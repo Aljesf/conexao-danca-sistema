@@ -142,119 +142,155 @@ export default function AlunosPage() {
 
   // ------------ UI ------------
   return (
-    <main
-      style={{ padding: 24, color: "white", background: "black", minHeight: "100vh" }}
-    >
-      <h1>Alunos</h1>
+  <>
+    <h1 className="mb-4 text-2xl font-semibold">Alunos</h1>
 
-      {/* 🔎 Busca */}
+    {/* Busca + Ações rápidas */}
+    <div className="mb-4 flex items-center gap-2">
       <input
         placeholder="Buscar por nome/email/telefone"
         value={filtro}
         onChange={(e) => setFiltro(e.target.value)}
-        style={{ padding: 8, width: 320, marginRight: 8 }}
+        className="input max-w-md"
       />
+    </div>
 
-      {/* Formulário de criação */}
-      <form
-        onSubmit={criar}
-        style={{ display: "grid", gap: 8, maxWidth: 520, margin: "12px 0" }}
-      >
-        <input
-          required
-          placeholder="Nome"
-          value={form.nome}
-          onChange={(e) => setForm({ ...form, nome: e.target.value })}
-        />
-        <input
-          placeholder="Email"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-        />
-        <input
-          placeholder="Telefone"
-          value={form.telefone}
-          onChange={(e) => setForm({ ...form, telefone: e.target.value })}
-        />
-        <input
-          placeholder="Data de nascimento (YYYY-MM-DD)"
-          value={form.data_nascimento}
-          onChange={(e) =>
-            setForm({ ...form, data_nascimento: e.target.value })
-          }
-        />
-        <button type="submit">Criar aluno</button>
+    {/* Formulário de criação */}
+    <div className="card mb-6">
+      <form onSubmit={criar} className="grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className="label">Nome</label>
+          <input
+            required
+            placeholder="Nome do aluno"
+            value={form.nome}
+            onChange={(e) => setForm({ ...form, nome: e.target.value })}
+            className="input"
+          />
+        </div>
+
+        <div>
+          <label className="label">Email</label>
+          <input
+            placeholder="email@exemplo.com"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            className="input"
+          />
+        </div>
+
+        <div>
+          <label className="label">Telefone</label>
+          <input
+            placeholder="(xx) xxxxx-xxxx"
+            value={form.telefone}
+            onChange={(e) => setForm({ ...form, telefone: e.target.value })}
+            className="input"
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="label">Data de nascimento (YYYY-MM-DD)</label>
+          <input
+            placeholder="2005-06-30"
+            value={form.data_nascimento}
+            onChange={(e) => setForm({ ...form, data_nascimento: e.target.value })}
+            className="input"
+          />
+        </div>
+
+        <div className="sm:col-span-2">
+          <button type="submit" className="btn">Criar aluno</button>
+        </div>
       </form>
+    </div>
 
-      {erro && <p style={{ color: "tomato" }}>Erro: {erro}</p>}
+    {erro && <p className="mb-4 text-red-400">Erro: {erro}</p>}
 
-      {/* Lista */}
-      <ul style={{ marginTop: 16 }}>
-        {listaFiltrada.map((a) => (
-          <li
-            key={a.id}
-            style={{ marginBottom: 10, borderBottom: "1px solid #333", paddingBottom: 8 }}
-          >
-            {editingId === a.id ? (
-              <>
-                <div style={{ display: "grid", gap: 6, maxWidth: 520 }}>
-                  <input
-                    value={edit.nome}
-                    onChange={(e) => setEdit({ ...edit, nome: e.target.value })}
-                    placeholder="Nome"
-                    required
-                  />
-                  <input
-                    value={edit.email}
-                    onChange={(e) => setEdit({ ...edit, email: e.target.value })}
-                    placeholder="Email"
-                  />
-                  <input
-                    value={edit.telefone}
-                    onChange={(e) =>
-                      setEdit({ ...edit, telefone: e.target.value })
-                    }
-                    placeholder="Telefone"
-                  />
-                  <input
-                    value={edit.data_nascimento}
-                    onChange={(e) =>
-                      setEdit({ ...edit, data_nascimento: e.target.value })
-                    }
-                    placeholder="YYYY-MM-DD"
-                  />
-                </div>
-                <div style={{ marginTop: 6 }}>
-                  <button onClick={salvarEdit} style={{ marginRight: 8 }}>
-                    Salvar
-                  </button>
-                  <button onClick={cancelEdit}>Cancelar</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <b>#{a.id}</b> — {a.nome} {a.email ? `• ${a.email}` : ""}{" "}
-                {a.telefone ? `• ${a.telefone}` : ""}
-                <div style={{ fontSize: 12, opacity: 0.8 }}>
-                  criado em {a.created_at && new Date(a.created_at).toLocaleString()}
-                  {a.user_email ? ` • por ${a.user_email}` : ""} •{" "}
-                  {a.ativo ? "ativo" : "inativo"}
-                </div>
-                <div style={{ marginTop: 6 }}>
-                  <button onClick={() => startEdit(a)} style={{ marginRight: 8 }}>
-                    Editar
-                  </button>
-                  <button onClick={() => toggleAtivo(a)} style={{ marginRight: 8 }}>
+    {/* Lista */}
+    <ul className="space-y-3">
+      {listaFiltrada.map((a) => (
+        <li key={a.id} className="card">
+          {/* Linha superior */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-zinc-400">#{a.id}</span>
+              <strong className="text-base">{a.nome || <em>(sem nome)</em>}</strong>
+              <span className="pill">{a.ativo ? "ativo" : "inativo"}</span>
+            </div>
+
+            {/* Ações */}
+            <div className="flex items-center gap-2">
+              {editingId === a.id ? (
+                <>
+                  <button onClick={salvarEdit} className="btn">Salvar</button>
+                  <button onClick={cancelEdit} className="btn-outline">Cancelar</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => startEdit(a)} className="btn-outline">Editar</button>
+                  <button onClick={() => toggleAtivo(a)} className="btn-outline">
                     {a.ativo ? "Inativar" : "Ativar"}
                   </button>
-                  <button onClick={() => excluir(a.id)}>Excluir</button>
-                </div>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
+                  <button onClick={() => excluir(a.id)} className="btn-outline">Excluir</button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Dados / edição */}
+          {editingId === a.id ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="label">Nome</label>
+                <input
+                  value={edit.nome}
+                  onChange={(e) => setEdit({ ...edit, nome: e.target.value })}
+                  className="input"
+                />
+              </div>
+
+              <div>
+                <label className="label">Email</label>
+                <input
+                  value={edit.email}
+                  onChange={(e) => setEdit({ ...edit, email: e.target.value })}
+                  className="input"
+                />
+              </div>
+
+              <div>
+                <label className="label">Telefone</label>
+                <input
+                  value={edit.telefone}
+                  onChange={(e) => setEdit({ ...edit, telefone: e.target.value })}
+                  className="input"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="label">Data de nascimento</label>
+                <input
+                  value={edit.data_nascimento}
+                  onChange={(e) => setEdit({ ...edit, data_nascimento: e.target.value })}
+                  className="input"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-1 text-sm text-zinc-400">
+              <div>{a.email ? <>📧 {a.email}</> : "—"}</div>
+              <div>{a.telefone ? <>📱 {a.telefone}</> : "—"}</div>
+              <div>
+                criado {a.created_at && new Date(a.created_at).toLocaleString()}
+                {a.user_email ? <> • por {a.user_email}</> : null}
+              </div>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  </>
+);
 }
 
