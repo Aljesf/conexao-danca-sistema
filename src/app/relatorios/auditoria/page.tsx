@@ -1,342 +1,211 @@
-// src/app/relatorios/auditoria/page.tsx
-"use client";
+import { NextResponse } from "next/server";
+import { getSupabaseServer } from "@/lib/supabaseServer";
+import type { Pessoa } from "@/types/pessoa";
 
-import { useEffect, useState } from "react";
-import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
-
-type LogRow = {
-  id: number;
-  created_at: string;
-  user_id: string;
-  acao: string;
-  entidade: string | null;
-  entidade_id: string | null;
-  detalhes: any;
+type RouteParams = {
+  params: { id: string };
 };
 
-type PerfilRow = {
-  user_id: string;
-  full_name: string | null;
-  pessoa_id: number | null;
-};
+// Campos padrão da tabela pessoas
+const pessoaSelect = `
+  id,
+  user_id,
+  nome,
+  nome_social,
+  email,
+  telefone,
+  telefone_secundario,
+  nascimento,
+  genero,
+  estado_civil,
+  nacionalidade,
+  naturalidade,
+  cpf,
+  cnpj,
+  razao_social,
+  nome_fantasia,
+  inscricao_estadual,
+  tipo_pessoa,
+  ativo,
+  observacoes,
+  neofin_customer_id,
+  foto_url,
+  endereco,
+  created_at,
+  updated_at,
+  created_by,
+  updated_by
+`;
 
-type PessoaRow = {
-  id: number;
-  nome: string;
-};
+// Função que carrega a pessoa e resolve os nomes de quem criou/atualizou
+async function carregarPessoaComNomes(id: string) {
+  const supabase = getSupabaseServer();
 
-type UsuarioRoleRow = {
-  user_id: string;
-  roles_sistema: {
-    codigo: string;
-    nome: string;
-  } | null;
-};
+  // 1) Busca o registro da pessoa
+  const { data: pessoaData, error } = await supabase
+    .from("pessoas")
+    .select(pessoaSelect)
+    .eq("id", id)
+    .maybeSingle();
 
-export default function AuditoriaPage() {
-  const supabase = getSupabaseBrowser();
+  if (error) {
+    console.error("Erro ao buscar pessoa:", error);
+    return { data: null as any, error };
+  }
 
-  const [loading, setLoading] = useState(true);
-  const [checkingPermissao, setCheckingPermissao] = useState(true);
-  const [semPermissao, setSemPermissao] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  if (!pessoaData) {
+    return { data: null as any, error: new Error("Pessoa não encontrada") };
+  }
 
-  const [logs, setLogs] = useState<LogRow[]>([]);
+  let createdByName: string | null = null;
+  let updatedByName: string | null = null;
 
-  // Futuramente podemos preencher essas métricas com dados reais
-  const [totalLogins, setTotalLogins] = useState<number | null>(null);
-  const [totalOperacoes, setTotalOperacoes] = useState<number | null>(null);
+  // Função auxiliar para resolver nome a partir de um user_id
+  async function resolverNomePorUserId(userId: string | null) {
+    if (!userId) return null;
 
-  // Mapa auxiliar para exibir nome do usuário ao invés do user_id
-  const [mapNomeUsuario, setMapNomeUsuario] = useState<
-    Record<string, string>
-  >({});
+    // 1) tenta pegar o full_name em profiles
+    const { data: perfil, error: perfilError } = await supabase
+      .from("profiles")
+      .select("full_name, pessoa_id")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-  useEffect(() => {
-    async function init() {
-      try {
-        setCheckingPermissao(true);
-        setLoading(true);
-        setError(null);
+    if (perfilError) {
+      console.error("Erro ao buscar perfil:", perfilError);
+      return null;
+    }
 
-        // 1) Verifica usuário logado
-        const { data: authData, error: authError } =
-          await supabase.auth.getUser();
+    if (perfil?.full_name) {
+      return perfil.full_name;
+    }
 
-        if (authError || !authData?.user) {
-          setError("Você não está autenticado.");
-          setCheckingPermissao(false);
-          setLoading(false);
-          return;
-        }
+    // 2) se não tiver full_name, tenta usar a pessoa vinculada
+    if (perfil?.pessoa_id) {
+      const { data: pessoaVinculada, error: pessoaError } = await supabase
+        .from("pessoas")
+        .select("nome")
+        .eq("id", perfil.pessoa_id)
+        .maybeSingle();
 
-        const userIdAtual = authData.user.id;
+      if (pessoaError) {
+        console.error("Erro ao buscar pessoa vinculada ao perfil:", pessoaError);
+        return null;
+      }
 
-        // 2) Verifica se é ADMIN ou AUDITOR
-        const [{ data: profileData, error: profileError }, { data: rolesData, error: rolesError }] =
-          await Promise.all([
-            supabase
-              .from("profiles")
-              .select("is_admin")
-              .eq("user_id", userIdAtual)
-              .single(),
-            supabase
-              .from("usuario_roles")
-              .select("user_id, roles_sistema(codigo, nome)")
-              .eq("user_id", userIdAtual),
-          ]);
-
-        if (profileError) {
-          setError("Não foi possível carregar seu perfil de acesso.");
-          setCheckingPermissao(false);
-          setLoading(false);
-          return;
-        }
-
-        const isAdmin = !!profileData?.is_admin;
-        const roles = (rolesData || []) as UsuarioRoleRow[];
-        const codigosRoles = roles
-          .map((r) => r.roles_sistema?.codigo)
-          .filter((c): c is string => !!c);
-
-        const isAuditor = codigosRoles.includes("AUDITOR");
-
-        if (!isAdmin && !isAuditor) {
-          setSemPermissao(true);
-          setCheckingPermissao(false);
-          setLoading(false);
-          return;
-        }
-
-        setCheckingPermissao(false);
-
-        // 3) Carrega logs de auditoria (últimos 200, por exemplo)
-        const { data: logsData, error: logsError } = await supabase
-          .from("auditoria_logs")
-          .select("id, created_at, user_id, acao, entidade, entidade_id, detalhes")
-          .order("created_at", { ascending: false })
-          .limit(200);
-
-        if (logsError) {
-          setError(logsError.message || "Erro ao carregar logs de auditoria.");
-          setLoading(false);
-          return;
-        }
-
-        const logs = (logsData || []) as LogRow[];
-        setLogs(logs);
-
-        // 4) (Opcional) Preenche algumas métricas simples
-        const totalLoginCount = logs.filter((l) => l.acao === "LOGIN").length;
-        setTotalLogins(totalLoginCount);
-        setTotalOperacoes(logs.length);
-
-        // 5) Monta mapa user_id -> nome (via profiles + pessoas)
-        const userIds = Array.from(new Set(logs.map((l) => l.user_id)));
-
-        if (userIds.length > 0) {
-          const { data: perfisData, error: perfisError } = await supabase
-            .from("profiles")
-            .select("user_id, full_name, pessoa_id")
-            .in("user_id", userIds);
-
-          if (!perfisError && perfisData) {
-            const perfis = perfisData as PerfilRow[];
-            const pessoaIds = perfis
-              .map((p) => p.pessoa_id)
-              .filter((id): id is number => id !== null);
-
-            let mapPessoas: Record<number, PessoaRow> = {};
-            if (pessoaIds.length > 0) {
-              const { data: pessoasData, error: pessoasError } = await supabase
-                .from("pessoas")
-                .select("id, nome")
-                .in("id", pessoaIds);
-
-              if (!pessoasError && pessoasData) {
-                (pessoasData as PessoaRow[]).forEach((p) => {
-                  mapPessoas[p.id] = p;
-                });
-              }
-            }
-
-            const mapNomes: Record<string, string> = {};
-            perfis.forEach((p) => {
-              const nomePessoa =
-                (p.pessoa_id && mapPessoas[p.pessoa_id]?.nome) || p.full_name;
-              mapNomes[p.user_id] = nomePessoa || p.user_id;
-            });
-
-            setMapNomeUsuario(mapNomes);
-          }
-        }
-      } catch (err: any) {
-        console.error(err);
-        setError(
-          err?.message ||
-            "Erro inesperado ao carregar a auditoria do sistema."
-        );
-      } finally {
-        setLoading(false);
+      if (pessoaVinculada?.nome) {
+        return pessoaVinculada.nome;
       }
     }
 
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return null;
+  }
 
-  if (checkingPermissao) {
-    return (
-      <div className="p-6">
-        <p className="text-sm text-gray-600">Verificando permissões...</p>
-      </div>
+  // Resolve criador
+  createdByName = await resolverNomePorUserId(pessoaData.created_by);
+
+  // Resolve editor
+  updatedByName = await resolverNomePorUserId(pessoaData.updated_by);
+
+  // 3) Monta o objeto Pessoa com os campos extras de nome
+  const pessoa: Pessoa = {
+    ...(pessoaData as any),
+    created_by_name: createdByName,
+    updated_by_name: updatedByName,
+  };
+
+  return { data: pessoa, error: null };
+}
+
+/* ========= GET /api/pessoas/[id] ========= */
+export async function GET(_req: Request, { params }: RouteParams) {
+  const { id } = params;
+
+  const { data, error } = await carregarPessoaComNomes(id);
+
+  if (error) {
+    if (error.message === "Pessoa não encontrada") {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+
+    console.error("GET /pessoas/[id] erro:", error);
+    return NextResponse.json(
+      { error: "Erro ao carregar pessoa." },
+      { status: 500 }
     );
   }
 
-  if (semPermissao) {
-    return (
-      <div className="p-6">
-        <h1 className="text-2xl font-semibold mb-2">Auditoria do Sistema</h1>
-        <p className="text-sm text-red-600">
-          Você não tem permissão para acessar esta página.
-        </p>
-      </div>
+  return NextResponse.json({ data });
+}
+
+/* ========= PUT /api/pessoas/[id] ========= */
+export async function PUT(req: Request, { params }: RouteParams) {
+  const { id } = params;
+  const supabase = getSupabaseServer();
+
+  const body = await req.json().catch(() => null);
+
+  if (!body) {
+    return NextResponse.json(
+      { error: "Corpo da requisição inválido." },
+      { status: 400 }
     );
   }
 
-  return (
-    <div className="p-6 space-y-6">
-      {/* Cabeçalho */}
-      <div>
-        <h1 className="text-2xl font-semibold mb-1">Auditoria do Sistema</h1>
-        <p className="text-sm text-gray-600">
-          Visualização dos registros de ações realizadas no sistema. Inicialmente
-          são apresentados os eventos de login, logout e outras operações
-          registradas pelo módulo de auditoria.
-        </p>
-      </div>
+  const {
+    nome,
+    nome_social,
+    email,
+    telefone,
+    telefone_secundario,
+    nascimento,
+    genero,
+    estado_civil,
+    nacionalidade,
+    naturalidade,
+    cpf,
+    observacoes,
+    updated_by, // id do usuário vindo do front (handleSalvar)
+  } = body as Partial<Pessoa> & { updated_by?: string | null };
 
-      {/* Cards/resumo – por enquanto com informações simples */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white/80 shadow rounded-xl px-4 py-3">
-          <div className="text-xs font-semibold text-gray-500 uppercase">
-            Total de registros de auditoria (carregados)
-          </div>
-          <div className="mt-1 text-2xl font-semibold">
-            {loading ? "…" : logs.length}
-          </div>
-        </div>
+  // Atualiza dados da pessoa
+  const { error: updateError } = await supabase
+    .from("pessoas")
+    .update({
+      nome,
+      nome_social,
+      email,
+      telefone,
+      telefone_secundario,
+      nascimento: nascimento || null,
+      genero,
+      estado_civil,
+      nacionalidade,
+      naturalidade,
+      cpf,
+      observacoes,
+      updated_by: updated_by ?? null,
+    })
+    .eq("id", id);
 
-        <div className="bg-white/80 shadow rounded-xl px-4 py-3">
-          <div className="text-xs font-semibold text-gray-500 uppercase">
-            Logins registrados
-          </div>
-          <div className="mt-1 text-2xl font-semibold">
-            {loading || totalLogins === null ? "…" : totalLogins}
-          </div>
-        </div>
+  if (updateError) {
+    console.error("PUT /pessoas/[id] erro UPDATE:", updateError);
+    return NextResponse.json(
+      { error: "Erro ao salvar alterações." },
+      { status: 500 }
+    );
+  }
 
-        <div className="bg-white/80 shadow rounded-xl px-4 py-3">
-          <div className="text-xs font-semibold text-gray-500 uppercase">
-            Ações (placeholder)
-          </div>
-          <div className="mt-1 text-xs text-gray-600">
-            Aqui futuramente podemos destacar outras métricas relevantes
-            (alunos ativos, últimos acessos, etc.).
-          </div>
-        </div>
-      </div>
+  // Recarrega pessoa já com "Criado por" / "Atualizado por" resolvidos
+  const { data, error } = await carregarPessoaComNomes(id);
 
-      {/* Filtros – estrutura pronta, ainda simples */}
-      <div className="bg-white/80 shadow rounded-xl px-4 py-3 space-y-3">
-        <div className="text-sm font-medium text-gray-700">
-          Filtros rápidos
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <input
-            className="border rounded-lg px-3 py-2 text-sm"
-            placeholder="(Em breve) Filtrar por usuário"
-            disabled
-          />
-          <input
-            className="border rounded-lg px-3 py-2 text-sm"
-            placeholder="(Em breve) Filtrar por ação"
-            disabled
-          />
-          <input
-            className="border rounded-lg px-3 py-2 text-sm"
-            placeholder="(Em breve) Data inicial"
-            disabled
-          />
-          <input
-            className="border rounded-lg px-3 py-2 text-sm"
-            placeholder="(Em breve) Data final"
-            disabled
-          />
-        </div>
-        <p className="text-xs text-gray-500">
-          A estrutura de filtros já está preparada. Depois vamos ligar esses
-          campos aos parâmetros de busca (por usuário, ação, período, etc.).
-        </p>
-      </div>
+  if (error) {
+    console.error("Erro ao recarregar pessoa após update:", error);
+    return NextResponse.json(
+      { error: "Erro ao carregar dados atualizados." },
+      { status: 500 }
+    );
+  }
 
-      {/* Tabela de logs */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Logs recentes</h2>
-
-        {error && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <p className="text-sm text-gray-500">Carregando logs...</p>
-        ) : logs.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            Nenhum registro de auditoria encontrado.
-          </p>
-        ) : (
-          <div className="overflow-x-auto rounded-xl bg-white/70 backdrop-blur shadow">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50 text-xs uppercase text-gray-500">
-                  <th className="text-left px-4 py-2">Data / Hora</th>
-                  <th className="text-left px-4 py-2">Usuário</th>
-                  <th className="text-left px-4 py-2">Ação</th>
-                  <th className="text-left px-4 py-2">Entidade</th>
-                  <th className="text-left px-4 py-2">ID Entidade</th>
-                  <th className="text-left px-4 py-2">Detalhes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map((log) => (
-                  <tr key={log.id} className="border-t hover:bg-purple-50/60">
-                    <td className="px-4 py-2 align-middle whitespace-nowrap">
-                      {new Date(log.created_at).toLocaleString("pt-BR")}
-                    </td>
-                    <td className="px-4 py-2 align-middle">
-                      {mapNomeUsuario[log.user_id] || log.user_id}
-                    </td>
-                    <td className="px-4 py-2 align-middle">{log.acao}</td>
-                    <td className="px-4 py-2 align-middle">
-                      {log.entidade || "—"}
-                    </td>
-                    <td className="px-4 py-2 align-middle">
-                      {log.entidade_id || "—"}
-                    </td>
-                    <td className="px-4 py-2 align-middle text-xs max-w-xs">
-                      {log.detalhes
-                        ? JSON.stringify(log.detalhes)
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  return NextResponse.json({ data });
 }

@@ -1,9 +1,6 @@
-// src/app/layout.tsx
-
 import "./globals.css";
 import type { Metadata } from "next";
-import Sidebar from "@/components/Sidebar";
-import AuthGuard from "@/components/AuthGuard"; // ⬅️ IMPORTANTE
+import { UserProvider } from "@/context/UserContext";
 
 export const metadata: Metadata = {
   title: "Conexão Dados",
@@ -18,13 +15,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        {/* Garantimos que TODO o app (exceto /login) passe pelo AuthGuard */}
-        <AuthGuard>
-          <div className="app-grid">
-            <Sidebar />
-            <main className="app-main">{children}</main>
-          </div>
-        </AuthGuard>
+        <UserProvider>{children}</UserProvider>
       </body>
     </html>
   );

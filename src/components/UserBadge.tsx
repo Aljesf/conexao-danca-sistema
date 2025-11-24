@@ -1,25 +1,48 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
+import { useRouter } from "next/navigation";
 
 export default function UserBadge() {
+  const supabase = getSupabaseBrowser();
+  const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const supabase = getSupabaseBrowser();
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
+    async function load() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setEmail(user?.email ?? null);
+      setLoading(false);
+    }
+    load();
   }, []);
 
-  const sair = async () => {
-    const supabase = getSupabaseBrowser();
+  async function sair() {
     await supabase.auth.signOut();
-    location.href = "/login";
-  };
+    router.replace("/login");
+  }
 
-  if (!email) return null;
+  if (loading) return null;
+
+  if (!email) {
+    return (
+      <div className="px-4 py-3 text-xs text-slate-500">
+        Não autenticado
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-3 text-sm text-zinc-300">
-      <span className="truncate max-w-[220px]">{email}</span>
-      <button onClick={sair} className="rounded border border-zinc-700 px-2 py-1 hover:bg-zinc-800">
+    <div className="px-4 py-3 text-xs">
+      <div className="truncate max-w-[220px] font-medium">{email}</div>
+      <button
+        onClick={sair}
+        className="mt-2 rounded border border-slate-300 px-3 py-1 text-[11px] hover:bg-slate-100"
+      >
         Sair
       </button>
     </div>

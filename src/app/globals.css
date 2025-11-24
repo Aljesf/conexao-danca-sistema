@@ -1,131 +1,61 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* ===========================
+   TAILWIND v4 - Import oficial
+   =========================== */
+@import "tailwindcss";
 
-/* Paleta */
+/* ===========================
+   PALETA GLOBAL E RESET LEVE
+   =========================== */
 :root {
-  --bg: #fbf7ff;
-  --fg: #2a2a2a;
-  --muted: #6b7280;
+  /* Layout */
+  --sidebar-w: 280px;
 
-  /* Sidebar */
-  --sb-from: #ffe9f4; /* rosa bebê */
-  --sb-to:   #efeaff; /* lilás */
-  --sb-border: #e7ddff;
-  --sb-hover: #ffffffaa;
+  /* Fundo geral do app */
+  --bg: #f9f6ff;        
+  --ink: #1f2937;       
+  --muted: #6b7280;     
+
+  /* Cores da barra lateral */
+  --accent-1: #ffe9f7;  
+  --accent-2: #efe4ff;  
+  --accent-3: #f5e9ff;  
+  --stroke:   #ecdff2;  
+  --hover:    rgba(140, 82, 255, 0.10);
 }
 
-html, body { height: 100%; }
+html,
 body {
-  background: var(--bg);
-  color: var(--fg);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  height: 100%;
 }
 
-/* === SIDEBAR === */
-.sidebar {
-  background: linear-gradient(180deg, var(--sb-from), var(--sb-to));
-  box-shadow: inset -1px 0 0 var(--sb-border);
-}
-
-/* Container de navegação */
-.sb-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 6px; /* espaço entre itens */
-}
-
-/* Títulos de grupo */
-.sb-title {
-  margin-top: 14px;
-  margin-bottom: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  color: var(--muted);
-}
-
-/* Link padrão da barra — todos com o MESMO tamanho visual */
-.sb-link {
-  display: flex;
-  align-items: center;
-  height: 40px;            /* altura fixa dos itens */
-  width: 100%;
-  border-radius: 10px;
-  padding: 0 12px;
-  color: var(--fg);
-  text-decoration: none;
-}
-
-/* Hover/focus */
-.sb-link:hover { background: var(--sb-hover); }
-.sb-link:focus-visible {
-  outline: 2px solid #a78bfa; /* violeta */
-  outline-offset: 2px;
-  background: #fff;
-}
-
-/* Se quiser tirar sublinhado globalmente da sidebar: */
-.sidebar a { text-decoration: none; color: inherit; }
-
-/* Tipografia básica das páginas */
-h1 { font-size: 32px; font-weight: 700; margin-bottom: 16px; }
-h2 { font-size: 22px; font-weight: 600; margin: 20px 0 10px; }
-
-/* Conteúdo: campos e botões com um respiro */
-main input, main select, main button, main a.btn {
-  font-size: 14px;
-  line-height: 1.4;
-}
-main input, main select {
-  padding: 8px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-}
-main button, main a.btn {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 14px; border-radius: 10px;
-  background: #111827; color: #fff; border: none;
-}
-main button:hover, main a.btn:hover { opacity: .92; }
-/* ======= Variáveis e reset leve ======= */
-:root{
-  --sidebar-w: 280px;               /* largura fixa da barra */
-  --bg: #f9f6ff;                    /* fundo do app (lilás bem claro) */
-  --ink: #1f2937;                   /* texto */
-  --muted: #6b7280;                 /* texto secundário */
-  --accent-1: #ffe9f7;              /* rosa bb */
-  --accent-2: #efe4ff;              /* lilás */
-  --accent-3: #f5e9ff;              /* lilás claro */
-  --stroke: #ecdff2;                /* borda suave */
-  --hover: rgba(140, 82, 255, 0.10);
-}
-
-html, body { height: 100%; }
-body{
+body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* ======= Grid do app: sidebar + conteúdo ======= */
-.app-grid{
+/* ===========================
+   GRID DO APP: SIDEBAR + MAIN
+   =========================== */
+.app-grid {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   min-height: 100vh;
 }
 
-/* Conteúdo à direita */
-.app-main{
+.app-main {
   padding: 28px 36px 40px;
   overflow: auto;
 }
 
-/* ======= Sidebar (lateral) ======= */
-.sidebar{
-  position: sticky;        /* fixa no topo ao rolar */
+/* ===========================
+   SIDEBAR ESTILOS
+   =========================== */
+.sidebar {
+  position: sticky;
   top: 0;
   height: 100vh;
   overflow: auto;
@@ -137,15 +67,41 @@ body{
   padding: 18px 14px 24px;
 }
 
-/* header do app na lateral */
-.sidebar .brand{
-  font-weight: 700;
-  letter-spacing: .2px;
-  margin-bottom: 14px;
+/* Header da sidebar */
+.sidebar .brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  text-decoration: none;
 }
 
-/* grupos e links */
-.nav-sec{
+.sidebar .logo {
+  height: 200px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* Caso a logo tenha fundo preto */
+.sidebar .logo.on-black {
+  mix-blend-mode: screen;
+  filter: brightness(1.1) contrast(105%);
+}
+
+.sidebar .brand-name {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  color: var(--ink);
+}
+
+/* ===========================
+   GRUPOS E LINKS DA SIDEBAR
+   =========================== */
+.nav-sec {
   margin: 18px 0 8px;
   font-size: 12px;
   font-weight: 700;
@@ -154,14 +110,18 @@ body{
   letter-spacing: .08em;
 }
 
-.nav-list{ margin: 6px 0; padding: 0; list-style: none; }
+.nav-list {
+  margin: 6px 0;
+  padding: 0;
+  list-style: none;
+}
 
-.nav-link{
+.nav-link {
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 44px;                 /* todos iguais — nada de variar pelo texto */
+  height: 44px; 
   padding: 0 12px;
   border-radius: 12px;
   text-decoration: none;
@@ -169,18 +129,24 @@ body{
   background: transparent;
   transition: background .15s ease, transform .05s ease;
 }
-.nav-link:hover{ background: var(--hover); }
-.nav-link:active{ transform: translateY(1px); }
 
-.nav-label{
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.nav-link:hover {
+  background: var(--hover);
 }
 
-/* “pills” secundárias (se usar) */
-.pill{
+.nav-link:active {
+  transform: translateY(1px);
+}
+
+.nav-label {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Pill extra */
+.pill {
   background: #111827;
   color: #fff;
   border-radius: 9999px;
@@ -188,59 +154,91 @@ body{
   font-size: 12px;
 }
 
-/* rolagem da barra (suave e clara) */
-.sidebar::-webkit-scrollbar{ width: 8px; }
-.sidebar::-webkit-scrollbar-thumb{ background: #e9dff5; border-radius: 8px; }
-/* Seções colapsáveis da sidebar */
-.sec { margin: 10px 0 6px; }
+/* Scroll bonito */
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: #e9dff5;
+  border-radius: 8px;
+}
 
-.sec-header{
+/* ===========================
+   SEÇÕES COLAPSÁVEIS (opcional)
+   =========================== */
+.sec {
+  margin: 10px 0 6px;
+}
+
+.sec-header {
   width: 100%;
   height: 40px;
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 0 10px;
   background: transparent;
-  border: 0; border-radius: 10px;
+  border: 0;
+  border-radius: 10px;
   color: var(--muted);
-  font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
   cursor: pointer;
 }
-.sec-header:hover{ background: var(--hover); color: var(--ink); }
 
-.caret{ transition: transform .15s ease; }
-.caret.rot{ transform: rotate(180deg); }
-
-/* usa o mesmo estilo dos itens; só esconde quando fechado */
-.nav-list.closed{ display: none; }
-/* Topo da sidebar com a logo */
-.sidebar .brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-  padding:14px 12px 12px;
-  margin-bottom:8px;
-  border-bottom:1px solid rgba(0,0,0,.06);
-  text-decoration:none;
-}
-
-.sidebar .logo{
-  height:200px;
-  width:auto;
-  object-fit:contain;
-  display:block;
-}
-
-.sidebar .brand-name{
-  font-family: var(--font-playfair), serif;
-  font-size:18px;
-  font-weight:800;
-  letter-spacing:.2px;
+.sec-header:hover {
+  background: var(--hover);
   color: var(--ink);
 }
 
-/* Se a sua arte tiver FUNDO PRETO e você quiser usar já:
-   troque className="logo" por className="logo on-black" no <Image> */
-.sidebar .logo.on-black{
-  mix-blend-mode: screen;            /* “apaga” o preto */
-  filter: brightness(1.1) contrast(105%);
+.caret {
+  transition: transform .15s ease;
+}
+.caret.rot {
+  transform: rotate(180deg);
+}
+
+.nav-list.closed {
+  display: none;
+}
+
+/* Remover sublinhado dos links da sidebar */
+.sidebar a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* ===========================
+   SUPORTE A CLASSES MAIS ANTIGAS
+   =========================== */
+.sb-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sb-title {
+  margin-top: 14px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+
+.sb-link {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  width: 100%;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.sb-link:hover {
+  background: rgba(255, 255, 255, 0.66);
 }

@@ -1,109 +1,147 @@
 // src/app/api/pessoas/route.ts
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import type { Pessoa } from "@/types/pessoa";
 
-// Aqui usamos a chave ANON, como nas outras rotas
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-// GET /api/pessoas  -> lista todas as pessoas
+/**
+ * GET /api/pessoas
+ * Lista todas as pessoas cadastradas.
+ */
 export async function GET() {
-  try {
-    const { data, error } = await supabase
-      .from("pessoas")
-      .select("*")
-      .order("id", { ascending: true });
+  const supabase = getSupabaseRoute();
 
-    if (error) {
-      console.error("Erro Supabase (GET /pessoas):", error);
-      return NextResponse.json(
-        { error: "Erro ao carregar pessoas.", details: error.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ data }, { status: 200 });
-  } catch (err: any) {
-    console.error("Erro inesperado (GET /pessoas):", err);
-    return NextResponse.json(
-      {
-        error: "Erro inesperado ao carregar pessoas.",
-        details: err?.message ?? String(err),
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// POST /api/pessoas  -> cria uma nova pessoa
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-
-    const {
+  const { data, error } = await supabase
+    .from("pessoas")
+    .select(
+      `
+      id,
+      user_id,
       nome,
+      nome_social,
       email,
       telefone,
+      telefone_secundario,
       nascimento,
+      genero,
+      estado_civil,
+      nacionalidade,
+      naturalidade,
       cpf,
+      cnpj,
+      razao_social,
+      nome_fantasia,
+      inscricao_estadual,
       tipo_pessoa,
-      observacoes,
       ativo,
-    } = body as {
-      nome: string;
-      email?: string | null;
-      telefone?: string | null;
-      nascimento?: string | null;
-      cpf?: string | null;
-      tipo_pessoa?: "FISICA" | "JURIDICA";
-      observacoes?: string | null;
-      ativo?: boolean;
-    };
+      observacoes,
+      neofin_customer_id,
+      foto_url,
+      endereco,
+      created_at,
+      updated_at,
+      created_by,
+      updated_by
+    `
+    )
+    .order("created_at", { ascending: false });
 
-    if (!nome || typeof nome !== "string") {
-      return NextResponse.json(
-        { error: "Nome é obrigatório." },
-        { status: 400 }
-      );
-    }
-
-    const tipoPessoaValido =
-      tipo_pessoa === "JURIDICA" ? "JURIDICA" : "FISICA";
-
-    const { data, error } = await supabase
-      .from("pessoas")
-      .insert({
-        nome: nome.trim(),
-        email: email?.trim() || null,
-        telefone: telefone?.trim() || null,
-        nascimento: nascimento || null,
-        cpf: cpf?.trim() || null,
-        tipo_pessoa: tipoPessoaValido,
-        observacoes: observacoes?.trim() || null,
-        ativo: ativo !== false, // default true
-      })
-      .select("*")
-      .single();
-
-    if (error || !data) {
-      console.error("Erro Supabase (POST /pessoas):", error);
-      return NextResponse.json(
-        { error: "Erro ao salvar pessoa.", details: error?.message },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ data }, { status: 201 });
-  } catch (err: any) {
-    console.error("Erro inesperado (POST /pessoas):", err);
+  if (error) {
+    console.error("GET /api/pessoas erro:", error);
     return NextResponse.json(
-      {
-        error: "Erro inesperado ao salvar pessoa.",
-        details: err?.message ?? String(err),
-      },
+      { error: "Erro ao listar pessoas." },
       { status: 500 }
     );
   }
+
+  return NextResponse.json({ data });
+}
+
+/**
+ * POST /api/pessoas
+ * Cria uma nova pessoa.
+ */
+export async function POST(req: Request) {
+  const supabase = getSupabaseRoute();
+
+  const body = await req.json().catch(() => null);
+
+  if (!body || !body.nome) {
+    return NextResponse.json(
+      { error: "Dados inválidos: nome é obrigatório." },
+      { status: 400 }
+    );
+  }
+
+  const {
+    nome,
+    email,
+    telefone,
+    nascimento,
+    cpf,
+    tipo_pessoa,
+    observacoes,
+    ativo,
+  } = body as Partial<Pessoa>;
+
+  // Se quiser já salvar quem criou, podemos pegar o user aqui também:
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const createdBy = user?.id ?? null;
+
+  const { data, error } = await supabase
+    .from("pessoas")
+    .insert({
+      nome,
+      email: email ?? null,
+      telefone: telefone ?? null,
+      nascimento: nascimento ?? null,
+      cpf: cpf ?? null,
+      tipo_pessoa: tipo_pessoa ?? "FISICA",
+      observacoes: observacoes ?? null,
+      ativo: ativo ?? true,
+      created_by: createdBy,
+    })
+    .select(
+      `
+      id,
+      user_id,
+      nome,
+      nome_social,
+      email,
+      telefone,
+      telefone_secundario,
+      nascimento,
+      genero,
+      estado_civil,
+      nacionalidade,
+      naturalidade,
+      cpf,
+      cnpj,
+      razao_social,
+      nome_fantasia,
+      inscricao_estadual,
+      tipo_pessoa,
+      ativo,
+      observacoes,
+      neofin_customer_id,
+      foto_url,
+      endereco,
+      created_at,
+      updated_at,
+      created_by,
+      updated_by
+    `
+    )
+    .single();
+
+  if (error) {
+    console.error("POST /api/pessoas erro:", error);
+    return NextResponse.json(
+      { error: "Erro ao criar pessoa." },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ data });
 }
