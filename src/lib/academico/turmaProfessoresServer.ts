@@ -1,5 +1,6 @@
+"use server";
+
 import { getSupabaseServer } from "@/lib/supabaseServer";
-import type { TurmaProfessor } from "@/types/turmaProfessores";
 
 export async function listarProfessoresDaTurma(turmaId: number) {
   const supabase = getSupabaseServer();
@@ -10,40 +11,21 @@ export async function listarProfessoresDaTurma(turmaId: number) {
       `
         id,
         turma_id,
-        colaborador_id,
-        funcao_id,
-        principal,
-        data_inicio,
-        data_fim,
-        ativo,
-        observacoes,
-        colaboradores!inner (
+        pessoa_id,
+        papel,
+        pessoas (
           id,
-          pessoa_id,
-          pessoas!inner ( id, nome )
-        ),
-        funcao:funcoes_colaborador!inner ( id, nome )
-      `
+          nome,
+          nome_social
+        )
+      `,
     )
     .eq("turma_id", turmaId)
-    .order("principal", { ascending: false })
-    .order("data_inicio", { ascending: true });
-
-  if (error) throw error;
-  return data as TurmaProfessor[];
-}
-
-export async function listarProfessoresAtivosSimples() {
-  const supabase = getSupabaseServer();
-  const { data, error } = await supabase
-    .from("vw_professores")
-    .select("id, nome")
-    .eq("ativo", true)
-    .order("nome");
+    .order("papel", { ascending: true });
 
   if (error) {
-    console.error("Erro ao listar professores ativos:", error);
-    return [];
+    console.error("[listarProfessoresDaTurma] Erro:", error);
+    throw new Error(error.message);
   }
 
   return data ?? [];

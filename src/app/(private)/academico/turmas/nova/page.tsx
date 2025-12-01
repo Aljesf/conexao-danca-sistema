@@ -326,22 +326,17 @@ export default function NovaTurmaPage() {
               <div className="mt-2 flex flex-wrap gap-2">
                 {professores
                   .filter((p) => p.id !== Number(professorPrincipalId))
-                  .map((p) => (
+                  .map((prof) => (
                     <label
-                      key={p.id}
-                      className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs ${
-                        professoresAuxiliares.includes(String(p.id))
-                          ? "border-violet-300 bg-violet-50 text-violet-700"
-                          : "border-slate-200 bg-slate-50 text-slate-700"
-                      }`}
+                      key={`aux-${prof.id}`}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm"
                     >
                       <input
                         type="checkbox"
-                        className="h-3 w-3"
-                        checked={professoresAuxiliares.includes(String(p.id))}
-                        onChange={() => toggleAuxiliar(String(p.id))}
+                        checked={professoresAuxiliares.includes(String(prof.id))}
+                        onChange={() => toggleAuxiliar(String(prof.id))}
                       />
-                      <span>{p.nome}</span>
+                      <span>{prof.nome}</span>
                     </label>
                   ))}
                 {professores.length === 0 && <span className="text-xs text-slate-500">Nenhum professor encontrado.</span>}
@@ -464,6 +459,13 @@ export default function NovaTurmaPage() {
             />
           </div>
 
+          {/* Info sobre avaliações da turma */}
+          <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3 text-xs text-slate-600 md:text-sm">
+            Após salvar a turma, você poderá vincular avaliações específicas
+            para ela na tela de detalhes da turma, em{" "}
+            <span className="font-medium">“Avaliações da turma”</span>. Essas
+            avaliações serão usadas para conclusão e currículo.
+          </div>
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"

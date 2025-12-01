@@ -1,3 +1,7 @@
+"use client";
+
+import Link from "next/link";
+
 import { listarConceitos } from "@/lib/avaliacoes/conceitosServer";
 import { ModeloForm } from "../ModeloForm";
 
