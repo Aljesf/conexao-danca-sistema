@@ -1,6 +1,6 @@
 // src/app/financeiro/cobrancas/[id]/reenviar/route.ts
 import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServerSSR";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
 
 export const runtime = "nodejs";

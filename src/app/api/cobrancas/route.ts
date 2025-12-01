@@ -1,6 +1,6 @@
-Ôªø// src/app/api/cobrancas/route.ts
+// src/app/api/cobrancas/route.ts
 import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServerSSR";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 
@@ -48,7 +48,7 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json(
-      { error: "Usu√°rio n√£o autenticado." },
+      { error: "Usu·rio n„o autenticado." },
       { status: 401 }
     );
   }
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
   const usuarioId = user?.id ?? null;
   if (!usuarioId) {
     return NextResponse.json(
-      { error: "Usu√°rio n√£o autenticado." },
+      { error: "Usu·rio n„o autenticado." },
       { status: 401 }
     );
   }

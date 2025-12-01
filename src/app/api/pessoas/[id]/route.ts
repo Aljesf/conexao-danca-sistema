@@ -1,7 +1,7 @@
 ﻿// src/app/api/pessoas/[id]/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getSupabaseServer } from "@/lib/supabaseServerSSR";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 import type { Pessoa } from "@/types/pessoas";
 

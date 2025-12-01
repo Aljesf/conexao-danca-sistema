@@ -1,4 +1,14 @@
-import { getSupabaseServer as getSupabaseServerSSR } from "./supabaseServerSSR";
+"use server";
 
-// Alias para manter compatibilidade com helpers server-side.
-export const getSupabaseServer = getSupabaseServerSSR;
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { getSupabaseServerSSR } from "./supabaseServerSSR";
+
+let serverClient: SupabaseClient | null = null;
+
+export function getSupabaseServer(): SupabaseClient {
+  if (!serverClient) {
+    serverClient = getSupabaseServerSSR();
+  }
+  return serverClient;
+}

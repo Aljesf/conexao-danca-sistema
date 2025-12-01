@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServerSSR";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 
 // GET /api/teste -> lista até 50 registros
 export async function GET() {

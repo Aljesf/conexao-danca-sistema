@@ -1,8 +1,15 @@
-// src/lib/supabaseBrowser.ts
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import type { SupabaseClient } from "@supabase/supabase-js";
+"use client";
 
-export function getSupabaseBrowser(): SupabaseClient {
-  // auth-helpers cuida dos cookies httpOnly e sessão compartilhada com o server
-  return createClientComponentClient();
+import { createBrowserClient } from "@supabase/auth-helpers-nextjs";
+
+let browserClient: ReturnType<typeof createBrowserClient> | null = null;
+
+export function getSupabaseBrowser() {
+  if (!browserClient) {
+    browserClient = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+  }
+  return browserClient;
 }

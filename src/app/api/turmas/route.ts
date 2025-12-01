@@ -1,6 +1,6 @@
 // src/app/api/turmas/route.ts
 import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServerSSR";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 
 export const runtime = "nodejs";
