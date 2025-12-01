@@ -1,171 +1,127 @@
 "use client";
 
-import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { sidebarConfig, type SidebarSection, type SidebarItem } from "@/config/sidebarConfig";
+import { useBranding } from "@/context/BrandingContext";
 import UserBadge from "./UserBadge";
 
-type SectionProps = {
-  id: string;
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
+type SidebarProps = {
+  /**
+   * Contexto atual do app.
+   * Se não for informado, usar o contexto vindo do BrandingContext.
+   */
+  context?: keyof typeof sidebarConfig;
 };
 
-function Section({ id, title, children, defaultOpen = true }: SectionProps) {
+const contextMap: Record<string, string> = {
+  escola: "escola",
+  loja: "loja",
+  lanchonete: "cafe",
+  administracao: "admin",
+};
+
+function Section({ id, title, items, defaultOpen = true }: SidebarSection & { defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
 
   useEffect(() => {
-    const v = localStorage.getItem(`sec:${id}`);
-    if (v !== null) setOpen(v === "1");
+    if (typeof window === "undefined") return;
+    const key = `sec:${id}`;
+    const stored = window.localStorage.getItem(key);
+    if (stored !== null) setOpen(stored === "1");
   }, [id]);
 
   useEffect(() => {
-    localStorage.setItem(`sec:${id}`, open ? "1" : "0");
+    if (typeof window === "undefined") return;
+    const key = `sec:${id}`;
+    window.localStorage.setItem(key, open ? "1" : "0");
   }, [id, open]);
 
   return (
-    <div className="sec">
+    <div className="mb-2">
       <button
         type="button"
-        className="sec-header"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        className="mb-1 flex w-full items-center justify-between text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500"
+        onClick={() => setOpen((prev) => !prev)}
       >
-        <span className={`caret ${open ? "rot" : ""}`}>▾</span>
-        <span className="sec-title">{title}</span>
+        <span>{title}</span>
+        <span className="text-[9px]">{open ? "▾" : "▸"}</span>
       </button>
 
-      <ul className={`nav-list ${open ? "open" : "closed"}`}>{children}</ul>
+      {open && (
+        <ul className="space-y-1 pl-2 pb-2">
+          {items.map((item, index) => (
+            <SidebarLink key={`${id}-${item.href}-${index}`} item={item} />
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-export default function Sidebar() {
+function SidebarLink({ item }: { item: SidebarItem }) {
+  const pathname = usePathname();
+  const isActive = pathname === item.href || (item.matchPrefix && pathname.startsWith(item.matchPrefix || ""));
+  const icon = item.icon;
+
+  const baseClasses = "flex items-center gap-2 rounded-full px-3 py-2 text-sm transition-colors";
+  const activeClasses = "bg-white text-slate-900 shadow";
+  const inactiveClasses = "text-slate-700/80 hover:bg-white/60 hover:text-slate-900";
+
   return (
-    <aside className="sidebar flex flex-col">
-      {/* topo com a logo */}
-      <a href="/" className="brand" aria-label="Início">
-        <Image
-          src="/logo-conexao.png"
-          alt="Conexão Dança"
-          width={160}
-          height={70}
-          priority
-          className="logo"
-        />
-      </a>
+    <li>
+      <Link href={item.href} className={[baseClasses, isActive ? activeClasses : inactiveClasses].join(" ")}>
+        {icon && <span className="text-lg leading-none">{icon}</span>}
+        <span className="truncate">{item.label}</span>
+      </Link>
+    </li>
+  );
+}
 
-      {/* ==== SEÇÕES DO MENU ==== */}
-      <Section id="pessoas" title="Pessoas">
-        <li>
-          <a className="nav-link" href="/">
-            <span className="nav-label">🏠 Início</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/pessoas">
-            <span className="nav-label">👥 Ver todas as pessoas</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/crm">
-            <span className="nav-label">⭐ Interessados (CRM)</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/professores">
-            <span className="nav-label">🧑‍🏫 Professores</span>
-          </a>
-        </li>
-      </Section>
+export default function Sidebar({ context }: SidebarProps) {
+  const { appName, activeContext, configs } = useBranding();
 
-      <Section id="alunos" title="Alunos">
-        <li>
-          <a className="nav-link" href="/alunos?novo=1">
-            <span className="nav-label">👟 Cadastrar aluno</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/alunos">
-            <span className="nav-label">🔎 Consultar alunos</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/alunos/historico">
-            <span className="nav-label">🧾 Histórico do aluno</span>
-          </a>
-        </li>
-      </Section>
+  const resolvedContext: keyof typeof sidebarConfig =
+    (contextMap[context ?? activeContext] as keyof typeof sidebarConfig) ?? "escola";
 
-      <Section id="turmas" title="Turmas">
-        <li>
-          <a className="nav-link" href="/turmas">
-            <span className="nav-label">📅 Consultar turmas</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/turmas?novo=1">
-            <span className="nav-label">➕ Cadastrar turma</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/turmas/grade">
-            <span className="nav-label">🗓️ Grade de horários</span>
-          </a>
-        </li>
-      </Section>
+  const sections = sidebarConfig[resolvedContext] ?? [];
 
-      <Section id="fin" title="Financeiro" defaultOpen={false}>
-        <li>
-          <a className="nav-link" href="/financeiro/pagar">
-            <span className="nav-label">💳 Contas a pagar</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/financeiro/receber">
-            <span className="nav-label">💵 Contas a receber</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/financeiro/caixa">
-            <span className="nav-label">📈 Movimentação diária</span>
-          </a>
-        </li>
-      </Section>
+  const contextMeta: Record<string, { label: string; icon: string }> = {
+    escola: { label: "Conexão Dança", icon: "🩰" },
+    loja: { label: "AJ Dance Store", icon: "🛍️" },
+    lanchonete: { label: "Ballet Café", icon: "☕" },
+    administracao: { label: "Administração do Sistema", icon: "⚙️" },
+  };
 
-      <Section id="relatorios" title="Relatórios" defaultOpen={false}>
-        <li>
-          <a className="nav-link" href="/relatorios/auditoria">
-            <span className="nav-label">📊 Auditoria do Sistema</span>
-          </a>
-        </li>
-      </Section>
+  const meta = contextMeta[resolvedContext] ?? { label: appName ?? "Painel interno", icon: "✨" };
+  const rawContext = context ?? activeContext;
+  const currentConfig = (configs as any)?.[rawContext];
+  const logoUrl = currentConfig?.logoUrl as string | undefined;
 
-      <Section id="cfg" title="Configurações" defaultOpen={false}>
-        <li>
-          <a className="nav-link" href="/config/parametros">
-            <span className="nav-label">⚙️ Parâmetros da escola</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/config/usuarios">
-            <span className="nav-label">👤 Usuários & Perfis</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/config/papeis">
-            <span className="nav-label">🧩 Papéis & Permissões</span>
-          </a>
-        </li>
-        <li>
-          <a className="nav-link" href="/config/integracoes">
-            <span className="nav-label">🔌 Integrações</span>
-          </a>
-        </li>
-      </Section>
+  return (
+    <aside className="flex h-full w-72 flex-col text-sm bg-gradient-to-b from-[color:var(--accent-1,#eef2ff)] to-[color:var(--accent-3,#e0e7ff)] text-slate-700">
+      <div className="flex flex-col items-center gap-3 border-b border-black/5 py-6">
+        <img src={logoUrl} alt={meta.label} className="h-28 w-28 rounded-3xl object-contain shadow-sm" />
+        <div className="flex flex-col text-center">
+          <span className="text-[10px] uppercase tracking-wider text-slate-500">Contexto ativo</span>
+          <span className="text-sm font-semibold text-slate-700">{meta.label}</span>
+        </div>
+      </div>
 
-      {/* ===== Rodapé com usuário logado ===== */}
-      <div className="mt-auto border-t border-white/40 pt-2">
+      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+        {sections.map((section, sectionIndex) => (
+          <Section
+            key={`${section.id}-${sectionIndex}`}
+            id={section.id}
+            title={section.title}
+            items={section.items}
+            defaultOpen={(section as any).defaultOpen ?? true}
+          />
+        ))}
+      </nav>
+
+      <div className="border-t border-black/5 px-3 py-3">
         <UserBadge />
       </div>
     </aside>

@@ -1,7 +1,8 @@
 // src/app/api/pessoas/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
-import type { Pessoa } from "@/types/pessoa";
+import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
+import type { Pessoa } from "@/types/pessoas";
 
 /**
  * GET /api/pessoas
@@ -9,6 +10,16 @@ import type { Pessoa } from "@/types/pessoa";
  */
 export async function GET() {
   const supabase = getSupabaseRoute();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "Usuário não autenticado." },
+      { status: 401 }
+    );
+  }
 
   const { data, error } = await supabase
     .from("pessoas")
@@ -67,40 +78,61 @@ export async function POST(req: Request) {
 
   if (!body || !body.nome) {
     return NextResponse.json(
-      { error: "Dados inválidos: nome é obrigatório." },
+      { error: "Dados invalidos: nome e obrigatorio." },
       { status: 400 }
     );
   }
 
   const {
     nome,
+    nome_social,
     email,
     telefone,
+    telefone_secundario,
     nascimento,
+    genero,
+    estado_civil,
+    nacionalidade,
+    naturalidade,
     cpf,
     tipo_pessoa,
     observacoes,
     ativo,
   } = body as Partial<Pessoa>;
 
-  // Se quiser já salvar quem criou, podemos pegar o user aqui também:
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const createdBy = user?.id ?? null;
+  if (!user?.id) {
+    return NextResponse.json(
+      { error: "Usuário não autenticado." },
+      { status: 401 }
+    );
+  }
+
+  const createdBy = user.id;
+  const updatedBy = createdBy;
+  const cpfValue = cpf && cpf.trim() !== "" ? cpf.trim() : null;
 
   const { data, error } = await supabase
     .from("pessoas")
     .insert({
       nome,
+      nome_social: nome_social ?? null,
       email: email ?? null,
       telefone: telefone ?? null,
+      telefone_secundario: telefone_secundario ?? null,
       nascimento: nascimento ?? null,
-      cpf: cpf ?? null,
+      genero: genero ?? "NAO_INFORMADO",
+      estado_civil: estado_civil ?? null,
+      nacionalidade: nacionalidade ?? null,
+      naturalidade: naturalidade ?? null,
+      cpf: cpfValue,
       tipo_pessoa: tipo_pessoa ?? "FISICA",
       observacoes: observacoes ?? null,
       ativo: ativo ?? true,
       created_by: createdBy,
+      updated_by: updatedBy,
     })
     .select(
       `
@@ -136,11 +168,28 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
+    const msg =
+      error.code === "23505"
+        ? "Ja existe uma pessoa ativa com este CPF."
+        : "Erro ao criar pessoa.";
     console.error("POST /api/pessoas erro:", error);
-    return NextResponse.json(
-      { error: "Erro ao criar pessoa." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+
+  try {
+    const usuarioNome = await resolverNomeDoUsuario(createdBy);
+    await logAuditoria({
+      usuario_id: createdBy,
+      usuario_nome: usuarioNome,
+      entidade: "pessoa",
+      entidade_id: data.id,
+      acao: "CREATE",
+      descricao: `Criou pessoa #${data.id} - ${data.nome ?? "sem nome"}`,
+      dados_anteriores: null,
+      dados_novos: data,
+    });
+  } catch (e) {
+    console.error("[auditoria] falha ao registrar log de criação de pessoa:", e);
   }
 
   return NextResponse.json({ data });

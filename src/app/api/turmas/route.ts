@@ -1,12 +1,19 @@
 // src/app/api/turmas/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServerSSR";
+import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const supabase = await getSupabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
+  }
 
   const { data, error } = await supabase
     .from("turmas")
@@ -14,7 +21,7 @@ export async function GET() {
       id,
       nome,
       nivel,
-      modalidade,
+      curso,
       capacidade,
       ativo,
       created_at,
@@ -38,9 +45,16 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const supabase = await getSupabaseServer();
-  const payload = await req.json(); // { turma: {...}, horarios: [{day,inicio,fim}, ...] }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const usuarioId = user?.id ?? null;
+  if (!usuarioId) {
+    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
+  }
 
-  // 1) cria turma
+  const payload = await req.json(); // { turma: {...}, horarios: [...] }
+
   const { data: turma, error } = await supabase
     .from("turmas")
     .insert([payload.turma])
@@ -51,7 +65,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // 2) insere horários (se vier)
   if (Array.isArray(payload.horarios) && payload.horarios.length) {
     const rows = payload.horarios.map((h: any) => ({
       turma_id: turma.id,
@@ -66,6 +79,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: errH.message }, { status: 500 });
     }
   }
+
+  const usuarioNome = await resolverNomeDoUsuario(usuarioId);
+  await logAuditoria({
+    usuario_id: usuarioId ?? "",
+    usuario_nome: usuarioNome,
+    entidade: "turma",
+    entidade_id: turma.id,
+    acao: "CREATE",
+    descricao: `Criou turma ${turma.nome ?? ""} (#${turma.id})`,
+  });
 
   return NextResponse.json({ data: turma }, { status: 201 });
 }

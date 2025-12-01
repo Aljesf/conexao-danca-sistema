@@ -1,79 +1,81 @@
 // src/app/api/auditoria/log/route.ts
-
-import { NextResponse } from "next/server";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import { resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 
-// ⚠️ ROTA INTERNA – PERIGO – USA SERVICE ROLE
-// Esta rota deve existir APENAS em ambiente de servidor.
+// Rota interna que usa service role para registrar logs manuais
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!, // Service Role — acesso total
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
   {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+    auth: { autoRefreshToken: false, persistSession: false },
   }
 );
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-
     const {
       acao,
       entidade,
       entidadeId,
-      detalhes,
-      userId // opcional: caso você queira passar explicitamente
+      descricao,
+      usuarioId,
+      dadosAnteriores,
+      dadosNovos,
+      ip,
+      userAgent,
     } = body;
 
-    // ------------------------
-    // 📌 1. Validação básica
-    // ------------------------
-    if (!acao) {
+    if (!acao || !entidade) {
       return NextResponse.json(
-        { error: "Campo 'acao' é obrigatório." },
+        { error: "Campos 'acao' e 'entidade' sao obrigatorios." },
         { status: 400 }
       );
     }
 
-    // entidade e entidadeId podem ser nulos dependendo do tipo de log
+    const supabaseAuth = createRouteHandlerClient({ cookies });
+    const {
+      data: { user },
+    } = await supabaseAuth.auth.getUser();
 
-    // ------------------------
-    // 📌 2. Pega usuário logado (caso não seja passado no body)
-    // ------------------------
-    let actingUserId = userId;
-
+    const actingUserId = (usuarioId as string | undefined) || user?.id;
     if (!actingUserId) {
-      const { data } = await supabaseAdmin.auth.getUser();
-
-      if (!data?.user) {
-        return NextResponse.json(
-          { error: "Não foi possível identificar o usuário para auditoria." },
-          { status: 401 }
-        );
-      }
-
-      actingUserId = data.user.id;
+      return NextResponse.json(
+        { error: "Usuario nao autenticado." },
+        { status: 401 }
+      );
     }
 
-    // ------------------------
-    // 📌 3. Insere log na auditoria
-    // ------------------------
+    const usuarioNome = await resolverNomeDoUsuario(actingUserId);
+    const detalhes = {
+      descricao: descricao || `${acao} em ${entidade}`,
+      usuario_nome: usuarioNome,
+      dados_anteriores: dadosAnteriores ?? null,
+      dados_novos: dadosNovos ?? null,
+    };
+
     const { error: auditError } = await supabaseAdmin
       .from("auditoria_logs")
       .insert({
         user_id: actingUserId,
         acao,
-        entidade: entidade || null,
-        entidade_id: entidadeId || null,
-        detalhes: detalhes || {},
+        entidade,
+        entidade_id:
+          entidadeId !== undefined && entidadeId !== null
+            ? String(entidadeId)
+            : null,
+        detalhes,
+        ip: ip ?? null,
+        user_agent: userAgent ?? null,
       });
 
     if (auditError) {
+      console.error("[auditoria/log] erro ao registrar auditoria:", auditError);
       return NextResponse.json(
-        { error: "Erro ao registrar auditoria.", details: auditError },
+        { error: "Erro ao registrar auditoria.", details: auditError.message },
         { status: 500 }
       );
     }
@@ -82,10 +84,13 @@ export async function POST(req: Request) {
       { success: true, message: "Log de auditoria registrado." },
       { status: 201 }
     );
-  } catch (err) {
+  } catch (err: any) {
     console.error("Erro em /api/auditoria/log:", err);
     return NextResponse.json(
-      { error: "Erro inesperado ao registrar auditoria." },
+      {
+        error: "Erro inesperado ao registrar auditoria.",
+        details: String(err?.message ?? err),
+      },
       { status: 500 }
     );
   }

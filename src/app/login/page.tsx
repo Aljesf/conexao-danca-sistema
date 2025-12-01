@@ -46,7 +46,7 @@ export default function LoginPage() {
     }
 
     // 3) Redireciona para home
-    router.replace("/");
+    router.replace("/pessoas");
   }
 
   async function cadastrar() {

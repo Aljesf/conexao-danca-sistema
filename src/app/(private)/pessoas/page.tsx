@@ -1,336 +1,144 @@
-// src/app/pessoas/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import type React from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 
 type Pessoa = {
   id: number;
   nome: string;
   email: string | null;
   telefone: string | null;
-  nascimento: string | null;
-  cpf: string | null;
   tipo_pessoa: "FISICA" | "JURIDICA";
   ativo: boolean;
-  observacoes: string | null;
-  neofin_customer_id: string | null;
-  created_at: string;
-  updated_at: string | null;
+  cpf: string | null;
 };
 
-export default function PessoasPage() {
+export default function PessoasListPage() {
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
 
-  // campos do formulário
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [nascimento, setNascimento] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [tipoPessoa, setTipoPessoa] = useState<"FISICA" | "JURIDICA">("FISICA");
-  const [observacoes, setObservacoes] = useState("");
-  const [ativo, setAtivo] = useState(true);
-
-  async function carregarPessoas() {
+  async function carregar() {
     try {
       setLoading(true);
       setError(null);
-
       const res = await fetch("/api/pessoas");
       const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json.error || "Falha ao carregar pessoas.");
-      }
-
+      if (!res.ok) throw new Error(json.error || "Falha ao carregar pessoas.");
       setPessoas(json.data || []);
     } catch (err: any) {
-      setError(err.message || "Erro inesperado ao carregar pessoas.");
+      setError(err.message || "Erro ao carregar pessoas.");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    carregarPessoas();
+    carregar();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-
-    try {
-      const res = await fetch("/api/pessoas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nome,
-          email: email || null,
-          telefone: telefone || null,
-          nascimento: nascimento || null,
-          cpf: cpf || null,
-          tipo_pessoa: tipoPessoa,
-          observacoes: observacoes || null,
-          ativo,
-        }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json.error || "Falha ao salvar pessoa.");
-      }
-
-      // adiciona a nova pessoa no topo da lista
-      setPessoas((prev) => [json.data as Pessoa, ...prev]);
-
-      // limpa o formulário
-      setNome("");
-      setEmail("");
-      setTelefone("");
-      setNascimento("");
-      setCpf("");
-      setTipoPessoa("FISICA");
-      setObservacoes("");
-      setAtivo(true);
-    } catch (err: any) {
-      setError(err.message || "Erro inesperado ao salvar pessoa.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function formatDate(dateStr: string | null) {
-    if (!dateStr) return "-";
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return "-";
-    return d.toLocaleDateString("pt-BR");
-  }
-
-  function formatDateTime(dateStr: string | null) {
-    if (!dateStr) return "-";
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return "-";
-    return d.toLocaleString("pt-BR");
-  }
+  const filtradas = useMemo(() => {
+    const q = busca.toLowerCase().trim();
+    if (!q) return pessoas;
+    return pessoas.filter((p) =>
+      [p.nome, p.email, p.cpf].some((v) => (v ?? "").toLowerCase().includes(q))
+    );
+  }, [pessoas, busca]);
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold mb-1">Pessoas</h1>
-        <p className="text-sm text-gray-600">
-          Cadastro central de pessoas do Conexão Dança: alunos, responsáveis,
-          professores, colaboradores e clientes da loja. Esta base será usada
-          para matrícula, financeiro e integração com a Neofin.
-        </p>
-      </div>
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-pink-50 via-slate-50 to-white px-4 py-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <div className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-5 shadow-sm backdrop-blur">
+          <h1 className="text-2xl font-semibold text-slate-900">Pessoas</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Lista geral de pessoas cadastradas.
+          </p>
+        </div>
 
-      {/* Formulário */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white/70 backdrop-blur rounded-xl shadow p-4 space-y-4 max-w-3xl"
-      >
-        <h2 className="text-lg font-semibold">Nova pessoa</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Nome */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium mb-1">
-              Nome completo *
-            </label>
+        <div className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-5 shadow-sm backdrop-blur">
+          <div className="flex flex-wrap items-center gap-3 mb-4">
             <input
-              type="text"
-              required
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por nome, e-mail ou documento"
+              className="input w-full max-w-lg"
             />
-          </div>
-
-          {/* Tipo de pessoa */}
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Tipo de pessoa
-            </label>
-            <select
-              value={tipoPessoa}
-              onChange={(e) =>
-                setTipoPessoa(
-                  e.target.value === "JURIDICA" ? "JURIDICA" : "FISICA"
-                )
-              }
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+            <Link
+              href="/pessoas/nova"
+              className="ml-auto rounded-full bg-violet-600 px-4 py-2 text-white text-sm font-semibold hover:bg-violet-700"
             >
-              <option value="FISICA">Pessoa Física</option>
-              <option value="JURIDICA">Pessoa Jurídica</option>
-            </select>
+              + Nova pessoa
+            </Link>
           </div>
 
-          {/* CPF / Documento */}
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              CPF / Documento
-            </label>
-            <input
-              type="text"
-              value={cpf}
-              onChange={(e) => setCpf(e.target.value)}
-              placeholder="Somente obrigatório para responsável financeiro"
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
+          {error && (
+            <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
 
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium mb-1">E-mail</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
-
-          {/* Telefone */}
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Telefone / WhatsApp
-            </label>
-            <input
-              type="tel"
-              value={telefone}
-              onChange={(e) => setTelefone(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
-
-          {/* Nascimento */}
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Data de nascimento
-            </label>
-            <input
-              type="date"
-              value={nascimento}
-              onChange={(e) => setNascimento(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
-
-          {/* Ativo */}
-          <div className="flex items-center gap-2 mt-2">
-            <input
-              id="ativo"
-              type="checkbox"
-              checked={ativo}
-              onChange={(e) => setAtivo(e.target.checked)}
-              className="h-4 w-4"
-            />
-            <label htmlFor="ativo" className="text-sm">
-              Cadastro ativo
-            </label>
-          </div>
-        </div>
-
-        {/* Observações */}
-        <div>
-          <label className="block text-sm font-medium mb-1">Observações</label>
-          <textarea
-            value={observacoes}
-            onChange={(e) => setObservacoes(e.target.value)}
-            rows={3}
-            className="w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400"
-          />
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
-          >
-            {saving ? "Salvando..." : "Salvar pessoa"}
-          </button>
-          {error && <span className="text-sm text-red-600">{error}</span>}
-        </div>
-      </form>
-
-      {/* Lista de pessoas */}
-      <div className="bg-white/70 backdrop-blur rounded-xl shadow p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Pessoas cadastradas</h2>
-          {loading && (
-            <span className="text-xs text-gray-500">Carregando...</span>
+          {loading ? (
+            <p className="text-sm text-slate-500">Carregando...</p>
+          ) : filtradas.length === 0 ? (
+            <p className="text-sm text-slate-500">Nenhuma pessoa encontrada.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="py-2 pr-4 text-left">Nome</th>
+                    <th className="py-2 pr-4 text-left">Tipo</th>
+                    <th className="py-2 pr-4 text-left">E-mail</th>
+                    <th className="py-2 pr-4 text-left">Telefone</th>
+                    <th className="py-2 pr-4 text-left">Situação</th>
+                    <th className="py-2 pr-4 text-right">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtradas.map((pessoa) => (
+                    <tr key={pessoa.id} className="border-b last:border-0">
+                      <td className="py-2 pr-4">
+                        <div className="font-semibold text-slate-800">
+                          {pessoa.nome}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {pessoa.cpf || "Sem documento"}
+                        </div>
+                      </td>
+                      <td className="py-2 pr-4">
+                        {pessoa.tipo_pessoa === "JURIDICA"
+                          ? "Pessoa jurídica"
+                          : "Pessoa física"}
+                      </td>
+                      <td className="py-2 pr-4">{pessoa.email || "-"}</td>
+                      <td className="py-2 pr-4">{pessoa.telefone || "-"}</td>
+                      <td className="py-2 pr-4">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            pessoa.ativo
+                              ? "bg-green-100 text-green-700"
+                              : "bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {pessoa.ativo ? "Ativo" : "Inativo"}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        <Link
+                          href={`/pessoas/${pessoa.id}`}
+                          className="text-violet-700 hover:underline"
+                        >
+                          Abrir cadastro
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-
-        {pessoas.length === 0 && !loading && (
-          <p className="text-sm text-gray-600">
-            Nenhuma pessoa cadastrada ainda.
-          </p>
-        )}
-
-        {pessoas.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left border-b">
-                  <th className="py-2 pr-4">ID</th>
-                  <th className="py-2 pr-4">Nome</th>
-                  <th className="py-2 pr-4">CPF / Doc.</th>
-                  <th className="py-2 pr-4">Tipo</th>
-                  <th className="py-2 pr-4">E-mail</th>
-                  <th className="py-2 pr-4">Telefone</th>
-                  <th className="py-2 pr-4">Nascimento</th>
-                  <th className="py-2 pr-4">Ativo</th>
-                  <th className="py-2 pr-4">Criado em</th>
-                  <th className="py-2 pr-4">Atualizado em</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pessoas.map((pessoa) => (
-                  <tr key={pessoa.id} className="border-b last:border-0">
-                    <td className="py-2 pr-4">{pessoa.id}</td>
-                    <td className="py-2 pr-4">
-                      <Link
-                        href={`/pessoas/${pessoa.id}`}
-                        className="text-purple-700 hover:underline"
-                      >
-                        {pessoa.nome}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-4">{pessoa.cpf || "-"}</td>
-                    <td className="py-2 pr-4">
-                      {pessoa.tipo_pessoa === "JURIDICA"
-                        ? "Jurídica"
-                        : "Física"}
-                    </td>
-                    <td className="py-2 pr-4">{pessoa.email || "-"}</td>
-                    <td className="py-2 pr-4">{pessoa.telefone || "-"}</td>
-                    <td className="py-2 pr-4">
-                      {formatDate(pessoa.nascimento)}
-                    </td>
-                    <td className="py-2 pr-4">
-                      {pessoa.ativo ? "Sim" : "Não"}
-                    </td>
-                    <td className="py-2 pr-4">
-                      {formatDateTime(pessoa.created_at)}
-                    </td>
-                    <td className="py-2 pr-4">
-                      {formatDateTime(pessoa.updated_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     </div>
   );

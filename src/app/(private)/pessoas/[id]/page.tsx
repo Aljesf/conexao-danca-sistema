@@ -1,13 +1,12 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
-
-import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
-
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import PessoaAvatar from "@/components/PessoaAvatar";
 import EditarFotoModal from "@/components/EditarFotoModal";
-import type { Pessoa, EnderecoPessoa } from "@/types/pessoa";
+import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
+import type { EnderecoPessoa, Pessoa } from "@/types/pessoas";
 
 type AbaId =
   | "dados"
@@ -17,6 +16,8 @@ type AbaId =
   | "vinculos"
   | "resumo"
   | "sistema";
+
+type LocalEndereco = (Partial<EnderecoPessoa> & { pessoa_id?: number }) | null;
 
 // calcula idade em anos a partir da data de nascimento (YYYY-MM-DD)
 function calcularIdade(dateStr: string | null): number | null {
@@ -63,7 +64,7 @@ export default function PessoaDetalhesPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [pessoa, setPessoa] = useState<Pessoa | null>(null);
-  const [endereco, setEndereco] = useState<EnderecoPessoa | null>(null);
+  const [endereco, setEndereco] = useState<LocalEndereco>(null);
 
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -89,7 +90,6 @@ export default function PessoaDetalhesPage() {
   const [openFoto, setOpenFoto] = useState(false);
 
   const podeEditar = true;
-
   useEffect(() => {
     if (!id) return;
 
@@ -103,6 +103,11 @@ export default function PessoaDetalhesPage() {
 
         const res = await fetch(`/api/pessoas/${id}`);
         const json = await res.json();
+
+        if (res.status === 401) {
+          router.replace("/login");
+          return;
+        }
 
         if (!res.ok) {
           throw new Error(json.error || "Falha ao carregar pessoa.");
@@ -140,16 +145,16 @@ export default function PessoaDetalhesPage() {
   }, [id, supabase]);
 
   function formatDate(dateStr: string | null) {
-    if (!dateStr) return "—";
+    if (!dateStr) return "-";
     const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return "—";
+    if (Number.isNaN(d.getTime())) return "-";
     return d.toLocaleDateString("pt-BR");
   }
 
   function formatDateTime(dateStr: string | null) {
-    if (!dateStr) return "—";
+    if (!dateStr) return "-";
     const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return "—";
+    if (Number.isNaN(d.getTime())) return "-";
     return d.toLocaleString("pt-BR");
   }
 
@@ -158,6 +163,13 @@ export default function PessoaDetalhesPage() {
 
   const idade = calcularIdade(pessoa?.nascimento ?? null);
   const generoLabel = pessoa ? formatGenero(pessoa.genero) : null;
+  const createdByLabel = pessoa?.created_by_name ?? "—";
+  const updatedByLabel = pessoa?.updated_by_name ?? "—";
+
+  const enderecoTitulo = useMemo(
+    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "Endereço fiscal" : "Endereço"),
+    [pessoa?.tipo_pessoa]
+  );
 
   async function handleSalvar() {
     if (!pessoa) return;
@@ -187,7 +199,7 @@ export default function PessoaDetalhesPage() {
           naturalidade: naturalidade || null,
           cpf,
           observacoes,
-          endereco, // 👈 manda o objeto de endereço para o backend
+          endereco,
           updated_by: updatedBy,
         }),
       });
@@ -210,15 +222,14 @@ export default function PessoaDetalhesPage() {
   }
 
   const abas: { id: AbaId; label: string; icon: string }[] = [
-    { id: "dados", label: "Dados da pessoa", icon: "👤" },
-    { id: "observacoes", label: "Observações", icon: "📝" },
-    { id: "contato", label: "Informações de contato", icon: "📞" },
-    { id: "endereco", label: "Endereço", icon: "📍" },
-    { id: "vinculos", label: "Vínculos no sistema", icon: "👥" },
-    { id: "resumo", label: "Resumo financeiro", icon: "📊" },
-    { id: "sistema", label: "Dados do sistema", icon: "💻" },
+    { id: "dados", label: "Dados da pessoa", icon: "??" },
+    { id: "observacoes", label: "Observações", icon: "??" },
+    { id: "contato", label: "Informações de contato", icon: "??" },
+    { id: "endereco", label: enderecoTitulo, icon: "??" },
+    { id: "vinculos", label: "Vínculos no sistema", icon: "??" },
+    { id: "resumo", label: "Resumo financeiro", icon: "??" },
+    { id: "sistema", label: "Dados do sistema", icon: "??" },
   ];
-
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-pink-50 via-slate-50 to-white px-4 py-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -232,14 +243,22 @@ export default function PessoaDetalhesPage() {
             <span className="font-medium text-slate-500">Detalhes</span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => router.push("/pessoas")}
-            className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white/70 px-4 py-1.5 text-[11px] font-medium text-violet-700 shadow-sm backdrop-blur hover:bg-violet-50 md:text-xs"
-          >
-            <span className="text-sm">←</span>
-            Voltar para a lista
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/pessoas/${id}/curriculo`}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 md:text-xs"
+            >
+              Currículo
+            </Link>
+            <button
+              type="button"
+              onClick={() => router.push("/pessoas")}
+              className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white/70 px-4 py-1.5 text-[11px] font-medium text-violet-700 shadow-sm backdrop-blur hover:bg-violet-50 md:text-xs"
+            >
+              <span className="text-sm">?</span>
+              Voltar para a lista
+            </button>
+          </div>
         </div>
 
         {/* Cabeçalho com avatar grande e status */}
@@ -282,7 +301,7 @@ export default function PessoaDetalhesPage() {
 
                 {pessoa?.telefone && (
                   <p className="mt-3 flex items-center justify-center gap-2 text-base font-medium text-slate-700 md:justify-start">
-                    <span className="text-lg">📞</span>
+                    <span className="text-lg">??</span>
                     <span>{pessoa.telefone}</span>
                   </p>
                 )}
@@ -404,19 +423,264 @@ export default function PessoaDetalhesPage() {
                 );
               })}
             </nav>
-
-            {/* CONTEÚDO DAS ABAS */}
+            {/* Conteúdo das abas */}
             <div className="rounded-3xl border border-violet-100 bg-white/95 p-6 text-[15px] text-slate-700 shadow-sm backdrop-blur-sm md:p-7">
               {/* Aba: Dados da pessoa */}
               {abaAtiva === "dados" && (
-              
-              {/* (mantém Observações, Contato, Vínculos, Resumo, Sistema iguais ao seu código atual) */}
+                <div className="space-y-6">
+                  <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                    Dados da pessoa
+                  </h2>
 
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-slate-400">Nome completo</p>
+                        {editMode ? (
+                          <input
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={nome}
+                            onChange={(e) => setNome(e.target.value)}
+                          />
+                        ) : (
+                          <p className="mt-1 font-medium text-slate-800">
+                            {nome || "-"}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-400">Nome social</p>
+                        {editMode ? (
+                          <input
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={nomeSocial}
+                            onChange={(e) => setNomeSocial(e.target.value)}
+                          />
+                        ) : (
+                          <p className="mt-1">{nomeSocial || "-"}</p>
+                        )}
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-sm text-slate-400">CPF</p>
+                          {editMode ? (
+                            <input
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={cpf}
+                              onChange={(e) => setCpf(e.target.value)}
+                            />
+                          ) : (
+                            <p className="mt-1">{cpf || "-"}</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="text-sm text-slate-400">
+                            Data de nascimento
+                          </p>
+                          {editMode ? (
+                            <input
+                              type="date"
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={nascimento}
+                              onChange={(e) => setNascimento(e.target.value)}
+                            />
+                          ) : (
+                            <p className="mt-1">
+                              {formatDate(pessoa.nascimento)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-sm text-slate-400">Gênero</p>
+                          {editMode ? (
+                            <select
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={genero}
+                              onChange={(e) =>
+                                setGenero(e.target.value as Pessoa["genero"])
+                              }
+                            >
+                              <option value="NAO_INFORMADO">
+                                Não informado
+                              </option>
+                              <option value="MASCULINO">Masculino</option>
+                              <option value="FEMININO">Feminino</option>
+                              <option value="OUTRO">Outro</option>
+                            </select>
+                          ) : (
+                            <p className="mt-1">{generoLabel || "-"}</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="text-sm text-slate-400">Estado civil</p>
+                          {editMode ? (
+                            <select
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={estadoCivil || ""}
+                              onChange={(e) =>
+                                setEstadoCivil(
+                                  (e.target.value ||
+                                    null) as Pessoa["estado_civil"] | null
+                                )
+                              }
+                            >
+                              <option value="">Não informado</option>
+                              <option value="SOLTEIRO">Solteiro(a)</option>
+                              <option value="CASADO">Casado(a)</option>
+                              <option value="DIVORCIADO">Divorciado(a)</option>
+                              <option value="VIUVO">Viúvo(a)</option>
+                              <option value="UNIAO_ESTAVEL">
+                                União estável
+                              </option>
+                              <option value="OUTRO">Outro</option>
+                            </select>
+                          ) : (
+                            <p className="mt-1">
+                              {estadoCivil ? estadoCivil : "Não informado"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-slate-400">Nacionalidade</p>
+                        {editMode ? (
+                          <input
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={nacionalidade}
+                            onChange={(e) => setNacionalidade(e.target.value)}
+                          />
+                        ) : (
+                          <p className="mt-1">{nacionalidade || "-"}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-400">Naturalidade</p>
+                        {editMode ? (
+                          <input
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={naturalidade}
+                            onChange={(e) => setNaturalidade(e.target.value)}
+                          />
+                        ) : (
+                          <p className="mt-1">{naturalidade || "-"}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-400">Tipo de pessoa</p>
+                        <p className="mt-1">
+                          {pessoa.tipo_pessoa === "JURIDICA"
+                            ? "Pessoa jurídica"
+                            : "Pessoa física"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-400">Idade</p>
+                        <p className="mt-1">{idade ?? "Não informado"}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Aba: Observações */}
+              {abaAtiva === "observacoes" && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                    Observações
+                  </h2>
+                  {editMode ? (
+                    <textarea
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                      rows={4}
+                      value={observacoes}
+                      onChange={(e) => setObservacoes(e.target.value)}
+                    />
+                  ) : (
+                    <p className="text-slate-700">
+                      {observacoes || "Nenhuma observação registrada."}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Aba: Contato */}
+              {abaAtiva === "contato" && (
+                <div className="space-y-6">
+                  <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                    Informações de contato
+                  </h2>
+
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-slate-400">E-mail</p>
+                        {editMode ? (
+                          <input
+                            type="email"
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                          />
+                        ) : (
+                          <p className="mt-1">{email || "-"}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-slate-400">
+                          Telefone principal
+                        </p>
+                        {editMode ? (
+                          <input
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={telefone}
+                            onChange={(e) => setTelefone(e.target.value)}
+                          />
+                        ) : (
+                          <p className="mt-1">{telefone || "-"}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-slate-400">
+                          Telefone secundário
+                        </p>
+                        {editMode ? (
+                          <input
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={telefoneSecundario}
+                            onChange={(e) =>
+                              setTelefoneSecundario(e.target.value)
+                            }
+                          />
+                        ) : (
+                          <p className="mt-1">{telefoneSecundario || "-"}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Aba: Endereço */}
               {abaAtiva === "endereco" && (
                 <div className="space-y-6">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Endereço
+                    {enderecoTitulo}
                   </h2>
 
                   <div className="grid gap-6 md:grid-cols-2">
@@ -435,9 +699,7 @@ export default function PessoaDetalhesPage() {
                             }
                           />
                         ) : (
-                          <p className="mt-1">
-                            {endereco?.logradouro || "—"}
-                          </p>
+                          <p className="mt-1">{endereco?.logradouro || "-"}</p>
                         )}
                       </div>
 
@@ -455,46 +717,50 @@ export default function PessoaDetalhesPage() {
                             }
                           />
                         ) : (
-                          <p className="mt-1">{endereco?.bairro || "—"}</p>
+                          <p className="mt-1">{endereco?.bairro || "-"}</p>
                         )}
                       </div>
 
-                      <div>
-                        <p className="text-sm text-slate-400">Número</p>
-                        {editMode ? (
-                          <input
-                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-                            value={endereco?.numero ?? ""}
-                            onChange={(e) =>
-                              setEndereco((old) => ({
-                                ...(old ?? { pessoa_id: pessoa.id }),
-                                numero: e.target.value || null,
-                              }))
-                            }
-                          />
-                        ) : (
-                          <p className="mt-1">{endereco?.numero || "—"}</p>
-                        )}
-                      </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-sm text-slate-400">Número</p>
+                          {editMode ? (
+                            <input
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={endereco?.numero ?? ""}
+                              onChange={(e) =>
+                                setEndereco((old) => ({
+                                  ...(old ?? { pessoa_id: pessoa.id }),
+                                  numero: e.target.value || null,
+                                }))
+                              }
+                            />
+                          ) : (
+                            <p className="mt-1">{endereco?.numero || "-"}</p>
+                          )}
+                        </div>
 
-                      <div>
-                        <p className="text-sm text-slate-400">Complemento</p>
-                        {editMode ? (
-                          <input
-                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-                            value={endereco?.complemento ?? ""}
-                            onChange={(e) =>
-                              setEndereco((old) => ({
-                                ...(old ?? { pessoa_id: pessoa.id }),
-                                complemento: e.target.value || null,
-                              }))
-                            }
-                          />
-                        ) : (
-                          <p className="mt-1">
-                            {endereco?.complemento || "—"}
+                        <div>
+                          <p className="text-sm text-slate-400">
+                            Complemento
                           </p>
-                        )}
+                          {editMode ? (
+                            <input
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={endereco?.complemento ?? ""}
+                              onChange={(e) =>
+                                setEndereco((old) => ({
+                                  ...(old ?? { pessoa_id: pessoa.id }),
+                                  complemento: e.target.value || null,
+                                }))
+                              }
+                            />
+                          ) : (
+                            <p className="mt-1">
+                              {endereco?.complemento || "-"}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -513,44 +779,46 @@ export default function PessoaDetalhesPage() {
                             }
                           />
                         ) : (
-                          <p className="mt-1">{endereco?.cidade || "—"}</p>
+                          <p className="mt-1">{endereco?.cidade || "-"}</p>
                         )}
                       </div>
 
-                      <div>
-                        <p className="text-sm text-slate-400">Estado</p>
-                        {editMode ? (
-                          <input
-                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-                            value={endereco?.estado ?? ""}
-                            onChange={(e) =>
-                              setEndereco((old) => ({
-                                ...(old ?? { pessoa_id: pessoa.id }),
-                                estado: e.target.value || null,
-                              }))
-                            }
-                          />
-                        ) : (
-                          <p className="mt-1">{endereco?.estado || "—"}</p>
-                        )}
-                      </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <p className="text-sm text-slate-400">Estado (UF)</p>
+                          {editMode ? (
+                            <input
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={endereco?.uf ?? ""}
+                              onChange={(e) =>
+                                setEndereco((old) => ({
+                                  ...(old ?? { pessoa_id: pessoa.id }),
+                                  uf: e.target.value || null,
+                                }))
+                              }
+                            />
+                          ) : (
+                            <p className="mt-1">{endereco?.uf || "-"}</p>
+                          )}
+                        </div>
 
-                      <div>
-                        <p className="text-sm text-slate-400">CEP</p>
-                        {editMode ? (
-                          <input
-                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-                            value={endereco?.cep ?? ""}
-                            onChange={(e) =>
-                              setEndereco((old) => ({
-                                ...(old ?? { pessoa_id: pessoa.id }),
-                                cep: e.target.value || null,
-                              }))
-                            }
-                          />
-                        ) : (
-                          <p className="mt-1">{endereco?.cep || "—"}</p>
-                        )}
+                        <div>
+                          <p className="text-sm text-slate-400">CEP</p>
+                          {editMode ? (
+                            <input
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={endereco?.cep ?? ""}
+                              onChange={(e) =>
+                                setEndereco((old) => ({
+                                  ...(old ?? { pessoa_id: pessoa.id }),
+                                  cep: e.target.value || null,
+                                }))
+                              }
+                            />
+                          ) : (
+                            <p className="mt-1">{endereco?.cep || "-"}</p>
+                          )}
+                        </div>
                       </div>
 
                       <div>
@@ -568,12 +836,83 @@ export default function PessoaDetalhesPage() {
                           />
                         ) : (
                           <p className="mt-1">
-                            {endereco?.referencia || "—"}
+                            {endereco?.referencia || "-"}
                           </p>
                         )}
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Aba: Vínculos */}
+              {abaAtiva === "vinculos" && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                    Vínculos no sistema
+                  </h2>
+                  <p className="text-slate-600">
+                    Nenhum vínculo cadastrado ainda.
+                  </p>
+                </div>
+              )}
+
+              {/* Aba: Resumo */}
+              {abaAtiva === "resumo" && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                    Resumo financeiro
+                  </h2>
+                  <p className="text-slate-600">
+                    Integrações financeiras não configuradas.
+                  </p>
+                </div>
+              )}
+
+              {/* Aba: Sistema */}
+              {abaAtiva === "sistema" && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                    Dados do sistema
+                  </h2>
+
+                  <dl className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">
+                        ID
+                      </p>
+                      <p className="text-sm font-medium text-slate-800">
+                        {pessoa.id}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">
+                        Criado em
+                      </p>
+                      <p className="text-sm font-medium text-slate-800">
+                        {formatDateTime(pessoa.created_at)} por {createdByLabel}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">
+                        Atualizado em
+                      </p>
+                      <p className="text-sm font-medium text-slate-800">
+                        {formatDateTime(pessoa.updated_at)} por {updatedByLabel}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-wide text-slate-400">
+                        Status
+                      </p>
+                      <p className="text-sm font-medium text-slate-800">
+                        {pessoa.ativo ? "Ativo" : "Inativo"}
+                      </p>
+                    </div>
+                  </dl>
                 </div>
               )}
             </div>
@@ -593,3 +932,6 @@ export default function PessoaDetalhesPage() {
     </div>
   );
 }
+
+
+

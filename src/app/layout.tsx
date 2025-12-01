@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { UserProvider } from "@/context/UserContext";
+import { BrandingProvider } from "@/context/BrandingContext";
 
 export const metadata: Metadata = {
   title: "Conexão Dados",
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
-        <UserProvider>{children}</UserProvider>
+        <UserProvider>
+          <BrandingProvider>{children}</BrandingProvider>
+        </UserProvider>
       </body>
     </html>
   );

@@ -1,17 +1,18 @@
-// src/app/api/cobrancas/route.ts
+﻿// src/app/api/cobrancas/route.ts
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServerSSR";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
+import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type NovaCobrancaPayload = {
-  pessoa_id: number;          // responsável financeiro
+  pessoa_id: number;
   descricao: string;
-  valor_centavos: number;     // ex.: 100,00 => 10000
-  vencimento: string;         // "YYYY-MM-DD"
-  metodo_pagamento?: string | null; // PIX, BOLETO, etc (opcional por enquanto)
+  valor_centavos: number;
+  vencimento: string;
+  metodo_pagamento?: string | null;
 };
 
 type Pessoa = {
@@ -39,9 +40,18 @@ type Cobranca = {
   pessoa?: Pessoa | null;
 };
 
-// GET /api/cobrancas  -> lista cobranças com dados básicos da pessoa
+// GET /api/cobrancas -> lista cobrancas com dados basicos da pessoa
 export async function GET() {
   const supabase = await getSupabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "Usuário não autenticado." },
+      { status: 401 }
+    );
+  }
 
   const { data, error } = await supabase
     .from("cobrancas")
@@ -74,7 +84,7 @@ export async function GET() {
   if (error) {
     console.error("[GET /api/cobrancas] erro:", error);
     return NextResponse.json(
-      { error: "Erro ao buscar cobranças." },
+      { error: "Erro ao buscar cobrancas." },
       { status: 500 }
     );
   }
@@ -82,33 +92,38 @@ export async function GET() {
   return NextResponse.json({ data: data as Cobranca[] }, { status: 200 });
 }
 
-// POST /api/cobrancas  -> cria cobrança e tenta integrar com Neofin
+// POST /api/cobrancas -> cria cobranca e tenta integrar com Neofin
 export async function POST(req: Request) {
   const supabase = await getSupabaseServer();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const usuarioId = user?.id ?? null;
+  if (!usuarioId) {
+    return NextResponse.json(
+      { error: "Usuário não autenticado." },
+      { status: 401 }
+    );
+  }
 
   let payload: NovaCobrancaPayload;
   try {
     payload = (await req.json()) as NovaCobrancaPayload;
   } catch {
     return NextResponse.json(
-      { error: "Corpo da requisição inválido." },
+      { error: "Corpo da requisicao invalido." },
       { status: 400 }
     );
   }
 
-  if (
-    !payload.pessoa_id ||
-    !payload.descricao ||
-    !payload.valor_centavos ||
-    !payload.vencimento
-  ) {
+  if (!payload.pessoa_id || !payload.descricao || !payload.valor_centavos || !payload.vencimento) {
     return NextResponse.json(
-      { error: "Campos obrigatórios: pessoa_id, descricao, valor_centavos, vencimento." },
+      { error: "Campos obrigatorios: pessoa_id, descricao, valor_centavos, vencimento." },
       { status: 400 }
     );
   }
 
-  // 1) Busca a pessoa responsável
+  // 1) Busca a pessoa responsavel
   const { data: pessoa, error: ePessoa } = await supabase
     .from("pessoas")
     .select("id, nome, cpf, email, telefone")
@@ -117,17 +132,16 @@ export async function POST(req: Request) {
 
   if (ePessoa || !pessoa) {
     return NextResponse.json(
-      { error: "Pessoa responsável não encontrada." },
+      { error: "Pessoa responsavel nao encontrada." },
       { status: 404 }
     );
   }
 
-  // 2) Validação de CPF
+  // 2) Validacao de CPF
   if (!pessoa.cpf) {
     return NextResponse.json(
       {
-        error:
-          "CPF não informado para essa pessoa. Para gerar cobrança, o responsável financeiro precisa ter CPF cadastrado.",
+        error: "CPF nao informado para essa pessoa. Para gerar cobranca, o responsavel financeiro precisa ter CPF cadastrado.",
       },
       { status: 400 }
     );
@@ -137,8 +151,7 @@ export async function POST(req: Request) {
   if (!documentoLimpo || documentoLimpo.length !== 11) {
     return NextResponse.json(
       {
-        error:
-          "CPF informado é inválido. Verifique o cadastro do responsável financeiro.",
+        error: "CPF informado e invalido. Verifique o cadastro do responsavel financeiro.",
       },
       { status: 400 }
     );
@@ -152,12 +165,10 @@ export async function POST(req: Request) {
     .eq("role", "RESPONSAVEL_FINANCEIRO");
 
   if (eRoles) {
-    console.error("[POST /api/cobrancas] erro ao buscar papéis:", eRoles);
+    console.error("[POST /api/cobrancas] erro ao buscar papeis:", eRoles);
     return NextResponse.json(
       {
-        error:
-          eRoles.message ??
-          "Erro ao verificar papéis da pessoa.",
+        error: eRoles.message ?? "Erro ao verificar papeis da pessoa.",
       },
       { status: 500 }
     );
@@ -166,14 +177,13 @@ export async function POST(req: Request) {
   if (!roles || roles.length === 0) {
     return NextResponse.json(
       {
-        error:
-          "Esta pessoa não está marcada como RESPONSÁVEL FINANCEIRO. Atualize os papéis antes de gerar a cobrança.",
+        error: "Esta pessoa nao esta marcada como RESPONSAVEL_FINANCEIRO. Atualize os papeis antes de gerar a cobranca.",
       },
       { status: 400 }
     );
   }
 
-  // 4) Cria a cobrança localmente
+  // 4) Cria a cobranca localmente
   const { data: novaCobranca, error: eInsert } = await supabase
     .from("cobrancas")
     .insert({
@@ -205,14 +215,14 @@ export async function POST(req: Request) {
     .single<Cobranca>();
 
   if (eInsert || !novaCobranca) {
-    console.error("[POST /api/cobrancas] erro ao criar cobrança:", eInsert);
+    console.error("[POST /api/cobrancas] erro ao criar cobranca:", eInsert);
     return NextResponse.json(
-      { error: "Erro ao criar cobrança." },
+      { error: "Erro ao criar cobranca." },
       { status: 500 }
     );
   }
 
-  // 5) Integra com a Neofin (idempotência pelo integrationIdentifier)
+  // 5) Integra com a Neofin (idempotencia pelo integrationIdentifier)
   const integrationIdentifier = `cobranca-${novaCobranca.id}`;
 
   const neofinResult = await upsertNeofinBilling({
@@ -229,12 +239,8 @@ export async function POST(req: Request) {
   });
 
   if (!neofinResult.ok) {
-    console.error(
-      "[Neofin] Falha ao enfileirar cobrança na criação:",
-      neofinResult
-    );
+    console.error("[Neofin] Falha ao enfileirar cobranca na criacao:", neofinResult);
 
-    // marca ERRO_INTEGRACAO
     await supabase
       .from("cobrancas")
       .update({ status: "ERRO_INTEGRACAO" })
@@ -242,15 +248,14 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       {
-        error:
-          "Cobrança criada localmente, mas falhou ao integrar com a Neofin.",
+        error: "Cobranca criada localmente, mas falhou ao integrar com a Neofin.",
         neofin: neofinResult,
       },
       { status: 502 }
     );
   }
 
-  // 6) Atualiza cobrança com identificador Neofin
+  // 6) Atualiza cobranca com identificador Neofin
   const { data: cobrancaAtualizada, error: eUpdate } = await supabase
     .from("cobrancas")
     .update({
@@ -278,19 +283,25 @@ export async function POST(req: Request) {
     .single<Cobranca>();
 
   if (eUpdate || !cobrancaAtualizada) {
-    console.error(
-      "[POST /api/cobrancas] erro ao atualizar cobrança após integração:",
-      eUpdate
-    );
+    console.error("[POST /api/cobrancas] erro ao atualizar cobranca apos integracao:", eUpdate);
     return NextResponse.json(
       {
-        error:
-          "Cobrança foi enviada para a Neofin, mas ocorreu um erro ao atualizar os dados locais.",
+        error: "Cobranca foi enviada para a Neofin, mas ocorreu um erro ao atualizar os dados locais.",
         neofin: neofinResult,
       },
       { status: 500 }
     );
   }
+
+  const usuarioNome = await resolverNomeDoUsuario(usuarioId);
+  await logAuditoria({
+    usuario_id: usuarioId ?? "",
+    usuario_nome: usuarioNome,
+    entidade: "cobranca",
+    entidade_id: cobrancaAtualizada.id,
+    acao: "CREATE",
+    descricao: `Criou cobranca #${cobrancaAtualizada.id} para pessoa ${pessoa.nome} (#${pessoa.id})`,
+  });
 
   return NextResponse.json(
     {

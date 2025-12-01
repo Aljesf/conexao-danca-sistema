@@ -1,7 +1,9 @@
-// src/app/api/pessoas/[id]/route.ts
+﻿// src/app/api/pessoas/[id]/route.ts
 import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
-import type { Pessoa } from "@/types/pessoa";
+import { createClient } from "@supabase/supabase-js";
+import { getSupabaseServer } from "@/lib/supabaseServerSSR";
+import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
+import type { Pessoa } from "@/types/pessoas";
 
 type RouteParams = {
   params: { id: string };
@@ -39,13 +41,18 @@ const pessoaSelect = `
 `;
 
 // Resolve um nome a partir do user_id usando profiles e, se necessário, pessoas
-async function resolverNomePorUserId(
-  supabase: ReturnType<typeof getSupabaseServer>,
-  userId: string | null
-): Promise<string | null> {
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: { autoRefreshToken: false, persistSession: false },
+  }
+);
+
+async function resolverNomePorUserId(userId: string | null): Promise<string | null> {
   if (!userId) return null;
 
-  const { data: perfil, error: perfilError } = await supabase
+  const { data: perfil, error: perfilError } = await supabaseAdmin
     .from("profiles")
     .select("full_name, pessoa_id")
     .eq("user_id", userId)
@@ -56,14 +63,12 @@ async function resolverNomePorUserId(
     return null;
   }
 
-  // 1) Se tiver full_name, usa ele
   if (perfil?.full_name) {
     return perfil.full_name;
   }
 
-  // 2) Se não tiver full_name mas tiver pessoa_id, pega o nome da tabela pessoas
   if (perfil?.pessoa_id) {
-    const { data: pessoaVinculada, error: pessoaError } = await supabase
+    const { data: pessoaVinculada, error: pessoaError } = await supabaseAdmin
       .from("pessoas")
       .select("nome")
       .eq("id", perfil.pessoa_id)
@@ -84,7 +89,7 @@ async function resolverNomePorUserId(
 
 // Carrega a pessoa e adiciona created_by_name / updated_by_name
 async function carregarPessoaComNomes(id: string) {
-  const supabase = getSupabaseServer();
+  const supabase = await getSupabaseServer();
 
   const { data, error } = await supabase
     .from("pessoas")
@@ -106,14 +111,10 @@ async function carregarPessoaComNomes(id: string) {
     updated_by_name?: string | null;
   };
 
-  const createdByName = await resolverNomePorUserId(
-    supabase,
-    pessoa.created_by ?? null
-  );
-  const updatedByName = await resolverNomePorUserId(
-    supabase,
-    pessoa.updated_by ?? null
-  );
+  const [createdByName, updatedByName] = await Promise.all([
+    resolverNomePorUserId(pessoa.created_by ?? null),
+    resolverNomePorUserId(pessoa.updated_by ?? null),
+  ]);
 
   return {
     ...pessoa,
@@ -130,6 +131,17 @@ export async function GET(_req: Request, { params }: RouteParams) {
       return NextResponse.json(
         { error: "ID da pessoa não informado" },
         { status: 400 }
+      );
+    }
+
+    const supabase = await getSupabaseServer();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: "Usuário não autenticado." },
+        { status: 401 }
       );
     }
 
@@ -168,7 +180,28 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
     const body = await req.json();
 
-    const supabase = getSupabaseServer();
+    const supabase = await getSupabaseServer();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
+      return NextResponse.json(
+        { error: "Usuario nao autenticado." },
+        { status: 401 }
+      );
+    }
+    const updatedBy = user.id;
+    const cpfValue =
+      body.cpf && typeof body.cpf === "string" && body.cpf.trim() !== ""
+        ? body.cpf.trim()
+        : null;
+
+    // captura dados anteriores para log
+    const { data: antigaPessoa } = await supabase
+      .from("pessoas")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
 
     const { data, error } = await supabase
       .from("pessoas")
@@ -183,9 +216,9 @@ export async function PUT(req: Request, { params }: RouteParams) {
         estado_civil: body.estado_civil ?? null,
         nacionalidade: body.nacionalidade ?? null,
         naturalidade: body.naturalidade ?? null,
-        cpf: body.cpf ?? null,
+        cpf: cpfValue,
         observacoes: body.observacoes ?? null,
-        updated_by: body.updated_by ?? null,
+        updated_by: updatedBy,
       })
       .eq("id", id)
       .select(pessoaSelect)
@@ -193,10 +226,11 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
     if (error) {
       console.error("Erro ao atualizar pessoa:", error);
-      return NextResponse.json(
-        { error: error.message || "Erro ao atualizar pessoa" },
-        { status: 400 }
-      );
+      const msg =
+        error.code === "23505"
+          ? "Ja existe uma pessoa ativa com este CPF."
+          : error.message || "Erro ao atualizar pessoa";
+      return NextResponse.json({ error: msg }, { status: 400 });
     }
 
     if (!data) {
@@ -206,8 +240,23 @@ export async function PUT(req: Request, { params }: RouteParams) {
       );
     }
 
-    // Reaproveita helper para trazer created_by_name/updated_by_name
     const pessoaAtualizada = await carregarPessoaComNomes(id);
+
+    try {
+      const usuarioNome = await resolverNomeDoUsuario(updatedBy);
+      await logAuditoria({
+        usuario_id: updatedBy,
+        usuario_nome: usuarioNome,
+        entidade: "pessoa",
+        entidade_id: Number(id),
+        acao: "UPDATE",
+        descricao: `Atualizou pessoa #${id} - ${pessoaAtualizada?.nome ?? data.nome ?? "sem nome"}`,
+        dados_anteriores: antigaPessoa ?? null,
+        dados_novos: pessoaAtualizada ?? data,
+      });
+    } catch (e) {
+      console.error("[auditoria] falha ao registrar log de atualização de pessoa:", e);
+    }
 
     return NextResponse.json(
       { data: pessoaAtualizada ?? data },
