@@ -17,8 +17,7 @@ export interface Turma {
   curso: string | null;
   modalidade: string | null; // representa o curso como texto hoje
   carga_horaria_prevista: number | null;
-  frequencia_minima: number | null;
-  frequencia_minima_percentual?: number | null;
+  frequencia_minima_percentual: number | null;
   data_inicio: string | null;
   data_fim: string | null;
   dias_semana: string | string[] | null;
