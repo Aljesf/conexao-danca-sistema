@@ -1,6 +1,6 @@
 📘 VNB — Estrutura Oficial do Sidebar do Sistema Conexão Dança
 
-Versão: 1.1
+Versão: 1.2
 Última atualização: 28-11-2025
 Responsável: Alírio de Jesus e Silva Filho
 
@@ -15,11 +15,12 @@ Reforço da estrutura hierárquica do Admin.
 Mantidas todas as seções dos demais contextos (Escola, Loja e Café).
 
 1. CONTEXTO ESCOLA — Conexão Dança
+1. CONTEXTO ESCOLA — Conexão Dança
 1.1 INÍCIO
 
 Início → /escola
 
-1.2 CAIXA
+1.2 CAIXA (ESCOLA)
 
 Frente de caixa → /escola/caixa
 
@@ -33,17 +34,7 @@ Eventos externos → /escola/calendario/eventos-externos
 
 Feriados → /escola/calendario/feriados
 
-1.4 MOVIMENTO CONEXÃO DANÇA
-
-Bolsas → /escola/movimento/bolsas
-
-Acolhimento → /escola/movimento/acolhimento
-
-Ações solidárias → /escola/movimento/acoes-solidarias
-
-Informações sociais → /escola/movimento/informacoes-sociais
-
-1.5 CAPTAÇÃO (CRM)
+1.4 CAPTAÇÃO (CRM)
 
 Visão geral → /escola/captacao
 
@@ -51,15 +42,16 @@ Novo interessado → /escola/captacao/novo
 
 Interessados → /escola/captacao/interessados
 
-1.6 PESSOAS
+1.5 PESSOAS
 
 Nova pessoa → /escola/pessoas/nova
 
 Lista de pessoas → /escola/pessoas
 
-1.7 ALUNOS
+1.6 ALUNOS
 
 Novo aluno → /escola/alunos/novo
+(atalho direto para o fluxo completo de matrícula)
 
 Lista de alunos → /escola/alunos
 
@@ -68,8 +60,9 @@ Matrículas → /escola/alunos/matriculas
 Currículo → /escola/alunos/curriculo
 
 Grupos de alunos → /escola/alunos/grupos
+(bolsistas, companhia, GAV etc.)
 
-1.8 ACADÊMICO
+1.7 ACADÊMICO
 
 Cursos → /escola/academico/cursos
 
@@ -79,7 +72,8 @@ Módulos → /escola/academico/modulos
 
 Avaliações → /escola/academico/avaliacoes
 
-Professores → /escola/academico/professores (somente visualização)
+Professores → /escola/academico/professores
+(somente visualização no contexto ESCOLA)
 
 Nova turma → /escola/academico/turmas/nova
 
@@ -88,6 +82,16 @@ Turmas → /escola/academico/turmas
 Grade → /escola/academico/grade
 
 Frequência → /escola/academico/frequencia
+
+1.8 MOVIMENTO CONEXÃO DANÇA (AGORA NO FINAL)
+
+Bolsas → /escola/movimento/bolsas
+
+Acolhimento → /escola/movimento/acolhimento
+
+Ações solidárias → /escola/movimento/acoes-solidarias
+
+Informações sociais → /escola/movimento/informacoes-sociais
 
 2. CONTEXTO LOJA — AJ Dance Store
 2.1 INÍCIO

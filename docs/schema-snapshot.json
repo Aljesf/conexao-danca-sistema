@@ -1,0 +1,5481 @@
+{
+  "generatedAt": "2025-12-03T02:08:54.657Z",
+  "databaseUrlPrefix": "postgresql://***@aws-1-sa-east-1.pooler.supabase.com:5432/postgres",
+  "schema": "public",
+  "tables": [
+    {
+      "schema": "public",
+      "name": "alunos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('alunos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "email",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "telefone",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "data_nascimento",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": "auth.uid()"
+        },
+        {
+          "column_name": "user_email",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_18655_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_18655_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_18655_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_18655_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "alunos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "alunos_email_key",
+          "indexdef": "CREATE UNIQUE INDEX alunos_email_key ON public.alunos USING btree (email) WHERE (email IS NOT NULL)"
+        },
+        {
+          "indexname": "alunos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX alunos_pkey ON public.alunos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "alunos_turmas",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('alunos_turmas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "aluno_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "turma_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "dt_inicio",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": "CURRENT_DATE"
+        },
+        {
+          "column_name": "dt_fim",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "situacao",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'ativo'::text"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "user_email",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_27626_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27626_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27626_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27626_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27626_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27626_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "alunos_turmas_aluno_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "aluno_id"
+        },
+        {
+          "constraint_name": "alunos_turmas_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "alunos_turmas_user_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "user_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "alunos_turmas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX alunos_turmas_pkey ON public.alunos_turmas USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "auditoria_logs",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "gen_random_uuid()"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "acao",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "entidade",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "entidade_id",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "detalhes",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ip",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "user_agent",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_42330_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42330_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42330_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42330_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "auditoria_logs_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "auditoria_logs_user_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "user_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "auditoria_logs_pkey",
+          "indexdef": "CREATE UNIQUE INDEX auditoria_logs_pkey ON public.auditoria_logs USING btree (id)"
+        },
+        {
+          "indexname": "auditoria_logs_user_created_at_idx",
+          "indexdef": "CREATE INDEX auditoria_logs_user_created_at_idx ON public.auditoria_logs USING btree (user_id, created_at DESC)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "avaliacao_aluno_resultado",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('avaliacao_aluno_resultado_id_seq'::regclass)"
+        },
+        {
+          "column_name": "turma_avaliacao_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "conceito_final_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "conceitos_por_grupo",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes_professor",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "data_avaliacao",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "avaliador_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "criado_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "atualizado_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_52474_10_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52474_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52474_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52474_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52474_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52474_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "avaliacao_aluno_resultado_avaliador_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "avaliador_id"
+        },
+        {
+          "constraint_name": "avaliacao_aluno_resultado_conceito_final_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "conceito_final_id"
+        },
+        {
+          "constraint_name": "avaliacao_aluno_resultado_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "avaliacao_aluno_resultado_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "avaliacao_aluno_resultado_turma_avaliacao_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "turma_avaliacao_id"
+        },
+        {
+          "constraint_name": "avaliacao_aluno_resultado_unique",
+          "constraint_type": "UNIQUE",
+          "column_name": "turma_avaliacao_id"
+        },
+        {
+          "constraint_name": "avaliacao_aluno_resultado_unique",
+          "constraint_type": "UNIQUE",
+          "column_name": "pessoa_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "avaliacao_aluno_resultado_pkey",
+          "indexdef": "CREATE UNIQUE INDEX avaliacao_aluno_resultado_pkey ON public.avaliacao_aluno_resultado USING btree (id)"
+        },
+        {
+          "indexname": "avaliacao_aluno_resultado_unique",
+          "indexdef": "CREATE UNIQUE INDEX avaliacao_aluno_resultado_unique ON public.avaliacao_aluno_resultado USING btree (turma_avaliacao_id, pessoa_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "avaliacoes_conceitos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('avaliacoes_conceitos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "rotulo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ordem",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "1"
+        },
+        {
+          "column_name": "cor_hex",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "criado_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "atualizado_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_52422_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52422_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52422_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52422_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52422_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52422_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52422_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "avaliacoes_conceitos_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "avaliacoes_conceitos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "avaliacoes_conceitos_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX avaliacoes_conceitos_codigo_key ON public.avaliacoes_conceitos USING btree (codigo)"
+        },
+        {
+          "indexname": "avaliacoes_conceitos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX avaliacoes_conceitos_pkey ON public.avaliacoes_conceitos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "avaliacoes_modelo",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('avaliacoes_modelo_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo_avaliacao",
+          "data_type": "USER-DEFINED",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "obrigatoria",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "grupos",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "conceitos_ids",
+          "data_type": "ARRAY",
+          "is_nullable": "NO",
+          "column_default": "'{}'::bigint[]"
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "criado_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "atualizado_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_52437_10_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52437_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52437_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52437_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52437_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52437_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52437_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52437_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52437_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "avaliacoes_modelo_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "avaliacoes_modelo_pkey",
+          "indexdef": "CREATE UNIQUE INDEX avaliacoes_modelo_pkey ON public.avaliacoes_modelo USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "bairros",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "uuid_generate_v4()"
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "cidade",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "estado",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "column_default": "true"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_44993_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_44993_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "bairros_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "bairros_pkey",
+          "indexdef": "CREATE UNIQUE INDEX bairros_pkey ON public.bairros USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "categorias_financeiras",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "nextval('categorias_financeiras_id_seq'::regclass)"
+        },
+        {
+          "column_name": "tipo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "plano_conta_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46483_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46483_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46483_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46483_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46483_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "categorias_financeiras_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "categorias_financeiras_plano_conta_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "plano_conta_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "categorias_financeiras_pkey",
+          "indexdef": "CREATE UNIQUE INDEX categorias_financeiras_pkey ON public.categorias_financeiras USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "centros_custo",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "nextval('centros_custo_id_seq'::regclass)"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46425_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46425_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46425_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46425_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "centros_custo_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "centros_custo_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "centros_custo_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX centros_custo_codigo_key ON public.centros_custo USING btree (codigo)"
+        },
+        {
+          "indexname": "centros_custo_pkey",
+          "indexdef": "CREATE UNIQUE INDEX centros_custo_pkey ON public.centros_custo USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "cobrancas",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('cobrancas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "valor_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "moeda",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'BRL'::text"
+        },
+        {
+          "column_name": "vencimento",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "data_pagamento",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'PENDENTE'::text"
+        },
+        {
+          "column_name": "metodo_pagamento",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "neofin_charge_id",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "neofin_payload",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "link_pagamento",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "linha_digitavel",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "origem_tipo",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "origem_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_40954_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_40954_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_40954_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_40954_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_40954_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_40954_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_40954_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "cobrancas_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "cobrancas_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "cobrancas_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "cobrancas_pessoa_id_idx",
+          "indexdef": "CREATE INDEX cobrancas_pessoa_id_idx ON public.cobrancas USING btree (pessoa_id)"
+        },
+        {
+          "indexname": "cobrancas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX cobrancas_pkey ON public.cobrancas USING btree (id)"
+        },
+        {
+          "indexname": "cobrancas_status_idx",
+          "indexdef": "CREATE INDEX cobrancas_status_idx ON public.cobrancas USING btree (status)"
+        },
+        {
+          "indexname": "cobrancas_vencimento_idx",
+          "indexdef": "CREATE INDEX cobrancas_vencimento_idx ON public.cobrancas USING btree (vencimento)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "colaborador_funcoes",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('colaborador_funcoes_id_seq'::regclass)"
+        },
+        {
+          "column_name": "colaborador_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "funcao_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "principal",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48033_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48033_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48033_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48033_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48033_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "colaborador_funcoes_colaborador_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "colaborador_id"
+        },
+        {
+          "constraint_name": "colaborador_funcoes_funcao_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "funcao_id"
+        },
+        {
+          "constraint_name": "colaborador_funcoes_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "colaborador_funcoes_pkey",
+          "indexdef": "CREATE UNIQUE INDEX colaborador_funcoes_pkey ON public.colaborador_funcoes USING btree (id)"
+        },
+        {
+          "indexname": "idx_colab_funcoes_colab",
+          "indexdef": "CREATE INDEX idx_colab_funcoes_colab ON public.colaborador_funcoes USING btree (colaborador_id)"
+        },
+        {
+          "indexname": "idx_colab_funcoes_funcao",
+          "indexdef": "CREATE INDEX idx_colab_funcoes_funcao ON public.colaborador_funcoes USING btree (funcao_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "colaborador_jornada",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('colaborador_jornada_id_seq'::regclass)"
+        },
+        {
+          "column_name": "colaborador_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo_vinculo_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "inicio_vigencia",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "fim_vigencia",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48282_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48282_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48282_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48282_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48282_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "colaborador_jornada_colaborador_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "colaborador_id"
+        },
+        {
+          "constraint_name": "colaborador_jornada_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "colaborador_jornada_tipo_vinculo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "tipo_vinculo_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "colaborador_jornada_pkey",
+          "indexdef": "CREATE UNIQUE INDEX colaborador_jornada_pkey ON public.colaborador_jornada USING btree (id)"
+        },
+        {
+          "indexname": "idx_jornada_colab",
+          "indexdef": "CREATE INDEX idx_jornada_colab ON public.colaborador_jornada USING btree (colaborador_id)"
+        },
+        {
+          "indexname": "idx_jornada_vigencia",
+          "indexdef": "CREATE INDEX idx_jornada_vigencia ON public.colaborador_jornada USING btree (inicio_vigencia, fim_vigencia)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "colaborador_jornada_dias",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('colaborador_jornada_dias_id_seq'::regclass)"
+        },
+        {
+          "column_name": "jornada_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "dia_semana",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "entrada_1",
+          "data_type": "time without time zone",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "saida_1",
+          "data_type": "time without time zone",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "entrada_2",
+          "data_type": "time without time zone",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "saida_2",
+          "data_type": "time without time zone",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48305_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48305_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48305_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48305_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "colaborador_jornada_dias_jornada_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "jornada_id"
+        },
+        {
+          "constraint_name": "colaborador_jornada_dias_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "colaborador_jornada_dias_pkey",
+          "indexdef": "CREATE UNIQUE INDEX colaborador_jornada_dias_pkey ON public.colaborador_jornada_dias USING btree (id)"
+        },
+        {
+          "indexname": "idx_jornada_dias_dia",
+          "indexdef": "CREATE INDEX idx_jornada_dias_dia ON public.colaborador_jornada_dias USING btree (dia_semana)"
+        },
+        {
+          "indexname": "idx_jornada_dias_jornada",
+          "indexdef": "CREATE INDEX idx_jornada_dias_jornada ON public.colaborador_jornada_dias USING btree (jornada_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "colaboradores",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('colaboradores_id_seq'::regclass)"
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo_vinculo",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "data_inicio",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "data_fim",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo_vinculo_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_47959_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47959_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47959_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "colaboradores_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "colaboradores_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "colaboradores_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "colaboradores_tipo_vinculo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "tipo_vinculo_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "colaboradores_pkey",
+          "indexdef": "CREATE UNIQUE INDEX colaboradores_pkey ON public.colaboradores USING btree (id)"
+        },
+        {
+          "indexname": "idx_colaboradores_centro",
+          "indexdef": "CREATE INDEX idx_colaboradores_centro ON public.colaboradores USING btree (centro_custo_id)"
+        },
+        {
+          "indexname": "idx_colaboradores_pessoa",
+          "indexdef": "CREATE INDEX idx_colaboradores_pessoa ON public.colaboradores USING btree (pessoa_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "config_pagamento_colaborador",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('config_pagamento_colaborador_id_seq'::regclass)"
+        },
+        {
+          "column_name": "colaborador_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "funcao_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "modelo_pagamento_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "valor_centavos",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48191_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48191_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48191_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48191_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "config_pagamento_colaborador_colaborador_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "colaborador_id"
+        },
+        {
+          "constraint_name": "config_pagamento_colaborador_funcao_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "funcao_id"
+        },
+        {
+          "constraint_name": "config_pagamento_colaborador_modelo_pagamento_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "modelo_pagamento_id"
+        },
+        {
+          "constraint_name": "config_pagamento_colaborador_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "config_pagamento_colaborador_pkey",
+          "indexdef": "CREATE UNIQUE INDEX config_pagamento_colaborador_pkey ON public.config_pagamento_colaborador USING btree (id)"
+        },
+        {
+          "indexname": "idx_conf_pag_colab",
+          "indexdef": "CREATE INDEX idx_conf_pag_colab ON public.config_pagamento_colaborador USING btree (colaborador_id)"
+        },
+        {
+          "indexname": "idx_conf_pag_modelo",
+          "indexdef": "CREATE INDEX idx_conf_pag_modelo ON public.config_pagamento_colaborador USING btree (modelo_pagamento_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "contas_financeiras",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('contas_financeiras_id_seq'::regclass)"
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "banco",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "agencia",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "numero_conta",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_47848_10_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47848_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47848_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47848_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47848_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47848_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "contas_financeiras_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "contas_financeiras_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "contas_financeiras_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "contas_financeiras_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX contas_financeiras_codigo_key ON public.contas_financeiras USING btree (codigo)"
+        },
+        {
+          "indexname": "contas_financeiras_pkey",
+          "indexdef": "CREATE UNIQUE INDEX contas_financeiras_pkey ON public.contas_financeiras USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "contas_pagar",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('contas_pagar_id_seq'::regclass)"
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "categoria_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "valor_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "vencimento",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "data_pagamento",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'PENDENTE'::text"
+        },
+        {
+          "column_name": "metodo_pagamento",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46514_12_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46514_13_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46514_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46514_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46514_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46514_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46514_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46514_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "contas_pagar_categoria_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "categoria_id"
+        },
+        {
+          "constraint_name": "contas_pagar_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "contas_pagar_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "contas_pagar_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "contas_pagar_pkey",
+          "indexdef": "CREATE UNIQUE INDEX contas_pagar_pkey ON public.contas_pagar USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "contas_pagar_pagamentos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('contas_pagar_pagamentos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "conta_pagar_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "conta_financeira_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "valor_principal_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "juros_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "0"
+        },
+        {
+          "column_name": "desconto_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "0"
+        },
+        {
+          "column_name": "data_pagamento",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "metodo_pagamento",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "usuario_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_47909_12_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47909_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47909_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47909_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47909_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47909_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47909_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_47909_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "contas_pagar_pagamentos_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "contas_pagar_pagamentos_conta_financeira_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "conta_financeira_id"
+        },
+        {
+          "constraint_name": "contas_pagar_pagamentos_conta_pagar_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "conta_pagar_id"
+        },
+        {
+          "constraint_name": "contas_pagar_pagamentos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "contas_pagar_pagamentos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX contas_pagar_pagamentos_pkey ON public.contas_pagar_pagamentos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "cursos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('cursos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "metodologia",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "situacao",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'Ativo'::text"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46299_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46299_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46299_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46299_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46299_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "cursos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "cursos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX cursos_pkey ON public.cursos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "endereco",
+      "columns": [
+        {
+          "column_name": "endereco_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('endereco_endereco_id_seq'::regclass)"
+        },
+        {
+          "column_name": "logradouro",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "numero",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "complemento",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "bairro",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cidade",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "uf",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cep",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_28027_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "endereco_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "endereco_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "endereco_pkey",
+          "indexdef": "CREATE UNIQUE INDEX endereco_pkey ON public.endereco USING btree (endereco_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "enderecos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('enderecos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "logradouro",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "numero",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "complemento",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "bairro",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cidade",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "uf",
+          "data_type": "character",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "cep",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "referencia",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_44879_10_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_44879_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_44879_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_44879_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_44879_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "enderecos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "enderecos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX enderecos_pkey ON public.enderecos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "enderecos_pessoa",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "uuid_generate_v4()"
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "rua_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "bairro_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "logradouro",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "bairro",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cidade",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "estado",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cep",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "numero",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "complemento",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "referencia",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_45020_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "enderecos_pessoa_bairro_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "bairro_id"
+        },
+        {
+          "constraint_name": "enderecos_pessoa_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "enderecos_pessoa_pessoa_id_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "enderecos_pessoa_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "enderecos_pessoa_rua_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "rua_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "enderecos_pessoa_pessoa_id_key",
+          "indexdef": "CREATE UNIQUE INDEX enderecos_pessoa_pessoa_id_key ON public.enderecos_pessoa USING btree (pessoa_id)"
+        },
+        {
+          "indexname": "enderecos_pessoa_pkey",
+          "indexdef": "CREATE UNIQUE INDEX enderecos_pessoa_pkey ON public.enderecos_pessoa USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "funcoes_colaborador",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "nextval('funcoes_colaborador_id_seq'::regclass)"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "grupo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "grupo_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48001_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48001_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48001_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48001_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48001_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "funcoes_colaborador_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "funcoes_colaborador_grupo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "grupo_id"
+        },
+        {
+          "constraint_name": "funcoes_colaborador_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "funcoes_colaborador_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX funcoes_colaborador_codigo_key ON public.funcoes_colaborador USING btree (codigo)"
+        },
+        {
+          "indexname": "funcoes_colaborador_pkey",
+          "indexdef": "CREATE UNIQUE INDEX funcoes_colaborador_pkey ON public.funcoes_colaborador USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "funcoes_grupo",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('funcoes_grupo_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "pode_lecionar",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "ordem",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_49491_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49491_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49491_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49491_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "funcoes_grupo_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "funcoes_grupo_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "funcoes_grupo_pkey",
+          "indexdef": "CREATE UNIQUE INDEX funcoes_grupo_pkey ON public.funcoes_grupo USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "habilidades",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('habilidades_id_seq'::regclass)"
+        },
+        {
+          "column_name": "curso_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nivel_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "modulo_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "criterio_avaliacao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ordem",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "1"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46355_10_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46355_11_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46355_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46355_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46355_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46355_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46355_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46355_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "habilidades_curso_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "curso_id"
+        },
+        {
+          "constraint_name": "habilidades_modulo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "modulo_id"
+        },
+        {
+          "constraint_name": "habilidades_nivel_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "nivel_id"
+        },
+        {
+          "constraint_name": "habilidades_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "habilidades_pkey",
+          "indexdef": "CREATE UNIQUE INDEX habilidades_pkey ON public.habilidades USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "matriculas",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "responsavel_financeiro_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo_matricula",
+          "data_type": "USER-DEFINED",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "vinculo_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "plano_matricula_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "contrato_modelo_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "contrato_emitido_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "contrato_pdf_url",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "status",
+          "data_type": "USER-DEFINED",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "ano_referencia",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "data_matricula",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": "CURRENT_DATE"
+        },
+        {
+          "column_name": "data_encerramento",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "created_by",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "updated_by",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_54978_10_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_12_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_15_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_16_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_54978_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "matriculas_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "matriculas_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "matriculas_responsavel_financeiro_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "responsavel_financeiro_id"
+        },
+        {
+          "constraint_name": "matriculas_vinculo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "vinculo_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_matriculas_pessoa",
+          "indexdef": "CREATE INDEX idx_matriculas_pessoa ON public.matriculas USING btree (pessoa_id)"
+        },
+        {
+          "indexname": "idx_matriculas_responsavel",
+          "indexdef": "CREATE INDEX idx_matriculas_responsavel ON public.matriculas USING btree (responsavel_financeiro_id)"
+        },
+        {
+          "indexname": "idx_matriculas_status",
+          "indexdef": "CREATE INDEX idx_matriculas_status ON public.matriculas USING btree (status)"
+        },
+        {
+          "indexname": "idx_matriculas_tipo_ano",
+          "indexdef": "CREATE INDEX idx_matriculas_tipo_ano ON public.matriculas USING btree (tipo_matricula, ano_referencia)"
+        },
+        {
+          "indexname": "idx_matriculas_vinculo",
+          "indexdef": "CREATE INDEX idx_matriculas_vinculo ON public.matriculas USING btree (vinculo_id)"
+        },
+        {
+          "indexname": "matriculas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX matriculas_pkey ON public.matriculas USING btree (id)"
+        },
+        {
+          "indexname": "uniq_matriculas_pessoa_tipo_vinculo_regular",
+          "indexdef": "CREATE UNIQUE INDEX uniq_matriculas_pessoa_tipo_vinculo_regular ON public.matriculas USING btree (pessoa_id, tipo_matricula, vinculo_id) WHERE (tipo_matricula = 'REGULAR'::tipo_matricula_enum)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "modelos_pagamento_colaborador",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "nextval('modelos_pagamento_colaborador_id_seq'::regclass)"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "unidade",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "categoria_financeira_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48127_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48127_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48127_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48127_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48127_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "modelos_pagamento_colaborador_categoria_financeira_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "categoria_financeira_id"
+        },
+        {
+          "constraint_name": "modelos_pagamento_colaborador_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "modelos_pagamento_colaborador_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "modelos_pagamento_colaborador_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_modpag_categoria",
+          "indexdef": "CREATE INDEX idx_modpag_categoria ON public.modelos_pagamento_colaborador USING btree (categoria_financeira_id)"
+        },
+        {
+          "indexname": "idx_modpag_centro",
+          "indexdef": "CREATE INDEX idx_modpag_centro ON public.modelos_pagamento_colaborador USING btree (centro_custo_id)"
+        },
+        {
+          "indexname": "modelos_pagamento_colaborador_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX modelos_pagamento_colaborador_codigo_key ON public.modelos_pagamento_colaborador USING btree (codigo)"
+        },
+        {
+          "indexname": "modelos_pagamento_colaborador_pkey",
+          "indexdef": "CREATE UNIQUE INDEX modelos_pagamento_colaborador_pkey ON public.modelos_pagamento_colaborador USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "modulos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('modulos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "curso_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nivel_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ordem",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "1"
+        },
+        {
+          "column_name": "obrigatorio",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46332_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46332_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46332_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46332_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46332_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46332_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46332_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46332_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "modulos_curso_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "curso_id"
+        },
+        {
+          "constraint_name": "modulos_nivel_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "nivel_id"
+        },
+        {
+          "constraint_name": "modulos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "modulos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX modulos_pkey ON public.modulos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "movimento_financeiro",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('movimento_financeiro_id_seq'::regclass)"
+        },
+        {
+          "column_name": "tipo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "valor_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "data_movimento",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "origem",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "origem_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "usuario_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46603_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46603_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46603_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46603_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46603_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46603_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46603_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "movimento_financeiro_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "movimento_financeiro_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "movimento_financeiro_pkey",
+          "indexdef": "CREATE UNIQUE INDEX movimento_financeiro_pkey ON public.movimento_financeiro USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "niveis",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('niveis_id_seq'::regclass)"
+        },
+        {
+          "column_name": "curso_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "faixa_etaria_sugerida",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "pre_requisito_nivel_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "idade_minima",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "idade_maxima",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46311_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46311_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46311_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46311_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46311_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "niveis_curso_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "curso_id"
+        },
+        {
+          "constraint_name": "niveis_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "niveis_pre_requisito_nivel_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pre_requisito_nivel_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "niveis_pkey",
+          "indexdef": "CREATE UNIQUE INDEX niveis_pkey ON public.niveis USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pessoas",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('pessoas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "email",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "telefone",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "nascimento",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cpf",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "endereco",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "tipo_pessoa",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": "'FISICA'::text"
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "column_default": "true"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "neofin_customer_id",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_by",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "updated_by",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "foto_url",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "nome_social",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "genero",
+          "data_type": "USER-DEFINED",
+          "is_nullable": "NO",
+          "column_default": "'NAO_INFORMADO'::genero_pessoa"
+        },
+        {
+          "column_name": "estado_civil",
+          "data_type": "USER-DEFINED",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "nacionalidade",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "naturalidade",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "telefone_secundario",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cnpj",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "razao_social",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "nome_fantasia",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "inscricao_estadual",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "endereco_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_27803_19_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27803_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27803_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "pessoas_created_by_fk",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "created_by"
+        },
+        {
+          "constraint_name": "pessoas_created_by_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "created_by"
+        },
+        {
+          "constraint_name": "pessoas_endereco_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "endereco_id"
+        },
+        {
+          "constraint_name": "pessoas_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "pessoas_updated_by_fk",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "updated_by"
+        },
+        {
+          "constraint_name": "pessoas_updated_by_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "updated_by"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "pessoas_cpf_ativo_uniq",
+          "indexdef": "CREATE UNIQUE INDEX pessoas_cpf_ativo_uniq ON public.pessoas USING btree (cpf) WHERE ((ativo = true) AND (cpf IS NOT NULL))"
+        },
+        {
+          "indexname": "pessoas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX pessoas_pkey ON public.pessoas USING btree (id)"
+        },
+        {
+          "indexname": "pessoas_user_id_idx",
+          "indexdef": "CREATE INDEX pessoas_user_id_idx ON public.pessoas USING btree (user_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pessoas_roles",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('pessoas_roles_id_seq'::regclass)"
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "role",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_40913_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_40913_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_40913_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "pessoas_roles_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "pessoas_roles_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "pessoas_roles_pessoa_id_idx",
+          "indexdef": "CREATE INDEX pessoas_roles_pessoa_id_idx ON public.pessoas_roles USING btree (pessoa_id)"
+        },
+        {
+          "indexname": "pessoas_roles_pkey",
+          "indexdef": "CREATE UNIQUE INDEX pessoas_roles_pkey ON public.pessoas_roles USING btree (id)"
+        },
+        {
+          "indexname": "pessoas_roles_unico_pessoa_role",
+          "indexdef": "CREATE UNIQUE INDEX pessoas_roles_unico_pessoa_role ON public.pessoas_roles USING btree (pessoa_id, role)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "plano_contas",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "nextval('plano_contas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "parent_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46639_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46639_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46639_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46639_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "plano_contas_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "plano_contas_parent_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "parent_id"
+        },
+        {
+          "constraint_name": "plano_contas_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "plano_contas_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX plano_contas_codigo_key ON public.plano_contas USING btree (codigo)"
+        },
+        {
+          "indexname": "plano_contas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX plano_contas_pkey ON public.plano_contas USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "professores",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('professores_id_seq'::regclass)"
+        },
+        {
+          "column_name": "colaborador_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo_professor_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "bio",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48086_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48086_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48086_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "professores_colaborador_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "colaborador_id"
+        },
+        {
+          "constraint_name": "professores_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "professores_tipo_professor_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "tipo_professor_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "professores_pkey",
+          "indexdef": "CREATE UNIQUE INDEX professores_pkey ON public.professores USING btree (id)"
+        },
+        {
+          "indexname": "ux_professores_colaborador",
+          "indexdef": "CREATE UNIQUE INDEX ux_professores_colaborador ON public.professores USING btree (colaborador_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "profiles",
+      "columns": [
+        {
+          "column_name": "user_id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "full_name",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "is_admin",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_18526_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_18526_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_18526_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_18526_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "profiles_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "profiles_pessoa_id_unique",
+          "constraint_type": "UNIQUE",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "profiles_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "user_id"
+        },
+        {
+          "constraint_name": "profiles_user_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "user_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "profiles_pessoa_id_unique",
+          "indexdef": "CREATE UNIQUE INDEX profiles_pessoa_id_unique ON public.profiles USING btree (pessoa_id)"
+        },
+        {
+          "indexname": "profiles_pkey",
+          "indexdef": "CREATE UNIQUE INDEX profiles_pkey ON public.profiles USING btree (user_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "recebimentos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('recebimentos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "cobranca_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "centro_custo_id",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "valor_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "data_pagamento",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "metodo_pagamento",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "origem_sistema",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_46561_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46561_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46561_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46561_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_46561_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "recebimentos_centro_custo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "centro_custo_id"
+        },
+        {
+          "constraint_name": "recebimentos_cobranca_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "cobranca_id"
+        },
+        {
+          "constraint_name": "recebimentos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "recebimentos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX recebimentos_pkey ON public.recebimentos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "roles_sistema",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "gen_random_uuid()"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "editavel",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "permissoes",
+          "data_type": "jsonb",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_42278_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42278_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42278_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42278_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42278_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42278_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "roles_sistema_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "roles_sistema_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "roles_sistema_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX roles_sistema_codigo_key ON public.roles_sistema USING btree (codigo)"
+        },
+        {
+          "indexname": "roles_sistema_pkey",
+          "indexdef": "CREATE UNIQUE INDEX roles_sistema_pkey ON public.roles_sistema USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "ruas",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "uuid_generate_v4()"
+        },
+        {
+          "column_name": "bairro_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "cep",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "column_default": "true"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_45004_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_45004_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "ruas_bairro_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "bairro_id"
+        },
+        {
+          "constraint_name": "ruas_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "ruas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX ruas_pkey ON public.ruas USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "tipos_professor",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "nextval('tipos_professor_id_seq'::regclass)"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48075_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48075_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48075_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "tipos_professor_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "tipos_professor_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "tipos_professor_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX tipos_professor_codigo_key ON public.tipos_professor USING btree (codigo)"
+        },
+        {
+          "indexname": "tipos_professor_pkey",
+          "indexdef": "CREATE UNIQUE INDEX tipos_professor_pkey ON public.tipos_professor USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "tipos_vinculo_colaborador",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "nextval('tipos_vinculo_colaborador_id_seq'::regclass)"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "usa_jornada",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "usa_vigencia",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "eh_professor_por_natureza",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "gera_folha",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "exige_config_pagamento",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_48239_10_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48239_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48239_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48239_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48239_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48239_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48239_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48239_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_48239_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "tipos_vinculo_colaborador_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "tipos_vinculo_colaborador_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "tipos_vinculo_colaborador_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX tipos_vinculo_colaborador_codigo_key ON public.tipos_vinculo_colaborador USING btree (codigo)"
+        },
+        {
+          "indexname": "tipos_vinculo_colaborador_pkey",
+          "indexdef": "CREATE UNIQUE INDEX tipos_vinculo_colaborador_pkey ON public.tipos_vinculo_colaborador USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "turma_aluno",
+      "columns": [
+        {
+          "column_name": "turma_aluno_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('turma_aluno_turma_aluno_id_seq'::regclass)"
+        },
+        {
+          "column_name": "turma_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "aluno_pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "dt_inicio",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": "CURRENT_DATE"
+        },
+        {
+          "column_name": "dt_fim",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": "'ativo'::text"
+        },
+        {
+          "column_name": "matricula_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_28115_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_28115_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_28115_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "chk_turma_aluno_datas",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turma_aluno_aluno_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "aluno_pessoa_id"
+        },
+        {
+          "constraint_name": "turma_aluno_matricula_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "matricula_id"
+        },
+        {
+          "constraint_name": "turma_aluno_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "turma_aluno_id"
+        },
+        {
+          "constraint_name": "turma_aluno_turma_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "turma_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_turma_aluno_matricula",
+          "indexdef": "CREATE INDEX idx_turma_aluno_matricula ON public.turma_aluno USING btree (matricula_id)"
+        },
+        {
+          "indexname": "idx_turma_aluno_pessoa",
+          "indexdef": "CREATE INDEX idx_turma_aluno_pessoa ON public.turma_aluno USING btree (aluno_pessoa_id)"
+        },
+        {
+          "indexname": "turma_aluno_pkey",
+          "indexdef": "CREATE UNIQUE INDEX turma_aluno_pkey ON public.turma_aluno USING btree (turma_aluno_id)"
+        },
+        {
+          "indexname": "uq_turma_aluno_aberta",
+          "indexdef": "CREATE UNIQUE INDEX uq_turma_aluno_aberta ON public.turma_aluno USING btree (turma_id, aluno_pessoa_id) WHERE (dt_fim IS NULL)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "turma_avaliacoes",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('turma_avaliacoes_id_seq'::regclass)"
+        },
+        {
+          "column_name": "turma_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "avaliacao_modelo_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "titulo",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "obrigatoria",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "data_prevista",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "data_realizada",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'RASCUNHO'::text"
+        },
+        {
+          "column_name": "criado_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "atualizado_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_52451_10_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52451_11_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52451_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52451_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52451_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52451_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52451_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_52451_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turma_avaliacoes_avaliacao_modelo_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "avaliacao_modelo_id"
+        },
+        {
+          "constraint_name": "turma_avaliacoes_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "turma_avaliacoes_turma_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "turma_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "turma_avaliacoes_pkey",
+          "indexdef": "CREATE UNIQUE INDEX turma_avaliacoes_pkey ON public.turma_avaliacoes USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "turma_niveis",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('turma_niveis_id_seq'::regclass)"
+        },
+        {
+          "column_name": "turma_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "nivel_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "principal",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_49793_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49793_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49793_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49793_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turma_niveis_nivel_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "nivel_id"
+        },
+        {
+          "constraint_name": "turma_niveis_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "turma_niveis_turma_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "turma_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "turma_niveis_pkey",
+          "indexdef": "CREATE UNIQUE INDEX turma_niveis_pkey ON public.turma_niveis USING btree (id)"
+        },
+        {
+          "indexname": "uq_turma_nivel_unico",
+          "indexdef": "CREATE UNIQUE INDEX uq_turma_nivel_unico ON public.turma_niveis USING btree (turma_id, nivel_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "turma_professores",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('turma_professores_id_seq'::regclass)"
+        },
+        {
+          "column_name": "turma_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "colaborador_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "funcao_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "principal",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "false"
+        },
+        {
+          "column_name": "data_inicio",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": "CURRENT_DATE"
+        },
+        {
+          "column_name": "data_fim",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_49745_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49745_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49745_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49745_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49745_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49745_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_49745_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turma_professores_colaborador_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "colaborador_id"
+        },
+        {
+          "constraint_name": "turma_professores_funcao_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "funcao_id"
+        },
+        {
+          "constraint_name": "turma_professores_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "turma_professores_turma_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "turma_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_turma_professores_principal",
+          "indexdef": "CREATE UNIQUE INDEX idx_turma_professores_principal ON public.turma_professores USING btree (turma_id) WHERE ((principal = true) AND (data_fim IS NULL))"
+        },
+        {
+          "indexname": "turma_professores_pkey",
+          "indexdef": "CREATE UNIQUE INDEX turma_professores_pkey ON public.turma_professores USING btree (id)"
+        },
+        {
+          "indexname": "uq_turma_professores_principal",
+          "indexdef": "CREATE UNIQUE INDEX uq_turma_professores_principal ON public.turma_professores USING btree (turma_id) WHERE ((principal = true) AND (data_fim IS NULL))"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "turmas",
+      "columns": [
+        {
+          "column_name": "turma_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('turmas_turma_id_seq'::regclass)"
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "curso",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "nivel",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "capacidade",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "dias_semana",
+          "data_type": "ARRAY",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "hora_inicio",
+          "data_type": "time without time zone",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "hora_fim",
+          "data_type": "time without time zone",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "column_default": "true"
+        },
+        {
+          "column_name": "professor_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "user_email",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "tipo_turma",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": "'REGULAR'::text"
+        },
+        {
+          "column_name": "turno",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ano_referencia",
+          "data_type": "integer",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "data_inicio",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "data_fim",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "status",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": "'EM_PREPARACAO'::text"
+        },
+        {
+          "column_name": "encerramento_automatico",
+          "data_type": "boolean",
+          "is_nullable": "YES",
+          "column_default": "false"
+        },
+        {
+          "column_name": "periodo_letivo_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "carga_horaria_prevista",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "frequencia_minima_percentual",
+          "data_type": "numeric",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_28099_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_28099_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turmas_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "turma_id"
+        },
+        {
+          "constraint_name": "turmas_status_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turmas_tipo_turma_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turmas_turno_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "turmas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX turmas_pkey ON public.turmas USING btree (turma_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "turmas_horarios",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('turmas_horarios_id_seq'::regclass)"
+        },
+        {
+          "column_name": "turma_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "day_of_week",
+          "data_type": "smallint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "inicio",
+          "data_type": "time without time zone",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "fim",
+          "data_type": "time without time zone",
+          "is_nullable": "NO",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_27762_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27762_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27762_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27762_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27762_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turmas_horarios_day_of_week_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "turmas_horarios_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "turmas_horarios_turma_id_day_of_week_inicio_fim_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "turma_id"
+        },
+        {
+          "constraint_name": "turmas_horarios_turma_id_day_of_week_inicio_fim_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "day_of_week"
+        },
+        {
+          "constraint_name": "turmas_horarios_turma_id_day_of_week_inicio_fim_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "inicio"
+        },
+        {
+          "constraint_name": "turmas_horarios_turma_id_day_of_week_inicio_fim_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "fim"
+        },
+        {
+          "constraint_name": "turmas_horarios_turma_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "turma_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "turmas_horarios_pkey",
+          "indexdef": "CREATE UNIQUE INDEX turmas_horarios_pkey ON public.turmas_horarios USING btree (id)"
+        },
+        {
+          "indexname": "turmas_horarios_turma_id_day_of_week_inicio_fim_key",
+          "indexdef": "CREATE UNIQUE INDEX turmas_horarios_turma_id_day_of_week_inicio_fim_key ON public.turmas_horarios USING btree (turma_id, day_of_week, inicio, fim)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "usuario_roles",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "gen_random_uuid()"
+        },
+        {
+          "column_name": "user_id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "role_id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_42290_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42290_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42290_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_42290_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "usuario_roles_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "usuario_roles_role_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "role_id"
+        },
+        {
+          "constraint_name": "usuario_roles_user_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "user_id"
+        },
+        {
+          "constraint_name": "usuario_roles_user_id_role_id_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "user_id"
+        },
+        {
+          "constraint_name": "usuario_roles_user_id_role_id_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "role_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "usuario_roles_pkey",
+          "indexdef": "CREATE UNIQUE INDEX usuario_roles_pkey ON public.usuario_roles USING btree (id)"
+        },
+        {
+          "indexname": "usuario_roles_user_id_role_id_key",
+          "indexdef": "CREATE UNIQUE INDEX usuario_roles_user_id_role_id_key ON public.usuario_roles USING btree (user_id, role_id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "vinculos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('vinculos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "aluno_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "responsavel_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "parentesco",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_27834_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27834_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_27834_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "vinculos_aluno_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "aluno_id"
+        },
+        {
+          "constraint_name": "vinculos_aluno_id_responsavel_id_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "aluno_id"
+        },
+        {
+          "constraint_name": "vinculos_aluno_id_responsavel_id_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "responsavel_id"
+        },
+        {
+          "constraint_name": "vinculos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "vinculos_responsavel_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "responsavel_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "vinculos_aluno_id_responsavel_id_key",
+          "indexdef": "CREATE UNIQUE INDEX vinculos_aluno_id_responsavel_id_key ON public.vinculos USING btree (aluno_id, responsavel_id)"
+        },
+        {
+          "indexname": "vinculos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX vinculos_pkey ON public.vinculos USING btree (id)"
+        }
+      ]
+    }
+  ],
+  "enums": {
+    "estado_civil_pessoa": [
+      "SOLTEIRO",
+      "CASADO",
+      "DIVORCIADO",
+      "VIUVO",
+      "UNIAO_ESTAVEL",
+      "OUTRO"
+    ],
+    "genero_pessoa": [
+      "MASCULINO",
+      "FEMININO",
+      "OUTRO",
+      "NAO_INFORMADO"
+    ],
+    "status_matricula_enum": [
+      "ATIVA",
+      "TRANCADA",
+      "CANCELADA",
+      "CONCLUIDA"
+    ],
+    "tipo_avaliacao_enum": [
+      "PRATICA",
+      "TEORICA",
+      "DESEMPENHO",
+      "MISTA"
+    ],
+    "tipo_matricula_enum": [
+      "REGULAR",
+      "CURSO_LIVRE",
+      "PROJETO_ARTISTICO"
+    ]
+  }
+}

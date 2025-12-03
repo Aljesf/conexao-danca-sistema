@@ -6,19 +6,19 @@ Fonte: docs/schema-supabase.sql (dump real do Supabase)
 
 - O banco atual cobre: pessoas/identidade, colaboradores/professores, acadêmico (cursos, níveis, módulos, habilidades, turmas, avaliações), matrículas/vínculos, financeiro (cobranças/recebimentos/contas), administração/segurança/auditoria.
 - Observações rápidas:
-  - Há modelagens paralelas para vínculos de alunos: `alunos_turmas` (FK alunos) e `turma_aluno` (FK pessoas).
-  - Endereços aparecem em múltiplas formas: `endereco` simples, `enderecos` estruturada, `enderecos_pessoa`, e JSONB `pessoas.endereco`.
+  - Modelagens paralelas de vínculo aluno/turma: `alunos_turmas` (FK alunos) e `turma_aluno` (FK pessoas, agora com `matricula_id`).
+  - Endereços em múltiplas formas: `endereco`, `enderecos`, `enderecos_pessoa`, além do JSONB `pessoas.endereco`.
   - Campos JSON/JSONB relevantes: `pessoas.endereco`, `avaliacoes_modelo.grupos`, `avaliacao_aluno_resultado.conceitos_por_grupo`, `cobrancas.neofin_payload`, `roles_sistema.permissoes`.
 
 ## 2. Domínios e Tabelas
 
 ### 2.1 Domínio Pessoas / Identidade
 
-- **pessoas**: cadastro F/J com contato, documentos, flags de ativo, sociais; guarda endereço em JSONB e opcional FK `endereco_id` → `enderecos`; created/updated by (auth/profiles).
+- **pessoas**: cadastro F/J com contato, documentos, flags de ativo e sociais; guarda endereço em JSONB e FK opcional `endereco_id` → `enderecos`; auditado por `created_by/updated_by` (profiles/auth).
 - **pessoas_roles**: associa pessoa a um role textual; FK `pessoa_id`.
-- **endereco**: tabela simples de endereço (logradouro/numero/bairro/cidade/uf/cep); PK `endereco_id`.
+- **endereco**: tabela simples (logradouro, número, bairro, cidade, uf, cep); PK `endereco_id`.
 - **enderecos**: endereço estruturado (logradouro, cidade, UF char(2), referência, timestamps); usada como FK em `pessoas`.
-- **enderecos_pessoa**: endereço detalhado por pessoa, com FKs para `ruas`, `bairros` e `pessoas` (unique por pessoa).
+- **enderecos_pessoa**: endereço detalhado por pessoa, FKs para `ruas`, `bairros` e `pessoas` (unique por pessoa).
 - **bairros / ruas**: dicionários de localidades; `ruas` FK `bairro_id`.
 - **profiles**: perfis de usuário (auth.users) ligados a `pessoas` (unique).
 - **usuario_roles**: relação user ↔ role (FK `profiles.user_id` e `roles_sistema`).
@@ -26,7 +26,7 @@ Fonte: docs/schema-supabase.sql (dump real do Supabase)
 
 ### 2.2 Domínio Colaboradores e Professores
 
-- **colaboradores**: vincula pessoa a centro de custo e tipo de vínculo; campos de vigência e ativo.
+- **colaboradores**: vincula pessoa a centro de custo e tipo de vínculo; campos de vigência, ativo, observações.
 - **tipos_vinculo_colaborador**: catálogo de vínculos (usa jornada, vigência, folha, etc.).
 - **funcoes_grupo**: grupos de funções (pode lecionar, ordem, centro de custo).
 - **funcoes_colaborador**: funções (código, nome, grupo, ativo) com FK para `funcoes_grupo`.
@@ -43,21 +43,51 @@ Fonte: docs/schema-supabase.sql (dump real do Supabase)
 - **niveis**: níveis por curso, com faixa etária, pré-requisito opcional.
 - **modulos**: módulos por curso/nivel, ordem e obrigatoriedade.
 - **habilidades**: habilidades por curso/nivel/modulo, critérios de avaliação, ordem.
-- **turmas**: cadastro de turmas (curso/nivel em texto, capacidade, dias_semana array, horários, turno/tipo/status, carga horária prevista, frequência mínima %, observações).
+- **turmas**: cadastro de turmas (curso/nivel em texto, capacidade, `dias_semana` array, horários, turno/tipo/status, carga horária prevista, `frequencia_minima_percentual`, observações).
 - **turmas_horarios**: horários por turma (dia da semana 0–6, início/fim).
 - **turma_professores**: vínculos professor (colaborador) e função por turma, marca principal, datas e ativo.
 - **turma_niveis**: níveis associados à turma; marca principal opcional.
 - **turma_avaliacoes**: avaliações previstas da turma (modelo, título, descrição, obrigatória, datas prevista/realizada, status).
 - **avaliacao_aluno_resultado**: resultados por aluno/pessoa em `turma_avaliacoes`, com conceito final, conceitos por grupo (JSONB), avaliador.
-- **avaliacoes_modelo**: modelos de avaliação (tipo USER-DEFINED, grupos JSONB, conceitos_ids array, obrigatória/ativo).
+- **avaliacoes_modelo**: modelos de avaliação (tipo USER-DEFINED, grupos JSONB, `conceitos_ids` array, obrigatória/ativo).
 - **avaliacoes_conceitos**: catálogo de conceitos (código, rótulo, ordem, cor, ativo).
 
 ### 2.4 Domínio Matrículas / Alunos / Vínculos
 
-- **alunos**: cadastro simples de aluno (nome, contato, data de nascimento, ativo); ligado opcionalmente a auth via `user_id`.
-- **alunos_turmas**: vínculo aluno ↔ turma com datas início/fim, situação; FKs `aluno_id` (alunos) e `turma_id`.
-- **turma_aluno**: vínculo usando `aluno_pessoa_id` (pessoas) e `turma_id`, com datas e status; unique de matrícula aberta por turma.
-- **vinculos**: relação aluno ↔ responsável (pessoas) com parentesco.
+- **matriculas** (NOVA, canônica): centraliza a relação Pessoa (aluno) ↔ Turma/Projeto ↔ Plano/Contrato ↔ Financeiro. Campos principais (schema atual):  
+  - `id` (identity),  
+  - `pessoa_id` (→ pessoas.id),  
+  - `responsavel_financeiro_id` (→ pessoas.id),  
+  - `tipo_matricula` enum (REGULAR/CURSO_LIVRE/PROJETO_ARTISTICO),  
+  - `vinculo_id` (→ turmas.turma_id nesta etapa),  
+  - `plano_matricula_id` (FK futuro, se/quando existir a tabela de planos),  
+  - `contrato_modelo_id` (FK futuro para contratos_modelo),  
+  - `contrato_emitido_id` (opcional, futuro),  
+  - `contrato_pdf_url`,  
+  - `status` enum (ATIVA/TRANCADA/CANCELADA/CONCLUIDA),  
+  - `ano_referencia`,  
+  - `data_matricula` (default current_date),  
+  - `data_encerramento`,  
+  - `observacoes`,  
+  - `created_at/updated_at`,  
+  - `created_by/updated_by`.  
+
+  > Observação: alguns FKs auxiliares (planos/contratos emitidos) ainda não existem fisicamente; o campo já está previsto para integração futura.
+
+- **alunos** (LEGADO): cadastro antigo de aluno (nome, contato, nascimento, ativo, `user_id` opcional). Continua existindo e é usado por partes antigas; modelo futuro usa `pessoas` + `matriculas`.
+- **alunos_turmas** (LEGADO): vínculo legado `aluno_id` (alunos) ↔ `turma_id` (turmas), com datas (`dt_inicio`, `dt_fim`) e `situacao` textual. Mantida para histórico/módulos antigos; será substituída por `matriculas` + `turma_aluno`.
+- **turma_aluno** (CANÔNICA operacional): vínculo Pessoa ↔ Turma ajustado para conversar com `matriculas`. Campos:  
+  - `turma_aluno_id` PK,  
+  - `turma_id` (→ turmas.turma_id),  
+  - `aluno_pessoa_id` (→ pessoas.id) com FK explícita,  
+  - `dt_inicio` (default current_date),  
+  - `dt_fim`,  
+  - `status` textual (ex.: 'ativo'),  
+  - `matricula_id` (→ matriculas.id).  
+
+  Índices existem em `aluno_pessoa_id` e `matricula_id`. Essa tabela passa a ser o vínculo operacional canônico Pessoa ↔ Turma, especialmente para REGULAR/CURSO_LIVRE.
+
+- **vinculos**: relação aluno (pessoa) ↔ responsável (pessoa) com parentesco (`aluno_id` → pessoas.id, `responsavel_id` → pessoas.id).
 
 ### 2.5 Domínio Financeiro
 
@@ -79,15 +109,40 @@ Fonte: docs/schema-supabase.sql (dump real do Supabase)
 
 ## 3. Pontos de Atenção e Inconsistências
 
-- Vínculos de aluno duplicados: coexistem `alunos_turmas` (aluno_id → alunos) e `turma_aluno` (aluno_pessoa_id → pessoas), com regras diferentes.
-- Endereços fragmentados: `endereco`, `enderecos`, `enderecos_pessoa` e JSONB `pessoas.endereco`, além de dicionários `bairros/ruas`.
-- Campos JSON/JSONB relevantes que podem dificultar queries estruturadas: `pessoas.endereco`, `avaliacoes_modelo.grupos`, `avaliacao_aluno_resultado.conceitos_por_grupo`, `cobrancas.neofin_payload`, `roles_sistema.permissoes`.
-- Dependências cruzadas: funções/agrupamentos (`funcoes_colaborador`, `funcoes_grupo`) e pagamentos de colaborador atravessam domínios acadêmico/financeiro.
-- Checks em turmas para tipo/turno/status; arrays em `turmas.dias_semana`; enum USER-DEFINED para `avaliacoes_modelo.tipo_avaliacao` e `pessoas.genero/estado_civil`.
+- **Matrículas / Alunos / Vínculos**:  
+  - Existe a tabela canônica `matriculas`, mas o código ainda não está totalmente migrado para usá-la.  
+  - Continuam coexistindo `alunos` (cadastro legado) e `pessoas` (oficial), além de `alunos_turmas` (legado) e `turma_aluno` (canônico, agora com `matricula_id`).  
+  - Risco: diferentes módulos enxergarem “aluno em turma” por tabelas distintas até conclusão da migração.
+
+- **Endereços fragmentados**:  
+  - Persistem `endereco`, `enderecos`, `enderecos_pessoa` e `pessoas.endereco` (JSONB), além de `bairros/ruas`.  
+  - O modelo alvo é `enderecos_pessoa` + dicionários, mas há dados espalhados.
+
+- **Campos JSON/JSONB**:  
+  - Estruturas como `pessoas.endereco`, `avaliacoes_modelo.grupos`, `avaliacao_aluno_resultado.conceitos_por_grupo`, `cobrancas.neofin_payload`, `roles_sistema.permissoes` exigem cuidado em queries/refatorações.
+
+- **Dependências cruzadas**:  
+  - Vínculos de colaborador/funções/pagamentos conectam Acadêmico (professores), Financeiro (centros/categorias) e Administração (roles/perfis).  
+  - Turmas e Avaliações dependem de dicionários auxiliares (`turma_professores`, `turma_avaliacoes`, `avaliacoes_modelo`, `avaliacoes_conceitos`), pedindo cautela em alterações.
 
 ## 4. Resumo para Futuras Refatorações
 
-- Domínios mais consistentes: financeiro (centros/categorias/plano/contas/cobranças/recebimentos/contas pagar), colaboradores/professores (funções, jornadas, pagamentos), avaliações (modelos/conceitos/resultados).
-- Domínios que pedem revisão: matrículas (unificar `alunos_turmas` vs `turma_aluno`), endereços (múltiplas representações), alinhamento aluno x pessoa, clarificar dicionários de localização.
-- Prioridades técnicas: consolidar modelo de matrícula/aluno; decidir modelo único de endereço; revisar uso de JSONB em avaliações e endereço para possíveis normalizações; garantir referências coerentes entre pessoas/alunos; mapear enums USER-DEFINED e seu uso no app.
-- Manter atenção à sobreposição entre funções de colaborador e pagamentos (evitar acoplamento excessivo) e aos vínculos turma-professor/nivel.
+- **Matrículas / Alunos / Vínculos**:  
+  - `matriculas` é a fonte oficial de vínculo pedagógico/financeiro.  
+  - `turma_aluno` é o vínculo operacional canônico Pessoa ↔ Turma e deve se associar a `matriculas` para REGULAR/CURSO_LIVRE.  
+  - `alunos` e `alunos_turmas` são legados, a serem mantidos só para leitura/histórico até migração completa.
+
+- **Endereços**:  
+  - Consolidar uso de `enderecos_pessoa` + `bairros/ruas`;  
+  - Planejar migração dos dados de `endereco`, `enderecos` e `pessoas.endereco` (JSONB) para a estrutura única.
+
+- **Financeiro**:  
+  - Manter e consolidar centros de custo, plano de contas, categorias, contas a pagar/receber e movimento;  
+  - Conectar `matriculas` às cobranças/recebimentos e, futuramente, a contratos emitidos.
+
+- **Avaliações, Turmas e Currículo**:  
+  - Conjunto `turmas` + `turma_professores` + `turma_avaliacoes` + `avaliacoes_modelo` + `avaliacao_aluno_resultado` está consistente;  
+  - Próxima evolução é integrar conclusão/frequências ao currículo (tabela `historico_academico` conceitual).
+
+- **Administração e Segurança**:  
+  - Manter `profiles`, `roles_sistema`, `usuario_roles` e `auditoria_logs` como base para expansão (incluindo automações/IA).

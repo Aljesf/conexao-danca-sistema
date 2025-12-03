@@ -341,6 +341,30 @@ CREATE TABLE public.habilidades (
   CONSTRAINT habilidades_nivel_id_fkey FOREIGN KEY (nivel_id) REFERENCES public.niveis(id),
   CONSTRAINT habilidades_modulo_id_fkey FOREIGN KEY (modulo_id) REFERENCES public.modulos(id)
 );
+CREATE TABLE public.matriculas (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  pessoa_id bigint NOT NULL,
+  responsavel_financeiro_id bigint NOT NULL,
+  tipo_matricula USER-DEFINED NOT NULL,
+  vinculo_id bigint NOT NULL,
+  plano_matricula_id bigint NOT NULL,
+  contrato_modelo_id bigint NOT NULL,
+  contrato_emitido_id bigint,
+  contrato_pdf_url text,
+  status USER-DEFINED NOT NULL,
+  ano_referencia integer,
+  data_matricula date NOT NULL DEFAULT CURRENT_DATE,
+  data_encerramento date,
+  observacoes text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  created_by uuid,
+  updated_by uuid,
+  CONSTRAINT matriculas_pkey PRIMARY KEY (id),
+  CONSTRAINT matriculas_pessoa_id_fkey FOREIGN KEY (pessoa_id) REFERENCES public.pessoas(id),
+  CONSTRAINT matriculas_responsavel_financeiro_id_fkey FOREIGN KEY (responsavel_financeiro_id) REFERENCES public.pessoas(id),
+  CONSTRAINT matriculas_vinculo_id_fkey FOREIGN KEY (vinculo_id) REFERENCES public.turmas(turma_id)
+);
 CREATE TABLE public.modelos_pagamento_colaborador (
   id integer NOT NULL DEFAULT nextval('modelos_pagamento_colaborador_id_seq'::regclass),
   codigo text NOT NULL UNIQUE,
@@ -535,8 +559,11 @@ CREATE TABLE public.turma_aluno (
   dt_inicio date DEFAULT CURRENT_DATE,
   dt_fim date,
   status text DEFAULT 'ativo'::text,
+  matricula_id bigint,
   CONSTRAINT turma_aluno_pkey PRIMARY KEY (turma_aluno_id),
-  CONSTRAINT turma_aluno_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(turma_id)
+  CONSTRAINT turma_aluno_turma_id_fkey FOREIGN KEY (turma_id) REFERENCES public.turmas(turma_id),
+  CONSTRAINT turma_aluno_aluno_pessoa_id_fkey FOREIGN KEY (aluno_pessoa_id) REFERENCES public.pessoas(id),
+  CONSTRAINT turma_aluno_matricula_id_fkey FOREIGN KEY (matricula_id) REFERENCES public.matriculas(id)
 );
 CREATE TABLE public.turma_avaliacoes (
   id bigint NOT NULL DEFAULT nextval('turma_avaliacoes_id_seq'::regclass),
