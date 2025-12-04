@@ -104,7 +104,7 @@ export default function NovaTurmaPage() {
       const diasMarcadosLabels = diasSelecionados;
 
       const payload = {
-        nome_turma: formData.get("nome") as string,
+        nome: formData.get("nome") as string,
         tipo_turma: (formData.get("tipo_turma") as string) || "REGULAR",
         serie: (formData.get("serie") as string) || null,
         turno: (formData.get("turno") as string) || null,

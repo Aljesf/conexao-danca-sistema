@@ -143,3 +143,10 @@ export async function removerTurmaAvaliacao(id: number): Promise<void> {
     throw new Error(error.message);
   }
 }
+
+// Alias para seguir o naming usado nas instrucoes
+export type CriarAvaliacaoTurmaInput = CriarTurmaAvaliacaoInput;
+
+export async function criarAvaliacaoDaTurma(input: CriarAvaliacaoTurmaInput) {
+  return criarTurmaAvaliacao(input);
+}

@@ -9,9 +9,10 @@ import type { Turma } from "@/types/turmas";
 
 type Props = {
   turma: Turma;
+  onUpdated?: () => void;
 };
 
-export function EditarTurmaDialog({ turma }: Props) {
+export function EditarTurmaDialog({ turma, onUpdated }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -23,24 +24,26 @@ export function EditarTurmaDialog({ turma }: Props) {
     const formData = new FormData(event.currentTarget);
     const turmaId = turma.turma_id ?? turma.id;
 
+    const nome = (formData.get("nome") as string).trim();
+    if (!nome) {
+      setErro("Informe o nome da turma.");
+      return;
+    }
+
     setSaving(true);
     setErro(null);
 
     const payload = {
-      nome: (formData.get("nome") as string) || turma.nome,
+      nome,
       curso: (formData.get("curso") as string) || null,
       nivel: (formData.get("nivel") as string) || null,
       tipo_turma: (formData.get("tipo_turma") as string) || null,
       turno: (formData.get("turno") as string) || null,
-      ano_referencia: formData.get("ano_referencia")
-        ? Number(formData.get("ano_referencia"))
-        : null,
+      ano_referencia: formData.get("ano_referencia") ? Number(formData.get("ano_referencia")) : null,
       status: (formData.get("status") as string) || turma.status || null,
       data_inicio: (formData.get("data_inicio") as string) || null,
       data_fim: (formData.get("data_fim") as string) || null,
-      carga_horaria_prevista: formData.get("carga_horaria_prevista")
-        ? Number(formData.get("carga_horaria_prevista"))
-        : null,
+      carga_horaria_prevista: formData.get("carga_horaria_prevista") ? Number(formData.get("carga_horaria_prevista")) : null,
       frequencia_minima_percentual: formData.get("frequencia_minima_percentual")
         ? Number(formData.get("frequencia_minima_percentual"))
         : null,
@@ -58,6 +61,7 @@ export function EditarTurmaDialog({ turma }: Props) {
 
     setSaving(false);
     setOpen(false);
+    onUpdated?.();
     router.refresh();
   }
 
@@ -96,7 +100,7 @@ export function EditarTurmaDialog({ turma }: Props) {
 
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nível</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nivel</label>
               <input
                 name="nivel"
                 defaultValue={turma.nivel ?? ""}
@@ -133,7 +137,7 @@ export function EditarTurmaDialog({ turma }: Props) {
 
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ano de referência</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ano de referencia</label>
               <input
                 type="number"
                 name="ano_referencia"
@@ -155,7 +159,7 @@ export function EditarTurmaDialog({ turma }: Props) {
               </select>
             </div>
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Frequência mínima (%)</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Frequencia minima (%)</label>
               <input
                 type="number"
                 name="frequencia_minima_percentual"
@@ -167,7 +171,7 @@ export function EditarTurmaDialog({ turma }: Props) {
 
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Data início</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Data inicio</label>
               <input
                 type="date"
                 name="data_inicio"
@@ -185,7 +189,7 @@ export function EditarTurmaDialog({ turma }: Props) {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Carga horária prevista</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Carga horaria prevista</label>
               <input
                 type="number"
                 name="carga_horaria_prevista"
@@ -196,7 +200,7 @@ export function EditarTurmaDialog({ turma }: Props) {
           </div>
 
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Observações</label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Observacoes</label>
             <textarea
               name="observacoes"
               defaultValue={turma.observacoes ?? ""}

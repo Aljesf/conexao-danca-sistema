@@ -1,23 +1,17 @@
 import { notFound } from "next/navigation";
 
-import { NovaAvaliacaoDialog } from "./_components/NovaAvaliacaoDialog";
 import { EditarTurmaDialog } from "./_components/EditarTurmaDialog";
+import { NovaAvaliacaoDialog } from "./_components/NovaAvaliacaoDialog";
 import { VincularProfessorDialog } from "./_components/VincularProfessorDialog";
 import { listarAvaliacoesDaTurma } from "@/lib/academico/turmaAvaliacoesServer";
+import { listarProfessoresDaTurma, type TurmaProfessor } from "@/lib/academico/turmaProfessoresServer";
+import { obterTurmaPorId } from "@/lib/academico/turmasServer";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import type { Turma } from "@/types/turmas";
 
 export const dynamic = "force-dynamic";
 
-type TurmaProfessorDetalhe = {
-  id: number;
-  colaborador_id: number;
-  funcao_id: number | null;
-  principal: boolean;
-  data_inicio: string | null;
-  data_fim: string | null;
-  ativo: boolean;
-  observacoes: string | null;
+type TurmaProfessorDetalhe = TurmaProfessor & {
   nome: string;
   funcao_nome: string;
 };
@@ -29,93 +23,6 @@ type AlunoMatriculado = {
   data_matricula: string | null;
   nome: string;
 };
-
-async function carregarTurma(turmaId: number) {
-  const supabase = await getSupabaseServer();
-  const { data, error } = await supabase
-    .from("turmas")
-    .select(
-      `
-        turma_id,
-        nome,
-        curso,
-        nivel,
-        tipo_turma,
-        turno,
-        ano_referencia,
-        status,
-        data_inicio,
-        data_fim,
-        carga_horaria_prevista,
-        frequencia_minima_percentual,
-        observacoes
-      `,
-    )
-    .eq("turma_id", turmaId)
-    .single();
-
-  if (error || !data) {
-    console.error("Erro ao carregar turma:", error);
-    return null;
-  }
-
-  return data as Turma;
-}
-
-async function carregarProfessores(turmaId: number): Promise<TurmaProfessorDetalhe[]> {
-  const supabase = await getSupabaseServer();
-  const { data, error } = await supabase
-    .from("turma_professores")
-    .select(
-      `
-        id,
-        turma_id,
-        colaborador_id,
-        funcao_id,
-        principal,
-        data_inicio,
-        data_fim,
-        ativo,
-        observacoes,
-        colaborador:colaboradores!turma_professores_colaborador_id_fkey (
-          id,
-          pessoa_id,
-          pessoa:pessoas!colaboradores_pessoa_id_fkey (
-            id,
-            nome
-          )
-        ),
-        funcao:funcoes_colaborador!turma_professores_funcao_id_fkey (
-          id,
-          nome,
-          codigo
-        )
-      `,
-    )
-    .eq("turma_id", turmaId)
-    .order("principal", { ascending: false })
-    .order("data_inicio", { ascending: true });
-
-  if (error) {
-    console.error("Erro ao carregar professores da turma:", error);
-    return [];
-  }
-
-  return (
-    data?.map((row: any) => ({
-      id: row.id,
-      colaborador_id: row.colaborador_id,
-      funcao_id: row.funcao_id ?? null,
-      principal: row.principal ?? false,
-      data_inicio: row.data_inicio ?? null,
-      data_fim: row.data_fim ?? null,
-      ativo: row.ativo ?? false,
-      observacoes: row.observacoes ?? null,
-      nome: row.colaborador?.pessoa?.nome ?? "Colaborador",
-      funcao_nome: row.funcao?.nome ?? "Professor",
-    })) ?? []
-  );
-}
 
 async function carregarAlunosMatriculados(turmaId: number): Promise<AlunoMatriculado[]> {
   const supabase = await getSupabaseServer();
@@ -153,7 +60,7 @@ async function carregarAlunosMatriculados(turmaId: number): Promise<AlunoMatricu
 }
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "Não informado";
+  if (!value) return "Nao informado";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("pt-BR");
@@ -169,9 +76,9 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
     notFound();
   }
 
-  const [turma, professores, avaliacoes, alunos] = await Promise.all([
-    carregarTurma(turmaId),
-    carregarProfessores(turmaId),
+  const [turma, professoresBase, avaliacoes, alunos] = await Promise.all([
+    obterTurmaPorId(turmaId),
+    listarProfessoresDaTurma(turmaId),
     listarAvaliacoesDaTurma(turmaId),
     carregarAlunosMatriculados(turmaId),
   ]);
@@ -181,19 +88,25 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
   }
 
   const turmaKey = turma.turma_id ?? turma.id ?? turmaId;
-  const cursoNivel = [turma.curso, turma.nivel].filter(Boolean).join(" / ") || "Curso não informado";
+  const professores: TurmaProfessorDetalhe[] =
+    professoresBase.map((p) => ({
+      ...p,
+      nome: p.nome_pessoa ?? "Colaborador",
+      funcao_nome: p.funcao_nome ?? "Professor",
+    })) ?? [];
+  const cursoNivel = [turma.curso, turma.nivel].filter(Boolean).join(" / ") || "Curso nao informado";
 
   return (
     <main className="p-8 space-y-10">
       <header className="flex items-center justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Acadêmico</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Academico</p>
           <h1 className="text-3xl font-semibold leading-tight text-slate-900">
             {turma.nome ?? turma.nome_turma ?? `Turma #${turmaKey}`}
           </h1>
           <p className="text-sm text-slate-500">{cursoNivel}</p>
         </div>
-        <EditarTurmaDialog turma={turma} />
+        <EditarTurmaDialog turma={turma as Turma} />
       </header>
 
       <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
@@ -204,19 +117,19 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
             <p className="text-xs text-slate-500">Tipo: {turma.tipo_turma ?? "REGULAR"}</p>
           </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Calendário</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Calendario</p>
             <p className="mt-1 text-sm text-slate-900">
-              Início: {formatDate(turma.data_inicio)} | Fim: {formatDate(turma.data_fim)}
+              Inicio: {formatDate(turma.data_inicio)} | Fim: {formatDate(turma.data_fim)}
             </p>
             <p className="text-xs text-slate-500">Turno: {turma.turno ?? "Sem turno"} </p>
           </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Carga e frequência</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Carga e frequencia</p>
             <p className="mt-1 text-sm text-slate-900">
-              {turma.carga_horaria_prevista ?? "--"}h • Freq. mínima{" "}
+              {turma.carga_horaria_prevista ?? "--"}h | Freq. minima{" "}
               {turma.frequencia_minima_percentual ? `${turma.frequencia_minima_percentual}%` : "--"}
             </p>
-            <p className="text-xs text-slate-500">Ano ref.: {turma.ano_referencia ?? "Não informado"}</p>
+            <p className="text-xs text-slate-500">Ano ref.: {turma.ano_referencia ?? "Nao informado"}</p>
           </div>
         </div>
         {turma.observacoes && (
@@ -230,7 +143,7 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
         <header className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Professores da turma</h2>
-            <p className="text-sm text-slate-500">Vínculos ativos e históricos em turma_professores.</p>
+            <p className="text-sm text-slate-500">Vinculos ativos e historicos em turma_professores.</p>
           </div>
           <VincularProfessorDialog turmaId={turmaKey} />
         </header>
@@ -244,14 +157,14 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
                   <div className="space-y-1">
                     <p className="text-sm font-semibold text-slate-900">{prof.nome}</p>
                     <p className="text-xs text-slate-500">
-                      {prof.funcao_nome} • {prof.principal ? "Principal" : "Auxiliar"}
+                      {prof.funcao_nome} | {prof.principal ? "Principal" : "Auxiliar"}
                     </p>
                     {prof.observacoes && <p className="text-xs text-slate-500">{prof.observacoes}</p>}
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                      Início {formatDate(prof.data_inicio)}
-                      {prof.data_fim ? ` • Fim ${formatDate(prof.data_fim)}` : ""}
+                      Inicio {formatDate(prof.data_inicio)}
+                      {prof.data_fim ? ` | Fim ${formatDate(prof.data_fim)}` : ""}
                     </span>
                     <span
                       className={`inline-flex items-center rounded-full px-3 py-1 font-semibold ${
@@ -273,14 +186,14 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
       <section id="avaliacoes" className="space-y-3">
         <header className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Avaliações da turma</h2>
+            <h2 className="text-xl font-semibold text-slate-900">Avaliacoes da turma</h2>
             <p className="text-sm text-slate-500">Baseadas na tabela turma_avaliacoes.</p>
           </div>
           <NovaAvaliacaoDialog turmaId={turmaKey} />
         </header>
         <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
           {avaliacoes.length === 0 ? (
-            <p className="text-sm text-slate-500">Nenhuma avaliação cadastrada.</p>
+            <p className="text-sm text-slate-500">Nenhuma avaliacao cadastrada.</p>
           ) : (
             <div className="space-y-3">
               {avaliacoes.map((av) => (
@@ -293,7 +206,7 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
                       <p className="text-sm font-semibold text-slate-900">{av.titulo}</p>
                       {av.modelo && (
                         <p className="text-xs text-slate-500">
-                          Modelo: {av.modelo.nome} • Tipo: {av.modelo.tipo_avaliacao}
+                          Modelo: {av.modelo.nome} | Tipo: {av.modelo.tipo_avaliacao}
                         </p>
                       )}
                       {av.descricao && <p className="text-xs text-slate-500">{av.descricao}</p>}
@@ -312,12 +225,12 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
                       </span>
                       {av.obrigatoria && (
                         <span className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-3 py-1 font-medium text-violet-700">
-                          Obrigatória
+                          Obrigatoria
                         </span>
                       )}
                       <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600">
-                        Prevista: {av.data_prevista ? formatDate(av.data_prevista) : "Não definida"}
-                        {av.data_realizada ? ` • Realizada: ${formatDate(av.data_realizada)}` : ""}
+                        Prevista: {av.data_prevista ? formatDate(av.data_prevista) : "Nao definida"}
+                        {av.data_realizada ? ` | Realizada: ${formatDate(av.data_realizada)}` : ""}
                       </span>
                     </div>
                   </div>
@@ -331,7 +244,7 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
       <section className="space-y-3">
         <header>
           <h2 className="text-xl font-semibold text-slate-900">Alunos da turma</h2>
-          <p className="text-sm text-slate-500">Lista de matrículas (tabela matriculas).</p>
+          <p className="text-sm text-slate-500">Lista de matriculas (tabela matriculas).</p>
         </header>
         <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
           {alunos.length === 0 ? (
@@ -349,13 +262,13 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-700">
-                      Matrícula #{aluno.id}
+                      Matricula #{aluno.id}
                     </span>
                     <span className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-indigo-700">
                       Status: {aluno.status ?? "Sem status"}
                     </span>
                     <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600">
-                      Início: {aluno.data_matricula ? formatDate(aluno.data_matricula) : "Não informado"}
+                      Inicio: {aluno.data_matricula ? formatDate(aluno.data_matricula) : "Nao informado"}
                     </span>
                   </div>
                 </div>
