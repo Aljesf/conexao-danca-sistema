@@ -86,13 +86,13 @@ export default function NovaMatriculaPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 md:py-10">
-      {/* Cabeçalho da página */}
+      {/* Cabecalho da pagina */}
       <header className="mb-6 md:mb-8">
         <h1 className="text-2xl md:text-3xl font-semibold text-slate-900">
-          Nova Matrícula
+          Nova Matricula
         </h1>
         <p className="mt-1 text-sm md:text-base text-slate-500">
-          Cadastro de matrícula vinculando uma pessoa a uma turma, usando a API{" "}
+          Cadastro de matricula vinculando uma pessoa a uma turma, usando a API{" "}
           <code className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded-md">
             /api/matriculas/novo
           </code>
@@ -100,15 +100,15 @@ export default function NovaMatriculaPage() {
         </p>
       </header>
 
-      {/* Card principal do formulário */}
+      {/* Card principal do formulario */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
         <div className="border-b border-slate-100 px-4 md:px-6 py-4 md:py-5">
           <h2 className="text-sm font-semibold text-slate-900">
-            Dados da matrícula
+            Dados da matricula
           </h2>
           <p className="mt-1 text-xs md:text-sm text-slate-500">
-            Utilize IDs de pessoas e turmas já cadastradas. Esta tela é o
-            primeiro passo para validar o fluxo de matrícula no sistema.
+            Utilize IDs de pessoas e turmas ja cadastradas. Esta tela e o
+            primeiro passo para validar o fluxo de matricula no sistema.
           </p>
         </div>
 
@@ -116,7 +116,7 @@ export default function NovaMatriculaPage() {
           onSubmit={handleSubmit}
           className="px-4 md:px-6 pb-5 md:pb-6 pt-4 md:pt-5 space-y-6"
         >
-          {/* Linha 1: pessoa e responsável */}
+          {/* Linha 1: pessoa e responsavel */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div>
               <label className={labelBase}>ID da Pessoa (Aluno) *</label>
@@ -136,7 +136,7 @@ export default function NovaMatriculaPage() {
 
             <div>
               <label className={labelBase}>
-                ID do Responsável Financeiro{" "}
+                ID do Responsavel Financeiro{" "}
                 <span className="font-normal text-[11px] text-slate-500">
                   (opcional)
                 </span>
@@ -149,8 +149,8 @@ export default function NovaMatriculaPage() {
                 placeholder="Se vazio, usa o mesmo ID do aluno"
               />
               <p className="mt-1 text-[11px] text-slate-500">
-                Também deve ser um <code className="font-mono">pessoas.id</code>
-                . Se deixar em branco, será usado o mesmo ID do aluno.
+                Tambem deve ser um <code className="font-mono">pessoas.id</code>
+                . Se deixar em branco, sera usado o mesmo ID do aluno.
               </p>
             </div>
           </div>
@@ -158,7 +158,7 @@ export default function NovaMatriculaPage() {
           {/* Linha 2: tipo + turma */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div>
-              <label className={labelBase}>Tipo de Matrícula *</label>
+              <label className={labelBase}>Tipo de Matricula *</label>
               <select
                 className={inputBase}
                 value={tipoMatricula}
@@ -173,7 +173,7 @@ export default function NovaMatriculaPage() {
             </div>
 
             <div>
-              <label className={labelBase}>ID da Turma (vínculo_id) *</label>
+              <label className={labelBase}>ID da Turma (vinculo_id) *</label>
               <input
                 type="number"
                 className={inputBase}
@@ -192,7 +192,7 @@ export default function NovaMatriculaPage() {
           {/* Linha 3: ano e data */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div>
-              <label className={labelBase}>Ano de Referência</label>
+              <label className={labelBase}>Ano de Referencia</label>
               <input
                 type="number"
                 className={inputBase}
@@ -201,13 +201,13 @@ export default function NovaMatriculaPage() {
                 placeholder="Ex.: 2025"
               />
               <p className="mt-1 text-[11px] text-slate-500">
-                Obrigatório para matrículas{" "}
+                Obrigatorio para matriculas{" "}
                 <span className="font-mono">REGULAR</span>.
               </p>
             </div>
 
             <div>
-              <label className={labelBase}>Data da Matrícula</label>
+              <label className={labelBase}>Data da Matricula</label>
               <input
                 type="date"
                 className={inputBase}
@@ -220,10 +220,10 @@ export default function NovaMatriculaPage() {
             </div>
           </div>
 
-          {/* Observações */}
+          {/* Observacoes */}
           <div>
             <label className={labelBase}>
-              Observações internas{" "}
+              Observacoes internas{" "}
               <span className="font-normal text-[11px] text-slate-500">
                 (opcional)
               </span>
@@ -232,29 +232,29 @@ export default function NovaMatriculaPage() {
               className={`${inputBase} min-h-[90px] resize-y`}
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
-              placeholder="Anotações internas sobre essa matrícula…"
+              placeholder="Anotacoes internas sobre essa matricula."
             />
           </div>
 
-          {/* Botão + dica */}
+          {/* Botao + dica */}
           <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3 pt-1">
             <button
               type="submit"
               disabled={loading}
               className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 md:px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? "Salvando matrícula..." : "Criar matrícula"}
+              {loading ? "Salvando matricula..." : "Criar matricula"}
             </button>
 
             <p className="text-[11px] text-slate-500">
-              Lembre de estar logado no sistema. A API só aceita requisições
+              Lembre de estar logado no sistema. A API so aceita requisicoes
               autenticadas.
             </p>
           </div>
         </form>
       </div>
 
-      {/* Alertas de erro genérico */}
+      {/* Alertas de erro generico */}
       {erroGenerico && (
         <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           <strong className="font-semibold">Erro ao chamar a API: </strong>
@@ -276,7 +276,7 @@ export default function NovaMatriculaPage() {
                   <code className="font-mono bg-slate-900 px-1.5 py-0.5 rounded">
                     /api/matriculas/novo
                   </code>{" "}
-                  — status HTTP {resultado.status_http}
+                  - status HTTP {resultado.status_http}
                 </p>
               </div>
             </div>
