@@ -26,9 +26,33 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("pessoas")
-    .select("id, nome_completo, nome, email, telefone_principal")
-    .or(`nome_completo.ilike.${ilike},nome.ilike.${ilike},email.ilike.${ilike}`)
-    .order("nome_completo", { ascending: true })
+    .select(
+      `
+      id,
+      nome,
+      nome_social,
+      razao_social,
+      nome_fantasia,
+      email,
+      telefone,
+      cpf,
+      cnpj,
+      tipo_pessoa,
+      ativo
+    `
+    )
+    .or(
+      [
+        `nome.ilike.${ilike}`,
+        `nome_social.ilike.${ilike}`,
+        `razao_social.ilike.${ilike}`,
+        `nome_fantasia.ilike.${ilike}`,
+        `cpf.ilike.${ilike}`,
+        `cnpj.ilike.${ilike}`,
+        `email.ilike.${ilike}`,
+      ].join(",")
+    )
+    .order("nome", { ascending: true })
     .limit(20);
 
   if (error) {
@@ -36,5 +60,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "erro_busca_pessoas" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, pessoas: data ?? [] }, { status: 200 });
+  const pessoas =
+    (data ?? []).map((p: any) => {
+      const documento_principal = p.cpf ?? p.cnpj ?? null;
+      return {
+        id: p.id,
+        nome: p.nome ?? p.nome_social ?? p.razao_social ?? p.nome_fantasia ?? null,
+        nome_social: p.nome_social ?? null,
+        razao_social: p.razao_social ?? null,
+        nome_fantasia: p.nome_fantasia ?? null,
+        email: p.email ?? null,
+        telefone_principal: p.telefone ?? null,
+        documento_principal,
+        tipo_pessoa: p.tipo_pessoa ?? null,
+        ativo: p.ativo,
+      };
+    }) ?? [];
+
+  return NextResponse.json({ ok: true, pessoas }, { status: 200 });
 }

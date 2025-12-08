@@ -1,416 +1,498 @@
 # 📘 Modelo Provisório — Módulo Loja v0
 Sistema Conexão Dança — AJ Dance Store  
-Versão: 0.4 (provisória, focada em uso imediato)
+Versão: 0.5 (provisória, focada em uso imediato)
 
 ## 1. Objetivo
 
 Este documento registra o modelo provisório do **Módulo Loja v0**, criado para uso imediato, com foco em:
 
-- cadastro de produtos;
-- registro de vendas simples;
-- registro de entregas de figurino (R$ 0,00);
-- controle mínimo de crediário interno;
-|- rastreio de quem fez a venda/entrega;
-- coleta de feedback dos vendedores (observações de teste);
-- vínculo da venda ao **responsável financeiro** e dos itens ao **beneficiário (aluno)**;
-- capacidade de **cancelar vendas** sem apagar dados;
-- uso da Loja como **porta de entrada** para cadastro rápido de família (responsável + alunos).
+- **Entrada de Estoque** (fluxo da equipe da loja);
+- **Gerenciar Produtos** (fluxo administrativo, definição de preços);
+- Registro de vendas simples (Loja AJ);
+- Registro de entregas de figurino (R$ 0,00);
+- Controle mínimo de crediário interno;
+- Rastreio de quem fez a venda/entrega;
+- Coleta de feedback dos vendedores (observações de teste);
+- Vínculo da venda ao **responsável financeiro (cliente)** e dos itens ao **beneficiário (aluno)**;
+- Capacidade de **cancelar vendas** sem apagar dados;
+- Uso da Loja como **porta de entrada** para cadastro rápido de família (responsável + alunos).
 
-Ele é compatível com o modelo de banco padrão, mas pode ser substituído/refatorado no futuro.
+Ele é compatível com o modelo de banco padrão e com a visão geral do sistema, mas pode ser substituído/refatorado no futuro conforme a Loja evoluir para v1.   
 
-## 2. Tabelas Provisórias do Domínio LOJA
+---
 
-### 2.1 Tabela `loja_produtos`
+## 2. Tabelas do Domínio LOJA v0
 
-Catálogo simples de produtos da AJ Dance Store.
+### 2.1 `loja_produtos` — Catálogo de produtos
 
-Campos (concepção física alvo):
+Catálogo simples de produtos da AJ Dance Store. Cada registro representa um “tipo de produto” (ex.: “Sapatilha meia ponta infantil – rosa”).
+
+**Campos (versão física atual):**
 
 - `id bigint PK`
 - `codigo text UNIQUE` — código interno/SKU
 - `nome text NOT NULL`
 - `descricao text`
 - `categoria text`
-- `preco_venda_centavos integer NOT NULL`
-- `unidade text` — “UN”, “PAR”, etc.
+- `preco_venda_centavos integer NOT NULL`  
+  - Convenção Loja v0:
+    - `0` → produto **pré-cadastrado / aguardando definição de preço** (NÃO aparece para venda);  
+    - `> 0` → produto **liberado para venda**.
+- `unidade text NOT NULL DEFAULT 'UN'` — “UN”, “PAR”, “KIT”, etc.
 - `estoque_atual integer NOT NULL DEFAULT 0`
 - `ativo boolean NOT NULL DEFAULT true`
 - `observacoes text`
 - `created_at timestamptz NOT NULL DEFAULT now()`
 - `updated_at timestamptz NOT NULL DEFAULT now()`
 
-### 2.2 Tabela `loja_vendas`
+**Estados do produto (regra de negócio):**
 
-Cabeçalho de vendas/entregas.
+1. **Pré-cadastrado / Aguardando preço**
+   - `ativo = true`
+   - `preco_venda_centavos = 0`
+   - Pode ter estoque, fornecedor, descrição…  
+   - **Não aparece no caixa/venda**.
+
+2. **Liberado para venda**
+   - `ativo = true`
+   - `preco_venda_centavos > 0`
+   - Aparece em `/loja/caixa` (frente de caixa).
+
+3. **Inativo**
+   - `ativo = false`
+   - Pode ter sido vendido no passado (historicamente), mas não deve mais aparecer para venda.
+
+---
+
+### 2.2 `loja_vendas` — Cabeçalho de vendas/entregas
+
+Representa uma venda ou entrega (inclusive figurino).
+
+**Campos:**
 
 - `id bigint PK`
 - `cliente_pessoa_id bigint NOT NULL` → FK `pessoas(id)`  
   > Quem é o **responsável financeiro / cliente** da venda.  
   > Pode ser o próprio aluno ou um responsável (pai, mãe, tio, etc.).
+
 - `tipo_venda text NOT NULL`
   - `VENDA`
   - `CREDIARIO_INTERNO`
   - `ENTREGA_FIGURINO`
+
 - `valor_total_centavos integer NOT NULL`
 - `desconto_centavos integer NOT NULL DEFAULT 0`
+
 - `forma_pagamento text NOT NULL`
-  - `AVISTA`, `CREDIARIO_INTERNO`, `OUTRO`
+  - Ex.: `AVISTA`, `CREDIARIO_INTERNO`, `PIX`, `CARTAO`, `OUTRO`
+
 - `status_pagamento text NOT NULL`
-  - `PENDENTE`, `PAGO`, `PARCIAL`
+  - `PENDENTE`
+  - `PAGO`
+  - `PARCIAL`
+
 - `status_venda text NOT NULL DEFAULT 'ATIVA'`
   - `ATIVA`
   - `CANCELADA`
+
 - `data_venda timestamptz NOT NULL DEFAULT now()`
 - `data_vencimento date` — relevante para crediário interno
+
 - `observacoes text` — campo livre para observações da venda
 - `observacao_vendedor text` — campo específico para feedback do usuário sobre o fluxo da loja (teste da Loja v0)
+
 - `vendedor_user_id uuid` → FK `profiles(user_id)`
+
 - `cancelada_em timestamptz` — data/hora do cancelamento (quando `status_venda = 'CANCELADA'`)
 - `cancelada_por_user_id uuid` → FK `profiles(user_id)` — usuário que cancelou
 - `motivo_cancelamento text` — texto curto com a justificativa do cancelamento
+
 - `created_at timestamptz NOT NULL DEFAULT now()`
 - `updated_at timestamptz NOT NULL DEFAULT now()`
 
-Regras de uso:
+**Regras de uso:**
 
-- Venda à vista:
+- **Venda à vista:**
   - `tipo_venda = 'VENDA'`
-  - `forma_pagamento = 'AVISTA'`
+  - `forma_pagamento = 'AVISTA'` (ou PIX/CARTÃO etc.)
   - `status_pagamento = 'PAGO'`
   - `status_venda = 'ATIVA'`
-- Crediário interno:
+
+- **Crediário interno:**
   - `tipo_venda = 'CREDIARIO_INTERNO'`
   - `forma_pagamento = 'CREDIARIO_INTERNO'`
   - `status_pagamento = 'PENDENTE` ou `PARCIAL`
   - `status_venda = 'ATIVA'`
   - `data_vencimento` preenchida
-- Entrega de figurino:
+
+- **Entrega de figurino:**
   - `tipo_venda = 'ENTREGA_FIGURINO'`
   - `valor_total_centavos = 0`
   - `status_pagamento = 'PAGO'`
   - `status_venda = 'ATIVA'`
 
-Cancelamento:
+**Cancelamento:**
 
-- Ao cancelar uma venda:
-  - `status_venda = 'CANCELADA'`
-  - `cancelada_em = now()`
-  - `cancelada_por_user_id` preenchido com o usuário logado
-  - `motivo_cancelamento` preenchido com texto digitado pelo usuário
-- Nenhuma linha é apagada; apenas o status é alterado.
+Ao cancelar uma venda:
 
-### 2.3 Tabela `loja_venda_itens`
+- `status_venda = 'CANCELADA'`
+- `cancelada_em = now()`
+- `cancelada_por_user_id` preenchido
+- `motivo_cancelamento` preenchido
+
+Nenhuma linha é apagada; apenas o status é alterado.
+
+---
+
+### 2.3 `loja_venda_itens` — Itens de venda
 
 Itens de cada venda/entrega.
 
 - `id bigint PK`
 - `venda_id bigint NOT NULL` → FK `loja_vendas(id)`
 - `produto_id bigint NOT NULL` → FK `loja_produtos(id)`
-- `quantidade integer NOT NULL`
-- `preco_unitario_centavos integer NOT NULL`
-- `total_centavos integer NOT NULL`
+- `quantidade integer NOT NULL CHECK (quantidade > 0)`
+- `preco_unitario_centavos integer NOT NULL CHECK (preco_unitario_centavos >= 0)`
+- `total_centavos integer NOT NULL CHECK (total_centavos >= 0)`
+
 - `beneficiario_pessoa_id bigint` → FK `pessoas(id)` (opcional)  
   > Quem **vai usar** o item (normalmente o aluno).  
   > Pode ser nulo quando o item não está vinculado a um aluno específico.
+
 - `observacoes text`
 
 Regra: a soma de `total_centavos` dos itens deve bater com `valor_total_centavos` da venda.
 
-## 3. Telas Previstas no Contexto LOJA
+---
 
-Referência ao VNB (Sidebar, domínio LOJA):
+### 2.4 `loja_fornecedores` — Papel de fornecedor
 
-- `/loja` — início da loja;
-- `/loja/produtos` — cadastro e listagem de produtos;
-- `/loja/caixa` — frente de caixa para vendas/entregas;
-- `/loja/vendas` — histórico de vendas;
-- `/loja/vendas/[id]` — visualização tipo recibo;
-- `/loja/relatorios` — visão de vendas e feedback (v0).
+Marca quais Pessoas (`pessoas.id`) atuam como fornecedores da Loja (PJ ou PF).
 
-### 3.1 `/loja/produtos`
+- `id bigint PK`
+- `pessoa_id bigint NOT NULL` → FK `pessoas(id)`  
+  > Pessoa (normalmente jurídica) que atua como **fornecedor**.
+- `codigo_interno text` — código/codinome do fornecedor na loja (opcional)
+- `ativo boolean NOT NULL DEFAULT true`
+- `observacoes text`
+- `created_at timestamptz NOT NULL DEFAULT now()`
+- `updated_at timestamptz NOT NULL DEFAULT now()`
 
-- Tabela com:
-  - Código, Nome, Preço, Estoque, Ativo.
-- Filtro por nome/código.
-- Formulário de novo produto (modal ou página) com:
-  - nome, código, categoria, preço de venda, estoque inicial, unidade, ativo, observações.
+Constraint importante:
 
-### 3.2 Wizard Família Loja v0 (Cadastro rápido de Responsável + Alunos)
+- `UNIQUE (pessoa_id)` — impede duplicar fornecedor para a mesma pessoa.
 
-Este wizard é acessado a partir da Loja (por exemplo, botão “Cadastrar família rápida (Loja)” no `/loja/caixa`) e tem como objetivo:
+---
 
-- criar **pessoas** para o responsável financeiro e para os alunos;
-- criar **vínculos** em `vinculos` (aluno ↔ responsável);
-- evitar cadastros duplicados;
-- voltar ao caixa com tudo pronto para a venda.
+### 2.5 `loja_fornecedor_precos` — Régua de preços por fornecedor
 
-#### 3.2.1 Passo 1 — Responsável Financeiro (cliente)
+Histórico de preços de custo de produtos por fornecedor.
 
-Campos:
+- `id bigint PK`
+- `fornecedor_id bigint NOT NULL` → FK `loja_fornecedores(id)` ON DELETE CASCADE
+- `produto_id bigint NOT NULL` → FK `loja_produtos(id)` ON DELETE CASCADE
+- `preco_custo_centavos integer NOT NULL`
+- `moeda text NOT NULL DEFAULT 'BRL'`
+- `data_referencia date NOT NULL DEFAULT current_date`
+- `observacoes text`
+- `created_at timestamptz NOT NULL DEFAULT now()`
 
-- Nome completo (obrigatório).
-- CPF (obrigatório).
-- Telefone principal (opcional).
+Uso:
 
-Regras:
+- Cada **compra ou entrada relevante** pode registrar uma linha aqui, ligando:
+  - fornecedor,  
+  - produto,  
+  - preço de custo,  
+  - data.
 
-- Ao preencher o CPF, a aplicação:
-  - consulta `pessoas` por CPF;
-  - se encontrar registro:
-    - exibir: “Já existe: Fulano de Tal. Deseja usar este cadastro?”;
-    - se o usuário confirmar, **não cria nova pessoa**, usa o cadastro existente;
-  - se não encontrar, permite criar nova pessoa com esse CPF.
-- Recomenda-se, em fase posterior, criar `UNIQUE (cpf)` em `pessoas`. Na Loja v0, essa unicidade é garantida pela lógica da aplicação.
+Permite responder:
+
+- “Quanto a Evidência me cobrou por esta sapatilha em cada pedido?”  
+- “Qual fornecedor normalmente faz melhor preço neste produto?”
+
+---
+
+## 3. Conceitos de Fluxo — Loja v0
+
+### 3.1 Papéis básicos
+
+- **Contexto Loja** (funcionários):
+  - **Entrada de Estoque**;
+  - Uso de `/loja/caixa` para vendas;
+  - Podem escolher fornecedor (já cadastrado) no pré-cadastro.
+
+- **Contexto Administração / Gestão da Loja** (você):
+  - **Gerenciar Produtos** (definir preços, ativar/inativar);
+  - Cadastrar fornecedores;
+  - Ver relatórios;
+  - Ajustar estoque em casos especiais.
+
+---
+
+## 4. Fluxo 1 — Cadastro de Fornecedor
+
+Tela principal: `/loja/fornecedores` (menu Loja → Fornecedores).   
+
+### 4.1 Cadastro de fornecedor (admin)
+
+1. Você cadastra primeiro o fornecedor em **Pessoas** (Pessoa Jurídica ou Física):  
+   - CNPJ, razão social, contatos etc.
+
+2. Na tela **Fornecedores da Loja**:
+   - Seleciona a Pessoa;
+   - Define:
+     - `codigo_interno` (Ex.: “EVIDENCIA”, “ATACADISTA_BH”, etc. — opcional);
+     - `observacoes`;
+     - `ativo = true`.
+
+3. O sistema cria/atualiza registro em `loja_fornecedores`.
 
 Resultado:
 
-- Pessoa responsável criada ou reutilizada.
-- `cliente_pessoa_id` será essa pessoa na venda.
+- A pessoa passa a aparecer nas telas de Loja como fornecedor disponível.
 
-#### 3.2.2 Passo 2 — Alunos / Dependentes
+---
 
-O wizard permite cadastrar uma lista de alunos dependentes:
+## 5. Fluxo 2 — ENTRADA DE ESTOQUE (funcionários)
 
-Para cada aluno:
+**Nome oficial na interface:**  
+> **Entrada de Estoque**
 
-- Nome completo (obrigatório).
-- Data de nascimento (opcional).
-- Observações (opcional).
-- Flag “Responsável é o próprio aluno” (para adultos que pagam por si mesmos).
+(Screen alvo: `/loja/estoque` ou seção específica dentro de `/loja/caixa`.)
 
-Regras de duplicidade:
+### 5.1 Pré-cadastro de produto (sem preço)
 
-- Ao salvar um aluno, a aplicação:
-  - normaliza o nome (minúsculas, sem acentos, sem espaços duplicados);
-  - procura em `pessoas` por nomes iguais ou muito semelhantes que:
-    - já estejam vinculados ao mesmo responsável em `vinculos` (quando existirem);
-  - Se encontrar nome **idêntico normalizado** com o mesmo responsável:
-    - exibe alerta: “Já existe um aluno chamado X vinculado a este responsável. Confirmar novo cadastro?”.
-- Em fase futura, pode ser usada similaridade de strings (trigramas) para detectar grafias parecidas (“Maria Clara” vs “Marya Clara”).
+Quando **produto é novo**:
 
-Criação de vínculos:
+1. Funcionário abre **Entrada de Estoque**.
+2. Seleciona um **fornecedor** (da lista de `loja_fornecedores`).
+3. Informa:
+   - Nome do produto;
+   - Código interno (se houver);
+   - Categoria;
+   - Unidade (UN, PAR, KIT…);
+   - Quantidade que chegou;
+   - Observações (ex.: numerações, cores, lote);
+4. **Não informa nenhum preço.**
 
-- Para cada aluno criado:
-  - a aplicação cria um registro em `pessoas`;
-  - e cria um registro em `vinculos`:
-    - `aluno_id` = pessoa do aluno.
-    - `responsavel_id` = pessoa do responsável financeiro.
-    - `parentesco` = texto (“pai”, “mãe”, “responsável”, etc.).
+A API então:
 
-Caso “responsável é o próprio aluno”:
+- Cria um registro em `loja_produtos` com:
+  - `preco_venda_centavos = 0` (produto ainda **não liberado para venda**);
+  - `estoque_atual = quantidade`;
+  - demais campos preenchidos.
 
-- Se marcado:
-  - criar apenas uma pessoa;
-  - essa pessoa será:
-    - responsável financeiro (cliente);
-    - beneficiário dos itens na venda.
-  - Vinculação em `vinculos` é opcional nesse caso (pode ser omitida).
+- Opcionalmente, cria uma linha em `loja_fornecedor_precos` com:
+  - `preco_custo_centavos = 0` (ou custo, se conhecido);
+  - `fornecedor_id` escolhido;
+  - `data_referencia = hoje`.
 
-#### 3.2.3 Resultado do Wizard
+Resultado:
 
-Ao concluir o wizard:
+- Produto está **pré-cadastrado**, com fornecedor e estoque;
+- Ainda **não aparece** para venda (preço 0).
 
-- retorna para `/loja/caixa` com:
-  - `cliente_pessoa_id` já selecionado;
-  - lista de alunos vinculados a esse responsável disponível para seleção no campo “Beneficiário” de cada item.
+### 5.2 Reposição de estoque (produto já existente)
 
-### 3.3 `/loja/caixa` (Frente de Caixa)
+Quando já existe o produto (tem linha em `loja_produtos`):
 
-#### 3.3.1 Bloco Cliente (Responsável Financeiro)
+1. Funcionário abre **Entrada de Estoque**.
+2. Seleciona um **produto já existente**.
+3. Seleciona o **fornecedor** (pode ser o mesmo ou outro).
+4. Informa **apenas quantidade** (e observações, se quiser).
+
+A API:
+
+- Soma a quantidade ao `estoque_atual`;
+- Não altera `preco_venda_centavos` (valor de venda continua o mesmo);
+- Pode opcionalmente registrar uma nova linha em `loja_fornecedor_precos` com o custo usado nesta compra.
+
+Resultado:
+
+- Estoque aumenta;
+- Preço de venda se mantém;
+- Produto continua liberado pra venda se já tinha preço definido.
+
+---
+
+## 6. Fluxo 3 — GERENCIAR PRODUTOS (admin)
+
+**Nome de menu:**  
+> **Gerenciar Produtos** (plural — lista de produtos)
+
+**Ação interna / API:**  
+> gerenciar **produto** (singular — um item por vez)
+
+Tela alvo: `/loja/produtos` (lista) + detalhamento/edição.
+
+### 6.1 Lista de produtos
+
+Na tela **Gerenciar Produtos**:
+
+- Listar:
+  - Código
+  - Nome
+  - Categoria
+  - Preço de venda (formatado em R$)
+  - Estoque atual
+  - Ativo (sim/não)
+  - Estado lógico:
+    - “Aguardando preço” quando `preco_venda_centavos = 0`.
+
+Filtros:
+
+- Nome/código;
+- Categoria;
+- Somente ativos;
+- Somente “aguardando preço”.
+
+### 6.2 Edição de produto (definição de preços)
+
+Ao abrir um produto:
+
+- Você (admin) pode:
+  - Definir/alterar **preço de venda**:
+    - campo `preco` (R$) no formulário → API converte para `preco_venda_centavos`.
+  - Ajustar categoria, unidade, descrição;
+  - Ativar/Inativar o produto.
+
+Regra chave:
+
+- Se `preco_venda_centavos` for atualizado para **> 0**, o produto passa a ser **liberado para venda**.
+- Produtos com `preco_venda_centavos = 0` **não devem aparecer** em `/loja/caixa`.
+
+### 6.3 Ligação com fornecedores e custo
+
+No futuro (Loja v1 ou Loja v0.1 mais avançada), na tela de **Gerenciar Produtos** você também poderá:
+
+- Ver os registros de `loja_fornecedor_precos` (histórico de custo);
+- Registrar um **preço de custo** para a compra atual de um fornecedor;
+- Isso alimenta a régua de preços e permite relatórios de margem.
+
+---
+
+## 7. Fluxo 4 — VENDAS / CAIXA
+
+Tela principal: `/loja/caixa`  
+Telas complementares: `/loja/vendas`, `/loja/vendas/[id]`, `/loja/relatorios`.
+
+### 7.1 Caixa — Bloco Cliente (Responsável Financeiro)
 
 - Auto-complete de `pessoas` para escolher o **cliente da venda** (`cliente_pessoa_id`).
 - Botão **“+ Cadastrar família rápida (Loja)”**:
-  - abre o wizard descrito em 3.2;
-  - ao concluir, retorna com cliente selecionado e alunos carregados.
+  - abre o **Wizard Família Loja v0** (descrição herdada do modelo anterior);   
+  - ao concluir:
+    - cria/usa Pessoa do responsável;
+    - cria/usa Pessoas de alunos;
+    - cria `vinculos` (aluno ↔ responsável);
+    - volta ao caixa com o cliente selecionado e lista de alunos carregada.
 
-#### 3.3.2 Bloco Tipo de Operação
+### 7.2 Caixa — Bloco Tipo de Operação
 
 - Select:
   - `VENDA`
   - `CREDIARIO_INTERNO`
   - `ENTREGA_FIGURINO`
-- Quando `CREDIARIO_INTERNO`:
-  - exibe campo `data_vencimento`.
-- Quando `ENTREGA_FIGURINO`:
-  - o front pode forçar `preco_unitario_centavos = 0` nos itens.
 
-#### 3.3.3 Bloco Itens
+A escolha de tipo determina como a API preenche `tipo_venda`, `status_pagamento`, `data_vencimento` etc.
 
-- Tabela de itens com colunas:
-  - Produto (auto-complete de `loja_produtos`).
-  - Quantidade.
-  - Preço unitário.
-  - Beneficiário (opcional):
-    - auto-complete de `pessoas`, com atalho para listar primeiro os alunos vinculados ao cliente;
-    - preenche `beneficiario_pessoa_id`.
-  - Observações (por item, opcional).
+### 7.3 Caixa — Bloco Itens
 
-- Cálculo automático:
-  - total por item = quantidade × preço unitário;
-  - total geral da venda (soma dos itens).
+Cada item:
 
-#### 3.3.4 Bloco Resumo e Feedback
+- Produto (auto-complete de `loja_produtos`):
+  - **somente produtos com `preco_venda_centavos > 0` e `ativo = true`**;
+- Quantidade;
+- Preço unitário (puxado de `preco_venda_centavos`, com possibilidade de desconto/ajuste, se permitido pela regra);
+- Beneficiário (opcional):
+  - primeiro mostra os alunos vinculados ao responsável;
+  - depois permite buscar outras Pessoas;
+- Observações do item.
 
-- Campos:
-  - Desconto (R$).
-  - Forma de pagamento.
-  - Observações gerais (`observacoes`).
-  - **Observação do vendedor (teste da Loja v0)** (`observacao_vendedor`):
-    - textarea específica para feedback sobre o fluxo da loja:
-      - campos que faltaram;
-      - situações não previstas;
-      - sugestões de melhoria.
-- Botão **“Salvar venda/entrega”**:
-  - Chama `POST /api/loja/vendas` com cabeçalho + itens.
-  - Define `vendedor_user_id` a partir do usuário logado.
-  - Redireciona para `/loja/vendas/[id]`.
+Total da venda:
 
-### 3.4 `/loja/vendas` e `/loja/vendas/[id]`
+- soma de `total_centavos` dos itens;
+- aplicação de desconto geral (`desconto_centavos`).
 
-#### 3.4.1 `/loja/vendas` — Lista
+### 7.4 Feedback do vendedor (Loja v0)
 
-Filtros:
+Campo:
 
-- Período (data inicial e final).
-- Tipo de operação (`VENDA`, `CREDIARIO_INTERNO`, `ENTREGA_FIGURINO`).
-- Status de pagamento.
-- **Status da venda** (`ATIVA` / `CANCELADA`).
-- Cliente.
-- Vendedor.
+- `observacao_vendedor` na venda (`loja_vendas`).
 
-Colunas:
+Uso:
 
-- Data da venda.
-- Cliente (nome da pessoa).
-- Tipo de operação.
-- Valor total.
-- Status de pagamento.
-- Status da venda (com destaque quando `CANCELADA`).
-- Vendedor.
+- Sua equipe descreve ali:
+  - dificuldades no fluxo,
+  - campos que faltaram,
+  - situações não previstas,
+  - sugestões de melhoria.
+- Será usado nos relatórios de feedback para evoluir a Loja v0 para Loja v1.
 
-#### 3.4.2 `/loja/vendas/[id]` — Detalhe / Recibo
+---
 
-Conteúdo:
+## 8. Relatórios principais
 
-- Cabeçalho com:
-  - Nome da escola / AJ Dance Store.
-  - Dados do cliente (nome, CPF opcional).
-  - Data da venda.
-  - Tipo de operação.
-  - Status da venda (ATIVA ou CANCELADA).
-- Itens:
-  - Produto.
-  - Quantidade.
-  - Preço unitário.
-  - Total.
-  - Beneficiário (quando houver).
-- Totais:
-  - Subtotal, desconto, total final.
-- Observações:
-  - `observacoes`.
-  - `observacao_vendedor` (pode aparecer em uma seção “Feedback interno”).
-- Rodapé:
-  - Nome do vendedor.
-  - Campo para assinatura manual.
-
-Ações:
-
-- Botão **“Imprimir”** (usa impressão do navegador).
-- Botão **“Cancelar venda”** (quando usuário tiver permissão e a venda estiver ATIVA):
-  - ao clicar, abre modal para preencher `motivo_cancelamento`;
-  - atualiza a venda para:
-    - `status_venda = 'CANCELADA'`
-    - `cancelada_em = now()`
-    - `cancelada_por_user_id` = usuário logado.
-
-## 4. Relatórios e Feedback da Loja v0
-
-### 4.1 Relatório de Vendas / Resumo
+### 8.1 Relatório de Vendas
 
 Rota sugerida: `/loja/relatorios` ou `/loja/relatorios/vendas`.
 
 Filtros:
 
-- Período (data inicial e final).
-- Tipo de operação (`VENDA`, `CREDIARIO_INTERNO`, `ENTREGA_FIGURINO`).
-- Vendedor.
-- Cliente.
-- Status de pagamento.
-- Status da venda (`ATIVA` / `CANCELADA`).
+- Período;
+- Tipo de operação;
+- Cliente;
+- Vendedor;
+- Status de pagamento;
+- Status da venda.
 
 Indicadores:
 
-- Total de vendas (R$) no período (apenas vendas ATIVAS).
-- Quantidade de vendas.
-- Total de crediário interno em aberto (somatório de vendas `CREDIARIO_INTERNO` com `status_pagamento = 'PENDENTE'` ou `PARCIAL` e `status_venda = 'ATIVA'`).
-- Quantidade de entregas de figurino.
+- Total vendido no período (apenas vendas ATIVAS);
+- Nº de vendas;
+- Total em crediário pendente;
+- Nº de entregas de figurino.
 
-Tabelas:
+### 8.2 Relatório de Feedback
 
-- Por produto:
-  - Produto | Quantidade vendida | Valor total.
-- Por vendedor:
-  - Vendedor | Nº de vendas | Valor total.
-- Por cliente:
-  - Cliente | Nº de vendas | Valor total.
+Rota sugerida: `/loja/relatorios/feedback`.
 
-### 4.2 Relatório de Feedback da Loja v0
+Mostra apenas vendas com `observacao_vendedor` preenchida:
 
-Rota sugerida: `/loja/relatorios/feedback`  
-ou aba dentro de `/loja/relatorios`.
+- Data;
+- Cliente;
+- Vendedor;
+- Tipo de operação;
+- Status da venda;
+- Texto do feedback.
 
-Objetivo: listar apenas vendas com feedback de teste.
+É o insumo principal para repensar o fluxo da Loja v1.
 
-Filtros mínimos:
+---
 
-- Período.
-- Vendedor.
+## 9. Resumo Geral da Arquitetura de Fluxo Loja v0
 
-Colunas principais:
+1. **Fornecedores** (Admin):  
+   - `/loja/fornecedores` → cadastra/ativa/desativa fornecedores  
+   - Tabelas: `pessoas`, `loja_fornecedores`, `loja_fornecedor_precos`.
 
-- Data da venda.
-- Cliente.
-- Vendedor.
-- Tipo de operação.
-- Status da venda.
-- `observacao_vendedor`.
+2. **Entrada de Estoque** (Loja):  
+   - Tela de Entrada de Estoque (novo produto ou reposição)  
+   - Cria/atualiza `loja_produtos` (estoque, dados básicos)  
+   - Pode registrar preço de custo em `loja_fornecedor_precos`  
+   - Não define preço de venda.
 
-Uso: esse relatório será a principal fonte de insumos para a especificação da Loja v1 (refinada), permitindo enxergar:
+3. **Gerenciar Produtos** (Admin):  
+   - `/loja/produtos` → lista e edita produtos  
+   - Define **preço de venda** (`preco_venda_centavos`)  
+   - Produto com `preco_venda_centavos > 0` → **liberado para venda**.
 
-- campos que fizeram falta;
-- fluxos confusos;
-- situações de uso não previstas.
+4. **Caixa / Vendas** (Loja):  
+   - `/loja/caixa`, `/loja/vendas`, `/loja/vendas/[id]`  
+   - Só enxergam produtos ativos com preço definido  
+   - Registram vendas em `loja_vendas` + `loja_venda_itens`, vinculando cliente e beneficiário.
 
-## 5. Observações Importantes
+5. **Relatórios**:  
+   - Vendas, crediário, entregas de figurino, feedback de vendedores.
 
-- Este modelo é **provisório**, mas já alinhado ao modelo central de Pessoas e ao futuro financeiro.
-- Não há integração obrigatória com `cobrancas` / `recebimentos` na v0.
-- No futuro, as vendas (especialmente `CREDIARIO_INTERNO`) podem gerar cobranças automáticas.
-- O campo `observacao_vendedor` é a principal ferramenta de coleta de feedback de uso real da Loja v0.
-- O vínculo `cliente_pessoa_id` (responsável financeiro) + `beneficiario_pessoa_id` (por item) viabiliza relatórios futuros tanto por **cliente** quanto por **aluno**.
-- O wizard “Família Loja v0” evita cadastros duplicados usando:
-  - CPF como chave prática para responsáveis;
-  - checagem de nome + responsável para alunos;
-  - e, futuramente, pode ser aprimorado com comparação de similaridade de nomes.
-
-## 6. Próximos Passos (quando for implementar)
-
-Quando o ChatGPT for gerar comandos de implementação:
-
-1. Criar as tabelas SQL acima (Loja v0).
-2. Criar APIs:
-   - `/api/loja/produtos`
-   - `/api/loja/vendas`
-   - endpoints de listagem para relatórios (vendas e feedback).
-   - endpoints de apoio ao wizard:
-     - busca e criação rápida de `pessoas`;
-     - criação de `vinculos`.
-3. Criar páginas:
-   - `/loja/produtos`
-   - `/loja/caixa`
-   - `/loja/vendas`
-   - `/loja/vendas/[id]`
-   - `/loja/relatorios` (vendas e feedback)
-   - wizard “Família Loja v0” embutido no fluxo da loja.
-
-[ FIM DO DOCUMENTO — modelo-loja-v0.md ]
+[ FIM DO DOCUMENTO — Modelo Loja v0 (versão 0.5 atualizada) ]

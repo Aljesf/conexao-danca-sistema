@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-12-03T02:08:54.657Z",
+  "generatedAt": "2025-12-05T15:37:01.444Z",
   "databaseUrlPrefix": "postgresql://***@aws-1-sa-east-1.pooler.supabase.com:5432/postgres",
   "schema": "public",
   "tables": [
@@ -2783,6 +2783,756 @@
     },
     {
       "schema": "public",
+      "name": "loja_fornecedor_precos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('loja_fornecedor_precos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "fornecedor_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "produto_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "preco_custo_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "moeda",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'BRL'::text"
+        },
+        {
+          "column_name": "data_referencia",
+          "data_type": "date",
+          "is_nullable": "NO",
+          "column_default": "CURRENT_DATE"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_55198_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55198_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55198_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55198_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55198_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55198_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55198_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_fornecedor_precos_fornecedor_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "fornecedor_id"
+        },
+        {
+          "constraint_name": "loja_fornecedor_precos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "loja_fornecedor_precos_produto_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "produto_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_loja_fornecedor_precos_data",
+          "indexdef": "CREATE INDEX idx_loja_fornecedor_precos_data ON public.loja_fornecedor_precos USING btree (data_referencia DESC)"
+        },
+        {
+          "indexname": "idx_loja_fornecedor_precos_fornecedor",
+          "indexdef": "CREATE INDEX idx_loja_fornecedor_precos_fornecedor ON public.loja_fornecedor_precos USING btree (fornecedor_id)"
+        },
+        {
+          "indexname": "idx_loja_fornecedor_precos_fornecedor_produto_data",
+          "indexdef": "CREATE INDEX idx_loja_fornecedor_precos_fornecedor_produto_data ON public.loja_fornecedor_precos USING btree (fornecedor_id, produto_id, data_referencia DESC)"
+        },
+        {
+          "indexname": "idx_loja_fornecedor_precos_produto",
+          "indexdef": "CREATE INDEX idx_loja_fornecedor_precos_produto ON public.loja_fornecedor_precos USING btree (produto_id)"
+        },
+        {
+          "indexname": "loja_fornecedor_precos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX loja_fornecedor_precos_pkey ON public.loja_fornecedor_precos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "loja_fornecedores",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('loja_fornecedores_id_seq'::regclass)"
+        },
+        {
+          "column_name": "pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "codigo_interno",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_55177_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55177_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55177_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55177_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55177_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_fornecedores_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "loja_fornecedores_pessoa_unique",
+          "constraint_type": "UNIQUE",
+          "column_name": "pessoa_id"
+        },
+        {
+          "constraint_name": "loja_fornecedores_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_loja_fornecedores_ativo",
+          "indexdef": "CREATE INDEX idx_loja_fornecedores_ativo ON public.loja_fornecedores USING btree (ativo)"
+        },
+        {
+          "indexname": "idx_loja_fornecedores_pessoa",
+          "indexdef": "CREATE INDEX idx_loja_fornecedores_pessoa ON public.loja_fornecedores USING btree (pessoa_id)"
+        },
+        {
+          "indexname": "loja_fornecedores_pessoa_unique",
+          "indexdef": "CREATE UNIQUE INDEX loja_fornecedores_pessoa_unique ON public.loja_fornecedores USING btree (pessoa_id)"
+        },
+        {
+          "indexname": "loja_fornecedores_pkey",
+          "indexdef": "CREATE UNIQUE INDEX loja_fornecedores_pkey ON public.loja_fornecedores USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "loja_produtos",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('loja_produtos_id_seq'::regclass)"
+        },
+        {
+          "column_name": "codigo",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "nome",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "descricao",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "categoria",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "preco_venda_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "unidade",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'UN'::text"
+        },
+        {
+          "column_name": "estoque_atual",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "0"
+        },
+        {
+          "column_name": "ativo",
+          "data_type": "boolean",
+          "is_nullable": "NO",
+          "column_default": "true"
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_55052_11_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55052_12_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55052_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55052_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55052_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55052_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55052_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55052_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_produtos_codigo_key",
+          "constraint_type": "UNIQUE",
+          "column_name": "codigo"
+        },
+        {
+          "constraint_name": "loja_produtos_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_loja_produtos_categoria",
+          "indexdef": "CREATE INDEX idx_loja_produtos_categoria ON public.loja_produtos USING btree (categoria)"
+        },
+        {
+          "indexname": "idx_loja_produtos_nome",
+          "indexdef": "CREATE INDEX idx_loja_produtos_nome ON public.loja_produtos USING btree (nome)"
+        },
+        {
+          "indexname": "loja_produtos_codigo_key",
+          "indexdef": "CREATE UNIQUE INDEX loja_produtos_codigo_key ON public.loja_produtos USING btree (codigo)"
+        },
+        {
+          "indexname": "loja_produtos_pkey",
+          "indexdef": "CREATE UNIQUE INDEX loja_produtos_pkey ON public.loja_produtos USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "loja_venda_itens",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('loja_venda_itens_id_seq'::regclass)"
+        },
+        {
+          "column_name": "venda_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "produto_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "quantidade",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "preco_unitario_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "total_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "beneficiario_pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_55106_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55106_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55106_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55106_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55106_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55106_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_venda_itens_beneficiario_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "beneficiario_pessoa_id"
+        },
+        {
+          "constraint_name": "loja_venda_itens_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "loja_venda_itens_preco_unitario_centavos_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_venda_itens_produto_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "produto_id"
+        },
+        {
+          "constraint_name": "loja_venda_itens_quantidade_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_venda_itens_total_centavos_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_venda_itens_venda_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "venda_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_loja_venda_itens_beneficiario",
+          "indexdef": "CREATE INDEX idx_loja_venda_itens_beneficiario ON public.loja_venda_itens USING btree (beneficiario_pessoa_id)"
+        },
+        {
+          "indexname": "idx_loja_venda_itens_produto",
+          "indexdef": "CREATE INDEX idx_loja_venda_itens_produto ON public.loja_venda_itens USING btree (produto_id)"
+        },
+        {
+          "indexname": "idx_loja_venda_itens_venda",
+          "indexdef": "CREATE INDEX idx_loja_venda_itens_venda ON public.loja_venda_itens USING btree (venda_id)"
+        },
+        {
+          "indexname": "loja_venda_itens_pkey",
+          "indexdef": "CREATE UNIQUE INDEX loja_venda_itens_pkey ON public.loja_venda_itens USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "loja_vendas",
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": "nextval('loja_vendas_id_seq'::regclass)"
+        },
+        {
+          "column_name": "cliente_pessoa_id",
+          "data_type": "bigint",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "tipo_venda",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "valor_total_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "desconto_centavos",
+          "data_type": "integer",
+          "is_nullable": "NO",
+          "column_default": "0"
+        },
+        {
+          "column_name": "forma_pagamento",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "status_pagamento",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "status_venda",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": "'ATIVA'::text"
+        },
+        {
+          "column_name": "data_venda",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "data_vencimento",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacoes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "observacao_vendedor",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "vendedor_user_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cancelada_em",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "cancelada_por_user_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "motivo_cancelamento",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "NO",
+          "column_default": "now()"
+        }
+      ],
+      "constraints": [
+        {
+          "constraint_name": "2200_55070_17_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_18_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_1_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_2_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_3_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_4_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_5_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_6_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_7_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_8_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "2200_55070_9_not_null",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_vendas_cancelada_por_user_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "cancelada_por_user_id"
+        },
+        {
+          "constraint_name": "loja_vendas_cliente_pessoa_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "cliente_pessoa_id"
+        },
+        {
+          "constraint_name": "loja_vendas_pkey",
+          "constraint_type": "PRIMARY KEY",
+          "column_name": "id"
+        },
+        {
+          "constraint_name": "loja_vendas_status_venda_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_vendas_tipo_venda_check",
+          "constraint_type": "CHECK",
+          "column_name": null
+        },
+        {
+          "constraint_name": "loja_vendas_vendedor_user_id_fkey",
+          "constraint_type": "FOREIGN KEY",
+          "column_name": "vendedor_user_id"
+        }
+      ],
+      "indexes": [
+        {
+          "indexname": "idx_loja_vendas_cliente",
+          "indexdef": "CREATE INDEX idx_loja_vendas_cliente ON public.loja_vendas USING btree (cliente_pessoa_id)"
+        },
+        {
+          "indexname": "idx_loja_vendas_data_venda",
+          "indexdef": "CREATE INDEX idx_loja_vendas_data_venda ON public.loja_vendas USING btree (data_venda)"
+        },
+        {
+          "indexname": "idx_loja_vendas_status_venda",
+          "indexdef": "CREATE INDEX idx_loja_vendas_status_venda ON public.loja_vendas USING btree (status_venda)"
+        },
+        {
+          "indexname": "idx_loja_vendas_tipo_venda",
+          "indexdef": "CREATE INDEX idx_loja_vendas_tipo_venda ON public.loja_vendas USING btree (tipo_venda)"
+        },
+        {
+          "indexname": "idx_loja_vendas_vendedor",
+          "indexdef": "CREATE INDEX idx_loja_vendas_vendedor ON public.loja_vendas USING btree (vendedor_user_id)"
+        },
+        {
+          "indexname": "loja_vendas_pkey",
+          "indexdef": "CREATE UNIQUE INDEX loja_vendas_pkey ON public.loja_vendas USING btree (id)"
+        }
+      ]
+    },
+    {
+      "schema": "public",
       "name": "matriculas",
       "columns": [
         {
@@ -2818,13 +3568,13 @@
         {
           "column_name": "plano_matricula_id",
           "data_type": "bigint",
-          "is_nullable": "NO",
+          "is_nullable": "YES",
           "column_default": null
         },
         {
           "column_name": "contrato_modelo_id",
           "data_type": "bigint",
-          "is_nullable": "NO",
+          "is_nullable": "YES",
           "column_default": null
         },
         {
@@ -2937,16 +3687,6 @@
         },
         {
           "constraint_name": "2200_54978_5_not_null",
-          "constraint_type": "CHECK",
-          "column_name": null
-        },
-        {
-          "constraint_name": "2200_54978_6_not_null",
-          "constraint_type": "CHECK",
-          "column_name": null
-        },
-        {
-          "constraint_name": "2200_54978_7_not_null",
           "constraint_type": "CHECK",
           "column_name": null
         },
