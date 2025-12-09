@@ -464,33 +464,42 @@ export default function GestaoEstoqueAdminPage() {
 
       selecionarProduto(produtoAtualizado);
 
-      if (precoCustoCentavos !== null) {
-        const resCusto = await fetch("/api/loja/produtos/custo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            produto_id: produtoAtualizado.id,
-            preco_custo_centavos: precoCustoCentavos,
-          }),
-        });
-
-        const jsonCusto: ApiResponse = await resCusto.json();
-        if (!resCusto.ok || !jsonCusto.ok) {
-          console.error("Falha ao registrar preco de custo:", jsonCusto.error);
-          setMensagemTipo("error");
-          setMensagem(
-            "Preco de venda salvo, mas houve erro ao registrar o preco de custo."
-          );
-          return;
-        }
-      }
+      // ============================================================
+      // Registro de preco de custo por edicao
+      // ------------------------------------------------------------
+      // ATENCAO:
+      // A rota /api/loja/produtos/custo ainda nao esta implementada
+      // nesta versao da Loja v0. O registro de custo e feito apenas
+      // pelo fluxo de entrada de estoque (/api/loja/estoque/entrada).
+      //
+      // Quando a API de custo estiver pronta, este bloco podera ser
+      // reativado para registrar historicamente o novo preco de custo.
+      //
+      // if (precoCustoCentavos !== null) {
+      //   const resCusto = await fetch("/api/loja/produtos/custo", {
+      //     method: "POST",
+      //     headers: { "Content-Type": "application/json" },
+      //     body: JSON.stringify({
+      //       produto_id: produtoAtualizado.id,
+      //       preco_custo_centavos: precoCustoCentavos,
+      //     }),
+      //   });
+      //
+      //   const jsonCusto: ApiResponse = await resCusto.json();
+      //   if (!resCusto.ok || !jsonCusto.ok) {
+      //     console.error(
+      //       "[GestaoEstoque] Falha ao registrar preco de custo:",
+      //       jsonCusto.error
+      //     );
+      //   }
+      // }
 
       setMensagemTipo("success");
       setMensagem("Produto atualizado com sucesso.");
     } catch (err) {
-      console.error("Erro inesperado ao salvar produto:", err);
+      console.error("[GestaoEstoque] Erro inesperado ao salvar produto:", err);
       setMensagemTipo("error");
-      setMensagem("Erro inesperado ao salvar produto.");
+      setMensagem("Ocorreu um erro ao salvar o produto. Verifique o console e tente novamente.");
     } finally {
       setSavingEdicao(false);
     }
