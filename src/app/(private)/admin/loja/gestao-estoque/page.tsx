@@ -222,14 +222,39 @@ export default function GestaoEstoqueAdminPage() {
     try {
       setCarregandoFornecedores(true);
       const res = await fetch("/api/loja/fornecedores", { cache: "no-store" });
-      const json: ApiResponse<FornecedorResumo[]> = await res.json();
-      if (!res.ok || !json.ok) {
-        console.error("Erro ao buscar fornecedores:", json.error);
+      const json: ApiResponse<any[]> = await res.json();
+
+      if (!res.ok || json?.ok === false) {
+        console.error("[GestaoEstoque] Erro ao buscar fornecedores:", json?.error);
+        setFornecedores([]);
         return;
       }
-      setFornecedores(json.data ?? []);
+
+      let itensBrutos: any[] = [];
+
+      if (Array.isArray(json?.data)) {
+        itensBrutos = json.data;
+      } else if (Array.isArray(json?.items)) {
+        itensBrutos = json.items;
+      } else if (Array.isArray(json?.fornecedores)) {
+        itensBrutos = json.fornecedores;
+      } else if (Array.isArray(json)) {
+        itensBrutos = json;
+      }
+
+      const lista: FornecedorResumo[] = itensBrutos.map((item) => ({
+        id: item.id,
+        nome:
+          item.pessoa_nome ??
+          item.nome ??
+          item.razao_social ??
+          item.codigo_interno ??
+          `Fornecedor #${item.id}`,
+      }));
+
+      setFornecedores(lista);
     } catch (err) {
-      console.error("Erro inesperado ao buscar fornecedores:", err);
+      console.error("[GestaoEstoque] Erro inesperado ao buscar fornecedores:", err);
     } finally {
       setCarregandoFornecedores(false);
     }
@@ -1091,11 +1116,11 @@ export default function GestaoEstoqueAdminPage() {
                                     : null,
                                 }))
                               }
-                              className="w-full border rounded-md px-3 py-2 text-sm bg-white"
+                          className="w-full border rounded-md px-3 py-2 text-sm bg-white"
                               disabled={carregandoFornecedores}
                             >
                               <option value="">(Sem fornecedor definido)</option>
-                              {fornecedores.map((f) => (
+                              {fornecedoresOrdenados.map((f) => (
                                 <option key={f.id} value={f.id}>
                                   {f.nome}
                                 </option>
