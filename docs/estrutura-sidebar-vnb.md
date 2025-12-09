@@ -229,6 +229,94 @@ Relatorios Comerciais (Loja / Cafe)
 
 Relatorios Sociais
 - Bolsas e acoes sociais -> /admin/relatorios/social
+
+## 4. CD-BAR — Cabecalho dinamico da sidebar por contexto
+
+### 4.1. O que e o CD-BAR
+
+CD-BAR e o “card de contexto ativo” exibido no topo da sidebar (logo + nome do contexto + texto “Contexto ativo”).
+
+Ele e responsavel por:
+
+- Exibir a IDENTIDADE visual do contexto atual (logo e nome).
+- Deixar claro em qual “mundo” o usuario esta:
+  - Escola -> Conexao Danca
+  - Loja -> AJ Dance Store
+  - Lanchonete -> Ballet Cafe
+  - Administracao -> Administracao do Sistema
+- Integrar a configuracao visual do contexto (BrandingContext) com a configuracao funcional do menu (sidebarConfig).
+
+### 4.2. Arquivo tecnico de referencia
+
+- Componente: Sidebar
+- Caminho: src/components/Sidebar.tsx
+- Principais pontos:
+
+1. contextMap  
+   Mapa que traduz o contexto “externo” vindo do Branding para a chave interna usada no sidebarConfig:
+
+   ```ts
+   const contextMap: Record<string, string> = {
+     escola: "escola",
+     loja: "loja",
+     lanchonete: "cafe",
+     administracao: "admin",
+   };
+   ```
+
+2. contextMeta  
+   Texto amigavel de cada contexto, usado para exibir o nome no CD-BAR:
+
+   ```ts
+   const contextMeta: Record<string, { label: string }> = {
+     escola: { label: "Conexao Danca" },
+     loja: { label: "AJ Dance Store" },
+     lanchonete: { label: "Ballet Cafe" },
+     administracao: { label: "Administracao do Sistema" },
+   };
+   ```
+
+3. BrandingContext + logo  
+   O componente le, via useBranding(), os dados de branding do contexto atual (configs[rawContext]) para exibir a logo (quando existir). Se nao houver logo, exibe as iniciais do nome do contexto.
+
+### 4.3. Fluxo para adicionar um NOVO contexto ao CD-BAR
+
+Sempre que for criar um novo contexto (ex.: Movimento, CRM, etc.), o fluxo deve ser SEMPRE este:
+
+1) Branding / Contexto logico  
+Configurar o novo contexto no BrandingContext (nome interno que sera usado em activeContext).
+
+2) SidebarConfig  
+Adicionar a chave correspondente no sidebarConfig com suas secoes e rotas. Ex.: movimento: SidebarSection[].
+
+3) contextMap  
+No componente Sidebar, atualizar o contextMap para apontar o nome vindo do Branding para a chave do sidebarConfig. Ex.:
+
+   ```ts
+   const contextMap: Record<string, string> = {
+     // ...
+     movimento: "movimento",
+   };
+   ```
+
+4) contextMeta  
+Ainda no Sidebar, adicionar a entrada no contextMeta com o rotulo que sera exibido no CD-BAR. Ex.:
+
+   ```ts
+   const contextMeta: Record<string, { label: string }> = {
+     // ...
+     movimento: { label: "Movimento Conexao Danca" },
+   };
+   ```
+
+5) Logo (opcional mas recomendado)  
+Configurar, no Branding, a logoUrl especifica para esse contexto (se existir). Dessa forma, o CD-BAR mostrara a logo do contexto em vez das iniciais do nome.
+
+Com isso, cada contexto tera:
+
+- Um CD-BAR proprio (logo + nome + contexto ativo).
+- Um menu proprio (via sidebarConfig[contexto]).
+- Um fluxo claro e padronizado para futuras expansoes.
 5. Regras de Ouro
 
 (Inalteradas)

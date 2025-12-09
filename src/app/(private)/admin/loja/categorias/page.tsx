@@ -486,42 +486,41 @@ export default function AdminLojaCategoriasPage() {
               </div>
 
               {isSubcategoria && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-slate-700">
-                      Centro de custo (financeiro)
-                    </label>
-                    <select
-                      value={form.centro_custo_id}
-                      onChange={(e) =>
-                        handleChange(
-                          "centro_custo_id",
-                          e.target.value === "" ? "" : Number(e.target.value)
-                        )
-                      }
-                      className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-violet-400 focus:bg-white focus:ring-1 focus:ring-violet-300"
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-700">
+                    Centro de custo (financeiro)
+                  </label>
+                  <select
+                    value={form.centro_custo_id}
+                    onChange={(e) =>
+                      handleChange("centro_custo_id", e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                    className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-violet-400 focus:bg-white focus:ring-1 focus:ring-violet-300"
+                  >
+                    <option value="">— Não vinculado —</option>
+                    {centrosCusto
+                      .filter((cc) => cc.ativo !== false)
+                      .map((cc) => (
+                        <option key={cc.id} value={cc.id}>
+                          {cc.codigo} — {cc.nome}
+                        </option>
+                      ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Não encontrou o centro de custo?
+                    <Link
+                      href="/admin/financeiro/centros-custo"
+                      className="ml-1 font-semibold text-violet-700 hover:underline"
                     >
-                      <option value="">— Não vinculado —</option>
-                      {centrosCusto
-                        .filter((cc) => cc.ativo !== false)
-                        .map((cc) => (
-                          <option key={cc.id} value={cc.id}>
-                            {cc.codigo} — {cc.nome}
-                          </option>
-                        ))}
-                    </select>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Não encontrou o centro de custo?
-                      <Link
-                        href="/admin/financeiro/centros-custo"
-                        className="ml-1 font-semibold text-violet-700 hover:underline"
-                      >
-                        Gerenciar centros de custo
-                      </Link>
-                      .
-                    </p>
-                  </div>
+                      Gerenciar centros de custo
+                    </Link>
+                    .
+                  </p>
+                </div>
+              )}
 
+              {isSubcategoria && (
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium text-slate-700">
                       Categoria financeira de <strong>receita</strong>
@@ -546,11 +545,7 @@ export default function AdminLojaCategoriasPage() {
                         ))}
                     </select>
                   </div>
-                </div>
-              )}
 
-              {isSubcategoria && (
-                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-medium text-slate-700">
                       Categoria financeira de <strong>despesa</strong>
@@ -574,9 +569,6 @@ export default function AdminLojaCategoriasPage() {
                           </option>
                         ))}
                     </select>
-                  </div>
-
-                  <div className="flex flex-col justify-end">
                     <p className="text-[11px] text-slate-500">
                       A receita será usada nas vendas da loja.
                       A despesa será usada nas compras de estoque e nas saídas

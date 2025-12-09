@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
-import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 
-// Visual espelhado no Plano de Contas: arvore por tipo, categorias ancoradas em cada conta contabill.
-
-type TipoCategoria = "RECEITA" | "DESPESA";
+type TipoCategoria = "RECEITA" | "DESPESA" | string;
 
 type PlanoConta = {
   id: number;
@@ -21,7 +18,7 @@ type Categoria = {
   codigo: string;
   nome: string;
   tipo: TipoCategoria;
-  plano_conta_id: number;
+  plano_conta_id: number | null;
   ativo: boolean;
 };
 
@@ -35,27 +32,6 @@ type CategoriaModalState =
       conta: PlanoConta;
       categoria?: Categoria;
     };
-
-const seedPlanos: PlanoConta[] = [
-  { id: 1, codigo: "1", nome: "Receitas", tipo: "RECEITA", parent_id: null },
-  { id: 2, codigo: "1.1", nome: "Receitas da Escola", tipo: "RECEITA", parent_id: 1 },
-  { id: 3, codigo: "1.1.1", nome: "Mensalidades", tipo: "RECEITA", parent_id: 2 },
-  { id: 4, codigo: "1.1.2", nome: "Workshops", tipo: "RECEITA", parent_id: 2 },
-  { id: 5, codigo: "1.2", nome: "Receitas da Loja", tipo: "RECEITA", parent_id: 1 },
-  { id: 6, codigo: "1.2.1", nome: "Vendas Loja", tipo: "RECEITA", parent_id: 5 },
-  { id: 7, codigo: "2", nome: "Despesas", tipo: "DESPESA", parent_id: null },
-  { id: 8, codigo: "2.1", nome: "Salarios", tipo: "DESPESA", parent_id: 7 },
-  { id: 9, codigo: "2.1.1", nome: "Salarios Professores", tipo: "DESPESA", parent_id: 8 },
-  { id: 10, codigo: "2.2", nome: "Despesas da Escola", tipo: "DESPESA", parent_id: 7 },
-];
-
-const seedCategorias: Categoria[] = [
-  { id: 1, codigo: "MENSAL", nome: "Mensalidade", tipo: "RECEITA", plano_conta_id: 3, ativo: true },
-  { id: 2, codigo: "WORK", nome: "Workshop", tipo: "RECEITA", plano_conta_id: 4, ativo: true },
-  { id: 3, codigo: "VENDA_LOJA", nome: "Venda loja", tipo: "RECEITA", plano_conta_id: 6, ativo: true },
-  { id: 4, codigo: "SAL_PROF", nome: "Salario Professor", tipo: "DESPESA", plano_conta_id: 9, ativo: true },
-  { id: 5, codigo: "ALUGUEL", nome: "Aluguel", tipo: "DESPESA", plano_conta_id: 10, ativo: true },
-];
 
 function buildTree(nodes: PlanoConta[], tipo: TipoCategoria): TreeNode[] {
   const filtered = nodes.filter((n) => n.tipo === tipo);
@@ -71,6 +47,11 @@ function buildTree(nodes: PlanoConta[], tipo: TipoCategoria): TreeNode[] {
       roots.push(node);
     }
   });
+  const sortNodes = (list: TreeNode[]) => {
+    list.sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR", { numeric: true }));
+    list.forEach((child) => sortNodes(child.children));
+  };
+  sortNodes(roots);
   return roots;
 }
 
@@ -85,7 +66,7 @@ function PlanoContaTree({
   categoriasPorConta: Map<number, Categoria[]>;
   onNova: (conta: PlanoConta) => void;
   onEditar: (conta: PlanoConta, categoria: Categoria) => void;
-  onToggle: (categoriaId: number) => void;
+  onToggle: (categoria: Categoria) => void;
 }) {
   return (
     <ul className="space-y-3">
@@ -102,9 +83,7 @@ function PlanoContaTree({
               </div>
               {isLeaf && (
                 <div className="mt-2 space-y-2">
-                  {cats.length === 0 && (
-                    <div className="text-xs text-slate-500">Nenhuma categoria vinculada.</div>
-                  )}
+                  {cats.length === 0 && <div className="text-xs text-slate-500">Nenhuma categoria vinculada.</div>}
                   {cats.map((cat) => (
                     <div
                       key={cat.id}
@@ -123,7 +102,7 @@ function PlanoContaTree({
                           Editar
                         </button>
                         <button
-                          onClick={() => onToggle(cat.id)}
+                          onClick={() => onToggle(cat)}
                           className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
                         >
                           {cat.ativo ? "Desativar" : "Reativar"}
@@ -159,7 +138,6 @@ function PlanoContaTree({
 }
 
 export default function CategoriasFinanceirasPage() {
-  const supabase = getSupabaseBrowser();
   const [planos, setPlanos] = useState<PlanoConta[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [modalCategoria, setModalCategoria] = useState<CategoriaModalState>({ open: false });
@@ -168,61 +146,41 @@ export default function CategoriasFinanceirasPage() {
     nome: "",
     ativo: true,
   });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    let ativo = true;
-    async function carregarPlanos() {
+    const load = async () => {
+      setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("plano_contas")
-          .select("id, codigo, nome, tipo, parent_id")
-          .order("codigo");
-        if (error) throw error;
-        if (ativo && data) {
-          setPlanos(data as PlanoConta[]);
-        }
-      } catch (err) {
-        console.error("Falha ao carregar plano_contas", err);
-        if (ativo) setPlanos(seedPlanos);
+        const [pcResp, catResp] = await Promise.all([
+          fetch("/api/financeiro/plano-contas"),
+          fetch("/api/financeiro/categorias"),
+        ]);
+        const pcJson = await pcResp.json();
+        const catJson = await catResp.json();
+        if (!pcResp.ok || !pcJson.ok) throw new Error(pcJson.error || "Erro ao carregar plano de contas.");
+        if (!catResp.ok || !catJson.ok) throw new Error(catJson.error || "Erro ao carregar categorias financeiras.");
+        setPlanos(pcJson.data ?? []);
+        setCategorias(catJson.data ?? []);
+      } catch (err: any) {
+        console.error(err);
+        alert(err.message || "Erro ao carregar dados financeiros.");
+      } finally {
+        setLoading(false);
       }
-    }
-    carregarPlanos();
-    return () => {
-      ativo = false;
     };
-  }, [supabase]);
-
-  useEffect(() => {
-    let ativo = true;
-    async function carregarCategorias() {
-      try {
-        const { data, error } = await supabase
-          .from("categorias_financeiras")
-          .select("id, codigo, nome, tipo, plano_conta_id, ativo")
-          .order("codigo");
-        if (error) throw error;
-        if (ativo && data) {
-          setCategorias(data as Categoria[]);
-        }
-      } catch (err) {
-        console.error("Falha ao carregar categorias_financeiras", err);
-        if (ativo) setCategorias(seedCategorias);
-      }
-    }
-    carregarCategorias();
-    return () => {
-      ativo = false;
-    };
-  }, [supabase]);
+    void load();
+  }, []);
 
   const receitas = useMemo(() => buildTree(planos, "RECEITA"), [planos]);
   const despesas = useMemo(() => buildTree(planos, "DESPESA"), [planos]);
   const categoriasPorConta = useMemo(() => {
     const map = new Map<number, Categoria[]>();
     categorias.forEach((cat) => {
-      const list = map.get(cat.plano_conta_id) || [];
+      const list = map.get(cat.plano_conta_id ?? -1) || [];
       list.push(cat);
-      map.set(cat.plano_conta_id, list);
+      map.set(cat.plano_conta_id ?? -1, list);
     });
     return map;
   }, [categorias]);
@@ -237,36 +195,68 @@ export default function CategoriasFinanceirasPage() {
     setForm({ codigo: categoria.codigo, nome: categoria.nome, ativo: categoria.ativo });
   }
 
-  function salvarCategoria(e: React.FormEvent) {
+  async function salvarCategoria(e: React.FormEvent) {
     e.preventDefault();
     if (!modalCategoria.open) return;
     if (!form.codigo.trim() || !form.nome.trim()) return;
     const conta = modalCategoria.conta;
-    if (modalCategoria.modo === "novo") {
-      const novoId = categorias.length ? Math.max(...categorias.map((c) => c.id)) + 1 : 1;
-      const nova: Categoria = {
-        id: novoId,
-        codigo: form.codigo.toUpperCase(),
-        nome: form.nome,
-        tipo: conta.tipo,
-        plano_conta_id: conta.id,
-        ativo: form.ativo,
-      };
-      setCategorias((prev) => [...prev, nova]);
-    } else if (modalCategoria.categoria) {
-      setCategorias((prev) =>
-        prev.map((c) =>
-          c.id === modalCategoria.categoria!.id
-            ? { ...c, codigo: form.codigo.toUpperCase(), nome: form.nome, ativo: form.ativo }
-            : c
-        )
-      );
+    setSaving(true);
+    try {
+      if (modalCategoria.modo === "novo") {
+        const resp = await fetch("/api/financeiro/categorias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tipo: conta.tipo,
+            codigo: form.codigo.trim().toUpperCase(),
+            nome: form.nome.trim(),
+            plano_conta_id: conta.id,
+            ativo: form.ativo,
+          }),
+        });
+        const json = await resp.json();
+        if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao criar categoria financeira.");
+        setCategorias((prev) => [...prev, json.data]);
+      } else if (modalCategoria.categoria) {
+        const resp = await fetch("/api/financeiro/categorias", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: modalCategoria.categoria.id,
+            tipo: conta.tipo,
+            codigo: form.codigo.trim().toUpperCase(),
+            nome: form.nome.trim(),
+            plano_conta_id: conta.id,
+            ativo: form.ativo,
+          }),
+        });
+        const json = await resp.json();
+        if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao atualizar categoria financeira.");
+        setCategorias((prev) => prev.map((c) => (c.id === json.data.id ? json.data : c)));
+      }
+      setModalCategoria({ open: false });
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Erro ao salvar categoria financeira.");
+    } finally {
+      setSaving(false);
     }
-    setModalCategoria({ open: false });
   }
 
-  function toggleAtivo(categoriaId: number) {
-    setCategorias((prev) => prev.map((c) => (c.id === categoriaId ? { ...c, ativo: !c.ativo } : c)));
+  async function toggleAtivo(cat: Categoria) {
+    try {
+      const resp = await fetch("/api/financeiro/categorias", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: cat.id, ativo: !cat.ativo }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao atualizar categoria financeira.");
+      setCategorias((prev) => prev.map((c) => (c.id === json.data.id ? json.data : c)));
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Erro ao atualizar categoria financeira.");
+    }
   }
 
   return (
@@ -275,17 +265,17 @@ export default function CategoriasFinanceirasPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h1 className="text-lg font-semibold text-slate-800">Categorias financeiras</h1>
           <p className="text-sm text-slate-600">
-            Ancoradas ao Plano de Contas. Cada categoria pertence a uma conta contabill e segue o tipo Receita ou Despesa.
+            Ancoradas ao Plano de Contas. Cada categoria pertence a uma conta contábil e segue o tipo Receita ou Despesa.
           </p>
         </div>
 
         <FinanceHelpCard
-          subtitle="Classificacao de receitas e despesas."
+          subtitle="Classificação de receitas e despesas."
           items={[
-            "Categorias sao criadas diretamente em cada conta contabill folha.",
+            "Categorias são criadas diretamente em cada conta contábil folha.",
             "Receitas e Despesas seguem o mesmo plano de contas.",
-            "Categorias inativas nao aparecem em lancamentos, mas podem ser reativadas.",
-            "Use codigos claros para facilitar o uso em contas a pagar/receber.",
+            "Categorias inativas não aparecem em lançamentos, mas podem ser reativadas.",
+            "Use códigos claros para facilitar o uso em contas a pagar/receber.",
           ]}
         />
 
@@ -295,13 +285,17 @@ export default function CategoriasFinanceirasPage() {
               <h2 className="text-lg font-semibold text-slate-800">Receitas</h2>
               <p className="text-sm text-slate-600">Plano de contas e categorias de receita.</p>
             </div>
-            <PlanoContaTree
-              nodes={receitas}
-              categoriasPorConta={categoriasPorConta}
-              onNova={abrirNovo}
-              onEditar={abrirEdicao}
-              onToggle={toggleAtivo}
-            />
+            {loading ? (
+              <p className="text-sm text-slate-600">Carregando...</p>
+            ) : (
+              <PlanoContaTree
+                nodes={receitas}
+                categoriasPorConta={categoriasPorConta}
+                onNova={abrirNovo}
+                onEditar={abrirEdicao}
+                onToggle={toggleAtivo}
+              />
+            )}
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -309,13 +303,17 @@ export default function CategoriasFinanceirasPage() {
               <h2 className="text-lg font-semibold text-slate-800">Despesas</h2>
               <p className="text-sm text-slate-600">Plano de contas e categorias de despesa.</p>
             </div>
-            <PlanoContaTree
-              nodes={despesas}
-              categoriasPorConta={categoriasPorConta}
-              onNova={abrirNovo}
-              onEditar={abrirEdicao}
-              onToggle={toggleAtivo}
-            />
+            {loading ? (
+              <p className="text-sm text-slate-600">Carregando...</p>
+            ) : (
+              <PlanoContaTree
+                nodes={despesas}
+                categoriasPorConta={categoriasPorConta}
+                onNova={abrirNovo}
+                onEditar={abrirEdicao}
+                onToggle={toggleAtivo}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -335,6 +333,7 @@ export default function CategoriasFinanceirasPage() {
               <button
                 onClick={() => setModalCategoria({ open: false })}
                 className="text-sm font-semibold text-slate-500"
+                type="button"
               >
                 Fechar
               </button>
@@ -342,7 +341,7 @@ export default function CategoriasFinanceirasPage() {
 
             <form onSubmit={salvarCategoria} className="mt-4 grid gap-3">
               <label className="text-sm text-slate-700">
-                Codigo
+                Código
                 <input
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
                   value={form.codigo}
@@ -357,7 +356,7 @@ export default function CategoriasFinanceirasPage() {
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
                   value={form.nome}
                   onChange={(e) => setForm({ ...form, nome: e.target.value })}
-                  placeholder="Salario de professor"
+                  placeholder="Salário de professor"
                   required
                 />
               </label>
@@ -370,7 +369,7 @@ export default function CategoriasFinanceirasPage() {
                 />
               </label>
               <label className="text-sm text-slate-700">
-                Conta contabill
+                Conta contábil
                 <input
                   readOnly
                   className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800"
@@ -389,9 +388,10 @@ export default function CategoriasFinanceirasPage() {
               <div className="flex gap-2">
                 <button
                   type="submit"
-                  className="rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow"
+                  disabled={saving}
+                  className="rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow disabled:opacity-70"
                 >
-                  {modalCategoria.modo === "novo" ? "Adicionar categoria" : "Salvar alteracoes"}
+                  {saving ? "Salvando..." : modalCategoria.modo === "novo" ? "Adicionar categoria" : "Salvar alterações"}
                 </button>
                 <button
                   type="button"

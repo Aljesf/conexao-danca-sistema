@@ -1,9 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
-
-// Segue modelo docs/modelo_financeiro.md. Dados mockados; conectar Supabase quando disponível.
 
 type CentroCusto = {
   id: number;
@@ -12,50 +10,94 @@ type CentroCusto = {
   ativo: boolean;
 };
 
-const seedCentros: CentroCusto[] = [
-  { id: 1, codigo: "ESCOLA", nome: "Escola", ativo: true },
-  { id: 2, codigo: "LOJA", nome: "Loja", ativo: true },
-  { id: 3, codigo: "CAFE", nome: "Café", ativo: true },
-];
-
 export default function CentrosCustoPage() {
-  const [centros, setCentros] = useState<CentroCusto[]>(seedCentros);
+  const [centros, setCentros] = useState<CentroCusto[]>([]);
   const [editing, setEditing] = useState<CentroCusto | null>(null);
   const [form, setForm] = useState({ codigo: "", nome: "", ativo: true });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const ativos = useMemo(() => centros.filter((c) => c.ativo), [centros]);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const resp = await fetch("/api/financeiro/centros-custo");
+        const json = await resp.json();
+        if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao carregar centros de custo.");
+        setCentros(json.data ?? []);
+      } catch (err: any) {
+        console.error(err);
+        alert(err.message || "Erro ao carregar centros de custo.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, []);
 
   function resetForm() {
     setEditing(null);
     setForm({ codigo: "", nome: "", ativo: true });
   }
 
-  function salvar(e: React.FormEvent) {
+  async function salvar(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.codigo.trim() || !form.nome.trim()) return;
-    if (editing) {
-      setCentros((prev) =>
-        prev.map((c) => (c.id === editing.id ? { ...c, codigo: form.codigo, nome: form.nome, ativo: form.ativo } : c))
-      );
-    } else {
-      const novo: CentroCusto = {
-        id: centros.length ? Math.max(...centros.map((c) => c.id)) + 1 : 1,
-        codigo: form.codigo.toUpperCase(),
-        nome: form.nome,
-        ativo: form.ativo,
-      };
-      setCentros((prev) => [novo, ...prev]);
+    if (!form.codigo.trim() || !form.nome.trim()) {
+      alert("Código e nome são obrigatórios.");
+      return;
     }
-    resetForm();
+    setSaving(true);
+    try {
+      const payload = {
+        codigo: form.codigo.toUpperCase(),
+        nome: form.nome.trim(),
+        ativo: form.ativo,
+        ...(editing ? { id: editing.id } : {}),
+      };
+
+      const resp = await fetch("/api/financeiro/centros-custo", {
+        method: editing ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await resp.json();
+      if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao salvar centro de custo.");
+
+      if (editing) {
+        setCentros((prev) => prev.map((c) => (c.id === editing.id ? json.data : c)));
+      } else {
+        setCentros((prev) => [json.data, ...prev]);
+      }
+      resetForm();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Erro ao salvar centro de custo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function alternar(item: CentroCusto) {
+    try {
+      const resp = await fetch("/api/financeiro/centros-custo", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id, ativo: !item.ativo }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao atualizar centro de custo.");
+      setCentros((prev) => prev.map((c) => (c.id === item.id ? json.data : c)));
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Erro ao atualizar centro de custo.");
+    }
   }
 
   function editar(item: CentroCusto) {
     setEditing(item);
     setForm({ codigo: item.codigo, nome: item.nome, ativo: item.ativo });
-  }
-
-  function alternar(id: number) {
-    setCentros((prev) => prev.map((c) => (c.id === id ? { ...c, ativo: !c.ativo } : c)));
   }
 
   return (
@@ -64,7 +106,8 @@ export default function CentrosCustoPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h1 className="text-lg font-semibold text-slate-800">Centros de custo</h1>
           <p className="text-sm text-slate-600">
-            Estrutura de alocação financeira usada em todas as telas (Escola, Loja, Café). Baseada em docs/modelo_financeiro.md.
+            Estrutura de alocação financeira usada em todas as telas (Escola, Loja, Café). Baseada em
+            docs/modelo_financeiro.md.
           </p>
         </div>
 
@@ -114,9 +157,10 @@ export default function CentrosCustoPage() {
             <div className="flex gap-2 md:col-span-2">
               <button
                 type="submit"
-                className="rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow"
+                disabled={saving}
+                className="rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow disabled:opacity-70"
               >
-                {editing ? "Salvar alterações" : "Adicionar centro"}
+                {saving ? "Salvando..." : editing ? "Salvar alterações" : "Adicionar centro"}
               </button>
               {editing && (
                 <button
@@ -134,36 +178,42 @@ export default function CentrosCustoPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-slate-800">Centros cadastrados</h3>
           <p className="text-sm text-slate-600">Exibindo ativos e inativos. Use o modo edição para ajustes inline.</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {centros.map((c) => (
-              <div key={c.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-lg font-semibold text-slate-800">{c.nome}</div>
-                    <div className="text-sm text-slate-600">{c.codigo}</div>
-                    <div className="text-xs text-slate-500">Status: {c.ativo ? "Ativo" : "Inativo"}</div>
+          {loading ? (
+            <p className="mt-3 text-sm text-slate-600">Carregando...</p>
+          ) : (
+            <>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {centros.map((c) => (
+                  <div key={c.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-lg font-semibold text-slate-800">{c.nome}</div>
+                        <div className="text-sm text-slate-600">{c.codigo}</div>
+                        <div className="text-xs text-slate-500">Status: {c.ativo ? "Ativo" : "Inativo"}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => editar(c)}
+                          className="rounded-full border border-slate-300 px-3 py-1 text-sm font-semibold text-slate-700"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => alternar(c)}
+                          className="rounded-full border border-slate-300 px-3 py-1 text-sm font-semibold text-slate-700"
+                        >
+                          {c.ativo ? "Desativar" : "Ativar"}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => editar(c)}
-                      className="rounded-full border border-slate-300 px-3 py-1 text-sm font-semibold text-slate-700"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => alternar(c.id)}
-                      className="rounded-full border border-slate-300 px-3 py-1 text-sm font-semibold text-slate-700"
-                    >
-                      {c.ativo ? "Desativar" : "Ativar"}
-                    </button>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="mt-3 text-sm text-slate-600">
-            Ativos: {ativos.length} • Total: {centros.length}
-          </div>
+              <div className="mt-3 text-sm text-slate-600">
+                Ativos: {ativos.length} • Total: {centros.length}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
