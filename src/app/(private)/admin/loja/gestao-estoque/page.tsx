@@ -1,4 +1,4 @@
-ï»¿"use client";
+"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -98,7 +98,7 @@ type CadastroAdminFormState = {
 function formatarReaisDeCentavos(
   valorCentavos: number | null | undefined
 ): string {
-  if (valorCentavos == null || Number.isNaN(valorCentavos)) return "â€”";
+  if (valorCentavos == null || Number.isNaN(valorCentavos)) return "—";
   const valor = valorCentavos / 100;
   return valor.toLocaleString("pt-BR", {
     style: "currency",
@@ -108,9 +108,9 @@ function formatarReaisDeCentavos(
 }
 
 function formatarData(dateStr: string | null | undefined): string {
-  if (!dateStr) return "â€”";
+  if (!dateStr) return "—";
   const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "â€”";
+  if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("pt-BR");
 }
 
@@ -271,7 +271,7 @@ export default function GestaoEstoqueAdminPage() {
     const map: Record<number, string> = {};
     categoriasLoja.forEach((c) =>
       c.subcategorias.forEach((s) => {
-        map[s.id] = `${c.nome} â€” ${s.nome}`;
+        map[s.id] = `${c.nome} — ${s.nome}`;
       })
     );
     return map;
@@ -620,7 +620,7 @@ export default function GestaoEstoqueAdminPage() {
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">
-          Gestao de Estoque â€” Loja v0 (Admin)
+          Gestao de Estoque — Loja v0 (Admin)
         </h1>
         <p className="text-sm text-gray-500">
           Aqui voce revisa o que a equipe cadastrou via estoque, define precos
@@ -852,7 +852,7 @@ export default function GestaoEstoqueAdminPage() {
                         <p className="text-xs text-gray-500">
                           ID #{produtoSelecionado.id}
                           {produtoSelecionado.codigo
-                            ? ` â€¢ Codigo: ${produtoSelecionado.codigo}`
+                            ? ` • Codigo: ${produtoSelecionado.codigo}`
                             : ""}
                         </p>
                       </div>
@@ -880,14 +880,14 @@ export default function GestaoEstoqueAdminPage() {
                       <div>
                         <div className="font-medium text-gray-600">Categoria</div>
                         <div className="text-gray-900">
-                          {subcategoriaNomeMap[produtoSelecionado.categoria_subcategoria_id ?? -1] ?? produtoSelecionado.categoria || "â€”"}
+                          {subcategoriaNomeMap[produtoSelecionado.categoria_subcategoria_id ?? -1] ?? produtoSelecionado.categoria || "—"}
                         </div>
                       </div>
 
                       <div>
                         <div className="font-medium text-gray-600">Unidade</div>
                         <div className="text-gray-900">
-                          {produtoSelecionado.unidade || "â€”"}
+                          {produtoSelecionado.unidade || "—"}
                         </div>
                       </div>
 
@@ -917,7 +917,7 @@ export default function GestaoEstoqueAdminPage() {
                       <div>
                         <div className="font-medium text-gray-600">Fornecedor</div>
                         <div className="text-gray-900">
-                          {produtoSelecionado.fornecedor_nome || "â€”"}
+                          {produtoSelecionado.fornecedor_nome || "—"}
                         </div>
                       </div>
 
@@ -1015,10 +1015,10 @@ export default function GestaoEstoqueAdminPage() {
                               <p className="text-[11px] text-gray-500">
                                 Nenhuma categoria cadastrada. Configure em{" "}
                                 <a
-                                  href="/administracao/loja/categorias"
+                                  href="/admin/loja/categorias"
                                   className="underline"
                                 >
-                                  AdministraÃ§Ã£o da Loja â†’ Categorias
+                                  Administração da Loja ? Categorias
                                 </a>
                                 .
                               </p>
@@ -1160,7 +1160,7 @@ export default function GestaoEstoqueAdminPage() {
 
                               <div>
                                 <label className="block text-xs font-medium mb-1">
-                                  Preco de custo (R$) â€” apenas administrador
+                                  Preco de custo (R$) — apenas administrador
                                 </label>
                                 <input
                                   type="text"
@@ -1486,6 +1486,7 @@ export default function GestaoEstoqueAdminPage() {
     </div>
   );
 }
+
 
 
 

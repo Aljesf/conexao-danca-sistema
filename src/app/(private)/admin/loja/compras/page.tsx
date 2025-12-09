@@ -221,7 +221,7 @@ export default function ListaComprasAdminPage() {
 
       setMostrandoNovo(false);
       await carregarPedidos();
-      router.push(`/administracao/loja/compras/${json.data.id}`);
+      router.push(`/admin/loja/compras/${json.data.id}`);
     } catch (err) {
       console.error("Erro inesperado ao criar pedido de compra:", err);
       setErroNovo("Erro inesperado ao criar pedido de compra.");
@@ -333,7 +333,7 @@ export default function ListaComprasAdminPage() {
                   <tr
                     key={p.id}
                     className="border-b hover:bg-gray-50 cursor-pointer"
-                    onClick={() => router.push(`/administracao/loja/compras/${p.id}`)}
+                    onClick={() => router.push(`/admin/loja/compras/${p.id}`)}
                   >
                     <td className="py-2 px-2">#{p.id}</td>
                     <td className="py-2 px-2">{formatarData(p.data_pedido)}</td>
@@ -522,3 +522,4 @@ export default function ListaComprasAdminPage() {
     </div>
   );
 }
+

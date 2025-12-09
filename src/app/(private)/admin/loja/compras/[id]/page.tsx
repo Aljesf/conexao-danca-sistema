@@ -350,7 +350,7 @@ export default function DetalheCompraAdminPage() {
       <button
         type="button"
         className="text-xs text-purple-700 hover:underline"
-        onClick={() => router.push("/administracao/loja/compras")}
+        onClick={() => router.push("/admin/loja/compras")}
       >
         ← Voltar para lista de compras
       </button>
@@ -623,7 +623,7 @@ export default function DetalheCompraAdminPage() {
                     </span>
                   </div>
                   <a
-                    href={`/administracao/financeiro/contas-a-pagar/${contaPagar.id}`}
+                    href={`/admin/financeiro/contas-pagar/${contaPagar.id}`}
                     className="text-[11px] text-purple-700 hover:underline"
                   >
                     Abrir no módulo Financeiro
@@ -855,3 +855,5 @@ export default function DetalheCompraAdminPage() {
     </div>
   );
 }
+
+

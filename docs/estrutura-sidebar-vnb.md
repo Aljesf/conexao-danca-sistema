@@ -1,259 +1,251 @@
-📘 VNB — Estrutura Oficial do Sidebar do Sistema Conexão Dança
+﻿ðŸ“˜ VNB â€” Estrutura Oficial do Sidebar do Sistema ConexÃ£o DanÃ§a
 
-Versão: 1.2
-Última atualização: 28-11-2025
-Responsável: Alírio de Jesus e Silva Filho
+VersÃ£o: 1.2
+Ãšltima atualizaÃ§Ã£o: 28-11-2025
+ResponsÃ¡vel: AlÃ­rio de Jesus e Silva Filho
 
-🔄 Alterações desta versão (v1.1)
+ðŸ”„ AlteraÃ§Ãµes desta versÃ£o (v1.1)
 
-Inclusão do Painel do Diretor (Relatórios) no contexto Administração.
+InclusÃ£o do Painel do Diretor (RelatÃ³rios) no contexto AdministraÃ§Ã£o.
 
-Inclusão da página de Auditoria do Sistema dentro de Usuários & Segurança.
+InclusÃ£o da pÃ¡gina de Auditoria do Sistema dentro de UsuÃ¡rios & SeguranÃ§a.
 
-Reforço da estrutura hierárquica do Admin.
+ReforÃ§o da estrutura hierÃ¡rquica do Admin.
 
-Mantidas todas as seções dos demais contextos (Escola, Loja e Café).
+Mantidas todas as seÃ§Ãµes dos demais contextos (Escola, Loja e CafÃ©).
 
-1. CONTEXTO ESCOLA — Conexão Dança
-1. CONTEXTO ESCOLA — Conexão Dança
-1.1 INÍCIO
+1. CONTEXTO ESCOLA â€” ConexÃ£o DanÃ§a
+1. CONTEXTO ESCOLA â€” ConexÃ£o DanÃ§a
+1.1 INÃCIO
 
-Início → /escola
+InÃ­cio â†’ /escola
 
 1.2 CAIXA (ESCOLA)
 
-Frente de caixa → /escola/caixa
+Frente de caixa â†’ /escola/caixa
 
-1.3 CALENDÁRIO
+1.3 CALENDÃRIO
 
-Visão geral → /escola/calendario
+VisÃ£o geral â†’ /escola/calendario
 
-Eventos internos → /escola/calendario/eventos-internos
+Eventos internos â†’ /escola/calendario/eventos-internos
 
-Eventos externos → /escola/calendario/eventos-externos
+Eventos externos â†’ /escola/calendario/eventos-externos
 
-Feriados → /escola/calendario/feriados
+Feriados â†’ /escola/calendario/feriados
 
-1.4 CAPTAÇÃO (CRM)
+1.4 CAPTAÃ‡ÃƒO (CRM)
 
-Visão geral → /escola/captacao
+VisÃ£o geral â†’ /escola/captacao
 
-Novo interessado → /escola/captacao/novo
+Novo interessado â†’ /escola/captacao/novo
 
-Interessados → /escola/captacao/interessados
+Interessados â†’ /escola/captacao/interessados
 
 1.5 PESSOAS
 
-Nova pessoa → /escola/pessoas/nova
+Nova pessoa â†’ /escola/pessoas/nova
 
-Lista de pessoas → /escola/pessoas
+Lista de pessoas â†’ /escola/pessoas
 
 1.6 ALUNOS
 
-Novo aluno → /escola/alunos/novo
-(atalho direto para o fluxo completo de matrícula)
+Novo aluno â†’ /escola/alunos/novo
+(atalho direto para o fluxo completo de matrÃ­cula)
 
-Lista de alunos → /escola/alunos
+Lista de alunos â†’ /escola/alunos
 
-Matrículas → /escola/alunos/matriculas
+MatrÃ­culas â†’ /escola/alunos/matriculas
 
-Currículo → /escola/alunos/curriculo
+CurrÃ­culo â†’ /escola/alunos/curriculo
 
-Grupos de alunos → /escola/alunos/grupos
+Grupos de alunos â†’ /escola/alunos/grupos
 (bolsistas, companhia, GAV etc.)
 
-1.7 ACADÊMICO
+1.7 ACADÃŠMICO
 
-Cursos → /escola/academico/cursos
+Cursos â†’ /escola/academico/cursos
 
-Níveis → /escola/academico/niveis
+NÃ­veis â†’ /escola/academico/niveis
 
-Módulos → /escola/academico/modulos
+MÃ³dulos â†’ /escola/academico/modulos
 
-Avaliações → /escola/academico/avaliacoes
+AvaliaÃ§Ãµes â†’ /escola/academico/avaliacoes
 
-Professores → /escola/academico/professores
-(somente visualização no contexto ESCOLA)
+Professores â†’ /escola/academico/professores
+(somente visualizaÃ§Ã£o no contexto ESCOLA)
 
-Nova turma → /escola/academico/turmas/nova
+Nova turma â†’ /escola/academico/turmas/nova
 
-Turmas → /escola/academico/turmas
+Turmas â†’ /escola/academico/turmas
 
-Grade → /escola/academico/grade
+Grade â†’ /escola/academico/grade
 
-Frequência → /escola/academico/frequencia
+FrequÃªncia â†’ /escola/academico/frequencia
 
-1.8 MOVIMENTO CONEXÃO DANÇA (AGORA NO FINAL)
+1.8 MOVIMENTO CONEXÃƒO DANÃ‡A (AGORA NO FINAL)
 
-Bolsas → /escola/movimento/bolsas
+Bolsas â†’ /escola/movimento/bolsas
 
-Acolhimento → /escola/movimento/acolhimento
+Acolhimento â†’ /escola/movimento/acolhimento
 
-Ações solidárias → /escola/movimento/acoes-solidarias
+AÃ§Ãµes solidÃ¡rias â†’ /escola/movimento/acoes-solidarias
 
-Informações sociais → /escola/movimento/informacoes-sociais
+InformaÃ§Ãµes sociais â†’ /escola/movimento/informacoes-sociais
 
-2. CONTEXTO LOJA — AJ Dance Store
-2.1 INÍCIO
+2. CONTEXTO LOJA â€” AJ Dance Store
+2.1 INÃCIO
 
-Início → /loja
+InÃ­cio â†’ /loja
 
 2.2 CAIXA & VENDAS
 
-Frente de caixa → /loja/caixa
+Frente de caixa â†’ /loja/caixa
 
-Pedidos da escola → /loja/pedidos/escola
+Pedidos da escola â†’ /loja/pedidos/escola
 
-Pedidos externos → /loja/pedidos/externos
+Pedidos externos â†’ /loja/pedidos/externos
 
-Trocas & devoluções → /loja/trocas
+Trocas & devoluÃ§Ãµes â†’ /loja/trocas
 
 2.3 PRODUTOS & ESTOQUE
 
-Produtos → /loja/produtos
+Produtos â†’ /loja/produtos
 
-Estoque → /loja/estoque
+Estoque â†’ /loja/estoque
 
-Fornecedores → /loja/fornecedores
+Fornecedores â†’ /loja/fornecedores
 
 2.4 PESSOAL DA LOJA
 
-Colaboradores da loja → /loja/colaboradores
+Colaboradores da loja â†’ /loja/colaboradores
 
-3. CONTEXTO LANCHONETE — Ballet Café
-3.1 INÍCIO
+3. CONTEXTO LANCHONETE â€” Ballet CafÃ©
+3.1 INÃCIO
 
-Início → /cafe
+InÃ­cio â†’ /cafe
 
 3.2 COMANDAS & CAIXA
 
-Comandas → /cafe/comandas
+Comandas â†’ /cafe/comandas
 
-Pedidos → /cafe/pedidos
+Pedidos â†’ /cafe/pedidos
 
-Caixa → /cafe/caixa
+Caixa â†’ /cafe/caixa
 
 3.3 PRODUTOS & ESTOQUE
 
-Cardápio → /cafe/cardapio
+CardÃ¡pio â†’ /cafe/cardapio
 
-Estoque da cozinha → /cafe/estoque
+Estoque da cozinha â†’ /cafe/estoque
 
-Fornecedores → /cafe/fornecedores
+Fornecedores â†’ /cafe/fornecedores
 
-3.4 PESSOAL DO CAFÉ
+3.4 PESSOAL DO CAFÃ‰
 
-Colaboradores do Café → /cafe/colaboradores
+Colaboradores do CafÃ© â†’ /cafe/colaboradores
 
-4. CONTEXTO ADMINISTRAÇÃO DO SISTEMA
+4. CONTEXTO ADMINISTRACAO DO SISTEMA
 
-(Atualizado na v1.1)
+(Atualizado na v1.4 — pos-unificacao admin/administracao em 2025-12-08)
 
-4.1 INÍCIO
+Raiz tecnica do contexto Admin:
+- src/app/(private)/admin
 
-Painel de administração → /admin
+Observacao:
+- A antiga arvore src/app/(private)/administracao foi unificada em /admin para os modulos Financeiro e Loja.
 
-4.2 CONFIGURAÇÕES DAS UNIDADES
+4.1 CONFIGURACOES DAS UNIDADES
 
-Configuração da escola → /admin/config/escola
+Configuracao da escola -> /admin/config/escola
+Configuracao da loja -> /admin/config/loja
+Configuracao do Ballet Cafe -> /admin/config/cafe
 
-Configuração da loja → /admin/config/loja
+4.2 COLABORADORES
 
-Configuração do Ballet Café → /admin/config/cafe
+Gestao de colaboradores -> /admin/colaboradores
+Centros de custo / centros base -> /admin/colaboradores/centros-custo
+Tipos de vinculo -> /admin/colaboradores/tipos-vinculo
+Tipos de funcao -> /admin/colaboradores/tipos-funcao
+Jornadas de trabalho -> /admin/colaboradores/jornadas
 
-4.3 COLABORADORES
+4.3 USUARIOS & SEGURANCA
 
-Centros de custo / centros base → /admin/colaboradores/centros-custo
+Usuarios -> /admin/usuarios
+Perfis -> /admin/perfis
+Permissoes -> /admin/permissoes
+Auditoria do sistema -> /admin/relatorios/auditoria
 
-Gestão de colaboradores → /admin/colaboradores
+4.4 FINANCEIRO (ADMIN)
 
-Tipos de vínculo → /admin/colaboradores/tipos-vinculo
+Dashboard financeiro -> /admin/financeiro
 
-Tipos de função → /admin/colaboradores/tipos-funcao
+Centros de custo (financeiro) -> /admin/financeiro/centros-custo
+Plano de contas -> /admin/financeiro/plano-contas
+Categorias financeiras -> /admin/financeiro/categorias
 
-Jornadas de trabalho → /admin/colaboradores/jornadas (futuro)
+Contas a receber (Admin) -> /admin/financeiro/contas-receber
+Contas a pagar (Admin) -> /admin/financeiro/contas-pagar
 
-4.4 USUÁRIOS & SEGURANÇA
+Movimentacao financeira -> /admin/financeiro/movimento
 
-Usuários → /admin/usuarios
+Lancamentos manuais -> /admin/financeiro/lancamentos-manuais
 
-Perfis → /admin/perfis
+4.5 LOJA (ADMIN)
 
-Permissões → /admin/permissoes
+Fornecedores da loja -> /admin/loja/fornecedores
+Gestao de estoque da loja v0 -> /admin/loja/gestao-estoque
 
-Auditoria do sistema → /admin/relatorios/auditoria ✔️ (novo)
+Categorias de produtos da loja -> /admin/loja/categorias
+Compras da loja -> /admin/loja/compras
+Configuracoes da loja (Admin) -> /admin/loja/configuracoes
+Estoque da loja (Admin) -> /admin/loja/estoque
 
-4.5 FINANCEIRO (ADMIN)
+4.6 IA / ASSISTENTES
 
-Dashboard financeiro → /admin/financeiro
+Painel de IA — Administracao -> /admin/ia
 
-Centros de custo (financeiro) → /admin/financeiro/centros-custo
+4.7 PAINEL DO DIRETOR — RELATORIOS
 
-Plano de contas → /admin/financeiro/plano-contas
+Pagina raiz -> /admin/relatorios
 
-Categorias financeiras → /admin/financeiro/categorias
+Relatorios Academicos / Alunos
+- Alunos por turma -> /admin/relatorios/alunos/turmas
+- Alunos ativos e inativos -> /admin/relatorios/alunos/status
+- Grupos & Projetos (GAV, Companhia, Bolsistas) -> /admin/relatorios/alunos/grupos
 
-Contas a receber (Admin) → /admin/financeiro/contas-receber
+Relatorios de Captacao / CRM
+- Conversao de interessados -> /admin/relatorios/captacao/conversao
 
-Contas a pagar (Admin) → /admin/financeiro/contas-pagar
+Relatorios Financeiros
+- Resumo financeiro -> /admin/relatorios/financeiro/resumo
+- Movimentacao financeira -> /admin/relatorios/financeiro/movimento
+- Contas a receber -> /admin/relatorios/financeiro/receber
+- Contas a pagar -> /admin/relatorios/financeiro/pagar
 
-Caixa geral / Movimentação → /admin/financeiro/caixa-geral
+Relatorios Comerciais (Loja / Cafe)
+- Vendas por periodo -> /admin/relatorios/comercial/vendas
+- Estoque critico -> /admin/relatorios/comercial/estoque
 
-Lançamentos manuais → /admin/financeiro/lancamentos-manuais
-
-4.6 PAINEL DO DIRETOR — RELATÓRIOS (NOVO MÓDULO)
-Página raiz
-
-Painel do Diretor → /admin/relatorios
-
-Sub-relatórios:
-📘 Acadêmicos / Alunos
-
-Alunos por turma → /admin/relatorios/alunos/turmas
-
-Alunos ativos e inativos → /admin/relatorios/alunos/status
-
-Grupos & Projetos (GAV, Companhia, Bolsistas) → /admin/relatorios/alunos/grupos
-
-Conversão de interessados → /admin/relatorios/captacao/conversao
-
-💰 Financeiros
-
-Resumo financeiro → /admin/relatorios/financeiro/resumo
-
-Movimentação → /admin/relatorios/financeiro/movimento
-
-Contas a receber → /admin/relatorios/financeiro/receber
-
-Contas a pagar → /admin/relatorios/financeiro/pagar
-
-🛍️ Comerciais (Loja e Café)
-
-Vendas por período → /admin/relatorios/comercial/vendas
-
-Estoque crítico → /admin/relatorios/comercial/estoque
-
-❤️ Sociais
-
-Bolsas e ações sociais → /admin/relatorios/social
-
+Relatorios Sociais
+- Bolsas e acoes sociais -> /admin/relatorios/social
 5. Regras de Ouro
 
 (Inalteradas)
 
-Financeiro pesado só no Admin.
+Financeiro pesado sÃ³ no Admin.
 
 Frente de caixa separada por contexto.
 
-Configurações apenas no Admin.
+ConfiguraÃ§Ãµes apenas no Admin.
 
 Colaboradores apenas no Admin.
 
-Professores: edição só no Admin; visualização na Escola.
+Professores: ediÃ§Ã£o sÃ³ no Admin; visualizaÃ§Ã£o na Escola.
 
-Toda alteração grande deve atualizar este arquivo.
+Toda alteraÃ§Ã£o grande deve atualizar este arquivo.
 
-6. Implementação (para Codex)
+6. ImplementaÃ§Ã£o (para Codex)
 
 (Mantido igual)
 
