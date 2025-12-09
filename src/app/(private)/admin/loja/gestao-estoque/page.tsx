@@ -426,7 +426,9 @@ export default function GestaoEstoqueAdminPage() {
         id: editForm.id,
         nome: editForm.nome.trim(),
         codigo: editForm.codigo.trim() || null,
-        categoria: editForm.categoria.trim() || null,
+        // Campo legado: nao usamos mais categoria texto para logica.
+        categoria: null,
+        // Campo oficial: subcategoria vinculada a tabela loja_produto_categoria_subcategoria
         categoria_subcategoria_id: editForm.categoria_subcategoria_id ?? null,
         unidade: editForm.unidade.trim() || "UN",
         ativo: editForm.ativo,
@@ -550,7 +552,7 @@ export default function GestaoEstoqueAdminPage() {
         quantidade: Number(cadastroForm.quantidade),
         unidade: cadastroForm.unidade.trim() || "UN",
         codigo: cadastroForm.codigo.trim() || undefined,
-        categoria: cadastroForm.categoria.trim() || undefined,
+        categoria: undefined,
         categoria_subcategoria_id: cadastroForm.categoria_subcategoria_id ?? undefined,
         fornecedor_id:
           cadastroForm.fornecedor_id === ""

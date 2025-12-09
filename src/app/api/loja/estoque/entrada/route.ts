@@ -25,6 +25,12 @@ function json(status: number, payload: ApiResponse) {
   return NextResponse.json(payload, { status });
 }
 
+function normalizeCategoriaSubId(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
 /**
  * POST /api/loja/estoque/entrada
  *
@@ -88,8 +94,8 @@ export async function POST(req: NextRequest) {
     // Produto novo
     nome,
     codigo,
-    categoria,
     unidade,
+    categoria_subcategoria_id,
 
     observacoes_produto,
 
@@ -108,6 +114,7 @@ export async function POST(req: NextRequest) {
 
   // Decide fluxo: novo produto x reposição
   const isReposicao = typeof produto_id === "number";
+  const categoriaSubId = normalizeCategoriaSubId(categoria_subcategoria_id);
 
   // Se tiver fornecedor, validar se existe
   let fornecedor = null;
@@ -274,7 +281,8 @@ export async function POST(req: NextRequest) {
           codigo: codigo || null,
           nome: nome.trim(),
           descricao: observacoes_produto || null,
-          categoria: categoria || null,
+          categoria: null,
+          categoria_subcategoria_id: categoriaSubId,
           preco_venda_centavos: 0, // aguardando definição de preço (admin)
           unidade: unidadeFinal,
           estoque_atual: qtd,

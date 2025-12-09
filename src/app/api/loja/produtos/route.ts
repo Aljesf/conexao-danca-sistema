@@ -36,12 +36,23 @@ type ProdutoDb = {
   observacoes?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  fornecedor_principal_id?: number | null;
   fornecedor_nome?: string | null;
 };
 
 // Utilitario para respostas JSON padronizadas
 function json(status: number, payload: ApiResponse) {
   return NextResponse.json(payload, { status });
+}
+
+function normalizeNullableNumber(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeCategoriaSubId(value: any): number | null {
+  return normalizeNullableNumber(value);
 }
 
 // ==============================
@@ -83,12 +94,14 @@ export async function GET(req: NextRequest) {
         nome,
         descricao,
         categoria,
+        categoria_subcategoria_id,
         preco_venda_centavos,
         unidade,
         estoque_atual,
         ativo,
         bloqueado_para_venda,
         observacoes,
+        fornecedor_principal_id,
         created_at,
         updated_at
       `,
@@ -126,10 +139,13 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const items: ProdutoDb[] = (data as ProdutoDb[] | null | undefined)?.map((p) => ({
-      ...p,
-      fornecedor_nome: (p as any).fornecedor_nome ?? null,
-    })) ?? [];
+    const items: ProdutoDb[] =
+      (data as ProdutoDb[] | null | undefined)?.map((p) => ({
+        ...p,
+        categoria_subcategoria_id: p.categoria_subcategoria_id ?? null,
+        fornecedor_principal_id: (p as any).fornecedor_principal_id ?? null,
+        fornecedor_nome: (p as any).fornecedor_nome ?? null,
+      })) ?? [];
 
     return json(200, {
       ok: true,
@@ -172,7 +188,6 @@ export async function POST(req: NextRequest) {
     codigo,
     nome,
     descricao,
-    categoria,
     categoria_subcategoria_id,
     preco_venda_centavos,
     preco,
@@ -207,10 +222,8 @@ export async function POST(req: NextRequest) {
   const bloqueado =
     precoFinal <= 0 ? true : Boolean(bloqueado_para_venda);
   const estoque = Number.isFinite(estoque_atual) ? Number(estoque_atual) : 0;
-  const catSubId =
-    typeof categoria_subcategoria_id === "number" && Number.isFinite(categoria_subcategoria_id)
-      ? categoria_subcategoria_id
-      : null;
+  const catSubId = normalizeCategoriaSubId(categoria_subcategoria_id);
+  const fornecedorPrincipalId = normalizeNullableNumber(body?.fornecedor_principal_id);
 
   try {
     const { data, error } = await supabaseAdmin
@@ -219,13 +232,14 @@ export async function POST(req: NextRequest) {
         codigo: codigo || null,
         nome: nome.trim(),
         descricao: descricao || null,
-        categoria: categoria || null,
+        categoria: null,
         categoria_subcategoria_id: catSubId,
         preco_venda_centavos: precoFinal,
         unidade: unidade || "UN",
         estoque_atual: estoque,
         ativo: Boolean(ativo),
         bloqueado_para_venda: bloqueado,
+        fornecedor_principal_id: fornecedorPrincipalId,
         observacoes: observacoes || null,
       })
       .select("*")
@@ -268,7 +282,6 @@ export async function PUT(req: NextRequest) {
     codigo,
     nome,
     descricao,
-    categoria,
     categoria_subcategoria_id,
     preco_venda_centavos,
     preco,
@@ -277,6 +290,7 @@ export async function PUT(req: NextRequest) {
     ativo,
     observacoes,
     bloqueado_para_venda,
+    fornecedor_principal_id,
   } = body ?? {};
 
   if (!id || typeof id !== "number") {
@@ -289,13 +303,9 @@ export async function PUT(req: NextRequest) {
   if (typeof nome === "string" && nome.trim().length > 0)
     updatePayload.nome = nome.trim();
   if (typeof descricao !== "undefined") updatePayload.descricao = descricao || null;
-  if (typeof categoria !== "undefined") updatePayload.categoria = categoria || null;
+
   if (typeof categoria_subcategoria_id !== "undefined") {
-    const val =
-      typeof categoria_subcategoria_id === "number" && Number.isFinite(categoria_subcategoria_id)
-        ? categoria_subcategoria_id
-        : null;
-    updatePayload.categoria_subcategoria_id = val;
+    updatePayload.categoria_subcategoria_id = normalizeCategoriaSubId(categoria_subcategoria_id);
   }
 
   // Preco de venda
@@ -347,12 +357,18 @@ export async function PUT(req: NextRequest) {
     updatePayload.observacoes = observacoes || null;
   }
 
+  if (typeof fornecedor_principal_id !== "undefined") {
+    updatePayload.fornecedor_principal_id = normalizeNullableNumber(fornecedor_principal_id);
+  }
+
   if (Object.keys(updatePayload).length === 0) {
     return json(400, {
       ok: false,
       error: "Nenhum campo valido foi enviado para atualizacao.",
     });
   }
+
+  updatePayload.categoria = null;
 
   try {
     const { data, error } = await supabaseAdmin
