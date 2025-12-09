@@ -9,6 +9,7 @@ type Produto = {
   nome: string;
   descricao?: string | null;
   categoria: string | null;
+  categoria_subcategoria_id?: number | null;
   preco_venda_centavos: number;
   unidade: string | null;
   estoque_atual: number;
@@ -25,6 +26,25 @@ type Produto = {
 type FornecedorResumo = {
   id: number;
   nome: string;
+};
+
+type SubcategoriaLoja = {
+  id: number;
+  nome: string;
+  codigo?: string | null;
+  ativo: boolean;
+  categoria_id?: number | null;
+  centro_custo_id?: number | null;
+  receita_categoria_id?: number | null;
+  despesa_categoria_id?: number | null;
+};
+
+type CategoriaLoja = {
+  id: number;
+  nome: string;
+  codigo?: string | null;
+  ativo: boolean;
+  subcategorias: SubcategoriaLoja[];
 };
 
 type ApiResponse<T = any> = {
@@ -53,6 +73,7 @@ type EditFormState = {
   nome: string;
   codigo: string;
   categoria: string;
+  categoria_subcategoria_id: number | null;
   unidade: string;
   ativo: boolean;
   precoReais: string; // preco de venda (texto)
@@ -64,6 +85,7 @@ type CadastroAdminFormState = {
   nome: string;
   codigo: string;
   categoria: string;
+  categoria_subcategoria_id: number | null;
   unidade: string;
   fornecedor_id: number | "";
   quantidade: number | "";
@@ -98,6 +120,10 @@ export default function GestaoEstoqueAdminPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [fornecedores, setFornecedores] = useState<FornecedorResumo[]>([]);
   const [carregandoFornecedores, setCarregandoFornecedores] = useState(false);
+  const [categoriasLoja, setCategoriasLoja] = useState<CategoriaLoja[]>([]);
+  const [erroCategoriasLoja, setErroCategoriasLoja] = useState("");
+  const [categoriaSelecionadaId, setCategoriaSelecionadaId] = useState<number | "">("");
+  const [categoriaCadastroSelecionadaId, setCategoriaCadastroSelecionadaId] = useState<number | "">("");
 
   const [loadingProdutos, setLoadingProdutos] = useState(false);
   // carregamento de fornecedores para selects
@@ -126,6 +152,7 @@ export default function GestaoEstoqueAdminPage() {
     nome: "",
     codigo: "",
     categoria: "",
+    categoria_subcategoria_id: null,
     unidade: "UN",
     ativo: true,
     precoReais: "",
@@ -137,6 +164,7 @@ export default function GestaoEstoqueAdminPage() {
     nome: "",
     codigo: "",
     categoria: "",
+    categoria_subcategoria_id: null,
     unidade: "UN",
     fornecedor_id: "",
     quantidade: "",
@@ -155,6 +183,7 @@ export default function GestaoEstoqueAdminPage() {
     setLoadingProdutos(true);
     try {
       const params = new URLSearchParams();
+      params.set("modo", "admin");
       params.set("pageSize", "200");
       if (filtros.search.trim().length > 0) {
         params.set("search", filtros.search.trim());
@@ -206,10 +235,66 @@ export default function GestaoEstoqueAdminPage() {
     }
   }
 
+  async function carregarCategoriasLoja() {
+    try {
+      setErroCategoriasLoja("");
+      const res = await fetch("/api/loja/produtos/categorias", { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || "Erro ao listar categorias da loja.");
+      }
+      setCategoriasLoja(json.categorias ?? []);
+    } catch (err: any) {
+      console.error("Erro inesperado ao carregar categorias/subcategorias:", err);
+      setCategoriasLoja([]);
+      setErroCategoriasLoja(err.message || "Erro ao listar categorias da loja.");
+    }
+  }
+
   useEffect(() => {
     carregarProdutos();
     carregarFornecedores();
+    carregarCategoriasLoja();
   }, []);
+
+  const subcatToCatMap = useMemo(() => {
+    const map: Record<number, number> = {};
+    categoriasLoja.forEach((c) =>
+      c.subcategorias.forEach((s) => {
+        map[s.id] = c.id;
+      })
+    );
+    return map;
+  }, [categoriasLoja]);
+
+  const subcategoriaNomeMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    categoriasLoja.forEach((c) =>
+      c.subcategorias.forEach((s) => {
+        map[s.id] = `${c.nome} — ${s.nome}`;
+      })
+    );
+    return map;
+  }, [categoriasLoja]);
+
+  useEffect(() => {
+    if (editForm.categoria_subcategoria_id && subcatToCatMap[editForm.categoria_subcategoria_id]) {
+      setCategoriaSelecionadaId(subcatToCatMap[editForm.categoria_subcategoria_id]);
+    } else {
+      setCategoriaSelecionadaId("");
+    }
+  }, [editForm.categoria_subcategoria_id, subcatToCatMap]);
+
+  useEffect(() => {
+    if (
+      cadastroForm.categoria_subcategoria_id &&
+      subcatToCatMap[cadastroForm.categoria_subcategoria_id]
+    ) {
+      setCategoriaCadastroSelecionadaId(subcatToCatMap[cadastroForm.categoria_subcategoria_id]);
+    } else {
+      setCategoriaCadastroSelecionadaId("");
+    }
+  }, [cadastroForm.categoria_subcategoria_id, subcatToCatMap]);
 
   const produtosFiltrados = useMemo(() => produtos, [produtos]);
 
@@ -222,6 +307,7 @@ export default function GestaoEstoqueAdminPage() {
       nome: p.nome,
       codigo: p.codigo ?? "",
       categoria: p.categoria ?? "",
+      categoria_subcategoria_id: p.categoria_subcategoria_id ?? null,
       unidade: p.unidade ?? "UN",
       ativo: p.ativo,
       precoReais:
@@ -242,11 +328,12 @@ export default function GestaoEstoqueAdminPage() {
       nome: "",
       codigo: "",
       categoria: "",
-    unidade: "UN",
-    ativo: true,
-    precoReais: "",
-    precoCustoReais: "",
-    fornecedorId: null,
+      categoria_subcategoria_id: null,
+      unidade: "UN",
+      ativo: true,
+      precoReais: "",
+      precoCustoReais: "",
+      fornecedorId: null,
   });
 }
 
@@ -314,12 +401,13 @@ export default function GestaoEstoqueAdminPage() {
         id: editForm.id,
         nome: editForm.nome.trim(),
         codigo: editForm.codigo.trim() || null,
-      categoria: editForm.categoria.trim() || null,
-      unidade: editForm.unidade.trim() || "UN",
-      ativo: editForm.ativo,
-      preco_venda_centavos: precoVendaCentavos,
-      fornecedor_principal_id: editForm.fornecedorId,
-    };
+        categoria: editForm.categoria.trim() || null,
+        categoria_subcategoria_id: editForm.categoria_subcategoria_id ?? null,
+        unidade: editForm.unidade.trim() || "UN",
+        ativo: editForm.ativo,
+        preco_venda_centavos: precoVendaCentavos,
+        fornecedor_principal_id: editForm.fornecedorId,
+      };
 
       const res = await fetch("/api/loja/produtos", {
         method: "PUT",
@@ -438,6 +526,7 @@ export default function GestaoEstoqueAdminPage() {
         unidade: cadastroForm.unidade.trim() || "UN",
         codigo: cadastroForm.codigo.trim() || undefined,
         categoria: cadastroForm.categoria.trim() || undefined,
+        categoria_subcategoria_id: cadastroForm.categoria_subcategoria_id ?? undefined,
         fornecedor_id:
           cadastroForm.fornecedor_id === ""
             ? undefined
@@ -501,6 +590,7 @@ export default function GestaoEstoqueAdminPage() {
         nome: "",
         codigo: "",
         categoria: "",
+        categoria_subcategoria_id: null,
         unidade: "UN",
         fornecedor_id: "",
         quantidade: "",
@@ -716,7 +806,7 @@ export default function GestaoEstoqueAdminPage() {
                           {p.codigo || "-"}
                         </td>
                         <td className="px-3 py-2 text-gray-600">
-                          {p.categoria || "-"}
+                          {subcategoriaNomeMap[p.categoria_subcategoria_id ?? -1] ?? p.categoria || "-"}
                         </td>
                         <td className="px-3 py-2 text-right text-gray-700">
                           {p.estoque_atual}
@@ -790,7 +880,7 @@ export default function GestaoEstoqueAdminPage() {
                       <div>
                         <div className="font-medium text-gray-600">Categoria</div>
                         <div className="text-gray-900">
-                          {produtoSelecionado.categoria || "—"}
+                          {subcategoriaNomeMap[produtoSelecionado.categoria_subcategoria_id ?? -1] ?? produtoSelecionado.categoria || "—"}
                         </div>
                       </div>
 
@@ -917,22 +1007,74 @@ export default function GestaoEstoqueAdminPage() {
                             </div>
                           </div>
 
-                          <div>
-                            <label className="block text-xs font-medium mb-1">
-                              Categoria
-                            </label>
-                            <input
-                              type="text"
-                              value={editForm.categoria}
-                              onChange={(e) =>
-                                setEditForm((prev) => ({
-                                  ...prev,
-                                  categoria: e.target.value,
-                                }))
-                              }
-                              className="w-full border rounded-md px-3 py-2 text-sm"
-                              placeholder="Ex.: Calcados, Acessorios"
-                            />
+                          <div className="space-y-2">
+                            {erroCategoriasLoja && (
+                              <p className="text-[11px] text-red-600">{erroCategoriasLoja}</p>
+                            )}
+                            {!erroCategoriasLoja && categoriasLoja.length === 0 && (
+                              <p className="text-[11px] text-gray-500">
+                                Nenhuma categoria cadastrada. Configure em{" "}
+                                <a
+                                  href="/administracao/loja/categorias"
+                                  className="underline"
+                                >
+                                  Administração da Loja → Categorias
+                                </a>
+                                .
+                              </p>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-xs font-medium mb-1">Categoria</label>
+                                <select
+                                  className="w-full border rounded-md px-3 py-2 text-sm"
+                                  value={categoriaSelecionadaId ?? ""}
+                                  onChange={(e) => {
+                                    const value = e.target.value ? Number(e.target.value) : "";
+                                    setCategoriaSelecionadaId(value as any);
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      categoria_subcategoria_id: null,
+                                    }));
+                                  }}
+                                  disabled={categoriasLoja.length === 0}
+                                >
+                                  <option value="">Selecione uma categoria</option>
+                                  {categoriasLoja.map((cat) => (
+                                    <option key={cat.id} value={cat.id}>
+                                      {cat.nome}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-medium mb-1">Subcategoria</label>
+                                <select
+                                  className="w-full border rounded-md px-3 py-2 text-sm"
+                                  value={editForm.categoria_subcategoria_id ?? ""}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      categoria_subcategoria_id: e.target.value
+                                        ? Number(e.target.value)
+                                        : null,
+                                    }))
+                                  }
+                                  disabled={!categoriaSelecionadaId || categoriasLoja.length === 0}
+                                >
+                                  <option value="">Selecione subcategoria</option>
+                                  {categoriasLoja
+                                    .find((cat) => cat.id === categoriaSelecionadaId)
+                                    ?.subcategorias.map((sub) => (
+                                      <option key={sub.id} value={sub.id}>
+                                        {sub.nome}
+                                      </option>
+                                    ))}
+                                </select>
+                              </div>
+                            </div>
                           </div>
 
                           <div>
@@ -1150,15 +1292,50 @@ export default function GestaoEstoqueAdminPage() {
                 <label className="block text-xs font-medium mb-1">
                   Categoria
                 </label>
-                <input
-                  type="text"
-                  value={cadastroForm.categoria}
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  value={categoriaCadastroSelecionadaId ?? ""}
+                  onChange={(e) => {
+                    const value = e.target.value ? Number(e.target.value) : "";
+                    setCategoriaCadastroSelecionadaId(value as any);
+                    handleCadastroChange("categoria_subcategoria_id", null);
+                  }}
+                  disabled={categoriasLoja.length === 0}
+                >
+                  <option value="">Selecione uma categoria</option>
+                  {categoriasLoja.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium mb-1">Subcategoria</label>
+                <select
+                  value={cadastroForm.categoria_subcategoria_id ?? ""}
                   onChange={(e) =>
-                    handleCadastroChange("categoria", e.target.value)
+                    handleCadastroChange(
+                      "categoria_subcategoria_id",
+                      e.target.value ? Number(e.target.value) : null
+                    )
                   }
                   className="w-full border rounded-md px-3 py-2 text-sm"
-                  placeholder="Ex.: calcados, figurino..."
-                />
+                  disabled={!categoriaCadastroSelecionadaId || categoriasLoja.length === 0}
+                >
+                  <option value="">Selecione subcategoria</option>
+                  {categoriasLoja
+                    .find((cat) => cat.id === categoriaCadastroSelecionadaId)
+                    ?.subcategorias.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nome}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Selecione a subcategoria da loja para vincular o produto.
+                </p>
               </div>
 
               <div>
@@ -1309,3 +1486,8 @@ export default function GestaoEstoqueAdminPage() {
     </div>
   );
 }
+
+
+
+
+

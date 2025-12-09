@@ -1,0 +1,80 @@
+        payloadEntrada.preco_custo_centavos = precoCustoCentavos;
+      }
+
+      const resEntrada = await fetch("/api/loja/estoque/entrada", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadEntrada),
+      });
+      const jsonEntrada: ApiResponse<any> = await resEntrada.json();
+
+      if (!resEntrada.ok || !jsonEntrada.ok || !jsonEntrada.data?.produto) {
+        setMensagemTipo("error");
+        setMensagem(
+          jsonEntrada.error ||
+            "Erro ao criar produto/estoque na entrada administrativa."
+        );
+        return;
+      }
+
+      const produtoCriado: Produto = jsonEntrada.data.produto;
+
+      const payloadPreco = {
+        id: produtoCriado.id,
+        preco_venda_centavos: precoVendaCentavos,
+      };
+
+      const resPreco = await fetch("/api/loja/produtos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadPreco),
+      });
+
+      const jsonPreco: ApiResponse<Produto> = await resPreco.json();
+
+      if (!resPreco.ok || !jsonPreco.ok || !jsonPreco.data) {
+        setMensagemTipo("error");
+        setMensagem(
+          jsonPreco.error ||
+            "Produto criado, mas houve erro ao definir o preco de venda."
+        );
+        setProdutos((prev) => [produtoCriado, ...prev]);
+        return;
+      }
+
+      const produtoFinal = jsonPreco.data;
+
+      setProdutos((prev) => [produtoFinal, ...prev]);
+
+      setCadastroForm({
+        nome: "",
+        codigo: "",
+        categoria: "",
+        unidade: "UN",
+        fornecedor_id: "",
+        quantidade: "",
+        precoCustoReais: "",
+        precoVendaReais: "",
+        observacoesProduto: "",
+        observacoesEntrada: "",
+      });
+
+      setMensagemTipo("success");
+      setMensagem("Produto criado com sucesso.");
+    } catch (err) {
+      console.error("Erro inesperado ao cadastrar produto:", err);
+      setMensagemTipo("error");
+      setMensagem("Erro inesperado ao cadastrar produto.");
+    } finally {
+      setSavingCadastro(false);
+    }
+  }
+
+  const fornecedoresOrdenados = useMemo(() => {
+    return [...fornecedores].sort((a, b) =>
+      a.nome.localeCompare(b.nome, "pt-BR")
+    );
+  }, [fornecedores]);
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <header className="space-y-1">

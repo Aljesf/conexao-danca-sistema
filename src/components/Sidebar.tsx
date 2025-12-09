@@ -46,7 +46,7 @@ function Section({ id, title, items, defaultOpen = true }: SidebarSection & { de
         onClick={() => setOpen((prev) => !prev)}
       >
         <span>{title}</span>
-        <span className="text-[9px]">{open ? "▾" : "▸"}</span>
+        <span className="text-[9px]">{open ? "▼" : "▲"}</span>
       </button>
 
       {open && (
@@ -87,22 +87,29 @@ export default function Sidebar({ context }: SidebarProps) {
 
   const sections = sidebarConfig[resolvedContext] ?? [];
 
-  const contextMeta: Record<string, { label: string; icon: string }> = {
-    escola: { label: "Conexão Dança", icon: "🩰" },
-    loja: { label: "AJ Dance Store", icon: "🛍️" },
-    lanchonete: { label: "Ballet Café", icon: "☕" },
-    administracao: { label: "Administração do Sistema", icon: "⚙️" },
+  const contextMeta: Record<string, { label: string }> = {
+    escola: { label: "Conexão Dança" },
+    loja: { label: "AJ Dance Store" },
+    lanchonete: { label: "Ballet Café" },
+    administracao: { label: "Administração do Sistema" },
   };
 
-  const meta = contextMeta[resolvedContext] ?? { label: appName ?? "Painel interno", icon: "✨" };
+  const meta = contextMeta[resolvedContext] ?? { label: appName ?? "Painel interno" };
   const rawContext = context ?? activeContext;
   const currentConfig = (configs as any)?.[rawContext];
   const logoUrl = currentConfig?.logoUrl as string | undefined;
+  const logoFallback = meta.label && meta.label.length > 0 ? meta.label.slice(0, 2).toUpperCase() : "APP";
 
   return (
     <aside className="flex h-full w-72 flex-col text-sm bg-gradient-to-b from-[color:var(--accent-1,#eef2ff)] to-[color:var(--accent-3,#e0e7ff)] text-slate-700">
       <div className="flex flex-col items-center gap-3 border-b border-black/5 py-6">
-        <img src={logoUrl} alt={meta.label} className="h-28 w-28 rounded-3xl object-contain shadow-sm" />
+        {logoUrl ? (
+          <img src={logoUrl} alt={meta.label} className="h-28 w-28 rounded-3xl object-contain shadow-sm" />
+        ) : (
+          <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-white text-xl font-semibold text-slate-700 shadow-sm">
+            {logoFallback}
+          </div>
+        )}
         <div className="flex flex-col text-center">
           <span className="text-[10px] uppercase tracking-wider text-slate-500">Contexto ativo</span>
           <span className="text-sm font-semibold text-slate-700">{meta.label}</span>

@@ -1,32 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 type PedidoStatus = "RASCUNHO" | "EM_ANDAMENTO" | "PARCIAL" | "CONCLUIDO" | "CANCELADO";
 
-type ItemPedido = {
+type PedidoCompraItem = {
   id: number;
   produto_id: number;
-  produto_nome?: string | null;
-  quantidade_solicitada: number;
+  produto_nome: string;
+  quantidade_pedida: number;
   quantidade_recebida: number;
+  quantidade_pendente: number;
   preco_custo_centavos: number;
   observacoes?: string | null;
 };
 
-type Recebimento = {
+type RecebimentoCompra = {
   id: number;
   item_id: number;
   produto_id: number;
-  quantidade_recebida: number;
-  preco_custo_centavos: number;
+  produto_nome: string;
+  quantidade: number;
   data_recebimento: string;
   observacao?: string | null;
 };
 
 type PedidoCompraDetalhe = {
   id: number;
+  numero_pedido: number;
   fornecedor_id: number;
   fornecedor_nome?: string | null;
   data_pedido: string;
@@ -34,22 +36,14 @@ type PedidoCompraDetalhe = {
   valor_estimado_centavos: number;
   observacoes?: string | null;
   conta_pagar_id?: number | null;
-  itens: ItemPedido[];
-  recebimentos: Recebimento[];
+  itens: PedidoCompraItem[];
+  recebimentos: RecebimentoCompra[];
 };
 
 type ApiResponse<T> = {
   ok?: boolean;
   data?: T;
   error?: string;
-};
-
-type RecebimentoForm = {
-  itemId: number;
-  produtoId: number;
-  quantidade: number;
-  precoCentavos: number;
-  observacao?: string;
 };
 
 type ContaPagarResumo = {
@@ -68,6 +62,8 @@ type ContaFinanceiraResumo = {
   centro_custo_id: number;
 };
 
+const hojeEmISO = () => new Date().toISOString().slice(0, 10);
+
 export default function DetalheCompraAdminPage() {
   const params = useParams();
   const router = useRouter();
@@ -77,8 +73,10 @@ export default function DetalheCompraAdminPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [recebimentosForm, setRecebimentosForm] = useState<RecebimentoForm[]>([]);
-  const [salvandoRecebimento, setSalvandoRecebimento] = useState(false);
+  const [receberAgora, setReceberAgora] = useState<Record<number, number>>({});
+  const [dataRecebimento, setDataRecebimento] = useState<string>(() => hojeEmISO());
+  const [observacaoRecebimento, setObservacaoRecebimento] = useState("");
+  const [isSavingRecebimento, setIsSavingRecebimento] = useState(false);
   const [erroRecebimento, setErroRecebimento] = useState<string | null>(null);
 
   // financeiro
@@ -91,6 +89,9 @@ export default function DetalheCompraAdminPage() {
   const [pagamentoObs, setPagamentoObs] = useState("");
   const [erroPagamento, setErroPagamento] = useState<string | null>(null);
   const [salvandoPagamento, setSalvandoPagamento] = useState(false);
+  const [mostrarNovaContaModal, setMostrarNovaContaModal] = useState(false);
+  const [isCriandoConta, setIsCriandoConta] = useState(false);
+  const [erroCriarConta, setErroCriarConta] = useState("");
 
   useEffect(() => {
     if (!Number.isNaN(id)) {
@@ -114,23 +115,9 @@ export default function DetalheCompraAdminPage() {
       }
 
       setPedido(json.data);
+      setReceberAgora({});
+      setErroRecebimento(null);
 
-      // preparar formulários de recebimento apenas para itens com saldo
-      const forms: RecebimentoForm[] = [];
-      json.data.itens.forEach((it) => {
-        const saldo = it.quantidade_solicitada - it.quantidade_recebida;
-        if (saldo > 0) {
-          forms.push({
-            itemId: it.id,
-            produtoId: it.produto_id,
-            quantidade: saldo,
-            precoCentavos: it.preco_custo_centavos || 0,
-          });
-        }
-      });
-      setRecebimentosForm(forms);
-
-      // carregar financeiro se houver conta vinculada
       if (json.data.conta_pagar_id) {
         await carregarContaPagar(json.data.conta_pagar_id);
         await carregarContasFinanceiras();
@@ -199,9 +186,9 @@ export default function DetalheCompraAdminPage() {
   }
 
   function formatarData(dateStr: string | null | undefined) {
-    if (!dateStr) return "—";
+    if (!dateStr) return "-";
     const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return "—";
+    if (Number.isNaN(d.getTime())) return "-";
     return d.toLocaleString("pt-BR");
   }
 
@@ -212,93 +199,77 @@ export default function DetalheCompraAdminPage() {
     });
   }
 
-  function atualizarRecebimentoForm(
-    itemId: number,
-    campo: "quantidade" | "precoCentavos" | "observacao",
-    valor: any
-  ) {
-    setRecebimentosForm((prev) =>
-      prev.map((rf) =>
-        rf.itemId === itemId
-          ? {
-              ...rf,
-              [campo]:
-                campo === "quantidade" || campo === "precoCentavos"
-                  ? Number(valor) || 0
-                  : (valor as string),
-            }
-          : rf
-      )
-    );
+  function handleChangeReceberAgora(itemId: number, value: string) {
+    const qtd = Number(value.replace(/\D/g, ""));
+    setReceberAgora((prev) => ({
+      ...prev,
+      [itemId]: Number.isFinite(qtd) ? qtd : 0,
+    }));
   }
 
-  async function registrarRecebimentos(e: React.FormEvent) {
-    e.preventDefault();
-    setErroRecebimento(null);
+  const preencherTudoPendente = () => {
+    if (!pedido) return;
+    const map: Record<number, number> = {};
+    for (const item of pedido.itens) {
+      if (item.quantidade_pendente > 0) {
+        map[item.id] = item.quantidade_pendente;
+      }
+    }
+    setReceberAgora(map);
+  };
 
+  const registrarRecebimento = async () => {
+    setErroRecebimento(null);
     if (!pedido) return;
 
-    const payloadRecebimentos = recebimentosForm
-      .filter((rf) => rf.quantidade > 0)
-      .map((rf) => ({
-        item_id: rf.itemId,
-        produto_id: rf.produtoId,
-        quantidade_recebida: rf.quantidade,
-        preco_custo_centavos: rf.precoCentavos,
-        observacao: rf.observacao ?? null,
-      }));
+    const itensPayload = pedido.itens
+      .map((item) => ({
+        itemId: item.id,
+        quantidade: receberAgora[item.id] ?? 0,
+      }))
+      .filter((it) => it.quantidade > 0);
 
-    if (payloadRecebimentos.length === 0) {
+    if (itensPayload.length === 0) {
       setErroRecebimento("Informe ao menos uma quantidade para receber.");
       return;
     }
 
-    setSalvandoRecebimento(true);
+    setIsSavingRecebimento(true);
     try {
-      const res = await fetch(`/api/loja/compras/${id}`, {
+      const res = await fetch(`/api/loja/compras/${pedido.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          acao: "RECEBER",
-          recebimentos: payloadRecebimentos,
+          action: "registrar_recebimento",
+          itens: itensPayload,
+          dataRecebimento,
+          observacao: observacaoRecebimento || null,
         }),
       });
 
       const json: ApiResponse<PedidoCompraDetalhe> = await res.json();
 
       if (!res.ok || !json.ok || !json.data) {
-        setErroRecebimento(json.error || "Erro ao registrar recebimentos.");
+        setErroRecebimento(json.error || "Erro ao registrar recebimento.");
         return;
       }
 
-      setPedido(json.data);
-
-      const forms: RecebimentoForm[] = [];
-      json.data.itens.forEach((it) => {
-        const saldo = it.quantidade_solicitada - it.quantidade_recebida;
-        if (saldo > 0) {
-          forms.push({
-            itemId: it.id,
-            produtoId: it.produto_id,
-            quantidade: saldo,
-            precoCentavos: it.preco_custo_centavos || 0,
-          });
-        }
-      });
-      setRecebimentosForm(forms);
-      setErroRecebimento(null);
-
-      if (json.data.conta_pagar_id) {
-        await carregarContaPagar(json.data.conta_pagar_id);
-        await carregarContasFinanceiras();
-      }
+      await carregarPedido();
+      setReceberAgora({});
+      setObservacaoRecebimento("");
     } catch (err) {
-      console.error("Erro inesperado ao registrar recebimentos:", err);
-      setErroRecebimento("Erro inesperado ao registrar recebimentos.");
+      console.error("Erro inesperado ao registrar recebimento:", err);
+      setErroRecebimento("Erro inesperado ao registrar recebimento.");
     } finally {
-      setSalvandoRecebimento(false);
+      setIsSavingRecebimento(false);
     }
-  }
+  };
+
+  const criarContaPagarDaCompra = async () => {
+    setErroPagamento(null);
+    setErroCriarConta("");
+    setMostrarNovaContaModal(true);
+  };
 
   async function handlePagarCompra(e: React.FormEvent) {
     e.preventDefault();
@@ -349,28 +320,15 @@ export default function DetalheCompraAdminPage() {
         body: JSON.stringify(payload),
       });
 
-      const json: ApiResponse<{ conta_pagar: any }> = await res.json();
+      const json: ApiResponse<any> = await res.json();
 
       if (!res.ok || !json.ok || !json.data) {
         setErroPagamento(json.error || "Erro ao registrar pagamento.");
         return;
       }
 
-      const cp = json.data.conta_pagar;
-      const totalNovo = cp.valor_centavos ?? 0;
-      const pagoNovo = cp.total_pago_centavos ?? 0;
-      const saldoNovo = Math.max(totalNovo - pagoNovo, 0);
-
-      setContaPagar({
-        id: cp.id,
-        descricao: cp.descricao,
-        valor_centavos: totalNovo,
-        vencimento: cp.vencimento ?? null,
-        status: cp.status,
-        total_pago_centavos: pagoNovo,
-      });
-      setPagamentoValorCentavos(saldoNovo);
       setErroPagamento(null);
+      await carregarPedido();
     } catch (err) {
       console.error("Erro inesperado ao pagar compra:", err);
       setErroPagamento("Erro inesperado ao pagar compra.");
@@ -398,9 +356,11 @@ export default function DetalheCompraAdminPage() {
       </button>
 
       <header>
-        <h1 className="text-lg font-semibold">Detalhe do pedido de compra #{id}</h1>
+        <h1 className="text-lg font-semibold">
+          Detalhe do pedido de compra #{pedido?.numero_pedido ?? id}
+        </h1>
         <p className="text-xs text-gray-600 mt-1">
-          Visualize os itens do pedido, recebimentos e o status atual. Ajustes de estoque e financeiro já estão integrados em etapas anteriores.
+          Visualize o status, registre recebimentos parciais e acompanhe o financeiro.
         </p>
       </header>
 
@@ -409,7 +369,6 @@ export default function DetalheCompraAdminPage() {
 
       {pedido && (
         <>
-          {/* Cabeçalho */}
           <section className="border rounded-lg bg-white p-3 space-y-2">
             <div className="flex flex-wrap justify-between gap-2">
               <div>
@@ -445,7 +404,6 @@ export default function DetalheCompraAdminPage() {
             )}
           </section>
 
-          {/* Itens */}
           <section className="border rounded-lg bg-white p-3 space-y-2">
             <h2 className="text-xs font-semibold uppercase text-gray-500">
               Itens do pedido
@@ -455,9 +413,9 @@ export default function DetalheCompraAdminPage() {
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="text-left px-2 py-1">Produto</th>
-                    <th className="text-right px-2 py-1">Solicitado</th>
-                    <th className="text-right px-2 py-1">Recebido</th>
-                    <th className="text-right px-2 py-1">Saldo</th>
+                    <th className="text-right px-2 py-1">Qtd pedida</th>
+                    <th className="text-right px-2 py-1">Recebida</th>
+                    <th className="text-right px-2 py-1">Pendente</th>
                     <th className="text-right px-2 py-1">Custo previsto (centavos)</th>
                   </tr>
                 </thead>
@@ -469,62 +427,17 @@ export default function DetalheCompraAdminPage() {
                       </td>
                     </tr>
                   ) : (
-                    pedido.itens.map((it) => {
-                      const saldo = it.quantidade_solicitada - it.quantidade_recebida;
-                      return (
-                        <tr key={it.id} className="border-b">
-                          <td className="px-2 py-1">
-                            <div className="font-medium text-gray-800">
-                              {it.produto_nome || `Produto #${it.produto_id}`}
-                            </div>
-                          </td>
-                          <td className="px-2 py-1 text-right">{it.quantidade_solicitada}</td>
-                          <td className="px-2 py-1 text-right">{it.quantidade_recebida}</td>
-                          <td className="px-2 py-1 text-right">{saldo}</td>
-                          <td className="px-2 py-1 text-right">{it.preco_custo_centavos}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Recebimentos */}
-          <section className="border rounded-lg bg-white p-3 space-y-2">
-            <h2 className="text-xs font-semibold uppercase text-gray-500">
-              Recebimentos registrados
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="text-left px-2 py-1">Data</th>
-                    <th className="text-left px-2 py-1">Produto</th>
-                    <th className="text-right px-2 py-1">Qtd recebida</th>
-                    <th className="text-right px-2 py-1">Custo (centavos)</th>
-                    <th className="text-left px-2 py-1">Observação</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pedido.recebimentos.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-3 text-center text-gray-500">
-                        Nenhum recebimento registrado ainda.
-                      </td>
-                    </tr>
-                  ) : (
-                    pedido.recebimentos.map((r) => (
-                      <tr key={r.id} className="border-b">
-                        <td className="px-2 py-1">{formatarData(r.data_recebimento)}</td>
+                    pedido.itens.map((it) => (
+                      <tr key={it.id} className="border-b">
                         <td className="px-2 py-1">
-                          {pedido.itens.find((it) => it.id === r.item_id)?.produto_nome ||
-                            `Produto #${r.produto_id}`}
+                          <div className="font-medium text-gray-800">
+                            {it.produto_nome || `Produto #${it.produto_id}`}
+                          </div>
                         </td>
-                        <td className="px-2 py-1 text-right">{r.quantidade_recebida}</td>
-                        <td className="px-2 py-1 text-right">{r.preco_custo_centavos}</td>
-                        <td className="px-2 py-1">{r.observacao || "—"}</td>
+                        <td className="px-2 py-1 text-right">{it.quantidade_pedida}</td>
+                        <td className="px-2 py-1 text-right">{it.quantidade_recebida}</td>
+                        <td className="px-2 py-1 text-right">{it.quantidade_pendente}</td>
+                        <td className="px-2 py-1 text-right">{it.preco_custo_centavos}</td>
                       </tr>
                     ))
                   )}
@@ -533,123 +446,145 @@ export default function DetalheCompraAdminPage() {
             </div>
           </section>
 
-          {/* Registrar recebimento (v0, já integrado no backend) */}
-          <section className="border rounded-lg bg-white p-3 space-y-2">
-            <h2 className="text-xs font-semibold uppercase text-gray-500">
-              Registrar recebimento (v0)
-            </h2>
-            <p className="text-[11px] text-gray-500">
-              Neste passo, os recebimentos já atualizam o estoque e criam/atualizam a conta
-              a pagar. Use apenas para registrar o recebimento físico da mercadoria.
+          <section className="border rounded-lg bg-white p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Recebimentos da compra (estoque)</h2>
+              <button
+                type="button"
+                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border bg-white hover:bg-gray-50 disabled:opacity-60"
+                onClick={preencherTudoPendente}
+                disabled={
+                  !pedido ||
+                  pedido.itens.length === 0 ||
+                  pedido.itens.every((i) => i.quantidade_pendente <= 0)
+                }
+              >
+                Receber tudo pendente
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              Registre os recebimentos parciais desta compra. O estoque é atualizado apenas
+              para as quantidades informadas aqui. Você pode registrar quantas entradas forem
+              necessárias até completar todos os itens.
             </p>
 
             {erroRecebimento && <p className="text-xs text-red-600">{erroRecebimento}</p>}
 
-            {recebimentosForm.length === 0 ? (
-              <p className="text-xs text-gray-500">
-                Todos os itens já foram recebidos. Não há saldo pendente.
-              </p>
-            ) : (
-              <form onSubmit={registrarRecebimentos} className="space-y-2">
-                <div className="overflow-x-auto border rounded-md">
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-gray-50 border-b">
-                      <tr>
-                        <th className="text-left px-2 py-1">Produto</th>
-                        <th className="text-right px-2 py-1">Saldo</th>
-                        <th className="text-right px-2 py-1">Qtd a receber</th>
-                        <th className="text-right px-2 py-1">Custo (centavos)</th>
-                        <th className="text-left px-2 py-1">Observação</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recebimentosForm.map((rf) => {
-                        const item = pedido.itens.find((it) => it.id === rf.itemId)!;
-                        const saldo = item.quantidade_solicitada - item.quantidade_recebida;
-                        return (
-                          <tr key={rf.itemId} className="border-b">
-                            <td className="px-2 py-1">
-                              <div className="font-medium text-gray-800">
-                                {item.produto_nome || `Produto #${item.produto_id}`}
-                              </div>
-                            </td>
-                            <td className="px-2 py-1 text-right">{saldo}</td>
-                            <td className="px-2 py-1 text-right">
-                              <input
-                                type="number"
-                                min={0}
-                                max={saldo}
-                                value={rf.quantidade}
-                                onChange={(e) =>
-                                  atualizarRecebimentoForm(
-                                    rf.itemId,
-                                    "quantidade",
-                                    Number(e.target.value) || 0
-                                  )
-                                }
-                                className="w-20 border rounded-md px-2 py-1 text-right text-xs"
-                              />
-                            </td>
-                            <td className="px-2 py-1 text-right">
-                              <input
-                                type="number"
-                                min={0}
-                                value={rf.precoCentavos}
-                                onChange={(e) =>
-                                  atualizarRecebimentoForm(
-                                    rf.itemId,
-                                    "precoCentavos",
-                                    Number(e.target.value) || 0
-                                  )
-                                }
-                                className="w-24 border rounded-md px-2 py-1 text-right text-xs"
-                              />
-                            </td>
-                            <td className="px-2 py-1">
-                              <input
-                                type="text"
-                                value={rf.observacao ?? ""}
-                                onChange={(e) =>
-                                  atualizarRecebimentoForm(
-                                    rf.itemId,
-                                    "observacao",
-                                    e.target.value
-                                  )
-                                }
-                                className="w-full border rounded-md px-2 py-1 text-xs"
-                                placeholder="Opcional"
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+            <div className="flex flex-wrap gap-4 items-center">
+              <div>
+                <label className="block text-xs font-medium mb-1">Data do recebimento</label>
+                <input
+                  type="date"
+                  value={dataRecebimento}
+                  onChange={(e) => setDataRecebimento(e.target.value)}
+                  className="border rounded-md px-2 py-1 text-sm"
+                />
+              </div>
+              <div className="flex-1 min-w-[240px]">
+                <label className="block text-xs font-medium mb-1">Observação (opcional)</label>
+                <input
+                  type="text"
+                  value={observacaoRecebimento}
+                  onChange={(e) => setObservacaoRecebimento(e.target.value)}
+                  className="border rounded-md px-2 py-1 text-sm w-full"
+                  placeholder="Lote parcial, mercadoria dividida, etc."
+                />
+              </div>
+            </div>
 
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 text-xs rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
-                    disabled={salvandoRecebimento}
-                  >
-                    Registrar recebimentos
-                  </button>
-                </div>
-              </form>
-            )}
+            <div className="overflow-x-auto border rounded-xl">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-3 py-2 text-left">Produto</th>
+                    <th className="px-3 py-2 text-right">Qtd pedida</th>
+                    <th className="px-3 py-2 text-right">Já recebida</th>
+                    <th className="px-3 py-2 text-right">Pendente</th>
+                    <th className="px-3 py-2 text-right">Receber agora</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedido.itens.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-3 text-center text-xs text-gray-500">
+                        Nenhum item neste pedido.
+                      </td>
+                    </tr>
+                  ) : (
+                    pedido.itens.map((item) => (
+                      <tr key={item.id} className="border-t">
+                        <td className="px-3 py-2">{item.produto_nome}</td>
+                        <td className="px-3 py-2 text-right">{item.quantidade_pedida}</td>
+                        <td className="px-3 py-2 text-right">{item.quantidade_recebida}</td>
+                        <td className="px-3 py-2 text-right">{item.quantidade_pendente}</td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            max={item.quantidade_pendente}
+                            value={receberAgora[item.id] ?? ""}
+                            onChange={(e) => handleChangeReceberAgora(item.id, e.target.value)}
+                            className="w-24 border rounded-md px-2 py-1 text-right text-sm"
+                          />
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60"
+                onClick={registrarRecebimento}
+                disabled={isSavingRecebimento}
+              >
+                {isSavingRecebimento ? "Registrando..." : "Registrar recebimento"}
+              </button>
+            </div>
           </section>
+
+          {pedido.recebimentos.length > 0 && (
+            <section className="border rounded-lg bg-white p-3 space-y-2">
+              <h3 className="text-sm font-semibold">Histórico de recebimentos</h3>
+              <div className="space-y-1 text-xs">
+                {pedido.recebimentos.map((rec) => (
+                  <div key={rec.id} className="flex justify-between gap-2">
+                    <span>
+                      {formatarData(rec.data_recebimento)} — {rec.produto_nome} — {rec.quantidade}{" "}
+                      un.
+                    </span>
+                    {rec.observacao && (
+                      <span className="text-gray-500 italic">{rec.observacao}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Pagamento da compra */}
           <section className="border rounded-lg bg-white p-3 space-y-2">
-            <h2 className="text-xs font-semibold uppercase text-gray-500">
-              Pagamento da compra
-            </h2>
+            <h2 className="text-base font-semibold">Pagamento da compra</h2>
 
-            {!pedido.conta_pagar_id && (
-              <p className="text-[11px] text-gray-500">
-                Ainda não há conta a pagar vinculada a este pedido. Ela é criada automaticamente ao registrar recebimentos.
-              </p>
+            {!contaPagar && (
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-xs text-gray-600">
+                  Ainda não há conta a pagar vinculada a este pedido. Você pode criar a conta agora
+                  para registrar os pagamentos desta compra.
+                </p>
+                <button
+                  type="button"
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border bg-white hover:bg-gray-50 disabled:opacity-60"
+                  onClick={criarContaPagarDaCompra}
+                  disabled={!pedido}
+                >
+                  Criar conta a pagar desta compra
+                </button>
+              </div>
             )}
 
             {pedido.conta_pagar_id && !contaPagar && (
@@ -658,7 +593,7 @@ export default function DetalheCompraAdminPage() {
               </p>
             )}
 
-            {pedido.conta_pagar_id && contaPagar && (
+            {contaPagar && (
               <>
                 <div className="border rounded-md p-2 bg-gray-50 text-xs space-y-1 mb-2">
                   <div className="flex justify-between">
@@ -672,7 +607,7 @@ export default function DetalheCompraAdminPage() {
                     <span>Status: {contaPagar.status}</span>
                     <span>
                       Vencimento:{" "}
-                      {contaPagar.vencimento ? formatarData(contaPagar.vencimento) : "—"}
+                      {contaPagar.vencimento ? formatarData(contaPagar.vencimento) : "-"}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -681,8 +616,7 @@ export default function DetalheCompraAdminPage() {
                       Saldo:{" "}
                       {formatarReais(
                         Math.max(
-                          (contaPagar.valor_centavos || 0) -
-                            (contaPagar.total_pago_centavos ?? 0),
+                          (contaPagar.valor_centavos || 0) - (contaPagar.total_pago_centavos ?? 0),
                           0
                         )
                       )}
@@ -698,11 +632,8 @@ export default function DetalheCompraAdminPage() {
 
                 {erroPagamento && <p className="text-xs text-red-600">{erroPagamento}</p>}
 
-                {(contaPagar.valor_centavos || 0) - (contaPagar.total_pago_centavos ?? 0) <=
-                0 ? (
-                  <p className="text-[11px] text-gray-500">
-                    Esta conta já está totalmente paga.
-                  </p>
+                {(contaPagar.valor_centavos || 0) - (contaPagar.total_pago_centavos ?? 0) <= 0 ? (
+                  <p className="text-[11px] text-gray-500">Esta conta já está totalmente paga.</p>
                 ) : (
                   <form onSubmit={handlePagarCompra} className="grid gap-2 md:grid-cols-4 text-xs">
                     <div className="space-y-1">
@@ -768,7 +699,7 @@ export default function DetalheCompraAdminPage() {
                         className="px-4 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
                         disabled={salvandoPagamento}
                       >
-                        Pagar compra
+                        Registrar pagamento
                       </button>
                     </div>
                   </form>
@@ -777,6 +708,149 @@ export default function DetalheCompraAdminPage() {
             )}
           </section>
         </>
+      )}
+
+      {mostrarNovaContaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-lg bg-white p-4 shadow-lg">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-semibold">Nova conta a pagar desta compra</h3>
+                <p className="text-xs text-gray-600">
+                  Configure os dados básicos da conta a pagar gerada a partir deste pedido.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-sm text-gray-500 hover:text-gray-700"
+                onClick={() => {
+                  setMostrarNovaContaModal(false);
+                  setErroCriarConta("");
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {erroCriarConta && (
+              <p className="mt-2 text-xs text-red-600">{erroCriarConta}</p>
+            )}
+
+            {pedido && (
+              <form
+                className="mt-3 space-y-3"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setIsCriandoConta(true);
+                  setErroCriarConta("");
+                  try {
+                    const formData = new FormData(e.currentTarget);
+                    const vencimento = (formData.get("vencimento") as string) || null;
+                    const valorReais = (formData.get("valor_reais") as string) || "0";
+
+                    const valorCentavos = Math.round(
+                      (parseFloat(valorReais.replace(",", ".")) || 0) * 100
+                    );
+
+                    const resConta = await fetch("/api/financeiro/contas-pagar", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        titulo: `Compra Loja - Pedido #${pedido.id}`,
+                        descricao_detalhada: pedido.observacoes ?? null,
+                        vencimento,
+                        valor_centavos: valorCentavos,
+                        pessoa_id: pedido.fornecedor_id ?? null,
+                      }),
+                    });
+
+                    const dataConta = await resConta.json();
+                    if (!resConta.ok || !dataConta?.ok || !dataConta?.conta?.id) {
+                      throw new Error(dataConta?.error || "Erro ao criar conta a pagar.");
+                    }
+
+                    const contaId = dataConta.conta.id;
+
+                    const resVincular = await fetch(`/api/loja/compras/${pedido.id}`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "vincular_conta_pagar",
+                        conta_pagar_id: contaId,
+                      }),
+                    });
+
+                    const dataVincular = await resVincular.json();
+                    if (!resVincular.ok || !dataVincular?.ok) {
+                      throw new Error(dataVincular?.error || "Erro ao vincular conta a pedido.");
+                    }
+
+                    setMostrarNovaContaModal(false);
+                    await carregarPedido();
+                  } catch (err: any) {
+                    console.error(err);
+                    setErroCriarConta(err.message || "Erro inesperado ao criar conta.");
+                  } finally {
+                    setIsCriandoConta(false);
+                  }
+                }}
+              >
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Vencimento</label>
+                    <input
+                      type="date"
+                      name="vencimento"
+                      className="w-full rounded-md border px-3 py-2 text-sm"
+                      defaultValue={
+                        pedido.data_pedido
+                          ? new Date(pedido.data_pedido).toISOString().slice(0, 10)
+                          : new Date().toISOString().slice(0, 10)
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1">Valor (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      name="valor_reais"
+                      className="w-full rounded-md border px-3 py-2 text-sm"
+                      defaultValue={(pedido.valor_estimado_centavos ?? 0) / 100}
+                    />
+                  </div>
+
+                  <p className="text-xs text-gray-600">
+                    Centro de custo e categoria poderao ser definidos depois no modulo Financeiro,
+                    em Contas a pagar.
+                  </p>
+                </div>
+
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border bg-white hover:bg-gray-50"
+                    onClick={() => {
+                      setMostrarNovaContaModal(false);
+                      setErroCriarConta("");
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60"
+                    disabled={isCriandoConta}
+                  >
+                    {isCriandoConta ? "Criando..." : "Criar conta"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

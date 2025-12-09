@@ -27,10 +27,12 @@ type ProdutoDb = {
   nome: string;
   descricao?: string | null;
   categoria: string | null;
+  categoria_subcategoria_id?: number | null;
   preco_venda_centavos: number;
   unidade: string | null;
   estoque_atual: number;
   ativo: boolean;
+  bloqueado_para_venda?: boolean;
   observacoes?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -55,13 +57,21 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const { search, apenasAtivos, page = "1", pageSize = "50", somenteComPreco } =
-    Object.fromEntries(req.nextUrl.searchParams);
+  const {
+    search,
+    apenasAtivos,
+    page = "1",
+    pageSize = "50",
+    somenteComPreco,
+    modo,
+  } = Object.fromEntries(req.nextUrl.searchParams);
 
   const pageNumber = Math.max(parseInt(page || "1", 10) || 1, 1);
   const perPage = Math.min(Math.max(parseInt(pageSize || "50", 10) || 50, 1), 200);
   const from = (pageNumber - 1) * perPage;
   const to = from + perPage - 1;
+
+  const isAdminMode = modo === "admin";
 
   try {
     let query = supabaseAdmin
@@ -77,6 +87,7 @@ export async function GET(req: NextRequest) {
         unidade,
         estoque_atual,
         ativo,
+        bloqueado_para_venda,
         observacoes,
         created_at,
         updated_at
@@ -86,7 +97,9 @@ export async function GET(req: NextRequest) {
       .range(from, to)
       .order("nome", { ascending: true });
 
-    if (apenasAtivos === "true") {
+    if (!isAdminMode) {
+      query = query.eq("ativo", true).is("bloqueado_para_venda", false);
+    } else if (apenasAtivos === "true") {
       query = query.eq("ativo", true);
     }
 
@@ -160,11 +173,13 @@ export async function POST(req: NextRequest) {
     nome,
     descricao,
     categoria,
+    categoria_subcategoria_id,
     preco_venda_centavos,
     preco,
     unidade = "UN",
     estoque_atual = 0,
     ativo = true,
+    bloqueado_para_venda,
     observacoes,
   } = body ?? {};
 
@@ -188,15 +203,14 @@ export async function POST(req: NextRequest) {
     if (!Number.isNaN(v)) precoCentavos = Math.round(v * 100);
   }
 
-  if (!precoCentavos || precoCentavos <= 0) {
-    return json(400, {
-      ok: false,
-      error:
-        "Preco invalido. Informe 'preco_venda_centavos' (inteiro) ou 'preco' (em reais).",
-    });
-  }
-
+  const precoFinal = Math.max(precoCentavos ?? 0, 0);
+  const bloqueado =
+    precoFinal <= 0 ? true : Boolean(bloqueado_para_venda);
   const estoque = Number.isFinite(estoque_atual) ? Number(estoque_atual) : 0;
+  const catSubId =
+    typeof categoria_subcategoria_id === "number" && Number.isFinite(categoria_subcategoria_id)
+      ? categoria_subcategoria_id
+      : null;
 
   try {
     const { data, error } = await supabaseAdmin
@@ -206,10 +220,12 @@ export async function POST(req: NextRequest) {
         nome: nome.trim(),
         descricao: descricao || null,
         categoria: categoria || null,
-        preco_venda_centavos: precoCentavos,
+        categoria_subcategoria_id: catSubId,
+        preco_venda_centavos: precoFinal,
         unidade: unidade || "UN",
         estoque_atual: estoque,
         ativo: Boolean(ativo),
+        bloqueado_para_venda: bloqueado,
         observacoes: observacoes || null,
       })
       .select("*")
@@ -253,12 +269,14 @@ export async function PUT(req: NextRequest) {
     nome,
     descricao,
     categoria,
+    categoria_subcategoria_id,
     preco_venda_centavos,
     preco,
     unidade,
     estoque_atual,
     ativo,
     observacoes,
+    bloqueado_para_venda,
   } = body ?? {};
 
   if (!id || typeof id !== "number") {
@@ -272,6 +290,13 @@ export async function PUT(req: NextRequest) {
     updatePayload.nome = nome.trim();
   if (typeof descricao !== "undefined") updatePayload.descricao = descricao || null;
   if (typeof categoria !== "undefined") updatePayload.categoria = categoria || null;
+  if (typeof categoria_subcategoria_id !== "undefined") {
+    const val =
+      typeof categoria_subcategoria_id === "number" && Number.isFinite(categoria_subcategoria_id)
+        ? categoria_subcategoria_id
+        : null;
+    updatePayload.categoria_subcategoria_id = val;
+  }
 
   // Preco de venda
   let precoCentavos: number | null = null;
@@ -290,10 +315,13 @@ export async function PUT(req: NextRequest) {
   }
 
   if (precoCentavos !== null) {
-    if (precoCentavos <= 0) {
-      return json(400, { ok: false, error: "Preco invalido." });
+    const precoFinal = Math.max(precoCentavos, 0);
+    updatePayload.preco_venda_centavos = precoFinal;
+    if (precoFinal <= 0) {
+      updatePayload.bloqueado_para_venda = true;
+    } else if (typeof bloqueado_para_venda === "boolean") {
+      updatePayload.bloqueado_para_venda = bloqueado_para_venda;
     }
-    updatePayload.preco_venda_centavos = precoCentavos;
   }
 
   if (typeof unidade === "string" && unidade.trim().length > 0) {
@@ -309,6 +337,10 @@ export async function PUT(req: NextRequest) {
 
   if (typeof ativo !== "undefined") {
     updatePayload.ativo = Boolean(ativo);
+  }
+
+  if (typeof bloqueado_para_venda === "boolean" && precoCentavos === null) {
+    updatePayload.bloqueado_para_venda = bloqueado_para_venda;
   }
 
   if (typeof observacoes !== "undefined") {

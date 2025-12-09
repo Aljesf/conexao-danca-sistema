@@ -190,6 +190,7 @@ export async function POST(req: NextRequest) {
       pedido_id: pedido.id,
       produto_id: it.produto_id,
       quantidade_solicitada: it.quantidade_solicitada,
+      quantidade_pedida: it.quantidade_solicitada,
       quantidade_recebida: 0,
       preco_custo_centavos: it.preco_custo_centavos,
       observacoes: it.observacoes ?? null,

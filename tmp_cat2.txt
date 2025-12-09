@@ -1,0 +1,40 @@
+                          }}
+                          className="px-3 py-1.5 text-xs border rounded-md hover:bg-gray-50"
+                          disabled={savingEdicao}
+                        >
+                          Cancelar edicao
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={limparSelecao}
+                          className="px-3 py-1.5 text-xs border rounded-md hover:bg-gray-50"
+                          disabled={savingEdicao}
+                        >
+                          Limpar selecao
+                        </button>
+
+                        <button
+                          type="submit"
+                          className="px-3 py-1.5 text-xs rounded-md border bg-white hover:bg-gray-50"
+                          disabled={savingEdicao || !editForm.id}
+                        >
+                          Salvar alteracoes
+                        </button>
+
+                        <button
+                          type="submit"
+                          onClick={() =>
+                            setEditForm((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    ativo: true,
+                                  }
+                                : prev
+                            )
+                          }
+                          className="px-3 py-1.5 text-xs rounded-md bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                          disabled={savingEdicao || !editForm.id}
+                        >
+                          Liberar produto

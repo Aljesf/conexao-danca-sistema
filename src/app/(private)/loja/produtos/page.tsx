@@ -82,6 +82,7 @@ export default function LojaGerenciarProdutosPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.set("modo", "admin");
       params.set("pageSize", "200");
       if (filtros.search.trim().length > 0) {
         params.set("search", filtros.search.trim());

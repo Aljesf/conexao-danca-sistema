@@ -112,7 +112,7 @@ export default function ListaComprasAdminPage() {
 
       // Produtos básicos
       if (produtos.length === 0) {
-        const resP = await fetch("/api/loja/produtos?apenasAtivos=true");
+        const resP = await fetch("/api/loja/produtos?apenasAtivos=true&modo=admin");
         const jsonP: ApiResponse<any> = await resP.json();
         if (resP.ok && jsonP.ok && jsonP.data) {
           const items = Array.isArray(jsonP.data.items) ? jsonP.data.items : jsonP.data;

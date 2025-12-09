@@ -1,0 +1,82 @@
+>   async function salvarCadastroAdmin(e: React.FormEvent) {
+      e.preventDefault();
+      resetMensagem();
+  
+      if (!cadastroForm.nome.trim()) {
+        setMensagemTipo("error");
+        setMensagem("Informe o nome do produto.");
+        return;
+      }
+  
+      if (!cadastroForm.quantidade || cadastroForm.quantidade <= 0) {
+        setMensagemTipo("error");
+        setMensagem("Informe uma quantidade maior que zero.");
+        return;
+      }
+  
+      let precoCustoCentavos: number | null = null;
+      if (cadastroForm.precoCustoReais.trim().length > 0) {
+        const clean = cadastroForm.precoCustoReais
+          .replace(/[^\d,.,]/g, "")
+          .replace(".", "")
+          .replace(",", ".");
+        const valor = parseFloat(clean);
+        if (Number.isNaN(valor) || valor < 0) {
+          setMensagemTipo("error");
+          setMensagem("Preco de custo invalido.");
+          return;
+        }
+        precoCustoCentavos = Math.round(valor * 100);
+      }
+  
+      if (!cadastroForm.precoVendaReais.trim()) {
+        setMensagemTipo("error");
+        setMensagem("Informe o preco de venda.");
+        return;
+      }
+      const cleanVenda = cadastroForm.precoVendaReais
+        .replace(/[^\d,.,]/g, "")
+        .replace(".", "")
+        .replace(",", ".");
+      const valorVenda = parseFloat(cleanVenda);
+>           <form className="space-y-4" onSubmit={salvarCadastroAdmin}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium mb-1">
+                    Nome do produto *
+                  </label>
+                  <input
+                    type="text"
+                    value={cadastroForm.nome}
+                    onChange={(e) =>
+                      handleCadastroChange("nome", e.target.value)
+                    }
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    placeholder="Ex.: Sapatilha meia ponta infantil"
+                  />
+                </div>
+  
+                <div>
+                  <label className="block text-xs font-medium mb-1">
+                    Codigo interno
+                  </label>
+                  <input
+                    type="text"
+                    value={cadastroForm.codigo}
+                    onChange={(e) =>
+                      handleCadastroChange("codigo", e.target.value)
+                    }
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    placeholder="Ex.: SAP-MP-INF-001"
+                  />
+                </div>
+  
+                <div>
+                  <label className="block text-xs font-medium mb-1">
+                    Categoria
+                  </label>
+                  <input
+                    type="text"
+                    value={cadastroForm.categoria}
+                    onChange={(e) =>
+                      handleCadastroChange("categoria", e.target.value)

@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { registrarEntradaEstoque } from "@/lib/loja/estoque";
 import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
 
 type ApiResponse<T = any> = {
   ok: boolean;
@@ -9,33 +10,39 @@ type ApiResponse<T = any> = {
 
 type PedidoStatus = "RASCUNHO" | "EM_ANDAMENTO" | "PARCIAL" | "CONCLUIDO" | "CANCELADO";
 
+type PedidoCompraItemDTO = {
+  id: number;
+  produto_id: number;
+  produto_nome: string;
+  quantidade_pedida: number;
+  quantidade_recebida: number;
+  quantidade_pendente: number;
+  preco_custo_centavos: number;
+  observacoes?: string | null;
+};
+
+type RecebimentoDTO = {
+  id: number;
+  item_id: number;
+  produto_id: number;
+  produto_nome: string;
+  quantidade: number;
+  data_recebimento: string;
+  observacao?: string | null;
+};
+
 type PedidoCompraDetalhe = {
   id: number;
+  numero_pedido: number;
   fornecedor_id: number;
   fornecedor_nome?: string | null;
   data_pedido: string;
   status: PedidoStatus;
   valor_estimado_centavos: number;
-  conta_pagar_id?: number | null;
   observacoes?: string | null;
-  itens: {
-    id: number;
-    produto_id: number;
-    produto_nome?: string | null;
-    quantidade_solicitada: number;
-    quantidade_recebida: number;
-    preco_custo_centavos: number;
-    observacoes?: string | null;
-  }[];
-  recebimentos: {
-    id: number;
-    item_id: number;
-    produto_id: number;
-    quantidade_recebida: number;
-    preco_custo_centavos: number;
-    data_recebimento: string;
-    observacao?: string | null;
-  }[];
+  conta_pagar_id?: number | null;
+  itens: PedidoCompraItemDTO[];
+  recebimentos: RecebimentoDTO[];
 };
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -69,7 +76,7 @@ async function getCentroCustoLojaId(): Promise<number | null> {
     .eq("codigo", "LOJA")
     .maybeSingle();
   if (error || !data) {
-    console.error("[compras] Centro de custo LOJA não encontrado:", error);
+    console.error("[compras] Centro de custo LOJA nao encontrado:", error);
     return null;
   }
   centroCustoLojaIdCache = data.id;
@@ -79,7 +86,6 @@ async function getCentroCustoLojaId(): Promise<number | null> {
 async function getCategoriaCompraMercadoriaId(): Promise<number | null> {
   if (!supabaseAdmin) return null;
   if (categoriaCompraIdCache) return categoriaCompraIdCache;
-  // tenta pelo codigo COMPRA_MERCADORIA; se não houver, pega primeira DESPESA
   const { data, error } = await supabaseAdmin
     .from("categorias_financeiras")
     .select("id, codigo, tipo")
@@ -91,9 +97,7 @@ async function getCategoriaCompraMercadoriaId(): Promise<number | null> {
     return null;
   }
 
-  const alvo =
-    data.find((c) => (c as any).codigo === "COMPRA_MERCADORIA") ??
-    data[0];
+  const alvo = data.find((c) => (c as any).codigo === "COMPRA_MERCADORIA") ?? data[0];
   if (!alvo) {
     console.error("[compras] Nenhuma categoria financeira encontrada para despesa.");
     return null;
@@ -110,10 +114,26 @@ async function getFornecedorPessoaId(fornecedorId: number): Promise<number | nul
     .eq("id", fornecedorId)
     .maybeSingle();
   if (error || !data) {
-    console.error("[compras] Fornecedor não encontrado ou sem pessoa_id:", error);
+    console.error("[compras] Fornecedor nao encontrado ou sem pessoa_id:", error);
     return null;
   }
   return data.pessoa_id as number;
+}
+
+function normalizarDataRecebimento(raw: any): string {
+  if (typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function temColunaQuantidadeRecebimento(): Promise<boolean> {
+  if (!supabaseAdmin) return false;
+  const { error } = await supabaseAdmin
+    .from("loja_pedidos_compra_recebimentos")
+    .select("quantidade")
+    .limit(1);
+  return !error;
 }
 
 async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | null> {
@@ -155,6 +175,7 @@ async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | 
       id,
       pedido_id,
       produto_id,
+      quantidade_pedida,
       quantidade_solicitada,
       quantidade_recebida,
       preco_custo_centavos,
@@ -169,6 +190,23 @@ async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | 
     throw errItens;
   }
 
+  const itensMapeados: PedidoCompraItemDTO[] =
+    (itens ?? []).map((it: any) => {
+      const pedida = Number(it.quantidade_pedida ?? it.quantidade_solicitada ?? 0) || 0;
+      const recebida = Number(it.quantidade_recebida ?? 0) || 0;
+      const pendente = Math.max(pedida - recebida, 0);
+      return {
+        id: it.id,
+        produto_id: it.produto_id,
+        produto_nome: it.produto?.nome ?? `Produto #${it.produto_id}`,
+        quantidade_pedida: pedida,
+        quantidade_recebida: recebida,
+        quantidade_pendente: pendente,
+        preco_custo_centavos: Number(it.preco_custo_centavos ?? 0),
+        observacoes: it.observacoes ?? null,
+      };
+    }) ?? [];
+
   const { data: recs, error: errRecs } = await supabaseAdmin
     .from("loja_pedidos_compra_recebimentos")
     .select(
@@ -177,22 +215,43 @@ async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | 
       pedido_id,
       item_id,
       produto_id,
+      quantidade,
       quantidade_recebida,
-      preco_custo_centavos,
       data_recebimento,
-      observacao
+      observacao,
+      produto:produto_id ( id, nome )
     `
     )
     .eq("pedido_id", pedidoId)
-    .order("data_recebimento", { ascending: false });
+    .order("data_recebimento", { ascending: false })
+    .order("id", { ascending: false });
 
   if (errRecs) {
     console.error("[GET /api/loja/compras/[id]] Erro ao buscar recebimentos:", errRecs);
     throw errRecs;
   }
 
+  const recebimentosMapeados: RecebimentoDTO[] =
+    (recs ?? []).map((r: any) => {
+      const quantidade = Number(r.quantidade ?? r.quantidade_recebida ?? 0) || 0;
+      const produtoNome =
+        r.produto?.nome ||
+        itensMapeados.find((it) => it.id === r.item_id)?.produto_nome ||
+        `Produto #${r.produto_id}`;
+      return {
+        id: r.id,
+        item_id: r.item_id,
+        produto_id: r.produto_id,
+        produto_nome: produtoNome,
+        quantidade,
+        data_recebimento: r.data_recebimento,
+        observacao: r.observacao ?? null,
+      };
+    }) ?? [];
+
   return {
     id: pedido.id,
+    numero_pedido: pedido.id,
     fornecedor_id: pedido.fornecedor_id,
     fornecedor_nome:
       pedido.fornecedor?.pessoas?.nome_fantasia ||
@@ -203,26 +262,8 @@ async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | 
     status: pedido.status,
     valor_estimado_centavos: pedido.valor_estimado_centavos,
     observacoes: pedido.observacoes,
-    itens:
-      (itens ?? []).map((it: any) => ({
-        id: it.id,
-        produto_id: it.produto_id,
-        produto_nome: it.produto?.nome ?? null,
-        quantidade_solicitada: it.quantidade_solicitada,
-        quantidade_recebida: it.quantidade_recebida,
-        preco_custo_centavos: it.preco_custo_centavos,
-        observacoes: it.observacoes ?? null,
-      })) ?? [],
-    recebimentos:
-      (recs ?? []).map((r: any) => ({
-        id: r.id,
-        item_id: r.item_id,
-        produto_id: r.produto_id,
-        quantidade_recebida: r.quantidade_recebida,
-        preco_custo_centavos: r.preco_custo_centavos,
-        data_recebimento: r.data_recebimento,
-        observacao: r.observacao ?? null,
-      })) ?? [],
+    itens: itensMapeados,
+    recebimentos: recebimentosMapeados,
   };
 }
 
@@ -261,7 +302,7 @@ export async function GET(
 
 // ==============================
 // POST /api/loja/compras/[id]
-// Registrar recebimentos basicos (sem estoque/financeiro neste passo)
+// Registrar recebimento parcial
 // ==============================
 export async function POST(
   req: NextRequest,
@@ -276,41 +317,164 @@ export async function POST(
   }
 
   const pedidoId = Number(context.params?.id);
-  if (!pedidoId || Number.isNaN(pedidoId)) {
+  if (!Number.isFinite(pedidoId)) {
     return json(400, { ok: false, error: "ID invalido." });
   }
 
-  let body: any;
+  const body = await req.json().catch(() => null);
+
+  if (!body || !body.action) {
+    return json(400, { ok: false, error: "Acao nao suportada." });
+  }
+
+  if (body.action === "vincular_conta_pagar") {
+    const contaPagarId = Number(body.conta_pagar_id);
+    if (!Number.isFinite(contaPagarId)) {
+      return json(400, { ok: false, error: "conta_pagar_id invalido" });
+    }
+
+    const { error } = await supabaseAdmin
+      .from("loja_pedidos_compra")
+      .update({ conta_pagar_id: contaPagarId })
+      .eq("id", pedidoId);
+
+    if (error) {
+      console.error("Erro ao vincular conta_pagar a compra:", error);
+      return json(500, { ok: false, error: "Erro ao vincular conta a pagar." });
+    }
+
+    return json(200, { ok: true });
+  }
+
+  if (body.action === "criar_conta_pagar") {
+    try {
+      const { data: pedido, error: pedidoErr } = await supabaseAdmin
+        .from("loja_pedidos_compra")
+        .select("id, fornecedor_id, valor_estimado_centavos, conta_pagar_id")
+        .eq("id", pedidoId)
+        .maybeSingle();
+
+      if (pedidoErr || !pedido) {
+        return json(404, { ok: false, error: "Pedido nao encontrado." });
+      }
+
+      if (pedido.conta_pagar_id) {
+        return json(200, { ok: true, conta_pagar_id: pedido.conta_pagar_id });
+      }
+
+      let valorTotalCentavos = Number(pedido.valor_estimado_centavos || 0);
+      if (!valorTotalCentavos || valorTotalCentavos <= 0) {
+        const { data: itensPedido } = await supabaseAdmin
+          .from("loja_pedidos_compra_itens")
+          .select("quantidade_pedida, quantidade_solicitada, preco_custo_centavos")
+          .eq("pedido_id", pedidoId);
+
+        if (itensPedido && itensPedido.length > 0) {
+          valorTotalCentavos = itensPedido.reduce((acc: number, it: any) => {
+            const qty = Number(it.quantidade_pedida ?? it.quantidade_solicitada ?? 0) || 0;
+            const custo = Number(it.preco_custo_centavos ?? 0) || 0;
+            return acc + qty * custo;
+          }, 0);
+        }
+      }
+
+      const centroId = await getCentroCustoLojaId();
+      const categoriaId = await getCategoriaCompraMercadoriaId();
+      const fornecedorPessoaId = pedido.fornecedor_id
+        ? await getFornecedorPessoaId(pedido.fornecedor_id)
+        : null;
+
+      const descricao = `Compra Loja - Pedido #${pedidoId}`;
+      const vencimento = body.vencimento || new Date().toISOString().slice(0, 10);
+
+      const payloadConta: Record<string, any> = {
+        descricao,
+        valor_centavos: valorTotalCentavos,
+        status: "PENDENTE",
+        vencimento,
+        metodo_pagamento: null,
+        observacoes: `Criada a partir da compra #${pedidoId}`,
+      };
+      if (centroId) payloadConta.centro_custo_id = centroId;
+      if (categoriaId) payloadConta.categoria_id = categoriaId;
+      if (fornecedorPessoaId) payloadConta.pessoa_id = fornecedorPessoaId;
+
+      const { data: conta, error: contaErr } = await supabaseAdmin
+        .from("contas_pagar")
+        .insert(payloadConta)
+        .select("id")
+        .maybeSingle();
+
+      if (contaErr || !conta) {
+        console.error("[POST /api/loja/compras/[id]] Erro ao criar conta a pagar:", contaErr);
+        return json(500, { ok: false, error: "Erro ao criar conta a pagar." });
+      }
+
+      await supabaseAdmin
+        .from("loja_pedidos_compra")
+        .update({ conta_pagar_id: conta.id })
+        .eq("id", pedidoId);
+
+      return json(200, { ok: true, conta_pagar_id: conta.id });
+    } catch (err) {
+      console.error("[POST /api/loja/compras/[id]] Erro ao criar conta a pagar:", err);
+      return json(500, { ok: false, error: "Erro ao criar conta a pagar." });
+    }
+  }
+
+  if (body.action !== "registrar_recebimento") {
+    return json(400, { ok: false, error: "Acao nao suportada." });
+  }
+
+  const itensPayloadRaw: { itemId?: number; quantidade?: number }[] = body.itens ?? [];
+  if (!Array.isArray(itensPayloadRaw) || itensPayloadRaw.length === 0) {
+    return json(400, { ok: false, error: "Envie ao menos um item para receber." });
+  }
+
+  const itensPayload = itensPayloadRaw.map((it) => ({
+    itemId: Number(it?.itemId),
+    quantidade: Number(it?.quantidade),
+  }));
+
+  for (const it of itensPayload) {
+    if (!Number.isFinite(it.itemId) || it.itemId <= 0) {
+      return json(400, { ok: false, error: "ItemId invalido no payload." });
+    }
+    if (!Number.isFinite(it.quantidade) || it.quantidade <= 0) {
+      return json(400, {
+        ok: false,
+        error: "Quantidade a receber deve ser maior que zero.",
+      });
+    }
+  }
+
+  const dataRecebimento = normalizarDataRecebimento(body.dataRecebimento);
+  const observacao =
+    typeof body.observacao === "string" && body.observacao.trim()
+      ? body.observacao.trim()
+      : null;
+
   try {
-    body = await req.json();
-  } catch {
-    return json(400, { ok: false, error: "Body JSON invalido." });
-  }
-
-  const { acao, recebimentos } = body ?? {};
-  if (acao !== "RECEBER") {
-    return json(400, { ok: false, error: "Acao invalida." });
-  }
-
-  if (!Array.isArray(recebimentos) || recebimentos.length === 0) {
-    return json(400, { ok: false, error: "Envie ao menos um recebimento." });
-  }
-
-  try {
-    // Busca info do pedido (fornecedor) para integrações
     const { data: pedidoCab, error: errPedidoCab } = await supabaseAdmin
       .from("loja_pedidos_compra")
-      .select("id, fornecedor_id")
+      .select("id, fornecedor_id, conta_pagar_id")
       .eq("id", pedidoId)
       .maybeSingle();
-    if (errPedidoCab || !pedidoCab) {
+
+    if (errPedidoCab) {
+      console.error("[POST /api/loja/compras/[id]] Erro ao buscar pedido:", errPedidoCab);
+      return json(500, { ok: false, error: "Erro ao buscar pedido de compra." });
+    }
+
+    if (!pedidoCab) {
       return json(404, { ok: false, error: "Pedido nao encontrado." });
     }
 
-    // Busca itens atuais para validar saldo
-    const { data: itens, error: errItens } = await supabaseAdmin
+    const { data: itensPedido, error: errItens } = await supabaseAdmin
       .from("loja_pedidos_compra_itens")
-      .select("id, quantidade_solicitada, quantidade_recebida")
+      .select(
+        "id, produto_id, quantidade_pedida, quantidade_solicitada, quantidade_recebida, preco_custo_centavos"
+      )
       .eq("pedido_id", pedidoId);
 
     if (errItens) {
@@ -321,134 +485,154 @@ export async function POST(
       return json(500, { ok: false, error: "Erro ao buscar itens do pedido." });
     }
 
-    const itensMap = new Map<number, { solicitada: number; recebida: number }>();
-    (itens ?? []).forEach((it: any) => {
+    if (!itensPedido || itensPedido.length === 0) {
+      return json(400, { ok: false, error: "Nenhum item encontrado neste pedido." });
+    }
+
+    const itensMap = new Map<
+      number,
+      { produto_id: number; pedida: number; solicitada: number; recebida: number; preco_custo_centavos: number }
+    >();
+    (itensPedido ?? []).forEach((it: any) => {
+      const solicitada = Number(it.quantidade_solicitada ?? 0) || 0;
+      const pedidaRaw = Number(it.quantidade_pedida ?? it.quantidade_solicitada ?? 0) || 0;
+      const pedidaFinal = pedidaRaw || solicitada;
       itensMap.set(it.id, {
-        solicitada: Number(it.quantidade_solicitada) || 0,
-        recebida: Number(it.quantidade_recebida) || 0,
+        produto_id: it.produto_id,
+        pedida: pedidaFinal,
+        solicitada,
+        recebida: Number(it.quantidade_recebida ?? 0) || 0,
+        preco_custo_centavos: Number(it.preco_custo_centavos ?? 0),
       });
     });
 
-    // validação de saldo
-    for (const r of recebimentos) {
-      const info = itensMap.get(r.item_id);
+    for (const rec of itensPayload) {
+      const info = itensMap.get(rec.itemId);
       if (!info) {
-        return json(400, { ok: false, error: `Item ${r.item_id} nao encontrado no pedido.` });
-      }
-      const saldo = info.solicitada - info.recebida;
-      if (!r.quantidade_recebida || r.quantidade_recebida <= 0) {
-        return json(400, { ok: false, error: "Quantidade recebida deve ser maior que zero." });
-      }
-      if (r.quantidade_recebida > saldo) {
         return json(400, {
           ok: false,
-          error: `Quantidade recebida maior que o saldo para o item ${r.item_id}.`,
+          error: `Item ${rec.itemId} nao pertence a este pedido.`,
         });
       }
-      if (
-        typeof r.preco_custo_centavos !== "number" ||
-        Number.isNaN(r.preco_custo_centavos) ||
-        r.preco_custo_centavos < 0
-      ) {
-        return json(400, { ok: false, error: "Preco de custo invalido." });
+      const pendente = Math.max(info.pedida - info.recebida, 0);
+      if (rec.quantidade > pendente) {
+        return json(400, {
+          ok: false,
+          error: `Quantidade maior que o pendente para o item ${rec.itemId}.`,
+        });
       }
     }
 
-    // insere recebimentos
-    const inserts = recebimentos.map((r: any) => ({
-      pedido_id: pedidoId,
-      item_id: r.item_id,
-      produto_id: r.produto_id,
-      quantidade_recebida: r.quantidade_recebida,
-      preco_custo_centavos: r.preco_custo_centavos,
-      observacao: r.observacao ?? null,
-    }));
+    const usarColunaQuantidade = await temColunaQuantidadeRecebimento();
+    const recebimentosInsert = itensPayload.map((rec) => {
+      const base = {
+        pedido_id: pedidoId,
+        item_id: rec.itemId,
+        produto_id: itensMap.get(rec.itemId)!.produto_id,
+        data_recebimento: dataRecebimento,
+        observacao,
+        created_by: null,
+      };
+      return usarColunaQuantidade
+        ? { ...base, quantidade: rec.quantidade }
+        : { ...base, quantidade_recebida: rec.quantidade };
+    });
 
     const { error: errRec } = await supabaseAdmin
       .from("loja_pedidos_compra_recebimentos")
-      .insert(inserts);
+      .insert(recebimentosInsert);
 
     if (errRec) {
       console.error("[POST /api/loja/compras/[id]] Erro ao inserir recebimentos:", errRec);
       return json(500, { ok: false, error: "Erro ao registrar recebimentos." });
     }
 
-    // atualiza quantidade_recebida em itens
-    for (const r of recebimentos) {
-      const info = itensMap.get(r.item_id);
+    for (const rec of itensPayload) {
+      const info = itensMap.get(rec.itemId);
       if (!info) continue;
-      const novaQtd = info.recebida + r.quantidade_recebida;
-      await supabaseAdmin
+
+      const pedidaFinal = info.pedida || info.solicitada || 0;
+      const novaQtdRecebida = info.recebida + rec.quantidade;
+
+      const { error: errUpdateItem } = await supabaseAdmin
         .from("loja_pedidos_compra_itens")
-        .update({ quantidade_recebida: novaQtd })
-        .eq("id", r.item_id);
+        .update({
+          quantidade_recebida: novaQtdRecebida,
+          quantidade_pedida: pedidaFinal,
+        })
+        .eq("id", rec.itemId);
 
-      // Integração ESTOQUE v0: movimento de entrada + atualiza saldo
+      if (errUpdateItem) {
+        console.error(
+          "[POST /api/loja/compras/[id]] Erro ao atualizar item:",
+          errUpdateItem
+        );
+        return json(500, { ok: false, error: "Erro ao atualizar itens do pedido." });
+      }
+
       try {
-        await supabaseAdmin.from("loja_estoque_movimentos").insert({
-          produto_id: r.produto_id,
-          tipo: "ENTRADA",
-          quantidade: r.quantidade_recebida,
+        await registrarEntradaEstoque({
+          supabase: supabaseAdmin,
+          produtoId: info.produto_id,
+          quantidade: rec.quantidade,
           origem: "COMPRA",
-          referencia_id: pedidoId,
+          referenciaId: pedidoId,
           observacao:
-            r.observacao ||
-            `Entrada por recebimento de compra #${pedidoId}`,
-          created_by: null,
+            observacao ||
+            `Recebimento do pedido de compra #${pedidoId} (item ${rec.itemId})`,
+          createdBy: null,
         });
-
-        // Atualiza estoque_atual (fallback em duas etapas)
-        const { data: prodAtual } = await supabaseAdmin
-          .from("loja_produtos")
-          .select("estoque_atual")
-          .eq("id", r.produto_id)
-          .maybeSingle();
-
-        const estoqueAtual = Number(prodAtual?.estoque_atual || 0);
-        const novoEstoque = estoqueAtual + Number(r.quantidade_recebida || 0);
-
-        await supabaseAdmin
-          .from("loja_produtos")
-          .update({ estoque_atual: novoEstoque })
-          .eq("id", r.produto_id);
       } catch (estoqueErr) {
         console.error(
           "[POST /api/loja/compras/[id]] Falha ao registrar estoque:",
           estoqueErr
         );
+        return json(500, {
+          ok: false,
+          error: "Erro ao registrar movimento de estoque para o recebimento.",
+        });
       }
 
-      // Opcional: registrar custo do fornecedor/produto
-      try {
-        await supabaseAdmin.from("loja_fornecedor_precos").insert({
-          fornecedor_id: pedidoCab.fornecedor_id,
-          produto_id: r.produto_id,
-          preco_custo_centavos: r.preco_custo_centavos,
-          data_referencia: new Date().toISOString().slice(0, 10),
-          observacoes: r.observacao || `Recebimento pedido #${pedidoId}`,
-        });
-      } catch (custoErr) {
-        console.error(
-          "[POST /api/loja/compras/[id]] Falha ao registrar preco de custo:",
-          custoErr
-        );
+      if (pedidoCab.fornecedor_id && info.preco_custo_centavos > 0) {
+        try {
+          await supabaseAdmin.from("loja_fornecedor_precos").insert({
+            fornecedor_id: pedidoCab.fornecedor_id,
+            produto_id: info.produto_id,
+            preco_custo_centavos: info.preco_custo_centavos,
+            data_referencia: dataRecebimento,
+            observacoes: observacao || `Recebimento pedido #${pedidoId}`,
+          });
+        } catch (custoErr) {
+          console.error(
+            "[POST /api/loja/compras/[id]] Falha ao registrar preco de custo:",
+            custoErr
+          );
+        }
       }
     }
 
-    // recalcula status do pedido
-    const { data: itensAtualizados } = await supabaseAdmin
+    const { data: itensAtualizados, error: errItensAtualizados } = await supabaseAdmin
       .from("loja_pedidos_compra_itens")
-      .select("quantidade_solicitada, quantidade_recebida")
+      .select("quantidade_pedida, quantidade_solicitada, quantidade_recebida")
       .eq("pedido_id", pedidoId);
+
+    if (errItensAtualizados) {
+      console.error(
+        "[POST /api/loja/compras/[id]] Erro ao recalcular status:",
+        errItensAtualizados
+      );
+      return json(500, { ok: false, error: "Erro ao recalcular status do pedido." });
+    }
 
     let status: PedidoStatus = "EM_ANDAMENTO";
     if (itensAtualizados && itensAtualizados.length > 0) {
-      const todosFechados = itensAtualizados.every(
-        (it: any) =>
-          Number(it.quantidade_recebida || 0) >= Number(it.quantidade_solicitada || 0)
-      );
+      const todosFechados = itensAtualizados.every((it: any) => {
+        const pedida = Number(it.quantidade_pedida ?? it.quantidade_solicitada ?? 0) || 0;
+        const meta = pedida || Number(it.quantidade_solicitada ?? 0) || 0;
+        return Number(it.quantidade_recebida ?? 0) >= meta;
+      });
       const algumRecebido = itensAtualizados.some(
-        (it: any) => Number(it.quantidade_recebida || 0) > 0
+        (it: any) => Number(it.quantidade_recebida ?? 0) > 0
       );
       if (todosFechados) status = "CONCLUIDO";
       else if (algumRecebido) status = "PARCIAL";
@@ -459,27 +643,22 @@ export async function POST(
       .update({ status, updated_at: new Date().toISOString() })
       .eq("id", pedidoId);
 
-    // Integração CONTAS A PAGAR v0 (apenas cria/atualiza conta pendente)
     try {
-      const valorLoteCentavos = recebimentos.reduce(
-        (acc: number, rec: any) =>
-          acc +
-          Number(rec.quantidade_recebida || 0) *
-            Number(rec.preco_custo_centavos || 0),
-        0
-      );
+      const valorLoteCentavos = itensPayload.reduce((acc, rec) => {
+        const info = itensMap.get(rec.itemId);
+        if (!info) return acc;
+        return acc + Number(info.preco_custo_centavos || 0) * rec.quantidade;
+      }, 0);
 
       if (valorLoteCentavos > 0) {
         const centroId = await getCentroCustoLojaId();
         const categoriaId = await getCategoriaCompraMercadoriaId();
-        const fornecedorPessoaId = await getFornecedorPessoaId(
-          pedidoCab.fornecedor_id
-        );
+        const fornecedorPessoaId = await getFornecedorPessoaId(pedidoCab.fornecedor_id);
 
-        let contaPagarId: number | null = null;
+        let contaPagarId: number | null = pedidoCab.conta_pagar_id ?? null;
 
         if (centroId && categoriaId && fornecedorPessoaId) {
-          const descricaoBase = `Compra Loja — Pedido #${pedidoId}`;
+          const descricaoBase = `Compra Loja - Pedido #${pedidoId}`;
           const { data: contaExistente } = await supabaseAdmin
             .from("contas_pagar")
             .select("id, valor_centavos")
@@ -489,18 +668,22 @@ export async function POST(
             .maybeSingle();
 
           if (!contaExistente) {
-            const { data: contaNova } = await supabaseAdmin.from("contas_pagar").insert({
-              centro_custo_id: centroId,
-              categoria_id: categoriaId,
-              pessoa_id: fornecedorPessoaId,
-              descricao: descricaoBase,
-              valor_centavos: valorLoteCentavos,
-              vencimento: new Date().toISOString().slice(0, 10),
-              status: "PENDENTE",
-              metodo_pagamento: null,
-              observacoes: `Criado automaticamente a partir do recebimento do pedido de compra #${pedidoId}.`,
-            }).select("id").maybeSingle();
-            contaPagarId = contaNova?.id ?? null;
+            const { data: contaNova } = await supabaseAdmin
+              .from("contas_pagar")
+              .insert({
+                centro_custo_id: centroId,
+                categoria_id: categoriaId,
+                pessoa_id: fornecedorPessoaId,
+                descricao: descricaoBase,
+                valor_centavos: valorLoteCentavos,
+                vencimento: new Date().toISOString().slice(0, 10),
+                status: "PENDENTE",
+                metodo_pagamento: null,
+                observacoes: `Criado automaticamente a partir do recebimento do pedido de compra #${pedidoId}.`,
+              })
+              .select("id")
+              .maybeSingle();
+            contaPagarId = contaNova?.id ?? contaPagarId;
           } else {
             const novoValor =
               Number(contaExistente.valor_centavos || 0) + valorLoteCentavos;
@@ -514,8 +697,7 @@ export async function POST(
             contaPagarId = contaExistente.id;
           }
 
-          // grava conta_pagar_id no pedido se ainda não estiver preenchido
-          if (contaPagarId) {
+          if (contaPagarId && !pedidoCab.conta_pagar_id) {
             await supabaseAdmin
               .from("loja_pedidos_compra")
               .update({ conta_pagar_id: contaPagarId })
@@ -524,20 +706,15 @@ export async function POST(
           }
         } else {
           console.error(
-            "[POST /api/loja/compras/[id]] Centro/categoria/pessoa do fornecedor não encontrados; pulando contas_pagar."
+            "[POST /api/loja/compras/[id]] Centro/categoria/pessoa do fornecedor nao encontrados; pulando contas_pagar."
           );
         }
       }
-      // NOTA LOJA v0:
-      // - Este passo cria/atualiza uma CONTA A PAGAR (PENDENTE) para o fornecedor,
-      //   centro de custo LOJA, com categoria de COMPRA DE MERCADORIA.
-      // - Pagamento/baixa e movimento_financeiro serão tratados em passo futuro (3B).
     } catch (finErr) {
       console.error(
         "[POST /api/loja/compras/[id]] Erro ao integrar com contas_pagar:",
         finErr
       );
-      // não falha a operação principal
     }
 
     const detalhe = await carregarDetalhe(pedidoId);

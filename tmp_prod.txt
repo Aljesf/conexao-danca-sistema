@@ -1,0 +1,70 @@
+    codigo,
+    nome,
+    descricao,
+    categoria,
+    preco_venda_centavos,
+    preco,
+    unidade,
+    estoque_atual,
+    ativo,
+    observacoes,
+    bloqueado_para_venda,
+  } = body ?? {};
+
+  if (!id || typeof id !== "number") {
+    return json(400, { ok: false, error: "Campo 'id' e obrigatorio e deve ser numerico." });
+  }
+
+  const updatePayload: Record<string, any> = {};
+
+  if (typeof codigo !== "undefined") updatePayload.codigo = codigo || null;
+  if (typeof nome === "string" && nome.trim().length > 0)
+    updatePayload.nome = nome.trim();
+  if (typeof descricao !== "undefined") updatePayload.descricao = descricao || null;
+  if (typeof categoria !== "undefined") updatePayload.categoria = categoria || null;
+
+  // Preco de venda
+  let precoCentavos: number | null = null;
+
+  if (typeof preco_venda_centavos === "number") {
+    precoCentavos = Math.round(preco_venda_centavos);
+  } else if (typeof preco_venda_centavos === "string") {
+    const v = parseInt(preco_venda_centavos, 10);
+    if (!Number.isNaN(v)) precoCentavos = v;
+  } else if (typeof preco === "number") {
+    precoCentavos = Math.round(preco * 100);
+  } else if (typeof preco === "string") {
+    const clean = preco.replace(/[^\d.,]/g, "").replace(",", ".");
+    const v = parseFloat(clean);
+    if (!Number.isNaN(v)) precoCentavos = Math.round(v * 100);
+  }
+
+  if (precoCentavos !== null) {
+    const precoFinal = Math.max(precoCentavos, 0);
+    updatePayload.preco_venda_centavos = precoFinal;
+    if (precoFinal <= 0) {
+      updatePayload.bloqueado_para_venda = true;
+    } else if (typeof bloqueado_para_venda === "boolean") {
+      updatePayload.bloqueado_para_venda = bloqueado_para_venda;
+    }
+  }
+
+  if (typeof unidade === "string" && unidade.trim().length > 0) {
+    updatePayload.unidade = unidade.trim();
+  }
+
+  if (typeof estoque_atual !== "undefined") {
+    const estoque = Number(estoque_atual);
+    if (!Number.isNaN(estoque)) {
+      updatePayload.estoque_atual = estoque;
+    }
+  }
+
+  if (typeof ativo !== "undefined") {
+    updatePayload.ativo = Boolean(ativo);
+  }
+
+  if (typeof bloqueado_para_venda === "boolean" && precoCentavos === null) {
+    updatePayload.bloqueado_para_venda = bloqueado_para_venda;
+  }
+
