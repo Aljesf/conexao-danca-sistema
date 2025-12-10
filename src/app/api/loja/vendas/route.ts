@@ -257,6 +257,37 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const formaPagamentoCodigo: string | null =
+    typeof body?.forma_pagamento_codigo === "string"
+      ? body.forma_pagamento_codigo
+      : null;
+
+  let formaPagamentoInfo: { codigo: string; nome: string | null; tipo_base: string | null } | null =
+    null;
+  if (formaPagamentoCodigo) {
+    const { data: fp, error: fpError } = await supabaseAdmin
+      .from("formas_pagamento")
+      .select("codigo, nome, tipo_base")
+      .eq("codigo", formaPagamentoCodigo)
+      .maybeSingle();
+
+    if (fpError || !fp) {
+      console.error(
+        "[POST /api/loja/vendas] Forma de pagamento não encontrada",
+        formaPagamentoCodigo,
+        fpError
+      );
+      return json(400, { ok: false, error: "forma_pagamento_nao_encontrada" });
+    }
+    formaPagamentoInfo = {
+      codigo: fp.codigo,
+      nome: fp.nome ?? null,
+      tipo_base: fp.tipo_base ?? null,
+    };
+  }
+
+  const isCartaoConexao = formaPagamentoInfo?.tipo_base === "CARTAO_CONEXAO";
+
   if (!Array.isArray(itens) || itens.length === 0) {
     return json(400, { ok: false, error: "Envie pelo menos um item na venda." });
   }
@@ -357,7 +388,7 @@ export async function POST(req: NextRequest) {
     centroCustoId: number | null;
   } | null = null;
 
-  if (forma_pagamento === "CREDITO") {
+  if (forma_pagamento === "CREDITO" && !isCartaoConexao) {
     const maquinaId = Number(cartao_maquina_id);
     const bandeiraId = Number(cartao_bandeira_id);
     if (!Number.isFinite(maquinaId) || maquinaId <= 0 || !Number.isFinite(bandeiraId) || bandeiraId <= 0) {
@@ -534,10 +565,73 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
       const estoqueAtual = Number(prodRow?.estoque_atual) || 0;
       const novoEstoque = Math.max(estoqueAtual - qtd, 0);
-      await supabaseAdmin
-        .from("loja_produtos")
-        .update({ estoque_atual: novoEstoque })
-        .eq("id", item.produto_id);
+    await supabaseAdmin
+      .from("loja_produtos")
+      .update({ estoque_atual: novoEstoque })
+      .eq("id", item.produto_id);
+  }
+
+    // Integração Crédito Conexão (forma base CARTAO_CONEXAO)
+    if (isCartaoConexao) {
+      try {
+        let tipoConta: "ALUNO" | "COLABORADOR" = "ALUNO";
+        if (formaPagamentoInfo?.codigo === "CARTAO_CONEXAO_COLAB") {
+          tipoConta = "COLABORADOR";
+        }
+
+        const titularId = cliente_pessoa_id;
+
+        const { data: contaConexao, error: contaError } = await supabaseAdmin
+          .from("credito_conexao_contas")
+          .select("id, ativo, tipo_conta")
+          .eq("pessoa_titular_id", titularId)
+          .eq("tipo_conta", tipoConta)
+          .eq("ativo", true)
+          .maybeSingle();
+
+        if (contaError || !contaConexao) {
+          console.error("Conta de Crédito Conexão não encontrada para titular", {
+            titularId,
+            tipoConta,
+            erro: contaError,
+          });
+          return json(400, {
+            ok: false,
+            error: "conta_conexao_nao_encontrada",
+            message:
+              "Não foi encontrada uma conta ativa de Crédito Conexão para este titular. Verifique o cadastro antes de usar esta forma de pagamento.",
+          });
+        }
+
+        const valorLancamentoCentavos = valorTotalVenda ?? 0;
+
+        const { error: lancamentoError } = await supabaseAdmin
+          .from("credito_conexao_lancamentos")
+          .insert({
+            conta_conexao_id: contaConexao.id,
+            origem_sistema: "LOJA",
+            origem_id: venda.id,
+            descricao: `Venda Loja #${venda.id} - Cartao Conexao`,
+            valor_centavos: valorLancamentoCentavos,
+          });
+
+        if (lancamentoError) {
+          console.error(
+            "Erro ao criar lançamento de Crédito Conexão para venda da loja",
+            lancamentoError
+          );
+          return json(500, {
+            ok: false,
+            error: "erro_criar_lancamento_credito_conexao",
+          });
+        }
+
+        // Para CARTAO_CONEXAO, não criar cobrança/recebimento/recebível aqui.
+        return json(201, { ok: true, data: { venda, itens: itensCriados ?? [] } });
+      } catch (err) {
+        console.error("Erro inesperado na integração com Crédito Conexão", err);
+        return json(500, { ok: false, error: "erro_credito_conexao_interno" });
+      }
     }
 
     // Integracao financeira v0
