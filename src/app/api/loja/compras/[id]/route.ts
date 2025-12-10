@@ -1,3 +1,4 @@
+import { getCentroCustoLojaId } from "@/lib/financeiro/centrosCusto";
 import { registrarEntradaEstoque } from "@/lib/loja/estoque";
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
@@ -64,24 +65,7 @@ function json<T>(status: number, payload: ApiResponse<T>) {
 }
 
 // Helpers simples com cache em memoria da funcao
-let centroCustoLojaIdCache: number | null = null;
 let categoriaCompraIdCache: number | null = null;
-
-async function getCentroCustoLojaId(): Promise<number | null> {
-  if (!supabaseAdmin) return null;
-  if (centroCustoLojaIdCache) return centroCustoLojaIdCache;
-  const { data, error } = await supabaseAdmin
-    .from("centros_custo")
-    .select("id, codigo")
-    .eq("codigo", "LOJA")
-    .maybeSingle();
-  if (error || !data) {
-    console.error("[compras] Centro de custo LOJA nao encontrado:", error);
-    return null;
-  }
-  centroCustoLojaIdCache = data.id;
-  return data.id;
-}
 
 async function getCategoriaCompraMercadoriaId(): Promise<number | null> {
   if (!supabaseAdmin) return null;
@@ -323,11 +307,13 @@ export async function POST(
 
   const body = await req.json().catch(() => null);
 
-  if (!body || !body.action) {
+  const { action, vencimento, valor_centavos } = body ?? {};
+
+  if (!body || !action) {
     return json(400, { ok: false, error: "Acao nao suportada." });
   }
 
-  if (body.action === "vincular_conta_pagar") {
+  if (action === "vincular_conta_pagar") {
     const contaPagarId = Number(body.conta_pagar_id);
     if (!Number.isFinite(contaPagarId)) {
       return json(400, { ok: false, error: "conta_pagar_id invalido" });
@@ -346,7 +332,7 @@ export async function POST(
     return json(200, { ok: true });
   }
 
-  if (body.action === "criar_conta_pagar") {
+  if (action === "criar_conta_pagar") {
     try {
       const { data: pedido, error: pedidoErr } = await supabaseAdmin
         .from("loja_pedidos_compra")
@@ -362,15 +348,15 @@ export async function POST(
         return json(200, { ok: true, conta_pagar_id: pedido.conta_pagar_id });
       }
 
-      let valorTotalCentavos = Number(pedido.valor_estimado_centavos || 0);
-      if (!valorTotalCentavos || valorTotalCentavos <= 0) {
+      let valorCalculado = Number(pedido.valor_estimado_centavos || 0);
+      if (!valorCalculado || valorCalculado <= 0) {
         const { data: itensPedido } = await supabaseAdmin
           .from("loja_pedidos_compra_itens")
           .select("quantidade_pedida, quantidade_solicitada, preco_custo_centavos")
           .eq("pedido_id", pedidoId);
 
         if (itensPedido && itensPedido.length > 0) {
-          valorTotalCentavos = itensPedido.reduce((acc: number, it: any) => {
+          valorCalculado = itensPedido.reduce((acc: number, it: any) => {
             const qty = Number(it.quantidade_pedida ?? it.quantidade_solicitada ?? 0) || 0;
             const custo = Number(it.preco_custo_centavos ?? 0) || 0;
             return acc + qty * custo;
@@ -378,20 +364,28 @@ export async function POST(
         }
       }
 
-      const centroId = await getCentroCustoLojaId();
+      const valorTotalCentavos =
+        typeof valor_centavos === "number" && valor_centavos > 0
+          ? valor_centavos
+          : valorCalculado;
+
+      const centroId = await getCentroCustoLojaId(supabaseAdmin);
       const categoriaId = await getCategoriaCompraMercadoriaId();
       const fornecedorPessoaId = pedido.fornecedor_id
         ? await getFornecedorPessoaId(pedido.fornecedor_id)
         : null;
 
       const descricao = `Compra Loja - Pedido #${pedidoId}`;
-      const vencimento = body.vencimento || new Date().toISOString().slice(0, 10);
+      const dataVencimento =
+        typeof vencimento === "string" && vencimento.length > 0
+          ? vencimento
+          : new Date().toISOString().slice(0, 10);
 
       const payloadConta: Record<string, any> = {
         descricao,
         valor_centavos: valorTotalCentavos,
         status: "PENDENTE",
-        vencimento,
+        vencimento: dataVencimento,
         metodo_pagamento: null,
         observacoes: `Criada a partir da compra #${pedidoId}`,
       };
@@ -422,7 +416,7 @@ export async function POST(
     }
   }
 
-  if (body.action !== "registrar_recebimento") {
+  if (action !== "registrar_recebimento") {
     return json(400, { ok: false, error: "Acao nao suportada." });
   }
 
@@ -651,7 +645,7 @@ export async function POST(
       }, 0);
 
       if (valorLoteCentavos > 0) {
-        const centroId = await getCentroCustoLojaId();
+        const centroId = await getCentroCustoLojaId(supabaseAdmin);
         const categoriaId = await getCategoriaCompraMercadoriaId();
         const fornecedorPessoaId = await getFornecedorPessoaId(pedidoCab.fornecedor_id);
 

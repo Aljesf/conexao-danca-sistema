@@ -263,6 +263,12 @@ export async function POST(
 
     // Cancela cobranca e gera estorno financeiro (quando existir)
     if (vendaAtual?.cobranca_id) {
+      const { data: cobrancaOriginal } = await supabaseAdmin
+        .from("cobrancas")
+        .select("id, centro_custo_id")
+        .eq("id", vendaAtual.cobranca_id)
+        .maybeSingle();
+
       await supabaseAdmin
         .from("cobrancas")
         .update({
@@ -280,19 +286,52 @@ export async function POST(
         recs?.reduce((sum, r: any) => sum + Number(r.valor_centavos || 0), 0) ?? 0;
 
       if (totalRecebido !== 0) {
-        const { error: erroEstorno } = await supabaseAdmin.from("recebimentos").insert({
-          cobranca_id: vendaAtual.cobranca_id,
-          valor_centavos: -totalRecebido,
-          data_pagamento: new Date().toISOString(),
-          metodo_pagamento: "ESTORNO_LOJA",
-          origem_sistema: "LOJA_CANCELAMENTO",
-          observacoes: `Estorno automatico da venda ${vendaId}`,
-        });
+        const { data: recebimentoEstorno, error: erroEstorno } = await supabaseAdmin
+          .from("recebimentos")
+          .insert({
+            cobranca_id: vendaAtual.cobranca_id,
+            valor_centavos: -totalRecebido,
+            data_pagamento: new Date().toISOString(),
+            metodo_pagamento: "ESTORNO_LOJA",
+            origem_sistema: "LOJA_CANCELAMENTO",
+            observacoes: `Estorno automatico da venda ${vendaId}`,
+          })
+          .select("*")
+          .maybeSingle();
         if (erroEstorno) {
           console.error(
             "[POST /api/loja/vendas/[id]] Falha ao registrar estorno financeiro:",
             erroEstorno
           );
+        }
+
+        // NOVO: registrar movimento financeiro de estorno de venda da loja
+        if (recebimentoEstorno && cobrancaOriginal && vendaAtual) {
+          const valorAbs = Math.abs(recebimentoEstorno.valor_centavos ?? 0);
+
+          if (valorAbs > 0) {
+            const { error: movimentoEstornoError } = await supabaseAdmin
+              .from("movimento_financeiro")
+              .insert({
+                tipo: "DESPESA",
+                centro_custo_id: (cobrancaOriginal as any).centro_custo_id ?? null,
+                valor_centavos: valorAbs,
+                data_movimento: recebimentoEstorno.data_pagamento ?? new Date().toISOString(),
+                origem: "LOJA_CANCELAMENTO",
+                origem_id: vendaAtual.id,
+                descricao: `Cancelamento venda Loja #${vendaAtual.id}`,
+              })
+              .select()
+              .single();
+
+            if (movimentoEstornoError) {
+              console.error(
+                "Erro ao registrar movimento financeiro de cancelamento de venda da loja",
+                movimentoEstornoError
+              );
+              // Nao impedir o cancelamento por causa do movimento
+            }
+          }
         }
       }
     }

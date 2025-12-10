@@ -1,3 +1,4 @@
+import { getCentroCustoLojaId } from "@/lib/financeiro/centrosCusto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -488,20 +489,68 @@ export async function POST(req: NextRequest) {
               .update({ cobranca_id: cobranca.id, status_pagamento: "PAGO" })
               .eq("id", venda.id);
 
-            const { error: erroRec } = await supabaseAdmin.from("recebimentos").insert({
-              cobranca_id: cobranca.id,
-              valor_centavos: valorTotalVenda,
-              data_pagamento: new Date().toISOString(),
-              metodo_pagamento: forma_pagamento,
-              origem_sistema: "LOJA_VENDA",
-              observacoes: `Recebimento automático venda #${venda.id}`,
-            });
+            const { data: recebimento, error: erroRec } = await supabaseAdmin
+              .from("recebimentos")
+              .insert({
+                cobranca_id: cobranca.id,
+                valor_centavos: valorTotalVenda,
+                data_pagamento: new Date().toISOString(),
+                metodo_pagamento: forma_pagamento,
+                origem_sistema: "LOJA_VENDA",
+                observacoes: `Recebimento automatico venda #${venda.id}`,
+              })
+              .select("*")
+              .maybeSingle();
 
             if (erroRec) {
               console.error(
                 "[POST /api/loja/vendas] Recebimento AVISTA falhou:",
                 erroRec
               );
+            }
+
+            // NOVO: registrar movimento financeiro da venda AVISTA da loja
+            if (recebimento && venda) {
+              try {
+                let centroCustoId = (cobranca as any)?.centro_custo_id ?? null;
+
+                if (!centroCustoId) {
+                  centroCustoId = await getCentroCustoLojaId(supabaseAdmin);
+                }
+
+                if (!centroCustoId) {
+                  console.error(
+                    "Nao foi possivel determinar centro_custo_id para movimento financeiro da venda AVISTA da loja",
+                    { vendaId: venda.id }
+                  );
+                } else {
+                  const { error: movimentoError } = await supabaseAdmin
+                    .from("movimento_financeiro")
+                    .insert({
+                      tipo: "RECEITA",
+                      centro_custo_id: centroCustoId,
+                      valor_centavos: recebimento.valor_centavos,
+                      data_movimento:
+                        recebimento.data_pagamento ?? new Date().toISOString(),
+                      origem: "LOJA_VENDA",
+                      origem_id: venda.id,
+                      descricao: `Venda Loja #${venda.id} - AVISTA`,
+                      usuario_id: null,
+                    });
+
+                  if (movimentoError) {
+                    console.error(
+                      "Erro ao registrar movimento financeiro da venda AVISTA da loja",
+                      movimentoError
+                    );
+                  }
+                }
+              } catch (err) {
+                console.error(
+                  "Erro inesperado ao registrar movimento financeiro da venda AVISTA da loja",
+                  err
+                );
+              }
             }
           }
         }
@@ -521,3 +570,4 @@ export async function POST(req: NextRequest) {
     return json(500, { ok: false, error: "Erro inesperado ao criar venda." });
   }
 }
+

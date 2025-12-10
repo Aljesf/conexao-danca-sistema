@@ -9,6 +9,13 @@ const supabaseAdmin =
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
+/**
+ * Rota generica de contas a pagar.
+ * IMPORTANTE:
+ * - Para compras da loja, prefira usar o fluxo
+ *   POST /api/loja/compras/[id] com action "criar_conta_pagar",
+ *   que ja resolve centro de custo, categoria e pessoa automaticamente.
+ */
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json(

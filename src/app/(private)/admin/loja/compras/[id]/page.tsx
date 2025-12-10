@@ -745,44 +745,27 @@ export default function DetalheCompraAdminPage() {
                   setErroCriarConta("");
                   try {
                     const formData = new FormData(e.currentTarget);
-                    const vencimento = (formData.get("vencimento") as string) || null;
+                    const vencimentoSelecionado =
+                      (formData.get("vencimento") as string) || "";
                     const valorReais = (formData.get("valor_reais") as string) || "0";
 
                     const valorCentavos = Math.round(
                       (parseFloat(valorReais.replace(",", ".")) || 0) * 100
                     );
 
-                    const resConta = await fetch("/api/financeiro/contas-pagar", {
+                    const resConta = await fetch(`/api/loja/compras/${pedido.id}`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
-                        titulo: `Compra Loja - Pedido #${pedido.id}`,
-                        descricao_detalhada: pedido.observacoes ?? null,
-                        vencimento,
+                        action: "criar_conta_pagar",
+                        vencimento: vencimentoSelecionado,
                         valor_centavos: valorCentavos,
-                        pessoa_id: pedido.fornecedor_id ?? null,
                       }),
                     });
 
                     const dataConta = await resConta.json();
-                    if (!resConta.ok || !dataConta?.ok || !dataConta?.conta?.id) {
+                    if (!resConta.ok || !dataConta?.ok) {
                       throw new Error(dataConta?.error || "Erro ao criar conta a pagar.");
-                    }
-
-                    const contaId = dataConta.conta.id;
-
-                    const resVincular = await fetch(`/api/loja/compras/${pedido.id}`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        action: "vincular_conta_pagar",
-                        conta_pagar_id: contaId,
-                      }),
-                    });
-
-                    const dataVincular = await resVincular.json();
-                    if (!resVincular.ok || !dataVincular?.ok) {
-                      throw new Error(dataVincular?.error || "Erro ao vincular conta a pedido.");
                     }
 
                     setMostrarNovaContaModal(false);
