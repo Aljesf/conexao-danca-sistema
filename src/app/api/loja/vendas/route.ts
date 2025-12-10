@@ -228,6 +228,9 @@ export async function POST(req: NextRequest) {
     observacoes,
     observacao_vendedor,
     itens,
+    cartao_maquina_id,
+    cartao_bandeira_id,
+    cartao_numero_parcelas,
   } = body ?? {};
 
   if (!cliente_pessoa_id || typeof cliente_pessoa_id !== "number") {
@@ -342,12 +345,124 @@ export async function POST(req: NextRequest) {
   const valorTotalVenda =
     tipo_venda === "ENTREGA_FIGURINO" ? 0 : Math.max(subtotal - desconto, 0);
 
+  let cartaoInfo: {
+    maquinaId: number;
+    bandeiraId: number;
+    numeroParcelas: number;
+    valorBrutoCentavos: number;
+    taxaOperadoraCentavos: number;
+    valorLiquidoCentavos: number;
+    dataPrevistaISO: string;
+    contaFinanceiraId: number;
+    centroCustoId: number | null;
+  } | null = null;
+
+  if (forma_pagamento === "CREDITO") {
+    const maquinaId = Number(cartao_maquina_id);
+    const bandeiraId = Number(cartao_bandeira_id);
+    if (!Number.isFinite(maquinaId) || maquinaId <= 0 || !Number.isFinite(bandeiraId) || bandeiraId <= 0) {
+      return json(400, {
+        ok: false,
+        error: "Maquininha e bandeira sao obrigatorias para pagamento no credito.",
+      });
+    }
+
+    const parcelasRaw = Number(cartao_numero_parcelas ?? 1);
+    const numeroParcelas = Number.isFinite(parcelasRaw) && parcelasRaw > 0 ? parcelasRaw : 1;
+
+    const { data: regra, error: regraError } = await supabaseAdmin
+      .from("cartao_regras_operacao")
+      .select(
+        `
+        id,
+        maquina_id,
+        bandeira_id,
+        tipo_transacao,
+        prazo_recebimento_dias,
+        taxa_percentual,
+        taxa_fixa_centavos,
+        permitir_parcelado,
+        max_parcelas,
+        ativo,
+        maquina:cartao_maquinas!inner (
+          id,
+          conta_financeira_id,
+          centro_custo_id
+        )
+      `
+      )
+      .eq("maquina_id", maquinaId)
+      .eq("bandeira_id", bandeiraId)
+      .eq("tipo_transacao", "CREDITO")
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (regraError || !regra) {
+      console.error(
+        "[POST /api/loja/vendas] Regra de cartao nao encontrada",
+        { cartao_maquina_id, cartao_bandeira_id },
+        regraError
+      );
+      return json(400, {
+        ok: false,
+        error: "Nao foi encontrada configuracao de cartao para esta maquininha/bandeira.",
+      });
+    }
+
+    if (numeroParcelas > 1 && regra.permitir_parcelado === false) {
+      return json(400, {
+        ok: false,
+        error: "Esta maquininha/bandeira nao aceita parcelamento.",
+      });
+    }
+
+    const maxParcelasRegra = Number(regra.max_parcelas ?? 12);
+    if (numeroParcelas > maxParcelasRegra) {
+      return json(400, {
+        ok: false,
+        error: `Numero de parcelas excede o maximo permitido (${maxParcelasRegra}).`,
+      });
+    }
+
+    if (!regra.maquina?.conta_financeira_id) {
+      return json(400, {
+        ok: false,
+        error: "Configuracao de cartao sem conta financeira vinculada.",
+      });
+    }
+
+    const valorBrutoCentavos = valorTotalVenda;
+    const taxaPercentualCentavos = Math.round(
+      valorBrutoCentavos * Number(regra.taxa_percentual || 0) / 100
+    );
+    const taxaFixaCentavos = Number(regra.taxa_fixa_centavos || 0);
+    const taxaTotalCentavos = taxaPercentualCentavos + taxaFixaCentavos;
+    const valorLiquidoCentavos = Math.max(valorBrutoCentavos - taxaTotalCentavos, 0);
+
+    const prazoDias = Number(regra.prazo_recebimento_dias ?? 30);
+    const dataPrevista = new Date();
+    dataPrevista.setDate(dataPrevista.getDate() + prazoDias);
+    const dataPrevistaISO = dataPrevista.toISOString().slice(0, 10);
+
+    cartaoInfo = {
+      maquinaId: regra.maquina_id,
+      bandeiraId: regra.bandeira_id,
+      numeroParcelas,
+      valorBrutoCentavos,
+      taxaOperadoraCentavos: taxaTotalCentavos,
+      valorLiquidoCentavos,
+      dataPrevistaISO,
+      contaFinanceiraId: regra.maquina.conta_financeira_id,
+      centroCustoId: regra.maquina.centro_custo_id ?? null,
+    };
+  }
+
   let statusPagamento: StatusPagamento =
     forma_pagamento === "CREDIARIO_INTERNO" || tipo_venda === "CREDIARIO_INTERNO"
       ? "PENDENTE"
       : status_pagamento;
   if (tipo_venda === "ENTREGA_FIGURINO") statusPagamento = "PAGO";
-  if (forma_pagamento === "AVISTA") statusPagamento = "PAGO";
+  if (forma_pagamento === "AVISTA" || forma_pagamento === "CREDITO") statusPagamento = "PAGO";
 
   const dueDate = data_vencimento && typeof data_vencimento === "string"
     ? data_vencimento
@@ -460,6 +575,80 @@ export async function POST(req: NextRequest) {
               .from("loja_vendas")
               .update({ cobranca_id: cobranca.id, status_pagamento: "PENDENTE" })
               .eq("id", venda.id);
+          }
+        } else if (forma_pagamento === "CREDITO") {
+          if (!cartaoInfo) {
+            console.error("[POST /api/loja/vendas] Cartao info ausente para forma_pagamento=CREDITO");
+          } else {
+            const agora = new Date();
+            const dataCurta = agora.toISOString().slice(0, 10);
+            const dataCompleta = agora.toISOString();
+
+            const { data: cobranca, error: erroCobranca } = await supabaseAdmin
+              .from("cobrancas")
+              .insert({
+                pessoa_id: cliente_pessoa_id,
+                descricao: `Venda Loja v0 #${venda.id}`,
+                valor_centavos: valorTotalVenda,
+                moeda: "BRL",
+                vencimento: dataCurta,
+                data_pagamento: dataCurta,
+                status: "PAGO",
+                metodo_pagamento: "CREDITO",
+                origem_tipo: "LOJA_VENDA",
+                origem_id: venda.id,
+              })
+              .select("*")
+              .maybeSingle();
+
+            if (erroCobranca) {
+              console.error("[POST /api/loja/vendas] Erro ao criar cobranca CREDITO:", erroCobranca);
+            } else if (cobranca?.id) {
+              cobrancaCriadaId = cobranca.id;
+              await supabaseAdmin
+                .from("loja_vendas")
+                .update({ cobranca_id: cobranca.id, status_pagamento: "PAGO" })
+                .eq("id", venda.id);
+
+              const { error: erroRec } = await supabaseAdmin
+                .from("recebimentos")
+                .insert({
+                  cobranca_id: cobranca.id,
+                  centro_custo_id: cartaoInfo.centroCustoId ?? null,
+                  valor_centavos: valorTotalVenda,
+                  data_pagamento: dataCompleta,
+                  metodo_pagamento: "CREDITO",
+                  origem_sistema: "LOJA_VENDA",
+                  observacoes: `Recebimento automatico venda #${venda.id} (cartao credito)`,
+                })
+                .select("*")
+                .maybeSingle();
+
+              if (erroRec) {
+                console.error("[POST /api/loja/vendas] Recebimento CREDITO falhou:", erroRec);
+              }
+            }
+
+            const { error: recebivelError } = await supabaseAdmin
+              .from("cartao_recebiveis")
+              .insert({
+                venda_id: venda.id,
+                maquina_id: cartaoInfo.maquinaId,
+                bandeira_id: cartaoInfo.bandeiraId,
+                conta_financeira_id: cartaoInfo.contaFinanceiraId,
+                valor_bruto_centavos: cartaoInfo.valorBrutoCentavos,
+                taxa_operadora_centavos: cartaoInfo.taxaOperadoraCentavos,
+                valor_liquido_centavos: cartaoInfo.valorLiquidoCentavos,
+                numero_parcelas: cartaoInfo.numeroParcelas,
+                data_prevista_pagamento: cartaoInfo.dataPrevistaISO,
+              });
+
+            if (recebivelError) {
+              console.error(
+                "[POST /api/loja/vendas] Erro ao criar recebivel de cartao para venda CREDITO da loja",
+                recebivelError
+              );
+            }
           }
         } else if (forma_pagamento === "AVISTA") {
           // cria cobranca paga + recebimento imediato

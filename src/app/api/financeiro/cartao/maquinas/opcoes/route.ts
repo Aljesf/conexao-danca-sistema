@@ -1,0 +1,41 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn(
+    "[/api/financeiro/cartao/maquinas/opcoes] Variaveis NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY nao definidas."
+  );
+}
+
+const supabaseAdmin =
+  SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    : null;
+
+export async function GET() {
+  if (!supabaseAdmin) {
+    return NextResponse.json(
+      { error: "Configuracao do Supabase ausente." },
+      { status: 500 }
+    );
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("cartao_maquinas")
+    .select("id, nome")
+    .eq("ativo", true)
+    .order("nome", { ascending: true });
+
+  if (error) {
+    console.error("[GET /api/financeiro/cartao/maquinas/opcoes] Erro ao listar maquininhas:", error);
+    return NextResponse.json(
+      { error: "Erro ao listar maquininhas" },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ ok: true, maquinas: data ?? [] });
+}

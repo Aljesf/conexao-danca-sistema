@@ -6,7 +6,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.warn(
-    "[/api/financeiro/contas-financeiras] Variaveis NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY nao definidas."
+    "[/api/financeiro/cartao/regras] Variaveis NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY nao definidas."
   );
 }
 
@@ -24,35 +24,38 @@ export async function GET() {
   }
 
   const { data, error } = await supabaseAdmin
-    .from("contas_financeiras")
+    .from("cartao_regras_operacao")
     .select(
       `
       id,
-      codigo,
-      nome,
-      tipo,
-      banco,
-      agencia,
-      numero_conta,
-      centro_custo_id,
+      maquina_id,
+      bandeira_id,
+      tipo_transacao,
+      prazo_recebimento_dias,
+      taxa_percentual,
+      taxa_fixa_centavos,
+      permitir_parcelado,
+      max_parcelas,
       ativo,
       created_at,
       updated_at,
-      centros_custo:centro_custo_id ( id, nome )
+      cartao_maquinas:maquina_id ( id, nome ),
+      cartao_bandeiras:bandeira_id ( id, nome )
     `
     )
     .order("ativo", { ascending: false })
-    .order("nome", { ascending: true });
+    .order("maquina_id", { ascending: true })
+    .order("bandeira_id", { ascending: true });
 
   if (error) {
-    console.error("[GET /api/financeiro/contas-financeiras] Erro ao listar contas:", error);
+    console.error("[GET /api/financeiro/cartao/regras] Erro ao listar regras:", error);
     return NextResponse.json(
-      { error: "Erro ao listar contas financeiras" },
+      { error: "Erro ao listar regras de cartao" },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ ok: true, contas: data ?? [] });
+  return NextResponse.json({ ok: true, regras: data ?? [] });
 }
 
 export async function POST(req: NextRequest) {
@@ -72,74 +75,70 @@ export async function POST(req: NextRequest) {
 
   const {
     id,
-    codigo,
-    nome,
-    tipo,
-    banco,
-    agencia,
-    numero_conta,
-    centro_custo_id,
+    maquina_id,
+    bandeira_id,
+    tipo_transacao,
+    prazo_recebimento_dias,
+    taxa_percentual,
+    taxa_fixa_centavos,
+    permitir_parcelado,
+    max_parcelas,
     ativo,
   } = body ?? {};
 
-  if (!codigo || !nome || !tipo) {
+  if (!maquina_id || !bandeira_id || !tipo_transacao) {
     return NextResponse.json(
-      { error: "Codigo, nome e tipo sao obrigatorios." },
+      { error: "Maquininha, bandeira e tipo de transacao sao obrigatorios." },
       { status: 400 }
     );
   }
 
-  const centroIdNum =
-    typeof centro_custo_id === "number" ? centro_custo_id : Number(centro_custo_id);
   const payloadBase = {
-    codigo: String(codigo).trim(),
-    nome: String(nome).trim(),
-    tipo: String(tipo).trim(),
-    banco: banco ? String(banco).trim() : null,
-    agencia: agencia ? String(agencia).trim() : null,
-    numero_conta: numero_conta ? String(numero_conta).trim() : null,
-    centro_custo_id: Number.isFinite(centroIdNum) ? centroIdNum : null,
+    maquina_id,
+    bandeira_id,
+    tipo_transacao,
+    prazo_recebimento_dias: prazo_recebimento_dias ?? 30,
+    taxa_percentual: taxa_percentual ?? 0,
+    taxa_fixa_centavos: taxa_fixa_centavos ?? 0,
+    permitir_parcelado: typeof permitir_parcelado === "boolean" ? permitir_parcelado : true,
+    max_parcelas: max_parcelas ?? 12,
     ativo: typeof ativo === "boolean" ? ativo : true,
   };
 
   const idNum = Number(id);
   if (Number.isFinite(idNum) && idNum > 0) {
-    const payload = {
-      ...payloadBase,
-      updated_at: new Date().toISOString(),
-    };
-
+    const payload = { ...payloadBase, updated_at: new Date().toISOString() };
     const { data, error } = await supabaseAdmin
-      .from("contas_financeiras")
+      .from("cartao_regras_operacao")
       .update(payload)
       .eq("id", idNum)
       .select()
       .maybeSingle();
 
     if (error) {
-      console.error("[POST /api/financeiro/contas-financeiras] Erro ao atualizar conta:", error);
+      console.error("[POST /api/financeiro/cartao/regras] Erro ao atualizar regra:", error);
       return NextResponse.json(
-        { error: "Erro ao atualizar conta financeira" },
+        { error: "Erro ao atualizar regra de cartao" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ ok: true, conta: data });
+    return NextResponse.json({ ok: true, regra: data });
   }
 
   const { data, error } = await supabaseAdmin
-    .from("contas_financeiras")
+    .from("cartao_regras_operacao")
     .insert(payloadBase)
     .select()
     .maybeSingle();
 
   if (error) {
-    console.error("[POST /api/financeiro/contas-financeiras] Erro ao criar conta:", error);
+    console.error("[POST /api/financeiro/cartao/regras] Erro ao criar regra:", error);
     return NextResponse.json(
-      { error: "Erro ao criar conta financeira" },
+      { error: "Erro ao criar regra de cartao" },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ ok: true, conta: data });
+  return NextResponse.json({ ok: true, regra: data });
 }

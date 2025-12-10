@@ -6,7 +6,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.warn(
-    "[/api/financeiro/contas-financeiras] Variaveis NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY nao definidas."
+    "[/api/financeiro/cartao/maquinas] Variaveis NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY nao definidas."
   );
 }
 
@@ -24,20 +24,19 @@ export async function GET() {
   }
 
   const { data, error } = await supabaseAdmin
-    .from("contas_financeiras")
+    .from("cartao_maquinas")
     .select(
       `
       id,
-      codigo,
       nome,
-      tipo,
-      banco,
-      agencia,
-      numero_conta,
+      operadora,
+      conta_financeira_id,
       centro_custo_id,
       ativo,
+      observacoes,
       created_at,
       updated_at,
+      contas_financeiras:conta_financeira_id ( id, codigo, nome ),
       centros_custo:centro_custo_id ( id, nome )
     `
     )
@@ -45,14 +44,14 @@ export async function GET() {
     .order("nome", { ascending: true });
 
   if (error) {
-    console.error("[GET /api/financeiro/contas-financeiras] Erro ao listar contas:", error);
+    console.error("[GET /api/financeiro/cartao/maquinas] Erro ao listar cartao_maquinas:", error);
     return NextResponse.json(
-      { error: "Erro ao listar contas financeiras" },
+      { error: "Erro ao listar maquininhas de cartao" },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ ok: true, contas: data ?? [] });
+  return NextResponse.json({ ok: true, maquinas: data ?? [] });
 }
 
 export async function POST(req: NextRequest) {
@@ -72,74 +71,67 @@ export async function POST(req: NextRequest) {
 
   const {
     id,
-    codigo,
     nome,
-    tipo,
-    banco,
-    agencia,
-    numero_conta,
+    operadora,
+    conta_financeira_id,
     centro_custo_id,
     ativo,
+    observacoes,
   } = body ?? {};
 
-  if (!codigo || !nome || !tipo) {
+  if (!nome || !conta_financeira_id || !centro_custo_id) {
     return NextResponse.json(
-      { error: "Codigo, nome e tipo sao obrigatorios." },
+      { error: "Nome, conta financeira e centro de custo sao obrigatorios." },
       { status: 400 }
     );
   }
 
-  const centroIdNum =
-    typeof centro_custo_id === "number" ? centro_custo_id : Number(centro_custo_id);
+  const contaIdNum = Number(conta_financeira_id);
+  const centroIdNum = Number(centro_custo_id);
+
   const payloadBase = {
-    codigo: String(codigo).trim(),
     nome: String(nome).trim(),
-    tipo: String(tipo).trim(),
-    banco: banco ? String(banco).trim() : null,
-    agencia: agencia ? String(agencia).trim() : null,
-    numero_conta: numero_conta ? String(numero_conta).trim() : null,
+    operadora: operadora ? String(operadora).trim() : null,
+    conta_financeira_id: Number.isFinite(contaIdNum) ? contaIdNum : null,
     centro_custo_id: Number.isFinite(centroIdNum) ? centroIdNum : null,
     ativo: typeof ativo === "boolean" ? ativo : true,
+    observacoes: observacoes ? String(observacoes).trim() : null,
   };
 
   const idNum = Number(id);
   if (Number.isFinite(idNum) && idNum > 0) {
-    const payload = {
-      ...payloadBase,
-      updated_at: new Date().toISOString(),
-    };
-
+    const payload = { ...payloadBase, updated_at: new Date().toISOString() };
     const { data, error } = await supabaseAdmin
-      .from("contas_financeiras")
+      .from("cartao_maquinas")
       .update(payload)
       .eq("id", idNum)
       .select()
       .maybeSingle();
 
     if (error) {
-      console.error("[POST /api/financeiro/contas-financeiras] Erro ao atualizar conta:", error);
+      console.error("[POST /api/financeiro/cartao/maquinas] Erro ao atualizar maquininha:", error);
       return NextResponse.json(
-        { error: "Erro ao atualizar conta financeira" },
+        { error: "Erro ao atualizar maquininha de cartao" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ ok: true, conta: data });
+    return NextResponse.json({ ok: true, maquina: data });
   }
 
   const { data, error } = await supabaseAdmin
-    .from("contas_financeiras")
+    .from("cartao_maquinas")
     .insert(payloadBase)
     .select()
     .maybeSingle();
 
   if (error) {
-    console.error("[POST /api/financeiro/contas-financeiras] Erro ao criar conta:", error);
+    console.error("[POST /api/financeiro/cartao/maquinas] Erro ao criar maquininha:", error);
     return NextResponse.json(
-      { error: "Erro ao criar conta financeira" },
+      { error: "Erro ao criar maquininha de cartao" },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ ok: true, conta: data });
+  return NextResponse.json({ ok: true, maquina: data });
 }
