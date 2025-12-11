@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type FaturaConexao = {
@@ -124,7 +125,14 @@ export default function FaturasCreditoConexaoPage() {
 
                   return (
                     <tr key={f.id} className="border-t">
-                      <td className="px-3 py-2">{f.id}</td>
+                      <td className="px-3 py-2">
+                        <Link
+                          href={`/admin/financeiro/credito-conexao/faturas/${f.id}`}
+                          className="text-indigo-600 hover:underline"
+                        >
+                          {f.id}
+                        </Link>
+                      </td>
                       <td className="px-3 py-2">Conta #{f.conta_conexao_id}</td>
                       <td className="px-3 py-2">{f.periodo_referencia}</td>
                       <td className="px-3 py-2">{formatDate(f.data_fechamento)}</td>

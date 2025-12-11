@@ -145,3 +145,99 @@ export async function upsertNeofinBilling(
     };
   }
 }
+
+type GetNeofinBillingInput = {
+  identifier: string;
+};
+
+/**
+ * Consulta detalhes de um billing/charge na Neofin usando o identificador fornecido.
+ * Tenta primeiro como path param (`/billing/{id}`) e, em caso de 404, tenta como query
+ * string (`/billing?integration_identifier={id}`) para dar suporte a identificadores
+ * de integraÇõÇœo customizados.
+ */
+export async function getNeofinBilling(
+  input: GetNeofinBillingInput
+): Promise<NeofinResult> {
+  if (!NEOFIN_API_KEY || !NEOFIN_SECRET_KEY) {
+    console.error(
+      "[Neofin] NEOFIN_API_KEY ou NEOFIN_SECRET_KEY nÇœo configuradas no .env"
+    );
+    return {
+      ok: false,
+      status: 500,
+      body: null,
+      message: "Credenciais da Neofin nÇœo configuradas no servidor.",
+    };
+  }
+
+  const identifier = input.identifier.trim();
+  if (!identifier) {
+    return {
+      ok: false,
+      status: 400,
+      body: null,
+      message: "Identificador vazio para consulta na Neofin.",
+    };
+  }
+
+  const headers = {
+    "api-key": NEOFIN_API_KEY,
+    "secret-key": NEOFIN_SECRET_KEY,
+  };
+
+  const primaryUrl = `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(
+    identifier
+  )}`;
+  const fallbackUrl = `${NEOFIN_BASE_URL}/billing/?integration_identifier=${encodeURIComponent(
+    identifier
+  )}`;
+
+  const tryFetch = async (url: string) => {
+    const res = await fetch(url, { headers });
+    let body: any = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    return { res, body };
+  };
+
+  try {
+    let { res, body } = await tryFetch(primaryUrl);
+
+    if (res.status === 404) {
+      ({ res, body } = await tryFetch(fallbackUrl));
+    }
+
+    if (!res.ok) {
+      console.error(
+        "[Neofin] Erro ao consultar cobranÇõa:",
+        res.status,
+        JSON.stringify(body)
+      );
+      return {
+        ok: false,
+        status: res.status,
+        body,
+        message: body?.message ?? "Erro ao consultar cobranÇõa na Neofin.",
+      };
+    }
+
+    return {
+      ok: true,
+      status: res.status,
+      body,
+      message: body?.message ?? null,
+    };
+  } catch (err: any) {
+    console.error("[Neofin] Erro de rede ao consultar cobranÇõa:", err);
+    return {
+      ok: false,
+      status: 500,
+      body: null,
+      message: err?.message ?? "Falha de rede ao chamar a Neofin.",
+    };
+  }
+}
