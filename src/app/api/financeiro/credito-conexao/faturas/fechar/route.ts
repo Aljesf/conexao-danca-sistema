@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { criarCobrancaLocalEEnviarNeofin } from "@/lib/cobrancasNeofin";
 
 /**
  * POST /api/financeiro/credito-conexao/faturas/fechar
@@ -202,51 +203,37 @@ export async function POST(req: Request) {
 
     const faturaId = fatura.id as number;
 
-    // 1.5) Criar cobrança vinculada à fatura (Cartão Conexão Aluno)
+    // 1.5) Criar cobranca vinculada a fatura (Cartao Conexao Aluno)
     let cobrancaId: number | null = null;
 
     if (conta.tipo_conta === "ALUNO") {
       try {
-        // Buscar dados mínimos do titular para a cobrança (pessoa)
+        // Buscar dados minimos do titular para a cobranca (pessoa)
         const pessoaId = conta.pessoa_titular_id;
         if (!pessoaId) {
           console.warn(
-            "Conta Crédito Conexão ALUNO sem pessoa_titular_id; não será gerada cobrança.",
+            "Conta Credito Conexao ALUNO sem pessoa_titular_id; nao sera gerada cobranca.",
           );
         } else {
-          const descricaoCobranca = `Fatura Cartão Conexão ${periodo_ref} (Conta #${conta.id})`;
+          const integrationIdentifier = `credito-conexao-fatura-${faturaId}`;
+          const resultadoCobranca = await criarCobrancaLocalEEnviarNeofin({
+            supabase,
+            usuarioId: null,
+            pessoa_id: pessoaId,
+            descricao: `Fatura Cartao Conexao ${periodo_ref} (Conta #${conta.id})`,
+            valor_centavos: valorTotalFatura,
+            vencimento: (dataVencimento ?? dataFechamento).toISOString().slice(0, 10),
+            metodo_pagamento: null,
+            centro_custo_id: conta.centro_custo_principal_id ?? null,
+            origem_tipo: "CREDITO_CONEXAO_FATURA",
+            origem_id: faturaId,
+            integrationIdentifier,
+            exigirResponsavelFinanceiro: true,
+          });
 
-          // Definir vencimento da cobrança: usa data_vencimento da fatura ou, se não houver, dataFechamento
-          const vencimentoDate = dataVencimento ?? dataFechamento;
-          const vencimentoStr = vencimentoDate.toISOString().slice(0, 10);
+          if (resultadoCobranca.ok) {
+            cobrancaId = resultadoCobranca.cobranca_id;
 
-          const { data: cobranca, error: cobrancaError } = await supabase
-            .from("cobrancas")
-            .insert({
-              pessoa_id: pessoaId,
-              descricao: descricaoCobranca,
-              valor_centavos: valorTotalFatura,
-              moeda: "BRL",
-              vencimento: vencimentoStr,
-              status: "PENDENTE",
-              centro_custo_id: conta.centro_custo_principal_id ?? null,
-              origem_tipo: "CREDITO_CONEXAO_FATURA",
-              origem_id: faturaId,
-              // TODO: integração com Neofin:
-              // - preencher neofin_charge_id, link_pagamento, linha_digitavel, etc.
-            })
-            .select()
-            .single();
-
-          if (cobrancaError) {
-            console.error(
-              "Erro ao criar cobrança para fatura Crédito Conexão",
-              cobrancaError,
-            );
-          } else if (cobranca) {
-            cobrancaId = cobranca.id as number;
-
-            // Atualizar fatura com cobranca_id
             const { error: updateFaturaError } = await supabase
               .from("credito_conexao_faturas")
               .update({ cobranca_id: cobrancaId })
@@ -258,16 +245,20 @@ export async function POST(req: Request) {
                 updateFaturaError,
               );
             }
+          } else {
+            console.error(
+              "Falha ao criar/enviar cobranca Neofin no fechamento da fatura:",
+              resultadoCobranca,
+            );
           }
         }
       } catch (cobrancaErr) {
         console.error(
-          "Erro inesperado ao gerar cobrança da fatura Crédito Conexão",
+          "Erro inesperado ao gerar cobranca da fatura Credito Conexao",
           cobrancaErr,
         );
       }
     }
-
     // 2) Criar vinculos em credito_conexao_fatura_lancamentos
     const vinculos = lancamentos.map((l) => ({
       fatura_id: faturaId,
