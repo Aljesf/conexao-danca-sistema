@@ -1,4 +1,4 @@
-import type { SidebarSection } from "./types";
+﻿import type { SidebarSection } from "./types";
 
 export const adminSidebar: SidebarSection[] = [
   {
@@ -8,7 +8,7 @@ export const adminSidebar: SidebarSection[] = [
   },
   {
     id: "admin-config-unidades",
-    title: "Configuracoes das unidades",
+    title: "Configurações das unidades",
     items: [
       { label: "🏫 Configuração da escola", href: "/admin/config/escola" },
       { label: "🛍️ Configuração da loja", href: "/admin/config/loja" },
@@ -28,7 +28,7 @@ export const adminSidebar: SidebarSection[] = [
   },
   {
     id: "admin-usuarios",
-    title: "Usuarios & Seguranca",
+    title: "Usuários & Segurança",
     items: [
       { label: "👤 Usuários", href: "/admin/usuarios" },
       { label: "🧬 Perfis", href: "/admin/perfis" },
@@ -44,11 +44,11 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🧾 Centros de custo (financeiro)", href: "/admin/financeiro/centros-custo" },
       { label: "📚 Plano de contas", href: "/admin/financeiro/plano-contas" },
       { label: "🗂️ Categorias financeiras", href: "/admin/financeiro/categorias" },
-      { label: "💳 Formas de pagamento", href: "/admin/financeiro/formas-pagamento" },
       { label: "💵 Contas a receber", href: "/admin/financeiro/contas-receber" },
       { label: "📤 Contas a pagar", href: "/admin/financeiro/contas-pagar" },
       { label: "🔄 Movimento", href: "/admin/financeiro/movimento" },
       { label: "🏦 Contas financeiras", href: "/admin/financeiro/contas-financeiras" },
+      { label: "💳 Crédito Conexão (contas)", href: "/admin/financeiro/credito-conexao/contas" },
       { label: "💳 Configuração de cartões", href: "/admin/financeiro/cartao/configuracoes" },
       { label: "💳 Recebíveis de cartão", href: "/admin/financeiro/cartao/recebiveis" },
       { label: "✍️ Lançamentos manuais", href: "/admin/financeiro/lancamentos-manuais" },
@@ -56,13 +56,13 @@ export const adminSidebar: SidebarSection[] = [
   },
   {
     id: "admin-relatorios-diretor",
-    title: "Painel do Diretor - Relatorios",
+    title: "Painel do Diretor - Relatórios",
     items: [
       { label: "📑 Relatórios", href: "/admin/relatorios" },
       { label: "Alunos por turma", href: "/admin/relatorios/alunos/turmas" },
       { label: "Alunos ativos e inativos", href: "/admin/relatorios/alunos/status" },
       { label: "Grupos & Projetos", href: "/admin/relatorios/alunos/grupos" },
-      { label: "Conversao de interessados", href: "/admin/relatorios/captacao/conversao" },
+      { label: "Conversão de interessados", href: "/admin/relatorios/captacao/conversao" },
       { label: "💹 Resumo financeiro", href: "/admin/relatorios/financeiro/resumo" },
       { label: "🔄 Movimentação financeira", href: "/admin/relatorios/financeiro/movimento" },
       { label: "💵 Contas a receber", href: "/admin/relatorios/financeiro/receber" },

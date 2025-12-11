@@ -312,7 +312,7 @@ export default function FrenteCaixaLojaPage() {
 
   // forma_pagamento interna usada pela API /api/loja/vendas
   const formaPagamentoInterna = useMemo<
-    "AVISTA" | "CREDITO" | "CREDIARIO_INTERNO" | null
+    "AVISTA" | "CREDITO" | "CREDIARIO_INTERNO" | "CARTAO_CONEXAO" | null
   >(() => {
     const tipoBase = formaPagamentoSelecionada?.formas_pagamento?.tipo_base;
     switch (tipoBase) {
@@ -322,6 +322,9 @@ export default function FrenteCaixaLojaPage() {
         return "CREDITO";
       case "CREDIARIO":
         return "CREDIARIO_INTERNO";
+      case "CARTAO_CONEXAO":
+        // novo tipo interno especifico para Cartao Conexao
+        return "CARTAO_CONEXAO";
       default:
         return null;
     }
