@@ -78,13 +78,20 @@ type FormaPagamentoContexto = {
 
 type ApiResponse<T = any> = { ok?: boolean; error?: string; data?: T };
 
+type RegraParcelamentoConexao = {
+  id: number;
+  tipo_conta: "ALUNO" | "COLABORADOR";
+  numero_parcelas_min: number;
+  numero_parcelas_max: number;
+  valor_minimo_centavos: number;
+  taxa_percentual: number;
+  taxa_fixa_centavos: number;
+  ativo: boolean;
+};
+
 // NOTA SOBRE O MODELO DE PAPEIS NA LOJA v0:
-// - "comprador" é a Pessoa que está realizando a compra/pagamento (transacional).
+// - "comprador" é a Pessoa que está realizando a compra/pagamento.
 // - "beneficiario" é a Pessoa que vai usar o produto (normalmente aluno), armazenada por item em loja_venda_itens.beneficiario_pessoa_id.
-// - Exemplos possíveis:
-//   * Pai compra para dois filhos (beneficiários distintos em itens diferentes).
-//   * Aluno compra para si mesmo (comprador = beneficiário).
-//   * Cliente genérico compra sem vincular beneficiário (beneficiário null).
 
 export default function FrenteCaixaLojaPage() {
   const router = useRouter();
@@ -99,7 +106,7 @@ export default function FrenteCaixaLojaPage() {
   );
   const [formaPagamentoCtxId, setFormaPagamentoCtxId] = useState<number | "">("");
 
-  // cartão de crédito
+  // cartão externo (maquininha)
   const [cartaoMaquinas, setCartaoMaquinas] = useState<MaquinaCartaoOpcao[]>([]);
   const [cartaoBandeiras, setCartaoBandeiras] = useState<BandeiraCartao[]>([]);
   const [cartaoRegras, setCartaoRegras] = useState<RegraCartao[]>([]);
@@ -107,6 +114,11 @@ export default function FrenteCaixaLojaPage() {
   const [cartaoBandeiraId, setCartaoBandeiraId] = useState<number | "">("");
   const [cartaoNumeroParcelas, setCartaoNumeroParcelas] = useState<number>(1);
   const [carregandoCartao, setCarregandoCartao] = useState(false);
+
+  // Cartão Conexão — regras de parcelamento
+  const [regrasConexao, setRegrasConexao] = useState<RegraParcelamentoConexao[]>([]);
+  const [carregandoRegrasConexao, setCarregandoRegrasConexao] = useState(false);
+  const [parcelasConexao, setParcelasConexao] = useState<number>(1);
 
   const [dataVencimento, setDataVencimento] = useState<string | "">("");
   const [observacoes, setObservacoes] = useState("");
@@ -147,7 +159,6 @@ export default function FrenteCaixaLojaPage() {
     setMensagem(null);
     setMensagemTipo(null);
   }
-
   // ======== BUSCAS AUXILIARES (COMPRADOR, ALUNO, PRODUTO) =========
   // busca comprador
   useEffect(() => {
@@ -277,14 +288,11 @@ export default function FrenteCaixaLojaPage() {
         }
         const json = await res.json();
         const formas: FormaPagamentoContexto[] = json.formas ?? [];
-        // filtrar apenas formas ativas
         const ativas = formas.filter((f) => f.ativo);
         setFormasPagamentoCtx(ativas);
 
-        // se ainda não houver forma selecionada, tenta escolher a primeira
         if (!formaPagamentoCtxId && ativas.length > 0) {
           setFormaPagamentoCtxId(ativas[0].id);
-          // se for cartão e tiver maquininha padrão, pré-selecionar
           const fp0 = ativas[0];
           if (
             fp0.formas_pagamento?.tipo_base === "CARTAO" &&
@@ -323,7 +331,6 @@ export default function FrenteCaixaLojaPage() {
       case "CREDIARIO":
         return "CREDIARIO_INTERNO";
       case "CARTAO_CONEXAO":
-        // novo tipo interno especifico para Cartao Conexao
         return "CARTAO_CONEXAO";
       default:
         return null;
@@ -332,8 +339,18 @@ export default function FrenteCaixaLojaPage() {
 
   const isCredito = formaPagamentoInterna === "CREDITO";
   const isCrediarioInterno = formaPagamentoInterna === "CREDIARIO_INTERNO";
+  const isCartaoConexao = formaPagamentoInterna === "CARTAO_CONEXAO";
 
-  // ======== CARTÃO — REGRAS/BANDEIRAS/MAQUININHAS =========
+  // Descobrir tipo de conta (ALUNO / COLABORADOR) para Cartão Conexão
+  const tipoContaConexao: "ALUNO" | "COLABORADOR" | null = useMemo(() => {
+    if (!isCartaoConexao || !formaPagamentoSelecionada?.formas_pagamento?.codigo) {
+      return null;
+    }
+    const codigo = formaPagamentoSelecionada.formas_pagamento.codigo;
+    if (codigo === "CARTAO_CONEXAO_COLAB") return "COLABORADOR";
+    return "ALUNO";
+  }, [isCartaoConexao, formaPagamentoSelecionada]);
+  // ======== CARTÃO — REGRAS/BANDEIRAS/MAQUININHAS (externo) =========
   const regraCartaoSelecionada = useMemo(() => {
     const maquina = cartaoMaquinaId ? Number(cartaoMaquinaId) : null;
     const bandeira = cartaoBandeiraId ? Number(cartaoBandeiraId) : null;
@@ -350,7 +367,7 @@ export default function FrenteCaixaLojaPage() {
     );
   }, [cartaoRegras, cartaoMaquinaId, cartaoBandeiraId]);
 
-  const parcelasDisponiveis = useMemo(() => {
+  const parcelasDisponiveisCartaoExterno = useMemo(() => {
     if (!regraCartaoSelecionada) return [1];
     if (
       !regraCartaoSelecionada.permitir_parcelado ||
@@ -365,7 +382,7 @@ export default function FrenteCaixaLojaPage() {
     );
   }, [regraCartaoSelecionada]);
 
-  // carregar opcoes de cartao (maquininhas/bandeiras/regras)
+  // carregar opcoes de cartao externo
   useEffect(() => {
     async function carregarCartao() {
       try {
@@ -405,6 +422,77 @@ export default function FrenteCaixaLojaPage() {
     carregarCartao();
   }, []);
 
+  // ======== Cartão Conexão — carregar regras de parcelamento =========
+  useEffect(() => {
+    async function carregarRegrasConexao() {
+      try {
+        setCarregandoRegrasConexao(true);
+        const res = await fetch(
+          "/api/financeiro/credito-conexao/regras-parcelas?ativo=true",
+        );
+        if (!res.ok) {
+          console.error(
+            "Erro ao carregar regras de parcelamento do Cartão Conexão:",
+            await res.text(),
+          );
+          return;
+        }
+        const json = await res.json();
+        const regras: RegraParcelamentoConexao[] = json.regras ?? [];
+        setRegrasConexao(regras);
+      } catch (e) {
+        console.error("Erro inesperado ao carregar regras do Cartão Conexão", e);
+      } finally {
+        setCarregandoRegrasConexao(false);
+      }
+    }
+
+    carregarRegrasConexao();
+  }, []);
+
+  // Parcelas disponíveis para Cartão Conexão, de acordo com valor e tipo de conta
+  const parcelasDisponiveisConexao = useMemo(() => {
+    if (!isCartaoConexao || !tipoContaConexao || totalVenda <= 0) {
+      return [1];
+    }
+
+    const regrasFiltradas = regrasConexao.filter((r) => {
+      if (!r.ativo) return false;
+      if (r.tipo_conta !== tipoContaConexao) return false;
+      if (r.valor_minimo_centavos > totalVenda) return false;
+      return true;
+    });
+
+    const setParcelas = new Set<number>();
+
+    // Sempre permitir 1x (sem juros) como fallback
+    setParcelas.add(1);
+
+    for (const regra of regrasFiltradas) {
+      for (
+        let n = regra.numero_parcelas_min;
+        n <= regra.numero_parcelas_max;
+        n++
+      ) {
+        if (n >= 1) setParcelas.add(n);
+      }
+    }
+
+    const arr = Array.from(setParcelas);
+    arr.sort((a, b) => a - b);
+    return arr;
+  }, [isCartaoConexao, tipoContaConexao, regrasConexao, totalVenda]);
+
+  // Garantir que parcelasConexao esteja sempre em uma opção válida
+  useEffect(() => {
+    if (!isCartaoConexao) {
+      setParcelasConexao(1);
+      return;
+    }
+    if (!parcelasDisponiveisConexao.includes(parcelasConexao)) {
+      setParcelasConexao(parcelasDisponiveisConexao[0] ?? 1);
+    }
+  }, [isCartaoConexao, parcelasDisponiveisConexao, parcelasConexao]);
   // ======== MANIPULAÇÃO DE ITENS =========
   function adicionarItem(produto: ProdutoResumo) {
     const idTemp = crypto.randomUUID();
@@ -472,12 +560,20 @@ export default function FrenteCaixaLojaPage() {
         return;
       }
     }
+
+    // Para Cartão Conexão, validar se há pelo menos uma opção de parcela
+    if (isCartaoConexao && (!parcelasDisponiveisConexao.length || parcelasConexao < 1)) {
+      setMensagem(
+        "Não há opção de parcelamento disponível para o valor desta compra no Cartão Conexão.",
+      );
+      setMensagemTipo("error");
+      return;
+    }
+
     const payload = {
       cliente_pessoa_id: comprador.id,
       tipo_venda: tipoVenda,
-      // forma_pagamento interna compatível com a API atual (/api/loja/vendas)
       forma_pagamento: formaPagamentoInterna,
-      // código global da forma (DINHEIRO, PIX, CREDITO_AVISTA, etc.) — para uso futuro
       forma_pagamento_codigo: formaPagamentoSelecionada.forma_pagamento_codigo,
       status_pagamento:
         formaPagamentoInterna === "AVISTA" || formaPagamentoInterna === "CREDITO"
@@ -497,7 +593,11 @@ export default function FrenteCaixaLojaPage() {
         isCredito && cartaoMaquinaId ? Number(cartaoMaquinaId) : null,
       cartao_bandeira_id:
         isCredito && cartaoBandeiraId ? Number(cartaoBandeiraId) : null,
-      cartao_numero_parcelas: isCredito ? cartaoNumeroParcelas : null,
+      cartao_numero_parcelas: isCredito
+        ? cartaoNumeroParcelas
+        : isCartaoConexao
+        ? parcelasConexao
+        : null,
     };
 
     setSaving(true);
@@ -526,7 +626,6 @@ export default function FrenteCaixaLojaPage() {
       setSaving(false);
     }
   }
-
   // ======== RENDER =========
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
@@ -683,11 +782,13 @@ export default function FrenteCaixaLojaPage() {
                     <td className="px-3 py-2 text-sm text-gray-700">
                       <div className="text-xs mb-1">
                         {it.beneficiario
-                          ? `Aluno: ${
-                              it.beneficiario.nome_completo ||
-                              it.beneficiario.nome ||
-                              it.beneficiario.id
-                            }`
+                          ? `Aluno: ${(() => {
+                              const name =
+                                it.beneficiario.nome_completo ||
+                                it.beneficiario.nome ||
+                                it.beneficiario.id;
+                              return name;
+                            })()}`
                           : comprador
                           ? `Aluno: Comprador atual (${comprador.nome_completo || comprador.nome || comprador.id})`
                           : "Aluno: Nenhum aluno definido"}
@@ -760,7 +861,6 @@ export default function FrenteCaixaLojaPage() {
               </tbody>
             </table>
           </div>
-
           {itemSelecionandoAluno && (
             <div className="mt-3 border rounded-lg p-3 bg-slate-50 space-y-2">
               <div className="flex items-center justify-between">
@@ -826,6 +926,7 @@ export default function FrenteCaixaLojaPage() {
           </p>
         </section>
       </div>
+
       {/* Pagamento e resumo */}
       <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
         <div className="grid md:grid-cols-3 gap-3">
@@ -887,81 +988,111 @@ export default function FrenteCaixaLojaPage() {
               />
             </div>
           )}
-
-          {isCredito && (
-            <div className="md:col-span-3 grid md:grid-cols-3 gap-3 mt-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">Maquininha *</label>
-                <select
-                  value={cartaoMaquinaId}
-                  onChange={(e) =>
-                    setCartaoMaquinaId(
-                      e.target.value ? Number(e.target.value) : "",
-                    )
-                  }
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                >
-                  <option value="">Selecione...</option>
-                  {cartaoMaquinas.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">Bandeira *</label>
-                <select
-                  value={cartaoBandeiraId}
-                  onChange={(e) =>
-                    setCartaoBandeiraId(
-                      e.target.value ? Number(e.target.value) : "",
-                    )
-                  }
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                >
-                  <option value="">Selecione...</option>
-                  {cartaoBandeiras.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.nome}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1">Parcelas</label>
-                <select
-                  value={cartaoNumeroParcelas}
-                  onChange={(e) =>
-                    setCartaoNumeroParcelas(Number(e.target.value) || 1)
-                  }
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  disabled={!regraCartaoSelecionada}
-                >
-                  {parcelasDisponiveis.map((n) => (
-                    <option key={n} value={n}>
-                      {n}x
-                    </option>
-                  ))}
-                </select>
-                {carregandoCartao && (
+        </div>
+        {/* Cartão Conexão — seleção de parcelas conforme regras */}
+        {isCartaoConexao && (
+          <div className="grid md:grid-cols-3 gap-3 mt-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">
+                Parcelas (Cartão Conexão)
+              </label>
+              <select
+                value={parcelasConexao}
+                onChange={(e) => setParcelasConexao(Number(e.target.value) || 1)}
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              >
+                {parcelasDisponiveisConexao.map((n) => (
+                  <option key={n} value={n}>
+                    {n}x
+                  </option>
+                ))}
+              </select>
+              {carregandoRegrasConexao && (
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Carregando regras de parcelamento...
+                </p>
+              )}
+              {!carregandoRegrasConexao &&
+                parcelasDisponiveisConexao.length === 1 &&
+                parcelasDisponiveisConexao[0] === 1 && (
                   <p className="mt-1 text-[11px] text-gray-500">
-                    Carregando configurações de cartão...
+                    Parcelamento extra não disponível para o valor atual da compra.
                   </p>
                 )}
-                {!carregandoCartao &&
-                  isCredito &&
-                  cartaoMaquinaId &&
-                  cartaoBandeiraId &&
-                  !regraCartaoSelecionada && (
-                    <p className="mt-1 text-[11px] text-red-600">
-                      Não há regra configurada para esta maquininha/bandeira (crédito).
-                    </p>
-                  )}
-              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Cartão externo (maquininha) */}
+        {isCredito && (
+          <div className="md:col-span-3 grid md:grid-cols-3 gap-3 mt-3">
+            <div>
+              <label className="block text-xs font-medium mb-1">Maquininha *</label>
+              <select
+                value={cartaoMaquinaId}
+                onChange={(e) =>
+                  setCartaoMaquinaId(e.target.value ? Number(e.target.value) : "")
+                }
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              >
+                <option value="">Selecione...</option>
+                {cartaoMaquinas.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Bandeira *</label>
+              <select
+                value={cartaoBandeiraId}
+                onChange={(e) =>
+                  setCartaoBandeiraId(e.target.value ? Number(e.target.value) : "")
+                }
+                className="w-full border rounded-md px-3 py-2 text-sm"
+              >
+                <option value="">Selecione...</option>
+                {cartaoBandeiras.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">Parcelas</label>
+              <select
+                value={cartaoNumeroParcelas}
+                onChange={(e) =>
+                  setCartaoNumeroParcelas(Number(e.target.value) || 1)
+                }
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                disabled={!regraCartaoSelecionada}
+              >
+                {parcelasDisponiveisCartaoExterno.map((n) => (
+                  <option key={n} value={n}>
+                    {n}x
+                  </option>
+                ))}
+              </select>
+              {carregandoCartao && (
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Carregando configurações de cartão...
+                </p>
+              )}
+              {!carregandoCartao &&
+                isCredito &&
+                cartaoMaquinaId &&
+                cartaoBandeiraId &&
+                !regraCartaoSelecionada && (
+                  <p className="mt-1 text-[11px] text-red-600">
+                    Não há regra configurada para esta maquininha/bandeira (crédito).
+                  </p>
+                )}
+            </div>
+          </div>
+        )}
 
         <div className="grid md:grid-cols-2 gap-3">
           <div>
@@ -1019,3 +1150,4 @@ export default function FrenteCaixaLojaPage() {
     </div>
   );
 }
+
