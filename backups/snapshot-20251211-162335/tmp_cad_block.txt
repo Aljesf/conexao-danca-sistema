@@ -1,0 +1,120 @@
+        id: editForm.id,
+        nome: editForm.nome.trim(),
+        codigo: editForm.codigo.trim() || null,
+        categoria: editForm.categoria.trim() || null,
+        categoria_subcategoria_id: editForm.categoria_subcategoria_id ?? null,
+        unidade: editForm.unidade.trim() || "UN",
+        ativo: editForm.ativo,
+        preco_venda_centavos: precoVendaCentavos,
+        fornecedor_principal_id: editForm.fornecedorId,
+      };
+
+      const res = await fetch("/api/loja/produtos", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json: ApiResponse<Produto> = await res.json();
+
+      if (!res.ok || !json.ok || !json.data) {
+        setMensagemTipo("error");
+        setMensagem(json.error || "Erro ao salvar produto.");
+        return;
+      }
+
+      const produtoAtualizado = json.data;
+
+      setProdutos((prev) => {
+        const idx = prev.findIndex((p) => p.id === produtoAtualizado.id);
+        if (idx >= 0) {
+          const clone = [...prev];
+          clone[idx] = produtoAtualizado;
+          return clone;
+        }
+        return prev;
+      });
+
+      selecionarProduto(produtoAtualizado);
+
+      if (precoCustoCentavos !== null) {
+        const resCusto = await fetch("/api/loja/produtos/custo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            produto_id: produtoAtualizado.id,
+            preco_custo_centavos: precoCustoCentavos,
+          }),
+        });
+
+        const jsonCusto: ApiResponse = await resCusto.json();
+        if (!resCusto.ok || !jsonCusto.ok) {
+          console.error("Falha ao registrar preco de custo:", jsonCusto.error);
+          setMensagemTipo("error");
+          setMensagem(
+            "Preco de venda salvo, mas houve erro ao registrar o preco de custo."
+          );
+          return;
+        }
+      }
+
+      setMensagemTipo("success");
+      setMensagem("Produto atualizado com sucesso.");
+    } catch (err) {
+      console.error("Erro inesperado ao salvar produto:", err);
+      setMensagemTipo("error");
+      setMensagem("Erro inesperado ao salvar produto.");
+    } finally {
+      setSavingEdicao(false);
+    }
+  }
+
+  async function salvarCadastroAdmin(e: React.FormEvent) {
+    e.preventDefault();
+    resetMensagem();
+
+    if (!cadastroForm.nome.trim()) {
+      setMensagemTipo("error");
+      setMensagem("Informe o nome do produto.");
+      return;
+    }
+
+    if (!cadastroForm.quantidade || cadastroForm.quantidade <= 0) {
+      setMensagemTipo("error");
+      setMensagem("Informe uma quantidade maior que zero.");
+      return;
+    }
+
+    let precoCustoCentavos: number | null = null;
+    if (cadastroForm.precoCustoReais.trim().length > 0) {
+      const clean = cadastroForm.precoCustoReais
+        .replace(/[^\d,.,]/g, "")
+        .replace(".", "")
+        .replace(",", ".");
+      const valor = parseFloat(clean);
+      if (Number.isNaN(valor) || valor < 0) {
+        setMensagemTipo("error");
+        setMensagem("Preco de custo invalido.");
+        return;
+      }
+      precoCustoCentavos = Math.round(valor * 100);
+    }
+
+    if (!cadastroForm.precoVendaReais.trim()) {
+      setMensagemTipo("error");
+      setMensagem("Informe o preco de venda.");
+      return;
+    }
+    const cleanVenda = cadastroForm.precoVendaReais
+      .replace(/[^\d,.,]/g, "")
+      .replace(".", "")
+      .replace(",", ".");
+    const valorVenda = parseFloat(cleanVenda);
+    if (Number.isNaN(valorVenda) || valorVenda < 0) {
+      setMensagemTipo("error");
+      setMensagem("Preco de venda invalido.");
+      return;
+    }
+    const precoVendaCentavos = Math.round(valorVenda * 100);
+
+    setSavingCadastro(true);

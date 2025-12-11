@@ -1,5 +1,4 @@
-// src/app/api/cobrancas/route.ts
-import { NextResponse } from "next/server";
+ï»¿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
@@ -47,10 +46,7 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json(
-      { error: "Usuário não autenticado." },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
   }
 
   const { data, error } = await supabase
@@ -83,10 +79,7 @@ export async function GET() {
 
   if (error) {
     console.error("[GET /api/cobrancas] erro:", error);
-    return NextResponse.json(
-      { error: "Erro ao buscar cobrancas." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erro ao buscar cobrancas." }, { status: 500 });
   }
 
   return NextResponse.json({ data: data as Cobranca[] }, { status: 200 });
@@ -100,20 +93,14 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   const usuarioId = user?.id ?? null;
   if (!usuarioId) {
-    return NextResponse.json(
-      { error: "Usuário não autenticado." },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
   }
 
   let payload: NovaCobrancaPayload;
   try {
     payload = (await req.json()) as NovaCobrancaPayload;
   } catch {
-    return NextResponse.json(
-      { error: "Corpo da requisicao invalido." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Corpo da requisicao invalido." }, { status: 400 });
   }
 
   if (!payload.pessoa_id || !payload.descricao || !payload.valor_centavos || !payload.vencimento) {
@@ -123,7 +110,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // 1) Busca a pessoa responsavel
   const { data: pessoa, error: ePessoa } = await supabase
     .from("pessoas")
     .select("id, nome, cpf, email, telefone")
@@ -131,17 +117,14 @@ export async function POST(req: Request) {
     .single<Pessoa>();
 
   if (ePessoa || !pessoa) {
-    return NextResponse.json(
-      { error: "Pessoa responsavel nao encontrada." },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "Pessoa responsavel nao encontrada." }, { status: 404 });
   }
 
-  // 2) Validacao de CPF
   if (!pessoa.cpf) {
     return NextResponse.json(
       {
-        error: "CPF nao informado para essa pessoa. Para gerar cobranca, o responsavel financeiro precisa ter CPF cadastrado.",
+        error:
+          "CPF nao informado para essa pessoa. Para gerar cobranca, o responsavel financeiro precisa ter CPF cadastrado.",
       },
       { status: 400 }
     );
@@ -150,14 +133,11 @@ export async function POST(req: Request) {
   const documentoLimpo = (pessoa.cpf || "").replace(/\D/g, "");
   if (!documentoLimpo || documentoLimpo.length !== 11) {
     return NextResponse.json(
-      {
-        error: "CPF informado e invalido. Verifique o cadastro do responsavel financeiro.",
-      },
+      { error: "CPF informado e invalido. Verifique o cadastro do responsavel financeiro." },
       { status: 400 }
     );
   }
 
-  // 3) Verifica se a pessoa tem papel RESPONSAVEL_FINANCEIRO
   const { data: roles, error: eRoles } = await supabase
     .from("pessoas_roles")
     .select("id, role")
@@ -166,24 +146,19 @@ export async function POST(req: Request) {
 
   if (eRoles) {
     console.error("[POST /api/cobrancas] erro ao buscar papeis:", eRoles);
-    return NextResponse.json(
-      {
-        error: eRoles.message ?? "Erro ao verificar papeis da pessoa.",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: eRoles.message ?? "Erro ao verificar papeis da pessoa." }, { status: 500 });
   }
 
   if (!roles || roles.length === 0) {
     return NextResponse.json(
       {
-        error: "Esta pessoa nao esta marcada como RESPONSAVEL_FINANCEIRO. Atualize os papeis antes de gerar a cobranca.",
+        error:
+          "Esta pessoa nao esta marcada como RESPONSAVEL_FINANCEIRO. Atualize os papeis antes de gerar a cobranca.",
       },
       { status: 400 }
     );
   }
 
-  // 4) Cria a cobranca localmente
   const { data: novaCobranca, error: eInsert } = await supabase
     .from("cobrancas")
     .insert({
@@ -216,13 +191,9 @@ export async function POST(req: Request) {
 
   if (eInsert || !novaCobranca) {
     console.error("[POST /api/cobrancas] erro ao criar cobranca:", eInsert);
-    return NextResponse.json(
-      { error: "Erro ao criar cobranca." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Erro ao criar cobranca." }, { status: 500 });
   }
 
-  // 5) Integra com a Neofin (idempotencia pelo integrationIdentifier)
   const integrationIdentifier = `cobranca-${novaCobranca.id}`;
 
   const neofinResult = await upsertNeofinBilling({
@@ -241,10 +212,7 @@ export async function POST(req: Request) {
   if (!neofinResult.ok) {
     console.error("[Neofin] Falha ao enfileirar cobranca na criacao:", neofinResult);
 
-    await supabase
-      .from("cobrancas")
-      .update({ status: "ERRO_INTEGRACAO" })
-      .eq("id", novaCobranca.id);
+    await supabase.from("cobrancas").update({ status: "ERRO_INTEGRACAO" }).eq("id", novaCobranca.id);
 
     return NextResponse.json(
       {
@@ -255,7 +223,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // 6) Atualiza cobranca com identificador Neofin
   const { data: cobrancaAtualizada, error: eUpdate } = await supabase
     .from("cobrancas")
     .update({

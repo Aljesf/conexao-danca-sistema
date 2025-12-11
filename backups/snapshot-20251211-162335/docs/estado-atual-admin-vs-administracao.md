@@ -1,0 +1,228 @@
+# 📘 Estado Atual — Comparativo /admin x /administracao
+
+Atualizado em: 2025-12-08 21:54 (pelo Codex)
+
+Raízes analisadas:
+- /admin → src/app/(private)/admin
+- /administracao → src/app/(private)/administracao
+
+---
+
+## 1. Rotas exclusivas de /admin
+
+- colaboradores
+  - Rota /admin: /admin/colaboradores
+  - Arquivo(s):
+    - src/app/(private)/admin/colaboradores/page.tsx
+- colaboradores/centros-custo
+  - Rota /admin: /admin/colaboradores/centros-custo
+  - Arquivo(s):
+    - src/app/(private)/admin/colaboradores/centros-custo/page.tsx
+- colaboradores/jornadas
+  - Rota /admin: /admin/colaboradores/jornadas
+  - Arquivo(s):
+    - src/app/(private)/admin/colaboradores/jornadas/page.tsx
+- colaboradores/tipos-funcao
+  - Rota /admin: /admin/colaboradores/tipos-funcao
+  - Arquivo(s):
+    - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx
+- colaboradores/tipos-vinculo
+  - Rota /admin: /admin/colaboradores/tipos-vinculo
+  - Arquivo(s):
+    - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx
+- config/cafe
+  - Rota /admin: /admin/config/cafe
+  - Arquivo(s):
+    - src/app/(private)/admin/config/cafe/page.tsx
+- config/escola
+  - Rota /admin: /admin/config/escola
+  - Arquivo(s):
+    - src/app/(private)/admin/config/escola/page.tsx
+- config/loja
+  - Rota /admin: /admin/config/loja
+  - Arquivo(s):
+    - src/app/(private)/admin/config/loja/page.tsx
+- financeiro/caixa-geral
+  - Rota /admin: /admin/financeiro/caixa-geral
+  - Arquivo(s):
+    - src/app/(private)/admin/financeiro/caixa-geral/page.tsx
+- ia
+  - Rota /admin: /admin/ia
+  - Arquivo(s):
+    - src/app/(private)/admin/ia/page.tsx
+- loja/fornecedores
+  - Rota /admin: /admin/loja/fornecedores
+  - Arquivo(s):
+    - src/app/(private)/admin/loja/fornecedores/page.tsx
+- loja/gestao-estoque
+  - Rota /admin: /admin/loja/gestao-estoque
+  - Arquivo(s):
+    - src/app/(private)/admin/loja/gestao-estoque/page.tsx
+- perfis
+  - Rota /admin: /admin/perfis
+  - Arquivo(s):
+    - src/app/(private)/admin/perfis/page.tsx
+- permissoes
+  - Rota /admin: /admin/permissoes
+  - Arquivo(s):
+    - src/app/(private)/admin/permissoes/page.tsx
+- relatorios
+  - Rota /admin: /admin/relatorios
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/page.tsx
+- relatorios/alunos/grupos
+  - Rota /admin: /admin/relatorios/alunos/grupos
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/alunos/grupos/page.tsx
+- relatorios/alunos/status
+  - Rota /admin: /admin/relatorios/alunos/status
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/alunos/status/page.tsx
+- relatorios/alunos/turmas
+  - Rota /admin: /admin/relatorios/alunos/turmas
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/alunos/turmas/page.tsx
+- relatorios/auditoria
+  - Rota /admin: /admin/relatorios/auditoria
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/auditoria/page.tsx
+- relatorios/captacao/conversao
+  - Rota /admin: /admin/relatorios/captacao/conversao
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/captacao/conversao/page.tsx
+- relatorios/comercial/estoque
+  - Rota /admin: /admin/relatorios/comercial/estoque
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/comercial/estoque/page.tsx
+- relatorios/comercial/vendas
+  - Rota /admin: /admin/relatorios/comercial/vendas
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/comercial/vendas/page.tsx
+- relatorios/financeiro/movimento
+  - Rota /admin: /admin/relatorios/financeiro/movimento
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/financeiro/movimento/page.tsx
+- relatorios/financeiro/pagar
+  - Rota /admin: /admin/relatorios/financeiro/pagar
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/financeiro/pagar/page.tsx
+- relatorios/financeiro/receber
+  - Rota /admin: /admin/relatorios/financeiro/receber
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/financeiro/receber/page.tsx
+- relatorios/financeiro/resumo
+  - Rota /admin: /admin/relatorios/financeiro/resumo
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/financeiro/resumo/page.tsx
+- relatorios/social
+  - Rota /admin: /admin/relatorios/social
+  - Arquivo(s):
+    - src/app/(private)/admin/relatorios/social/page.tsx
+- usuarios
+  - Rota /admin: /admin/usuarios
+  - Arquivo(s):
+    - src/app/(private)/admin/usuarios/page.tsx
+
+---
+
+## 2. Rotas exclusivas de /administracao
+
+- financeiro/movimento
+  - Rota /administracao: /administracao/financeiro/movimento
+  - Arquivo(s):
+    - src/app/(private)/administracao/financeiro/movimento/page.tsx
+- loja/categorias
+  - Rota /administracao: /administracao/loja/categorias
+  - Arquivo(s):
+    - src/app/(private)/administracao/loja/categorias/page.tsx
+- loja/compras
+  - Rota /administracao: /administracao/loja/compras
+  - Arquivo(s):
+    - src/app/(private)/administracao/loja/compras/page.tsx
+- loja/compras/[id]
+  - Rota /administracao: /administracao/loja/compras/[id]
+  - Arquivo(s):
+    - src/app/(private)/administracao/loja/compras/[id]/page.tsx
+- loja/configuracoes
+  - Rota /administracao: /administracao/loja/configuracoes
+  - Arquivo(s):
+    - src/app/(private)/administracao/loja/configuracoes/page.tsx
+- loja/estoque
+  - Rota /administracao: /administracao/loja/estoque
+  - Arquivo(s):
+    - src/app/(private)/administracao/loja/estoque/page.tsx
+
+---
+
+## 3. Rotas com CONFLITO (existem em /admin e /administracao)
+
+- financeiro
+  - Versão /admin:
+    - Rota: /admin/financeiro
+    - Arquivo(s):
+      - src/app/(private)/admin/financeiro/page.tsx
+  - Versão /administracao:
+    - Rota: /administracao/financeiro
+    - Arquivo(s):
+      - src/app/(private)/administracao/financeiro/page.tsx
+- financeiro/categorias
+  - Versão /admin:
+    - Rota: /admin/financeiro/categorias
+    - Arquivo(s):
+      - src/app/(private)/admin/financeiro/categorias/page.tsx
+  - Versão /administracao:
+    - Rota: /administracao/financeiro/categorias
+    - Arquivo(s):
+      - src/app/(private)/administracao/financeiro/categorias/page.tsx
+- financeiro/centros-custo
+  - Versão /admin:
+    - Rota: /admin/financeiro/centros-custo
+    - Arquivo(s):
+      - src/app/(private)/admin/financeiro/centros-custo/page.tsx
+  - Versão /administracao:
+    - Rota: /administracao/financeiro/centros-custo
+    - Arquivo(s):
+      - src/app/(private)/administracao/financeiro/centros-custo/page.tsx
+- financeiro/contas-pagar
+  - Versão /admin:
+    - Rota: /admin/financeiro/contas-pagar
+    - Arquivo(s):
+      - src/app/(private)/admin/financeiro/contas-pagar/page.tsx
+  - Versão /administracao:
+    - Rota: /administracao/financeiro/contas-pagar
+    - Arquivo(s):
+      - src/app/(private)/administracao/financeiro/contas-pagar/page.tsx
+- financeiro/contas-receber
+  - Versão /admin:
+    - Rota: /admin/financeiro/contas-receber
+    - Arquivo(s):
+      - src/app/(private)/admin/financeiro/contas-receber/page.tsx
+  - Versão /administracao:
+    - Rota: /administracao/financeiro/contas-receber
+    - Arquivo(s):
+      - src/app/(private)/administracao/financeiro/contas-receber/page.tsx
+- financeiro/lancamentos-manuais
+  - Versão /admin:
+    - Rota: /admin/financeiro/lancamentos-manuais
+    - Arquivo(s):
+      - src/app/(private)/admin/financeiro/lancamentos-manuais/page.tsx
+  - Versão /administracao:
+    - Rota: /administracao/financeiro/lancamentos-manuais
+    - Arquivo(s):
+      - src/app/(private)/administracao/financeiro/lancamentos-manuais/page.tsx
+- financeiro/plano-contas
+  - Versão /admin:
+    - Rota: /admin/financeiro/plano-contas
+    - Arquivo(s):
+      - src/app/(private)/admin/financeiro/plano-contas/page.tsx
+  - Versão /administracao:
+    - Rota: /administracao/financeiro/plano-contas
+    - Arquivo(s):
+      - src/app/(private)/administracao/financeiro/plano-contas/page.tsx
+
+---
+
+## 4. Observações automáticas
+
+- Rotas de loja (categorias, compras, compras/[id], configuracoes, estoque) aparecem apenas em /administracao nesta fotografia.
+- Módulo financeiro tem duplicatas em /admin e /administracao (financeiro e seus subitens), mais /admin possui caixa-geral exclusivo e /administracao possui movimento exclusivo.

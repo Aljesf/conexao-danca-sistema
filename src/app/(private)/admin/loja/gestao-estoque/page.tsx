@@ -842,7 +842,7 @@ export default function GestaoEstoqueAdminPage() {
                           {p.codigo || "-"}
                         </td>
                         <td className="px-3 py-2 text-gray-600">
-                          {subcategoriaNomeMap[p.categoria_subcategoria_id ?? -1] ?? p.categoria || "-"}
+                          {(subcategoriaNomeMap[p.categoria_subcategoria_id ?? -1] ?? p.categoria) || "-"}
                         </td>
                         <td className="px-3 py-2 text-right text-gray-700">
                           {p.estoque_atual}
@@ -916,7 +916,7 @@ export default function GestaoEstoqueAdminPage() {
                       <div>
                         <div className="font-medium text-gray-600">Categoria</div>
                         <div className="text-gray-900">
-                          {subcategoriaNomeMap[produtoSelecionado.categoria_subcategoria_id ?? -1] ?? produtoSelecionado.categoria || "ù"}
+                          {(subcategoriaNomeMap[produtoSelecionado.categoria_subcategoria_id ?? -1] ?? produtoSelecionado.categoria) || "ù"}
                         </div>
                       </div>
 
@@ -1522,6 +1522,10 @@ export default function GestaoEstoqueAdminPage() {
     </div>
   );
 }
+
+
+
+
 
 
 

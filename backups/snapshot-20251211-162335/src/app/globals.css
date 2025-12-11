@@ -1,0 +1,343 @@
+/* ===========================
+   TAILWIND v4 - Import oficial
+   =========================== */
+@import "tailwindcss";
+
+/* ===========================
+   PALETA GLOBAL E RESET LEVE
+   =========================== */
+:root {
+  /* Layout */
+  --sidebar-w: 280px;
+
+  /* Fundo geral do app */
+  --bg: #f9f6ff;        
+  --ink: #1f2937;       
+  --muted: #6b7280;     
+
+  /* Cores da barra lateral */
+  --accent-1: #ffe9f7;  
+  --accent-2: #efe4ff;  
+  --accent-3: #f5e9ff;  
+  --stroke:   #ecdff2;  
+  --hover:    rgba(140, 82, 255, 0.10);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ===========================
+   GRID DO APP: SIDEBAR + MAIN
+   =========================== */
+.app-grid {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+}
+
+.app-main {
+  padding: 28px 36px 40px;
+  overflow: auto;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: #fff;
+  border: 1px solid #ece5f5;
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(17, 24, 39, 0.04);
+}
+
+.brand-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-caption {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.app-content {
+  margin-top: 8px;
+}
+
+/* ===========================
+   SIDEBAR ESTILOS
+   =========================== */
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
+  width: var(--sidebar-w);
+  border-right: 1px solid var(--stroke);
+  background:
+    radial-gradient(120% 75% at 0% 0%, var(--accent-2), transparent 65%),
+    linear-gradient(180deg, var(--accent-1), var(--accent-2));
+  padding: 18px 14px 24px;
+}
+
+/* Header da sidebar */
+.sidebar .brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  text-decoration: none;
+}
+
+.sidebar .logo {
+  height: 200px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* Caso a logo tenha fundo preto */
+.sidebar .logo.on-black {
+  mix-blend-mode: screen;
+  filter: brightness(1.1) contrast(105%);
+}
+
+.sidebar .brand-name {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  color: var(--ink);
+}
+
+/* ===========================
+   GRUPOS E LINKS DA SIDEBAR
+   =========================== */
+.nav-sec {
+  margin: 18px 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.nav-list {
+  margin: 6px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 44px; 
+  padding: 0 12px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  background: transparent;
+  transition: background .15s ease, transform .05s ease;
+}
+
+.nav-link:hover {
+  background: var(--hover);
+}
+
+.nav-link:active {
+  transform: translateY(1px);
+}
+
+.nav-label {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Pill extra */
+.pill {
+  background: #111827;
+  color: #fff;
+  border-radius: 9999px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+/* Scroll bonito */
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+.sidebar::-webkit-scrollbar-thumb {
+  background: #e9dff5;
+  border-radius: 8px;
+}
+
+/* ===========================
+   SEÇÕES COLAPSÁVEIS (opcional)
+   =========================== */
+.sec {
+  margin: 10px 0 6px;
+}
+
+.sec-header {
+  width: 100%;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.sec-header:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.caret {
+  transition: transform .15s ease;
+}
+.caret.rot {
+  transform: rotate(180deg);
+}
+
+.nav-list.closed {
+  display: none;
+}
+
+/* Remover sublinhado dos links da sidebar */
+.sidebar a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* ===========================
+   SUPORTE A CLASSES MAIS ANTIGAS
+   =========================== */
+.sb-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sb-title {
+  margin-top: 14px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+
+.sb-link {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  width: 100%;
+  border-radius: 10px;
+  padding: 0 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.sb-link:hover {
+  background: rgba(255, 255, 255, 0.66);
+}
+
+/* ===========================
+   CONTEXT SELECTOR (HEADER)
+   =========================== */
+.ctx-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid #eae2f5;
+  background: #fff;
+  cursor: pointer;
+  min-width: 180px;
+  box-shadow: 0 6px 20px rgba(17, 24, 39, 0.05);
+}
+.ctx-select:hover {
+  background: rgba(170, 120, 255, 0.07);
+}
+.ctx-select strong {
+  font-weight: 700;
+}
+.ctx-menu {
+  position: absolute;
+  right: 0;
+  margin-top: 6px;
+  background: #fff;
+  border: 1px solid #eae2f5;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  min-width: 200px;
+  padding: 6px;
+  z-index: 20;
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.ctx-item:hover {
+  background: rgba(170, 120, 255, 0.07);
+}
