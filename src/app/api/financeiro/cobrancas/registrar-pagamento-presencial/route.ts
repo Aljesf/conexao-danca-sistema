@@ -243,6 +243,12 @@ export async function POST(req: Request) {
   }
 
   try {
+    console.log("[registrar-pagamento-presencial] chamando processarClassificacaoFinanceira", {
+      cobrancaId: cobrancaAtualizada.id,
+      origem: cobrancaAtualizada.origem_tipo,
+      origemId: cobrancaAtualizada.origem_id,
+    });
+
     const classificacao = await processarClassificacaoFinanceira(supabase, {
       ...cobrancaAtualizada,
       data_pagamento: dataPagamentoISO,

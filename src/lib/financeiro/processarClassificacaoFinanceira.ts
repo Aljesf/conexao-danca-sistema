@@ -160,6 +160,8 @@ export async function processarClassificacaoFinanceira(
   supabase: SupabaseClient,
   cobranca: CobrancaBase
 ): Promise<ResultadoClassificacao> {
+  console.log("[processarClassificacaoFinanceira] iniciado", { cobrancaId: cobranca?.id });
+
   if (!cobranca?.id) {
     return { ok: false, error: "cobranca_invalida" };
   }
