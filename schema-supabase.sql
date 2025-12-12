@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2025-12-10T15:37:12.692Z
+-- Snapshot do schema gerado em 2025-12-12T01:06:48.494Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -337,6 +337,89 @@ CREATE TABLE public."contas_pagar_pagamentos" (
   "observacoes" text,
   "usuario_id" uuid,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."credito_conexao_contas"
+-- --------------------------------------------------
+CREATE TABLE public."credito_conexao_contas" (
+  "id" bigint NOT NULL DEFAULT nextval('credito_conexao_contas_id_seq'::regclass),
+  "pessoa_titular_id" bigint NOT NULL,
+  "tipo_conta" text NOT NULL,
+  "descricao_exibicao" text,
+  "dia_fechamento" integer NOT NULL DEFAULT 10,
+  "dia_vencimento" integer,
+  "centro_custo_principal_id" integer,
+  "conta_financeira_origem_id" bigint,
+  "conta_financeira_destino_id" bigint,
+  "limite_maximo_centavos" integer,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "limite_autorizado_centavos" integer
+);
+
+-- --------------------------------------------------
+-- Tabela: public."credito_conexao_fatura_lancamentos"
+-- --------------------------------------------------
+CREATE TABLE public."credito_conexao_fatura_lancamentos" (
+  "fatura_id" bigint NOT NULL,
+  "lancamento_id" bigint NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."credito_conexao_faturas"
+-- --------------------------------------------------
+CREATE TABLE public."credito_conexao_faturas" (
+  "id" bigint NOT NULL DEFAULT nextval('credito_conexao_faturas_id_seq'::regclass),
+  "conta_conexao_id" bigint NOT NULL,
+  "periodo_referencia" text NOT NULL,
+  "data_fechamento" date NOT NULL,
+  "data_vencimento" date,
+  "valor_total_centavos" integer NOT NULL,
+  "status" text NOT NULL DEFAULT 'ABERTA'::text,
+  "cobranca_id" bigint,
+  "neofin_invoice_id" text,
+  "folha_pagamento_id" bigint,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "valor_taxas_centavos" integer NOT NULL DEFAULT 0
+);
+
+-- --------------------------------------------------
+-- Tabela: public."credito_conexao_lancamentos"
+-- --------------------------------------------------
+CREATE TABLE public."credito_conexao_lancamentos" (
+  "id" bigint NOT NULL DEFAULT nextval('credito_conexao_lancamentos_id_seq'::regclass),
+  "conta_conexao_id" bigint NOT NULL,
+  "origem_sistema" text NOT NULL,
+  "origem_id" bigint,
+  "descricao" text,
+  "valor_centavos" integer NOT NULL,
+  "data_lancamento" date NOT NULL DEFAULT CURRENT_DATE,
+  "status" text NOT NULL DEFAULT 'PENDENTE_FATURA'::text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "numero_parcelas" integer
+);
+
+-- --------------------------------------------------
+-- Tabela: public."credito_conexao_regras_parcelas"
+-- --------------------------------------------------
+CREATE TABLE public."credito_conexao_regras_parcelas" (
+  "id" bigint NOT NULL DEFAULT nextval('credito_conexao_regras_parcelas_id_seq'::regclass),
+  "tipo_conta" text NOT NULL,
+  "numero_parcelas_min" integer NOT NULL,
+  "numero_parcelas_max" integer NOT NULL,
+  "valor_minimo_centavos" integer NOT NULL DEFAULT 0,
+  "taxa_percentual" numeric NOT NULL DEFAULT 0,
+  "taxa_fixa_centavos" integer NOT NULL DEFAULT 0,
+  "centro_custo_id" integer,
+  "categoria_financeira_id" integer,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
