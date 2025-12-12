@@ -32,3 +32,9 @@
 - Certifique-se de ter o centro de custo `FIN` criado (ver `SQL/centros_custo.sql`).
 - Para o rateio de LOJA, é necessário que as subcategorias estejam configuradas com `centro_custo_id`.
 - Movimentos de rateio usam `origem = RATEIO_COBRANCA` e `origem_id = <cobranca_id>` para facilitar auditoria/limpeza.
+
+### Auditoria rápida (SQL)
+- Movimentos de taxa/rateio por cobrança:
+  `select origem, origem_id, count(*) qtd from movimento_financeiro where origem_id = <COBRANCA_ID> and origem in ('RATEIO_COBRANCA','TAXA_CREDITO_CONEXAO') group by origem, origem_id;`
+- Movimento do recebimento vinculado à cobrança:
+  `select mf.* from movimento_financeiro mf join recebimentos r on r.id = mf.origem_id where mf.origem = 'RECEBIMENTO' and r.cobranca_id = <COBRANCA_ID> order by mf.id desc;`

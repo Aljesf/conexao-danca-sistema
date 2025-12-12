@@ -20,6 +20,7 @@ type Cobranca = {
   centro_custo_id: number | null;
   neofin_charge_id: string | null;
   vencimento: string;
+  data_pagamento?: string | null;
   origem_tipo?: string | null;
   origem_id?: number | null;
 };
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
 
   const body = (await req.json().catch(() => null)) as RequestPayload | null;
   const cobrancaId = body?.cobranca_id ? Number(body.cobranca_id) : NaN;
+  const forceRateio = new URL(req.url).searchParams.get("force_rateio") === "true";
   const dataPagamento =
     typeof body?.data_pagamento === "string" && body.data_pagamento
       ? body.data_pagamento
@@ -90,6 +92,7 @@ export async function POST(req: Request) {
       centro_custo_id,
       neofin_charge_id,
       vencimento,
+      data_pagamento,
       origem_tipo,
       origem_id
     `
@@ -103,8 +106,64 @@ export async function POST(req: Request) {
   }
 
   if (cobranca.status === "PAGO") {
+    const { data: movimentosClassificacao, error: movClassError } = await supabase
+      .from("movimento_financeiro")
+      .select("id")
+      .eq("origem_id", cobranca.id)
+      .in("origem", ["RATEIO_COBRANCA", "TAXA_CREDITO_CONEXAO"]);
+
+    const jaClassificado = !movClassError && (movimentosClassificacao?.length ?? 0) > 0;
+
+    if (jaClassificado && !forceRateio) {
+      return NextResponse.json(
+        {
+          ok: true,
+          cobranca_id: cobranca.id,
+          status: "PAGO",
+          idempotent: true,
+          rateio_ok: true,
+          rateio: { info: "classificacao_ja_existente" },
+        },
+        { status: 200 }
+      );
+    }
+
+    let rateio_ok = true;
+    let rateio_details: any = null;
+
+    try {
+      console.log("[registrar-pagamento-presencial] reprocessando classificacao PAGO", {
+        cobrancaId: cobranca.id,
+        origem: cobranca.origem_tipo,
+        origemId: cobranca.origem_id,
+        forceRateio,
+      });
+
+      const classificacao = await processarClassificacaoFinanceira(supabase, {
+        ...cobranca,
+        data_pagamento: cobranca.data_pagamento ?? dataPagamento,
+      });
+      if (!classificacao.ok) {
+        rateio_ok = false;
+        rateio_details = classificacao;
+      } else if (classificacao.detalhes) {
+        rateio_details = classificacao.detalhes;
+      }
+    } catch (err: any) {
+      console.error("[Registrar pagamento presencial] erro ao classificar rateio (PAGO):", err);
+      rateio_ok = false;
+      rateio_details = { error: err?.message ?? String(err) };
+    }
+
     return NextResponse.json(
-      { ok: true, cobranca_id: cobranca.id, status: "PAGO", idempotent: true },
+      {
+        ok: true,
+        cobranca_id: cobranca.id,
+        status: "PAGO",
+        idempotent: true,
+        rateio_ok,
+        rateio: rateio_details,
+      },
       { status: 200 }
     );
   }
