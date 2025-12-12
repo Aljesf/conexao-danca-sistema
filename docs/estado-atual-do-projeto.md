@@ -43,3 +43,11 @@
 - Fatura só pode ser paga se houver lançamentos vinculados (tabela `credito_conexao_fatura_lancamentos`). Sem lançamentos, o pagamento presencial retorna erro `fatura_sem_lancamentos`.
 - Motivo: preservar consistência contábil e evitar recebimentos/rateios sem consumo.
 - Impacto: taxa (`TAXA_CREDITO_CONEXAO`) e rateio (`RATEIO_COBRANCA`) só são gerados quando existem lançamentos; idempotência mantém movimentos se já houver classificação.
+
+## Fechar fatura (Crédito Conexão)
+- Endpoint `/api/financeiro/credito-conexao/faturas/[id]/fechar`:
+  - Recalcula compras, número de parcelas e taxa de parcelamento (regra ativa em `credito_conexao_regras_parcelas`).
+  - Atualiza `valor_total_centavos`, `valor_taxas_centavos`, vencimento e status da fatura (ABERTA).
+  - Cria ou atualiza a cobrança (`origem_tipo = CREDITO_CONEXAO_FATURA`), respeitando `force=true` para recriar/atualizar.
+- Se a fatura não tiver lançamentos (`credito_conexao_fatura_lancamentos`), bloqueia com `fatura_sem_lancamentos`.
+- UI: botão “Fechar fatura” no detalhe, visível quando status ≠ PAGA; mostra erro amigável se não houver lançamentos.

@@ -13,6 +13,7 @@ export default function DetalheFaturaCreditoConexaoPage() {
   const [lancamentos, setLancamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [fechando, setFechando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [showPagamentoModal, setShowPagamentoModal] = useState(false);
@@ -96,6 +97,36 @@ export default function DetalheFaturaCreditoConexaoPage() {
       setErro("Falha ao sincronizar boleto.");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function fecharFatura() {
+    try {
+      setFechando(true);
+      setErro(null);
+      setAviso(null);
+
+      const res = await fetch(`/api/financeiro/credito-conexao/faturas/${faturaId}/fechar`, {
+        method: "POST",
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        if (json?.error === "fatura_sem_lancamentos") {
+          setErro("Nao e possivel fechar a fatura sem lancamentos de consumo.");
+        } else {
+          setErro("Falha ao fechar fatura.");
+        }
+        console.error("Fechar fatura erro:", json);
+        return;
+      }
+
+      await carregar();
+    } catch (e) {
+      console.error(e);
+      setErro("Falha ao fechar fatura.");
+    } finally {
+      setFechando(false);
     }
   }
 
@@ -230,6 +261,16 @@ export default function DetalheFaturaCreditoConexaoPage() {
                 >
                   {syncing ? "Sincronizando..." : "Sync boleto"}
                 </button>
+                {fatura.status !== "PAGA" && (
+                  <button
+                    type="button"
+                    onClick={fecharFatura}
+                    disabled={fechando}
+                    className="text-xs px-3 py-1 rounded-full bg-amber-100 hover:bg-amber-200 disabled:opacity-50"
+                  >
+                    {fechando ? "Fechando..." : "Fechar fatura"}
+                  </button>
+                )}
               </div>
             </div>
 
