@@ -222,8 +222,8 @@ export async function POST(req: Request) {
 
   let neofin_ok = true;
   let neofin_details: any = null;
-  let classificacao_ok = true;
-  let classificacao_details: any = null;
+  let rateio_ok = true;
+  let rateio_details: any = null;
 
   if (cobranca.neofin_charge_id) {
     const neofinResult = await markNeofinBillingAsPaid({
@@ -248,13 +248,15 @@ export async function POST(req: Request) {
       data_pagamento: dataPagamentoISO,
     });
     if (!classificacao.ok) {
-      classificacao_ok = false;
-      classificacao_details = classificacao;
+      rateio_ok = false;
+      rateio_details = classificacao;
+    } else if (classificacao.detalhes) {
+      rateio_details = classificacao.detalhes;
     }
   } catch (err: any) {
     console.error("[Registrar pagamento presencial] erro ao classificar rateio:", err);
-    classificacao_ok = false;
-    classificacao_details = { error: err?.message ?? String(err) };
+    rateio_ok = false;
+    rateio_details = { error: err?.message ?? String(err) };
   }
 
   return NextResponse.json(
@@ -264,8 +266,8 @@ export async function POST(req: Request) {
       recebimento,
       neofin_ok,
       neofin: neofin_details,
-      classificacao_ok,
-      classificacao: classificacao_details,
+      rateio_ok,
+      rateio: rateio_details,
     },
     { status: 200 }
   );

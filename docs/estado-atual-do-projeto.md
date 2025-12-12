@@ -22,6 +22,12 @@
   - **LOJA_VENDA**: busca itens da venda, identifica subcategorias (`loja_produto_categoria_subcategoria`) e soma por `centro_custo_id` da subcategoria; cria receitas de rateio por centro.
   - Demais origens: nenhum rateio é criado.
 
+### Taxa de parcelamento (Crédito Conexão)
+- Ao classificar `CREDITO_CONEXAO_FATURA`, busca a regra ativa em `credito_conexao_regras_parcelas` (tipo_conta, faixa de parcelas, valor mínimo).
+- Calcula `taxa_centavos = round(valor_cobranca * (taxa_percentual/100)) + taxa_fixa_centavos`.
+- Lança movimento de receita com `origem = TAXA_CREDITO_CONEXAO` usando o `centro_custo_id` da regra (ou FIN como fallback).
+- O principal (valor da cobrança) segue para rateio normal; a taxa é movimento separado.
+
 ## Observações
 - Certifique-se de ter o centro de custo `FIN` criado (ver `SQL/centros_custo.sql`).
 - Para o rateio de LOJA, é necessário que as subcategorias estejam configuradas com `centro_custo_id`.
