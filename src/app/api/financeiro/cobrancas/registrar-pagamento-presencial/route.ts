@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { markNeofinBillingAsPaid } from "@/lib/neofinClient";
+import { processarClassificacaoFinanceira } from "@/lib/financeiro/processarClassificacaoFinanceira";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type RequestPayload = {
   cobranca_id?: number;
@@ -21,6 +23,25 @@ type Cobranca = {
   origem_tipo?: string | null;
   origem_id?: number | null;
 };
+
+async function getCentroCustoIdPorCodigo(
+  supabase: SupabaseClient,
+  codigo: string
+): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("centros_custo")
+    .select("id")
+    .eq("codigo", codigo)
+    .eq("ativo", true)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[Registrar pagamento presencial] erro ao buscar centro ${codigo}:`, error);
+    return null;
+  }
+
+  return (data as any)?.id ?? null;
+}
 
 export async function POST(req: Request) {
   const supabase = await getSupabaseServer();
@@ -90,13 +111,14 @@ export async function POST(req: Request) {
 
   const centroCustoIdBody =
     typeof body?.centro_custo_id === "number" ? body.centro_custo_id : null;
-  const centroCustoId = cobranca.centro_custo_id ?? centroCustoIdBody ?? null;
+  let centroCustoId = cobranca.centro_custo_id ?? centroCustoIdBody ?? null;
 
   if (!centroCustoId) {
-    return NextResponse.json(
-      { ok: false, error: "centro_custo_nao_definido" },
-      { status: 400 }
-    );
+    centroCustoId = await getCentroCustoIdPorCodigo(supabase, "FIN");
+  }
+
+  if (!centroCustoId) {
+    return NextResponse.json({ ok: false, error: "centro_fin_nao_configurado" }, { status: 500 });
   }
 
   const dataPagamentoISO = dataPagamento.includes("T")
@@ -200,6 +222,8 @@ export async function POST(req: Request) {
 
   let neofin_ok = true;
   let neofin_details: any = null;
+  let classificacao_ok = true;
+  let classificacao_details: any = null;
 
   if (cobranca.neofin_charge_id) {
     const neofinResult = await markNeofinBillingAsPaid({
@@ -218,6 +242,21 @@ export async function POST(req: Request) {
     }
   }
 
+  try {
+    const classificacao = await processarClassificacaoFinanceira(supabase, {
+      ...cobrancaAtualizada,
+      data_pagamento: dataPagamentoISO,
+    });
+    if (!classificacao.ok) {
+      classificacao_ok = false;
+      classificacao_details = classificacao;
+    }
+  } catch (err: any) {
+    console.error("[Registrar pagamento presencial] erro ao classificar rateio:", err);
+    classificacao_ok = false;
+    classificacao_details = { error: err?.message ?? String(err) };
+  }
+
   return NextResponse.json(
     {
       ok: true,
@@ -225,6 +264,8 @@ export async function POST(req: Request) {
       recebimento,
       neofin_ok,
       neofin: neofin_details,
+      classificacao_ok,
+      classificacao: classificacao_details,
     },
     { status: 200 }
   );
