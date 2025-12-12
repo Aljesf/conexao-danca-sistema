@@ -14,6 +14,14 @@ export default function DetalheFaturaCreditoConexaoPage() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [showPagamentoModal, setShowPagamentoModal] = useState(false);
+  const [pagamentoData, setPagamentoData] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [pagamentoMetodo, setPagamentoMetodo] = useState<"PIX" | "DINHEIRO">("PIX");
+  const [pagamentoObs, setPagamentoObs] = useState("");
+  const [salvandoPagamento, setSalvandoPagamento] = useState(false);
 
   function fmtMoney(centavos: number) {
     return (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -37,6 +45,7 @@ export default function DetalheFaturaCreditoConexaoPage() {
     try {
       setLoading(true);
       setErro(null);
+      setAviso(null);
 
       const [fRes, lRes] = await Promise.all([
         fetch(`/api/financeiro/credito-conexao/faturas/${faturaId}`),
@@ -90,6 +99,45 @@ export default function DetalheFaturaCreditoConexaoPage() {
     }
   }
 
+  async function registrarPagamentoPresencial() {
+    if (!fatura?.cobranca?.id) return;
+    try {
+      setSalvandoPagamento(true);
+      setErro(null);
+      setAviso(null);
+
+      const res = await fetch("/api/financeiro/cobrancas/registrar-pagamento-presencial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cobranca_id: fatura.cobranca.id,
+          data_pagamento: pagamentoData,
+          metodo_pagamento: pagamentoMetodo,
+          observacao: pagamentoObs,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        console.error(json);
+        setErro("Falha ao registrar pagamento presencial.");
+        return;
+      }
+
+      if (json.neofin_ok === false) {
+        setAviso("Pagamento registrado localmente, mas falhou ao marcar como pago na Neofin.");
+      }
+
+      setShowPagamentoModal(false);
+      await carregar();
+    } catch (e) {
+      console.error(e);
+      setErro("Falha ao registrar pagamento presencial.");
+    } finally {
+      setSalvandoPagamento(false);
+    }
+  }
+
   async function copiar(texto: string) {
     try {
       await navigator.clipboard.writeText(texto);
@@ -110,6 +158,7 @@ export default function DetalheFaturaCreditoConexaoPage() {
       </div>
 
       {erro && <div className="text-sm text-red-600">{erro}</div>}
+      {aviso && <div className="text-sm text-amber-700">{aviso}</div>}
 
       {loading || !fatura ? (
         <div className="text-sm text-gray-600">Carregando...</div>
@@ -160,14 +209,28 @@ export default function DetalheFaturaCreditoConexaoPage() {
           <div className="border rounded-xl bg-white shadow-sm p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold">Cobrança (Neofin)</h2>
-              <button
-                type="button"
-                onClick={syncBoleto}
-                disabled={!fatura.cobranca?.id || syncing}
-                className="text-xs px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
-              >
-                {syncing ? "Sincronizando..." : "Sync boleto"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPagamentoModal(true);
+                    setPagamentoData(new Date().toISOString().slice(0, 10));
+                    setPagamentoObs("");
+                  }}
+                  disabled={!fatura.cobranca?.id}
+                  className="text-xs px-3 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 disabled:opacity-50"
+                >
+                  Registrar pagamento presencial
+                </button>
+                <button
+                  type="button"
+                  onClick={syncBoleto}
+                  disabled={!fatura.cobranca?.id || syncing}
+                  className="text-xs px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
+                >
+                  {syncing ? "Sincronizando..." : "Sync boleto"}
+                </button>
+              </div>
             </div>
 
             {!fatura.cobranca ? (
@@ -264,6 +327,68 @@ export default function DetalheFaturaCreditoConexaoPage() {
             )}
           </div>
         </>
+      )}
+
+      {showPagamentoModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-5 space-y-4">
+            <h3 className="text-lg font-semibold">Pagamento presencial</h3>
+
+            <div className="space-y-3 text-sm">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-600">Data do pagamento</label>
+                <input
+                  type="date"
+                  value={pagamentoData}
+                  onChange={(e) => setPagamentoData(e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-gray-600">Método</label>
+                <select
+                  value={pagamentoMetodo}
+                  onChange={(e) => setPagamentoMetodo(e.target.value as "PIX" | "DINHEIRO")}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                >
+                  <option value="PIX">PIX</option>
+                  <option value="DINHEIRO">Dinheiro</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-gray-600">Observação</label>
+                <textarea
+                  value={pagamentoObs}
+                  onChange={(e) => setPagamentoObs(e.target.value)}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  rows={3}
+                  placeholder="Opcional"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 text-sm">
+              <button
+                type="button"
+                onClick={() => setShowPagamentoModal(false)}
+                className="px-4 py-2 rounded border bg-white"
+                disabled={salvandoPagamento}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={registrarPagamentoPresencial}
+                disabled={salvandoPagamento}
+                className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {salvandoPagamento ? "Salvando..." : "Confirmar pagamento"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

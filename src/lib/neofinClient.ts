@@ -241,3 +241,138 @@ export async function getNeofinBilling(
     };
   }
 }
+
+function firstNonEmptyString(...values: Array<unknown>): string | null {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return null;
+}
+
+function extractBillingId(candidate: any, fallback?: string | null): string | null {
+  if (!candidate) return fallback ?? null;
+
+  if (Array.isArray(candidate)) {
+    const first = candidate.find((c) => c && typeof c === "object");
+    if (first) return extractBillingId(first, fallback);
+  }
+
+  const id =
+    firstNonEmptyString(
+      (candidate as any)?.id,
+      (candidate as any)?.billing_id,
+      (candidate as any)?.charge_id,
+      (candidate as any)?.integration_identifier,
+      (candidate as any)?.integrationIdentifier
+    ) ?? null;
+
+  return id ?? (fallback ?? null);
+}
+
+type MarkPaidArgs = {
+  integrationIdentifier: string;
+  paidAt: string; // YYYY-MM-DD ou ISO
+  paidAmountCentavos?: number;
+  paymentMethod?: string;
+  note?: string;
+};
+
+export async function markNeofinBillingAsPaid(
+  args: MarkPaidArgs
+): Promise<{ ok: true; data: any } | { ok: false; error: string; details?: any }> {
+  if (!NEOFIN_API_KEY || !NEOFIN_SECRET_KEY) {
+    console.error(
+      "[Neofin] NEOFIN_API_KEY ou NEOFIN_SECRET_KEY nÇœo configuradas no .env"
+    );
+    return {
+      ok: false,
+      error: "credenciais_neofin_ausentes",
+    };
+  }
+
+  const paidDate = new Date(args.paidAt);
+  if (Number.isNaN(paidDate.getTime())) {
+    return { ok: false, error: "data_pagamento_invalida" };
+  }
+
+  const paidAtIso =
+    typeof args.paidAt === "string" && args.paidAt.includes("T")
+      ? args.paidAt
+      : `${args.paidAt}T00:00:00`;
+
+  // Resolver o ID real da cobranÇõa na Neofin (caso diferente do integrationIdentifier)
+  let targetId = args.integrationIdentifier;
+  try {
+    const lookup = await getNeofinBilling({ identifier: args.integrationIdentifier });
+    if (lookup.ok) {
+      const resolved = extractBillingId(lookup.body, args.integrationIdentifier);
+      if (resolved) {
+        targetId = resolved;
+      }
+    }
+  } catch (lookupErr) {
+    console.warn("[Neofin] Falha ao resolver billing antes de marcar pago:", lookupErr);
+  }
+
+  const headers = {
+    "Content-Type": "application/json",
+    "api-key": NEOFIN_API_KEY,
+    "secret-key": NEOFIN_SECRET_KEY,
+  };
+
+  const payload = {
+    status: "paid",
+    paid_at: paidAtIso,
+    paid_amount: args.paidAmountCentavos ?? undefined,
+    payment_method: args.paymentMethod ?? undefined,
+    note: args.note ?? undefined,
+    integration_identifier: args.integrationIdentifier,
+  };
+
+  const attempt = async (url: string, method: "PATCH" | "POST") => {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify(payload),
+    });
+    let body: any = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    return { res, body };
+  };
+
+  const patchUrl = `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(targetId)}`;
+  const postUrl = `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(targetId)}/paid`;
+
+  try {
+    let { res, body } = await attempt(patchUrl, "PATCH");
+
+    if (!res.ok && res.status === 404) {
+      ({ res, body } = await attempt(postUrl, "POST"));
+    }
+
+    if (!res.ok) {
+      console.error(
+        "[Neofin] Erro ao marcar cobranÇõa como paga:",
+        res.status,
+        JSON.stringify(body)
+      );
+      return {
+        ok: false,
+        error: body?.message ?? "erro_marcar_pago_neofin",
+        details: { status: res.status, body },
+      };
+    }
+
+    return { ok: true, data: body ?? null };
+  } catch (err: any) {
+    console.error("[Neofin] Erro de rede ao marcar pago:", err);
+    return { ok: false, error: "falha_rede_neofin", details: err?.message ?? String(err) };
+  }
+}
