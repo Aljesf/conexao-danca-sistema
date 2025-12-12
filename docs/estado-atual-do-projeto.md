@@ -38,3 +38,8 @@
   `select origem, origem_id, count(*) qtd from movimento_financeiro where origem_id = <COBRANCA_ID> and origem in ('RATEIO_COBRANCA','TAXA_CREDITO_CONEXAO') group by origem, origem_id;`
 - Movimento do recebimento vinculado à cobrança:
   `select mf.* from movimento_financeiro mf join recebimentos r on r.id = mf.origem_id where mf.origem = 'RECEBIMENTO' and r.cobranca_id = <COBRANCA_ID> order by mf.id desc;`
+
+## Regra de integridade — Crédito Conexão
+- Fatura só pode ser paga se houver lançamentos vinculados (tabela `credito_conexao_fatura_lancamentos`). Sem lançamentos, o pagamento presencial retorna erro `fatura_sem_lancamentos`.
+- Motivo: preservar consistência contábil e evitar recebimentos/rateios sem consumo.
+- Impacto: taxa (`TAXA_CREDITO_CONEXAO`) e rateio (`RATEIO_COBRANCA`) só são gerados quando existem lançamentos; idempotência mantém movimentos se já houver classificação.

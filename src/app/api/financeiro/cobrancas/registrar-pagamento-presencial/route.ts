@@ -44,6 +44,23 @@ async function getCentroCustoIdPorCodigo(
   return (data as any)?.id ?? null;
 }
 
+async function contarLancamentosDaFatura(
+  supabase: SupabaseClient,
+  faturaId: number
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("credito_conexao_fatura_lancamentos")
+    .select("lancamento_id", { count: "exact", head: true })
+    .eq("fatura_id", faturaId);
+
+  if (error) {
+    console.error("[Registrar pagamento presencial] erro ao contar lancamentos da fatura:", error);
+    return -1;
+  }
+
+  return count ?? 0;
+}
+
 export async function POST(req: Request) {
   const supabase = await getSupabaseServer();
   const {
@@ -105,7 +122,48 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "cobranca_nao_encontrada" }, { status: 404 });
   }
 
+  let lancamentosFaturaCount: number | null = null;
+  if (cobranca.origem_tipo === "CREDITO_CONEXAO_FATURA" && cobranca.origem_id) {
+    lancamentosFaturaCount = await contarLancamentosDaFatura(supabase, cobranca.origem_id);
+    if (lancamentosFaturaCount === -1) {
+      return NextResponse.json(
+        { ok: false, error: "erro_contar_lancamentos_fatura" },
+        { status: 500 }
+      );
+    }
+    if (lancamentosFaturaCount === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "fatura_sem_lancamentos",
+          message: "Nao e possivel pagar uma fatura do Credito Conexao sem lancamentos de consumo.",
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   if (cobranca.status === "PAGO") {
+    if (
+      cobranca.origem_tipo === "CREDITO_CONEXAO_FATURA" &&
+      cobranca.origem_id &&
+      lancamentosFaturaCount !== 0
+    ) {
+      if (lancamentosFaturaCount === null) {
+        lancamentosFaturaCount = await contarLancamentosDaFatura(supabase, cobranca.origem_id);
+      }
+      if (lancamentosFaturaCount === 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "fatura_sem_lancamentos",
+            message: "Adicione lancamentos (loja, cafe ou escola) antes de pagar esta fatura.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const { data: movimentosClassificacao, error: movClassError } = await supabase
       .from("movimento_financeiro")
       .select("id")
