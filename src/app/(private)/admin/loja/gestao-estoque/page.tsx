@@ -59,6 +59,26 @@ type CategoriaLoja = {
   subcategorias: SubcategoriaLoja[];
 };
 
+type Variante = {
+  id: number;
+  produto_id: number;
+  sku: string;
+  cor_id: number | null;
+  numeracao_id: number | null;
+  tamanho_id: number | null;
+  estoque_atual: number;
+  preco_venda_centavos: number | null;
+  ativo: boolean;
+};
+
+type AtributosResp = {
+  cores: Array<{ id: number; nome: string; codigo?: string | null; hex?: string | null; ativo: boolean }>;
+  numeracoes: Array<{ id: number; tipo: string; valor: number; ativo: boolean }>;
+  tamanhos: Array<{ id: number; tipo: string; nome: string; ordem: number; ativo: boolean }>;
+  marcas: Array<{ id: number; nome: string; ativo: boolean }>;
+  modelos: Array<{ id: number; nome: string; ativo: boolean }>;
+};
+
 type ApiResponse<T = any> = {
   ok?: boolean;
   error?: string;
@@ -110,7 +130,7 @@ type CadastroAdminFormState = {
 function formatarReaisDeCentavos(
   valorCentavos: number | null | undefined
 ): string {
-  if (valorCentavos == null || Number.isNaN(valorCentavos)) return "ù";
+  if (valorCentavos == null || Number.isNaN(valorCentavos)) return "u";
   const valor = valorCentavos / 100;
   return valor.toLocaleString("pt-BR", {
     style: "currency",
@@ -120,9 +140,9 @@ function formatarReaisDeCentavos(
 }
 
 function formatarData(dateStr: string | null | undefined): string {
-  if (!dateStr) return "ù";
+  if (!dateStr) return "u";
   const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "ù";
+  if (Number.isNaN(d.getTime())) return "u";
   return d.toLocaleString("pt-BR");
 }
 
@@ -144,6 +164,14 @@ export default function GestaoEstoqueAdminPage() {
   const [ajusteMotivo, setAjusteMotivo] = useState<string>("EXTRAVIO");
   const [ajusteObs, setAjusteObs] = useState<string>("");
   const [ajusteLoading, setAjusteLoading] = useState(false);
+
+  // Variantes e atributos (Fase 1)
+  const [atributos, setAtributos] = useState<AtributosResp | null>(null);
+  const [loadingAtributos, setLoadingAtributos] = useState(false);
+  const [variantes, setVariantes] = useState<Variante[]>([]);
+  const [loadingVariantes, setLoadingVariantes] = useState(false);
+  const [erroVariantes, setErroVariantes] = useState<string | null>(null);
+  const [criandoPadrao, setCriandoPadrao] = useState(false);
 
   const [loadingProdutos, setLoadingProdutos] = useState(false);
   // carregamento de fornecedores para selects
@@ -321,17 +349,82 @@ export default function GestaoEstoqueAdminPage() {
     }
   }
 
+  async function carregarAtributos() {
+    setLoadingAtributos(true);
+    try {
+      const res = await fetch("/api/loja/atributos", { cache: "no-store" });
+      const json: ApiResponse<AtributosResp> = await res.json();
+      if (!res.ok || json?.ok === false) {
+        console.error("[GestaoEstoque] erro ao carregar atributos:", json?.error);
+        setAtributos(null);
+        return;
+      }
+      setAtributos(json.data ?? null);
+    } catch (err) {
+      console.error("[GestaoEstoque] erro inesperado ao carregar atributos:", err);
+      setAtributos(null);
+    } finally {
+      setLoadingAtributos(false);
+    }
+  }
+
+  async function carregarVariantes(produtoId: number) {
+    setErroVariantes(null);
+    setLoadingVariantes(true);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("produto_id", String(produtoId));
+      const res = await fetch(`/api/loja/variantes?${qs.toString()}`, { cache: "no-store" });
+      const json: ApiResponse<any> = await res.json().catch(() => null);
+      const lista = (json?.variantes || json?.items || json?.data || []) as Variante[];
+
+      if (!res.ok || json?.ok === false) {
+        setErroVariantes(json?.error || "Erro ao carregar variantes.");
+        setVariantes([]);
+        return;
+      }
+
+      setVariantes(Array.isArray(lista) ? lista : []);
+    } catch (err) {
+      console.error("[GestaoEstoque] erro ao carregar variantes:", err);
+      setErroVariantes("Erro inesperado ao carregar variantes.");
+      setVariantes([]);
+    } finally {
+      setLoadingVariantes(false);
+    }
+  }
+
+  async function criarVariantePadrao() {
+    if (!produtoSelecionado) return;
+    setCriandoPadrao(true);
+    try {
+      const res = await fetch("/api/loja/variantes/padrao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ produto_id: produtoSelecionado.id }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || json?.ok === false) {
+        alert(json?.error || "Erro ao criar variante padrao.");
+        return;
+      }
+      await carregarVariantes(produtoSelecionado.id);
+    } finally {
+      setCriandoPadrao(false);
+    }
+  }
+
   async function salvarAjusteManual() {
     if (!produtoSelecionado) return;
     const qtd = Number(ajusteQtd);
     if (!Number.isFinite(qtd) || qtd <= 0) {
       setMensagemTipo("error");
-      setMensagem("Quantidade inválida para ajuste.");
+      setMensagem("Quantidade invalida para ajuste.");
       return;
     }
     if (!ajusteObs || ajusteObs.trim().length < 10) {
       setMensagemTipo("error");
-      setMensagem("Observação obrigatória (mínimo 10 caracteres).");
+      setMensagem("Observacao obrigatoria (minimo 10 caracteres).");
       return;
     }
 
@@ -383,6 +476,7 @@ export default function GestaoEstoqueAdminPage() {
     carregarProdutos();
     carregarFornecedores();
     carregarCategoriasLoja();
+    carregarAtributos();
   }, []);
 
   const subcatToCatMap = useMemo(() => {
@@ -399,7 +493,7 @@ export default function GestaoEstoqueAdminPage() {
     const map: Record<number, string> = {};
     categoriasLoja.forEach((c) =>
       c.subcategorias.forEach((s) => {
-        map[s.id] = `${c.nome} ù ${s.nome}`;
+        map[s.id] = `${c.nome} u ${s.nome}`;
       })
     );
     return map;
@@ -426,10 +520,29 @@ export default function GestaoEstoqueAdminPage() {
 
   const produtosFiltrados = useMemo(() => produtos, [produtos]);
 
+  const coresMap = useMemo(() => {
+    const map = new Map<number, string>();
+    (atributos?.cores || []).forEach((c) => map.set(c.id, c.nome));
+    return map;
+  }, [atributos?.cores]);
+
+  const numeracoesMap = useMemo(() => {
+    const map = new Map<number, string>();
+    (atributos?.numeracoes || []).forEach((n) => map.set(n.id, `${n.valor}`));
+    return map;
+  }, [atributos?.numeracoes]);
+
+  const tamanhosMap = useMemo(() => {
+    const map = new Map<number, string>();
+    (atributos?.tamanhos || []).forEach((t) => map.set(t.id, t.nome));
+    return map;
+  }, [atributos?.tamanhos]);
+
   function selecionarProduto(p: Produto) {
     resetMensagem();
     setProdutoSelecionado(p);
     setEmEdicao(false);
+    setVariantes([]);
     setEditForm({
       id: p.id,
       nome: p.nome,
@@ -446,6 +559,7 @@ export default function GestaoEstoqueAdminPage() {
       fornecedorId: p.fornecedor_principal_id ?? null,
     });
     carregarMovimentos(p.id);
+    carregarVariantes(p.id);
   }
 
   function limparSelecao() {
@@ -453,6 +567,7 @@ export default function GestaoEstoqueAdminPage() {
     setProdutoSelecionado(null);
     setEmEdicao(false);
     setMovimentos([]);
+    setVariantes([]);
     setEditForm({
       id: null,
       nome: "",
@@ -759,68 +874,79 @@ export default function GestaoEstoqueAdminPage() {
   }, [fornecedores]);
   return (
     <>
-      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">
-          Gestao de Estoque ù Loja v0 (Admin)
-        </h1>
-        <p className="text-sm text-gray-500">
-          Aqui voce revisa o que a equipe cadastrou via estoque, define precos
-          de venda e tambem pode cadastrar produtos completos (estoque + custo + preco).
-        </p>
-      </header>
+      <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-pink-50 via-slate-50 to-white px-4 py-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <header className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-6 shadow-sm backdrop-blur space-y-4">
+            <div className="space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Administracao do Sistema - Loja
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
+                Gestao de Estoque (Admin)
+              </h1>
+              <p className="max-w-3xl text-[15px] text-slate-600">
+                Revise produtos, defina precos e visualize as variantes do produto (Loja v1). Fase 1: apenas visualizacao/garantia de variante padrao.
+              </p>
+            </div>
+            <div className="inline-flex rounded-full border border-violet-100 bg-violet-50 p-1 text-sm font-medium text-violet-700 shadow-sm">
+              <span className="inline-flex items-center gap-2 px-3 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-violet-500" />
+                Estruturado por atributos
+              </span>
+            </div>
+          </header>
 
-      <div className="inline-flex rounded-full border bg-gray-50 p-1">
-        <button
-          type="button"
-          onClick={() => {
-            resetMensagem();
-            setAba("REVISAR");
-          }}
-          className={
-            "px-4 py-1.5 text-xs font-medium rounded-full " +
-            (aba === "REVISAR"
-              ? "bg-indigo-600 text-white"
-              : "text-gray-700 hover:bg-gray-100")
-          }
-        >
-          Revisar e liberar produtos
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            resetMensagem();
-            setAba("CADASTRO");
-          }}
-          className={
-            "px-4 py-1.5 text-xs font-medium rounded-full " +
-            (aba === "CADASTRO"
-              ? "bg-indigo-600 text-white"
-              : "text-gray-700 hover:bg-gray-100")
-          }
-        >
-          Cadastro completo (Admin)
-        </button>
-      </div>
+          <div className="inline-flex rounded-full border border-violet-100 bg-white/90 p-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => {
+                resetMensagem();
+                setAba("REVISAR");
+              }}
+              className={
+                "px-4 py-1.5 text-xs font-medium rounded-full transition " +
+                (aba === "REVISAR"
+                  ? "bg-violet-600 text-white shadow-sm"
+                  : "text-slate-700 hover:bg-violet-50")
+              }
+            >
+              Revisar produtos
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                resetMensagem();
+                setAba("CADASTRO");
+              }}
+              className={
+                "px-4 py-1.5 text-xs font-medium rounded-full transition " +
+                (aba === "CADASTRO"
+                  ? "bg-violet-600 text-white shadow-sm"
+                  : "text-slate-700 hover:bg-violet-50")
+              }
+            >
+              Cadastro completo (Admin)
+            </button>
+          </div>
 
-      {mensagem && (
-        <div
-          className={
-            "text-sm border rounded-md px-3 py-2 " +
-            (mensagemTipo === "success"
-              ? "bg-green-50 border-green-300 text-green-800"
-              : "bg-red-50 border-red-300 text-red-800")
-          }
-        >
-          {mensagem}
-        </div>
-      )}
+          {mensagem && (
+            <div
+              className={
+                "text-sm border rounded-md px-3 py-2 " +
+                (mensagemTipo === "success"
+                  ? "bg-green-50 border-green-300 text-green-800"
+                  : "bg-red-50 border-red-300 text-red-800")
+              }
+            >
+              {mensagem}
+            </div>
+          )}
 
       {aba === "REVISAR" && (
         <>
-          <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="flex-1 min-w-[200px]">
+          <section className="rounded-3xl border border-violet-100 bg-white/95 p-5 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[220px]">
                 <label className="block text-xs font-medium mb-1">
                   Buscar por nome ou codigo
                 </label>
@@ -830,7 +956,7 @@ export default function GestaoEstoqueAdminPage() {
                   onChange={(e) =>
                     setFiltros((prev) => ({ ...prev, search: e.target.value }))
                   }
-                  className="w-full border rounded-md px-3 py-1.5 text-sm"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
                   placeholder="Nome ou codigo..."
                 />
               </div>
@@ -846,18 +972,18 @@ export default function GestaoEstoqueAdminPage() {
                       apenasAtivos: e.target.checked,
                     }))
                   }
-                  className="rounded border-gray-300"
+                  className="rounded border-slate-300"
                 />
                 <label
                   htmlFor="apenasAtivos"
-                  className="text-xs font-medium text-gray-700"
+                  className="text-xs font-medium text-slate-700"
                 >
                   Apenas ativos
                 </label>
               </div>
 
               <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-xs font-medium text-gray-700">
+                <span className="text-xs font-medium text-slate-700">
                   Filtro de preco:
                 </span>
                 <select
@@ -868,7 +994,7 @@ export default function GestaoEstoqueAdminPage() {
                       modoPreco: e.target.value as FiltrosState["modoPreco"],
                     }))
                   }
-                  className="border rounded-md px-2 py-1 text-xs"
+                  className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
                 >
                   <option value="TODOS">Todos</option>
                   <option value="AGUARDANDO_PRECO">Aguardando preco</option>
@@ -880,24 +1006,36 @@ export default function GestaoEstoqueAdminPage() {
                 type="button"
                 onClick={carregarProdutos}
                 disabled={loadingProdutos}
-                className="inline-flex items-center px-3 py-1.5 rounded-md bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-full bg-violet-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-violet-700 disabled:opacity-70"
               >
                 {loadingProdutos ? "Atualizando..." : "Atualizar lista"}
               </button>
+
+              <a
+                href="/admin/loja/cadastros"
+                className="inline-flex items-center justify-center rounded-full border border-violet-100 bg-violet-50 px-4 py-2 text-xs font-medium text-violet-700 shadow-sm hover:bg-violet-100"
+              >
+                 Atributos do Produto
+              </a>
+            </div>
+
+            <div className="text-xs text-slate-500">
+              {produtosFiltrados.length} produto(s)
+              {loadingAtributos && <span className="ml-2">carregando atributos...</span>}
             </div>
           </section>
 
-          <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <h2 className="text-sm font-semibold">Produtos</h2>
-              <span className="text-xs text-gray-500">
-                {produtosFiltrados.length} produto(s)
+          <section className="rounded-3xl border border-violet-100 bg-white/95 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-800">Produtos</h2>
+              <span className="text-xs text-slate-500">
+                Clique em um produto para ver as variantes
               </span>
             </div>
 
-            <div className="overflow-x-auto border rounded-lg">
+            <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-3 py-2 text-left">Nome</th>
                     <th className="px-3 py-2 text-left">Codigo</th>
@@ -928,7 +1066,7 @@ export default function GestaoEstoqueAdminPage() {
                         key={p.id}
                         className={
                           "cursor-pointer " +
-                          (selecionado ? "bg-indigo-50" : "hover:bg-gray-50")
+                          (selecionado ? "bg-violet-50/60" : "hover:bg-slate-50")
                         }
                         onClick={() => selecionarProduto(p)}
                       >
@@ -981,11 +1119,11 @@ export default function GestaoEstoqueAdminPage() {
             </div>
           </section>
 
-          <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
-            <div className="mt-4">
+          <section className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-sm space-y-4">
+            <div>
               {produtoSelecionado ? (
                 <div className="space-y-4">
-                  <div className="border rounded-lg p-4 bg-white">
+                  <div className="border rounded-2xl p-4 bg-white">
                       <div className="flex items-center justify-between mb-3">
                         <div>
                           <h2 className="text-sm font-semibold">
@@ -993,32 +1131,119 @@ export default function GestaoEstoqueAdminPage() {
                           </h2>
                         <p className="text-xs text-gray-500">
                           ID #{produtoSelecionado.id}
-                          {produtoSelecionado.codigo
-                            ? ` ò Codigo: ${produtoSelecionado.codigo}`
-                            : ""}
+                          {produtoSelecionado.codigo ? ` - Codigo: ${produtoSelecionado.codigo}` : ""}
                         </p>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => carregarVariantes(produtoSelecionado.id)}
+                          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                        >
+                          Recarregar variantes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={criarVariantePadrao}
+                          disabled={criandoPadrao}
+                          className="px-3 py-1.5 text-xs rounded-full bg-violet-600 text-white shadow-sm hover:bg-violet-700 disabled:opacity-70"
+                        >
+                          {criandoPadrao ? "Criando..." : "Criar variante padrao"}
+                        </button>
+                        {produtoSelecionado && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAjusteModal(true)}
+                            className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                          >
+                            Ajuste manual
+                          </button>
+                        )}
                         {!emEdicao && (
                           <button
                             type="button"
                             onClick={() => setEmEdicao(true)}
-                            className="px-3 py-1.5 text-xs rounded-md border bg-white hover:bg-gray-50"
+                            className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
                             disabled={!editForm.id}
                           >
                             Editar produto
                           </button>
                         )}
-                        {produtoSelecionado && (
-                          <button
-                            type="button"
-                            onClick={() => setShowAjusteModal(true)}
-                            className="px-3 py-1.5 text-xs rounded-md border bg-white hover:bg-gray-50"
-                          >
-                            Ajuste manual
-                          </button>
-                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-violet-100 bg-white/95 shadow-sm overflow-hidden">
+                      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                        <h4 className="text-sm font-semibold text-slate-800">Variantes</h4>
+                        <span className="text-xs text-slate-500">{variantes.length} variante(s)</span>
+                      </div>
+
+                      {erroVariantes && (
+                        <div className="px-5 py-3 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">
+                          {erroVariantes}
+                        </div>
+                      )}
+
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead className="bg-slate-50">
+                            <tr className="text-left">
+                              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">SKU</th>
+                              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Cor</th>
+                              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Numeracao</th>
+                              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Tamanho</th>
+                              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">Estoque</th>
+                              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">Preco</th>
+                              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Ativo</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {loadingVariantes && (
+                              <tr>
+                                <td colSpan={7} className="px-5 py-6 text-slate-500">
+                                  Carregando variantes...
+                                </td>
+                              </tr>
+                            )}
+
+                            {!loadingVariantes && variantes.length === 0 && (
+                              <tr>
+                                <td colSpan={7} className="px-5 py-8 text-slate-500">
+                                  Nenhuma variante encontrada. Clique em "Criar variante padrao".
+                                </td>
+                              </tr>
+                            )}
+
+                            {!loadingVariantes &&
+                              variantes.map((v) => (
+                                <tr key={v.id} className="border-t border-slate-100">
+                                  <td className="px-5 py-3 font-medium text-slate-900">{v.sku}</td>
+                                  <td className="px-5 py-3 text-slate-700">{v.cor_id ? coresMap.get(v.cor_id) || `#${v.cor_id}` : "-"}</td>
+                                  <td className="px-5 py-3 text-slate-700">{v.numeracao_id ? numeracoesMap.get(v.numeracao_id) || `#${v.numeracao_id}` : "-"}</td>
+                                  <td className="px-5 py-3 text-slate-700">{v.tamanho_id ? tamanhosMap.get(v.tamanho_id) || `#${v.tamanho_id}` : "-"}</td>
+                                  <td className="px-5 py-3 text-right text-slate-700">{v.estoque_atual}</td>
+                                  <td className="px-5 py-3 text-right text-slate-700">
+                                    {formatarReaisDeCentavos(
+                                      v.preco_venda_centavos ?? produtoSelecionado.preco_venda_centavos
+                                    )}
+                                  </td>
+                                  <td className="px-5 py-3">
+                                    <span
+                                      className={
+                                        "inline-flex rounded-full px-3 py-1 text-xs font-medium border " +
+                                        (v.ativo
+                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                          : "bg-slate-50 text-slate-600 border-slate-200")
+                                      }
+                                    >
+                                      {v.ativo ? "Ativa" : "Inativa"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
 
@@ -1031,14 +1256,14 @@ export default function GestaoEstoqueAdminPage() {
                       <div>
                         <div className="font-medium text-gray-600">Categoria</div>
                         <div className="text-gray-900">
-                          {(subcategoriaNomeMap[produtoSelecionado.categoria_subcategoria_id ?? -1] ?? produtoSelecionado.categoria) || "ù"}
+                          {(subcategoriaNomeMap[produtoSelecionado.categoria_subcategoria_id ?? -1] ?? produtoSelecionado.categoria) || "u"}
                         </div>
                       </div>
 
                       <div>
                         <div className="font-medium text-gray-600">Unidade</div>
                         <div className="text-gray-900">
-                          {produtoSelecionado.unidade || "ù"}
+                          {produtoSelecionado.unidade || "u"}
                         </div>
                       </div>
 
@@ -1068,7 +1293,7 @@ export default function GestaoEstoqueAdminPage() {
                       <div>
                         <div className="font-medium text-gray-600">Fornecedor</div>
                         <div className="text-gray-900">
-                          {produtoSelecionado.fornecedor_nome || "ù"}
+                          {produtoSelecionado.fornecedor_nome || "u"}
                         </div>
                       </div>
 
@@ -1133,14 +1358,14 @@ export default function GestaoEstoqueAdminPage() {
                                 <td className="px-3 py-2">{mov.tipo}</td>
                                 <td className="px-3 py-2">{mov.origem}</td>
                                 <td className="px-3 py-2 text-right">{mov.quantidade}</td>
-                                <td className="px-3 py-2 text-right">{mov.saldo_antes ?? "—"}</td>
-                                <td className="px-3 py-2 text-right">{mov.saldo_depois ?? "—"}</td>
-                                <td className="px-3 py-2">{mov.referencia_id ?? "—"}</td>
+                                <td className="px-3 py-2 text-right">{mov.saldo_antes ?? "-"}</td>
+                                <td className="px-3 py-2 text-right">{mov.saldo_depois ?? "-"}</td>
+                                <td className="px-3 py-2">{mov.referencia_id ?? "-"}</td>
                                 <td className="px-3 py-2">
                                   {mov.observacao ? (
                                     <span className="text-gray-700">{mov.observacao}</span>
                                   ) : (
-                                    <span className="text-gray-400">—</span>
+                                    <span className="text-gray-400">-</span>
                                   )}
                                 </td>
                               </tr>
@@ -1219,7 +1444,7 @@ export default function GestaoEstoqueAdminPage() {
                                   href="/admin/loja/categorias"
                                   className="underline"
                                 >
-                                  AdministraþÒo da Loja ? Categorias
+                                  Administracao da Loja - Categorias
                                 </a>
                                 .
                               </p>
@@ -1361,7 +1586,7 @@ export default function GestaoEstoqueAdminPage() {
 
                               <div>
                                 <label className="block text-xs font-medium mb-1">
-                                  Preco de custo (R$) ù apenas administrador
+                                  Preco de custo (R$) u apenas administrador
                                 </label>
                                 <input
                                   type="text"
@@ -1684,7 +1909,8 @@ export default function GestaoEstoqueAdminPage() {
           </form>
         </section>
       )}
-    </div>
+        </div>
+      </div>
 
     {showAjusteModal && produtoSelecionado && (
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
@@ -1708,7 +1934,7 @@ export default function GestaoEstoqueAdminPage() {
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="col-span-2">
-              <label className="block text-xs font-medium mb-1">Direção</label>
+              <label className="block text-xs font-medium mb-1">Direcao</label>
               <select
                 value={ajusteDirecao}
                 onChange={(e) => setAjusteDirecao(e.target.value as "ENTRADA" | "SAIDA")}
@@ -1716,7 +1942,7 @@ export default function GestaoEstoqueAdminPage() {
                 disabled={ajusteLoading}
               >
                 <option value="ENTRADA">Entrada</option>
-                <option value="SAIDA">Saída</option>
+                <option value="SAIDA">Saida</option>
               </select>
             </div>
 
@@ -1740,19 +1966,19 @@ export default function GestaoEstoqueAdminPage() {
                 className="w-full border rounded-md px-3 py-2"
                 disabled={ajusteLoading}
               >
-                <option value="EXTRAVIO">Extravío</option>
+                <option value="EXTRAVIO">Extravio</option>
                 <option value="AVARIA">Avaria</option>
                 <option value="USO_INTERNO">Uso interno</option>
-                <option value="INVENTARIO_POSITIVO">Inventário positivo</option>
-                <option value="INVENTARIO_NEGATIVO">Inventário negativo</option>
-                <option value="CORRECAO_CADASTRO">Correção de cadastro</option>
-                <option value="DEVOLUCAO">Devolução</option>
+                <option value="INVENTARIO_POSITIVO">Inventario positivo</option>
+                <option value="INVENTARIO_NEGATIVO">Inventario negativo</option>
+                <option value="CORRECAO_CADASTRO">Correcao de cadastro</option>
+                <option value="DEVOLUCAO">Devolucao</option>
               </select>
             </div>
           </div>
 
           <div className="text-sm">
-            <label className="block text-xs font-medium mb-1">Observação (obrigatória)</label>
+            <label className="block text-xs font-medium mb-1">Observacao (obrigatoria)</label>
             <textarea
               value={ajusteObs}
               onChange={(e) => setAjusteObs(e.target.value)}
@@ -1761,7 +1987,7 @@ export default function GestaoEstoqueAdminPage() {
               disabled={ajusteLoading}
             />
             <p className="text-[11px] text-gray-500 mt-1">
-              Descreva o motivo do ajuste. Mínimo 10 caracteres.
+              Descreva o motivo do ajuste. Minimo 10 caracteres.
             </p>
           </div>
 
@@ -1789,3 +2015,5 @@ export default function GestaoEstoqueAdminPage() {
     </>
   );
 }
+
+
