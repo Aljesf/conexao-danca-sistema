@@ -85,6 +85,26 @@ type ApiResponse<T = any> = {
   data?: T;
 };
 
+function parseMoneyToCentavos(input: string): number | null {
+  const raw = (input ?? "").trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/\./g, "").replace(",", ".");
+  const v = Number(normalized);
+  if (!Number.isFinite(v) || v < 0) return null;
+  return Math.round(v * 100);
+}
+
+type VarianteCreatePayload = {
+  produto_id: number;
+  cor_id?: number | null;
+  numeracao_id?: number | null;
+  tamanho_id?: number | null;
+  estoque_atual?: number;
+  preco_venda_centavos?: number | null;
+  ativo?: boolean;
+  observacoes?: string | null;
+};
+
 type ProdutosListResponse = {
   items: Produto[];
   pagination: {
@@ -172,6 +192,28 @@ export default function GestaoEstoqueAdminPage() {
   const [loadingVariantes, setLoadingVariantes] = useState(false);
   const [erroVariantes, setErroVariantes] = useState<string | null>(null);
   const [criandoPadrao, setCriandoPadrao] = useState(false);
+  const [ultimoProdutoCriado, setUltimoProdutoCriado] = useState<Produto | null>(null);
+  const [variantesProdutoCriado, setVariantesProdutoCriado] = useState<Variante[]>([]);
+  const [loadingVariantesProdutoCriado, setLoadingVariantesProdutoCriado] = useState(false);
+
+  const [isNovaVarianteOpen, setIsNovaVarianteOpen] = useState(false);
+  const [nvCorId, setNvCorId] = useState<string>("");
+  const [nvNumeracaoId, setNvNumeracaoId] = useState<string>("");
+  const [nvTamanhoId, setNvTamanhoId] = useState<string>("");
+  const [nvEstoque, setNvEstoque] = useState<string>("0");
+  const [nvPreco, setNvPreco] = useState<string>("");
+  const [nvAtivo, setNvAtivo] = useState(true);
+  const [nvObs, setNvObs] = useState<string>("");
+
+  const [isEditVarianteOpen, setIsEditVarianteOpen] = useState(false);
+  const [editVarianteId, setEditVarianteId] = useState<number | null>(null);
+  const [evCorId, setEvCorId] = useState<string>("");
+  const [evNumeracaoId, setEvNumeracaoId] = useState<string>("");
+  const [evTamanhoId, setEvTamanhoId] = useState<string>("");
+  const [evEstoque, setEvEstoque] = useState<string>("0");
+  const [evPreco, setEvPreco] = useState<string>("");
+  const [evAtivo, setEvAtivo] = useState(true);
+  const [evObs, setEvObs] = useState<string>("");
 
   const [loadingProdutos, setLoadingProdutos] = useState(false);
   // carregamento de fornecedores para selects
@@ -411,6 +453,153 @@ export default function GestaoEstoqueAdminPage() {
       await carregarVariantes(produtoSelecionado.id);
     } finally {
       setCriandoPadrao(false);
+    }
+  }
+
+  async function criarVarianteSelecionada() {
+    if (!produtoSelecionado?.id) return;
+
+    const estoqueNum = Number((nvEstoque ?? "0").trim());
+    if (!Number.isFinite(estoqueNum) || estoqueNum < 0) {
+      alert("Estoque invalido.");
+      return;
+    }
+
+    const precoCent = parseMoneyToCentavos(nvPreco);
+
+    const payload: VarianteCreatePayload = {
+      produto_id: produtoSelecionado.id,
+      cor_id: nvCorId ? Number(nvCorId) : null,
+      numeracao_id: nvNumeracaoId ? Number(nvNumeracaoId) : null,
+      tamanho_id: nvTamanhoId ? Number(nvTamanhoId) : null,
+      estoque_atual: Math.trunc(estoqueNum),
+      preco_venda_centavos: precoCent,
+      ativo: nvAtivo,
+      observacoes: nvObs?.trim() ? nvObs.trim() : null,
+    };
+
+    setLoadingVariantes(true);
+    try {
+      const resp = await fetch("/api/loja/variantes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        const msg = data?.error || data?.message || "Falha ao criar variante.";
+        alert(msg);
+        return;
+      }
+
+      setIsNovaVarianteOpen(false);
+      setNvCorId("");
+      setNvNumeracaoId("");
+      setNvTamanhoId("");
+      setNvEstoque("0");
+      setNvPreco("");
+      setNvAtivo(true);
+      setNvObs("");
+
+      await carregarVariantes(produtoSelecionado.id);
+    } finally {
+      setLoadingVariantes(false);
+    }
+  }
+
+  function abrirEdicaoVariante(v: any) {
+    setEditVarianteId(Number(v.id));
+    setEvCorId(v.cor_id ? String(v.cor_id) : "");
+    setEvNumeracaoId(v.numeracao_id ? String(v.numeracao_id) : "");
+    setEvTamanhoId(v.tamanho_id ? String(v.tamanho_id) : "");
+    setEvEstoque(String(v.estoque_atual ?? 0));
+    setEvPreco(
+      typeof v.preco_venda_centavos === "number"
+        ? (v.preco_venda_centavos / 100).toFixed(2).replace(".", ",")
+        : ""
+    );
+    setEvAtivo(Boolean(v.ativo));
+    setEvObs(v.observacoes ?? "");
+    setIsEditVarianteOpen(true);
+  }
+
+  async function salvarEdicaoVariante() {
+    if (!produtoSelecionado?.id || !editVarianteId) return;
+
+    const estoqueNum = Number((evEstoque ?? "0").trim());
+    if (!Number.isFinite(estoqueNum) || estoqueNum < 0) {
+      alert("Estoque invalido.");
+      return;
+    }
+
+    const precoCent = parseMoneyToCentavos(evPreco);
+
+    const payload: any = {
+      id: editVarianteId,
+      produto_id: produtoSelecionado.id,
+      cor_id: evCorId ? Number(evCorId) : null,
+      numeracao_id: evNumeracaoId ? Number(evNumeracaoId) : null,
+      tamanho_id: evTamanhoId ? Number(evTamanhoId) : null,
+      estoque_atual: Math.trunc(estoqueNum),
+      preco_venda_centavos: precoCent,
+      ativo: evAtivo,
+      observacoes: evObs?.trim() ? evObs.trim() : null,
+    };
+
+    setLoadingVariantes(true);
+    try {
+      const resp = await fetch("/api/loja/variantes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        alert(data?.error || data?.message || "Falha ao salvar variante.");
+        return;
+      }
+
+      setIsEditVarianteOpen(false);
+      setEditVarianteId(null);
+      await carregarVariantes(produtoSelecionado.id);
+    } finally {
+      setLoadingVariantes(false);
+    }
+  }
+
+  async function garantirVariantePadrao(produtoId: number) {
+    try {
+      await fetch("/api/loja/variantes/padrao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ produto_id: produtoId }),
+      });
+    } catch (err) {
+      console.error("Falha ao garantir variante padrao:", err);
+    }
+  }
+
+  async function carregarVariantesProdutoCriado(produtoId: number) {
+    setLoadingVariantesProdutoCriado(true);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("produto_id", String(produtoId));
+      const res = await fetch(`/api/loja/variantes?${qs.toString()}`, { cache: "no-store" });
+      const json: ApiResponse<any> = await res.json().catch(() => null);
+      const lista = (json?.variantes || json?.items || json?.data || []) as Variante[];
+      if (!res.ok || json?.ok === false) {
+        setVariantesProdutoCriado([]);
+        return;
+      }
+      setVariantesProdutoCriado(Array.isArray(lista) ? lista : []);
+    } catch (err) {
+      console.error("[GestaoEstoque] erro ao carregar variantes do produto criado:", err);
+      setVariantesProdutoCriado([]);
+    } finally {
+      setLoadingVariantesProdutoCriado(false);
     }
   }
 
@@ -841,6 +1030,9 @@ export default function GestaoEstoqueAdminPage() {
       const produtoFinal = jsonPreco.data;
 
       setProdutos((prev) => [produtoFinal, ...prev]);
+      setUltimoProdutoCriado(produtoFinal);
+      await garantirVariantePadrao(produtoFinal.id);
+      await carregarVariantesProdutoCriado(produtoFinal.id);
 
       setCadastroForm({
         nome: "",
@@ -1138,18 +1330,27 @@ export default function GestaoEstoqueAdminPage() {
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={() => carregarVariantes(produtoSelecionado.id)}
-                          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                          onClick={() => setIsNovaVarianteOpen(true)}
+                          disabled={!produtoSelecionado?.id}
+                          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-60"
                         >
-                          Recarregar variantes
+                          Criar variante
                         </button>
                         <button
                           type="button"
                           onClick={criarVariantePadrao}
-                          disabled={criandoPadrao}
+                          disabled={criandoPadrao || !produtoSelecionado?.id}
                           className="px-3 py-1.5 text-xs rounded-full bg-violet-600 text-white shadow-sm hover:bg-violet-700 disabled:opacity-70"
                         >
                           {criandoPadrao ? "Criando..." : "Criar variante padrao"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => produtoSelecionado?.id && carregarVariantes(produtoSelecionado.id)}
+                          disabled={!produtoSelecionado?.id}
+                          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Recarregar variantes
                         </button>
                         {produtoSelecionado && (
                           <button
@@ -1179,6 +1380,300 @@ export default function GestaoEstoqueAdminPage() {
                         <span className="text-xs text-slate-500">{variantes.length} variante(s)</span>
                       </div>
 
+                      <div className="flex flex-wrap gap-2 items-center px-5 py-3">
+                        <button
+                          className="px-3 py-2 rounded-md border text-sm"
+                          disabled={!produtoSelecionado?.id}
+                          onClick={() => setIsNovaVarianteOpen(true)}
+                          type="button"
+                        >
+                          Criar variante
+                        </button>
+
+                        <button
+                          className="px-3 py-2 rounded-md border text-sm"
+                          disabled={!produtoSelecionado?.id}
+                          onClick={async () => {
+                            if (!produtoSelecionado?.id) return;
+                            setLoadingVariantes(true);
+                            try {
+                              await fetch("/api/loja/variantes/padrao", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ produto_id: produtoSelecionado.id }),
+                              });
+                              await carregarVariantes(produtoSelecionado.id);
+                            } finally {
+                              setLoadingVariantes(false);
+                            }
+                          }}
+                          type="button"
+                        >
+                          Criar variante padrao
+                        </button>
+
+                        <button
+                          className="px-3 py-2 rounded-md border text-sm"
+                          disabled={!produtoSelecionado?.id}
+                          onClick={() => produtoSelecionado?.id && carregarVariantes(produtoSelecionado.id)}
+                          type="button"
+                        >
+                          Recarregar variantes
+                        </button>
+                      </div>
+
+                      {isNovaVarianteOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-lg">
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-lg font-semibold">Nova variante</h3>
+                              <button
+                                className="px-2 py-1 rounded-md border text-sm"
+                                onClick={() => setIsNovaVarianteOpen(false)}
+                                type="button"
+                              >
+                                Fechar
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <label className="text-sm">
+                                Cor
+                                <select
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={nvCorId}
+                                  onChange={(e) => setNvCorId(e.target.value)}
+                                >
+                                  <option value="">(Sem cor)</option>
+                                  {(atributos?.cores ?? []).map((c: any) => (
+                                    <option key={`cor-${c.id}`} value={String(c.id)}>
+                                      {c.nome}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="text-sm">
+                                Numeracao
+                                <select
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={nvNumeracaoId}
+                                  onChange={(e) => setNvNumeracaoId(e.target.value)}
+                                >
+                                  <option value="">(Sem numeracao)</option>
+                                  {(atributos?.numeracoes ?? []).map((n: any) => (
+                                    <option key={`num-${n.id}`} value={String(n.id)}>
+                                      {n.valor}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="text-sm">
+                                Tamanho
+                                <select
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={nvTamanhoId}
+                                  onChange={(e) => setNvTamanhoId(e.target.value)}
+                                >
+                                  <option value="">(Sem tamanho)</option>
+                                  {(atributos?.tamanhos ?? []).map((t: any) => (
+                                    <option key={`tam-${t.id}`} value={String(t.id)}>
+                                      {t.nome}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="text-sm">
+                                Estoque
+                                <input
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={nvEstoque}
+                                  onChange={(e) => setNvEstoque(e.target.value)}
+                                  inputMode="numeric"
+                                  placeholder="0"
+                                />
+                              </label>
+
+                              <label className="text-sm">
+                                Preco (R$)
+                                <input
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={nvPreco}
+                                  onChange={(e) => setNvPreco(e.target.value)}
+                                  placeholder="(vazio = herdar do produto)"
+                                />
+                              </label>
+
+                              <label className="text-sm flex items-center gap-2 mt-6">
+                                <input
+                                  type="checkbox"
+                                  checked={nvAtivo}
+                                  onChange={(e) => setNvAtivo(e.target.checked)}
+                                />
+                                Ativo
+                              </label>
+                            </div>
+
+                            <label className="text-sm block mt-3">
+                              Observacoes
+                              <textarea
+                                className="mt-1 w-full rounded-md border px-2 py-2"
+                                rows={3}
+                                value={nvObs}
+                                onChange={(e) => setNvObs(e.target.value)}
+                                placeholder="Ex.: Lote especifico, detalhe do produto, etc."
+                              />
+                            </label>
+
+                            <div className="flex justify-end gap-2 mt-4">
+                              <button
+                                className="px-3 py-2 rounded-md border text-sm"
+                                onClick={() => setIsNovaVarianteOpen(false)}
+                                type="button"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                className="px-3 py-2 rounded-md bg-violet-600 text-white text-sm disabled:opacity-50"
+                                disabled={!produtoSelecionado?.id}
+                                onClick={criarVarianteSelecionada}
+                                type="button"
+                              >
+                                Criar variante
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {isEditVarianteOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                          <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-lg">
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-lg font-semibold">Editar variante</h3>
+                              <button
+                                className="px-2 py-1 rounded-md border text-sm"
+                                onClick={() => setIsEditVarianteOpen(false)}
+                                type="button"
+                              >
+                                Fechar
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <label className="text-sm">
+                                Cor
+                                <select
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={evCorId}
+                                  onChange={(e) => setEvCorId(e.target.value)}
+                                >
+                                  <option value="">(Sem cor)</option>
+                                  {(atributos?.cores ?? []).map((c: any) => (
+                                    <option key={`cor-${c.id}`} value={String(c.id)}>
+                                      {c.nome}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="text-sm">
+                                Numeracao
+                                <select
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={evNumeracaoId}
+                                  onChange={(e) => setEvNumeracaoId(e.target.value)}
+                                >
+                                  <option value="">(Sem numeracao)</option>
+                                  {(atributos?.numeracoes ?? []).map((n: any) => (
+                                    <option key={`num-${n.id}`} value={String(n.id)}>
+                                      {n.valor}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="text-sm">
+                                Tamanho
+                                <select
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={evTamanhoId}
+                                  onChange={(e) => setEvTamanhoId(e.target.value)}
+                                >
+                                  <option value="">(Sem tamanho)</option>
+                                  {(atributos?.tamanhos ?? []).map((t: any) => (
+                                    <option key={`tam-${t.id}`} value={String(t.id)}>
+                                      {t.nome}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              <label className="text-sm">
+                                Estoque
+                                <input
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={evEstoque}
+                                  onChange={(e) => setEvEstoque(e.target.value)}
+                                  inputMode="numeric"
+                                  placeholder="0"
+                                />
+                              </label>
+
+                              <label className="text-sm">
+                                Preco (R$)
+                                <input
+                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                                  value={evPreco}
+                                  onChange={(e) => setEvPreco(e.target.value)}
+                                  placeholder="(vazio = herdar do produto)"
+                                />
+                              </label>
+
+                              <label className="text-sm flex items-center gap-2 mt-6">
+                                <input
+                                  type="checkbox"
+                                  checked={evAtivo}
+                                  onChange={(e) => setEvAtivo(e.target.checked)}
+                                />
+                                Ativo
+                              </label>
+                            </div>
+
+                            <label className="text-sm block mt-3">
+                              Observacoes
+                              <textarea
+                                className="mt-1 w-full rounded-md border px-2 py-2"
+                                rows={3}
+                                value={evObs}
+                                onChange={(e) => setEvObs(e.target.value)}
+                                placeholder="Ex.: Lote especifico, detalhe do produto, etc."
+                              />
+                            </label>
+
+                            <div className="flex justify-end gap-2 mt-4">
+                              <button
+                                className="px-3 py-2 rounded-md border text-sm"
+                                onClick={() => setIsEditVarianteOpen(false)}
+                                type="button"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                className="px-3 py-2 rounded-md bg-violet-600 text-white text-sm disabled:opacity-50"
+                                disabled={!produtoSelecionado?.id}
+                                onClick={salvarEdicaoVariante}
+                                type="button"
+                              >
+                                Salvar
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {erroVariantes && (
                         <div className="px-5 py-3 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">
                           {erroVariantes}
@@ -1196,6 +1691,7 @@ export default function GestaoEstoqueAdminPage() {
                               <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">Estoque</th>
                               <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">Preco</th>
                               <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Ativo</th>
+                              <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Acoes</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1239,6 +1735,15 @@ export default function GestaoEstoqueAdminPage() {
                                     >
                                       {v.ativo ? "Ativa" : "Inativa"}
                                     </span>
+                                  </td>
+                                  <td className="px-5 py-3">
+                                    <button
+                                      type="button"
+                                      className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                                      onClick={() => abrirEdicaoVariante(v)}
+                                    >
+                                      Editar
+                                    </button>
                                   </td>
                                 </tr>
                               ))}
@@ -1907,6 +2412,97 @@ export default function GestaoEstoqueAdminPage() {
               </button>
             </div>
           </form>
+
+          {ultimoProdutoCriado && (
+            <div className="mt-6 rounded-3xl border border-violet-100 bg-white/95 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    Variantes do produto criado
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Produto #{ultimoProdutoCriado.id} - {ultimoProdutoCriado.nome}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/admin/loja/cadastros"
+                    className="text-xs font-medium text-violet-700 underline"
+                  >
+                    Cadastros
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => carregarVariantesProdutoCriado(ultimoProdutoCriado.id)}
+                    className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                  >
+                    Recarregar variantes
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="text-left">
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">SKU</th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Cor</th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Numeracao</th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Tamanho</th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">Estoque</th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">Preco</th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Ativo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingVariantesProdutoCriado && (
+                      <tr>
+                        <td colSpan={7} className="px-5 py-6 text-slate-500">
+                          Carregando variantes...
+                        </td>
+                      </tr>
+                    )}
+
+                    {!loadingVariantesProdutoCriado && variantesProdutoCriado.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-5 py-8 text-slate-500">
+                          Nenhuma variante encontrada. A variante padrao e criada automaticamente.
+                        </td>
+                      </tr>
+                    )}
+
+                    {!loadingVariantesProdutoCriado &&
+                      variantesProdutoCriado.map((v) => (
+                        <tr key={v.id} className="border-t border-slate-100">
+                          <td className="px-5 py-3 font-medium text-slate-900">{v.sku}</td>
+                          <td className="px-5 py-3 text-slate-700">{v.cor_id ? coresMap.get(v.cor_id) || `#${v.cor_id}` : "-"}</td>
+                          <td className="px-5 py-3 text-slate-700">{v.numeracao_id ? numeracoesMap.get(v.numeracao_id) || `#${v.numeracao_id}` : "-"}</td>
+                          <td className="px-5 py-3 text-slate-700">{v.tamanho_id ? tamanhosMap.get(v.tamanho_id) || `#${v.tamanho_id}` : "-"}</td>
+                          <td className="px-5 py-3 text-right text-slate-700">{v.estoque_atual}</td>
+                          <td className="px-5 py-3 text-right text-slate-700">
+                            {formatarReaisDeCentavos(
+                              v.preco_venda_centavos ?? ultimoProdutoCriado.preco_venda_centavos
+                            )}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span
+                              className={
+                                "inline-flex rounded-full px-3 py-1 text-xs font-medium border " +
+                                (v.ativo
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-slate-50 text-slate-600 border-slate-200")
+                              }
+                            >
+                              {v.ativo ? "Ativa" : "Inativa"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
       )}
         </div>
@@ -2015,5 +2611,3 @@ export default function GestaoEstoqueAdminPage() {
     </>
   );
 }
-
-

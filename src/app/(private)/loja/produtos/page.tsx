@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -13,6 +13,18 @@ type Produto = {
   estoque_atual: number;
   ativo: boolean;
   observacoes?: string | null;
+};
+
+type Variante = {
+  id: number;
+  produto_id: number;
+  sku: string;
+  cor_id: number | null;
+  numeracao_id: number | null;
+  tamanho_id: number | null;
+  estoque_atual: number;
+  preco_venda_centavos: number | null;
+  ativo: boolean;
 };
 
 type ApiResponse<T = any> = {
@@ -50,6 +62,9 @@ export default function LojaGerenciarProdutosPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [variantes, setVariantes] = useState<Variante[]>([]);
+  const [loadingVariantes, setLoadingVariantes] = useState(false);
+  const [erroVariantes, setErroVariantes] = useState<string | null>(null);
 
   const [filtros, setFiltros] = useState<FiltrosState>({
     search: "",
@@ -91,7 +106,7 @@ export default function LojaGerenciarProdutosPage() {
         params.set("apenasAtivos", "true");
       }
 
-      // filtros de preço
+      // filtros de preÃ§o
       if (filtros.modoPreco === "AGUARDANDO_PRECO") {
         params.set("somenteComPreco", "false");
       } else if (filtros.modoPreco === "COM_PRECO") {
@@ -128,6 +143,30 @@ export default function LojaGerenciarProdutosPage() {
     return produtos;
   }, [produtos]);
 
+  async function carregarVariantes(produtoId: number) {
+    setErroVariantes(null);
+    setLoadingVariantes(true);
+    try {
+      const qs = new URLSearchParams();
+      qs.set("produto_id", String(produtoId));
+      const res = await fetch(`/api/loja/variantes?${qs.toString()}`, { cache: "no-store" });
+      const json: ApiResponse<any> = await res.json().catch(() => null);
+      const lista = (json?.variantes || json?.items || json?.data || []) as Variante[];
+      if (!res.ok || json?.ok === false) {
+        setErroVariantes(json?.error || "Erro ao carregar variantes.");
+        setVariantes([]);
+        return;
+      }
+      setVariantes(Array.isArray(lista) ? lista : []);
+    } catch (err) {
+      console.error("Erro ao carregar variantes:", err);
+      setErroVariantes("Erro inesperado ao carregar variantes.");
+      setVariantes([]);
+    } finally {
+      setLoadingVariantes(false);
+    }
+  }
+
   function selecionarProduto(p: Produto) {
     resetMensagem();
     setEditForm({
@@ -142,6 +181,7 @@ export default function LojaGerenciarProdutosPage() {
           ? (p.preco_venda_centavos / 100).toFixed(2).replace(".", ",")
           : "",
     });
+    carregarVariantes(p.id);
   }
 
   function limparSelecao() {
@@ -155,6 +195,8 @@ export default function LojaGerenciarProdutosPage() {
       ativo: true,
       precoReais: "",
     });
+    setVariantes([]);
+    setErroVariantes(null);
   }
 
   function handleEditChange<K extends keyof EditFormState>(
@@ -175,7 +217,7 @@ export default function LojaGerenciarProdutosPage() {
       return;
     }
 
-    // Converter precoReais → centavos
+    // Converter precoReais â†’ centavos
     let precoCentavos: number | null = null;
     if (editForm.precoReais.trim().length > 0) {
       const clean = editForm.precoReais
@@ -185,12 +227,12 @@ export default function LojaGerenciarProdutosPage() {
       const valor = parseFloat(clean);
       if (Number.isNaN(valor) || valor < 0) {
         setMensagemTipo("error");
-        setMensagem("Preço inválido.");
+        setMensagem("PreÃ§o invÃ¡lido.");
         return;
       }
       precoCentavos = Math.round(valor * 100);
     } else {
-      // preço em branco → produto aguardando definição de preço
+      // preÃ§o em branco â†’ produto aguardando definiÃ§Ã£o de preÃ§o
       precoCentavos = 0;
     }
 
@@ -253,11 +295,11 @@ export default function LojaGerenciarProdutosPage() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Gerenciar Produtos — Loja v0</h1>
+        <h1 className="text-2xl font-semibold">Gerenciar Produtos â€” Loja v0</h1>
         <p className="text-sm text-gray-500">
-          Nesta tela você define preços de venda, ativa/inativa produtos e
-          ajusta informações básicas. Produtos com preço em branco ficam
-          marcados como &quot;aguardando preço&quot; e não aparecem no caixa.
+          Nesta tela vocÃª define preÃ§os de venda, ativa/inativa produtos e
+          ajusta informaÃ§Ãµes bÃ¡sicas. Produtos com preÃ§o em branco ficam
+          marcados como &quot;aguardando preÃ§o&quot; e nÃ£o aparecem no caixa.
         </p>
       </header>
 
@@ -266,7 +308,7 @@ export default function LojaGerenciarProdutosPage() {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-medium mb-1">
-              Buscar por nome ou código
+              Buscar por nome ou cÃ³digo
             </label>
             <input
               type="text"
@@ -275,7 +317,7 @@ export default function LojaGerenciarProdutosPage() {
                 setFiltros((prev) => ({ ...prev, search: e.target.value }))
               }
               className="w-full border rounded-md px-3 py-1.5 text-sm"
-              placeholder="Digite parte do nome ou código interno..."
+              placeholder="Digite parte do nome ou cÃ³digo interno..."
             />
           </div>
 
@@ -302,7 +344,7 @@ export default function LojaGerenciarProdutosPage() {
 
           <div className="flex flex-wrap gap-2 items-center">
             <span className="text-xs font-medium text-gray-700">
-              Filtro de preço:
+              Filtro de preÃ§o:
             </span>
             <select
               value={filtros.modoPreco}
@@ -315,8 +357,8 @@ export default function LojaGerenciarProdutosPage() {
               className="border rounded-md px-2 py-1 text-xs"
             >
               <option value="TODOS">Todos</option>
-              <option value="AGUARDANDO_PRECO">Aguardando preço</option>
-              <option value="COM_PRECO">Com preço definido</option>
+              <option value="AGUARDANDO_PRECO">Aguardando preÃ§o</option>
+              <option value="COM_PRECO">Com preÃ§o definido</option>
             </select>
           </div>
 
@@ -345,10 +387,10 @@ export default function LojaGerenciarProdutosPage() {
             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
               <tr>
                 <th className="px-3 py-2 text-left">Nome</th>
-                <th className="px-3 py-2 text-left">Código</th>
+                <th className="px-3 py-2 text-left">CÃ³digo</th>
                 <th className="px-3 py-2 text-left">Categoria</th>
                 <th className="px-3 py-2 text-right">Estoque</th>
-                <th className="px-3 py-2 text-right">Preço venda</th>
+                <th className="px-3 py-2 text-right">PreÃ§o venda</th>
                 <th className="px-3 py-2 text-center">Status</th>
               </tr>
             </thead>
@@ -383,7 +425,7 @@ export default function LojaGerenciarProdutosPage() {
                         </span>
                         {aguardandoPreco && (
                           <span className="text-[11px] text-amber-600">
-                            Aguardando definição de preço
+                            Aguardando definiÃ§Ã£o de preÃ§o
                           </span>
                         )}
                       </div>
@@ -435,22 +477,22 @@ export default function LojaGerenciarProdutosPage() {
         )}
       </section>
 
-      {/* Formulário de edição */}
+      {/* FormulÃ¡rio de ediÃ§Ã£o */}
       <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Edição do produto</h2>
+          <h2 className="text-sm font-semibold">EdiÃ§Ã£o do produto</h2>
           <button
             type="button"
             onClick={limparSelecao}
             className="text-xs text-gray-500 hover:text-gray-700"
           >
-            Limpar seleção
+            Limpar seleÃ§Ã£o
           </button>
         </div>
 
         {!editForm.id ? (
           <p className="text-xs text-gray-500">
-            Clique em um produto na tabela acima para editar preço, categoria,
+            Clique em um produto na tabela acima para editar preÃ§o, categoria,
             unidade e status.
           </p>
         ) : (
@@ -470,7 +512,7 @@ export default function LojaGerenciarProdutosPage() {
 
               <div>
                 <label className="block text-xs font-medium mb-1">
-                  Código interno
+                  CÃ³digo interno
                 </label>
                 <input
                   type="text"
@@ -509,18 +551,18 @@ export default function LojaGerenciarProdutosPage() {
 
               <div>
                 <label className="block text-xs font-medium mb-1">
-                  Preço de venda (R$)
+                  PreÃ§o de venda (R$)
                 </label>
                 <input
                   type="text"
                   value={editForm.precoReais}
                   onChange={(e) => handleEditChange("precoReais", e.target.value)}
                   className="w-full border rounded-md px-3 py-2 text-sm"
-                  placeholder="Deixe em branco para 'aguardando preço'"
+                  placeholder="Deixe em branco para 'aguardando preÃ§o'"
                 />
                 <p className="text-[11px] text-gray-500 mt-1">
-                  Este é o preço de venda final. Se deixar em branco, o produto
-                  ficará &quot;aguardando preço&quot; e não aparecerá no caixa.
+                  Este Ã© o preÃ§o de venda final. Se deixar em branco, o produto
+                  ficarÃ¡ &quot;aguardando preÃ§o&quot; e nÃ£o aparecerÃ¡ no caixa.
                 </p>
               </div>
 
@@ -547,12 +589,97 @@ export default function LojaGerenciarProdutosPage() {
                 disabled={saving}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
               >
-                {saving ? "Salvando..." : "Salvar alterações"}
+                {saving ? "Salvando..." : "Salvar alteracoes"}
               </button>
             </div>
           </form>
+        )}
+
+        {editForm.id && (
+          <div className="mt-4 rounded-3xl border border-indigo-100 bg-white/95 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Variantes</h3>
+                <p className="text-xs text-slate-600">
+                  Produto #{editForm.id} - {editForm.nome || "Selecionado"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => carregarVariantes(editForm.id as number)}
+                className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+              >
+                Recarregar variantes
+              </button>
+            </div>
+
+            {erroVariantes && (
+              <div className="px-5 py-3 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">
+                {erroVariantes}
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr className="text-left">
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">SKU</th>
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">Estoque</th>
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">Preco</th>
+                    <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Ativo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingVariantes && (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-6 text-slate-500">
+                        Carregando variantes...
+                      </td>
+                    </tr>
+                  )}
+
+                  {!loadingVariantes && variantes.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-8 text-slate-500">
+                        Nenhuma variante encontrada. Crie a variante padrao no Admin.
+                      </td>
+                    </tr>
+                  )}
+
+                  {!loadingVariantes &&
+                    variantes.map((v) => (
+                      <tr key={v.id} className="border-t border-slate-100">
+                        <td className="px-5 py-3 font-medium text-slate-900">{v.sku}</td>
+                        <td className="px-5 py-3 text-right text-slate-700">{v.estoque_atual}</td>
+                        <td className="px-5 py-3 text-right text-slate-700">
+                          {v.preco_venda_centavos != null
+                            ? `R$ ${(v.preco_venda_centavos / 100).toFixed(2).replace(".", ",")}`
+                            : "—"}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${
+                              v.ativo
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-slate-50 text-slate-600 border-slate-200"
+                            }`}
+                          >
+                            {v.ativo ? "Ativa" : "Inativa"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </section>
     </div>
   );
 }
+
+
+
+
+
