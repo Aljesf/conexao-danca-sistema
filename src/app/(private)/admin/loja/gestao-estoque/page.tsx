@@ -1697,7 +1697,7 @@ export default function GestaoEstoqueAdminPage() {
                           <tbody>
                             {loadingVariantes && (
                               <tr>
-                                <td colSpan={7} className="px-5 py-6 text-slate-500">
+                                <td colSpan={8} className="px-5 py-6 text-slate-500">
                                   Carregando variantes...
                                 </td>
                               </tr>
@@ -1705,7 +1705,7 @@ export default function GestaoEstoqueAdminPage() {
 
                             {!loadingVariantes && variantes.length === 0 && (
                               <tr>
-                                <td colSpan={7} className="px-5 py-8 text-slate-500">
+                                <td colSpan={8} className="px-5 py-8 text-slate-500">
                                   Nenhuma variante encontrada. Clique em "Criar variante padrao".
                                 </td>
                               </tr>
