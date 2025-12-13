@@ -23,6 +23,18 @@ type Produto = {
   data_atualizacao?: string | null;
 };
 
+type MovimentoEstoque = {
+  id: number;
+  tipo: string;
+  origem: string;
+  quantidade: number;
+  saldo_antes: number | null;
+  saldo_depois: number | null;
+  referencia_id: number | null;
+  observacao: string | null;
+  created_at: string;
+};
+
 type FornecedorResumo = {
   id: number;
   nome: string;
@@ -124,6 +136,14 @@ export default function GestaoEstoqueAdminPage() {
   const [erroCategoriasLoja, setErroCategoriasLoja] = useState("");
   const [categoriaSelecionadaId, setCategoriaSelecionadaId] = useState<number | "">("");
   const [categoriaCadastroSelecionadaId, setCategoriaCadastroSelecionadaId] = useState<number | "">("");
+  const [movimentos, setMovimentos] = useState<MovimentoEstoque[]>([]);
+  const [loadingMovimentos, setLoadingMovimentos] = useState(false);
+  const [showAjusteModal, setShowAjusteModal] = useState(false);
+  const [ajusteDirecao, setAjusteDirecao] = useState<"ENTRADA" | "SAIDA">("SAIDA");
+  const [ajusteQtd, setAjusteQtd] = useState<number | "">("");
+  const [ajusteMotivo, setAjusteMotivo] = useState<string>("EXTRAVIO");
+  const [ajusteObs, setAjusteObs] = useState<string>("");
+  const [ajusteLoading, setAjusteLoading] = useState(false);
 
   const [loadingProdutos, setLoadingProdutos] = useState(false);
   // carregamento de fornecedores para selects
@@ -276,6 +296,89 @@ export default function GestaoEstoqueAdminPage() {
     }
   }
 
+  async function carregarMovimentos(produtoId: number) {
+    try {
+      setLoadingMovimentos(true);
+      const res = await fetch(`/api/loja/estoque/movimentos?produto_id=${produtoId}`);
+      const json = await res.json();
+
+      if (!res.ok || !json?.ok || !Array.isArray(json?.movimentos)) {
+        console.error("Erro ao carregar movimentos de estoque:", json?.error ?? json);
+        setMovimentos([]);
+        return;
+      }
+
+      if (json.warning) {
+        console.warn("[Movimentos estoque] aviso:", json.warning);
+      }
+
+      setMovimentos(json.movimentos);
+    } catch (err) {
+      console.error("Erro inesperado ao carregar movimentos de estoque:", err);
+      setMovimentos([]);
+    } finally {
+      setLoadingMovimentos(false);
+    }
+  }
+
+  async function salvarAjusteManual() {
+    if (!produtoSelecionado) return;
+    const qtd = Number(ajusteQtd);
+    if (!Number.isFinite(qtd) || qtd <= 0) {
+      setMensagemTipo("error");
+      setMensagem("Quantidade inválida para ajuste.");
+      return;
+    }
+    if (!ajusteObs || ajusteObs.trim().length < 10) {
+      setMensagemTipo("error");
+      setMensagem("Observação obrigatória (mínimo 10 caracteres).");
+      return;
+    }
+
+    try {
+      setAjusteLoading(true);
+      const res = await fetch("/api/loja/estoque/ajuste-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          produto_id: produtoSelecionado.id,
+          direcao: ajusteDirecao,
+          quantidade: qtd,
+          motivo: ajusteMotivo,
+          observacao: ajusteObs,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.ok) {
+        console.error("Falha ao registrar ajuste manual:", json);
+        setMensagemTipo("error");
+        setMensagem(json?.error || "Erro ao registrar ajuste manual.");
+        return;
+      }
+
+      setMensagemTipo("success");
+      setMensagem("Ajuste manual registrado com sucesso.");
+
+      // Atualizar estoque local do produto selecionado
+      setProdutoSelecionado((prev) =>
+        prev ? { ...prev, estoque_atual: json.saldoDepois ?? prev.estoque_atual } : prev
+      );
+
+      await carregarMovimentos(produtoSelecionado.id);
+      await carregarProdutos();
+      setShowAjusteModal(false);
+      setAjusteObs("");
+      setAjusteQtd("");
+    } catch (err) {
+      console.error("Erro inesperado ao registrar ajuste manual:", err);
+      setMensagemTipo("error");
+      setMensagem("Erro inesperado ao registrar ajuste manual.");
+    } finally {
+      setAjusteLoading(false);
+    }
+  }
+
   useEffect(() => {
     carregarProdutos();
     carregarFornecedores();
@@ -342,12 +445,14 @@ export default function GestaoEstoqueAdminPage() {
       precoCustoReais: "",
       fornecedorId: p.fornecedor_principal_id ?? null,
     });
+    carregarMovimentos(p.id);
   }
 
   function limparSelecao() {
     resetMensagem();
     setProdutoSelecionado(null);
     setEmEdicao(false);
+    setMovimentos([]);
     setEditForm({
       id: null,
       nome: "",
@@ -653,7 +758,8 @@ export default function GestaoEstoqueAdminPage() {
     );
   }, [fornecedores]);
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+    <>
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">
           Gestao de Estoque ù Loja v0 (Admin)
@@ -880,11 +986,11 @@ export default function GestaoEstoqueAdminPage() {
               {produtoSelecionado ? (
                 <div className="space-y-4">
                   <div className="border rounded-lg p-4 bg-white">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <h2 className="text-sm font-semibold">
-                          {emEdicao ? "Editar produto" : "Detalhes do produto"}
-                        </h2>
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h2 className="text-sm font-semibold">
+                            {emEdicao ? "Editar produto" : "Detalhes do produto"}
+                          </h2>
                         <p className="text-xs text-gray-500">
                           ID #{produtoSelecionado.id}
                           {produtoSelecionado.codigo
@@ -902,6 +1008,15 @@ export default function GestaoEstoqueAdminPage() {
                             disabled={!editForm.id}
                           >
                             Editar produto
+                          </button>
+                        )}
+                        {produtoSelecionado && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAjusteModal(true)}
+                            className="px-3 py-1.5 text-xs rounded-md border bg-white hover:bg-gray-50"
+                          >
+                            Ajuste manual
                           </button>
                         )}
                       </div>
@@ -982,6 +1097,56 @@ export default function GestaoEstoqueAdminPage() {
                         <p className="text-xs text-gray-900 whitespace-pre-line">
                           {produtoSelecionado.observacoes}
                         </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border rounded-lg p-4 bg-white">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold">Historico de estoque</h3>
+                      {loadingMovimentos && (
+                        <span className="text-[11px] text-gray-500">Carregando...</span>
+                      )}
+                    </div>
+
+                    {movimentos.length === 0 ? (
+                      <p className="text-xs text-gray-500">Nenhum movimento encontrado.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50 text-gray-600">
+                            <tr>
+                              <th className="px-3 py-2 text-left">Data</th>
+                              <th className="px-3 py-2 text-left">Tipo</th>
+                              <th className="px-3 py-2 text-left">Origem</th>
+                              <th className="px-3 py-2 text-right">Quantidade</th>
+                              <th className="px-3 py-2 text-right">Saldo antes</th>
+                              <th className="px-3 py-2 text-right">Saldo depois</th>
+                              <th className="px-3 py-2 text-left">Referencia</th>
+                              <th className="px-3 py-2 text-left">Obs.</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {movimentos.map((mov) => (
+                              <tr key={mov.id} className="border-t">
+                                <td className="px-3 py-2">{formatarData(mov.created_at)}</td>
+                                <td className="px-3 py-2">{mov.tipo}</td>
+                                <td className="px-3 py-2">{mov.origem}</td>
+                                <td className="px-3 py-2 text-right">{mov.quantidade}</td>
+                                <td className="px-3 py-2 text-right">{mov.saldo_antes ?? "—"}</td>
+                                <td className="px-3 py-2 text-right">{mov.saldo_depois ?? "—"}</td>
+                                <td className="px-3 py-2">{mov.referencia_id ?? "—"}</td>
+                                <td className="px-3 py-2">
+                                  {mov.observacao ? (
+                                    <span className="text-gray-700">{mov.observacao}</span>
+                                  ) : (
+                                    <span className="text-gray-400">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>
@@ -1520,15 +1685,107 @@ export default function GestaoEstoqueAdminPage() {
         </section>
       )}
     </div>
+
+    {showAjusteModal && produtoSelecionado && (
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Ajuste manual de estoque</h3>
+              <p className="text-xs text-gray-600">
+                Produto #{produtoSelecionado.id} - {produtoSelecionado.nome}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="text-sm text-gray-500 hover:text-gray-700"
+              onClick={() => setShowAjusteModal(false)}
+              disabled={ajusteLoading}
+            >
+              Fechar
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="col-span-2">
+              <label className="block text-xs font-medium mb-1">Direção</label>
+              <select
+                value={ajusteDirecao}
+                onChange={(e) => setAjusteDirecao(e.target.value as "ENTRADA" | "SAIDA")}
+                className="w-full border rounded-md px-3 py-2"
+                disabled={ajusteLoading}
+              >
+                <option value="ENTRADA">Entrada</option>
+                <option value="SAIDA">Saída</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1">Quantidade</label>
+              <input
+                type="number"
+                min={1}
+                value={ajusteQtd}
+                onChange={(e) => setAjusteQtd(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-full border rounded-md px-3 py-2"
+                disabled={ajusteLoading}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium mb-1">Motivo</label>
+              <select
+                value={ajusteMotivo}
+                onChange={(e) => setAjusteMotivo(e.target.value)}
+                className="w-full border rounded-md px-3 py-2"
+                disabled={ajusteLoading}
+              >
+                <option value="EXTRAVIO">Extravío</option>
+                <option value="AVARIA">Avaria</option>
+                <option value="USO_INTERNO">Uso interno</option>
+                <option value="INVENTARIO_POSITIVO">Inventário positivo</option>
+                <option value="INVENTARIO_NEGATIVO">Inventário negativo</option>
+                <option value="CORRECAO_CADASTRO">Correção de cadastro</option>
+                <option value="DEVOLUCAO">Devolução</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="text-sm">
+            <label className="block text-xs font-medium mb-1">Observação (obrigatória)</label>
+            <textarea
+              value={ajusteObs}
+              onChange={(e) => setAjusteObs(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              rows={3}
+              disabled={ajusteLoading}
+            />
+            <p className="text-[11px] text-gray-500 mt-1">
+              Descreva o motivo do ajuste. Mínimo 10 caracteres.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="px-3 py-1.5 text-xs border rounded-md hover:bg-gray-50"
+              onClick={() => setShowAjusteModal(false)}
+              disabled={ajusteLoading}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
+              onClick={salvarAjusteManual}
+              disabled={ajusteLoading}
+            >
+              {ajusteLoading ? "Salvando..." : "Registrar ajuste"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
-
-
-
-
-
-
-
-
-
-

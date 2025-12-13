@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
-import { getNeofinBilling, type NeofinResult } from "@/lib/neofinClient";
+import { getNeofinBilling, upsertNeofinBilling, type NeofinResult } from "@/lib/neofinClient";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -172,34 +172,73 @@ export async function POST(req: Request) {
       .eq("id", cobrancaId)
       .single<Cobranca>();
 
-    if (cobrancaError || !cobranca) {
-      console.error("[Neofin sync boleto] cobranca_nao_encontrada:", cobrancaError);
-      return NextResponse.json({ ok: false, error: "Cobranca nao encontrada." }, { status: 404 });
+  if (cobrancaError || !cobranca) {
+    console.error("[Neofin sync boleto] cobranca_nao_encontrada:", cobrancaError);
+    return NextResponse.json({ ok: false, error: "Cobranca nao encontrada." }, { status: 404 });
+  }
+
+  if (cobranca.status === "CANCELADA") {
+    return NextResponse.json(
+      { ok: false, error: "Cobranca cancelada nao permite sync de boleto." },
+      { status: 400 }
+    );
     }
 
-    if (!cobranca.neofin_charge_id) {
+  let identifier = resolveLookupIdentifier(cobranca);
+  // Se não existir charge, tenta criar
+  if (!identifier) {
+    const cpf = (cobranca.pessoa?.cpf || "").replace(/\D/g, "");
+    if (!cpf) {
       return NextResponse.json(
-        { ok: false, error: "cobranca_sem_neofin_charge_id" },
+        { ok: false, error: "cpf_invalido_para_criar_boleto" },
         { status: 400 }
       );
     }
 
-    if (cobranca.status === "CANCELADA") {
+    const integrationIdentifier = `cobranca-${cobranca.id}`;
+    const neofinCreate = await upsertNeofinBilling({
+      integrationIdentifier,
+      amountCentavos: cobranca.valor_centavos,
+      dueDate: cobranca.vencimento,
+      description: cobranca.descricao,
+      customer: {
+        nome: cobranca.pessoa?.nome ?? `Pessoa #${cobranca.pessoa_id}`,
+        cpf,
+        email: cobranca.pessoa?.email ?? undefined,
+        telefone: cobranca.pessoa?.telefone ?? undefined,
+      },
+    });
+
+    if (!neofinCreate.ok) {
+      console.error("[Neofin sync boleto] falha ao criar charge:", neofinCreate);
       return NextResponse.json(
-        { ok: false, error: "Cobranca cancelada nao permite sync de boleto." },
-        { status: 400 }
+        { ok: false, error: "erro_criar_neofin_boleto", neofin: neofinCreate },
+        { status: 502 }
       );
     }
 
-    const identifier = resolveLookupIdentifier(cobranca);
-    if (!identifier) {
-      return NextResponse.json(
-        { ok: false, error: "identificador_neofin_ausente" },
-        { status: 400 }
-      );
-    }
+    const infoCriacao = extractBillingInfo(neofinCreate.body, integrationIdentifier);
+    identifier = infoCriacao.chargeId ?? integrationIdentifier;
 
-    const neofinResult = await getNeofinBilling({ identifier });
+    // Atualiza cobranca com dados iniciais
+    await supabase
+      .from("cobrancas")
+      .update({
+        neofin_charge_id: identifier,
+        link_pagamento: infoCriacao.paymentLink ?? cobranca.link_pagamento ?? null,
+        linha_digitavel: infoCriacao.digitableLine ?? cobranca.linha_digitavel ?? null,
+        neofin_payload: neofinCreate.body ?? cobranca.neofin_payload ?? null,
+      })
+      .eq("id", cobranca.id);
+  }
+
+  if (!identifier) {
+    return NextResponse.json(
+      { ok: false, error: "identificador_neofin_ausente" },
+      { status: 400 }
+    );
+  }
+  const neofinResult = await getNeofinBilling({ identifier });
 
     if (!neofinResult.ok) {
       console.error("[Neofin sync boleto] erro ao consultar cobrança:", neofinResult);

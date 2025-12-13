@@ -8,6 +8,7 @@ type PessoaResumo = {
   nome?: string | null;
   nome_completo?: string | null;
   cpf?: string | null;
+  cnpj?: string | null;
   telefone_principal?: string | null;
   email?: string | null;
   documento_principal?: string | null;
@@ -89,6 +90,14 @@ type RegraParcelamentoConexao = {
   ativo: boolean;
 };
 
+type ContaConexao = {
+  id: number;
+  pessoa_titular_id: number;
+  tipo_conta: "ALUNO" | "COLABORADOR";
+  descricao_exibicao?: string | null;
+  ativo: boolean;
+};
+
 // NOTA SOBRE O MODELO DE PAPEIS NA LOJA v0:
 // - "comprador" é a Pessoa que está realizando a compra/pagamento.
 // - "beneficiario" é a Pessoa que vai usar o produto (normalmente aluno), armazenada por item em loja_venda_itens.beneficiario_pessoa_id.
@@ -119,6 +128,15 @@ export default function FrenteCaixaLojaPage() {
   const [regrasConexao, setRegrasConexao] = useState<RegraParcelamentoConexao[]>([]);
   const [carregandoRegrasConexao, setCarregandoRegrasConexao] = useState(false);
   const [parcelasConexao, setParcelasConexao] = useState<number>(1);
+  const [contasConexao, setContasConexao] = useState<ContaConexao[]>([]);
+  const [contaConexaoId, setContaConexaoId] = useState<number | "">("");
+
+  // cadastro rápido de pessoa (comprador/beneficiário)
+  const [showCadastroRapido, setShowCadastroRapido] = useState(false);
+  const [cadastroContexto, setCadastroContexto] = useState<"COMPRADOR" | "BENEFICIARIO">(
+    "COMPRADOR",
+  );
+  const [cadastroItemId, setCadastroItemId] = useState<string | null>(null);
 
   const [dataVencimento, setDataVencimento] = useState<string | "">("");
   const [observacoes, setObservacoes] = useState("");
@@ -493,6 +511,53 @@ export default function FrenteCaixaLojaPage() {
       setParcelasConexao(parcelasDisponiveisConexao[0] ?? 1);
     }
   }, [isCartaoConexao, parcelasDisponiveisConexao, parcelasConexao]);
+
+  // Carrega contas de Crédito Conexão do comprador para selecionar na venda
+  useEffect(() => {
+    if (!isCartaoConexao || !comprador?.id || !tipoContaConexao) {
+      setContasConexao([]);
+      setContaConexaoId("");
+      return;
+    }
+
+    let cancelado = false;
+    async function carregarContasConexao() {
+      try {
+        const resp = await fetch(
+          `/api/financeiro/credito-conexao/contas?tipo_conta=${tipoContaConexao}`,
+          { credentials: "include" },
+        );
+        const json = await resp.json();
+        if (cancelado) return;
+
+        const contas: ContaConexao[] = (json.contas ?? []).filter(
+          (c: any) => c?.pessoa_titular_id === comprador.id && (c?.ativo ?? true),
+        );
+        setContasConexao(contas);
+
+        if (contas.length === 1) {
+          setContaConexaoId(contas[0].id);
+        } else if (contas.length > 1) {
+          const atualValido = contas.some((c) => c.id === contaConexaoId);
+          if (!atualValido) {
+            setContaConexaoId(contas[0].id);
+          }
+        } else {
+          setContaConexaoId("");
+        }
+      } catch (err) {
+        if (cancelado) return;
+        console.error(err);
+        setContasConexao([]);
+        setContaConexaoId("");
+      }
+    }
+
+    carregarContasConexao();
+    return () => {
+      cancelado = true;
+    };
+  }, [isCartaoConexao, comprador?.id, tipoContaConexao, contaConexaoId]);
   // ======== MANIPULAÇÃO DE ITENS =========
   function adicionarItem(produto: ProdutoResumo) {
     const idTemp = crypto.randomUUID();
@@ -516,6 +581,33 @@ export default function FrenteCaixaLojaPage() {
 
   function removerItem(idTemp: string) {
     setItens((prev) => prev.filter((i) => i.idTemp !== idTemp));
+  }
+
+  function abrirCadastroRapido(
+    contexto: "COMPRADOR" | "BENEFICIARIO",
+    itemId?: string | null,
+  ) {
+    setCadastroContexto(contexto);
+    setCadastroItemId(itemId ?? null);
+    setShowCadastroRapido(true);
+  }
+
+  function handleCadastroRapidoSuccess(pessoa: PessoaResumo) {
+    if (cadastroContexto === "COMPRADOR") {
+      setComprador(pessoa);
+      setBuscaComprador("");
+      setResultadoComprador([]);
+    } else if (cadastroContexto === "BENEFICIARIO" && cadastroItemId) {
+      setItens((prev) =>
+        prev.map((row) =>
+          row.idTemp === cadastroItemId ? { ...row, beneficiario: pessoa } : row,
+        ),
+      );
+      setItemSelecionandoAluno(null);
+      setBuscaAluno("");
+      setResultadoAluno([]);
+    }
+    setShowCadastroRapido(false);
   }
 
   // ======== FINALIZAÇÃO DA VENDA =========
@@ -570,6 +662,12 @@ export default function FrenteCaixaLojaPage() {
       return;
     }
 
+    if (isCartaoConexao && (!contaConexaoId || Number(contaConexaoId) <= 0)) {
+      setMensagem("Selecione uma conta de Crédito Conexão antes de finalizar.");
+      setMensagemTipo("error");
+      return;
+    }
+
     const payload = {
       cliente_pessoa_id: comprador.id,
       tipo_venda: tipoVenda,
@@ -598,6 +696,7 @@ export default function FrenteCaixaLojaPage() {
         : isCartaoConexao
         ? parcelasConexao
         : null,
+      conta_conexao_id: isCartaoConexao && contaConexaoId ? Number(contaConexaoId) : null,
     };
 
     setSaving(true);
@@ -684,6 +783,19 @@ export default function FrenteCaixaLojaPage() {
                     {p.nome_completo || p.nome || "Sem nome"} (ID {p.id})
                   </button>
                 ))}
+                {!buscandoComprador &&
+                  resultadoComprador.length === 0 &&
+                  buscaComprador.trim().length >= 2 && (
+                    <div className="p-2">
+                      <button
+                        type="button"
+                        className="text-xs text-indigo-600 hover:underline"
+                        onClick={() => abrirCadastroRapido("COMPRADOR")}
+                      >
+                        Cadastrar novo comprador
+                      </button>
+                    </div>
+                  )}
               </div>
             </div>
           ) : (
@@ -913,6 +1025,19 @@ export default function FrenteCaixaLojaPage() {
                 {!buscandoAluno &&
                   resultadoAluno.length === 0 &&
                   buscaAluno.trim().length >= 2 && (
+                    <div className="p-2">
+                      <button
+                        type="button"
+                        className="text-xs text-indigo-600 hover:underline"
+                        onClick={() => abrirCadastroRapido("BENEFICIARIO", itemSelecionandoAluno)}
+                      >
+                        Cadastrar novo usuário (beneficiário)
+                      </button>
+                    </div>
+                  )}
+                {!buscandoAluno &&
+                  resultadoAluno.length === 0 &&
+                  buscaAluno.trim().length >= 2 && (
                     <p className="text-xs text-gray-500 px-3 py-2">
                       Nenhuma pessoa encontrada para esta busca.
                     </p>
@@ -989,12 +1114,12 @@ export default function FrenteCaixaLojaPage() {
             </div>
           )}
         </div>
-        {/* Cartão Conexão — seleção de parcelas conforme regras */}
+        {/* Cartao Conexao - selecao de parcelas conforme regras */}
         {isCartaoConexao && (
           <div className="grid md:grid-cols-3 gap-3 mt-3">
             <div>
               <label className="block text-xs font-medium mb-1">
-                Parcelas (Cartão Conexão)
+                Parcelas (Cartao Conexao)
               </label>
               <select
                 value={parcelasConexao}
@@ -1016,12 +1141,38 @@ export default function FrenteCaixaLojaPage() {
                 parcelasDisponiveisConexao.length === 1 &&
                 parcelasDisponiveisConexao[0] === 1 && (
                   <p className="mt-1 text-[11px] text-gray-500">
-                    Parcelamento extra não disponível para o valor atual da compra.
+                    Parcelamento extra nao disponivel para o valor atual da compra.
                   </p>
                 )}
             </div>
+            <div>
+              <label className="block text-xs font-medium mb-1">
+                Conta Credito Conexao
+              </label>
+              {contasConexao.length > 0 ? (
+                <select
+                  value={contaConexaoId}
+                  onChange={(e) =>
+                    setContaConexaoId(e.target.value ? Number(e.target.value) : "")
+                  }
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                >
+                  <option value="">Selecione...</option>
+                  {contasConexao.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.descricao_exibicao || `Conta #${c.id}`} — {c.tipo_conta}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-[12px] text-red-600">
+                  Nenhuma conta ativa de Credito Conexao para este comprador/tipo.
+                </p>
+              )}
+            </div>
           </div>
         )}
+
 
         {/* Cartão externo (maquininha) */}
         {isCredito && (
@@ -1147,7 +1298,325 @@ export default function FrenteCaixaLojaPage() {
           </button>
         </div>
       </section>
+      <CadastroPessoaRapidaModal
+        open={showCadastroRapido}
+        contexto={cadastroContexto}
+        onClose={() => setShowCadastroRapido(false)}
+        onSuccess={handleCadastroRapidoSuccess}
+      />
     </div>
   );
 }
 
+type CadastroPessoaRapidaModalProps = {
+  open: boolean;
+  contexto: "COMPRADOR" | "BENEFICIARIO";
+  onClose: () => void;
+  onSuccess: (p: PessoaResumo) => void;
+};
+
+function CadastroPessoaRapidaModal({
+  open,
+  contexto,
+  onClose,
+  onSuccess,
+}: CadastroPessoaRapidaModalProps) {
+  const [tipoPessoa, setTipoPessoa] = useState<"FISICA" | "JURIDICA">("FISICA");
+  const [nome, setNome] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [cnpj, setCnpj] = useState("");
+  const [razaoSocial, setRazaoSocial] = useState("");
+  const [nomeFantasia, setNomeFantasia] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [email, setEmail] = useState("");
+  const [logradouro, setLogradouro] = useState("");
+  const [numero, setNumero] = useState("");
+  const [complemento, setComplemento] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [uf, setUf] = useState("");
+  const [cep, setCep] = useState("");
+  const [referencia, setReferencia] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setNome("");
+      setCpf("");
+      setCnpj("");
+      setRazaoSocial("");
+      setNomeFantasia("");
+      setTelefone("");
+      setEmail("");
+      setLogradouro("");
+      setNumero("");
+      setComplemento("");
+      setBairro("");
+      setCidade("");
+      setUf("");
+      setCep("");
+      setReferencia("");
+      setErro(null);
+      setTipoPessoa("FISICA");
+    }
+  }, [open]);
+
+  async function salvar() {
+    setErro(null);
+    setSalvando(true);
+    try {
+      const payload: any = {
+        tipo_pessoa: tipoPessoa,
+        nome: nome || razaoSocial || nomeFantasia,
+        cpf,
+        cnpj,
+        razao_social: razaoSocial,
+        nome_fantasia: nomeFantasia,
+        telefone,
+        email,
+        endereco: {
+          logradouro,
+          numero,
+          complemento,
+          bairro,
+          cidade,
+          uf,
+          cep,
+          referencia,
+        },
+      };
+
+      const res = await fetch("/api/pessoas/rapido", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setErro(json.error || "Falha ao cadastrar pessoa.");
+        return;
+      }
+      const pessoa = json.data?.pessoa as PessoaResumo;
+      if (pessoa?.id) {
+        onSuccess(pessoa);
+      } else {
+        setErro("Cadastro retornou resposta inesperada.");
+      }
+    } catch (e: any) {
+      setErro("Erro inesperado ao cadastrar pessoa.");
+      console.error(e);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <div className="w-full max-w-3xl bg-white rounded-xl shadow-lg p-5 space-y-4 overflow-y-auto max-h-[90vh]">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">
+              Cadastro rápido — {contexto === "COMPRADOR" ? "Comprador" : "Beneficiário"}
+            </h3>
+            <p className="text-xs text-gray-600">
+              Dados completos para boleto (endereço recomendável).
+            </p>
+          </div>
+          <button
+            type="button"
+            className="text-sm text-gray-600 hover:text-gray-800"
+            onClick={onClose}
+            disabled={salvando}
+          >
+            Fechar
+          </button>
+        </div>
+
+        {erro && <div className="text-sm text-red-600">{erro}</div>}
+
+        <div className="grid md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <label className="block text-xs font-medium mb-1">Tipo de pessoa</label>
+            <select
+              value={tipoPessoa}
+              onChange={(e) => setTipoPessoa(e.target.value as "FISICA" | "JURIDICA")}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            >
+              <option value="FISICA">Pessoa física</option>
+              <option value="JURIDICA">Pessoa jurídica</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              {tipoPessoa === "FISICA" ? "Nome completo" : "Nome/Apelido"}
+            </label>
+            <input
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+          {tipoPessoa === "FISICA" ? (
+            <div>
+              <label className="block text-xs font-medium mb-1">CPF</label>
+              <input
+                value={cpf}
+                onChange={(e) => setCpf(e.target.value)}
+                className="w-full border rounded-md px-3 py-2"
+                disabled={salvando}
+              />
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-medium mb-1">CNPJ</label>
+                <input
+                  value={cnpj}
+                  onChange={(e) => setCnpj(e.target.value)}
+                  className="w-full border rounded-md px-3 py-2"
+                  disabled={salvando}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Razão social</label>
+                <input
+                  value={razaoSocial}
+                  onChange={(e) => setRazaoSocial(e.target.value)}
+                  className="w-full border rounded-md px-3 py-2"
+                  disabled={salvando}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1">Nome fantasia</label>
+                <input
+                  value={nomeFantasia}
+                  onChange={(e) => setNomeFantasia(e.target.value)}
+                  className="w-full border rounded-md px-3 py-2"
+                  disabled={salvando}
+                />
+              </div>
+            </>
+          )}
+          <div>
+            <label className="block text-xs font-medium mb-1">Telefone</label>
+            <input
+              value={telefone}
+              onChange={(e) => setTelefone(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">E-mail</label>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <label className="block text-xs font-medium mb-1">Logradouro</label>
+            <input
+              value={logradouro}
+              onChange={(e) => setLogradouro(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Número</label>
+            <input
+              value={numero}
+              onChange={(e) => setNumero(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Complemento</label>
+            <input
+              value={complemento}
+              onChange={(e) => setComplemento(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Bairro</label>
+            <input
+              value={bairro}
+              onChange={(e) => setBairro(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Cidade</label>
+            <input
+              value={cidade}
+              onChange={(e) => setCidade(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">UF</label>
+            <input
+              value={uf}
+              onChange={(e) => setUf(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              maxLength={2}
+              disabled={salvando}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">CEP</label>
+            <input
+              value={cep}
+              onChange={(e) => setCep(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Referência</label>
+            <input
+              value={referencia}
+              onChange={(e) => setReferencia(e.target.value)}
+              className="w-full border rounded-md px-3 py-2"
+              disabled={salvando}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            className="px-3 py-1.5 text-xs border rounded-md hover:bg-gray-50"
+            onClick={onClose}
+            disabled={salvando}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
+            onClick={salvar}
+            disabled={salvando}
+          >
+            {salvando ? "Salvando..." : "Cadastrar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

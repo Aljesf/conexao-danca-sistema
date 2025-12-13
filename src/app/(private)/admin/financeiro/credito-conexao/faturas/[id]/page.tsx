@@ -87,7 +87,7 @@ export default function DetalheFaturaCreditoConexaoPage() {
       const json = await res.json();
       if (!res.ok || !json.ok) {
         console.error(json);
-        setErro("Falha ao sincronizar boleto.");
+        setErro(json?.details || json?.error || "Falha ao sincronizar boleto.");
         return;
       }
 

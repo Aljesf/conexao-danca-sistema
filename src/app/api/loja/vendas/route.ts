@@ -1,4 +1,6 @@
 import { getCentroCustoLojaId } from "@/lib/financeiro/centrosCusto";
+import { ensureFaturaAberta, getPeriodoReferencia, recalcularComprasFatura, vincularLancamentoNaFatura } from "@/lib/financeiro/creditoConexaoFaturas";
+import { registrarSaidaEstoque } from "@/lib/loja/estoque";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -30,6 +32,8 @@ type Venda = {
   vendedor_user_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  conta_conexao_id?: number | null;
+  numero_parcelas?: number | null;
 };
 
 /**
@@ -225,12 +229,13 @@ export async function POST(req: NextRequest) {
     status_pagamento,
     desconto_centavos,
     data_vencimento,
-    observacoes,
-    observacao_vendedor,
-    itens,
-    cartao_maquina_id,
-    cartao_bandeira_id,
-    cartao_numero_parcelas,
+  observacoes,
+  observacao_vendedor,
+  itens,
+  cartao_maquina_id,
+  cartao_bandeira_id,
+  cartao_numero_parcelas,
+  conta_conexao_id,
   } = body ?? {};
 
   if (!cliente_pessoa_id || typeof cliente_pessoa_id !== "number") {
@@ -287,6 +292,9 @@ export async function POST(req: NextRequest) {
   }
 
   const isCartaoConexao = formaPagamentoInfo?.tipo_base === "CARTAO_CONEXAO";
+  const contaConexaoIdRaw = conta_conexao_id;
+  const contaConexaoId =
+    typeof contaConexaoIdRaw === "number" ? contaConexaoIdRaw : Number(contaConexaoIdRaw);
 
   if (!Array.isArray(itens) || itens.length === 0) {
     return json(400, { ok: false, error: "Envie pelo menos um item na venda." });
@@ -375,6 +383,67 @@ export async function POST(req: NextRequest) {
   const subtotal = itensCalculados.reduce((sum, i) => sum + i.total_centavos, 0);
   const valorTotalVenda =
     tipo_venda === "ENTREGA_FIGURINO" ? 0 : Math.max(subtotal - desconto, 0);
+  const numeroParcelasConexao =
+    isCartaoConexao && Number.isFinite(cartao_numero_parcelas) && cartao_numero_parcelas > 0
+      ? Number(cartao_numero_parcelas)
+      : 1;
+
+  let contaConexaoSelecionada:
+    | { id: number; pessoa_titular_id: number; tipo_conta: "ALUNO" | "COLABORADOR" }
+    | null = null;
+
+  if (isCartaoConexao) {
+    let tipoConta: "ALUNO" | "COLABORADOR" = "ALUNO";
+    if (formaPagamentoInfo?.codigo === "CARTAO_CONEXAO_COLAB") {
+      tipoConta = "COLABORADOR";
+    }
+
+    if (!Number.isFinite(contaConexaoId) || contaConexaoId <= 0) {
+      return json(400, { ok: false, error: "conta_conexao_obrigatoria" });
+    }
+
+    const { data: contaConexao, error: contaError } = await supabaseAdmin
+      .from("credito_conexao_contas")
+      .select("id, pessoa_titular_id, tipo_conta, ativo")
+      .eq("id", contaConexaoId)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (contaError || !contaConexao) {
+      console.error("Conta de Crédito Conexão não encontrada para id informado", {
+        contaConexaoId,
+        contaError,
+      });
+      return json(400, {
+        ok: false,
+        error: "conta_conexao_nao_encontrada",
+        message:
+          "Não foi encontrada conta ativa de Crédito Conexão para o titular selecionado. Verifique o cadastro antes de usar esta forma de pagamento.",
+      });
+    }
+
+    if (contaConexao.pessoa_titular_id !== cliente_pessoa_id) {
+      return json(400, {
+        ok: false,
+        error: "conta_conexao_obrigatoria",
+        message: "A conta de Crédito Conexão informada não pertence a este comprador.",
+      });
+    }
+
+    if (contaConexao.tipo_conta !== tipoConta) {
+      return json(400, {
+        ok: false,
+        error: "conta_conexao_incompativel",
+        message: "A conta de Crédito Conexão informada não corresponde ao tipo selecionado.",
+      });
+    }
+
+    contaConexaoSelecionada = {
+      id: contaConexao.id,
+      pessoa_titular_id: contaConexao.pessoa_titular_id,
+      tipo_conta: tipoConta,
+    };
+  }
 
   let cartaoInfo: {
     maquinaId: number;
@@ -514,6 +583,12 @@ export async function POST(req: NextRequest) {
         data_vencimento: dueDate,
         observacoes: observacoes || null,
         observacao_vendedor: observacao_vendedor || null,
+        conta_conexao_id: isCartaoConexao ? contaConexaoSelecionada?.id ?? null : null,
+        numero_parcelas: isCartaoConexao
+          ? numeroParcelasConexao
+          : isCredito
+          ? cartaoNumeroParcelas
+          : null,
       })
       .select("*")
       .single();
@@ -548,94 +623,159 @@ export async function POST(req: NextRequest) {
       const qtd = Number(item.quantidade) || 0;
       if (qtd <= 0) continue;
 
-      await supabaseAdmin.from("loja_estoque_movimentos").insert({
-        produto_id: item.produto_id,
-        tipo: "SAIDA",
-        quantidade: qtd,
-        origem: "VENDA",
-        referencia_id: venda.id,
-        observacao: "Saida automatica por venda no caixa",
-        created_by: null,
-      });
+      try {
+        await registrarSaidaEstoque({
+          supabase: supabaseAdmin,
+          produtoId: item.produto_id,
+          quantidade: qtd,
+          origem: "VENDA",
+          referenciaId: venda.id,
+          observacao: "Saida automatica por venda no caixa",
+          createdBy: null,
+        });
+      } catch (estoqueErr) {
+        console.error("[POST /api/loja/vendas] erro ao registrar saida de estoque:", estoqueErr);
+        return json(500, { ok: false, error: "erro_movimento_estoque_venda" });
+      }
+    }
 
-      const { data: prodRow } = await supabaseAdmin
-        .from("loja_produtos")
-        .select("estoque_atual")
-        .eq("id", item.produto_id)
-        .maybeSingle();
-      const estoqueAtual = Number(prodRow?.estoque_atual) || 0;
-      const novoEstoque = Math.max(estoqueAtual - qtd, 0);
-    await supabaseAdmin
-      .from("loja_produtos")
-      .update({ estoque_atual: novoEstoque })
-      .eq("id", item.produto_id);
-  }
-
-    // Integração Crédito Conexão (forma base CARTAO_CONEXAO)
+    // Integracao Credito Conexao (forma base CARTAO_CONEXAO)
     if (isCartaoConexao) {
       try {
-        let tipoConta: "ALUNO" | "COLABORADOR" = "ALUNO";
-        if (formaPagamentoInfo?.codigo === "CARTAO_CONEXAO_COLAB") {
-          tipoConta = "COLABORADOR";
-        }
-
-        const titularId = cliente_pessoa_id;
-
-        const { data: contaConexao, error: contaError } = await supabaseAdmin
-          .from("credito_conexao_contas")
-          .select("id, ativo, tipo_conta")
-          .eq("pessoa_titular_id", titularId)
-          .eq("tipo_conta", tipoConta)
-          .eq("ativo", true)
-          .maybeSingle();
-
-        if (contaError || !contaConexao) {
-          console.error("Conta de Crédito Conexão não encontrada para titular", {
-            titularId,
-            tipoConta,
-            erro: contaError,
-          });
-          return json(400, {
-            ok: false,
-            error: "conta_conexao_nao_encontrada",
-            message:
-              "Não foi encontrada uma conta ativa de Crédito Conexão para este titular. Verifique o cadastro antes de usar esta forma de pagamento.",
-          });
+        if (!contaConexaoSelecionada) {
+          return json(400, { ok: false, error: "conta_conexao_obrigatoria" });
         }
 
         const valorLancamentoCentavos = valorTotalVenda ?? 0;
-        const numeroParcelasConexaoRaw = cartao_numero_parcelas;
-        const numeroParcelasConexao =
-          typeof numeroParcelasConexaoRaw === "number" && numeroParcelasConexaoRaw > 0
-            ? numeroParcelasConexaoRaw
-            : 1;
 
-        const { error: lancamentoError } = await supabaseAdmin
+        const { data: lancamentoExistente, error: lancamentoBuscaError } = await supabaseAdmin
           .from("credito_conexao_lancamentos")
-          .insert({
-            conta_conexao_id: contaConexao.id,
-            origem_sistema: "LOJA",
-            origem_id: venda.id,
-            descricao: `Venda Loja #${venda.id} - Cartao Conexao`,
-            valor_centavos: valorLancamentoCentavos,
-            numero_parcelas: numeroParcelasConexao,
-          });
+          .select("id")
+          .eq("origem_sistema", "LOJA")
+          .eq("origem_id", venda.id)
+          .maybeSingle();
 
-        if (lancamentoError) {
+        let lancamentoId: number | null = null;
+
+        if (lancamentoBuscaError) {
           console.error(
-            "Erro ao criar lançamento de Crédito Conexão para venda da loja",
-            lancamentoError
+            "[POST /api/loja/vendas] erro ao verificar lancamento de credito conexao existente",
+            lancamentoBuscaError
           );
-          return json(500, {
-            ok: false,
-            error: "erro_criar_lancamento_credito_conexao",
+        }
+
+        if (lancamentoExistente?.id) {
+          lancamentoId = lancamentoExistente.id;
+          const { error: updateLanc } = await supabaseAdmin
+            .from("credito_conexao_lancamentos")
+            .update({
+              conta_conexao_id: contaConexaoSelecionada.id,
+              valor_centavos: valorLancamentoCentavos,
+              numero_parcelas: numeroParcelasConexao,
+              status: "PENDENTE_FATURA",
+            })
+            .eq("id", lancamentoExistente.id);
+
+          if (updateLanc) {
+            console.error(
+              "[POST /api/loja/vendas] erro ao atualizar lancamento credito conexao existente",
+              updateLanc
+            );
+          } else {
+            console.log("[loja] lancamento credito conexao reutilizado", {
+              lancamentoId,
+              vendaId: venda.id,
+              contaConexaoId: contaConexaoSelecionada.id,
+            });
+          }
+        } else {
+          const { data: lancamentoCriado, error: lancamentoError } = await supabaseAdmin
+            .from("credito_conexao_lancamentos")
+            .insert({
+              conta_conexao_id: contaConexaoSelecionada.id,
+              origem_sistema: "LOJA",
+              origem_id: venda.id,
+              descricao: `Venda Loja #${venda.id} - Cartao Conexao`,
+              valor_centavos: valorLancamentoCentavos,
+              numero_parcelas: numeroParcelasConexao,
+              status: "PENDENTE_FATURA",
+            })
+            .select("id")
+            .single();
+
+          if (lancamentoError) {
+            console.error(
+              "Erro ao criar lancamento de Credito Conexao para venda da loja",
+              lancamentoError
+            );
+            return json(500, {
+              ok: false,
+              error: "erro_criar_lancamento_credito_conexao",
+            });
+          }
+
+          lancamentoId = lancamentoCriado?.id ?? null;
+          console.log("[loja] lancamento credito conexao criado", {
+            lancamentoId,
+            vendaId: venda.id,
+            contaConexaoId: contaConexaoSelecionada.id,
+            valor: valorLancamentoCentavos,
+            numeroParcelas: numeroParcelasConexao,
           });
         }
 
-        // Para CARTAO_CONEXAO, não criar cobrança/recebimento/recebível aqui.
-        return json(201, { ok: true, data: { venda, itens: itensCriados ?? [] } });
+        let statusLancamento: "PENDENTE_FATURA" | "FATURADO" = "PENDENTE_FATURA";
+        let faturaId: number | null = null;
+        let periodoFatura: string | null = null;
+        let comprasFatura: number | null = null;
+
+        if (lancamentoId) {
+          try {
+            const periodo = getPeriodoReferencia();
+            const { fatura, periodo_usado } = await ensureFaturaAberta(
+              supabaseAdmin,
+              contaConexaoSelecionada.id,
+              periodo
+            );
+            faturaId = fatura.id;
+            periodoFatura = periodo_usado;
+
+            const vinc = await vincularLancamentoNaFatura(supabaseAdmin, faturaId, lancamentoId);
+            if (!vinc.ok) {
+              throw vinc.error || new Error("Erro ao vincular lancamento na fatura");
+            }
+
+            const { error: updLanc } = await supabaseAdmin
+              .from("credito_conexao_lancamentos")
+              .update({ status: "FATURADO" })
+              .eq("id", lancamentoId);
+
+            if (updLanc) {
+              throw updLanc;
+            }
+
+            statusLancamento = "FATURADO";
+            comprasFatura = await recalcularComprasFatura(supabaseAdmin, faturaId);
+          } catch (errFatura: any) {
+            console.error("[POST /api/loja/vendas] falha ao vincular lancamento na fatura", errFatura);
+          }
+        }
+
+        // Para CARTAO_CONEXAO, nao criar cobranca/recebimento/recebivel aqui.
+        return json(201, {
+          ok: true,
+          data: {
+            venda,
+            itens: itensCriados ?? [],
+            lancamento_credito_conexao_id: lancamentoId,
+            status_lancamento: statusLancamento,
+            fatura_id: faturaId,
+            periodo_referencia: periodoFatura,
+            compras_fatura_centavos: comprasFatura,
+          },
+        });
       } catch (err) {
-        console.error("Erro inesperado na integração com Crédito Conexão", err);
+        console.error("Erro inesperado na integracao com Credito Conexao", err);
         return json(500, { ok: false, error: "erro_credito_conexao_interno" });
       }
     }

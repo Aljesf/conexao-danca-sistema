@@ -95,6 +95,7 @@ export async function POST(req: Request) {
     nacionalidade,
     naturalidade,
     cpf,
+    cnpj,
     tipo_pessoa,
     observacoes,
     ativo,
@@ -112,7 +113,48 @@ export async function POST(req: Request) {
 
   const createdBy = user.id;
   const updatedBy = createdBy;
-  const cpfValue = cpf && cpf.trim() !== "" ? cpf.trim() : null;
+  const onlyDigits = (v: string) => (v || "").replace(/\D/g, "");
+  const cpfValue = cpf && cpf.trim() !== "" ? onlyDigits(cpf) : null;
+  const cnpjValue = cnpj && (cnpj as any).trim ? onlyDigits(cnpj as any) : null;
+
+  // Checagem de duplicidade por CPF/CNPJ (fluxo amigável)
+  if (cpfValue) {
+    const { data: existenteCpf, error: errCpf } = await supabase
+      .from("pessoas")
+      .select("id,nome,cpf,cnpj")
+      .eq("cpf", cpfValue)
+      .maybeSingle();
+
+    if (errCpf) {
+      console.warn("[api/pessoas] erro ao checar cpf:", errCpf);
+    }
+
+    if (existenteCpf?.id) {
+      return NextResponse.json(
+        { ok: false, error: "pessoa_ja_existe", pessoa: existenteCpf },
+        { status: 409 }
+      );
+    }
+  }
+
+  if (cnpjValue) {
+    const { data: existenteCnpj, error: errCnpj } = await supabase
+      .from("pessoas")
+      .select("id,nome,cpf,cnpj")
+      .eq("cnpj", cnpjValue)
+      .maybeSingle();
+
+    if (errCnpj) {
+      console.warn("[api/pessoas] erro ao checar cnpj:", errCnpj);
+    }
+
+    if (existenteCnpj?.id) {
+      return NextResponse.json(
+        { ok: false, error: "pessoa_ja_existe", pessoa: existenteCnpj },
+        { status: 409 }
+      );
+    }
+  }
 
   const { data, error } = await supabase
     .from("pessoas")
@@ -128,6 +170,7 @@ export async function POST(req: Request) {
       nacionalidade: nacionalidade ?? null,
       naturalidade: naturalidade ?? null,
       cpf: cpfValue,
+      cnpj: cnpjValue,
       tipo_pessoa: tipo_pessoa ?? "FISICA",
       observacoes: observacoes ?? null,
       ativo: ativo ?? true,

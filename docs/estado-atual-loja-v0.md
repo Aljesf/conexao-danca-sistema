@@ -75,9 +75,13 @@ O modelo conceitual do v0 foi superado por evoluções no código e no schema; a
 - Integração de estoque pode não estar presente em todas as operações (validar `loja_estoque_movimentos` no ambiente).
 - Documentos conceituais (`modelo-loja-v0.md`) estão defasados frente ao código; não usar como fonte única.
 
-## 7. Próximos passos recomendados
+- Referencia de regra oficial para ajuste manual de estoque: `docs/estoque-ajuste-manual.md`.
+
+## 7. Proximos passos recomendados
 - Consolidar integração financeira completa (cobranças/recebimentos para vendas; contas a pagar/pagamentos para compras).
 +- Garantir consistência de estoque (entradas/saídas/cancelamentos) e exibir saldo confiável.
 %- Refinar relatórios (vendas, estoque, compras, fornecedores) e alinhar com centros de custo/categorias financeiras.
 %- Revisar UX do caixa e do admin de compras/estoque para a Loja v1.
 %- Atualizar documentação sempre que tabelas ou rotas da Loja mudarem; este arquivo é a fonte oficial do estado atual.
+
+

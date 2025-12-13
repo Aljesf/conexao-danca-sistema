@@ -10,6 +10,7 @@ export async function GET(req: Request) {
 
     const contaIdParam = searchParams.get("conta_conexao_id");
     const statusParam = searchParams.get("status"); // ABERTA, PAGA, EM_ATRASO, CANCELADA ou null
+    const periodoParam = searchParams.get("periodo_referencia"); // YYYY-MM
 
     let query = supabase
       .from("credito_conexao_faturas")
@@ -23,14 +24,30 @@ export async function GET(req: Request) {
         valor_total_centavos,
         valor_taxas_centavos,
         status,
+        conta:credito_conexao_contas (
+          id,
+          descricao_exibicao,
+          tipo_conta,
+          pessoa_titular_id,
+          titular:pessoas (
+            id,
+            nome,
+            cpf
+          )
+        ),
         created_at,
         updated_at
       `,
       )
-      .order("created_at", { ascending: false });
+      .order("periodo_referencia", { ascending: false })
+      .order("id", { ascending: false });
 
     if (contaIdParam) {
       query = query.eq("conta_conexao_id", Number(contaIdParam));
+    }
+
+    if (periodoParam) {
+      query = query.eq("periodo_referencia", periodoParam);
     }
 
     if (statusParam) {

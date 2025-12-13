@@ -166,14 +166,16 @@ export default function DetalheCompraAdminPage() {
   async function carregarContasFinanceiras() {
     try {
       const res = await fetch("/api/financeiro/contas-financeiras");
-      const json: ApiResponse<any[]> = await res.json();
-      if (!res.ok || !json.ok || !json.data) {
-        console.error("Erro ao carregar contas financeiras:", json.error);
+      const json = await res.json();
+
+      // API retorna { ok: true, contas: [...] }
+      if (!res.ok || !json?.ok || !Array.isArray(json?.contas)) {
+        console.error("Erro ao carregar contas financeiras:", json?.error ?? json);
         return;
       }
 
       setContasFinanceiras(
-        json.data.map((c) => ({
+        json.contas.map((c: any) => ({
           id: c.id,
           nome: c.nome,
           codigo: c.codigo ?? null,
@@ -838,5 +840,4 @@ export default function DetalheCompraAdminPage() {
     </div>
   );
 }
-
 

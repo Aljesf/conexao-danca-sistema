@@ -13,7 +13,7 @@ const supabaseAdmin =
 
 export async function GET(
   _req: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   if (!supabaseAdmin) {
     return NextResponse.json(
@@ -22,8 +22,9 @@ export async function GET(
     );
   }
 
-  const id = Number(context.params?.id);
-  if (!id || Number.isNaN(id)) {
+  const { id } = await context.params;
+  const idNum = Number(id);
+  if (!idNum || Number.isNaN(idNum)) {
     return NextResponse.json(
       { ok: false, error: "ID inválido." },
       { status: 400 }
@@ -48,7 +49,7 @@ export async function GET(
         observacoes
       `
       )
-      .eq("id", id)
+      .eq("id", idNum)
       .maybeSingle();
 
     if (errConta || !conta) {
@@ -72,7 +73,7 @@ export async function GET(
         conta_financeira_id
       `
       )
-      .eq("conta_pagar_id", id)
+      .eq("conta_pagar_id", idNum)
       .order("data_pagamento", { ascending: false });
 
     if (errPag) {

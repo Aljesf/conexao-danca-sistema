@@ -9,7 +9,13 @@ type ApiResponse<T = any> = {
   data?: T;
 };
 
-type PedidoStatus = "RASCUNHO" | "EM_ANDAMENTO" | "PARCIAL" | "CONCLUIDO" | "CANCELADO";
+type PedidoStatus =
+  | "RASCUNHO"
+  | "EM_ANDAMENTO"
+  | "PARCIAL"
+  | "CONCLUIDO"
+  | "CANCELADO"
+  | "PENDENTE_PAGAMENTO";
 
 type PedidoCompraItemDTO = {
   id: number;
@@ -256,7 +262,7 @@ async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | 
 // ==============================
 export async function GET(
   _req: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   if (!supabaseAdmin) {
     return json(500, {
@@ -266,7 +272,8 @@ export async function GET(
     });
   }
 
-  const pedidoId = Number(context.params?.id);
+  const { id } = await context.params;
+  const pedidoId = Number(id);
   if (!pedidoId || Number.isNaN(pedidoId)) {
     return json(400, { ok: false, error: "ID invalido." });
   }
@@ -290,7 +297,7 @@ export async function GET(
 // ==============================
 export async function POST(
   req: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   if (!supabaseAdmin) {
     return json(500, {
@@ -300,7 +307,8 @@ export async function POST(
     });
   }
 
-  const pedidoId = Number(context.params?.id);
+  const { id } = await context.params;
+  const pedidoId = Number(id);
   if (!Number.isFinite(pedidoId)) {
     return json(400, { ok: false, error: "ID invalido." });
   }
@@ -500,6 +508,8 @@ export async function POST(
       });
     });
 
+    let movimentoWarning = false;
+
     for (const rec of itensPayload) {
       const info = itensMap.get(rec.itemId);
       if (!info) {
@@ -517,19 +527,20 @@ export async function POST(
       }
     }
 
-    const usarColunaQuantidade = await temColunaQuantidadeRecebimento();
     const recebimentosInsert = itensPayload.map((rec) => {
-      const base = {
+      const produtoInfo = itensMap.get(rec.itemId)!;
+      const precoCusto = Number(produtoInfo?.preco_custo_centavos ?? 0) || 0;
+      return {
         pedido_id: pedidoId,
         item_id: rec.itemId,
-        produto_id: itensMap.get(rec.itemId)!.produto_id,
+        produto_id: produtoInfo.produto_id,
+        quantidade: rec.quantidade,
+        quantidade_recebida: rec.quantidade,
+        preco_custo_centavos: precoCusto,
         data_recebimento: dataRecebimento,
         observacao,
         created_by: null,
       };
-      return usarColunaQuantidade
-        ? { ...base, quantidade: rec.quantidade }
-        : { ...base, quantidade_recebida: rec.quantidade };
     });
 
     const { error: errRec } = await supabaseAdmin
@@ -575,16 +586,11 @@ export async function POST(
             observacao ||
             `Recebimento do pedido de compra #${pedidoId} (item ${rec.itemId})`,
           createdBy: null,
+          custoUnitarioCentavos: info.preco_custo_centavos ?? 0,
         });
       } catch (estoqueErr) {
-        console.error(
-          "[POST /api/loja/compras/[id]] Falha ao registrar estoque:",
-          estoqueErr
-        );
-        return json(500, {
-          ok: false,
-          error: "Erro ao registrar movimento de estoque para o recebimento.",
-        });
+        console.error("[POST /api/loja/compras/[id]] Falha ao registrar estoque:", estoqueErr);
+        movimentoWarning = true;
       }
 
       if (pedidoCab.fornecedor_id && info.preco_custo_centavos > 0) {
@@ -619,17 +625,39 @@ export async function POST(
     }
 
     let status: PedidoStatus = "EM_ANDAMENTO";
+    let pendenteTotal = 0;
+    let algumRecebido = false;
+
     if (itensAtualizados && itensAtualizados.length > 0) {
-      const todosFechados = itensAtualizados.every((it: any) => {
+      itensAtualizados.forEach((it: any) => {
         const pedida = Number(it.quantidade_pedida ?? it.quantidade_solicitada ?? 0) || 0;
-        const meta = pedida || Number(it.quantidade_solicitada ?? 0) || 0;
-        return Number(it.quantidade_recebida ?? 0) >= meta;
+        const recebida = Number(it.quantidade_recebida ?? 0) || 0;
+        pendenteTotal += Math.max(pedida - recebida, 0);
+        if (recebida > 0) algumRecebido = true;
       });
-      const algumRecebido = itensAtualizados.some(
-        (it: any) => Number(it.quantidade_recebida ?? 0) > 0
-      );
-      if (todosFechados) status = "CONCLUIDO";
-      else if (algumRecebido) status = "PARCIAL";
+
+      if (pendenteTotal > 0) {
+        status = algumRecebido ? "PARCIAL" : "EM_ANDAMENTO";
+      } else {
+        // Sem pendências de recebimento: depende do pagamento
+        let contaStatus: string | null = null;
+        if (pedidoCab.conta_pagar_id) {
+          const { data: contaPagarRow } = await supabaseAdmin
+            .from("contas_pagar")
+            .select("status")
+            .eq("id", pedidoCab.conta_pagar_id)
+            .maybeSingle();
+          contaStatus = (contaPagarRow as any)?.status ?? null;
+        }
+
+        if (!pedidoCab.conta_pagar_id) {
+          status = "PENDENTE_PAGAMENTO";
+        } else if (contaStatus === "PAGO") {
+          status = "CONCLUIDO";
+        } else {
+          status = "PENDENTE_PAGAMENTO";
+        }
+      }
     }
 
     await supabaseAdmin
@@ -713,10 +741,18 @@ export async function POST(
 
     const detalhe = await carregarDetalhe(pedidoId);
     if (!detalhe) {
-      return json(200, { ok: true, data: { id: pedidoId, status } });
+      return json(200, {
+        ok: true,
+        data: { id: pedidoId, status },
+        warning: movimentoWarning ? "movimento_estoque_falhou" : undefined,
+      });
     }
 
-    return json(200, { ok: true, data: detalhe });
+    return json(200, {
+      ok: true,
+      data: detalhe,
+      warning: movimentoWarning ? "movimento_estoque_falhou" : undefined,
+    });
   } catch (err) {
     console.error("[POST /api/loja/compras/[id]] Erro inesperado:", err);
     return json(500, { ok: false, error: "Erro inesperado ao registrar recebimento." });

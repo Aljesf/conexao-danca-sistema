@@ -51,3 +51,13 @@
   - Cria ou atualiza a cobrança (`origem_tipo = CREDITO_CONEXAO_FATURA`), respeitando `force=true` para recriar/atualizar.
 - Se a fatura não tiver lançamentos (`credito_conexao_fatura_lancamentos`), bloqueia com `fatura_sem_lancamentos`.
 - UI: botão “Fechar fatura” no detalhe, visível quando status ≠ PAGA; mostra erro amigável se não houver lançamentos.
+
+## Venda com Cartao Conexao (Loja)
+- Forma de pagamento base `CARTAO_CONEXAO` exige `conta_conexao_id` e `numero_parcelas` no payload.
+- Ao finalizar a venda, cria/atualiza um registro em `credito_conexao_lancamentos` (`origem_sistema = LOJA`, `origem_id = venda.id`) com status `PENDENTE_FATURA`.
+- Nao cria cobranca/recebimento no ato; o valor sera faturado posteriormente.
+
+## Incluir pendencias na fatura
+- Endpoint `/api/financeiro/credito-conexao/faturas/incluir-pendencias` cria (se necessario) a fatura do periodo e move lancamentos `PENDENTE_FATURA` (origem LOJA por padrao) para ela, marcando-os como `FATURADO`.
+- Recalcula `valor_total_centavos` da fatura apenas com as compras (taxa segue no fechar).
+- Botao "Incluir pendencias" disponivel na lista de faturas (Admin) para disparar o processo por conta.

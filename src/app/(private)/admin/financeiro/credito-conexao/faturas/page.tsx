@@ -1,48 +1,87 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type FaturaConexao = {
   id: number;
   conta_conexao_id: number;
   periodo_referencia: string;
-  data_fechamento: string;
+  data_fechamento: string | null;
   data_vencimento: string | null;
   valor_total_centavos: number;
   valor_taxas_centavos: number;
   status: string;
   created_at: string;
+  conta?: {
+    id: number;
+    descricao_exibicao?: string | null;
+    tipo_conta?: string | null;
+    pessoa_titular_id?: number | null;
+    titular?: {
+      id: number;
+      nome: string | null;
+      cpf: string | null;
+    } | null;
+  } | null;
+};
+
+type ContaConexao = {
+  id: number;
+  descricao_exibicao?: string | null;
 };
 
 export default function FaturasCreditoConexaoPage() {
   const [faturas, setFaturas] = useState<FaturaConexao[]>([]);
+  const [contas, setContas] = useState<ContaConexao[]>([]);
+  const [contaSelecionada, setContaSelecionada] = useState<number | "">("");
+  const [periodo, setPeriodo] = useState<string>(new Date().toISOString().slice(0, 7));
   const [loading, setLoading] = useState(false);
+  const [including, setIncluding] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const router = useRouter();
 
   async function carregarFaturas() {
     try {
       setLoading(true);
       setErro(null);
 
-      const res = await fetch("/api/financeiro/credito-conexao/faturas");
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
+      const params = new URLSearchParams();
+      if (periodo) params.set("periodo_referencia", periodo);
+      if (contaSelecionada) params.set("conta_conexao_id", String(contaSelecionada));
 
+      const res = await fetch(`/api/financeiro/credito-conexao/faturas?${params.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
       const json = await res.json();
       setFaturas(json.faturas ?? []);
-    } catch (e: any) {
-      console.error("Erro ao carregar faturas Crédito Conexão", e);
-      setErro("Erro ao carregar faturas do Cartão Conexão.");
+    } catch (e) {
+      console.error("Erro ao carregar faturas Credito Conexao", e);
+      setErro("Erro ao carregar faturas do Cartao Conexao.");
     } finally {
       setLoading(false);
     }
   }
 
+  async function carregarContas() {
+    try {
+      const res = await fetch("/api/financeiro/credito-conexao/contas");
+      const json = await res.json();
+      setContas(json.contas ?? []);
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     carregarFaturas();
+    carregarContas();
   }, []);
+
+  useEffect(() => {
+    carregarFaturas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodo, contaSelecionada]);
 
   function formatDate(dateStr: string | null) {
     if (!dateStr) return "—";
@@ -56,6 +95,13 @@ export default function FaturasCreditoConexaoPage() {
       style: "currency",
       currency: "BRL",
     });
+  }
+
+  function ajustarPeriodo(deltaMes: number) {
+    const [anoStr, mesStr] = periodo.split("-").map((v) => Number(v));
+    if (!anoStr || !mesStr) return;
+    const novaData = new Date(anoStr, mesStr - 1 + deltaMes, 1);
+    setPeriodo(novaData.toISOString().slice(0, 7));
   }
 
   function formatStatus(status: string) {
@@ -73,12 +119,45 @@ export default function FaturasCreditoConexaoPage() {
     }
   }
 
+  async function incluirPendencias() {
+    if (!contaSelecionada) {
+      setErro("Selecione uma conta para incluir pendencias.");
+      return;
+    }
+    try {
+      setIncluding(true);
+      setErro(null);
+      const res = await fetch("/api/financeiro/credito-conexao/faturas/incluir-pendencias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conta_conexao_id: Number(contaSelecionada),
+          incluir_origens: ["LOJA"],
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setErro(json.error || "Falha ao incluir pendencias.");
+        return;
+      }
+      await carregarFaturas();
+      if (json.fatura_id) {
+        router.push(`/admin/financeiro/credito-conexao/faturas/${json.fatura_id}`);
+      }
+    } catch (e) {
+      console.error(e);
+      setErro("Erro ao incluir pendencias.");
+    } finally {
+      setIncluding(false);
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Crédito Conexão — Faturas</h1>
+        <h1 className="text-2xl font-semibold">Credito Conexao â€” Faturas</h1>
         <p className="text-sm text-gray-600">
-          Visualize as faturas geradas do Cartão Conexão (Aluno/Colaborador), com valores de
+          Visualize as faturas geradas do Cartao Conexao (Aluno/Colaborador), com valores de
           compras, taxas e total consolidado.
         </p>
       </div>
@@ -86,15 +165,63 @@ export default function FaturasCreditoConexaoPage() {
       {erro && <div className="text-sm text-red-600">{erro}</div>}
 
       <div className="border rounded-xl bg-white shadow-sm">
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Faturas</h2>
-          <button
-            type="button"
-            onClick={carregarFaturas}
-            className="text-xs px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700"
-          >
-            Atualizar
-          </button>
+        <div className="px-4 py-3 border-b flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold">Faturas</h2>
+              <button
+                type="button"
+                onClick={carregarFaturas}
+                className="text-xs px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700"
+              >
+                Atualizar
+              </button>
+            </div>
+            <div className="flex items-center gap-1 text-xs">
+              <button
+                type="button"
+                className="px-2 py-1 rounded-md border text-slate-700 hover:bg-slate-50"
+                onClick={() => ajustarPeriodo(-1)}
+              >
+                ◀ mês anterior
+              </button>
+              <input
+                type="month"
+                value={periodo}
+                onChange={(e) => setPeriodo(e.target.value)}
+                className="border rounded-md px-2 py-1"
+              />
+              <button
+                type="button"
+                className="px-2 py-1 rounded-md border text-slate-700 hover:bg-slate-50"
+                onClick={() => ajustarPeriodo(1)}
+              >
+                mês seguinte ▶
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={contaSelecionada}
+              onChange={(e) => setContaSelecionada(e.target.value ? Number(e.target.value) : "")}
+              className="text-xs border rounded-md px-2 py-1"
+            >
+              <option value="">Conta CrÃ©dito ConexÃ£o...</option>
+              {contas.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.descricao_exibicao || `Conta #${c.id}`}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={incluirPendencias}
+              disabled={including}
+              className="text-xs px-3 py-1 rounded-full bg-indigo-100 hover:bg-indigo-200 text-indigo-700 disabled:opacity-60"
+            >
+              {including ? "Incluindo..." : "Incluir pendÃªncias (LOJA)"}
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -108,7 +235,7 @@ export default function FaturasCreditoConexaoPage() {
                 <tr>
                   <th className="px-3 py-2 text-left">ID</th>
                   <th className="px-3 py-2 text-left">Conta</th>
-                  <th className="px-3 py-2 text-left">Período</th>
+                  <th className="px-3 py-2 text-left">PerÃ­odo</th>
                   <th className="px-3 py-2 text-left">Fechamento</th>
                   <th className="px-3 py-2 text-left">Vencimento</th>
                   <th className="px-3 py-2 text-right">Compras</th>
@@ -133,19 +260,23 @@ export default function FaturasCreditoConexaoPage() {
                           {f.id}
                         </Link>
                       </td>
-                      <td className="px-3 py-2">Conta #{f.conta_conexao_id}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium">
+                          {f.conta?.descricao_exibicao || `Conta #${f.conta_conexao_id}`}
+                        </div>
+                        {f.conta?.titular?.nome && (
+                          <div className="text-xs text-gray-600">
+                            {f.conta.titular.nome}
+                            {f.conta.titular.cpf ? ` — CPF ${f.conta.titular.cpf}` : ""}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-2">{f.periodo_referencia}</td>
                       <td className="px-3 py-2">{formatDate(f.data_fechamento)}</td>
                       <td className="px-3 py-2">{formatDate(f.data_vencimento)}</td>
-                      <td className="px-3 py-2 text-right">
-                        {formatCurrency(valorCompras)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {formatCurrency(valorTaxas)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {formatCurrency(valorTotal)}
-                      </td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(valorCompras)}</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(valorTaxas)}</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(valorTotal)}</td>
                       <td className="px-3 py-2">
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -172,3 +303,6 @@ export default function FaturasCreditoConexaoPage() {
     </div>
   );
 }
+
+
+

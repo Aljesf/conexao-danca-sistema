@@ -78,21 +78,22 @@ export async function GET(req: NextRequest) {
 
     if (status) query = query.eq("status", status);
 
-    if (q) {
+    if (q.length > 0) {
       const like = `%${q}%`;
-      query = query.or(
-        [
-          `id.ilike.${like}`,
-          `fornecedor.pessoas.nome.ilike.${like}`,
-          `fornecedor.pessoas.nome_fantasia.ilike.${like}`,
-        ].join(",")
-      );
+      const qNumber = Number(q);
+
+      const filters = [`status.ilike.${like}`, `observacoes.ilike.${like}`];
+      if (Number.isFinite(qNumber)) {
+        filters.push(`id.eq.${qNumber}`);
+      }
+
+      query = query.or(filters.join(","));
     }
 
     const { data, error } = await query;
 
     if (error) {
-      console.error("[GET /api/loja/compras] Erro Supabase:", error);
+      console.error("[GET /api/loja/compras] Erro Supabase:", error, { q, status });
       return json(500, { ok: false, error: "Erro ao listar pedidos de compra." });
     }
 

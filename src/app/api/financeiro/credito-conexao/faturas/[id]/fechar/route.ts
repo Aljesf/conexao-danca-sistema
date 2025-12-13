@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { upsertNeofinBilling } from "@/lib/neofinClient";
 
 type RouteContext = { params: { id: string } };
 
@@ -38,6 +39,76 @@ type RegraParcelas = {
   taxa_fixa_centavos: number;
   centro_custo_id: number | null;
 };
+
+type PessoaTitular = {
+  id: number;
+  nome: string;
+  cpf: string | null;
+  email: string | null;
+  telefone: string | null;
+};
+
+function firstNonEmptyString(...values: Array<unknown>): string | null {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return null;
+}
+
+function extractBillingInfo(body: any, fallbackId?: string) {
+  const candidates: any[] = [];
+  if (Array.isArray(body)) candidates.push(...body);
+  if (body && typeof body === "object") {
+    if (Array.isArray(body.billings)) candidates.push(...body.billings);
+    if (Array.isArray(body.data)) candidates.push(...body.data);
+    if (Array.isArray(body.data?.billings)) candidates.push(...body.data.billings);
+  }
+  const billing = candidates.find((b) => b && typeof b === "object") ?? (body && typeof body === "object" ? body : null);
+
+  const chargeId =
+    firstNonEmptyString(
+      billing?.id,
+      billing?.billing_id,
+      billing?.charge_id,
+      billing?.integration_identifier,
+      billing?.integrationIdentifier,
+      body?.billing_id,
+      body?.charge_id,
+      body?.integration_identifier,
+      fallbackId
+    ) ?? null;
+
+  const paymentLink =
+    firstNonEmptyString(
+      billing?.payment_link,
+      billing?.payment_url,
+      billing?.link_pagamento,
+      billing?.url,
+      billing?.link,
+      billing?.billet_url,
+      billing?.boleto_url,
+      body?.payment_link,
+      body?.payment_url
+    ) ?? null;
+
+  const digitableLine =
+    firstNonEmptyString(
+      billing?.digitable_line,
+      billing?.linha_digitavel,
+      billing?.digitableLine,
+      billing?.boleto_linha_digitavel,
+      billing?.boleto_digitable_line,
+      billing?.barcode,
+      billing?.bar_code,
+      body?.digitable_line,
+      body?.linha_digitavel
+    ) ?? null;
+
+  return { chargeId, paymentLink, digitableLine };
+}
 
 function chooseRegraParcelas(
   regras: RegraParcelas[],
@@ -286,6 +357,81 @@ export async function POST(req: Request, { params }: RouteContext) {
         );
       }
       cobrancaId = novaCobranca.id;
+    }
+  }
+
+  const { data: cobrancaRow, error: cobrancaRowErr } = await supabase
+    .from("cobrancas")
+    .select("id, neofin_charge_id, link_pagamento, linha_digitavel, neofin_payload, descricao, valor_centavos, vencimento")
+    .eq("id", cobrancaId)
+    .maybeSingle();
+
+  if (cobrancaRowErr || !cobrancaRow) {
+    console.error("[fechar fatura] erro ao buscar cobranca para integracao:", cobrancaRowErr);
+    return NextResponse.json({ ok: false, error: "cobranca_nao_encontrada" }, { status: 500 });
+  }
+
+  // IntegraÇõÇœo Neofin: garantir charge/links
+  if (!cobrancaId) {
+    return NextResponse.json({ ok: false, error: "cobranca_nao_criada" }, { status: 500 });
+  }
+
+  const { data: pessoaTitular, error: pessoaErr } = await supabase
+    .from("pessoas")
+    .select("id, nome, cpf, email, telefone")
+    .eq("id", fatura.conta.pessoa_titular_id)
+    .maybeSingle<PessoaTitular>();
+
+  if (pessoaErr || !pessoaTitular || !pessoaTitular.cpf) {
+    console.error("[fechar fatura] pessoa titular sem CPF ou erro ao buscar:", pessoaErr);
+    return NextResponse.json(
+      { ok: false, error: "titular_sem_cpf", details: pessoaErr?.message ?? null },
+      { status: 500 }
+    );
+  }
+
+  const cpfLimpo = (pessoaTitular.cpf || "").replace(/\D/g, "");
+  const integrationIdentifier = `cobranca-${cobrancaId}`;
+
+  if (!cobrancaRow.neofin_charge_id || force) {
+    const neofinResult = await upsertNeofinBilling({
+      integrationIdentifier,
+      amountCentavos: total_centavos,
+      dueDate: vencimento,
+      description: cobrancaRow.descricao ?? descricao,
+      customer: {
+        nome: pessoaTitular.nome,
+        cpf: cpfLimpo,
+        email: pessoaTitular.email ?? undefined,
+        telefone: pessoaTitular.telefone ?? undefined,
+      },
+    });
+
+    if (!neofinResult.ok) {
+      console.error("[fechar fatura] erro ao criar charge na Neofin:", neofinResult);
+      return NextResponse.json(
+        { ok: false, error: "erro_neofin_criar_boleto", details: neofinResult },
+        { status: 502 }
+      );
+    }
+
+    const info = extractBillingInfo(neofinResult.body, integrationIdentifier);
+    const { error: updCobrancaNeofin } = await supabase
+      .from("cobrancas")
+      .update({
+        neofin_charge_id: info.chargeId ?? integrationIdentifier,
+        link_pagamento: info.paymentLink ?? null,
+        linha_digitavel: info.digitableLine ?? null,
+        neofin_payload: neofinResult.body ?? null,
+      })
+      .eq("id", cobrancaId);
+
+    if (updCobrancaNeofin) {
+      console.error("[fechar fatura] erro ao salvar dados da Neofin na cobranca:", updCobrancaNeofin);
+      return NextResponse.json(
+        { ok: false, error: "erro_salvar_dados_neofin", details: updCobrancaNeofin?.message ?? null },
+        { status: 500 }
+      );
     }
   }
 

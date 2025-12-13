@@ -157,6 +157,40 @@ export async function POST(req: NextRequest) {
       })
       .eq("id", conta.id);
 
+    // Se existir pedido de compra vinculado e sem pendencias de recebimento, atualizar status para CONCLUIDO
+    try {
+      const { data: pedidosVinculados } = await supabaseAdmin
+        .from("loja_pedidos_compra")
+        .select("id")
+        .eq("conta_pagar_id", conta.id);
+
+      for (const ped of pedidosVinculados ?? []) {
+        const { data: itensPedido } = await supabaseAdmin
+          .from("loja_pedidos_compra_itens")
+          .select("quantidade_pedida, quantidade_solicitada, quantidade_recebida")
+          .eq("pedido_id", ped.id);
+
+        const pendente =
+          itensPedido?.reduce((acc: number, it: any) => {
+            const pedida = Number(it.quantidade_pedida ?? it.quantidade_solicitada ?? 0) || 0;
+            const recebida = Number(it.quantidade_recebida ?? 0) || 0;
+            return acc + Math.max(pedida - recebida, 0);
+          }, 0) ?? 0;
+
+        if (pendente === 0 && statusFinal === "PAGO") {
+          await supabaseAdmin
+            .from("loja_pedidos_compra")
+            .update({ status: "CONCLUIDO", updated_at: new Date().toISOString() })
+            .eq("id", ped.id);
+        }
+      }
+    } catch (errPedidoStatus) {
+      console.warn(
+        "[/api/financeiro/contas-pagar/pagar] Nao foi possivel atualizar status do pedido de compra vinculado:",
+        errPedidoStatus
+      );
+    }
+
     return NextResponse.json({
       ok: true,
       data: {
