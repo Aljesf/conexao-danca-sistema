@@ -36,6 +36,84 @@ function json<T>(status: number, payload: ApiResponse<T>) {
   return NextResponse.json(payload, { status });
 }
 
+async function garantirVariantePadrao(produtoId: number) {
+  if (!supabaseAdmin) return null;
+  const { data, error } = await supabaseAdmin
+    .from("loja_produto_variantes")
+    .select("id, produto_id")
+    .eq("produto_id", produtoId)
+    .is("cor_id", null)
+    .is("numeracao_id", null)
+    .is("tamanho_id", null)
+    .order("id", { ascending: true })
+    .maybeSingle();
+
+  if (error) {
+    console.error("[/api/loja/compras] erro ao buscar variante padrao:", error);
+    return null;
+  }
+
+  if (data) return data;
+
+  const sku = `PADRAO-${produtoId}`;
+  const ins = await supabaseAdmin
+    .from("loja_produto_variantes")
+    .insert({
+      produto_id: produtoId,
+      sku,
+      cor_id: null,
+      numeracao_id: null,
+      tamanho_id: null,
+      estoque_atual: 0,
+      preco_venda_centavos: null,
+      ativo: true,
+      observacoes: "Variante padrao criada automaticamente (compra).",
+    })
+    .select("id, produto_id")
+    .maybeSingle();
+
+  if (ins.error) {
+    console.error("[/api/loja/compras] erro ao criar variante padrao:", ins.error);
+    return null;
+  }
+
+  return ins.data;
+}
+
+async function mapearVariantesDosProdutos(produtoIds: number[]) {
+  const map = new Map<number, { id: number }[]>();
+  if (!supabaseAdmin || produtoIds.length === 0) return map;
+
+  const { data, error } = await supabaseAdmin
+    .from("loja_produto_variantes")
+    .select("id, produto_id, ativo")
+    .in("produto_id", produtoIds);
+
+  if (error) {
+    console.error("[/api/loja/compras] erro ao buscar variantes:", error);
+    return map;
+  }
+
+  (data || []).forEach((v: any) => {
+    if (v.ativo === false) return;
+    const arr = map.get(v.produto_id) ?? [];
+    arr.push({ id: v.id });
+    map.set(v.produto_id, arr);
+  });
+
+  for (const pid of produtoIds) {
+    const jaTem = map.get(pid);
+    if (!jaTem || jaTem.length === 0) {
+      const criado = await garantirVariantePadrao(pid);
+      if (criado?.id) {
+        map.set(pid, [{ id: criado.id }]);
+      }
+    }
+  }
+
+  return map;
+}
+
 // ==============================
 // GET /api/loja/compras
 // Lista pedidos de compra

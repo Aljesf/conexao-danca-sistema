@@ -19,10 +19,10 @@ export async function GET(req: Request) {
     const variante_id = varianteIdRaw ? Number(varianteIdRaw) : null;
 
     if (!Number.isFinite(produto_id) || produto_id <= 0) {
-      return json({ ok: false, error: "produto_id inválido." }, 400);
+      return json({ ok: false, error: "produto_id invalido." }, 400);
     }
     if (varianteIdRaw && (!Number.isFinite(variante_id!) || variante_id! <= 0)) {
-      return json({ ok: false, error: "variante_id inválido." }, 400);
+      return json({ ok: false, error: "variante_id invalido." }, 400);
     }
 
     const cookieStore = await cookies();
@@ -40,26 +40,36 @@ export async function GET(req: Request) {
       referencia_id,
       observacao,
       created_at,
-      variante:loja_produto_variantes!loja_estoque_movimentos_variante_id_fkey (
-        id, sku
-      )
+      variante:loja_produto_variantes ( id, sku )
     `;
 
-    let query = supabase
-      .from("loja_estoque_movimentos")
-      .select(selectFull)
-      .eq("produto_id", produto_id)
-      .order("created_at", { ascending: false })
-      .limit(80);
+    const buildQuery = (select: string) => {
+      let q = supabase
+        .from("loja_estoque_movimentos")
+        .select(select)
+        .eq("produto_id", produto_id)
+        .order("created_at", { ascending: false })
+        .limit(80);
 
-    if (variante_id) query = query.eq("variante_id", variante_id);
+      if (variante_id) q = q.eq("variante_id", variante_id);
+      return q;
+    };
 
-    let res = await query;
+    let movimentosRows: any[] = [];
+    let skuMap: Map<number, string> | null = null;
 
-    if (res.error && String(res.error.code || "") === "PGRST204") {
+    const res = await buildQuery(selectFull);
+
+    if (res.error) {
+      console.warn(
+        "[/api/loja/estoque/movimentos] aviso: join com variante falhou, usando fallback:",
+        res.error
+      );
+
       const selectMin = `
         id,
         produto_id,
+        variante_id,
         tipo,
         origem,
         quantidade,
@@ -69,26 +79,53 @@ export async function GET(req: Request) {
         observacao,
         created_at
       `;
-      let q2 = supabase
-        .from("loja_estoque_movimentos")
-        .select(selectMin)
-        .eq("produto_id", produto_id)
-        .order("created_at", { ascending: false })
-        .limit(80);
-      if (variante_id) q2 = q2.eq("variante_id", variante_id);
-      res = await q2;
+
+      const fallbackRes = await buildQuery(selectMin);
+
+      if (fallbackRes.error) {
+        console.error("[/api/loja/estoque/movimentos] erro:", fallbackRes.error);
+        return json(
+          { ok: false, error: fallbackRes.error.message, details: fallbackRes.error },
+          500
+        );
+      }
+
+      movimentosRows = fallbackRes.data || [];
+
+      const varianteIds = Array.from(
+        new Set(
+          (movimentosRows || [])
+            .map((m: any) => Number(m.variante_id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+        )
+      );
+
+      if (varianteIds.length > 0) {
+        const skuRes = await supabase
+          .from("loja_produto_variantes")
+          .select("id, sku")
+          .in("id", varianteIds);
+
+        if (!skuRes.error && Array.isArray(skuRes.data)) {
+          skuMap = new Map(
+            skuRes.data.map((v: any) => [Number(v.id), v.sku] as [number, string])
+          );
+        } else if (skuRes.error) {
+          console.warn(
+            "[/api/loja/estoque/movimentos] aviso: falha ao carregar skus fallback:",
+            skuRes.error
+          );
+        }
+      }
+    } else {
+      movimentosRows = res.data || [];
     }
 
-    if (res.error) {
-      console.error("[/api/loja/estoque/movimentos] erro:", res.error);
-      return json({ ok: false, error: res.error.message, details: res.error }, 500);
-    }
-
-    const movimentos = (res.data || []).map((m: any) => ({
+    const movimentos = (movimentosRows || []).map((m: any) => ({
       id: m.id,
       produto_id: m.produto_id,
       variante_id: m.variante_id ?? null,
-      sku: m.variante?.sku ?? null,
+      sku: m.variante?.sku ?? skuMap?.get(Number(m.variante_id)) ?? null,
       tipo: m.tipo,
       origem: m.origem,
       quantidade: m.quantidade,
