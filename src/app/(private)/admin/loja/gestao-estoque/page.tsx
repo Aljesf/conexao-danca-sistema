@@ -178,12 +178,11 @@ export default function GestaoEstoqueAdminPage() {
   const [categoriaCadastroSelecionadaId, setCategoriaCadastroSelecionadaId] = useState<number | "">("");
   const [movimentos, setMovimentos] = useState<MovimentoEstoque[]>([]);
   const [loadingMovimentos, setLoadingMovimentos] = useState(false);
-  const [showAjusteModal, setShowAjusteModal] = useState(false);
-  const [ajusteDirecao, setAjusteDirecao] = useState<"ENTRADA" | "SAIDA">("SAIDA");
-  const [ajusteQtd, setAjusteQtd] = useState<number | "">("");
-  const [ajusteMotivo, setAjusteMotivo] = useState<string>("EXTRAVIO");
-  const [ajusteObs, setAjusteObs] = useState<string>("");
-  const [ajusteLoading, setAjusteLoading] = useState(false);
+  const [isAjusteOpen, setIsAjusteOpen] = useState(false);
+  const [ajVarianteId, setAjVarianteId] = useState<string>("");
+  const [ajOperacao, setAjOperacao] = useState<"ENTRADA" | "SAIDA">("ENTRADA");
+  const [ajQuantidade, setAjQuantidade] = useState<string>("1");
+  const [ajObs, setAjObs] = useState<string>("");
 
   // Variantes e atributos (Fase 1)
   const [atributos, setAtributos] = useState<AtributosResp | null>(null);
@@ -200,7 +199,6 @@ export default function GestaoEstoqueAdminPage() {
   const [nvCorId, setNvCorId] = useState<string>("");
   const [nvNumeracaoId, setNvNumeracaoId] = useState<string>("");
   const [nvTamanhoId, setNvTamanhoId] = useState<string>("");
-  const [nvEstoque, setNvEstoque] = useState<string>("0");
   const [nvPreco, setNvPreco] = useState<string>("");
   const [nvAtivo, setNvAtivo] = useState(true);
   const [nvObs, setNvObs] = useState<string>("");
@@ -214,6 +212,7 @@ export default function GestaoEstoqueAdminPage() {
   const [evPreco, setEvPreco] = useState<string>("");
   const [evAtivo, setEvAtivo] = useState(true);
   const [evObs, setEvObs] = useState<string>("");
+  const [histVarianteId, setHistVarianteId] = useState<string>("");
 
   const [loadingProdutos, setLoadingProdutos] = useState(false);
   // carregamento de fornecedores para selects
@@ -298,7 +297,16 @@ export default function GestaoEstoqueAdminPage() {
         return;
       }
 
-      setProdutos(json.data.items ?? []);
+      const items = json.data.items ?? [];
+      setProdutos(items);
+
+      // Atualiza selecao com dados recarregados (estoque somado pela API)
+      if (produtoSelecionado?.id) {
+        const atualizado = items.find((p) => Number(p.id) === Number(produtoSelecionado.id));
+        if (atualizado) {
+          setProdutoSelecionado(atualizado);
+        }
+      }
     } catch (err) {
       console.error("Erro ao carregar produtos:", err);
       setMensagemTipo("error");
@@ -366,14 +374,24 @@ export default function GestaoEstoqueAdminPage() {
     }
   }
 
-  async function carregarMovimentos(produtoId: number) {
+  async function carregarMovimentos(produtoId: number, varianteId?: number | null) {
     try {
       setLoadingMovimentos(true);
-      const res = await fetch(`/api/loja/estoque/movimentos?produto_id=${produtoId}`);
-      const json = await res.json();
+      const qs = new URLSearchParams();
+      qs.set("produto_id", String(produtoId));
+      if (varianteId && varianteId > 0) qs.set("variante_id", String(varianteId));
+
+      const res = await fetch(`/api/loja/estoque/movimentos?${qs.toString()}`, { cache: "no-store" });
+      const raw = await res.text();
+      let json: any = {};
+      try {
+        json = raw ? JSON.parse(raw) : {};
+      } catch {
+        json = {};
+      }
 
       if (!res.ok || !json?.ok || !Array.isArray(json?.movimentos)) {
-        console.error("Erro ao carregar movimentos de estoque:", json?.error ?? json);
+        console.error("Erro ao carregar movimentos de estoque:", json?.error ?? raw);
         setMovimentos([]);
         return;
       }
@@ -423,14 +441,22 @@ export default function GestaoEstoqueAdminPage() {
       if (!res.ok || json?.ok === false) {
         setErroVariantes(json?.error || "Erro ao carregar variantes.");
         setVariantes([]);
+        setAjVarianteId("");
         return;
       }
 
-      setVariantes(Array.isArray(lista) ? lista : []);
+      const arr = Array.isArray(lista) ? lista : [];
+      setVariantes(arr);
+      if (arr.length === 1) {
+        setAjVarianteId(String(arr[0].id));
+      } else if (!arr.some((v) => String(v.id) === ajVarianteId)) {
+        setAjVarianteId("");
+      }
     } catch (err) {
       console.error("[GestaoEstoque] erro ao carregar variantes:", err);
       setErroVariantes("Erro inesperado ao carregar variantes.");
       setVariantes([]);
+      setAjVarianteId("");
     } finally {
       setLoadingVariantes(false);
     }
@@ -459,12 +485,6 @@ export default function GestaoEstoqueAdminPage() {
   async function criarVarianteSelecionada() {
     if (!produtoSelecionado?.id) return;
 
-    const estoqueNum = Number((nvEstoque ?? "0").trim());
-    if (!Number.isFinite(estoqueNum) || estoqueNum < 0) {
-      alert("Estoque invalido.");
-      return;
-    }
-
     const precoCent = parseMoneyToCentavos(nvPreco);
 
     const payload: VarianteCreatePayload = {
@@ -472,7 +492,6 @@ export default function GestaoEstoqueAdminPage() {
       cor_id: nvCorId ? Number(nvCorId) : null,
       numeracao_id: nvNumeracaoId ? Number(nvNumeracaoId) : null,
       tamanho_id: nvTamanhoId ? Number(nvTamanhoId) : null,
-      estoque_atual: Math.trunc(estoqueNum),
       preco_venda_centavos: precoCent,
       ativo: nvAtivo,
       observacoes: nvObs?.trim() ? nvObs.trim() : null,
@@ -498,7 +517,6 @@ export default function GestaoEstoqueAdminPage() {
       setNvCorId("");
       setNvNumeracaoId("");
       setNvTamanhoId("");
-      setNvEstoque("0");
       setNvPreco("");
       setNvAtivo(true);
       setNvObs("");
@@ -603,61 +621,55 @@ export default function GestaoEstoqueAdminPage() {
     }
   }
 
-  async function salvarAjusteManual() {
-    if (!produtoSelecionado) return;
-    const qtd = Number(ajusteQtd);
-    if (!Number.isFinite(qtd) || qtd <= 0) {
-      setMensagemTipo("error");
-      setMensagem("Quantidade invalida para ajuste.");
+  async function executarAjusteManual() {
+    if (!produtoSelecionado?.id) return;
+
+    const varianteIdNum = ajVarianteId ? Number(ajVarianteId) : NaN;
+    const qtd = Number((ajQuantidade ?? "").trim());
+
+    if (!Number.isFinite(varianteIdNum) || varianteIdNum <= 0) {
+      alert("Selecione uma variante.");
       return;
     }
-    if (!ajusteObs || ajusteObs.trim().length < 10) {
-      setMensagemTipo("error");
-      setMensagem("Observacao obrigatoria (minimo 10 caracteres).");
+    if (!Number.isFinite(qtd) || qtd <= 0) {
+      alert("Quantidade invalida.");
       return;
     }
 
+    setLoadingVariantes(true);
     try {
-      setAjusteLoading(true);
-      const res = await fetch("/api/loja/estoque/ajuste-manual", {
+      const resp = await fetch("/api/loja/estoque", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           produto_id: produtoSelecionado.id,
-          direcao: ajusteDirecao,
-          quantidade: qtd,
-          motivo: ajusteMotivo,
-          observacao: ajusteObs,
+          variante_id: varianteIdNum,
+          operacao: ajOperacao,
+          quantidade: Math.trunc(qtd),
+          observacoes: ajObs?.trim() ? ajObs.trim() : null,
         }),
       });
-      const json = await res.json();
 
-      if (!res.ok || !json.ok) {
-        console.error("Falha ao registrar ajuste manual:", json);
-        setMensagemTipo("error");
-        setMensagem(json?.error || "Erro ao registrar ajuste manual.");
+      const json = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        console.error("Falha ao registrar ajuste manual de variante:", json);
+        alert(json?.error || json?.message || "Erro ao registrar ajuste manual.");
         return;
       }
 
-      setMensagemTipo("success");
-      setMensagem("Ajuste manual registrado com sucesso.");
+      setIsAjusteOpen(false);
+      setAjQuantidade("1");
+      setAjObs("");
 
-      // Atualizar estoque local do produto selecionado
-      setProdutoSelecionado((prev) =>
-        prev ? { ...prev, estoque_atual: json.saldoDepois ?? prev.estoque_atual } : prev
-      );
-
-      await carregarMovimentos(produtoSelecionado.id);
+      await carregarVariantes(produtoSelecionado.id);
+      await carregarMovimentos(produtoSelecionado.id, histVarianteId ? Number(histVarianteId) : null);
       await carregarProdutos();
-      setShowAjusteModal(false);
-      setAjusteObs("");
-      setAjusteQtd("");
     } catch (err) {
-      console.error("Erro inesperado ao registrar ajuste manual:", err);
-      setMensagemTipo("error");
-      setMensagem("Erro inesperado ao registrar ajuste manual.");
+      console.error("Erro inesperado ao registrar ajuste manual de variante:", err);
+      alert("Erro inesperado ao registrar ajuste manual.");
     } finally {
-      setAjusteLoading(false);
+      setLoadingVariantes(false);
     }
   }
 
@@ -727,11 +739,33 @@ export default function GestaoEstoqueAdminPage() {
     return map;
   }, [atributos?.tamanhos]);
 
+  useEffect(() => {
+    if (!produtoSelecionado) {
+      setAjVarianteId("");
+      return;
+    }
+
+    const varianteSelecionadaExiste = variantes.some((v) => String(v.id) === ajVarianteId);
+    if (varianteSelecionadaExiste) return;
+
+    if (variantes.length === 1) {
+      setAjVarianteId(String(variantes[0].id));
+    } else if (variantes.length === 0) {
+      setAjVarianteId("");
+    }
+  }, [variantes, produtoSelecionado, ajVarianteId]);
+
   function selecionarProduto(p: Produto) {
     resetMensagem();
     setProdutoSelecionado(p);
+    setHistVarianteId("");
     setEmEdicao(false);
     setVariantes([]);
+    setIsAjusteOpen(false);
+    setAjVarianteId("");
+    setAjOperacao("ENTRADA");
+    setAjQuantidade("1");
+    setAjObs("");
     setEditForm({
       id: p.id,
       nome: p.nome,
@@ -747,7 +781,7 @@ export default function GestaoEstoqueAdminPage() {
       precoCustoReais: "",
       fornecedorId: p.fornecedor_principal_id ?? null,
     });
-    carregarMovimentos(p.id);
+    carregarMovimentos(p.id, null);
     carregarVariantes(p.id);
   }
 
@@ -757,6 +791,11 @@ export default function GestaoEstoqueAdminPage() {
     setEmEdicao(false);
     setMovimentos([]);
     setVariantes([]);
+    setIsAjusteOpen(false);
+    setAjVarianteId("");
+    setAjOperacao("ENTRADA");
+    setAjQuantidade("1");
+    setAjObs("");
     setEditForm({
       id: null,
       nome: "",
@@ -1355,7 +1394,7 @@ export default function GestaoEstoqueAdminPage() {
                         {produtoSelecionado && (
                           <button
                             type="button"
-                            onClick={() => setShowAjusteModal(true)}
+                            onClick={() => setIsAjusteOpen(true)}
                             className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
                           >
                             Ajuste manual
@@ -1378,48 +1417,6 @@ export default function GestaoEstoqueAdminPage() {
                       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
                         <h4 className="text-sm font-semibold text-slate-800">Variantes</h4>
                         <span className="text-xs text-slate-500">{variantes.length} variante(s)</span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2 items-center px-5 py-3">
-                        <button
-                          className="px-3 py-2 rounded-md border text-sm"
-                          disabled={!produtoSelecionado?.id}
-                          onClick={() => setIsNovaVarianteOpen(true)}
-                          type="button"
-                        >
-                          Criar variante
-                        </button>
-
-                        <button
-                          className="px-3 py-2 rounded-md border text-sm"
-                          disabled={!produtoSelecionado?.id}
-                          onClick={async () => {
-                            if (!produtoSelecionado?.id) return;
-                            setLoadingVariantes(true);
-                            try {
-                              await fetch("/api/loja/variantes/padrao", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ produto_id: produtoSelecionado.id }),
-                              });
-                              await carregarVariantes(produtoSelecionado.id);
-                            } finally {
-                              setLoadingVariantes(false);
-                            }
-                          }}
-                          type="button"
-                        >
-                          Criar variante padrao
-                        </button>
-
-                        <button
-                          className="px-3 py-2 rounded-md border text-sm"
-                          disabled={!produtoSelecionado?.id}
-                          onClick={() => produtoSelecionado?.id && carregarVariantes(produtoSelecionado.id)}
-                          type="button"
-                        >
-                          Recarregar variantes
-                        </button>
                       </div>
 
                       {isNovaVarianteOpen && (
@@ -1481,25 +1478,14 @@ export default function GestaoEstoqueAdminPage() {
                                     <option key={`tam-${t.id}`} value={String(t.id)}>
                                       {t.nome}
                                     </option>
-                                  ))}
-                                </select>
-                              </label>
+                              ))}
+                            </select>
+                          </label>
 
-                              <label className="text-sm">
-                                Estoque
-                                <input
-                                  className="mt-1 w-full rounded-md border px-2 py-2"
-                                  value={nvEstoque}
-                                  onChange={(e) => setNvEstoque(e.target.value)}
-                                  inputMode="numeric"
-                                  placeholder="0"
-                                />
-                              </label>
-
-                              <label className="text-sm">
-                                Preco (R$)
-                                <input
-                                  className="mt-1 w-full rounded-md border px-2 py-2"
+                          <label className="text-sm">
+                            Preco (R$)
+                            <input
+                              className="mt-1 w-full rounded-md border px-2 py-2"
                                   value={nvPreco}
                                   onChange={(e) => setNvPreco(e.target.value)}
                                   placeholder="(vazio = herdar do produto)"
@@ -1838,6 +1824,27 @@ export default function GestaoEstoqueAdminPage() {
                         <span className="text-[11px] text-gray-500">Carregando...</span>
                       )}
                     </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <label className="text-xs text-slate-600">Variante:</label>
+                      <select
+                        className="border rounded-md px-2 py-1 text-xs bg-white"
+                        value={histVarianteId}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setHistVarianteId(v);
+                          if (!produtoSelecionado?.id) return;
+                          const idNum = v ? Number(v) : null;
+                          carregarMovimentos(produtoSelecionado.id, idNum);
+                        }}
+                      >
+                        <option value="">Todas (produto)</option>
+                        {variantes.map((v) => (
+                          <option key={v.id} value={String(v.id)}>
+                            {v.sku}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
                     {movimentos.length === 0 ? (
                       <p className="text-xs text-gray-500">Nenhum movimento encontrado.</p>
@@ -1849,6 +1856,7 @@ export default function GestaoEstoqueAdminPage() {
                               <th className="px-3 py-2 text-left">Data</th>
                               <th className="px-3 py-2 text-left">Tipo</th>
                               <th className="px-3 py-2 text-left">Origem</th>
+                              <th className="px-3 py-2 text-left">Variante</th>
                               <th className="px-3 py-2 text-right">Quantidade</th>
                               <th className="px-3 py-2 text-right">Saldo antes</th>
                               <th className="px-3 py-2 text-right">Saldo depois</th>
@@ -1862,6 +1870,7 @@ export default function GestaoEstoqueAdminPage() {
                                 <td className="px-3 py-2">{formatarData(mov.created_at)}</td>
                                 <td className="px-3 py-2">{mov.tipo}</td>
                                 <td className="px-3 py-2">{mov.origem}</td>
+                                <td className="px-3 py-2">{mov.variante_id ?? "-"}</td>
                                 <td className="px-3 py-2 text-right">{mov.quantidade}</td>
                                 <td className="px-3 py-2 text-right">{mov.saldo_antes ?? "-"}</td>
                                 <td className="px-3 py-2 text-right">{mov.saldo_depois ?? "-"}</td>
@@ -2508,12 +2517,12 @@ export default function GestaoEstoqueAdminPage() {
         </div>
       </div>
 
-    {showAjusteModal && produtoSelecionado && (
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 space-y-4">
-          <div className="flex items-center justify-between">
+    {isAjusteOpen && produtoSelecionado && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-lg">
+          <div className="flex items-center justify-between mb-3">
             <div>
-              <h3 className="text-lg font-semibold">Ajuste manual de estoque</h3>
+              <h3 className="text-lg font-semibold">Ajuste manual de estoque (variante)</h3>
               <p className="text-xs text-gray-600">
                 Produto #{produtoSelecionado.id} - {produtoSelecionado.nome}
               </p>
@@ -2521,88 +2530,87 @@ export default function GestaoEstoqueAdminPage() {
             <button
               type="button"
               className="text-sm text-gray-500 hover:text-gray-700"
-              onClick={() => setShowAjusteModal(false)}
-              disabled={ajusteLoading}
+              onClick={() => setIsAjusteOpen(false)}
             >
               Fechar
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="col-span-2">
-              <label className="block text-xs font-medium mb-1">Direcao</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="text-sm">
+              Variante
               <select
-                value={ajusteDirecao}
-                onChange={(e) => setAjusteDirecao(e.target.value as "ENTRADA" | "SAIDA")}
-                className="w-full border rounded-md px-3 py-2"
-                disabled={ajusteLoading}
+                className="mt-1 w-full rounded-md border px-2 py-2"
+                value={ajVarianteId}
+                onChange={(e) => setAjVarianteId(e.target.value)}
               >
-                <option value="ENTRADA">Entrada</option>
-                <option value="SAIDA">Saida</option>
-              </select>
-            </div>
+                <option value="">Selecione...</option>
+                {variantes.map((v) => {
+                  const labelParts = [
+                    v.sku ? String(v.sku) : `#${v.id}`,
+                    v.cor_id ? coresMap.get(v.cor_id) : null,
+                    v.numeracao_id ? numeracoesMap.get(v.numeracao_id) : null,
+                    v.tamanho_id ? tamanhosMap.get(v.tamanho_id) : null,
+                  ].filter(Boolean);
 
-            <div>
-              <label className="block text-xs font-medium mb-1">Quantidade</label>
+                  return (
+                    <option key={`var-${v.id}`} value={String(v.id)}>
+                      {labelParts.join(" — ") || `Variante #${v.id}`}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+
+            <label className="text-sm">
+              Operacao
+              <select
+                className="mt-1 w-full rounded-md border px-2 py-2"
+                value={ajOperacao}
+                onChange={(e) => setAjOperacao(e.target.value as "ENTRADA" | "SAIDA")}
+              >
+                <option value="ENTRADA">Entrada (somar)</option>
+                <option value="SAIDA">Saida (subtrair)</option>
+              </select>
+            </label>
+
+            <label className="text-sm">
+              Quantidade
               <input
-                type="number"
-                min={1}
-                value={ajusteQtd}
-                onChange={(e) => setAjusteQtd(e.target.value === "" ? "" : Number(e.target.value))}
-                className="w-full border rounded-md px-3 py-2"
-                disabled={ajusteLoading}
+                className="mt-1 w-full rounded-md border px-2 py-2"
+                value={ajQuantidade}
+                onChange={(e) => setAjQuantidade(e.target.value)}
+                inputMode="numeric"
+                placeholder="1"
               />
-            </div>
+            </label>
 
-            <div>
-              <label className="block text-xs font-medium mb-1">Motivo</label>
-              <select
-                value={ajusteMotivo}
-                onChange={(e) => setAjusteMotivo(e.target.value)}
-                className="w-full border rounded-md px-3 py-2"
-                disabled={ajusteLoading}
-              >
-                <option value="EXTRAVIO">Extravio</option>
-                <option value="AVARIA">Avaria</option>
-                <option value="USO_INTERNO">Uso interno</option>
-                <option value="INVENTARIO_POSITIVO">Inventario positivo</option>
-                <option value="INVENTARIO_NEGATIVO">Inventario negativo</option>
-                <option value="CORRECAO_CADASTRO">Correcao de cadastro</option>
-                <option value="DEVOLUCAO">Devolucao</option>
-              </select>
-            </div>
+            <label className="text-sm">
+              Observacoes
+              <input
+                className="mt-1 w-full rounded-md border px-2 py-2"
+                value={ajObs}
+                onChange={(e) => setAjObs(e.target.value)}
+                placeholder="Ex.: Perda, correcao, inventario..."
+              />
+            </label>
           </div>
 
-          <div className="text-sm">
-            <label className="block text-xs font-medium mb-1">Observacao (obrigatoria)</label>
-            <textarea
-              value={ajusteObs}
-              onChange={(e) => setAjusteObs(e.target.value)}
-              className="w-full border rounded-md px-3 py-2"
-              rows={3}
-              disabled={ajusteLoading}
-            />
-            <p className="text-[11px] text-gray-500 mt-1">
-              Descreva o motivo do ajuste. Minimo 10 caracteres.
-            </p>
-          </div>
-
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 mt-4">
             <button
               type="button"
-              className="px-3 py-1.5 text-xs border rounded-md hover:bg-gray-50"
-              onClick={() => setShowAjusteModal(false)}
-              disabled={ajusteLoading}
+              className="px-3 py-2 rounded-md border text-sm"
+              onClick={() => setIsAjusteOpen(false)}
             >
               Cancelar
             </button>
             <button
               type="button"
-              className="px-3 py-1.5 text-xs rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
-              onClick={salvarAjusteManual}
-              disabled={ajusteLoading}
+              className="px-3 py-2 rounded-md bg-violet-600 text-white text-sm disabled:opacity-50"
+              onClick={executarAjusteManual}
+              disabled={!produtoSelecionado.id}
             >
-              {ajusteLoading ? "Salvando..." : "Registrar ajuste"}
+              Aplicar ajuste
             </button>
           </div>
         </div>

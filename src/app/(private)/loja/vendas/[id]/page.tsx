@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 
 type Venda = {
   id: number;
@@ -72,20 +73,26 @@ type ApiResponse<T = any> = {
   data?: T;
 };
 
-export default function VendaDetalhePage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default function VendaDetalhePage() {
+  const params = useParams<{ id: string }>();
+  const vendaId = params?.id ? String(params.id) : "";
   const [venda, setVenda] = useState<Venda | null>(null);
   const [itens, setItens] = useState<Item[]>([]);
   const [cobranca, setCobranca] = useState<Cobranca>(null);
   const [recebimentos, setRecebimentos] = useState<Recebimento[]>([]);
   const [loading, setLoading] = useState(true);
   const [mensagem, setMensagem] = useState<string | null>(null);
-  const vendaId = params.id;
 
   async function carregar() {
+    if (!vendaId || Number.isNaN(Number(vendaId))) {
+      setMensagem("ID de venda inválido.");
+      setVenda(null);
+      setItens([]);
+      setCobranca(null);
+      setRecebimentos([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setMensagem(null);
     try {

@@ -24,6 +24,15 @@ type ProdutoResumo = {
 type ItemCaixa = {
   idTemp: string;
   produto: ProdutoResumo;
+  variante_id: number | null;
+  variante_label?: string | null;
+  sku?: string | null;
+  cor_id?: number | null;
+  numeracao_id?: number | null;
+  tamanho_id?: number | null;
+  cor_nome?: string | null;
+  numeracao_nome?: string | null;
+  tamanho_nome?: string | null;
   quantidade: number;
   precoUnitarioCentavos: number;
   beneficiario: PessoaResumo | null;
@@ -164,6 +173,12 @@ export default function FrenteCaixaLojaPage() {
   const [buscaProduto, setBuscaProduto] = useState("");
   const [resultadoProduto, setResultadoProduto] = useState<ProdutoResumo[]>([]);
   const [buscandoProduto, setBuscandoProduto] = useState(false);
+  const [isVarianteModalOpen, setIsVarianteModalOpen] = useState(false);
+  const [variantesDoProduto, setVariantesDoProduto] = useState<any[]>([]);
+  const [varianteSelecionadaId, setVarianteSelecionadaId] = useState<string>("");
+  const [produtoPendenciaVariante, setProdutoPendenciaVariante] = useState<any | null>(
+    null,
+  );
 
   // helpers
   function formatCurrency(cents: number) {
@@ -171,6 +186,16 @@ export default function FrenteCaixaLojaPage() {
       style: "currency",
       currency: "BRL",
     });
+  }
+
+  function labelVariante(v: any) {
+    const parts = [
+      v?.sku ? String(v.sku) : v?.id ? `#${v.id}` : "",
+      v?.cor_nome || v?.cor || null,
+      v?.numeracao_nome || v?.numeracao || null,
+      v?.tamanho_nome || v?.tamanho || null,
+    ].filter(Boolean);
+    return parts.join(" — ");
   }
 
   function resetMensagem() {
@@ -559,18 +584,89 @@ export default function FrenteCaixaLojaPage() {
     };
   }, [isCartaoConexao, comprador?.id, tipoContaConexao, contaConexaoId]);
   // ======== MANIPULAÇÃO DE ITENS =========
-  function adicionarItem(produto: ProdutoResumo) {
+  async function escolherVarianteAntesDeAdicionar(produto: ProdutoResumo) {
+    const produto_id = Number(produto?.id);
+    if (!Number.isFinite(produto_id) || produto_id <= 0) return;
+
+    try {
+      let resp = await fetch(`/api/loja/variantes?produto_id=${produto_id}`);
+      let data = await resp.json().catch(() => ({}));
+      let vars = Array.isArray(data?.variantes)
+        ? data.variantes
+        : Array.isArray(data)
+        ? data
+        : [];
+
+      if (!resp.ok) {
+        alert(data?.error || data?.message || "Falha ao buscar variantes.");
+        return;
+      }
+
+      if (!vars.length) {
+        await fetch("/api/loja/variantes/padrao", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ produto_id }),
+        });
+        resp = await fetch(`/api/loja/variantes?produto_id=${produto_id}`);
+        data = await resp.json().catch(() => ({}));
+        vars = Array.isArray(data?.variantes)
+          ? data.variantes
+          : Array.isArray(data)
+          ? data
+          : [];
+      }
+
+      if (!vars.length) {
+        alert("Produto sem variantes (nem PADRAO).");
+        return;
+      }
+
+      if (vars.length === 1) {
+        const estoqueUnico = Number(vars[0]?.estoque_atual ?? 0);
+        if (!Number.isFinite(estoqueUnico) || estoqueUnico <= 0) {
+          alert("Variante sem estoque disponivel.");
+          return;
+        }
+        adicionarProdutoAoCarrinhoComVariante(produto, vars[0]);
+        return;
+      }
+
+      setProdutoPendenciaVariante(produto);
+      setVariantesDoProduto(vars);
+      setVarianteSelecionadaId("");
+      setIsVarianteModalOpen(true);
+    } catch (err) {
+      console.error("Erro ao selecionar variante:", err);
+      alert("Erro inesperado ao buscar variantes.");
+    }
+  }
+
+  function adicionarProdutoAoCarrinhoComVariante(produto: ProdutoResumo, variante: any) {
     const idTemp = crypto.randomUUID();
-    setItens((prev) => [
-      ...prev,
-      {
-        idTemp,
-        produto,
-        quantidade: 1,
-        precoUnitarioCentavos: produto.preco_venda_centavos || 0,
-        beneficiario: null,
-      },
-    ]);
+    const preco =
+      typeof variante?.preco_venda_centavos === "number" && variante.preco_venda_centavos > 0
+        ? variante.preco_venda_centavos
+        : produto.preco_venda_centavos || 0;
+
+    const item: ItemCaixa = {
+      idTemp,
+      produto,
+      variante_id: Number(variante?.id) || null,
+      variante_label: labelVariante(variante) || null,
+      sku: variante?.sku || null,
+      cor_id: variante?.cor_id ?? null,
+      numeracao_id: variante?.numeracao_id ?? null,
+      tamanho_id: variante?.tamanho_id ?? null,
+      cor_nome: variante?.cor_nome ?? null,
+      numeracao_nome: variante?.numeracao_nome ?? null,
+      tamanho_nome: variante?.tamanho_nome ?? null,
+      quantidade: 1,
+      precoUnitarioCentavos: preco,
+      beneficiario: null,
+    };
+
+    setItens((prev) => [...prev, item]);
   }
 
   function atualizarItem(idTemp: string, partial: Partial<ItemCaixa>) {
@@ -682,6 +778,7 @@ export default function FrenteCaixaLojaPage() {
       observacao_vendedor: observacaoVendedor || undefined,
       itens: itens.map((it) => ({
         produto_id: it.produto.id,
+        variante_id: it.variante_id ?? null,
         quantidade: it.quantidade,
         preco_unitario_centavos: it.precoUnitarioCentavos,
         beneficiario_pessoa_id: it.beneficiario?.id ?? comprador?.id ?? null,
@@ -706,9 +803,23 @@ export default function FrenteCaixaLojaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json: ApiResponse<any> = await res.json();
-      if (!res.ok || !json.ok) {
-        setMensagem(json.error || "Erro ao registrar venda.");
+
+      const rawText = await res.text();
+      let json: any = {};
+      try {
+        json = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        json = {};
+      }
+
+      if (!res.ok || !json?.ok) {
+        const msg =
+          json?.error ||
+          json?.message ||
+          (rawText ? rawText.slice(0, 300) : "Erro ao registrar venda.");
+        const detCode = json?.details?.code ? ` (code: ${json.details.code})` : "";
+        const detMsg = json?.details?.message ? ` | ${json.details.message}` : "";
+        setMensagem(msg + detCode + detMsg);
         setMensagemTipo("error");
         return;
       }
@@ -728,8 +839,93 @@ export default function FrenteCaixaLojaPage() {
   // ======== RENDER =========
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      {isVarianteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-xl bg-white p-4 shadow-lg">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">Selecionar variante</h3>
+              <button
+                className="px-2 py-1 rounded-md border text-sm"
+                onClick={() => {
+                  setIsVarianteModalOpen(false);
+                  setProdutoPendenciaVariante(null);
+                }}
+                type="button"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="text-sm mb-2">
+              Produto: <b>{produtoPendenciaVariante?.nome ?? "-"}</b>
+            </div>
+
+            <div className="max-h-80 overflow-auto border rounded-md">
+              {(variantesDoProduto ?? []).map((v) => {
+                const estoque = Number(v?.estoque_atual ?? 0);
+                const disabled = !Number.isFinite(estoque) || estoque <= 0;
+                return (
+                  <label
+                    key={`sel-var-${v.id}`}
+                    className={`flex items-center justify-between gap-3 px-3 py-2 border-b last:border-b-0 text-sm ${
+                      disabled ? "opacity-50" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="variante"
+                        value={String(v.id)}
+                        disabled={disabled}
+                        checked={varianteSelecionadaId === String(v.id)}
+                        onChange={(e) => setVarianteSelecionadaId(e.target.value)}
+                      />
+                      <span>{labelVariante(v)}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span>
+                        Estoque: <b>{estoque}</b>
+                      </span>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                className="px-3 py-2 rounded-md border text-sm"
+                onClick={() => {
+                  setIsVarianteModalOpen(false);
+                  setProdutoPendenciaVariante(null);
+                }}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="px-3 py-2 rounded-md bg-violet-600 text-white text-sm disabled:opacity-50"
+                disabled={!varianteSelecionadaId}
+                onClick={() => {
+                  const v = (variantesDoProduto ?? []).find(
+                    (x) => String(x.id) === String(varianteSelecionadaId),
+                  );
+                  if (!v || !produtoPendenciaVariante) return;
+                  adicionarProdutoAoCarrinhoComVariante(produtoPendenciaVariante, v);
+                  setIsVarianteModalOpen(false);
+                  setProdutoPendenciaVariante(null);
+                }}
+                type="button"
+              >
+                Adicionar ao carrinho
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Frente de caixa — Loja v0</h1>
+        <h1 className="text-2xl font-semibold">Frente de caixa - Loja v0</h1>
         <p className="text-sm text-gray-600">
           Tela de atendimento rápido da AJ Dance Store. Comprador = quem paga; aluno/usuário
           = quem vai usar o produto (definido por item).
@@ -844,13 +1040,13 @@ export default function FrenteCaixaLojaPage() {
             <p className="text-[11px] text-gray-500">Buscando produtos...</p>
           )}
           <div className="grid md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-            {resultadoProduto.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => adicionarItem(p)}
-                className="border rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
-              >
+                {resultadoProduto.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => escolherVarianteAntesDeAdicionar(p)}
+                    className="border rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                  >
                 <p className="font-semibold text-gray-800">{p.nome}</p>
                 <p className="text-xs text-gray-500">
                   {p.codigo ? `(${p.codigo}) ` : ""}
@@ -888,6 +1084,7 @@ export default function FrenteCaixaLojaPage() {
                     <td className="px-3 py-2">
                       <div className="text-gray-800">{it.produto.nome}</div>
                       <div className="text-[11px] text-gray-500">
+                        {it.variante_label ? it.variante_label + " — " : ""}
                         {it.produto.codigo || ""}
                       </div>
                     </td>

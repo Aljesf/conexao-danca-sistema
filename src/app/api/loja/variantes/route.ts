@@ -49,9 +49,6 @@ export async function POST(req: NextRequest) {
     const numeracao_id = body?.numeracao_id === null || body?.numeracao_id === undefined ? null : Number(body.numeracao_id);
     const tamanho_id = body?.tamanho_id === null || body?.tamanho_id === undefined ? null : Number(body.tamanho_id);
 
-    const estoque_atual_raw = body?.estoque_atual === undefined ? 0 : Number(body.estoque_atual);
-    const estoque_atual = Number.isFinite(estoque_atual_raw) ? estoque_atual_raw : 0;
-
     const preco_raw = body?.preco_venda_centavos;
     const preco_venda_centavos =
       preco_raw === null || preco_raw === undefined
@@ -68,7 +65,7 @@ export async function POST(req: NextRequest) {
       cor_id,
       numeracao_id,
       tamanho_id,
-      estoque_atual,
+      estoque_atual: 0, // variante nasce com estoque zero; movimentos ajustam o saldo
       preco_venda_centavos,
       ativo: body?.ativo === undefined ? true : !!body.ativo,
       observacoes: body?.observacoes ? String(body.observacoes) : null,

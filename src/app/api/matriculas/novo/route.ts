@@ -218,7 +218,7 @@ function validatePayload(
 }
 
 export async function POST(request: NextRequest) {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
 
   // 1. Autenticação básica

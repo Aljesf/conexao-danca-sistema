@@ -31,7 +31,7 @@ function json<T>(status: number, payload: ApiResponse<T>) {
 // ==============================
 export async function GET(
   _req: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   if (!supabaseAdmin) {
     return json(500, {
@@ -41,7 +41,8 @@ export async function GET(
     });
   }
 
-  const vendaId = Number(context.params?.id);
+  const { id } = await context.params;
+  const vendaId = Number(id);
   if (!vendaId || Number.isNaN(vendaId) || vendaId <= 0) {
     return json(400, { ok: false, error: "ID de venda invalido." });
   }
@@ -167,7 +168,7 @@ export async function GET(
 // ==============================
 export async function POST(
   req: NextRequest,
-  context: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   if (!supabaseAdmin) {
     return json(500, {
@@ -177,7 +178,8 @@ export async function POST(
     });
   }
 
-  const vendaId = Number(context.params?.id);
+  const { id } = await context.params;
+  const vendaId = Number(id);
   if (!vendaId || Number.isNaN(vendaId) || vendaId <= 0) {
     return json(400, { ok: false, error: "ID de venda invalido." });
   }

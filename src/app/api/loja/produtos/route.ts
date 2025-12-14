@@ -139,13 +139,36 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const items: ProdutoDb[] =
+    const itemsRaw: ProdutoDb[] =
       (data as ProdutoDb[] | null | undefined)?.map((p) => ({
         ...p,
         categoria_subcategoria_id: p.categoria_subcategoria_id ?? null,
         fornecedor_principal_id: (p as any).fornecedor_principal_id ?? null,
         fornecedor_nome: (p as any).fornecedor_nome ?? null,
       })) ?? [];
+
+    // Estoque pela view de variantes
+    let estoqueMap = new Map<number, number>();
+    if (itemsRaw.length > 0) {
+      const ids = itemsRaw.map((p) => p.id);
+      const { data: estoqueData, error: estoqueError } = await supabaseAdmin
+        .from("v_loja_produtos_estoque")
+        .select("produto_id, estoque_total")
+        .in("produto_id", ids);
+
+      if (estoqueError) {
+        console.error("[GET /api/loja/produtos] Erro ao buscar estoque na view:", estoqueError);
+      } else {
+        (estoqueData || []).forEach((row: any) => {
+          estoqueMap.set(Number(row.produto_id), Number(row.estoque_total) || 0);
+        });
+      }
+    }
+
+    const items: ProdutoDb[] = itemsRaw.map((p) => ({
+      ...p,
+      estoque_atual: estoqueMap.get(p.id) ?? 0,
+    }));
 
     return json(200, {
       ok: true,
