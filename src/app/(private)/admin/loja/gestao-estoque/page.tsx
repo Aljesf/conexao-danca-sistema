@@ -658,6 +658,11 @@ export default function GestaoEstoqueAdminPage() {
         return;
       }
 
+      if (json?.warning) {
+        console.warn("Ajuste aplicado, mas movimento pendente:", json.warning);
+        // alert("Ajuste aplicado, mas movimento de estoque não foi registrado (pendente).");
+      }
+
       setIsAjusteOpen(false);
       setAjQuantidade("1");
       setAjObs("");

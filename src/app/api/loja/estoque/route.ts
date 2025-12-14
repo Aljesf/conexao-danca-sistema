@@ -31,6 +31,10 @@ const supabaseAdmin =
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
+function isMotivoCheck(err: any) {
+  return String(err?.code || "") === "23514" && String(err?.message || "").includes("motivo_check");
+}
+
 function json<T>(status: number, payload: ApiResponse<T>) {
   return NextResponse.json(payload, { status });
 }
@@ -205,38 +209,50 @@ export async function POST(req: Request) {
 
     const saldoProdutoDepois = await getSaldoProduto(produto_id);
 
-    const movimento = {
+    const saldo_antes = saldoVarianteAntes;
+    const saldo_depois = saldoVarianteDepois;
+
+    const movPayload: any = {
       produto_id,
       variante_id,
-      tipo: operacao,
+      tipo: operacao === "ENTRADA" ? "ENTRADA" : "SAIDA",
       origem: "AJUSTE_MANUAL",
+      motivo: "AJUSTE_MANUAL",
       referencia_id: null,
       quantidade,
-      motivo: "AJUSTE_MANUAL",
-      observacao: observacoes,
-      saldo_antes: saldoProdutoAntes,
-      saldo_depois: saldoProdutoDepois,
-      custo_unitario_centavos: null,
+      saldo_antes,
+      saldo_depois,
+      observacao: observacoes ?? null,
       created_by: null,
-      created_at: new Date().toISOString(),
     };
 
-    const { data: movimentoData, error: movError } = await supabase
-      .from("loja_estoque_movimentos")
-      .insert(movimento)
-      .select("*")
-      .maybeSingle();
+    const movRes = await supabase.from("loja_estoque_movimentos").insert(movPayload);
 
-    if (movError) {
-      console.error("[POST /api/loja/estoque] erro ao registrar movimento:", movError);
-      return json(200, {
-        ok: true,
-        variante: varianteAtualizada,
-        warning: "movimento_nao_registrado",
-      });
+    if (movRes.error) {
+      console.error("[/api/loja/estoque] falha ao inserir movimento", movRes.error, movPayload);
+
+      if (isMotivoCheck(movRes.error)) {
+        return NextResponse.json(
+          {
+            ok: true,
+            warning: {
+              type: "MOV_ESTOQUE_PENDENTE",
+              message: movRes.error.message,
+              code: movRes.error.code,
+            },
+            variante: { id: variante_id, estoque_atual: saldo_depois },
+          },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json(
+        { ok: false, error: movRes.error.message, details: movRes.error },
+        { status: 500 }
+      );
     }
 
-    return json(200, { ok: true, variante: varianteAtualizada, movimento: movimentoData });
+    return json(200, { ok: true, variante: varianteAtualizada, movimento: movPayload });
   } catch (err) {
     console.error("[POST /api/loja/estoque] Erro inesperado:", err);
     return json(500, { ok: false, error: "Erro inesperado ao ajustar estoque." });
