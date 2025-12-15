@@ -1,5 +1,5 @@
 # RELATORIO-DIAGNOSTICO-ROTAS
-Gerado em: 2025-12-15T17:58:09.093Z
+Gerado em: 2025-12-15T22:12:47.876Z
 Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 
 ## A) Rotas reais (page.tsx)
@@ -54,26 +54,27 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 - [PLACEHOLDER] /admin/loja/categorias - src/app/(private)/admin/loja/categorias/page.tsx (contexto: admin, linhas: 627)
 - [PLACEHOLDER] /admin/loja/compras - src/app/(private)/admin/loja/compras/page.tsx (contexto: admin, linhas: 598)
 - [PLACEHOLDER] /admin/loja/compras/[id] - src/app/(private)/admin/loja/compras/[id]/page.tsx (contexto: admin, linhas: 826)
-- [PLACEHOLDER] /admin/loja/configuracoes - src/app/(private)/admin/loja/configuracoes/page.tsx (contexto: admin, linhas: 14)
+- [PLACEHOLDER] /admin/loja/configuracoes - src/app/(private)/admin/loja/configuracoes/page.tsx (contexto: admin, linhas: 11)
 - [PLACEHOLDER] /admin/loja/estoque - src/app/(private)/admin/loja/estoque/page.tsx (contexto: admin, linhas: 5)
 - [PLACEHOLDER] /admin/loja/fornecedores - src/app/(private)/admin/loja/fornecedores/page.tsx (contexto: admin, linhas: 432)
 - [PLACEHOLDER] /admin/loja/gestao-estoque - src/app/(private)/admin/loja/gestao-estoque/page.tsx (contexto: admin, linhas: 2535)
-- [PLACEHOLDER] /admin/perfis - src/app/(private)/admin/perfis/page.tsx (contexto: admin, linhas: 4)
-- [PLACEHOLDER] /admin/permissoes - src/app/(private)/admin/permissoes/page.tsx (contexto: admin, linhas: 4)
+- [PLACEHOLDER] /admin/perfis - src/app/(private)/admin/perfis/page.tsx (contexto: admin, linhas: 327)
+- [PLACEHOLDER] /admin/permissoes - src/app/(private)/admin/permissoes/page.tsx (contexto: admin, linhas: 313)
 - [PLACEHOLDER] /admin/relatorios - src/app/(private)/admin/relatorios/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/grupos - src/app/(private)/admin/relatorios/alunos/grupos/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/status - src/app/(private)/admin/relatorios/alunos/status/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/turmas - src/app/(private)/admin/relatorios/alunos/turmas/page.tsx (contexto: admin, linhas: 18)
-- [PLACEHOLDER] /admin/relatorios/auditoria - src/app/(private)/admin/relatorios/auditoria/page.tsx (contexto: admin, linhas: 18)
+- [PLACEHOLDER] /admin/relatorios/auditoria - src/app/(private)/admin/relatorios/auditoria/page.tsx (contexto: admin, linhas: 158)
 - [PLACEHOLDER] /admin/relatorios/captacao/conversao - src/app/(private)/admin/relatorios/captacao/conversao/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/comercial/estoque - src/app/(private)/admin/relatorios/comercial/estoque/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/comercial/vendas - src/app/(private)/admin/relatorios/comercial/vendas/page.tsx (contexto: admin, linhas: 18)
+- [PLACEHOLDER] /admin/relatorios/construtor - src/app/(private)/admin/relatorios/construtor/page.tsx (contexto: admin, linhas: 52)
 - [PLACEHOLDER] /admin/relatorios/financeiro/movimento - src/app/(private)/admin/relatorios/financeiro/movimento/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/financeiro/pagar - src/app/(private)/admin/relatorios/financeiro/pagar/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/financeiro/receber - src/app/(private)/admin/relatorios/financeiro/receber/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/financeiro/resumo - src/app/(private)/admin/relatorios/financeiro/resumo/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/social - src/app/(private)/admin/relatorios/social/page.tsx (contexto: admin, linhas: 18)
-- [PLACEHOLDER] /admin/usuarios - src/app/(private)/admin/usuarios/page.tsx (contexto: admin, linhas: 4)
+- [PLACEHOLDER] /admin/usuarios - src/app/(private)/admin/usuarios/page.tsx (contexto: admin, linhas: 484)
 - [REAL] /alunos/curriculo - src/app/(private)/alunos/curriculo/page.tsx (contexto: outros, linhas: 100)
 - [REAL] /avaliacoes/turma/[avaliacaoId]/lancamento - src/app/(private)/avaliacoes/turma/[avaliacaoId]/lancamento/page.tsx (contexto: outros, linhas: 61)
 - [PLACEHOLDER] /calendario - src/app/(private)/calendario/page.tsx (contexto: outros, linhas: 4)
@@ -107,7 +108,7 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 - [REAL] /config/colaboradores/tipos-funcao - src/app/(private)/config/colaboradores/tipos-funcao/page.tsx (contexto: outros, linhas: 387)
 - [PLACEHOLDER] /config/colaboradores/tipos-vinculo - src/app/(private)/config/colaboradores/tipos-vinculo/page.tsx (contexto: outros, linhas: 294)
 - [PLACEHOLDER] /config/comercial/ballet-cafe - src/app/(private)/config/comercial/ballet-cafe/page.tsx (contexto: outros, linhas: 11)
-- [PLACEHOLDER] /config/comercial/loja - src/app/(private)/config/comercial/loja/page.tsx (contexto: outros, linhas: 11)
+- [REAL] /config/comercial/loja - src/app/(private)/config/comercial/loja/page.tsx (contexto: outros, linhas: 2)
 - [PLACEHOLDER] /config/contratos - src/app/(private)/config/contratos/page.tsx (contexto: outros, linhas: 4)
 - [PLACEHOLDER] /config/enderecos - src/app/(private)/config/enderecos/page.tsx (contexto: outros, linhas: 4)
 - [PLACEHOLDER] /config/escola - src/app/(private)/config/escola/page.tsx (contexto: outros, linhas: 11)
@@ -160,11 +161,11 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 
 ## C) Arquivos sem rota (inventário útil)
 - src/components: components/AppShell.tsx, components/AuthGuard.tsx, components/Container.tsx, components/ContextConfigForm.tsx, components/ContextSelector.tsx, components/EditarFotoModal.tsx, components/FinanceHelpCard.tsx, components/FormCard.tsx, components/FormInput.tsx, components/MovimentoButton.tsx, components/PessoaAvatar.tsx, components/PlaceholderPage.tsx, components/PrimaryButton.tsx, components/Sidebar.tsx, components/StatCard.tsx, components/Topbar.tsx, components/UserBadge.tsx, components/admin, components/ui
-- src/lib: lib/academico, lib/auditoriaLog.ts, lib/avaliacoes, lib/cobrancasNeofin.ts, lib/financeiro, lib/formatters, lib/ia, lib/loja, lib/neofinClient.ts, lib/nextCookies.ts, lib/openaiClient.ts, lib/supabaseBrowser.ts, lib/supabaseClient.ts, lib/supabaseRoute.ts, lib/supabaseServer.ts, lib/supabaseServerSSR.ts
-- src/app/api (rotas): /api/_debug-user, /api/academico/professores/lista-simples, /api/admin/ia, /api/alunos, /api/alunos/[id], /api/auditoria, /api/auditoria/log, /api/cobrancas, /api/curriculo/[pessoaId]/pdf, /api/financeiro/cartao/bandeiras, /api/financeiro/cartao/bandeiras/opcoes, /api/financeiro/cartao/maquinas, /api/financeiro/cartao/maquinas/opcoes, /api/financeiro/cartao/recebiveis, /api/financeiro/cartao/regras, /api/financeiro/categorias, /api/financeiro/categorias-despesa, /api/financeiro/categorias-receita, /api/financeiro/centros-custo, /api/financeiro/cobrancas/registrar-pagamento-presencial, /api/financeiro/cobrancas/reprocessar-classificacao, /api/financeiro/contas-financeiras, /api/financeiro/contas-financeiras/centros, /api/financeiro/contas-pagar, /api/financeiro/contas-pagar/[id], /api/financeiro/contas-pagar/pagar, /api/financeiro/contas-receber, /api/financeiro/contas-receber/receber, /api/financeiro/credito-conexao/contas, /api/financeiro/credito-conexao/faturas, /api/financeiro/credito-conexao/faturas/[id], /api/financeiro/credito-conexao/faturas/[id]/fechar, /api/financeiro/credito-conexao/faturas/[id]/lancamentos, /api/financeiro/credito-conexao/faturas/fechar, /api/financeiro/credito-conexao/faturas/incluir-pendencias, /api/financeiro/credito-conexao/regras-parcelas, /api/financeiro/dashboard, /api/financeiro/dashboard-inteligente, /api/financeiro/dashboard-inteligente/cron-diario, /api/financeiro/dashboard-inteligente/historico, /api/financeiro/dashboard-inteligente/reanalisar, /api/financeiro/formas-pagamento, /api/financeiro/formas-pagamento/dicionario, /api/financeiro/movimento, /api/financeiro/plano-contas, /api/integracoes/neofin/cobrancas/gerar-boleto, /api/integracoes/neofin/cobrancas/sync-boleto, /api/internal/schema, /api/loja/atributos, /api/loja/cadastros, /api/loja/cadastros/[id], /api/loja/categorias, /api/loja/categorias/[id], /api/loja/compras, /api/loja/compras/[id], /api/loja/debug/criar-venda-teste, /api/loja/diagnostico/estoque-movimentos, /api/loja/estoque, /api/loja/estoque/ajuste-manual, /api/loja/estoque/entrada, /api/loja/estoque/movimentos, /api/loja/fornecedores, /api/loja/produtos, /api/loja/produtos/categorias, /api/loja/produtos/subcategorias/[id], /api/loja/variantes, /api/loja/variantes/padrao, /api/loja/vendas, /api/loja/vendas/[id], /api/matriculas/novo, /api/pessoas, /api/pessoas/[id], /api/pessoas/[id]/foto, /api/pessoas/busca, /api/pessoas/rapido, /api/professores, /api/professores/[id], /api/teste, /api/turmas, /api/turmas/busca, /api/usuarios/create-from-pessoa
+- src/lib: lib/academico, lib/auditoriaLog.ts, lib/auth, lib/avaliacoes, lib/cobrancasNeofin.ts, lib/financeiro, lib/formatters, lib/ia, lib/loja, lib/neofinClient.ts, lib/nextCookies.ts, lib/openaiClient.ts, lib/supabaseBrowser.ts, lib/supabaseClient.ts, lib/supabaseRoute.ts, lib/supabaseServer.ts, lib/supabaseServerSSR.ts
+- src/app/api (rotas): /api/_debug-user, /api/academico/professores/lista-simples, /api/admin/ia, /api/admin/roles, /api/admin/usuarios, /api/admin/usuarios/[user_id]/roles, /api/alunos, /api/alunos/[id], /api/auditoria, /api/auditoria/log, /api/cobrancas, /api/curriculo/[pessoaId]/pdf, /api/financeiro/cartao/bandeiras, /api/financeiro/cartao/bandeiras/opcoes, /api/financeiro/cartao/maquinas, /api/financeiro/cartao/maquinas/opcoes, /api/financeiro/cartao/recebiveis, /api/financeiro/cartao/regras, /api/financeiro/categorias, /api/financeiro/categorias-despesa, /api/financeiro/categorias-receita, /api/financeiro/centros-custo, /api/financeiro/cobrancas/registrar-pagamento-presencial, /api/financeiro/cobrancas/reprocessar-classificacao, /api/financeiro/contas-financeiras, /api/financeiro/contas-financeiras/centros, /api/financeiro/contas-pagar, /api/financeiro/contas-pagar/[id], /api/financeiro/contas-pagar/pagar, /api/financeiro/contas-receber, /api/financeiro/contas-receber/receber, /api/financeiro/credito-conexao/contas, /api/financeiro/credito-conexao/faturas, /api/financeiro/credito-conexao/faturas/[id], /api/financeiro/credito-conexao/faturas/[id]/fechar, /api/financeiro/credito-conexao/faturas/[id]/lancamentos, /api/financeiro/credito-conexao/faturas/fechar, /api/financeiro/credito-conexao/faturas/incluir-pendencias, /api/financeiro/credito-conexao/regras-parcelas, /api/financeiro/dashboard, /api/financeiro/dashboard-inteligente, /api/financeiro/dashboard-inteligente/cron-diario, /api/financeiro/dashboard-inteligente/historico, /api/financeiro/dashboard-inteligente/reanalisar, /api/financeiro/formas-pagamento, /api/financeiro/formas-pagamento/dicionario, /api/financeiro/movimento, /api/financeiro/plano-contas, /api/integracoes/neofin/cobrancas/gerar-boleto, /api/integracoes/neofin/cobrancas/sync-boleto, /api/internal/schema, /api/loja/atributos, /api/loja/cadastros, /api/loja/cadastros/[id], /api/loja/categorias, /api/loja/categorias/[id], /api/loja/compras, /api/loja/compras/[id], /api/loja/debug/criar-venda-teste, /api/loja/diagnostico/estoque-movimentos, /api/loja/estoque, /api/loja/estoque/ajuste-manual, /api/loja/estoque/entrada, /api/loja/estoque/movimentos, /api/loja/fornecedores, /api/loja/produtos, /api/loja/produtos/categorias, /api/loja/produtos/subcategorias/[id], /api/loja/variantes, /api/loja/variantes/padrao, /api/loja/vendas, /api/loja/vendas/[id], /api/matriculas/novo, /api/pessoas, /api/pessoas/[id], /api/pessoas/[id]/foto, /api/pessoas/busca, /api/pessoas/rapido, /api/professores, /api/professores/[id], /api/teste, /api/turmas, /api/turmas/busca, /api/usuarios/create-from-pessoa
 
 ## D) Contagens e ranking
-- Totais -> REAL: 35, PLACEHOLDER: 111, SUSPEITA: 4, Total: 150
+- Totais -> REAL: 36, PLACEHOLDER: 111, SUSPEITA: 4, Total: 151
 - Top 20 maiores páginas (por linhas):
   - /admin/loja/gestao-estoque (2535 linhas) - src/app/(private)/admin/loja/gestao-estoque/page.tsx
   - /loja/caixa (1712 linhas) - src/app/(private)/loja/caixa/page.tsx
@@ -181,11 +182,11 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
   - /admin/financeiro (587 linhas) - src/app/(private)/admin/financeiro/page.tsx
   - /admin/financeiro/contas-pagar (539 linhas) - src/app/(private)/admin/financeiro/contas-pagar/page.tsx
   - /admin/financeiro/contas-receber (489 linhas) - src/app/(private)/admin/financeiro/contas-receber/page.tsx
+  - /admin/usuarios (484 linhas) - src/app/(private)/admin/usuarios/page.tsx
   - /admin/financeiro/formas-pagamento (470 linhas) - src/app/(private)/admin/financeiro/formas-pagamento/page.tsx
   - /admin/loja/fornecedores (432 linhas) - src/app/(private)/admin/loja/fornecedores/page.tsx
   - /academico/turmas/nova (431 linhas) - src/app/(private)/academico/turmas/nova/page.tsx
   - /config/escola/professores (425 linhas) - src/app/(private)/config/escola/professores/page.tsx
-  - /loja/estoque (425 linhas) - src/app/(private)/loja/estoque/page.tsx
 - Top 20 menores páginas (por linhas):
   - /admin/colaboradores (2 linhas) - src/app/(private)/admin/colaboradores/page.tsx
   - /admin/colaboradores/tipos-funcao (2 linhas) - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx
@@ -193,12 +194,10 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
   - /admin/config/cafe (2 linhas) - src/app/(private)/admin/config/cafe/page.tsx
   - /admin/config/escola (2 linhas) - src/app/(private)/admin/config/escola/page.tsx
   - /admin/config/loja (2 linhas) - src/app/(private)/admin/config/loja/page.tsx
+  - /config/comercial/loja (2 linhas) - src/app/(private)/config/comercial/loja/page.tsx
   - /academico/frequencia (4 linhas) - src/app/(private)/academico/frequencia/page.tsx
   - /academico/modalidades (4 linhas) - src/app/(private)/academico/modalidades/page.tsx
   - /academico/turmas/grade (4 linhas) - src/app/(private)/academico/turmas/grade/page.tsx
-  - /admin/perfis (4 linhas) - src/app/(private)/admin/perfis/page.tsx
-  - /admin/permissoes (4 linhas) - src/app/(private)/admin/permissoes/page.tsx
-  - /admin/usuarios (4 linhas) - src/app/(private)/admin/usuarios/page.tsx
   - /calendario (4 linhas) - src/app/(private)/calendario/page.tsx
   - /calendario/eventos-externos (4 linhas) - src/app/(private)/calendario/eventos-externos/page.tsx
   - /calendario/eventos-internos (4 linhas) - src/app/(private)/calendario/eventos-internos/page.tsx
@@ -207,5 +206,7 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
   - /captacao/interessados (4 linhas) - src/app/(private)/captacao/interessados/page.tsx
   - /captacao/novo (4 linhas) - src/app/(private)/captacao/novo/page.tsx
   - /comercial/ballet-cafe (4 linhas) - src/app/(private)/comercial/ballet-cafe/page.tsx
+  - /comercial/ballet-cafe/categorias (4 linhas) - src/app/(private)/comercial/ballet-cafe/categorias/page.tsx
+  - /comercial/ballet-cafe/compras (4 linhas) - src/app/(private)/comercial/ballet-cafe/compras/page.tsx
 
 > Status calculado por heurística simples: REAL (conteúdo/tabelas/fetch), PLACEHOLDER (muito curto ou contém TODO/placeholder), SUSPEITA (mínimo de código sem sinais claros).

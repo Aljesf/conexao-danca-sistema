@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-12-15T17:58:09.093Z",
+  "generatedAt": "2025-12-15T22:12:47.876Z",
   "pages": [
     {
       "route": "/academico/avaliacoes",
@@ -363,7 +363,7 @@
       "file": "src/app/(private)/admin/loja/configuracoes/page.tsx",
       "context": "admin",
       "status": "PLACEHOLDER",
-      "lines": 14
+      "lines": 11
     },
     {
       "route": "/admin/loja/estoque",
@@ -391,14 +391,14 @@
       "file": "src/app/(private)/admin/perfis/page.tsx",
       "context": "admin",
       "status": "PLACEHOLDER",
-      "lines": 4
+      "lines": 327
     },
     {
       "route": "/admin/permissoes",
       "file": "src/app/(private)/admin/permissoes/page.tsx",
       "context": "admin",
       "status": "PLACEHOLDER",
-      "lines": 4
+      "lines": 313
     },
     {
       "route": "/admin/relatorios",
@@ -433,7 +433,7 @@
       "file": "src/app/(private)/admin/relatorios/auditoria/page.tsx",
       "context": "admin",
       "status": "PLACEHOLDER",
-      "lines": 18
+      "lines": 158
     },
     {
       "route": "/admin/relatorios/captacao/conversao",
@@ -455,6 +455,13 @@
       "context": "admin",
       "status": "PLACEHOLDER",
       "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/construtor",
+      "file": "src/app/(private)/admin/relatorios/construtor/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 52
     },
     {
       "route": "/admin/relatorios/financeiro/movimento",
@@ -496,7 +503,7 @@
       "file": "src/app/(private)/admin/usuarios/page.tsx",
       "context": "admin",
       "status": "PLACEHOLDER",
-      "lines": 4
+      "lines": 484
     },
     {
       "route": "/alunos/curriculo",
@@ -733,8 +740,8 @@
       "route": "/config/comercial/loja",
       "file": "src/app/(private)/config/comercial/loja/page.tsx",
       "context": "outros",
-      "status": "PLACEHOLDER",
-      "lines": 11
+      "status": "REAL",
+      "lines": 2
     },
     {
       "route": "/config/contratos",
@@ -1060,6 +1067,9 @@
     "/api/_debug-user",
     "/api/academico/professores/lista-simples",
     "/api/admin/ia",
+    "/api/admin/roles",
+    "/api/admin/usuarios",
+    "/api/admin/usuarios/[user_id]/roles",
     "/api/alunos",
     "/api/alunos/[id]",
     "/api/auditoria",
@@ -1163,6 +1173,7 @@
   "libEntries": [
     "lib/academico",
     "lib/auditoriaLog.ts",
+    "lib/auth",
     "lib/avaliacoes",
     "lib/cobrancasNeofin.ts",
     "lib/financeiro",

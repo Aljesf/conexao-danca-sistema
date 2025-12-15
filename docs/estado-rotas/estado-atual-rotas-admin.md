@@ -1,8 +1,8 @@
 # Estado atual das rotas - Admin
-Atualizado em: 2025-12-15 17:58
+Atualizado em: 2025-12-15 22:12
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T17:58:09.093Z
+Auditado em: 2025-12-15T22:12:47.876Z
 
 ## Rotas
 - [REAL] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 2)
@@ -34,23 +34,24 @@ Auditado em: 2025-12-15T17:58:09.093Z
 - [PLACEHOLDER] /admin/loja/categorias - src/app/(private)/admin/loja/categorias/page.tsx (linhas: 627)
 - [PLACEHOLDER] /admin/loja/compras - src/app/(private)/admin/loja/compras/page.tsx (linhas: 598)
 - [PLACEHOLDER] /admin/loja/compras/[id] - src/app/(private)/admin/loja/compras/[id]/page.tsx (linhas: 826)
-- [PLACEHOLDER] /admin/loja/configuracoes - src/app/(private)/admin/loja/configuracoes/page.tsx (linhas: 14)
+- [PLACEHOLDER] /admin/loja/configuracoes - src/app/(private)/admin/loja/configuracoes/page.tsx (linhas: 11)
 - [PLACEHOLDER] /admin/loja/estoque - src/app/(private)/admin/loja/estoque/page.tsx (linhas: 5)
 - [PLACEHOLDER] /admin/loja/fornecedores - src/app/(private)/admin/loja/fornecedores/page.tsx (linhas: 432)
 - [PLACEHOLDER] /admin/loja/gestao-estoque - src/app/(private)/admin/loja/gestao-estoque/page.tsx (linhas: 2535)
-- [PLACEHOLDER] /admin/perfis - src/app/(private)/admin/perfis/page.tsx (linhas: 4)
-- [PLACEHOLDER] /admin/permissoes - src/app/(private)/admin/permissoes/page.tsx (linhas: 4)
+- [PLACEHOLDER] /admin/perfis - src/app/(private)/admin/perfis/page.tsx (linhas: 327)
+- [PLACEHOLDER] /admin/permissoes - src/app/(private)/admin/permissoes/page.tsx (linhas: 313)
 - [PLACEHOLDER] /admin/relatorios - src/app/(private)/admin/relatorios/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/grupos - src/app/(private)/admin/relatorios/alunos/grupos/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/status - src/app/(private)/admin/relatorios/alunos/status/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/turmas - src/app/(private)/admin/relatorios/alunos/turmas/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/relatorios/auditoria - src/app/(private)/admin/relatorios/auditoria/page.tsx (linhas: 18)
+- [PLACEHOLDER] /admin/relatorios/auditoria - src/app/(private)/admin/relatorios/auditoria/page.tsx (linhas: 158)
 - [PLACEHOLDER] /admin/relatorios/captacao/conversao - src/app/(private)/admin/relatorios/captacao/conversao/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/comercial/estoque - src/app/(private)/admin/relatorios/comercial/estoque/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/comercial/vendas - src/app/(private)/admin/relatorios/comercial/vendas/page.tsx (linhas: 18)
+- [PLACEHOLDER] /admin/relatorios/construtor - src/app/(private)/admin/relatorios/construtor/page.tsx (linhas: 52)
 - [PLACEHOLDER] /admin/relatorios/financeiro/movimento - src/app/(private)/admin/relatorios/financeiro/movimento/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/financeiro/pagar - src/app/(private)/admin/relatorios/financeiro/pagar/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/financeiro/receber - src/app/(private)/admin/relatorios/financeiro/receber/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/financeiro/resumo - src/app/(private)/admin/relatorios/financeiro/resumo/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/social - src/app/(private)/admin/relatorios/social/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/usuarios - src/app/(private)/admin/usuarios/page.tsx (linhas: 4)
+- [PLACEHOLDER] /admin/usuarios - src/app/(private)/admin/usuarios/page.tsx (linhas: 484)
