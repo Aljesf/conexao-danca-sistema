@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { AnaliseGpt, SnapshotFinanceiro } from "@/lib/financeiro/dashboardInteligente";
 
-type AlertSchema = {
+export type FinanceiroAlerta = {
   severidade: "CRITICO" | "ALERTA" | "INFO";
   titulo: string;
   por_que_importa: string;
@@ -9,43 +9,130 @@ type AlertSchema = {
   sinal: "\u2191" | "\u2193" | "\u2192";
 };
 
-type GptOutput = {
-  alertas?: AlertSchema[];
-  texto_curto?: string;
+export type FinanceiroAnalise = {
+  texto_curto: string;
+  alertas: FinanceiroAlerta[];
+  meta?: {
+    fonte: "GPT" | "REGRAS";
+    model?: string | null;
+    created_at?: string | null;
+  };
 };
 
 const DEFAULT_MODEL = process.env.FINANCEIRO_GPT_MODEL || "gpt-5";
 
-function baseAlertas(snapshot: SnapshotFinanceiro): AlertSchema[] {
-  return (snapshot.regras_alerta || []).slice(0, 3).map((r) => ({
+export const PROMPT_FINANCEIRO_CONSULTOR = `
+Voce atua como consultor financeiro interno (nao contábil). Objetivo: leitura executiva em 30 segundos.
+Proibido inventar dados, criar lançamentos, sugerir ilegalidades ou repetir números do input.
+Foque em inadimplencia, folego de caixa, tendencia de entradas/saidas, riscos de travamento/crescimento, cartao conexao quando relevante.
+Responda EXCLUSIVAMENTE em JSON no formato:
+{
+  "texto_curto": "string (1 paragrafo, tom gestor/investidor, sem repetir numeros)",
+  "alertas": [
+    {
+      "severidade": "CRITICO|ALERTA|INFO",
+      "titulo": "string curta",
+      "por_que_importa": "1 linha",
+      "acao_pratica": "1 linha",
+      "sinal": "\\u2191|\\u2193|\\u2192"
+    }
+  ],
+  "meta": { "fonte": "GPT", "model": "nome_do_modelo" }
+}
+Maximo 3 alertas; priorizar severidade (CRITICO > ALERTA > INFO). Se dados escassos, use INFO pedindo para alimentar dados/registrar movimentos.
+`;
+
+function baseAlertas(snapshot: SnapshotFinanceiro): FinanceiroAnalise {
+  const alertas = (snapshot.regras_alerta || []).slice(0, 3).map((r) => ({
     severidade: r.severidade === "CRITICO" ? "CRITICO" : "ALERTA",
     titulo: r.titulo,
     por_que_importa: r.detalhe ?? "Alertas calculados pelo motor interno.",
     acao_pratica: "Revisar movimentos e alimentar dados se faltando.",
-    sinal: "\u2192",
+    sinal: "\u2192" as const,
   }));
+
+  return {
+    texto_curto: "Analise calculada por regras internas; alimente dados para melhor leitura.",
+    alertas,
+    meta: { fonte: "REGRAS", model: null, created_at: new Date().toISOString() },
+  };
+}
+
+function sanitizeAnalise(parsed: any, fallback: FinanceiroAnalise): FinanceiroAnalise {
+  const safeAlertas: FinanceiroAlerta[] = Array.isArray(parsed?.alertas) ? parsed.alertas : [];
+  const normalized = safeAlertas.slice(0, 3).map((a) => {
+    const severidade =
+      a?.severidade === "CRITICO" || a?.severidade === "ALERTA" || a?.severidade === "INFO"
+        ? a.severidade
+        : "INFO";
+    const sinal = a?.sinal === "\u2191" || a?.sinal === "\u2193" ? a.sinal : "\u2192";
+    return {
+      severidade,
+      titulo: typeof a?.titulo === "string" ? a.titulo : "Alerta",
+      por_que_importa:
+        typeof a?.por_que_importa === "string"
+          ? a.por_que_importa
+          : "Importancia nao informada.",
+      acao_pratica:
+        typeof a?.acao_pratica === "string"
+          ? a.acao_pratica
+          : "Revisar dados e planos de acao.",
+      sinal,
+    };
+  });
+
+  const texto_curto =
+    typeof parsed?.texto_curto === "string" && parsed.texto_curto.trim()
+      ? parsed.texto_curto.trim()
+      : fallback.texto_curto;
+
+  const meta = {
+    fonte: "GPT" as const,
+    model: parsed?.meta?.model ?? DEFAULT_MODEL,
+    created_at: new Date().toISOString(),
+  };
+
+  return { texto_curto, alertas: normalized.length ? normalized : fallback.alertas, meta };
+}
+
+function tryParseJson(output: string): any | null {
+  try {
+    return JSON.parse(output);
+  } catch {
+    const first = output.indexOf("{");
+    const last = output.lastIndexOf("}");
+    if (first !== -1 && last !== -1 && last > first) {
+      try {
+        return JSON.parse(output.slice(first, last + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 export async function analisarSnapshotGPT(snapshot: SnapshotFinanceiro): Promise<AnaliseGpt | null> {
-  const fallbackAlertas = baseAlertas(snapshot);
+  const fallback = baseAlertas(snapshot);
 
   if (!process.env.OPENAI_API_KEY) {
     return {
       model: null,
-      alertas: fallbackAlertas,
-      texto_curto: "Analise GPT desativada (OPENAI_API_KEY ausente); exibindo alertas calculados.",
+      alertas: fallback.alertas,
+      texto_curto: fallback.texto_curto,
+      meta: fallback.meta,
       raw: {},
     };
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  const tendencia = snapshot.tendencia;
   const resumoCentros = (snapshot.resumo_por_centro || []).map((c) => ({
     nome: c.centro_custo_nome ?? c.centro_custo_codigo ?? `Centro ${c.centro_custo_id}`,
     resultado_30d_centavos: c.resultado_30d_centavos,
     tendencia: c.tendencia_resultado,
   }));
+
   const serie = snapshot.serie_fluxo_caixa || [];
   const serieStats = serie.length
     ? {
@@ -60,66 +147,40 @@ export async function analisarSnapshotGPT(snapshot: SnapshotFinanceiro): Promise
     entradas_previstas_30d_centavos: snapshot.entradas_previstas_30d_centavos,
     saidas_comprometidas_30d_centavos: snapshot.saidas_comprometidas_30d_centavos,
     folego_caixa_dias: snapshot.folego_caixa_dias,
-    tendencia,
+    tendencia: snapshot.tendencia,
     resumo_por_centro: resumoCentros,
     serie_stats: serieStats,
-    contexto_centros: resumoCentros.map((c) => c.nome),
     regras_alerta: snapshot.regras_alerta,
   };
-
-  const instructions = `
-    Voce atua como consultor interno (nao contábil). Objetivo: fornecer leitura executiva em 30 segundos.
-    Regras:
-    - Responder exclusivamente em JSON no formato:
-    {
-      "texto_curto": "string (1 paragrafo, tom gestor/investidor, sem repetir numeros)",
-      "alertas": [
-        {
-          "severidade": "CRITICO|ALERTA|INFO",
-          "titulo": "string curta",
-          "por_que_importa": "1 linha",
-          "acao_pratica": "1 linha",
-          "sinal": "\\u2191|\\u2193|\\u2192"
-        }
-      ]
-    }
-    - Maximo 3 alertas, priorizar severidade (CRITICO > ALERTA > INFO).
-    - Nao inventar fatos fora do snapshot; nao sugerir ilegalidades; nao criar lancamentos.
-    - Se dados escassos (muitos zeros), gerar alertas INFO orientando a alimentar dados/registrar movimentos.
-    - Linguagem direta e executiva, sem porcentagens absurdas por base zero.
-  `;
 
   try {
     const response = await client.responses.create({
       model: DEFAULT_MODEL,
       input: [
-        { role: "system", content: [{ type: "text", text: instructions }] },
+        { role: "system", content: [{ type: "text", text: PROMPT_FINANCEIRO_CONSULTOR }] },
         { role: "user", content: [{ type: "text", text: JSON.stringify(payload) }] },
       ],
       response_format: { type: "json_object" },
     });
 
     const text = (response as any)?.output_text ?? "";
-    let parsed: GptOutput | null = null;
-    try {
-      parsed = text ? (JSON.parse(text) as GptOutput) : null;
-    } catch (err) {
-      console.warn("[analisarSnapshotGPT] Falha ao fazer parse da saida GPT:", err, text);
-    }
+    const parsedRaw = text ? tryParseJson(text) : null;
+    const normalized = parsedRaw ? sanitizeAnalise(parsedRaw, fallback) : fallback;
 
-    const alertas = (parsed?.alertas || []).slice(0, 3);
     return {
       model: DEFAULT_MODEL,
-      alertas: alertas.length ? alertas : fallbackAlertas,
-      texto_curto: parsed?.texto_curto ?? "Analise automatica indisponivel; usando alertas calculados.",
+      alertas: normalized.alertas,
+      texto_curto: normalized.texto_curto,
+      meta: normalized.meta,
       raw: response,
     };
   } catch (err) {
     console.warn("[analisarSnapshotGPT] Erro na chamada GPT:", err);
     return {
       model: DEFAULT_MODEL,
-      alertas: fallbackAlertas,
-      texto_curto: "Analise automatica nao disponivel; exibindo alertas calculados.",
+      alertas: fallback.alertas,
+      texto_curto: fallback.texto_curto,
+      meta: fallback.meta,
       raw: { error: String(err) },
     };
   }

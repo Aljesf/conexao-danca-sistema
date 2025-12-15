@@ -62,11 +62,13 @@ export type AnaliseGpt = {
   created_at?: string;
   snapshot_id?: number;
   model?: string | null;
+  meta?: { fonte?: "GPT" | "REGRAS"; model?: string | null; created_at?: string | null };
   alertas: Array<{
-    icone?: string | null;
-    titulo_curto: string;
     severidade: "INFO" | "ALERTA" | "CRITICO";
+    titulo: string;
+    por_que_importa?: string | null;
     acao_pratica?: string | null;
+    sinal?: "↑" | "↓" | "→";
   }>;
   texto_curto?: string | null;
   raw?: any;

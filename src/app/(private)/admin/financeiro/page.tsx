@@ -50,7 +50,7 @@ type AnaliseAlerta = {
   titulo: string;
   por_que_importa: string;
   acao_pratica: string;
-  sinal: "↑" | "↓" | "→";
+  sinal: "\u2191" | "\u2193" | "\u2192";
 };
 
 type Snapshot = {
@@ -75,6 +75,7 @@ type Analise = {
   model?: string | null;
   alertas: AnaliseAlerta[];
   texto_curto?: string | null;
+  meta?: { fonte?: "GPT" | "REGRAS" | null };
 };
 
 type DashboardResponse = {
@@ -90,9 +91,9 @@ type LineDatum = {
 };
 
 function tendenciaIcon(direcao?: "UP" | "DOWN" | "FLAT") {
-  if (direcao === "UP") return "↑";
-  if (direcao === "DOWN") return "↓";
-  return "→";
+  if (direcao === "UP") return "\u2191";
+  if (direcao === "DOWN") return "\u2193";
+  return "\u2192";
 }
 
 function variacaoTexto(t: TendenciaValor | undefined) {
@@ -210,13 +211,15 @@ export default function FinanceiroDashboardPage() {
   const alertasMostrados = useMemo(() => {
     if (analise?.alertas?.length) return ordenarAlertas(analise.alertas).slice(0, 3);
     if (snapshot?.regras_alerta?.length) {
-      return snapshot.regras_alerta.slice(0, 3).map((r) => ({
-        severidade: r.severidade,
-        titulo: r.titulo,
-        por_que_importa: r.detalhe ?? "Alerta calculado pelo motor interno.",
-        acao_pratica: "Revisar dados e registrar movimentos.",
-        sinal: "→" as const,
-      }));
+      return snapshot.regras_alerta.slice(0, 3).map((r) => {
+        return {
+          severidade: r.severidade,
+          titulo: r.titulo,
+          por_que_importa: r.detalhe ?? "Alerta calculado pelo motor interno.",
+          acao_pratica: "Revisar dados e registrar movimentos.",
+          sinal: "→" as const,
+        };
+      });
     }
     return [];
   }, [analise, snapshot]);
@@ -359,11 +362,11 @@ export default function FinanceiroDashboardPage() {
               : snapshot?.created_at
               ? formatDateTimeISO(snapshot.created_at)
               : "--"}
-            {!analise?.model && (
+            {analise?.meta?.fonte === "REGRAS" || !analise?.model ? (
               <span className="ml-2 text-[11px] font-medium text-slate-500">
                 (Gerado por regras - GPT indisponivel)
               </span>
-            )}
+            ) : null}
           </div>
 
           {analise?.texto_curto ? (
@@ -400,8 +403,8 @@ export default function FinanceiroDashboardPage() {
                     </p>
                   </div>
                 </div>
-                <p className="mt-2 text-xs text-slate-500">{a.por_que_importa}</p>
-                <p className="mt-1 text-sm text-slate-700">{a.acao_pratica}</p>
+                <p className="mt-2 text-xs text-slate-500">Por que importa: {a.por_que_importa}</p>
+                <p className="mt-1 text-sm text-slate-700">Ação prática: {a.acao_pratica}</p>
               </div>
             ))}
           </div>
