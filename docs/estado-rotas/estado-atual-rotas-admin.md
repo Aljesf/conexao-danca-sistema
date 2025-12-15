@@ -1,15 +1,15 @@
 # Estado atual das rotas - Admin
-Atualizado em: 2025-12-15 11:24
+Atualizado em: 2025-12-15 14:53
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T11:23:48.239Z
+Auditado em: 2025-12-15T14:53:16.821Z
 
 ## Rotas
-- [PLACEHOLDER] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 18)
+- [REAL] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 4)
 - [PLACEHOLDER] /admin/colaboradores/centros-custo - src/app/(private)/admin/colaboradores/centros-custo/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/colaboradores/jornadas - src/app/(private)/admin/colaboradores/jornadas/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (linhas: 18)
+- [REAL] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (linhas: 4)
+- [REAL] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (linhas: 4)
 - [PLACEHOLDER] /admin/config/cafe - src/app/(private)/admin/config/cafe/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/config/escola - src/app/(private)/admin/config/escola/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/config/loja - src/app/(private)/admin/config/loja/page.tsx (linhas: 18)

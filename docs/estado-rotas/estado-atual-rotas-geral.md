@@ -1,8 +1,8 @@
 # Estado atual das rotas - Geral
-Atualizado em: 2025-12-15 11:24
+Atualizado em: 2025-12-15 14:53
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T11:23:48.239Z
+Auditado em: 2025-12-15T14:53:16.821Z
 
 ## Rotas
 - [PLACEHOLDER] /academico/avaliacoes - src/app/(private)/academico/avaliacoes/page.tsx (linhas: 93)
@@ -17,7 +17,7 @@ Auditado em: 2025-12-15T11:23:48.239Z
 - [PLACEHOLDER] /academico/filtro - src/app/(private)/academico/filtro/page.tsx (linhas: 140)
 - [PLACEHOLDER] /academico/frequencia - src/app/(private)/academico/frequencia/page.tsx (linhas: 4)
 - [REAL] /academico/habilidades - src/app/(private)/academico/habilidades/page.tsx (linhas: 82)
-- [PLACEHOLDER] /academico/modalidades - src/app/(private)/academico/modalidades/page.tsx (linhas: 4)
+- [REAL] /academico/modalidades - src/app/(private)/academico/modalidades/page.tsx (linhas: 4)
 - [SUSPEITA] /academico/modulos - src/app/(private)/academico/modulos/page.tsx (linhas: 23)
 - [PLACEHOLDER] /academico/niveis - src/app/(private)/academico/niveis/page.tsx (linhas: 608)
 - [REAL] /academico/turmas - src/app/(private)/academico/turmas/page.tsx (linhas: 82)
@@ -27,11 +27,11 @@ Auditado em: 2025-12-15T11:23:48.239Z
 - [PLACEHOLDER] /academico/turmas/[turmaId]/professores/adicionar - src/app/(private)/academico/turmas/[turmaId]/professores/adicionar/page.tsx (linhas: 106)
 - [PLACEHOLDER] /academico/turmas/grade - src/app/(private)/academico/turmas/grade/page.tsx (linhas: 4)
 - [PLACEHOLDER] /academico/turmas/nova - src/app/(private)/academico/turmas/nova/page.tsx (linhas: 431)
-- [PLACEHOLDER] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 18)
+- [REAL] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 4)
 - [PLACEHOLDER] /admin/colaboradores/centros-custo - src/app/(private)/admin/colaboradores/centros-custo/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/colaboradores/jornadas - src/app/(private)/admin/colaboradores/jornadas/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (linhas: 18)
+- [REAL] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (linhas: 4)
+- [REAL] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (linhas: 4)
 - [PLACEHOLDER] /admin/config/cafe - src/app/(private)/admin/config/cafe/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/config/escola - src/app/(private)/admin/config/escola/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/config/loja - src/app/(private)/admin/config/loja/page.tsx (linhas: 18)
@@ -120,9 +120,9 @@ Auditado em: 2025-12-15T11:23:48.239Z
 - [PLACEHOLDER] /config/permissoes - src/app/(private)/config/permissoes/page.tsx (linhas: 4)
 - [REAL] /escola/academico/turmas - src/app/(private)/escola/academico/turmas/page.tsx (linhas: 76)
 - [REAL] /escola/academico/turmas/nova - src/app/(private)/escola/academico/turmas/nova/page.tsx (linhas: 262)
-- [PLACEHOLDER] /escola/pessoas - src/app/(private)/escola/pessoas/page.tsx (linhas: 5)
-- [PLACEHOLDER] /escola/pessoas/[id] - src/app/(private)/escola/pessoas/[id]/page.tsx (linhas: 9)
-- [PLACEHOLDER] /escola/pessoas/nova - src/app/(private)/escola/pessoas/nova/page.tsx (linhas: 5)
+- [REAL] /escola/pessoas - src/app/(private)/escola/pessoas/page.tsx (linhas: 5)
+- [REAL] /escola/pessoas/[id] - src/app/(private)/escola/pessoas/[id]/page.tsx (linhas: 9)
+- [REAL] /escola/pessoas/nova - src/app/(private)/escola/pessoas/nova/page.tsx (linhas: 5)
 - [PLACEHOLDER] /financeiro - src/app/(private)/financeiro/page.tsx (linhas: 246)
 - [PLACEHOLDER] /financeiro/caixa - src/app/(private)/financeiro/caixa/page.tsx (linhas: 4)
 - [PLACEHOLDER] /financeiro/cobrancas/[id] - src/app/(private)/financeiro/cobrancas/[id]/page.tsx (linhas: 266)

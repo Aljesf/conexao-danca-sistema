@@ -77,6 +77,7 @@ function determineStatus(content: string, linesCount: number): RouteStatus {
   if (/(todo|em constru[cç][aã]o|placeholder|em breve)/.test(lc)) {
     return "PLACEHOLDER";
   }
+  if (/redirect\s*\(/i.test(content)) return "REAL";
   if (linesCount < 15) return "PLACEHOLDER";
 
   const hasDataSignals =

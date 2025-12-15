@@ -1,8 +1,8 @@
 # Estado atual das rotas - Academico
-Atualizado em: 2025-12-15 11:24
+Atualizado em: 2025-12-15 14:53
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T11:23:48.239Z
+Auditado em: 2025-12-15T14:53:16.821Z
 
 ## Rotas
 - [PLACEHOLDER] /academico/avaliacoes - src/app/(private)/academico/avaliacoes/page.tsx (linhas: 93)
@@ -17,7 +17,7 @@ Auditado em: 2025-12-15T11:23:48.239Z
 - [PLACEHOLDER] /academico/filtro - src/app/(private)/academico/filtro/page.tsx (linhas: 140)
 - [PLACEHOLDER] /academico/frequencia - src/app/(private)/academico/frequencia/page.tsx (linhas: 4)
 - [REAL] /academico/habilidades - src/app/(private)/academico/habilidades/page.tsx (linhas: 82)
-- [PLACEHOLDER] /academico/modalidades - src/app/(private)/academico/modalidades/page.tsx (linhas: 4)
+- [REAL] /academico/modalidades - src/app/(private)/academico/modalidades/page.tsx (linhas: 4)
 - [SUSPEITA] /academico/modulos - src/app/(private)/academico/modulos/page.tsx (linhas: 23)
 - [PLACEHOLDER] /academico/niveis - src/app/(private)/academico/niveis/page.tsx (linhas: 608)
 - [REAL] /academico/turmas - src/app/(private)/academico/turmas/page.tsx (linhas: 82)
