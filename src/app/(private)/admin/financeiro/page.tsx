@@ -1,88 +1,266 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
+import { formatBRLFromCents } from "@/lib/formatters/money";
+import { formatDateISO, formatDateTimeISO } from "@/lib/formatters/date";
+
+type TendenciaValor = {
+  atual_centavos: number;
+  anterior_centavos: number;
+  variacao_percentual: number | null;
+  direcao: "UP" | "DOWN" | "FLAT";
+};
+
+type TendenciaResumo = {
+  entradas: TendenciaValor;
+  saidas: TendenciaValor;
+  resultado: TendenciaValor;
+};
 
 type ResumoCentro = {
-  centro_custo_id: number | null;
-  centro_custo_codigo?: string | null;
-  centro_custo_nome?: string | null;
-  receitas_centavos: number;
-  despesas_centavos: number;
-  saldo_centavos: number;
+  centro_custo_id: number;
+  centro_custo_codigo: string | null;
+  centro_custo_nome: string | null;
+  receitas_30d_centavos: number;
+  despesas_30d_centavos: number;
+  resultado_30d_centavos: number;
+  tendencia_resultado: TendenciaValor;
+};
+
+type SerieFluxoItem = {
+  data: string;
+  tipo: "historico" | "projecao";
+  entradas_centavos: number;
+  saidas_centavos: number;
+  saldo_acumulado_centavos: number;
+};
+
+type RegraAlerta = {
+  codigo: string;
+  titulo: string;
+  severidade: "INFO" | "ALERTA" | "CRITICO";
+  detalhe?: string | null;
+};
+
+type Snapshot = {
+  id: number;
+  created_at: string;
+  data_base: string;
+  periodo_inicio: string;
+  periodo_fim: string;
+  caixa_hoje_centavos: number;
+  entradas_previstas_30d_centavos: number;
+  saidas_comprometidas_30d_centavos: number;
+  folego_caixa_dias: number | null;
+  tendencia: TendenciaResumo;
+  resumo_por_centro: ResumoCentro[];
+  serie_fluxo_caixa: SerieFluxoItem[];
+  regras_alerta: RegraAlerta[];
+};
+
+type Analise = {
+  id?: number;
+  created_at?: string;
+  model?: string | null;
+  alertas: Array<{
+    icone?: string | null;
+    titulo_curto: string;
+    severidade: "INFO" | "ALERTA" | "CRITICO";
+    acao_pratica?: string | null;
+  }>;
+  texto_curto?: string | null;
 };
 
 type DashboardResponse = {
   ok: boolean;
-  pagar_pendente_centavos: number;
-  receber_pendente_centavos: number;
-  saldo_periodo_centavos: number;
-  resumo_por_centro_custo?: ResumoCentro[];
+  snapshot: Snapshot;
+  analise: Analise | null;
   error?: string;
 };
 
-function formatBRL(value?: number | null) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "--";
-  return (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+type LineDatum = {
+  x: number;
+  y: number;
+};
+
+function tendenciaIcon(direcao?: "UP" | "DOWN" | "FLAT") {
+  if (direcao === "UP") return "↑";
+  if (direcao === "DOWN") return "↓";
+  return "→";
+}
+
+function variacaoTexto(t: TendenciaValor | undefined) {
+  if (!t || t.variacao_percentual === null || Number.isNaN(t.variacao_percentual)) {
+    return "Sem histórico";
+  }
+  const sign = t.variacao_percentual >= 0 ? "+" : "";
+  return `${sign}${t.variacao_percentual.toFixed(1)}% vs 30d anterior`;
+}
+
+function ordenarAlertas(alertas: Analise["alertas"]) {
+  const peso = { CRITICO: 3, ALERTA: 2, INFO: 1 };
+  return [...(alertas || [])].sort(
+    (a, b) => (peso[b.severidade] || 0) - (peso[a.severidade] || 0)
+  );
+}
+
+function buildPolyline(points: LineDatum[]) {
+  return points.map((p) => `${p.x},${p.y}`).join(" ");
+}
+
+function normalizeSeries(data: SerieFluxoItem[], height: number, width: number) {
+  const padding = 24;
+  const plotWidth = Math.max(width - padding * 2, 50);
+  const plotHeight = Math.max(height - padding * 2, 50);
+  const maxVal = Math.max(
+    ...data.flatMap((d) => [
+      d.entradas_centavos,
+      d.saidas_centavos,
+      d.saldo_acumulado_centavos,
+    ]),
+    1
+  );
+  const minVal = Math.min(
+    ...data.flatMap((d) => [
+      d.entradas_centavos,
+      d.saidas_centavos,
+      d.saldo_acumulado_centavos,
+    ]),
+    0
+  );
+  const range = maxVal - minVal || 1;
+  const step = data.length > 1 ? plotWidth / (data.length - 1) : plotWidth;
+
+  const scaleY = (v: number) => padding + plotHeight - ((v - minVal) / range) * plotHeight;
+
+  const entradas: LineDatum[] = [];
+  const saidas: LineDatum[] = [];
+  const saldo: LineDatum[] = [];
+
+  data.forEach((d, idx) => {
+    const x = padding + idx * step;
+    entradas.push({ x, y: scaleY(d.entradas_centavos) });
+    saidas.push({ x, y: scaleY(d.saidas_centavos) });
+    saldo.push({ x, y: scaleY(d.saldo_acumulado_centavos) });
+  });
+
+  return {
+    entradas,
+    saidas,
+    saldo,
+    minVal,
+    maxVal,
+    padding,
+  };
 }
 
 export default function FinanceiroDashboardPage() {
-  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [analise, setAnalise] = useState<Analise | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reanalisando, setReanalisando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/financeiro/dashboard");
-        const json = (await res.json()) as DashboardResponse;
-        if (!res.ok || !json?.ok) {
-          throw new Error(json?.error || "Erro ao carregar dashboard financeiro.");
-        }
-        if (active) setData(json);
-      } catch (err: any) {
-        if (active) setError(err?.message ?? "Erro inesperado ao carregar dashboard.");
-      } finally {
-        if (active) setLoading(false);
-      }
+  async function loadDashboard() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/financeiro/dashboard-inteligente");
+      const json = (await res.json()) as DashboardResponse;
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao carregar dashboard.");
+      setSnapshot(json.snapshot);
+      setAnalise(json.analise);
+    } catch (err: any) {
+      setError(err?.message || "Erro inesperado ao carregar dashboard.");
+    } finally {
+      setLoading(false);
     }
+  }
 
-    load();
-    return () => {
-      active = false;
-    };
+  useEffect(() => {
+    loadDashboard();
   }, []);
 
-  const resumoCentros = useMemo(() => data?.resumo_por_centro_custo ?? [], [data]);
+  async function reanalisar() {
+    setReanalisando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/financeiro/dashboard-inteligente/reanalisar", {
+        method: "POST",
+      });
+      const json = (await res.json()) as DashboardResponse;
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao reanalisar.");
+      setSnapshot(json.snapshot);
+      setAnalise(json.analise);
+    } catch (err: any) {
+      setError(err?.message || "Erro ao reanalisar dashboard.");
+    } finally {
+      setReanalisando(false);
+    }
+  }
 
-  const totais = useMemo(
-    () => ({
-      saldo: data?.saldo_periodo_centavos ?? 0,
-      receber: data?.receber_pendente_centavos ?? 0,
-      pagar: data?.pagar_pendente_centavos ?? 0,
-    }),
-    [data]
+  const alertasMostrados = useMemo(() => {
+    if (analise?.alertas?.length) return ordenarAlertas(analise.alertas).slice(0, 3);
+    if (snapshot?.regras_alerta?.length) {
+      return snapshot.regras_alerta.slice(0, 3).map((r) => ({
+        icone: r.severidade === "CRITICO" ? "🔥" : r.severidade === "ALERTA" ? "⚠️" : "ℹ️",
+        titulo_curto: r.titulo,
+        severidade: r.severidade,
+        acao_pratica: r.detalhe ?? "",
+      }));
+    }
+    return [];
+  }, [analise, snapshot]);
+
+  const serieChart = useMemo(() => snapshot?.serie_fluxo_caixa ?? [], [snapshot]);
+
+  const blocoCentros = useMemo(
+    () => snapshot?.resumo_por_centro ?? [],
+    [snapshot]
   );
 
-  const loadingText = loading ? "Carregando..." : undefined;
+  const tendencia = snapshot?.tendencia;
+
+  const cardsSaude = [
+    {
+      titulo: "Caixa disponivel hoje",
+      valor: formatBRLFromCents(snapshot?.caixa_hoje_centavos ?? null),
+      tendencia: tendencia?.resultado,
+    },
+    {
+      titulo: "Entradas previstas (30d)",
+      valor: formatBRLFromCents(snapshot?.entradas_previstas_30d_centavos ?? null),
+      tendencia: tendencia?.entradas,
+    },
+    {
+      titulo: "Saidas comprometidas (30d)",
+      valor: formatBRLFromCents(snapshot?.saidas_comprometidas_30d_centavos ?? null),
+      tendencia: tendencia?.saidas,
+    },
+  ];
+
+  if (snapshot?.folego_caixa_dias !== null && snapshot?.folego_caixa_dias !== undefined) {
+    cardsSaude.push({
+      titulo: "Folego de caixa (dias)",
+      valor: `${snapshot.folego_caixa_dias}`,
+      tendencia: tendencia?.resultado,
+    });
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 to-white px-4 py-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Dashboard Financeiro</h1>
+              <h1 className="text-lg font-semibold text-slate-800">Dashboard Financeiro Inteligente</h1>
               <p className="text-sm text-slate-600">
-                Visao consolidada do caixa por centro de custo com dados reais do Supabase.
+                Visao futura, tendencia e alertas automáticos com dados reais do Supabase.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 text-sm">
               <Link href="/admin/financeiro/centros-custo" className="text-purple-600 font-medium">
                 Centros de custo
               </Link>
@@ -104,10 +282,9 @@ export default function FinanceiroDashboardPage() {
           <FinanceHelpCard
             subtitle="Visao geral do financeiro com dados reais."
             items={[
-              "Resumo de saldo do periodo, contas a pagar e a receber.",
-              "Valores carregados de cobrancas, contas_pagar e movimento_financeiro.",
-              "Os atalhos permitem acessar rapidamente as principais telas do financeiro.",
-              "Use filtros globais da pagina (quando disponiveis) para refinar o periodo exibido.",
+              "Blocos com saude imediata, leitura inteligente (GPT) e tendencia por centro.",
+              "Fluxo de caixa historico (90d) e projecao (30d) para decisoes de curto prazo.",
+              "Alertas simples calculados e ate 3 alertas GPT quando habilitado.",
             ]}
           />
 
@@ -116,113 +293,240 @@ export default function FinanceiroDashboardPage() {
               {error}
             </div>
           ) : null}
+        </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-600">Saldo do periodo</p>
-              <p className="text-xl font-semibold text-slate-800">
-                {loading ? loadingText : formatBRL(totais.saldo)}
-              </p>
+        {/* Bloco 1 */}
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">Saude imediata</h2>
+              <p className="text-sm text-slate-600">Valores consolidados e comparacao vs 30d anterior.</p>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-600">Receber pendente</p>
-              <p className="text-xl font-semibold text-slate-800">
-                {loading ? loadingText : formatBRL(totais.receber)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-600">Pagar pendente</p>
-              <p className="text-xl font-semibold text-slate-800">
-                {loading ? loadingText : formatBRL(totais.pagar)}
-              </p>
-            </div>
+            {loading ? <span className="text-xs text-slate-500">Carregando...</span> : null}
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {cardsSaude.map((card) => (
+              <div
+                key={card.titulo}
+                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <p className="text-sm text-slate-600">{card.titulo}</p>
+                <p className="text-xl font-semibold text-slate-800">
+                  {loading ? "Carregando..." : card.valor}
+                </p>
+                <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">
+                  <span>{tendenciaIcon(card.tendencia?.direcao)}</span>
+                  <span>{variacaoTexto(card.tendencia)}</span>
+                </p>
+              </div>
+            ))}
           </div>
         </div>
 
+        {/* Bloco 2 */}
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-slate-800">Resumo por centro de custo</h3>
-              <p className="text-sm text-slate-600">Saldo, receitas e despesas agrupados por centro.</p>
+              <h2 className="text-lg font-semibold text-slate-800">Leitura Inteligente do Sistema (GPT)</h2>
+              <p className="text-sm text-slate-600">
+                Ate 3 alertas priorizados, com base no snapshot do dia.
+              </p>
             </div>
-            {loading ? (
-              <span className="text-xs font-medium text-slate-500">Atualizando...</span>
-            ) : null}
+            <div className="flex gap-2">
+              <button
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={loadDashboard}
+                disabled={loading || reanalisando}
+              >
+                Atualizar
+              </button>
+              <button
+                className="rounded-md bg-purple-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-500 disabled:opacity-60"
+                onClick={reanalisar}
+                disabled={loading || reanalisando}
+              >
+                {reanalisando ? "Reanalisando..." : "Reanalisar agora"}
+              </button>
+            </div>
           </div>
 
-          {loading && resumoCentros.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-600">Carregando dados do dashboard...</p>
-          ) : null}
+          <div className="mt-3 text-xs text-slate-500">
+            Ultima analise:{" "}
+            {analise?.created_at
+              ? formatDateTimeISO(analise.created_at)
+              : snapshot?.created_at
+              ? formatDateTimeISO(snapshot.created_at)
+              : "--"}
+          </div>
 
-          {!loading && resumoCentros.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-600">
-              Nenhum movimento financeiro encontrado para o periodo selecionado.
-            </p>
-          ) : null}
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {resumoCentros.map((item) => {
-              const centroLabel =
-                item.centro_custo_nome ||
-                item.centro_custo_codigo ||
-                (item.centro_custo_id ? `Centro #${item.centro_custo_id}` : "Sem centro");
-
-              return (
-                <div
-                  key={`${centroLabel}-${item.centro_custo_id ?? "none"}`}
-                  className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-                >
-                  <div className="flex items-center justify-between">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {alertasMostrados.length === 0 ? (
+              <div className="col-span-full rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Sem alertas no momento.
+              </div>
+            ) : null}
+            {alertasMostrados.map((a, idx) => (
+              <div
+                key={`${a.titulo_curto}-${idx}`}
+                className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{a.icone || "⚠️"}</span>
                     <div>
-                      <h3 className="text-lg font-semibold text-slate-800">{centroLabel}</h3>
-                      <p className="text-sm text-slate-600">Centro de custo</p>
-                    </div>
-                    <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700">
-                      Resumo
-                    </span>
-                  </div>
-                  <div className="mt-3 space-y-2 text-sm text-slate-700">
-                    <div className="flex justify-between">
-                      <span>Saldo</span>
-                      <span className="font-semibold text-slate-900">{formatBRL(item.saldo_centavos)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Receitas</span>
-                      <span className="text-green-700">{formatBRL(item.receitas_centavos)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Despesas</span>
-                      <span className="text-rose-700">{formatBRL(item.despesas_centavos)}</span>
+                      <p className="text-sm font-semibold text-slate-800">{a.titulo_curto}</p>
+                      <p className="text-[11px] uppercase text-slate-500">{a.severidade}</p>
                     </div>
                   </div>
                 </div>
-              );
-            })}
+                {a.acao_pratica ? (
+                  <p className="mt-2 text-sm text-slate-600">{a.acao_pratica}</p>
+                ) : null}
+              </div>
+            ))}
           </div>
         </div>
 
+        {/* Bloco 3 */}
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800">Atalhos rapidos</h3>
-          <p className="text-sm text-slate-600">Navegue para os modulos de gestao financeira.</p>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">Fluxo de caixa no tempo</h2>
+              <p className="text-sm text-slate-600">Historico 90d + projecao 30d (entradas, saidas e saldo).</p>
+            </div>
+            {loading ? <span className="text-xs text-slate-500">Carregando...</span> : null}
+          </div>
+
+          <div className="mt-4">
+            {serieChart.length === 0 ? (
+              <p className="text-sm text-slate-600">Sem dados para o periodo.</p>
+            ) : (
+              <ChartFluxo data={serieChart} />
+            )}
+          </div>
+        </div>
+
+        {/* Bloco 4 */}
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">Resultado por centro de custo</h2>
+              <p className="text-sm text-slate-600">Comparacao dos ultimos 30d vs janela anterior.</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {blocoCentros.length === 0 ? (
+              <p className="text-sm text-slate-600">Nenhum centro de custo encontrado.</p>
+            ) : null}
+            {blocoCentros.map((c) => (
+              <div key={c.centro_custo_id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-800">
+                      {c.centro_custo_nome || c.centro_custo_codigo || `Centro ${c.centro_custo_id}`}
+                    </h3>
+                    <p className="text-xs text-slate-500">30 dias</p>
+                  </div>
+                  <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700">
+                    {tendenciaIcon(c.tendencia_resultado.direcao)}
+                  </span>
+                </div>
+                <div className="mt-3 space-y-1 text-sm text-slate-700">
+                  <div className="flex justify-between">
+                    <span>Receitas</span>
+                    <span className="text-green-700">{formatBRLFromCents(c.receitas_30d_centavos)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Despesas</span>
+                    <span className="text-rose-700">{formatBRLFromCents(c.despesas_30d_centavos)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Resultado</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatBRLFromCents(c.resultado_30d_centavos)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Tendencia</span>
+                    <span>{variacaoTexto(c.tendencia_resultado)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bloco 5 */}
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-semibold text-slate-800">Drill-down</h3>
+          <p className="text-sm text-slate-600">Acesse rapidamente os modulos de gestao financeira.</p>
           <div className="mt-3 flex flex-wrap gap-3 text-sm">
-            <Link href="/admin/financeiro/centros-custo" className="text-purple-600 font-medium">
-              Centros de custo
-            </Link>
-            <Link href="/admin/financeiro/categorias" className="text-purple-600 font-medium">
-              Categorias
-            </Link>
-            <Link href="/admin/financeiro/contas-receber" className="text-purple-600 font-medium">
+            <Link href="/admin/financeiro/contas-receber" className="rounded-md border border-slate-200 px-3 py-2 font-medium text-purple-700 hover:bg-purple-50">
               Contas a receber
             </Link>
-            <Link href="/admin/financeiro/contas-pagar" className="text-purple-600 font-medium">
+            <Link href="/admin/financeiro/contas-pagar" className="rounded-md border border-slate-200 px-3 py-2 font-medium text-purple-700 hover:bg-purple-50">
               Contas a pagar
             </Link>
-            <Link href="/admin/financeiro/movimento" className="text-purple-600 font-medium">
+            <Link href="/admin/financeiro/movimento" className="rounded-md border border-slate-200 px-3 py-2 font-medium text-purple-700 hover:bg-purple-50">
               Movimento
+            </Link>
+            <Link href="/admin/financeiro/categorias" className="rounded-md border border-slate-200 px-3 py-2 font-medium text-purple-700 hover:bg-purple-50">
+              Categorias
+            </Link>
+            <Link href="/admin/financeiro/centros-custo" className="rounded-md border border-slate-200 px-3 py-2 font-medium text-purple-700 hover:bg-purple-50">
+              Centros de custo
             </Link>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ChartFluxo({ data }: { data: SerieFluxoItem[] }) {
+  const height = 260;
+  const width = 900;
+  const { entradas, saidas, saldo } = normalizeSeries(data, height, width);
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-full">
+        <polyline
+          fill="none"
+          stroke="#16a34a"
+          strokeWidth="2"
+          points={buildPolyline(entradas)}
+        />
+        <polyline
+          fill="none"
+          stroke="#dc2626"
+          strokeWidth="2"
+          points={buildPolyline(saidas)}
+        />
+        <polyline
+          fill="none"
+          stroke="#7c3aed"
+          strokeWidth="2.5"
+          points={buildPolyline(saldo)}
+        />
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-600">
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-1 w-4 bg-green-600" />
+          Entradas
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-1 w-4 bg-rose-600" />
+          Saidas
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-1 w-4 bg-purple-600" />
+          Saldo acumulado
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        Serie historica (90d) + projecao (30d) a partir de cobrancas e contas a pagar por vencimento.
+      </p>
     </div>
   );
 }

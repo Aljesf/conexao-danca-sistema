@@ -6,6 +6,13 @@
 - Filtros aceitos: `data_inicio`, `data_fim`, `centro_custo_id`. Resumo por centro carrega nomes/codigos de `centros_custo` quando disponiveis.
 - Fontes de dados: tabelas `contas_pagar`, `cobrancas`, `movimento_financeiro` e `centros_custo`.
 
+## Dashboard financeiro inteligente
+- Nova tela `/admin/financeiro` consome `GET /api/financeiro/dashboard-inteligente` (snapshot do dia, sem mocks).
+- Endpoints: `GET /api/financeiro/dashboard-inteligente`, `POST /api/financeiro/dashboard-inteligente/reanalisar`, `POST /api/financeiro/dashboard-inteligente/cron-diario`, `GET /api/financeiro/dashboard-inteligente/historico`.
+- Tabelas novas: `financeiro_snapshots` (consolidado diario, tendencia, serie, alertas) e `financeiro_analises_gpt` (ate 3 alertas + texto curto).
+- Regras de calculo: caixa_hoje = sum movimentos ate hoje; entradas_30d = cobrancas pendentes por vencimento; saidas_30d = contas_pagar pendentes por vencimento; folego = caixa/(saidas/30); tendencia compara janela 30d atual vs anterior; serie 90d historico + 30d futuro; alertas simples (folego<10, saidas +20%, entradas -20%).
+- Segurança: payload enviado ao GPT e restrito ao snapshot enxuto (sem dados pessoais); se OPENAI_API_KEY ausente, apenas alertas calculados sao retornados.
+
 ## Centros de custo
 - **FIN (Intermediacao Financeira)** - ponto central para registrar recebimentos quando a cobranca nao tem centro definido.
 - **ESC / CAF** - usados como destino direto para cobrancas de origem ESCOLA ou CAFE (quando configurados).
