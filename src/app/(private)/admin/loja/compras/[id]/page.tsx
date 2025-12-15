@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 type PedidoStatus = "RASCUNHO" | "EM_ANDAMENTO" | "PARCIAL" | "CONCLUIDO" | "CANCELADO";
@@ -66,6 +66,11 @@ type ContaFinanceiraResumo = {
 
 const hojeEmISO = () => new Date().toISOString().slice(0, 10);
 
+function formatCentavosBRL(centavos: number): string {
+  const v = Number.isFinite(centavos) ? centavos : 0;
+  return (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 export default function DetalheCompraAdminPage() {
   const params = useParams();
   const router = useRouter();
@@ -94,6 +99,14 @@ export default function DetalheCompraAdminPage() {
   const [mostrarNovaContaModal, setMostrarNovaContaModal] = useState(false);
   const [isCriandoConta, setIsCriandoConta] = useState(false);
   const [erroCriarConta, setErroCriarConta] = useState("");
+
+  const totalPedidoCentavos = useMemo(() => {
+    if (!pedido) return 0;
+    return pedido.itens.reduce(
+      (acc, it) => acc + Number(it.quantidade_pedida || 0) * Number(it.preco_custo_centavos || 0),
+      0
+    );
+  }, [pedido]);
 
   useEffect(() => {
     if (!Number.isNaN(id)) {
@@ -420,7 +433,8 @@ export default function DetalheCompraAdminPage() {
                     <th className="text-right px-2 py-1">Qtd pedida</th>
                     <th className="text-right px-2 py-1">Recebida</th>
                     <th className="text-right px-2 py-1">Pendente</th>
-                    <th className="text-right px-2 py-1">Custo previsto (centavos)</th>
+                    <th className="text-right px-2 py-1">Custo unit. (R$)</th>
+                    <th className="text-right px-2 py-1">Total (R$)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -444,12 +458,20 @@ export default function DetalheCompraAdminPage() {
                         <td className="px-2 py-1 text-right">{it.quantidade_pedida}</td>
                         <td className="px-2 py-1 text-right">{it.quantidade_recebida}</td>
                         <td className="px-2 py-1 text-right">{it.quantidade_pendente}</td>
-                        <td className="px-2 py-1 text-right">{it.preco_custo_centavos}</td>
+                        <td className="px-2 py-1 text-right">
+                          {formatCentavosBRL(it.preco_custo_centavos)}
+                        </td>
+                        <td className="px-2 py-1 text-right font-semibold text-gray-800">
+                          {formatCentavosBRL(it.quantidade_pedida * it.preco_custo_centavos)}
+                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
+            </div>
+            <div className="flex justify-end text-sm font-semibold text-gray-800">
+              Total estimado do pedido: {formatCentavosBRL(totalPedidoCentavos)}
             </div>
           </section>
 

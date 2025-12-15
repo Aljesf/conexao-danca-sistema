@@ -41,6 +41,20 @@ type VarianteResumo = {
   ativo?: boolean;
 };
 
+function parseBRLToCentavos(input: string): number {
+  const raw = (input ?? "").trim();
+  if (!raw) return 0;
+  const normalized = raw.replace(/\./g, "").replace(",", ".");
+  const v = Number(normalized);
+  if (!Number.isFinite(v) || v < 0) return 0;
+  return Math.round(v * 100);
+}
+
+function formatCentavosBRL(centavos: number): string {
+  const v = Number.isFinite(centavos) ? centavos : 0;
+  return (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 export default function ListaComprasAdminPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -63,7 +77,7 @@ export default function ListaComprasAdminPage() {
       produtoId: number | null;
       varianteId: number | null;
       quantidade: number;
-      custoCentavos: number;
+      custoUnitarioBRL: string;
       observacoes?: string;
     }[]
   >([]);
@@ -84,6 +98,15 @@ export default function ListaComprasAdminPage() {
   const [observacoesNovo, setObservacoesNovo] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [erroNovo, setErroNovo] = useState<string | null>(null);
+
+  const totalPedidoCentavos = useMemo(
+    () =>
+      itensNovo.reduce(
+        (acc, it) => acc + (Number(it.quantidade) || 0) * parseBRLToCentavos(it.custoUnitarioBRL),
+        0
+      ),
+    [itensNovo]
+  );
 
   useEffect(() => {
     carregarPedidos();
@@ -203,7 +226,7 @@ export default function ListaComprasAdminPage() {
         produtoId: produtoId ?? null,
         varianteId: varianteId ?? null,
         quantidade: 1,
-        custoCentavos: 0,
+        custoUnitarioBRL: "0,00",
         observacoes: observacao ?? undefined,
       },
     ]);
@@ -211,7 +234,7 @@ export default function ListaComprasAdminPage() {
 
   function atualizarItemNovo(
     idTemp: string,
-    campo: "produtoId" | "varianteId" | "quantidade" | "custoCentavos",
+    campo: "produtoId" | "varianteId" | "quantidade" | "custoUnitarioBRL",
     valor: any
   ) {
     setItensNovo((prev) =>
@@ -220,9 +243,11 @@ export default function ListaComprasAdminPage() {
           ? {
               ...it,
               [campo]:
-                campo === "quantidade" || campo === "custoCentavos"
+                campo === "quantidade"
                   ? Number(valor) || 0
-                : valor,
+                : campo === "custoUnitarioBRL"
+                  ? String(valor ?? "")
+                  : valor,
             }
           : it
       )
@@ -246,7 +271,11 @@ export default function ListaComprasAdminPage() {
       return;
     }
     const itensValidos = itensNovo.filter(
-      (it) => it.produtoId && it.varianteId && it.quantidade > 0
+      (it) =>
+        it.produtoId &&
+        it.varianteId &&
+        it.quantidade > 0 &&
+        parseBRLToCentavos(it.custoUnitarioBRL) >= 0
     );
     if (itensValidos.length === 0) {
       setErroNovo("Os itens do pedido precisam ter produto, variante e quantidade maior que zero.");
@@ -262,7 +291,7 @@ export default function ListaComprasAdminPage() {
           produto_id: it.produtoId!,
           variante_id: it.varianteId!,
           quantidade_solicitada: it.quantidade,
-          preco_custo_centavos: it.custoCentavos,
+          preco_custo_centavos: parseBRLToCentavos(it.custoUnitarioBRL),
           observacoes: it.observacoes ?? null,
         })),
       };
@@ -477,7 +506,8 @@ export default function ListaComprasAdminPage() {
                         <th className="text-left px-2 py-1">Produto</th>
                         <th className="text-left px-2 py-1">Variante</th>
                         <th className="text-right px-2 py-1">Qtd</th>
-                        <th className="text-right px-2 py-1">Custo (centavos)</th>
+                        <th className="text-right px-2 py-1">Custo unit. (R$)</th>
+                        <th className="text-right px-2 py-1">Total (R$)</th>
                         <th className="text-right px-2 py-1">Ações</th>
                       </tr>
                     </thead>
@@ -551,18 +581,17 @@ export default function ListaComprasAdminPage() {
                           </td>
                           <td className="px-2 py-1 text-right">
                             <input
-                              type="number"
-                              min={0}
-                              value={it.custoCentavos}
+                              type="text"
+                              value={it.custoUnitarioBRL}
                               onChange={(e) =>
-                                atualizarItemNovo(
-                                  it.idTemp,
-                                  "custoCentavos",
-                                  Number(e.target.value) || 0
-                                )
+                                atualizarItemNovo(it.idTemp, "custoUnitarioBRL", e.target.value)
                               }
                               className="w-24 border rounded-md px-2 py-1 text-right text-xs"
+                              placeholder="0,00"
                             />
+                          </td>
+                          <td className="px-2 py-1 text-right font-medium text-gray-800">
+                            {formatCentavosBRL(it.quantidade * parseBRLToCentavos(it.custoUnitarioBRL))}
                           </td>
                           <td className="px-2 py-1 text-right">
                             <button
@@ -579,6 +608,10 @@ export default function ListaComprasAdminPage() {
                   </table>
                 </div>
               )}
+            </div>
+
+            <div className="flex justify-end text-sm font-semibold text-gray-800">
+              Total estimado do pedido: {formatCentavosBRL(totalPedidoCentavos)}
             </div>
 
             <div className="space-y-1">
