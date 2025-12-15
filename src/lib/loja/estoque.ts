@@ -3,6 +3,7 @@ import { type SupabaseClient } from "@supabase/supabase-js";
 type RegistrarEntradaEstoqueParams = {
   supabase: SupabaseClient<any, "public", any> | null;
   produtoId: number;
+  varianteId: number;
   quantidade: number;
   origem: string;
   referenciaId?: number | null;
@@ -14,6 +15,7 @@ type RegistrarEntradaEstoqueParams = {
 type RegistrarSaidaEstoqueParams = {
   supabase: SupabaseClient<any, "public", any> | null;
   produtoId: number;
+  varianteId: number;
   quantidade: number;
   origem: string;
   referenciaId?: number | null;
@@ -23,24 +25,25 @@ type RegistrarSaidaEstoqueParams = {
 
 async function obterSaldoAtual(
   supabase: SupabaseClient<any, "public", any>,
-  produtoId: number
+  varianteId: number
 ) {
-  const { data: prodAtual, error: prodErr } = await supabase
-    .from("loja_produtos")
+  const { data: vAtual, error: vErr } = await supabase
+    .from("loja_produto_variantes")
     .select("estoque_atual")
-    .eq("id", produtoId)
+    .eq("id", varianteId)
     .maybeSingle();
 
-  if (prodErr) {
-    throw new Error(`[estoque] Falha ao buscar estoque atual: ${prodErr.message}`);
+  if (vErr) {
+    throw new Error(`[estoque] Falha ao buscar estoque atual da variante: ${vErr.message}`);
   }
 
-  return Number(prodAtual?.estoque_atual ?? 0);
+  return Number(vAtual?.estoque_atual ?? 0);
 }
 
 export async function registrarEntradaEstoque({
   supabase,
   produtoId,
+  varianteId,
   quantidade,
   origem,
   referenciaId,
@@ -59,13 +62,13 @@ export async function registrarEntradaEstoque({
 
   const obsFinal = observacao?.trim() || null;
 
-  const saldoAntes = await obterSaldoAtual(supabase, produtoId);
+  const saldoAntes = await obterSaldoAtual(supabase, varianteId);
   const saldoDepois = saldoAntes + qtd;
 
   const { error: updateErr } = await supabase
-    .from("loja_produtos")
+    .from("loja_produto_variantes")
     .update({ estoque_atual: saldoDepois, updated_at: new Date().toISOString() })
-    .eq("id", produtoId);
+    .eq("id", varianteId);
 
   if (updateErr) {
     throw new Error(`[estoque] Falha ao atualizar estoque: ${updateErr.message}`);
@@ -75,6 +78,7 @@ export async function registrarEntradaEstoque({
     .from("loja_estoque_movimentos")
     .insert({
       produto_id: produtoId,
+      variante_id: varianteId,
       tipo: "ENTRADA",
       quantidade: qtd,
       origem: origem || "DESCONHECIDA",
@@ -103,6 +107,7 @@ export async function registrarEntradaEstoque({
 export async function registrarSaidaEstoque({
   supabase,
   produtoId,
+  varianteId,
   quantidade,
   origem,
   referenciaId,
@@ -120,13 +125,13 @@ export async function registrarSaidaEstoque({
 
   const obsFinal = observacao?.trim() || null;
 
-  const saldoAntes = await obterSaldoAtual(supabase, produtoId);
+  const saldoAntes = await obterSaldoAtual(supabase, varianteId);
   const saldoDepois = Math.max(saldoAntes - qtd, 0);
 
   const { error: updateErr } = await supabase
-    .from("loja_produtos")
+    .from("loja_produto_variantes")
     .update({ estoque_atual: saldoDepois, updated_at: new Date().toISOString() })
-    .eq("id", produtoId);
+    .eq("id", varianteId);
 
   if (updateErr) {
     throw new Error(`[estoque] Falha ao atualizar estoque (saida): ${updateErr.message}`);
@@ -136,6 +141,7 @@ export async function registrarSaidaEstoque({
     .from("loja_estoque_movimentos")
     .insert({
       produto_id: produtoId,
+      variante_id: varianteId,
       tipo: "SAIDA",
       quantidade: qtd,
       origem: origem || "DESCONHECIDA",

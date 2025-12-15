@@ -20,6 +20,8 @@ type PedidoStatus =
 type PedidoCompraItemDTO = {
   id: number;
   produto_id: number;
+  variante_id: number;
+  variante_sku?: string | null;
   produto_nome: string;
   quantidade_pedida: number;
   quantidade_recebida: number;
@@ -165,12 +167,14 @@ async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | 
       id,
       pedido_id,
       produto_id,
+      variante_id,
       quantidade_pedida,
       quantidade_solicitada,
       quantidade_recebida,
       preco_custo_centavos,
       observacoes,
-      produto:produto_id ( id, nome )
+      produto:produto_id ( id, nome ),
+      variante:variante_id ( id, sku )
     `
     )
     .eq("pedido_id", pedidoId);
@@ -188,6 +192,8 @@ async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | 
       return {
         id: it.id,
         produto_id: it.produto_id,
+        variante_id: it.variante_id,
+        variante_sku: it.variante?.sku ?? null,
         produto_nome: it.produto?.nome ?? `Produto #${it.produto_id}`,
         quantidade_pedida: pedida,
         quantidade_recebida: recebida,
@@ -472,12 +478,12 @@ export async function POST(
       return json(404, { ok: false, error: "Pedido nao encontrado." });
     }
 
-    const { data: itensPedido, error: errItens } = await supabaseAdmin
-      .from("loja_pedidos_compra_itens")
-      .select(
-        "id, produto_id, quantidade_pedida, quantidade_solicitada, quantidade_recebida, preco_custo_centavos"
-      )
-      .eq("pedido_id", pedidoId);
+  const { data: itensPedido, error: errItens } = await supabaseAdmin
+    .from("loja_pedidos_compra_itens")
+    .select(
+      "id, produto_id, variante_id, quantidade_pedida, quantidade_solicitada, quantidade_recebida, preco_custo_centavos"
+    )
+    .eq("pedido_id", pedidoId);
 
     if (errItens) {
       console.error(
@@ -493,7 +499,14 @@ export async function POST(
 
     const itensMap = new Map<
       number,
-      { produto_id: number; pedida: number; solicitada: number; recebida: number; preco_custo_centavos: number }
+      {
+        produto_id: number;
+        variante_id: number | null;
+        pedida: number;
+        solicitada: number;
+        recebida: number;
+        preco_custo_centavos: number;
+      }
     >();
     (itensPedido ?? []).forEach((it: any) => {
       const solicitada = Number(it.quantidade_solicitada ?? 0) || 0;
@@ -501,6 +514,7 @@ export async function POST(
       const pedidaFinal = pedidaRaw || solicitada;
       itensMap.set(it.id, {
         produto_id: it.produto_id,
+        variante_id: it.variante_id ?? null,
         pedida: pedidaFinal,
         solicitada,
         recebida: Number(it.quantidade_recebida ?? 0) || 0,
@@ -555,6 +569,13 @@ export async function POST(
     for (const rec of itensPayload) {
       const info = itensMap.get(rec.itemId);
       if (!info) continue;
+      if (!info.variante_id) {
+        console.error(
+          "[POST /api/loja/compras/[id]] item sem variante_id (inconsistente com migracao):",
+          info
+        );
+        return json(500, { ok: false, error: "Item de compra sem variante_id." });
+      }
 
       const pedidaFinal = info.pedida || info.solicitada || 0;
       const novaQtdRecebida = info.recebida + rec.quantidade;
@@ -579,6 +600,7 @@ export async function POST(
         await registrarEntradaEstoque({
           supabase: supabaseAdmin,
           produtoId: info.produto_id,
+          varianteId: info.variante_id,
           quantidade: rec.quantidade,
           origem: "COMPRA",
           referenciaId: pedidoId,

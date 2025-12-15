@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type PedidoStatus = "RASCUNHO" | "EM_ANDAMENTO" | "PARCIAL" | "CONCLUIDO" | "CANCELADO";
 
@@ -32,12 +32,18 @@ type ProdutoResumo = {
   codigo: string | null;
 };
 
-export default function ListaComprasAdminPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
+type VarianteResumo = {
+  id: number;
+  sku: string;
+  cor_id?: number | null;
+  numeracao_id?: number | null;
+  tamanho_id?: number | null;
+  ativo?: boolean;
+};
+
+export default function ListaComprasAdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<PedidoStatus | "TODOS">("TODOS");
@@ -55,28 +61,26 @@ export default function ListaComprasAdminPage({
     {
       idTemp: string;
       produtoId: number | null;
+      varianteId: number | null;
       quantidade: number;
       custoCentavos: number;
       observacoes?: string;
     }[]
   >([]);
+  const [variantesPorProduto, setVariantesPorProduto] = useState<Record<number, VarianteResumo[]>>({});
   const [prefillComprasAplicado, setPrefillComprasAplicado] = useState(false);
 
-  const produtoIdPref = (() => {
-    const raw = Array.isArray(searchParams?.produto_id)
-      ? searchParams.produto_id[0]
-      : searchParams?.produto_id;
+  const produtoIdPref = useMemo(() => {
+    const raw = searchParams?.get("produto_id");
     const n = Number(raw);
     return Number.isFinite(n) && n > 0 ? n : null;
-  })();
+  }, [searchParams]);
 
-  const varianteIdPref = (() => {
-    const raw = Array.isArray(searchParams?.variante_id)
-      ? searchParams.variante_id[0]
-      : searchParams?.variante_id;
+  const varianteIdPref = useMemo(() => {
+    const raw = searchParams?.get("variante_id");
     const n = Number(raw);
     return Number.isFinite(n) && n > 0 ? n : null;
-  })();
+  }, [searchParams]);
   const [observacoesNovo, setObservacoesNovo] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [erroNovo, setErroNovo] = useState<string | null>(null);
@@ -89,10 +93,13 @@ export default function ListaComprasAdminPage({
   useEffect(() => {
     if (!produtoIdPref || prefillComprasAplicado) return;
     abrirNovoPedido();
-    adicionarItemNovo(
-      produtoIdPref,
-      varianteIdPref ? `Variante #${varianteIdPref}` : null
-    );
+    carregarVariantesDoProduto(produtoIdPref).then(() => {
+      adicionarItemNovo(
+        produtoIdPref,
+        varianteIdPref ?? null,
+        varianteIdPref ? `Variante #${varianteIdPref}` : null
+      );
+    });
     setPrefillComprasAplicado(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [produtoIdPref, varianteIdPref, prefillComprasAplicado]);
@@ -162,6 +169,23 @@ export default function ListaComprasAdminPage({
     }
   }
 
+  async function carregarVariantesDoProduto(produtoId: number) {
+    if (!produtoId) return;
+    if (variantesPorProduto[produtoId]) return;
+    try {
+      const res = await fetch(`/api/loja/variantes?produto_id=${produtoId}`);
+      const json = await res.json().catch(() => ({}));
+      const lista = json?.variantes || json?.items || json?.data || (Array.isArray(json) ? json : []);
+      setVariantesPorProduto((prev) => ({
+        ...prev,
+        [produtoId]: Array.isArray(lista) ? lista : [],
+      }));
+    } catch (err) {
+      console.error("Erro ao carregar variantes do produto", produtoId, err);
+      setVariantesPorProduto((prev) => ({ ...prev, [produtoId]: [] }));
+    }
+  }
+
   function abrirNovoPedido() {
     setErroNovo(null);
     setFornecedorIdSelecionado(null);
@@ -171,12 +195,13 @@ export default function ListaComprasAdminPage({
     carregarFornecedoresEProdutosSeNecessario();
   }
 
-  function adicionarItemNovo(produtoId?: number | null, observacao?: string | null) {
+  function adicionarItemNovo(produtoId?: number | null, varianteId?: number | null, observacao?: string | null) {
     setItensNovo((prev) => [
       ...prev,
       {
         idTemp: crypto.randomUUID(),
         produtoId: produtoId ?? null,
+        varianteId: varianteId ?? null,
         quantidade: 1,
         custoCentavos: 0,
         observacoes: observacao ?? undefined,
@@ -186,7 +211,7 @@ export default function ListaComprasAdminPage({
 
   function atualizarItemNovo(
     idTemp: string,
-    campo: "produtoId" | "quantidade" | "custoCentavos",
+    campo: "produtoId" | "varianteId" | "quantidade" | "custoCentavos",
     valor: any
   ) {
     setItensNovo((prev) =>
@@ -197,7 +222,7 @@ export default function ListaComprasAdminPage({
               [campo]:
                 campo === "quantidade" || campo === "custoCentavos"
                   ? Number(valor) || 0
-                  : valor,
+                : valor,
             }
           : it
       )
@@ -220,9 +245,11 @@ export default function ListaComprasAdminPage({
       setErroNovo("Adicione pelo menos um item ao pedido.");
       return;
     }
-    const itensValidos = itensNovo.filter((it) => it.produtoId && it.quantidade > 0);
+    const itensValidos = itensNovo.filter(
+      (it) => it.produtoId && it.varianteId && it.quantidade > 0
+    );
     if (itensValidos.length === 0) {
-      setErroNovo("Os itens do pedido precisam ter produto e quantidade maior que zero.");
+      setErroNovo("Os itens do pedido precisam ter produto, variante e quantidade maior que zero.");
       return;
     }
 
@@ -233,6 +260,7 @@ export default function ListaComprasAdminPage({
         observacoes: observacoesNovo || null,
         itens: itensValidos.map((it) => ({
           produto_id: it.produtoId!,
+          variante_id: it.varianteId!,
           quantidade_solicitada: it.quantidade,
           preco_custo_centavos: it.custoCentavos,
           observacoes: it.observacoes ?? null,
@@ -447,6 +475,7 @@ export default function ListaComprasAdminPage({
                     <thead className="bg-gray-50 border-b">
                       <tr>
                         <th className="text-left px-2 py-1">Produto</th>
+                        <th className="text-left px-2 py-1">Variante</th>
                         <th className="text-right px-2 py-1">Qtd</th>
                         <th className="text-right px-2 py-1">Custo (centavos)</th>
                         <th className="text-right px-2 py-1">Ações</th>
@@ -458,13 +487,17 @@ export default function ListaComprasAdminPage({
                           <td className="px-2 py-1">
                             <select
                               value={it.produtoId ?? ""}
-                              onChange={(e) =>
-                                atualizarItemNovo(
-                                  it.idTemp,
-                                  "produtoId",
-                                  e.target.value ? Number(e.target.value) : null
-                                )
-                              }
+                              onChange={(e) => {
+                                const val = e.target.value ? Number(e.target.value) : null;
+                                if (val) carregarVariantesDoProduto(val);
+                                setItensNovo((prev) =>
+                                  prev.map((item) =>
+                                    item.idTemp === it.idTemp
+                                      ? { ...item, produtoId: val, varianteId: null }
+                                      : item
+                                  )
+                                );
+                              }}
                               className="border rounded-md px-2 py-1 text-xs w-full"
                             >
                               <option value="">Selecione</option>
@@ -473,6 +506,32 @@ export default function ListaComprasAdminPage({
                                   {p.nome} {p.codigo ? `(${p.codigo})` : ""}
                                 </option>
                               ))}
+                            </select>
+                          </td>
+                          <td className="px-2 py-1">
+                            <select
+                              value={it.varianteId ?? ""}
+                              onChange={(e) =>
+                                atualizarItemNovo(
+                                  it.idTemp,
+                                  "varianteId",
+                                  e.target.value ? Number(e.target.value) : null
+                                )
+                              }
+                              className="border rounded-md px-2 py-1 text-xs w-full"
+                              disabled={!it.produtoId}
+                            >
+                              <option value="">
+                                {it.produtoId ? "Selecione a variante" : "Selecione o produto"}
+                              </option>
+                              {(variantesPorProduto[it.produtoId ?? -1] ?? []).map((v) => {
+                                const label = v.sku || `Variante #${v.id}`;
+                                return (
+                                  <option key={v.id} value={v.id}>
+                                    {label}
+                                  </option>
+                                );
+                              })}
                             </select>
                           </td>
                           <td className="px-2 py-1 text-right">

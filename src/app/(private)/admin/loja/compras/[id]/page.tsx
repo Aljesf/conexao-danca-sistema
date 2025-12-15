@@ -8,6 +8,8 @@ type PedidoStatus = "RASCUNHO" | "EM_ANDAMENTO" | "PARCIAL" | "CONCLUIDO" | "CAN
 type PedidoCompraItem = {
   id: number;
   produto_id: number;
+  variante_id: number;
+  variante_sku?: string | null;
   produto_nome: string;
   quantidade_pedida: number;
   quantidade_recebida: number;
@@ -435,6 +437,9 @@ export default function DetalheCompraAdminPage() {
                           <div className="font-medium text-gray-800">
                             {it.produto_nome || `Produto #${it.produto_id}`}
                           </div>
+                          <div className="text-[11px] text-gray-600">
+                            Variante: {it.variante_sku || `#${it.variante_id}`}
+                          </div>
                         </td>
                         <td className="px-2 py-1 text-right">{it.quantidade_pedida}</td>
                         <td className="px-2 py-1 text-right">{it.quantidade_recebida}</td>
@@ -516,7 +521,14 @@ export default function DetalheCompraAdminPage() {
                   ) : (
                     pedido.itens.map((item) => (
                       <tr key={item.id} className="border-t">
-                        <td className="px-3 py-2">{item.produto_nome}</td>
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-gray-800">
+                            {item.produto_nome}
+                          </div>
+                          <div className="text-[11px] text-gray-600">
+                            Variante: {item.variante_sku || `#${item.variante_id}`}
+                          </div>
+                        </td>
                         <td className="px-3 py-2 text-right">{item.quantidade_pedida}</td>
                         <td className="px-3 py-2 text-right">{item.quantidade_recebida}</td>
                         <td className="px-3 py-2 text-right">{item.quantidade_pendente}</td>
@@ -556,8 +568,12 @@ export default function DetalheCompraAdminPage() {
                 {pedido.recebimentos.map((rec) => (
                   <div key={rec.id} className="flex justify-between gap-2">
                     <span>
-                      {formatarData(rec.data_recebimento)} — {rec.produto_nome} — {rec.quantidade}{" "}
-                      un.
+                      {formatarData(rec.data_recebimento)} — {rec.produto_nome} —{" "}
+                      {(() => {
+                        const itemVar = pedido.itens.find((i) => i.id === rec.item_id);
+                        return itemVar ? itemVar.variante_sku || `#${itemVar.variante_id}` : "Variante n/d";
+                      })()}{" "}
+                      — {rec.quantidade} un.
                     </span>
                     {rec.observacao && (
                       <span className="text-gray-500 italic">{rec.observacao}</span>
@@ -840,4 +856,3 @@ export default function DetalheCompraAdminPage() {
     </div>
   );
 }
-

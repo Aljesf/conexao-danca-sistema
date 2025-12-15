@@ -18,6 +18,12 @@ type PedidoCompraResumo = {
   valor_estimado_centavos: number;
 };
 
+type VarianteCompraInfo = {
+  id: number;
+  produto_id: number;
+  ativo: boolean | null;
+};
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -40,7 +46,7 @@ async function garantirVariantePadrao(produtoId: number) {
   if (!supabaseAdmin) return null;
   const { data, error } = await supabaseAdmin
     .from("loja_produto_variantes")
-    .select("id, produto_id")
+    .select("id, produto_id, ativo")
     .eq("produto_id", produtoId)
     .is("cor_id", null)
     .is("numeracao_id", null)
@@ -69,7 +75,7 @@ async function garantirVariantePadrao(produtoId: number) {
       ativo: true,
       observacoes: "Variante padrao criada automaticamente (compra).",
     })
-    .select("id, produto_id")
+    .select("id, produto_id, ativo")
     .maybeSingle();
 
   if (ins.error) {
@@ -228,6 +234,12 @@ export async function POST(req: NextRequest) {
     if (!it?.produto_id || typeof it.produto_id !== "number") {
       return json(400, { ok: false, error: "Item sem produto_id valido." });
     }
+    if (!it?.variante_id || typeof it.variante_id !== "number") {
+      return json(400, {
+        ok: false,
+        error: "Item sem variante_id. Compra deve ser registrada por variante.",
+      });
+    }
     if (!it?.quantidade_solicitada || it.quantidade_solicitada <= 0) {
       return json(400, {
         ok: false,
@@ -240,6 +252,59 @@ export async function POST(req: NextRequest) {
       it.preco_custo_centavos < 0
     ) {
       return json(400, { ok: false, error: "Preco de custo invalido." });
+    }
+  }
+
+  // Valida variantes pertencem ao produto e estao ativas
+  const varianteIds = Array.from(
+    new Set(
+      itens
+        .map((it: any) => Number(it.variante_id))
+        .filter((id: any) => Number.isFinite(id) && id > 0)
+    )
+  );
+
+  if (varianteIds.length === 0) {
+    return json(400, {
+      ok: false,
+      error: "Item sem variante_id. Compra deve ser registrada por variante.",
+    });
+  }
+
+  const variantesMap = new Map<number, VarianteCompraInfo>();
+  if (supabaseAdmin) {
+    const { data: variantes, error: variantesErr } = await supabaseAdmin
+      .from("loja_produto_variantes")
+      .select("id, produto_id, ativo")
+      .in("id", varianteIds);
+
+    if (variantesErr) {
+      console.error("[POST /api/loja/compras] Falha ao validar variantes:", variantesErr);
+      return json(500, { ok: false, error: "Erro ao validar variantes." });
+    }
+
+    (variantes || []).forEach((v: any) => variantesMap.set(Number(v.id), v as VarianteCompraInfo));
+  }
+
+  for (const it of itens) {
+    const varianteInfo = variantesMap.get(Number(it.variante_id));
+    if (!varianteInfo) {
+      return json(400, {
+        ok: false,
+        error: `Variante ${it.variante_id} nao encontrada.`,
+      });
+    }
+    if (Number(varianteInfo.produto_id) !== Number(it.produto_id)) {
+      return json(400, {
+        ok: false,
+        error: `Variante ${it.variante_id} nao pertence ao produto ${it.produto_id}.`,
+      });
+    }
+    if (varianteInfo.ativo === false) {
+      return json(400, {
+        ok: false,
+        error: `Variante ${it.variante_id} esta inativa.`,
+      });
     }
   }
 
@@ -268,6 +333,7 @@ export async function POST(req: NextRequest) {
     const itensInsert = itens.map((it: any) => ({
       pedido_id: pedido.id,
       produto_id: it.produto_id,
+      variante_id: it.variante_id,
       quantidade_solicitada: it.quantidade_solicitada,
       quantidade_pedida: it.quantidade_solicitada,
       quantidade_recebida: 0,
