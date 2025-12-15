@@ -190,6 +190,7 @@ export default function GestaoEstoqueAdminPage() {
   const [variantes, setVariantes] = useState<Variante[]>([]);
   const [loadingVariantes, setLoadingVariantes] = useState(false);
   const [erroVariantes, setErroVariantes] = useState<string | null>(null);
+  const [ultimaVarianteCriada, setUltimaVarianteCriada] = useState<Variante | null>(null);
   const [criandoPadrao, setCriandoPadrao] = useState(false);
   const [ultimoProdutoCriado, setUltimoProdutoCriado] = useState<Produto | null>(null);
   const [variantesProdutoCriado, setVariantesProdutoCriado] = useState<Variante[]>([]);
@@ -513,6 +514,18 @@ export default function GestaoEstoqueAdminPage() {
         return;
       }
 
+      const novaVariante =
+        data?.variante ||
+        data?.data?.variante ||
+        data?.data ||
+        (Array.isArray(data?.variantes) ? data.variantes[data.variantes.length - 1] : null);
+
+      if (novaVariante && typeof novaVariante.id !== "undefined") {
+        setUltimaVarianteCriada(novaVariante as Variante);
+      } else {
+        setUltimaVarianteCriada(null);
+      }
+
       setIsNovaVarianteOpen(false);
       setNvCorId("");
       setNvNumeracaoId("");
@@ -525,6 +538,19 @@ export default function GestaoEstoqueAdminPage() {
     } finally {
       setLoadingVariantes(false);
     }
+  }
+
+  function abrirEntradaRapida(varianteId: number) {
+    setAjVarianteId(String(varianteId));
+    setAjOperacao("ENTRADA");
+    setAjQuantidade("1");
+    setAjObs("");
+    setIsAjusteOpen(true);
+    setTimeout(() => {
+      const el = document.getElementById("aj-quantidade-input") as HTMLInputElement | null;
+      el?.focus();
+      el?.select();
+    }, 50);
   }
 
   function abrirEdicaoVariante(v: any) {
@@ -771,6 +797,7 @@ export default function GestaoEstoqueAdminPage() {
     setAjOperacao("ENTRADA");
     setAjQuantidade("1");
     setAjObs("");
+    setUltimaVarianteCriada(null);
     setEditForm({
       id: p.id,
       nome: p.nome,
@@ -801,6 +828,7 @@ export default function GestaoEstoqueAdminPage() {
     setAjOperacao("ENTRADA");
     setAjQuantidade("1");
     setAjObs("");
+    setUltimaVarianteCriada(null);
     setEditForm({
       id: null,
       nome: "",
@@ -812,8 +840,8 @@ export default function GestaoEstoqueAdminPage() {
       precoReais: "",
       precoCustoReais: "",
       fornecedorId: null,
-  });
-}
+    });
+  }
 
   function handleEditChange<K extends keyof EditFormState>(
     field: K,
@@ -1424,6 +1452,60 @@ export default function GestaoEstoqueAdminPage() {
                         <span className="text-xs text-slate-500">{variantes.length} variante(s)</span>
                       </div>
 
+                      {ultimaVarianteCriada &&
+                        produtoSelecionado &&
+                        ultimaVarianteCriada.produto_id === produtoSelecionado.id && (
+                          <div className="mx-5 my-3 flex flex-col gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <div className="font-semibold">Variante criada</div>
+                              <div className="text-xs text-emerald-700">
+                                SKU {ultimaVarianteCriada.sku || `#${ultimaVarianteCriada.id}`}{" "}
+                                {[
+                                  ultimaVarianteCriada.cor_id
+                                    ? coresMap.get(ultimaVarianteCriada.cor_id) || `#${ultimaVarianteCriada.cor_id}`
+                                    : null,
+                                  ultimaVarianteCriada.numeracao_id
+                                    ? numeracoesMap.get(ultimaVarianteCriada.numeracao_id) ||
+                                      `#${ultimaVarianteCriada.numeracao_id}`
+                                    : null,
+                                  ultimaVarianteCriada.tamanho_id
+                                    ? tamanhosMap.get(ultimaVarianteCriada.tamanho_id) ||
+                                      `#${ultimaVarianteCriada.tamanho_id}`
+                                    : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" / ")}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-emerald-700"
+                                onClick={() => abrirEntradaRapida(Number(ultimaVarianteCriada.id))}
+                              >
+                                Entrada rapida
+                              </button>
+                              <a
+                                className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                                href={
+                                  produtoSelecionado
+                                    ? `/admin/loja/compras?produto_id=${produtoSelecionado.id}&variante_id=${ultimaVarianteCriada.id}`
+                                    : "#"
+                                }
+                              >
+                                Ir para compras
+                              </a>
+                              <button
+                                type="button"
+                                className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                                onClick={() => setUltimaVarianteCriada(null)}
+                              >
+                                Dispensar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                       {isNovaVarianteOpen && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
                           <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-lg">
@@ -1728,13 +1810,32 @@ export default function GestaoEstoqueAdminPage() {
                                     </span>
                                   </td>
                                   <td className="px-5 py-3">
-                                    <button
-                                      type="button"
-                                      className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
-                                      onClick={() => abrirEdicaoVariante(v)}
-                                    >
-                                      Editar
-                                    </button>
+                                    <div className="flex flex-wrap gap-2">
+                                      <button
+                                        type="button"
+                                        className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                                        onClick={() => abrirEntradaRapida(v.id)}
+                                      >
+                                        Entrada
+                                      </button>
+                                      <a
+                                        className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                                        href={
+                                          produtoSelecionado
+                                            ? `/admin/loja/compras?produto_id=${produtoSelecionado.id}&variante_id=${v.id}`
+                                            : "#"
+                                        }
+                                      >
+                                        Comprar
+                                      </a>
+                                      <button
+                                        type="button"
+                                        className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                                        onClick={() => abrirEdicaoVariante(v)}
+                                      >
+                                        Editar
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}
@@ -2582,6 +2683,7 @@ export default function GestaoEstoqueAdminPage() {
             <label className="text-sm">
               Quantidade
               <input
+                id="aj-quantidade-input"
                 className="mt-1 w-full rounded-md border px-2 py-2"
                 value={ajQuantidade}
                 onChange={(e) => setAjQuantidade(e.target.value)}

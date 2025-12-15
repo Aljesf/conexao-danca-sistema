@@ -32,7 +32,11 @@ type ProdutoResumo = {
   codigo: string | null;
 };
 
-export default function ListaComprasAdminPage() {
+export default function ListaComprasAdminPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const router = useRouter();
 
   const [busca, setBusca] = useState("");
@@ -56,6 +60,23 @@ export default function ListaComprasAdminPage() {
       observacoes?: string;
     }[]
   >([]);
+  const [prefillComprasAplicado, setPrefillComprasAplicado] = useState(false);
+
+  const produtoIdPref = (() => {
+    const raw = Array.isArray(searchParams?.produto_id)
+      ? searchParams.produto_id[0]
+      : searchParams?.produto_id;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
+
+  const varianteIdPref = (() => {
+    const raw = Array.isArray(searchParams?.variante_id)
+      ? searchParams.variante_id[0]
+      : searchParams?.variante_id;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
   const [observacoesNovo, setObservacoesNovo] = useState("");
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [erroNovo, setErroNovo] = useState<string | null>(null);
@@ -64,6 +85,17 @@ export default function ListaComprasAdminPage() {
     carregarPedidos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFiltro]);
+
+  useEffect(() => {
+    if (!produtoIdPref || prefillComprasAplicado) return;
+    abrirNovoPedido();
+    adicionarItemNovo(
+      produtoIdPref,
+      varianteIdPref ? `Variante #${varianteIdPref}` : null
+    );
+    setPrefillComprasAplicado(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produtoIdPref, varianteIdPref, prefillComprasAplicado]);
 
   async function carregarPedidos() {
     try {
@@ -139,14 +171,15 @@ export default function ListaComprasAdminPage() {
     carregarFornecedoresEProdutosSeNecessario();
   }
 
-  function adicionarItemNovo() {
+  function adicionarItemNovo(produtoId?: number | null, observacao?: string | null) {
     setItensNovo((prev) => [
       ...prev,
       {
         idTemp: crypto.randomUUID(),
-        produtoId: null,
+        produtoId: produtoId ?? null,
         quantidade: 1,
         custoCentavos: 0,
+        observacoes: observacao ?? undefined,
       },
     ]);
   }
@@ -522,4 +555,3 @@ export default function ListaComprasAdminPage() {
     </div>
   );
 }
-
