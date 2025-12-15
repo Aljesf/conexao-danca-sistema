@@ -6,7 +6,7 @@ export type FinanceiroAlerta = {
   titulo: string;
   por_que_importa: string;
   acao_pratica: string;
-  sinal: "\u2191" | "\u2193" | "\u2192";
+  sinal: "↑" | "↓" | "→";
 };
 
 export type FinanceiroAnalise = {
@@ -22,25 +22,40 @@ export type FinanceiroAnalise = {
 const DEFAULT_MODEL = process.env.FINANCEIRO_GPT_MODEL || "gpt-5";
 
 export const PROMPT_FINANCEIRO_CONSULTOR = `
-Voce atua como consultor financeiro interno (nao contábil). Objetivo: leitura executiva em 30 segundos.
-Proibido inventar dados, criar lançamentos, sugerir ilegalidades ou repetir números do input.
-Foque em inadimplencia, folego de caixa, tendencia de entradas/saidas, riscos de travamento/crescimento, cartao conexao quando relevante.
-Responda EXCLUSIVAMENTE em JSON no formato:
+Você é o Consultor Financeiro Interno do Sistema Conexão Dança (Escola, Loja e Café).
+
+Objetivo: orientar decisões em até 30 segundos com base SOMENTE no snapshot recebido.
+Este dashboard não é contábil. É um painel de decisão (saúde, risco e ação).
+
+Regras:
+- Não repetir números do snapshot.
+- Não inventar fatos ou dados.
+- Priorizar consequência > variação.
+- Quando houver 'base zero' ou pouco histórico, diga isso sem usar porcentagens confusas.
+- Se dados estiverem insuficientes, declarar 'dados insuficientes' e sugerir ação preventiva (ex.: registrar lançamentos, alimentar movimento, revisar cobranças).
+
+Foco da leitura:
+- Pressão de caixa (fôlego, risco de curto prazo).
+- Qualidade do crescimento (crescer sem liquidez é risco).
+- Concentração de risco (quando poucos itens/pessoas/centros puxam o resultado).
+- Centro de custo: comparar cada centro consigo mesmo; não comparar centros entre si.
+- Cartão Conexão: se existir no snapshot, tratar como ativo financeiro sensível (crescimento saudável vs risco).
+
+Formato obrigatório de saída (JSON estrito):
 {
-  "texto_curto": "string (1 paragrafo, tom gestor/investidor, sem repetir numeros)",
+  "texto_curto": "Resumo executivo em 1 parágrafo, sem números",
   "alertas": [
     {
       "severidade": "CRITICO|ALERTA|INFO",
-      "titulo": "string curta",
+      "titulo": "Título curto",
       "por_que_importa": "1 linha",
       "acao_pratica": "1 linha",
-      "sinal": "\\u2191|\\u2193|\\u2192"
+      "sinal": "↑|↓|→"
     }
-  ],
-  "meta": { "fonte": "GPT", "model": "nome_do_modelo" }
+  ]
 }
-Maximo 3 alertas; priorizar severidade (CRITICO > ALERTA > INFO). Se dados escassos, use INFO pedindo para alimentar dados/registrar movimentos.
-`;
+
+Máximo de 3 alertas. Priorize por severidade (CRITICO > ALERTA > INFO).`;
 
 function baseAlertas(snapshot: SnapshotFinanceiro): FinanceiroAnalise {
   const alertas = (snapshot.regras_alerta || []).slice(0, 3).map((r) => ({
@@ -48,43 +63,45 @@ function baseAlertas(snapshot: SnapshotFinanceiro): FinanceiroAnalise {
     titulo: r.titulo,
     por_que_importa: r.detalhe ?? "Alertas calculados pelo motor interno.",
     acao_pratica: "Revisar movimentos e alimentar dados se faltando.",
-    sinal: "\u2192" as const,
+    sinal: "→" as const,
   }));
 
   return {
-    texto_curto: "Analise calculada por regras internas; alimente dados para melhor leitura.",
+    texto_curto:
+      "Leitura gerada por regras internas (GPT indisponível no momento). Para uma análise mais rica, alimente o movimento financeiro e registre cobranças/recebimentos.",
     alertas,
     meta: { fonte: "REGRAS", model: null, created_at: new Date().toISOString() },
   };
 }
 
 function sanitizeAnalise(parsed: any, fallback: FinanceiroAnalise): FinanceiroAnalise {
-  const safeAlertas: FinanceiroAlerta[] = Array.isArray(parsed?.alertas) ? parsed.alertas : [];
+  const safeAlertas: FinanceiroAlerta[] = Array.isArray(parsed?.alertas)
+    ? parsed.alertas.filter((a: any) => a && typeof a === "object")
+    : [];
   const normalized = safeAlertas.slice(0, 3).map((a) => {
     const severidade =
       a?.severidade === "CRITICO" || a?.severidade === "ALERTA" || a?.severidade === "INFO"
         ? a.severidade
         : "INFO";
-    const sinal = a?.sinal === "\u2191" || a?.sinal === "\u2193" ? a.sinal : "\u2192";
+    const sinal = a?.sinal === "↑" || a?.sinal === "↓" ? a.sinal : "→";
     return {
       severidade,
-      titulo: typeof a?.titulo === "string" ? a.titulo : "Alerta",
+      titulo: typeof a?.titulo === "string" && a.titulo.trim() ? a.titulo.trim() : "Alerta",
       por_que_importa:
-        typeof a?.por_que_importa === "string"
-          ? a.por_que_importa
+        typeof a?.por_que_importa === "string" && a.por_que_importa.trim()
+          ? a.por_que_importa.trim()
           : "Importancia nao informada.",
       acao_pratica:
-        typeof a?.acao_pratica === "string"
-          ? a.acao_pratica
+        typeof a?.acao_pratica === "string" && a.acao_pratica.trim()
+          ? a.acao_pratica.trim()
           : "Revisar dados e planos de acao.",
       sinal,
     };
   });
 
-  const texto_curto =
-    typeof parsed?.texto_curto === "string" && parsed.texto_curto.trim()
-      ? parsed.texto_curto.trim()
-      : fallback.texto_curto;
+  const texto_curto_raw =
+    typeof parsed?.texto_curto === "string" && parsed.texto_curto.trim() ? parsed.texto_curto.trim() : "";
+  const texto_curto = texto_curto_raw || fallback.texto_curto;
 
   const meta = {
     fonte: "GPT" as const,
@@ -96,19 +113,22 @@ function sanitizeAnalise(parsed: any, fallback: FinanceiroAnalise): FinanceiroAn
 }
 
 function tryParseJson(output: string): any | null {
+  if (!output) return null;
+
   try {
     return JSON.parse(output);
   } catch {
     const first = output.indexOf("{");
     const last = output.lastIndexOf("}");
-    if (first !== -1 && last !== -1 && last > first) {
-      try {
-        return JSON.parse(output.slice(first, last + 1));
-      } catch {
-        return null;
-      }
+    if (first === -1 || last === -1 || last <= first) {
+      return null;
     }
-    return null;
+
+    try {
+      return JSON.parse(output.slice(first, last + 1));
+    } catch {
+      return null;
+    }
   }
 }
 
