@@ -1,8 +1,8 @@
 # Estado atual das rotas - Admin
-Atualizado em: 2025-12-15 16:22
+Atualizado em: 2025-12-15 16:28
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T16:22:35.880Z
+Auditado em: 2025-12-15T16:28:41.871Z
 
 ## Rotas
 - [REAL] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 2)
@@ -10,9 +10,9 @@ Auditado em: 2025-12-15T16:22:35.880Z
 - [PLACEHOLDER] /admin/colaboradores/jornadas - src/app/(private)/admin/colaboradores/jornadas/page.tsx (linhas: 18)
 - [REAL] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (linhas: 2)
 - [REAL] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (linhas: 2)
-- [PLACEHOLDER] /admin/config/cafe - src/app/(private)/admin/config/cafe/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/config/escola - src/app/(private)/admin/config/escola/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/config/loja - src/app/(private)/admin/config/loja/page.tsx (linhas: 18)
+- [REAL] /admin/config/cafe - src/app/(private)/admin/config/cafe/page.tsx (linhas: 2)
+- [REAL] /admin/config/escola - src/app/(private)/admin/config/escola/page.tsx (linhas: 2)
+- [REAL] /admin/config/loja - src/app/(private)/admin/config/loja/page.tsx (linhas: 2)
 - [REAL] /admin/financeiro - src/app/(private)/admin/financeiro/page.tsx (linhas: 587)
 - [REAL] /admin/financeiro/cartao/configuracoes - src/app/(private)/admin/financeiro/cartao/configuracoes/page.tsx (linhas: 818)
 - [REAL] /admin/financeiro/cartao/recebiveis - src/app/(private)/admin/financeiro/cartao/recebiveis/page.tsx (linhas: 250)

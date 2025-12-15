@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2025-12-15T16:22:35.880Z",
+  "generatedAt": "2025-12-15T16:28:41.871Z",
   "pages": [
     {
       "route": "/academico/avaliacoes",
@@ -194,22 +194,22 @@
       "route": "/admin/config/cafe",
       "file": "src/app/(private)/admin/config/cafe/page.tsx",
       "context": "admin",
-      "status": "PLACEHOLDER",
-      "lines": 18
+      "status": "REAL",
+      "lines": 2
     },
     {
       "route": "/admin/config/escola",
       "file": "src/app/(private)/admin/config/escola/page.tsx",
       "context": "admin",
-      "status": "PLACEHOLDER",
-      "lines": 18
+      "status": "REAL",
+      "lines": 2
     },
     {
       "route": "/admin/config/loja",
       "file": "src/app/(private)/admin/config/loja/page.tsx",
       "context": "admin",
-      "status": "PLACEHOLDER",
-      "lines": 18
+      "status": "REAL",
+      "lines": 2
     },
     {
       "route": "/admin/financeiro",

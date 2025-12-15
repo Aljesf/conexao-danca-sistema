@@ -1,8 +1,8 @@
 # Estado atual das rotas - Pessoas
-Atualizado em: 2025-12-15 16:22
+Atualizado em: 2025-12-15 16:28
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T16:22:35.880Z
+Auditado em: 2025-12-15T16:28:41.871Z
 
 ## Rotas
 - [PLACEHOLDER] /pessoas - src/app/(private)/pessoas/page.tsx (linhas: 135)
