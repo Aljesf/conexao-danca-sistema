@@ -51,55 +51,55 @@ export async function GET(req: NextRequest) {
 
   const centroCustoParam = searchParams.get("centro_custo_id");
   const centroCustoId = centroCustoParam ? Number(centroCustoParam) : null;
+  const centroCustoValido = centroCustoId !== null && !Number.isNaN(centroCustoId);
 
   try {
-    // Contas a pagar pendentes
-    let pagarQuery = supabaseAdmin
-      .from("contas_pagar")
-      .select("total:sum(valor_centavos)")
-      .neq("status", "PAGO");
-
-    if (centroCustoId !== null && !Number.isNaN(centroCustoId)) {
-      pagarQuery = pagarQuery.eq("centro_custo_id", centroCustoId);
-    }
-    if (dataInicio) pagarQuery = pagarQuery.gte("vencimento", dataInicio);
-    if (dataFim) pagarQuery = pagarQuery.lte("vencimento", dataFim);
-
-    const { data: pagarData, error: pagarError } = await pagarQuery.single();
-    if (pagarError) throw pagarError;
-    const pagar_pendente_centavos = toNumber((pagarData as any)?.total);
-
-    // Contas a receber pendentes
-    let receberQuery = supabaseAdmin
-      .from("cobrancas")
-      .select("total:sum(valor_centavos)")
-      .neq("status", "RECEBIDO")
-      .neq("status", "PAGO"); // compat: cobrancas usam PAGO no fluxo atual
-
-    if (centroCustoId !== null && !Number.isNaN(centroCustoId)) {
-      receberQuery = receberQuery.eq("centro_custo_id", centroCustoId);
-    }
-    if (dataInicio) receberQuery = receberQuery.gte("vencimento", dataInicio);
-    if (dataFim) receberQuery = receberQuery.lte("vencimento", dataFim);
-
-    const { data: receberData, error: receberError } = await receberQuery.single();
-    if (receberError) throw receberError;
-    const receber_pendente_centavos = toNumber((receberData as any)?.total);
-
-    // Movimentacao por centro de custo (receitas/entradas e despesas/saidas)
     const tiposReceita = ["ENTRADA", "RECEITA"];
     const tiposDespesa = ["SAIDA", "DESPESA"];
     const tiposAceitos = [...tiposReceita, ...tiposDespesa];
 
+    // Contas a pagar pendentes (somar em JS para evitar PGRST200)
+    let pagarQuery = supabaseAdmin
+      .from("contas_pagar")
+      .select("valor_centavos, vencimento, centro_custo_id")
+      .neq("status", "PAGO");
+
+    if (centroCustoValido) pagarQuery = pagarQuery.eq("centro_custo_id", centroCustoId);
+    if (dataInicio) pagarQuery = pagarQuery.gte("vencimento", dataInicio);
+    if (dataFim) pagarQuery = pagarQuery.lte("vencimento", dataFim);
+
+    const { data: pagarData, error: pagarError } = await pagarQuery;
+    if (pagarError) throw pagarError;
+    const pagar_pendente_centavos = (pagarData ?? []).reduce(
+      (acc: number, row: any) => acc + toNumber(row?.valor_centavos),
+      0
+    );
+
+    // Contas a receber pendentes (status diferentes de PAGO/RECEBIDO)
+    let receberQuery = supabaseAdmin
+      .from("cobrancas")
+      .select("valor_centavos, vencimento, centro_custo_id")
+      .neq("status", "RECEBIDO")
+      .neq("status", "PAGO");
+
+    if (centroCustoValido) receberQuery = receberQuery.eq("centro_custo_id", centroCustoId);
+    if (dataInicio) receberQuery = receberQuery.gte("vencimento", dataInicio);
+    if (dataFim) receberQuery = receberQuery.lte("vencimento", dataFim);
+
+    const { data: receberData, error: receberError } = await receberQuery;
+    if (receberError) throw receberError;
+    const receber_pendente_centavos = (receberData ?? []).reduce(
+      (acc: number, row: any) => acc + toNumber(row?.valor_centavos),
+      0
+    );
+
+    // Movimentacao por centro de custo (receitas/entradas e despesas/saidas)
     let movimentoQuery = supabaseAdmin
       .from("movimento_financeiro")
-      .select("centro_custo_id, tipo, total:sum(valor_centavos)")
-      .in("tipo", tiposAceitos)
-      .group("centro_custo_id, tipo");
+      .select("centro_custo_id, tipo, valor_centavos, data_movimento")
+      .in("tipo", tiposAceitos);
 
-    if (centroCustoId !== null && !Number.isNaN(centroCustoId)) {
-      movimentoQuery = movimentoQuery.eq("centro_custo_id", centroCustoId);
-    }
+    if (centroCustoValido) movimentoQuery = movimentoQuery.eq("centro_custo_id", centroCustoId);
     if (dataInicio) movimentoQuery = movimentoQuery.gte("data_movimento", dataInicio);
     if (dataFim) movimentoQuery = movimentoQuery.lte("data_movimento", dataFim);
 
@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
 
     (movimentosData || []).forEach((row: any) => {
       const tipo = String(row?.tipo || "").toUpperCase();
-      const total = toNumber((row as any)?.total);
+      const total = toNumber(row?.valor_centavos);
       const centroId = row?.centro_custo_id ?? null;
       const key = centroId === null ? "sem-centro" : String(centroId);
 

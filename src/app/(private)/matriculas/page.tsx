@@ -16,7 +16,7 @@ type MatriculaRow = {
 export const dynamic = "force-dynamic";
 
 export default async function MatriculasPage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerComponentClient({ cookies: () => cookieStore });
 
   const { data, error } = await supabase

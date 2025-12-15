@@ -9,7 +9,7 @@ export default async function PrivateLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerComponentClient({ cookies: () => cookieStore });
   const {
     data: { user },
