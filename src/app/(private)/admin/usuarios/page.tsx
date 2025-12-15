@@ -232,6 +232,29 @@ export default function AdminUsuariosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function criarUsuarioFromPessoa(pessoaIdPrefill?: number) {
+    const pessoaIdStr = window.prompt("Informe o ID da pessoa para criar o usuário", pessoaIdPrefill ? String(pessoaIdPrefill) : "");
+    if (!pessoaIdStr) return;
+    const pessoaId = Number(pessoaIdStr);
+    if (!pessoaId || Number.isNaN(pessoaId)) return;
+
+    const email = window.prompt("Email do usuário (obrigatório):") || "";
+    if (!email.trim()) return;
+    const senha = window.prompt("Senha inicial (obrigatória):") || "";
+    if (!senha.trim()) return;
+
+    try {
+      await apiJson("/api/usuarios/create-from-pessoa", {
+        method: "POST",
+        body: JSON.stringify({ pessoaId, email: email.trim(), senha: senha.trim() }),
+      });
+      await carregarUsuarios();
+      alert("Usuário criado e vinculado à pessoa.");
+    } catch (e: any) {
+      alert(e?.payload?.error || e?.payload?.details || e?.message || "Erro ao criar usuário a partir da pessoa.");
+    }
+  }
+
   // Se não carregou nada e houve erro de auth, exibe placeholder
   if (erro && !users.length) {
     return <PlaceholderPage title="Usuários" description={erro} />;
@@ -310,6 +333,7 @@ export default function AdminUsuariosPage() {
               <tr style={{ textAlign: "left", background: "rgba(0,0,0,0.01)" }}>
                 <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Nome</th>
                 <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Email</th>
+                <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Pessoa</th>
                 <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Admin</th>
                 <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Papéis</th>
                 <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Ações</th>
@@ -320,6 +344,34 @@ export default function AdminUsuariosPage() {
                 <tr key={u.user_id}>
                   <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0", fontWeight: 650 }}>{nomeExibicao(u)}</td>
                   <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0" }}>{emailExibicao(u)}</td>
+                  <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0" }}>
+                    {u.pessoa ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <a href={`/pessoas/${u.pessoa.id}`} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                          Pessoa #{u.pessoa.id}
+                        </a>
+                        <div style={{ fontSize: 12, color: "rgba(0,0,0,0.6)" }}>
+                          {u.pessoa.nome || "Sem nome"} {u.pessoa.cpf ? `• CPF: ${u.pessoa.cpf}` : ""}
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ color: "rgba(0,0,0,0.6)" }}>Sem vínculo</div>
+                        <button
+                          onClick={() => criarUsuarioFromPessoa()}
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 10,
+                            border: "1px solid #ddd",
+                            background: "#fff",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Vincular…
+                        </button>
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0" }}>
                     <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                       <input type="checkbox" checked={!!u.is_admin} onChange={(e) => toggleAdmin(u, e.target.checked)} />
@@ -378,6 +430,27 @@ export default function AdminUsuariosPage() {
           <div>
             <div style={{ marginBottom: 10, color: "rgba(0,0,0,0.65)" }}>
               User ID: <code>{modalUser.user_id}</code>
+            </div>
+            <div style={{ marginBottom: 12, color: "rgba(0,0,0,0.8)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <strong>Pessoa:</strong>
+              {modalUser.pessoa ? (
+                <span>
+                  <a href={`/pessoas/${modalUser.pessoa.id}`} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                    #{modalUser.pessoa.id}
+                  </a>{" "}
+                  — {modalUser.pessoa.nome || "Sem nome"} {modalUser.pessoa.cpf ? `• CPF: ${modalUser.pessoa.cpf}` : ""}
+                </span>
+              ) : (
+                <span>
+                  Sem vínculo.{" "}
+                  <button
+                    onClick={() => criarUsuarioFromPessoa()}
+                    style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}
+                  >
+                    Vincular…
+                  </button>
+                </span>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
