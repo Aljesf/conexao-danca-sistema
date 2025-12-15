@@ -66,11 +66,11 @@ export const adminSidebar: SidebarSection[] = [
     title: "Loja (Admin)",
     items: [
       { label: "📦 Gestão de estoque", href: "/admin/loja/gestao-estoque" },
-      { label: "🚧 🛒 Compras", href: "/admin/loja/compras" },
-      { label: "🚧 🚚 Fornecedores", href: "/admin/loja/fornecedores" },
-      { label: "🚧 🏷️ Categorias", href: "/admin/loja/categorias" },
-      { label: "🚧 📦 Estoque", href: "/admin/loja/estoque" },
-      { label: "🚧 ⚙️ Configurações da loja", href: "/admin/loja/configuracoes" },
+      { label: "🛒 Compras", href: "/admin/loja/compras" },
+      { label: "🚚 Fornecedores", href: "/admin/loja/fornecedores" },
+      { label: "🏷️ Categorias", href: "/admin/loja/categorias" },
+      { label: "📦 Estoque", href: "/admin/loja/estoque" },
+      { label: "⚙️ Configurações da loja", href: "/admin/loja/configuracoes" },
     ],
   },
   {
