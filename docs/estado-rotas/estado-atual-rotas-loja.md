@@ -1,8 +1,8 @@
 # Estado atual das rotas - Loja
-Atualizado em: 2025-12-15 17:18
+Atualizado em: 2025-12-15 17:58
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T17:18:05.388Z
+Auditado em: 2025-12-15T17:58:09.093Z
 
 ## Rotas
 - [PLACEHOLDER] /loja/caixa - src/app/(private)/loja/caixa/page.tsx (linhas: 1712)

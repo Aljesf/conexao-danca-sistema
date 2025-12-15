@@ -10,9 +10,9 @@ export const adminSidebar: SidebarSection[] = [
     id: "admin-config-unidades",
     title: "Configurações das unidades",
     items: [
-      { label: "🚧 🏫 Configuração da escola", href: "/admin/config/escola" },
-      { label: "🚧 🛍️ Configuração da loja", href: "/admin/config/loja" },
-      { label: "🚧 ☕ Configuração do Ballet Café", href: "/admin/config/cafe" },
+      { label: "🏫 Configuração da escola", href: "/admin/config/escola" },
+      { label: "🛍️ Configuração da loja", href: "/admin/config/loja" },
+      { label: "☕ Configuração do Ballet Café", href: "/admin/config/cafe" },
     ],
   },
   {

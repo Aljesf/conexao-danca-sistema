@@ -1,5 +1,5 @@
 # RELATORIO-DIAGNOSTICO-ROTAS
-Gerado em: 2025-12-15T17:18:05.388Z
+Gerado em: 2025-12-15T17:58:09.093Z
 Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 
 ## A) Rotas reais (page.tsx)
