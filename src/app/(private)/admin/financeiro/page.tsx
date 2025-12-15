@@ -4,13 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 import { formatBRLFromCents } from "@/lib/formatters/money";
-import { formatDateISO, formatDateTimeISO } from "@/lib/formatters/date";
+import { formatDateTimeISO } from "@/lib/formatters/date";
 
 type TendenciaValor = {
   atual_centavos: number;
   anterior_centavos: number;
   variacao_percentual: number | null;
   direcao: "UP" | "DOWN" | "FLAT";
+  descricao?: "BASE_ZERO_SUBIU" | "ZEROU" | "SEM_MOVIMENTO" | null;
 };
 
 type TendenciaResumo = {
@@ -44,6 +45,14 @@ type RegraAlerta = {
   detalhe?: string | null;
 };
 
+type AnaliseAlerta = {
+  severidade: "INFO" | "ALERTA" | "CRITICO";
+  titulo: string;
+  por_que_importa: string;
+  acao_pratica: string;
+  sinal: "↑" | "↓" | "→";
+};
+
 type Snapshot = {
   id: number;
   created_at: string;
@@ -64,12 +73,7 @@ type Analise = {
   id?: number;
   created_at?: string;
   model?: string | null;
-  alertas: Array<{
-    icone?: string | null;
-    titulo_curto: string;
-    severidade: "INFO" | "ALERTA" | "CRITICO";
-    acao_pratica?: string | null;
-  }>;
+  alertas: AnaliseAlerta[];
   texto_curto?: string | null;
 };
 
@@ -92,14 +96,16 @@ function tendenciaIcon(direcao?: "UP" | "DOWN" | "FLAT") {
 }
 
 function variacaoTexto(t: TendenciaValor | undefined) {
-  if (!t || t.variacao_percentual === null || Number.isNaN(t.variacao_percentual)) {
-    return "Sem histórico";
-  }
+  if (!t) return "Sem historico";
+  if (t.descricao === "BASE_ZERO_SUBIU") return "Subiu a partir de base zero";
+  if (t.descricao === "ZEROU") return "Zerou vs periodo anterior";
+  if (t.descricao === "SEM_MOVIMENTO") return "Sem movimento em ambos periodos";
+  if (t.variacao_percentual === null || Number.isNaN(t.variacao_percentual)) return "Sem historico";
   const sign = t.variacao_percentual >= 0 ? "+" : "";
   return `${sign}${t.variacao_percentual.toFixed(1)}% vs 30d anterior`;
 }
 
-function ordenarAlertas(alertas: Analise["alertas"]) {
+function ordenarAlertas(alertas: AnaliseAlerta[]) {
   const peso = { CRITICO: 3, ALERTA: 2, INFO: 1 };
   return [...(alertas || [])].sort(
     (a, b) => (peso[b.severidade] || 0) - (peso[a.severidade] || 0)
@@ -205,22 +211,18 @@ export default function FinanceiroDashboardPage() {
     if (analise?.alertas?.length) return ordenarAlertas(analise.alertas).slice(0, 3);
     if (snapshot?.regras_alerta?.length) {
       return snapshot.regras_alerta.slice(0, 3).map((r) => ({
-        icone: r.severidade === "CRITICO" ? "🔥" : r.severidade === "ALERTA" ? "⚠️" : "ℹ️",
-        titulo_curto: r.titulo,
         severidade: r.severidade,
-        acao_pratica: r.detalhe ?? "",
+        titulo: r.titulo,
+        por_que_importa: r.detalhe ?? "Alerta calculado pelo motor interno.",
+        acao_pratica: "Revisar dados e registrar movimentos.",
+        sinal: "→" as const,
       }));
     }
     return [];
   }, [analise, snapshot]);
 
   const serieChart = useMemo(() => snapshot?.serie_fluxo_caixa ?? [], [snapshot]);
-
-  const blocoCentros = useMemo(
-    () => snapshot?.resumo_por_centro ?? [],
-    [snapshot]
-  );
-
+  const blocoCentros = useMemo(() => snapshot?.resumo_por_centro ?? [], [snapshot]);
   const tendencia = snapshot?.tendencia;
 
   const cardsSaude = [
@@ -257,7 +259,7 @@ export default function FinanceiroDashboardPage() {
             <div>
               <h1 className="text-lg font-semibold text-slate-800">Dashboard Financeiro Inteligente</h1>
               <p className="text-sm text-slate-600">
-                Visao futura, tendencia e alertas automáticos com dados reais do Supabase.
+                Visao futura, tendencia e alertas automaticos com dados reais do Supabase.
               </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
@@ -357,7 +359,16 @@ export default function FinanceiroDashboardPage() {
               : snapshot?.created_at
               ? formatDateTimeISO(snapshot.created_at)
               : "--"}
+            {!analise?.model && (
+              <span className="ml-2 text-[11px] font-medium text-slate-500">
+                (Gerado por regras - GPT indisponivel)
+              </span>
+            )}
           </div>
+
+          {analise?.texto_curto ? (
+            <p className="mt-3 text-sm text-slate-700 leading-relaxed">{analise.texto_curto}</p>
+          ) : null}
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {alertasMostrados.length === 0 ? (
@@ -367,21 +378,30 @@ export default function FinanceiroDashboardPage() {
             ) : null}
             {alertasMostrados.map((a, idx) => (
               <div
-                key={`${a.titulo_curto}-${idx}`}
+                key={`${a.titulo}-${idx}`}
                 className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{a.icone || "⚠️"}</span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{a.titulo_curto}</p>
-                      <p className="text-[11px] uppercase text-slate-500">{a.severidade}</p>
-                    </div>
+                  <div>
+                    <span
+                      className={`inline-block rounded-full px-2 py-1 text-[11px] font-semibold ${
+                        a.severidade === "CRITICO"
+                          ? "bg-rose-100 text-rose-700"
+                          : a.severidade === "ALERTA"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {a.severidade}
+                    </span>
+                    <p className="mt-2 text-sm font-semibold text-slate-800 flex items-center gap-1">
+                      <span>{a.sinal}</span>
+                      <span>{a.titulo}</span>
+                    </p>
                   </div>
                 </div>
-                {a.acao_pratica ? (
-                  <p className="mt-2 text-sm text-slate-600">{a.acao_pratica}</p>
-                ) : null}
+                <p className="mt-2 text-xs text-slate-500">{a.por_que_importa}</p>
+                <p className="mt-1 text-sm text-slate-700">{a.acao_pratica}</p>
               </div>
             ))}
           </div>

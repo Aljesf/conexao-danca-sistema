@@ -6,6 +6,7 @@ export type TendenciaValor = {
   anterior_centavos: number;
   variacao_percentual: number | null;
   direcao: "UP" | "DOWN" | "FLAT";
+  descricao?: "BASE_ZERO_SUBIU" | "ZEROU" | "SEM_MOVIMENTO" | null;
 };
 
 export type TendenciaResumo = {
@@ -108,25 +109,35 @@ function variacao(atual: number, anterior: number): TendenciaValor {
   const safeAnterior = Number(anterior || 0);
 
   let variacao_percentual: number | null = null;
-  if (safeAnterior === 0) {
-    if (safeAtual === 0) {
-      variacao_percentual = 0;
-    } else {
-      variacao_percentual = 100;
-    }
+  let descricao: TendenciaValor["descricao"] = null;
+
+  if (safeAnterior === 0 && safeAtual > 0) {
+    variacao_percentual = null;
+    descricao = "BASE_ZERO_SUBIU";
+  } else if (safeAnterior > 0 && safeAtual === 0) {
+    variacao_percentual = -100;
+    descricao = "ZEROU";
+  } else if (safeAnterior === 0 && safeAtual === 0) {
+    variacao_percentual = 0;
+    descricao = "SEM_MOVIMENTO";
   } else {
     variacao_percentual = ((safeAtual - safeAnterior) / Math.abs(safeAnterior)) * 100;
   }
 
   let direcao: "UP" | "DOWN" | "FLAT" = "FLAT";
-  if (variacao_percentual > 5) direcao = "UP";
-  else if (variacao_percentual < -5) direcao = "DOWN";
+  if (descricao === "BASE_ZERO_SUBIU") direcao = "UP";
+  else if (descricao === "ZEROU") direcao = "DOWN";
+  else if (variacao_percentual !== null) {
+    if (variacao_percentual > 5) direcao = "UP";
+    else if (variacao_percentual < -5) direcao = "DOWN";
+  }
 
   return {
     atual_centavos: safeAtual,
     anterior_centavos: safeAnterior,
     variacao_percentual,
     direcao,
+    descricao,
   };
 }
 
@@ -355,7 +366,15 @@ export async function gerarSnapshot(
     });
   }
   const variacaoSaidas = saidasTrend.variacao_percentual ?? 0;
-  if (variacaoSaidas > 20) {
+  const saidasDescricao = saidasTrend.descricao;
+  if (saidasDescricao === "BASE_ZERO_SUBIU") {
+    regras_alerta.push({
+      codigo: "SAIDAS_ACELERANDO",
+      titulo: "Saidas iniciaram a partir de base zero",
+      severidade: "ALERTA",
+      detalhe: "Saidas 30d surgiram apos periodo anterior zerado",
+    });
+  } else if (variacaoSaidas > 20) {
     regras_alerta.push({
       codigo: "SAIDAS_ACELERANDO",
       titulo: "Saidas acelerando",
@@ -364,7 +383,15 @@ export async function gerarSnapshot(
     });
   }
   const variacaoEntradas = entradasTrend.variacao_percentual ?? 0;
-  if (variacaoEntradas < -20) {
+  const entradasDescricao = entradasTrend.descricao;
+  if (entradasDescricao === "ZEROU") {
+    regras_alerta.push({
+      codigo: "ENTRADAS_QUEDA",
+      titulo: "Entradas zeraram",
+      severidade: "ALERTA",
+      detalhe: "Entradas 30d zeraram em relacao ao periodo anterior",
+    });
+  } else if (variacaoEntradas < -20) {
     regras_alerta.push({
       codigo: "ENTRADAS_QUEDA",
       titulo: "Entradas em queda",
