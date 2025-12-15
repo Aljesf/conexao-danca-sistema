@@ -182,6 +182,7 @@ export default function GestaoEstoqueAdminPage() {
   const [ajVarianteId, setAjVarianteId] = useState<string>("");
   const [ajOperacao, setAjOperacao] = useState<"ENTRADA" | "SAIDA">("ENTRADA");
   const [ajQuantidade, setAjQuantidade] = useState<string>("1");
+  const [ajMotivo, setAjMotivo] = useState<"NORMAL" | "PERDA" | "EXTRAVIO" | "AVARIA">("NORMAL");
   const [ajObs, setAjObs] = useState<string>("");
 
   // Variantes e atributos (Fase 1)
@@ -544,6 +545,7 @@ export default function GestaoEstoqueAdminPage() {
     setAjVarianteId(String(varianteId));
     setAjOperacao("ENTRADA");
     setAjQuantidade("1");
+    setAjMotivo("NORMAL");
     setAjObs("");
     setIsAjusteOpen(true);
     setTimeout(() => {
@@ -662,6 +664,9 @@ export default function GestaoEstoqueAdminPage() {
       return;
     }
 
+    const motivoPayload =
+      ajOperacao === "SAIDA" && ajMotivo !== "NORMAL" ? ajMotivo : null;
+
     setLoadingVariantes(true);
     try {
       const resp = await fetch("/api/loja/estoque", {
@@ -672,6 +677,7 @@ export default function GestaoEstoqueAdminPage() {
           variante_id: varianteIdNum,
           operacao: ajOperacao,
           quantidade: Math.trunc(qtd),
+          motivo: motivoPayload,
           observacoes: ajObs?.trim() ? ajObs.trim() : null,
         }),
       });
@@ -796,6 +802,7 @@ export default function GestaoEstoqueAdminPage() {
     setAjVarianteId("");
     setAjOperacao("ENTRADA");
     setAjQuantidade("1");
+    setAjMotivo("NORMAL");
     setAjObs("");
     setUltimaVarianteCriada(null);
     setEditForm({
@@ -827,6 +834,7 @@ export default function GestaoEstoqueAdminPage() {
     setAjVarianteId("");
     setAjOperacao("ENTRADA");
     setAjQuantidade("1");
+    setAjMotivo("NORMAL");
     setAjObs("");
     setUltimaVarianteCriada(null);
     setEditForm({
@@ -2673,10 +2681,29 @@ export default function GestaoEstoqueAdminPage() {
               <select
                 className="mt-1 w-full rounded-md border px-2 py-2"
                 value={ajOperacao}
-                onChange={(e) => setAjOperacao(e.target.value as "ENTRADA" | "SAIDA")}
+                onChange={(e) => {
+                  const op = e.target.value as "ENTRADA" | "SAIDA";
+                  setAjOperacao(op);
+                  if (op === "ENTRADA") setAjMotivo("NORMAL");
+                }}
               >
                 <option value="ENTRADA">Entrada (somar)</option>
                 <option value="SAIDA">Saida (subtrair)</option>
+              </select>
+            </label>
+
+            <label className="text-sm">
+              Motivo
+              <select
+                className="mt-1 w-full rounded-md border px-2 py-2"
+                value={ajMotivo}
+                onChange={(e) => setAjMotivo(e.target.value as any)}
+                disabled={ajOperacao === "ENTRADA"}
+              >
+                <option value="NORMAL">Operacao normal</option>
+                <option value="PERDA">Perda</option>
+                <option value="EXTRAVIO">Extravio</option>
+                <option value="AVARIA">Avaria</option>
               </select>
             </label>
 

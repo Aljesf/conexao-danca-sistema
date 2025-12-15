@@ -73,6 +73,36 @@ function isCheckMotivo(err: any) {
   return String(err?.code || "") === "23514" && String(err?.message || "").includes("motivo_check");
 }
 
+async function getCentroCustoLojaId(supabase: any) {
+  const envId = Number(process.env.CENTRO_CUSTO_LOJA_ID);
+  if (Number.isFinite(envId) && envId > 0) return envId;
+
+  const codigosPreferidos = ["LOJA", "AJ_LOJA", "AJDANCE_LOJA", "AJ_DANCE_STORE"];
+  const byCodigo = await supabase
+    .from("centros_custo")
+    .select("id, codigo, nome")
+    .in("codigo", codigosPreferidos)
+    .order("id", { ascending: true })
+    .limit(1);
+
+  if (!byCodigo.error && byCodigo.data && byCodigo.data.length > 0) {
+    return Number(byCodigo.data[0].id);
+  }
+
+  const byNome = await supabase
+    .from("centros_custo")
+    .select("id, codigo, nome")
+    .ilike("nome", "%loja%")
+    .order("id", { ascending: true })
+    .limit(1);
+
+  if (!byNome.error && byNome.data && byNome.data.length > 0) {
+    return Number(byNome.data[0].id);
+  }
+
+  return null;
+}
+
 async function insertVendaComRetryCamposInexistentes(supabase: any, payload: any) {
   let tentativa = 0;
   const maxTentativas = 6;
@@ -338,6 +368,43 @@ export async function POST(req: Request) {
           return json({ ok: false, error: p.message, details: p.details }, 500);
         }
       }
+    }
+
+    try {
+      const centroLojaId = await getCentroCustoLojaId(supabase);
+      if (!centroLojaId) {
+        warnings.push({
+          type: "FIN_CENTRO_INDEFINIDO",
+          message: "Centro de custo da Loja nao encontrado para registrar a receita da venda.",
+        });
+      } else if (total_centavos > 0) {
+        const descricaoFin =
+          "Venda Loja #" +
+          venda_id +
+          (body?.forma_pagamento ? ` - ${String(body.forma_pagamento)}` : "");
+
+        const { error: movFinError } = await supabase.from("movimento_financeiro").insert({
+          tipo: "RECEITA",
+          centro_custo_id: centroLojaId,
+          valor_centavos: total_centavos,
+          data_movimento: new Date().toISOString(),
+          origem: "VENDA_LOJA",
+          origem_id: venda_id,
+          descricao: descricaoFin,
+        });
+
+        if (movFinError) {
+          console.error("[/api/loja/vendas] falha ao registrar movimento financeiro da venda:", movFinError);
+          warnings.push({
+            type: "FIN_MOVIMENTO_FALHOU",
+            message: movFinError.message ?? "Falha ao registrar movimento financeiro da venda",
+            details: movFinError,
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error("[/api/loja/vendas] erro inesperado ao registrar movimento financeiro:", err);
+      warnings.push({ type: "FIN_MOVIMENTO_EXCEPTION", message: String(err?.message || err) });
     }
 
     return json({ ok: true, data: { venda: { id: venda_id }, warnings } }, 200);
