@@ -29,9 +29,9 @@ export const adminSidebar: SidebarSection[] = [
     id: "admin-usuarios",
     title: "Usuários & Segurança",
     items: [
-      { label: "🚧 👤 Usuários", href: "/admin/usuarios" },
-      { label: "🚧 🧬 Perfis", href: "/admin/perfis" },
-      { label: "🚧 🔐 Permissões", href: "/admin/permissoes" },
+      { label: "👤 Usuários", href: "/admin/usuarios" },
+      { label: "🧬 Perfis", href: "/admin/perfis" },
+      { label: "🔐 Permissões", href: "/admin/permissoes" },
     ],
   },
   {

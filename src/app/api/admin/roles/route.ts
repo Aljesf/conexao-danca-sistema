@@ -7,7 +7,7 @@ export async function GET() {
 
   const { data, error } = await auth.supabase
     .from("roles_sistema")
-    .select("id, codigo, nome, descricao, ativo, created_at")
+    .select("id, codigo, nome, descricao, ativo, created_at, permissoes")
     .order("nome", { ascending: true });
 
   if (error) return NextResponse.json({ ok: false, error: "erro_roles", details: error.message }, { status: 500 });
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const { data, error } = await auth.supabase
     .from("roles_sistema")
     .insert({ codigo, nome, descricao: descricao || null, ativo: true })
-    .select("id, codigo, nome, descricao, ativo")
+    .select("id, codigo, nome, descricao, ativo, permissoes")
     .maybeSingle();
 
   if (error) return NextResponse.json({ ok: false, error: "erro_criar_role", details: error.message }, { status: 500 });
@@ -48,12 +48,13 @@ export async function PATCH(req: Request) {
   if (typeof body?.nome === "string") patch.nome = body.nome.trim();
   if (typeof body?.descricao === "string") patch.descricao = body.descricao.trim();
   if (typeof body?.ativo === "boolean") patch.ativo = body.ativo;
+  if (body && Object.prototype.hasOwnProperty.call(body, "permissoes")) patch.permissoes = body.permissoes;
 
   const { data, error } = await auth.supabase
     .from("roles_sistema")
     .update(patch)
     .eq("id", id)
-    .select("id, codigo, nome, descricao, ativo")
+    .select("id, codigo, nome, descricao, ativo, permissoes")
     .maybeSingle();
 
   if (error) return NextResponse.json({ ok: false, error: "erro_update_role", details: error.message }, { status: 500 });
