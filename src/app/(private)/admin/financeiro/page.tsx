@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateTimeISO } from "@/lib/formatters/date";
+import { HELP_DASHBOARD_INTELIGENTE } from "@/lib/financeiro/helpDashboardInteligente";
 
 type TendenciaValor = {
   atual_centavos: number;
@@ -75,7 +76,11 @@ type Analise = {
   model?: string | null;
   alertas: AnaliseAlerta[];
   texto_curto?: string | null;
-  meta?: { fonte?: "GPT" | "REGRAS" | null };
+  meta?: {
+    fonte?: "GPT" | "REGRAS" | null;
+    erro_tipo?: "SEM_CHAVE" | "ERRO" | "PARSER";
+    erro_msg?: string | null;
+  };
 };
 
 type DashboardResponse = {
@@ -83,6 +88,17 @@ type DashboardResponse = {
   snapshot: Snapshot;
   analise: Analise | null;
   error?: string;
+  has_openai_key?: boolean;
+  gpt_status?: "OK" | "SEM_CHAVE" | "ERRO";
+  gpt_error_motivo?: string | null;
+  model_usado?: string | null;
+  diagnostico_gpt?: {
+    has_openai_key: boolean;
+    model_configurado: string | null;
+    modo: "FINANCEIRO";
+    status: "OK" | "SEM_CHAVE" | "ERRO" | "PARSER";
+    motivo: string | null;
+  };
 };
 
 type LineDatum = {
@@ -169,6 +185,13 @@ export default function FinanceiroDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [reanalisando, setReanalisando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gptInfo, setGptInfo] = useState<{
+    status?: "OK" | "SEM_CHAVE" | "ERRO";
+    motivo?: string | null;
+    hasKey?: boolean;
+    model?: string | null;
+  }>({});
+  const [helpOpen, setHelpOpen] = useState(false);
 
   async function loadDashboard() {
     setLoading(true);
@@ -179,6 +202,12 @@ export default function FinanceiroDashboardPage() {
       if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao carregar dashboard.");
       setSnapshot(json.snapshot);
       setAnalise(json.analise);
+      setGptInfo({
+        status: json.gpt_status,
+        motivo: json.gpt_error_motivo,
+        hasKey: json.has_openai_key,
+        model: json.model_usado,
+      });
     } catch (err: any) {
       setError(err?.message || "Erro inesperado ao carregar dashboard.");
     } finally {
@@ -201,6 +230,12 @@ export default function FinanceiroDashboardPage() {
       if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao reanalisar.");
       setSnapshot(json.snapshot);
       setAnalise(json.analise);
+      setGptInfo({
+        status: json.gpt_status,
+        motivo: json.gpt_error_motivo,
+        hasKey: json.has_openai_key,
+        model: json.model_usado,
+      });
     } catch (err: any) {
       setError(err?.message || "Erro ao reanalisar dashboard.");
     } finally {
@@ -331,11 +366,21 @@ export default function FinanceiroDashboardPage() {
         {/* Bloco 2 */}
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-800">Leitura Inteligente do Sistema (GPT)</h2>
-              <p className="text-sm text-slate-600">
-                Ate 3 alertas priorizados, com base no snapshot do dia.
-              </p>
+            <div className="flex items-start gap-2">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-800">Leitura Inteligente do Sistema (GPT)</h2>
+                <p className="text-sm text-slate-600">
+                  Ate 3 alertas priorizados, com base no snapshot do dia.
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Help do bloco GPT"
+                className="mt-0.5 h-7 w-7 rounded-full border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => setHelpOpen(true)}
+              >
+                ?
+              </button>
             </div>
             <div className="flex gap-2">
               <button
@@ -366,6 +411,12 @@ export default function FinanceiroDashboardPage() {
               <span className="ml-2 text-[11px] font-medium text-slate-500">
                 (Gerado por regras - GPT indisponivel)
               </span>
+            ) : null}
+            {gptInfo?.status === "SEM_CHAVE" ? (
+              <span className="ml-2 text-[11px] font-medium text-amber-700">GPT: sem chave</span>
+            ) : null}
+            {gptInfo?.status === "ERRO" ? (
+              <span className="ml-2 text-[11px] font-medium text-amber-700">GPT: erro (ver log)</span>
             ) : null}
           </div>
 
@@ -502,6 +553,30 @@ export default function FinanceiroDashboardPage() {
           </div>
         </div>
       </div>
+
+      {helpOpen ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-10 sm:items-center">
+          <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Help — Bloco 2</p>
+                <h3 className="text-lg font-semibold text-slate-800">Leitura Inteligente do Sistema</h3>
+                <p className="text-xs text-slate-500">Fonte: docs/financeiro/dashboard-inteligente-help.md</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => setHelpOpen(false)}
+              >
+                Fechar
+              </button>
+            </div>
+            <div className="mt-4 rounded-md bg-slate-50 p-3 text-sm text-slate-800 whitespace-pre-wrap">
+              {HELP_DASHBOARD_INTELIGENTE}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

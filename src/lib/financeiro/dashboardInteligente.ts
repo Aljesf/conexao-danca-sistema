@@ -89,7 +89,13 @@ export type AnaliseGpt = {
   created_at?: string;
   snapshot_id?: number;
   model?: string | null;
-  meta?: { fonte?: "GPT" | "REGRAS"; model?: string | null; created_at?: string | null };
+  meta?: {
+    fonte?: "GPT" | "REGRAS";
+    model?: string | null;
+    created_at?: string | null;
+    erro_tipo?: "SEM_CHAVE" | "ERRO" | "PARSER";
+    erro_msg?: string | null;
+  };
   alertas: Array<{
     severidade: "INFO" | "ALERTA" | "CRITICO";
     titulo: string;
@@ -757,7 +763,7 @@ async function salvarAnalise(
     return null;
   }
 
-  return data as AnaliseGpt;
+  return { ...(data as AnaliseGpt), meta: analise.meta };
 }
 
 export async function obterSnapshotDoDia(

@@ -16,10 +16,12 @@ export type FinanceiroAnalise = {
     fonte: "GPT" | "REGRAS";
     model?: string | null;
     created_at?: string | null;
+    erro_tipo?: "SEM_CHAVE" | "ERRO" | "PARSER";
+    erro_msg?: string | null;
   };
 };
 
-const DEFAULT_MODEL = process.env.FINANCEIRO_GPT_MODEL || "gpt-5";
+const DEFAULT_MODEL = process.env.FINANCEIRO_GPT_MODEL || "gpt-4.1-mini";
 
 export const PROMPT_FINANCEIRO_CONSULTOR = `
 Você é o Consultor Financeiro Interno do Sistema Conexão Dança (Escola, Loja e Café).
@@ -57,7 +59,10 @@ Formato obrigatório de saída (JSON estrito):
 
 Máximo de 3 alertas. Priorize por severidade (CRITICO > ALERTA > INFO).`;
 
-function baseAlertas(snapshot: SnapshotFinanceiro): FinanceiroAnalise {
+function baseAlertas(
+  snapshot: SnapshotFinanceiro,
+  meta?: Partial<FinanceiroAnalise["meta"]>
+): FinanceiroAnalise {
   const alertas = (snapshot.regras_alerta || []).slice(0, 3).map((r) => ({
     severidade: r.severidade === "CRITICO" ? "CRITICO" : "ALERTA",
     titulo: r.titulo,
@@ -70,7 +75,13 @@ function baseAlertas(snapshot: SnapshotFinanceiro): FinanceiroAnalise {
     texto_curto:
       "Leitura gerada por regras internas (GPT indisponível no momento). Para uma análise mais rica, alimente o movimento financeiro e registre cobranças/recebimentos.",
     alertas,
-    meta: { fonte: "REGRAS", model: null, created_at: new Date().toISOString() },
+    meta: {
+      fonte: "REGRAS",
+      model: meta?.model ?? null,
+      created_at: new Date().toISOString(),
+      erro_tipo: meta?.erro_tipo,
+      erro_msg: meta?.erro_msg,
+    },
   };
 }
 
@@ -132,16 +143,49 @@ function tryParseJson(output: string): any | null {
   }
 }
 
-export async function analisarSnapshotGPT(snapshot: SnapshotFinanceiro): Promise<AnaliseGpt | null> {
-  const fallback = baseAlertas(snapshot);
+function getResponseOutputText(resp: any): string {
+  if (!resp) return "";
+  if (typeof resp.output_text === "string") return resp.output_text;
 
-  if (!process.env.OPENAI_API_KEY) {
+  const out = Array.isArray(resp.output) ? resp.output : [];
+  for (const item of out) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const c of content) {
+      if (typeof c?.text === "string" && c.text.trim()) return c.text;
+      if (typeof c?.type === "string" && c.type === "output_text" && typeof c?.text === "string") {
+        return c.text;
+      }
+    }
+  }
+  return "";
+}
+
+function sanitizeErrorMessage(err: any): string {
+  if (!err) return "erro_desconhecido";
+  const raw =
+    typeof err === "string"
+      ? err
+      : err?.message || err?.error || err?.statusText || err?.code || JSON.stringify(err);
+  return String(raw).slice(0, 180);
+}
+
+export async function analisarSnapshotGPT(snapshot: SnapshotFinanceiro): Promise<AnaliseGpt | null> {
+  const hasOpenaiKey = !!process.env.OPENAI_API_KEY;
+  const model = DEFAULT_MODEL;
+  const fallbackDefault = baseAlertas(snapshot);
+
+  if (!hasOpenaiKey) {
+    const fallback = baseAlertas(snapshot, {
+      model: null,
+      erro_tipo: "SEM_CHAVE",
+      erro_msg: "OPENAI_API_KEY ausente no servidor",
+    });
     return {
       model: null,
       alertas: fallback.alertas,
       texto_curto: fallback.texto_curto,
       meta: fallback.meta,
-      raw: {},
+      raw: { error: "OPENAI_API_KEY ausente no servidor" },
     };
   }
 
@@ -175,33 +219,67 @@ export async function analisarSnapshotGPT(snapshot: SnapshotFinanceiro): Promise
 
   try {
     const response = await client.responses.create({
-      model: DEFAULT_MODEL,
+      model,
       input: [
-        { role: "system", content: [{ type: "text", text: PROMPT_FINANCEIRO_CONSULTOR }] },
-        { role: "user", content: [{ type: "text", text: JSON.stringify(payload) }] },
+        {
+          role: "system",
+          content: [{ type: "input_text", text: PROMPT_FINANCEIRO_CONSULTOR }],
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: JSON.stringify(payload) }],
+        },
       ],
-      response_format: { type: "json_object" },
+      text: {
+        format: { type: "json_object" },
+      },
     });
 
-    const text = (response as any)?.output_text ?? "";
+    const text = getResponseOutputText(response);
     const parsedRaw = text ? tryParseJson(text) : null;
-    const normalized = parsedRaw ? sanitizeAnalise(parsedRaw, fallback) : fallback;
+
+    if (!parsedRaw) {
+      const fallback = baseAlertas(snapshot, {
+        model,
+        erro_tipo: "PARSER",
+        erro_msg: "Falha ao parsear resposta GPT",
+      });
+      return {
+        model,
+        alertas: fallback.alertas,
+        texto_curto: fallback.texto_curto,
+        meta: fallback.meta,
+        raw: { response, output_text: text, parse_error: true },
+      };
+    }
+
+    const normalized = sanitizeAnalise(parsedRaw, fallbackDefault);
 
     return {
-      model: DEFAULT_MODEL,
+      model,
       alertas: normalized.alertas,
       texto_curto: normalized.texto_curto,
       meta: normalized.meta,
       raw: response,
     };
   } catch (err) {
-    console.warn("[analisarSnapshotGPT] Erro na chamada GPT:", err);
+    const extra =
+      err && typeof err === "object"
+        ? ` status=${(err as any)?.status ?? "?"} code=${(err as any)?.code ?? "?"} message=${(err as any)?.message ?? "?"}`
+        : "";
+    const motivo = sanitizeErrorMessage(`${extra} ${sanitizeErrorMessage(err)}`.trim());
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[analisarSnapshotGPT] Erro na chamada GPT:", err);
+    } else {
+      console.warn("[analisarSnapshotGPT] Erro na chamada GPT:", motivo);
+    }
+    const fallback = baseAlertas(snapshot, { model, erro_tipo: "ERRO", erro_msg: motivo });
     return {
-      model: DEFAULT_MODEL,
+      model,
       alertas: fallback.alertas,
       texto_curto: fallback.texto_curto,
       meta: fallback.meta,
-      raw: { error: String(err) },
+      raw: { error: motivo },
     };
   }
 }
