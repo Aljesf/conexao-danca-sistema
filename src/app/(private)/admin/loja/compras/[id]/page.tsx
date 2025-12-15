@@ -66,9 +66,27 @@ type ContaFinanceiraResumo = {
 
 const hojeEmISO = () => new Date().toISOString().slice(0, 10);
 
+function parseBRLToCentavos(input: string): number {
+  const raw = (input ?? "").trim();
+  if (!raw) return 0;
+  const normalized = raw.replace(/\./g, "").replace(",", ".");
+  const v = Number(normalized);
+  if (!Number.isFinite(v) || v < 0) return 0;
+  return Math.round(v * 100);
+}
+
 function formatCentavosBRL(centavos: number): string {
   const v = Number.isFinite(centavos) ? centavos : 0;
   return (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatDateOnlyPTBR(dateStr?: string | null): string {
+  if (!dateStr) return "-";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("pt-BR");
 }
 
 export default function DetalheCompraAdminPage() {
@@ -89,7 +107,7 @@ export default function DetalheCompraAdminPage() {
   // financeiro
   const [contaPagar, setContaPagar] = useState<ContaPagarResumo | null>(null);
   const [contasFinanceiras, setContasFinanceiras] = useState<ContaFinanceiraResumo[]>([]);
-  const [pagamentoValorCentavos, setPagamentoValorCentavos] = useState(0);
+  const [pagamentoValorBRL, setPagamentoValorBRL] = useState("0,00");
   const [pagamentoContaId, setPagamentoContaId] = useState<number | null>(null);
   const [pagamentoData, setPagamentoData] = useState(new Date().toISOString().slice(0, 10));
   const [pagamentoMetodo, setPagamentoMetodo] = useState("");
@@ -171,7 +189,7 @@ export default function DetalheCompraAdminPage() {
         total_pago_centavos: pago,
       });
 
-      setPagamentoValorCentavos(saldo);
+      setPagamentoValorBRL((saldo / 100).toFixed(2).replace(".", ","));
       setErroPagamento(null);
     } catch (err) {
       console.error("Erro inesperado ao carregar conta a pagar:", err);
@@ -203,17 +221,11 @@ export default function DetalheCompraAdminPage() {
   }
 
   function formatarData(dateStr: string | null | undefined) {
-    if (!dateStr) return "-";
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return "-";
-    return d.toLocaleString("pt-BR");
+    return formatDateOnlyPTBR(dateStr);
   }
 
   function formatarReais(centavos: number) {
-    return (centavos / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
+    return formatCentavosBRL(centavos);
   }
 
   function handleChangeReceberAgora(itemId: number, value: string) {
@@ -288,6 +300,14 @@ export default function DetalheCompraAdminPage() {
     setMostrarNovaContaModal(true);
   };
 
+  const aplicarSaldoTotal = () => {
+    if (!contaPagar) return;
+    const total = contaPagar.valor_centavos || 0;
+    const pago = contaPagar.total_pago_centavos ?? 0;
+    const saldo = Math.max(total - pago, 0);
+    setPagamentoValorBRL((saldo / 100).toFixed(2).replace(".", ","));
+  };
+
   async function handlePagarCompra(e: React.FormEvent) {
     e.preventDefault();
     setErroPagamento(null);
@@ -311,12 +331,14 @@ export default function DetalheCompraAdminPage() {
       return;
     }
 
-    if (pagamentoValorCentavos <= 0) {
+    const valorInformadoCentavos = parseBRLToCentavos(pagamentoValorBRL);
+
+    if (valorInformadoCentavos <= 0) {
       setErroPagamento("Informe um valor maior que zero.");
       return;
     }
 
-    const valor = Math.min(pagamentoValorCentavos, saldo);
+    const valor = Math.min(valorInformadoCentavos, saldo);
 
     setSalvandoPagamento(true);
     try {
@@ -396,7 +418,7 @@ export default function DetalheCompraAdminPage() {
               </div>
               <div>
                 <div className="text-xs text-gray-500">Data do pedido</div>
-                <div className="text-sm">{formatarData(pedido.data_pedido)}</div>
+                <div className="text-sm">{formatDateOnlyPTBR(pedido.data_pedido)}</div>
               </div>
               <div>
                 <div className="text-xs text-gray-500">Status</div>
@@ -647,7 +669,7 @@ export default function DetalheCompraAdminPage() {
                     <span>Status: {contaPagar.status}</span>
                     <span>
                       Vencimento:{" "}
-                      {contaPagar.vencimento ? formatarData(contaPagar.vencimento) : "-"}
+                      {contaPagar.vencimento ? formatDateOnlyPTBR(contaPagar.vencimento) : "-"}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -663,7 +685,7 @@ export default function DetalheCompraAdminPage() {
                     </span>
                   </div>
                   <a
-                    href={`/admin/financeiro/contas-pagar/${contaPagar.id}`}
+                    href="/admin/financeiro/contas-pagar"
                     className="text-[11px] text-purple-700 hover:underline"
                   >
                     Abrir no módulo Financeiro
@@ -705,31 +727,44 @@ export default function DetalheCompraAdminPage() {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="font-medium">Valor (centavos)</label>
+                      <div className="flex items-center justify-between">
+                        <label className="font-medium">Valor (R$)</label>
+                        <button
+                          type="button"
+                          className="text-[11px] text-purple-700 hover:underline"
+                          onClick={aplicarSaldoTotal}
+                        >
+                          Pagar saldo total
+                        </button>
+                      </div>
                       <input
-                        type="number"
-                        min={1}
-                        value={pagamentoValorCentavos}
-                        onChange={(e) => setPagamentoValorCentavos(Number(e.target.value) || 0)}
+                        type="text"
+                        value={pagamentoValorBRL}
+                        onChange={(e) => setPagamentoValorBRL(e.target.value)}
                         className="border rounded-md px-2 py-1 text-xs text-right"
+                        placeholder="0,00"
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="font-medium">Método / Obs.</label>
-                      <input
-                        type="text"
+                      <label className="font-medium">Método</label>
+                      <select
                         value={pagamentoMetodo}
                         onChange={(e) => setPagamentoMetodo(e.target.value)}
-                        placeholder="PIX, dinheiro..."
                         className="border rounded-md px-2 py-1 text-xs"
-                      />
-                      <input
-                        type="text"
+                      >
+                        <option value="">Selecione</option>
+                        <option value="PIX">PIX</option>
+                        <option value="DINHEIRO">Dinheiro</option>
+                        <option value="CARTAO">Cartão</option>
+                        <option value="TRANSFERENCIA">Transferência</option>
+                      </select>
+                      <textarea
                         value={pagamentoObs}
                         onChange={(e) => setPagamentoObs(e.target.value)}
                         placeholder="Observações (opcional)"
-                        className="border rounded-md px-2 py-1 text-xs mt-1"
+                        className="border rounded-md px-2 py-1 text-xs mt-1 w-full"
+                        rows={2}
                       />
                     </div>
 
