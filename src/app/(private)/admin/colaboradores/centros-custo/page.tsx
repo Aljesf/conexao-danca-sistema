@@ -1,21 +1,12 @@
-﻿"use client";
-
-type SimplePageProps = {
-  title: string;
-  description?: string;
-};
-
-function SimplePlaceholder({ title, description }: SimplePageProps) {
+export default function Page() {
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">{title}</h1>
-      <p className="text-sm text-gray-600">
-        {description ?? "Esta tela ainda será implementada."}
+    <div style={{ padding: 24 }}>
+      <h1>Centro de custo não pertence ao domínio de Colaboradores</h1>
+      <p>Esta tela foi descontinuada.</p>
+      <p>
+        Centros de custo são gerenciados exclusivamente no Financeiro e vinculados a pagamentos, lançamentos e
+        contratos — não a colaboradores.
       </p>
     </div>
   );
-}
-
-export default function Page() {
-  return <SimplePlaceholder title="Centros de custo / centros base" description="Esta tela ainda será implementada." />;
 }

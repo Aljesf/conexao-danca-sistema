@@ -1,5 +1,5 @@
 # RELATORIO-DIAGNOSTICO-ROTAS
-Gerado em: 2025-12-15T16:28:41.871Z
+Gerado em: 2025-12-15T17:18:05.388Z
 Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 
 ## A) Rotas reais (page.tsx)
@@ -26,7 +26,7 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 - [PLACEHOLDER] /academico/turmas/grade - src/app/(private)/academico/turmas/grade/page.tsx (contexto: academico, linhas: 4)
 - [PLACEHOLDER] /academico/turmas/nova - src/app/(private)/academico/turmas/nova/page.tsx (contexto: academico, linhas: 431)
 - [REAL] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (contexto: admin, linhas: 2)
-- [PLACEHOLDER] /admin/colaboradores/centros-custo - src/app/(private)/admin/colaboradores/centros-custo/page.tsx (contexto: admin, linhas: 18)
+- [PLACEHOLDER] /admin/colaboradores/centros-custo - src/app/(private)/admin/colaboradores/centros-custo/page.tsx (contexto: admin, linhas: 12)
 - [PLACEHOLDER] /admin/colaboradores/jornadas - src/app/(private)/admin/colaboradores/jornadas/page.tsx (contexto: admin, linhas: 18)
 - [REAL] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (contexto: admin, linhas: 2)
 - [REAL] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (contexto: admin, linhas: 2)
@@ -103,7 +103,7 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 - [PLACEHOLDER] /comunicacao/emails - src/app/(private)/comunicacao/emails/page.tsx (contexto: outros, linhas: 4)
 - [PLACEHOLDER] /comunicacao/mensagens - src/app/(private)/comunicacao/mensagens/page.tsx (contexto: outros, linhas: 4)
 - [PLACEHOLDER] /comunicacao/templates - src/app/(private)/comunicacao/templates/page.tsx (contexto: outros, linhas: 4)
-- [PLACEHOLDER] /config/colaboradores - src/app/(private)/config/colaboradores/page.tsx (contexto: outros, linhas: 642)
+- [PLACEHOLDER] /config/colaboradores - src/app/(private)/config/colaboradores/page.tsx (contexto: outros, linhas: 605)
 - [REAL] /config/colaboradores/tipos-funcao - src/app/(private)/config/colaboradores/tipos-funcao/page.tsx (contexto: outros, linhas: 387)
 - [PLACEHOLDER] /config/colaboradores/tipos-vinculo - src/app/(private)/config/colaboradores/tipos-vinculo/page.tsx (contexto: outros, linhas: 294)
 - [PLACEHOLDER] /config/comercial/ballet-cafe - src/app/(private)/config/comercial/ballet-cafe/page.tsx (contexto: outros, linhas: 11)
@@ -173,10 +173,10 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
   - /admin/financeiro/cartao/configuracoes (818 linhas) - src/app/(private)/admin/financeiro/cartao/configuracoes/page.tsx
   - /matriculas/novo (810 linhas) - src/app/(private)/matriculas/novo/page.tsx
   - /academico/cursos (675 linhas) - src/app/(private)/academico/cursos/page.tsx
-  - /config/colaboradores (642 linhas) - src/app/(private)/config/colaboradores/page.tsx
   - /admin/loja/categorias (627 linhas) - src/app/(private)/admin/loja/categorias/page.tsx
   - /loja/produtos (621 linhas) - src/app/(private)/loja/produtos/page.tsx
   - /academico/niveis (608 linhas) - src/app/(private)/academico/niveis/page.tsx
+  - /config/colaboradores (605 linhas) - src/app/(private)/config/colaboradores/page.tsx
   - /admin/loja/compras (598 linhas) - src/app/(private)/admin/loja/compras/page.tsx
   - /admin/financeiro (587 linhas) - src/app/(private)/admin/financeiro/page.tsx
   - /admin/financeiro/contas-pagar (539 linhas) - src/app/(private)/admin/financeiro/contas-pagar/page.tsx

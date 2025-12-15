@@ -19,7 +19,6 @@ export const adminSidebar: SidebarSection[] = [
     id: "admin-colaboradores",
     title: "Colaboradores",
     items: [
-      { label: "🧾 Centros de custo / centros base", href: "/admin/colaboradores/centros-custo" },
       { label: "👥 Gestão de colaboradores", href: "/admin/colaboradores" },
       { label: "🔗 Tipos de vínculo", href: "/admin/colaboradores/tipos-vinculo" },
       { label: "🧩 Tipos de função", href: "/admin/colaboradores/tipos-funcao" },

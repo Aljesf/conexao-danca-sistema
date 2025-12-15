@@ -1,8 +1,8 @@
 # Estado atual das rotas - Geral
-Atualizado em: 2025-12-15 16:28
+Atualizado em: 2025-12-15 17:18
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T16:28:41.871Z
+Auditado em: 2025-12-15T17:18:05.388Z
 
 ## Rotas
 - [PLACEHOLDER] /academico/avaliacoes - src/app/(private)/academico/avaliacoes/page.tsx (linhas: 93)
@@ -28,7 +28,7 @@ Auditado em: 2025-12-15T16:28:41.871Z
 - [PLACEHOLDER] /academico/turmas/grade - src/app/(private)/academico/turmas/grade/page.tsx (linhas: 4)
 - [PLACEHOLDER] /academico/turmas/nova - src/app/(private)/academico/turmas/nova/page.tsx (linhas: 431)
 - [REAL] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 2)
-- [PLACEHOLDER] /admin/colaboradores/centros-custo - src/app/(private)/admin/colaboradores/centros-custo/page.tsx (linhas: 18)
+- [PLACEHOLDER] /admin/colaboradores/centros-custo - src/app/(private)/admin/colaboradores/centros-custo/page.tsx (linhas: 12)
 - [PLACEHOLDER] /admin/colaboradores/jornadas - src/app/(private)/admin/colaboradores/jornadas/page.tsx (linhas: 18)
 - [REAL] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (linhas: 2)
 - [REAL] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (linhas: 2)
@@ -105,7 +105,7 @@ Auditado em: 2025-12-15T16:28:41.871Z
 - [PLACEHOLDER] /comunicacao/emails - src/app/(private)/comunicacao/emails/page.tsx (linhas: 4)
 - [PLACEHOLDER] /comunicacao/mensagens - src/app/(private)/comunicacao/mensagens/page.tsx (linhas: 4)
 - [PLACEHOLDER] /comunicacao/templates - src/app/(private)/comunicacao/templates/page.tsx (linhas: 4)
-- [PLACEHOLDER] /config/colaboradores - src/app/(private)/config/colaboradores/page.tsx (linhas: 642)
+- [PLACEHOLDER] /config/colaboradores - src/app/(private)/config/colaboradores/page.tsx (linhas: 605)
 - [REAL] /config/colaboradores/tipos-funcao - src/app/(private)/config/colaboradores/tipos-funcao/page.tsx (linhas: 387)
 - [PLACEHOLDER] /config/colaboradores/tipos-vinculo - src/app/(private)/config/colaboradores/tipos-vinculo/page.tsx (linhas: 294)
 - [PLACEHOLDER] /config/comercial/ballet-cafe - src/app/(private)/config/comercial/ballet-cafe/page.tsx (linhas: 11)

@@ -6,7 +6,6 @@ import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 
 type Pessoa = { id: number; nome: string | null };
-type CentroCusto = { id: number; nome: string | null };
 type TipoVinculo = { id: number; nome: string | null; codigo: string | null; ativo: boolean | null };
 type Colaborador = {
   id: number;
@@ -87,7 +86,6 @@ function useSupabaseData() {
   const supabase = getSupabaseBrowser();
   const [loading, setLoading] = useState(true);
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
-  const [centros, setCentros] = useState<CentroCusto[]>([]);
   const [tipos, setTipos] = useState<TipoVinculo[]>([]);
   const [funcoes, setFuncoes] = useState<Funcao[]>([]);
   const [funcoesGrupos, setFuncoesGrupos] = useState<FuncaoGrupo[]>([]);
@@ -97,21 +95,18 @@ function useSupabaseData() {
   async function load() {
     setLoading(true);
 
-    const [pessoasRes, centrosRes, tiposRes, funcoesRes, funcoesGrupoRes, colaboradoresRes, colabFuncoesRes] =
-      await Promise.all([
-        supabase.from("pessoas").select("id,nome"),
-        supabase.from("centros_custo").select("id,nome"),
-        supabase.from("tipos_vinculo_colaborador").select("id,nome,codigo,ativo"),
-        supabase.from("funcoes_colaborador").select("id,nome,grupo_id,descricao,ativo"),
-        supabase.from("funcoes_grupo").select("id,nome,pode_lecionar,ativo"),
-        supabase
-          .from("colaboradores")
-          .select("id,pessoa_id,centro_custo_id,tipo_vinculo_id,data_inicio,data_fim,observacoes,ativo"),
-        supabase.from("colaborador_funcoes").select("id,colaborador_id,funcao_id,ativo,principal"),
-      ]);
+    const [pessoasRes, tiposRes, funcoesRes, funcoesGrupoRes, colaboradoresRes, colabFuncoesRes] = await Promise.all([
+      supabase.from("pessoas").select("id,nome"),
+      supabase.from("tipos_vinculo_colaborador").select("id,nome,codigo,ativo"),
+      supabase.from("funcoes_colaborador").select("id,nome,grupo_id,descricao,ativo"),
+      supabase.from("funcoes_grupo").select("id,nome,pode_lecionar,ativo"),
+      supabase
+        .from("colaboradores")
+        .select("id,pessoa_id,centro_custo_id,tipo_vinculo_id,data_inicio,data_fim,observacoes,ativo"),
+      supabase.from("colaborador_funcoes").select("id,colaborador_id,funcao_id,ativo,principal"),
+    ]);
 
     setPessoas(pessoasRes.data ?? []);
-    setCentros(centrosRes.data ?? []);
     setTipos(tiposRes.data ?? []);
     setFuncoes(funcoesRes.data ?? []);
     setFuncoesGrupos(funcoesGrupoRes.data ?? []);
@@ -140,7 +135,6 @@ function useSupabaseData() {
     supabase,
     loading,
     pessoas,
-    centros,
     tipos,
     funcoes,
     funcoesGrupos,
@@ -158,16 +152,15 @@ function formatDate(dateStr?: string | null) {
 }
 
 function ColaboradoresPage() {
-  const { supabase, loading, load, pessoas, centros, tipos, funcoes, funcoesGrupos, colaboradores, colabFuncoes, refreshColaboradores, refreshFuncoes } =
+  const { supabase, loading, load, pessoas, tipos, funcoes, funcoesGrupos, colaboradores, colabFuncoes, refreshColaboradores, refreshFuncoes } =
     useSupabaseData();
 
-  const [filters, setFilters] = useState({ centro: "all", tipo: "all", status: "ativos" });
+  const [filters, setFilters] = useState({ tipo: "all", status: "ativos" });
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     pessoa_id: null as number | null,
-    centro_custo_id: null as number | null,
     tipo_vinculo_id: null as number | null,
     data_inicio: "",
     data_fim: "",
@@ -220,7 +213,6 @@ function ColaboradoresPage() {
   const colaboradoresFiltrados = useMemo(() => {
     return colaboradores.filter((c) => {
       if (filters.status === "ativos" && !c.ativo) return false;
-      if (filters.centro !== "all" && c.centro_custo_id !== Number(filters.centro)) return false;
       if (filters.tipo !== "all" && c.tipo_vinculo_id !== Number(filters.tipo)) return false;
       return true;
     });
@@ -230,7 +222,6 @@ function ColaboradoresPage() {
     setEditingId(null);
     setForm({
       pessoa_id: null,
-      centro_custo_id: null,
       tipo_vinculo_id: null,
       data_inicio: "",
       data_fim: "",
@@ -250,7 +241,6 @@ function ColaboradoresPage() {
     setEditingId(colab.id);
     setForm({
       pessoa_id: colab.pessoa_id,
-      centro_custo_id: colab.centro_custo_id,
       tipo_vinculo_id: colab.tipo_vinculo_id,
       data_inicio: formatDate(colab.data_inicio),
       data_fim: formatDate(colab.data_fim),
@@ -342,7 +332,9 @@ function ColaboradoresPage() {
     let colabId = editingId;
     const payload = {
       pessoa_id: form.pessoa_id,
-      centro_custo_id: form.centro_custo_id,
+      // Centro de custo n�o � mais atribu�do diretamente ao colaborador.
+      // A origem financeira � definida no modelo de pagamento.
+      centro_custo_id: null,
       tipo_vinculo_id: form.tipo_vinculo_id,
       data_inicio: form.data_inicio || null,
       data_fim: form.data_fim || null,
@@ -384,9 +376,9 @@ function ColaboradoresPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-slate-800">Gestão de colaboradores</h1>
+              <h1 className="text-xl font-semibold text-slate-800">Gest�o de colaboradores</h1>
               <p className="text-sm text-slate-600">
-                Central para cadastro e funções dos colaboradores da escola, loja e café.
+                Central para cadastro e fun��es dos colaboradores da escola, loja e caf�.
               </p>
             </div>
             <button
@@ -401,9 +393,9 @@ function ColaboradoresPage() {
         <FinanceHelpCard
           subtitle="Entenda esta tela"
           items={[
-            "Todo colaborador está ligado a uma pessoa do cadastro geral.",
-            "Tipos de vínculo definem se o colaborador é CLT, autônomo, convidado, etc.",
-            "Funções definem se o colaborador é professor, administrativo ou apoio.",
+            "Todo colaborador est� ligado a uma pessoa do cadastro geral.",
+            "Tipos de v�nculo definem se o colaborador � CLT, aut�nomo, convidado, etc.",
+            "Fun��es definem se o colaborador � professor, administrativo ou apoio.",
           ]}
         />
 
@@ -411,27 +403,15 @@ function ColaboradoresPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-slate-800">Colaboradores cadastrados</h3>
-              <p className="text-sm text-slate-600">Clique em editar para abrir o formulário.</p>
+              <p className="text-sm text-slate-600">Clique em editar para abrir o formul�rio.</p>
             </div>
             <div className="flex flex-wrap gap-2 text-sm">
-              <select
-                className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
-                value={filters.centro}
-                onChange={(e) => setFilters((f) => ({ ...f, centro: e.target.value }))}
-              >
-                <option value="all">Todos os centros</option>
-                {centros.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              </select>
               <select
                 className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
                 value={filters.tipo}
                 onChange={(e) => setFilters((f) => ({ ...f, tipo: e.target.value }))}
               >
-                <option value="all">Todos os vínculos</option>
+                <option value="all">Todos os v�nculos</option>
                 {tipos
                   .filter((t) => t.ativo)
                   .map((t) => (
@@ -456,25 +436,24 @@ function ColaboradoresPage() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-3 py-2 text-left font-semibold text-slate-700">Nome</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Tipo de vínculo</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Centro base</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Funções</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Tipo de v�nculo</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Fun��es</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-700">Professor?</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-700">Ativo</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Ações</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-700">A��es</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-3 text-sm text-slate-600">
+                    <td colSpan={6} className="px-3 py-3 text-sm text-slate-600">
                       Carregando...
                     </td>
                   </tr>
                 )}
                 {!loading && colaboradoresFiltrados.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-3 text-sm text-slate-600">
+                    <td colSpan={6} className="px-3 py-3 text-sm text-slate-600">
                       Nenhum colaborador encontrado.
                     </td>
                   </tr>
@@ -484,10 +463,9 @@ function ColaboradoresPage() {
                     <tr key={c.id} className="hover:bg-slate-50">
                       <td className="px-3 py-2 text-slate-800">{pessoas.find((p) => p.id === c.pessoa_id)?.nome}</td>
                       <td className="px-3 py-2 text-slate-700">{tipos.find((t) => t.id === c.tipo_vinculo_id)?.nome}</td>
-                      <td className="px-3 py-2 text-slate-700">{centros.find((cc) => cc.id === c.centro_custo_id)?.nome}</td>
-                      <td className="px-3 py-2 text-slate-700">{funcoesTexto(c.id) || "—"}</td>
-                      <td className="px-3 py-2 text-slate-700">{isProfessor(c.id) ? "Sim" : "Não"}</td>
-                      <td className="px-3 py-2 text-slate-700">{c.ativo ? "Sim" : "Não"}</td>
+                      <td className="px-3 py-2 text-slate-700">{funcoesTexto(c.id) || "-"}</td>
+                      <td className="px-3 py-2 text-slate-700">{isProfessor(c.id) ? "Sim" : "N�o"}</td>
+                      <td className="px-3 py-2 text-slate-700">{c.ativo ? "Sim" : "N�o"}</td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -520,7 +498,7 @@ function ColaboradoresPage() {
                 <h3 className="text-lg font-semibold text-slate-900">
                   {editingId ? "Editar colaborador" : "Novo colaborador"}
                 </h3>
-                <p className="text-sm text-slate-600">Inclua os dados e as funções no mesmo fluxo.</p>
+                <p className="text-sm text-slate-600">Inclua os dados e as fun��es no mesmo fluxo.</p>
               </div>
               <button className="text-sm text-slate-600" onClick={() => setShowModal(false)}>
                 Fechar
@@ -537,24 +515,9 @@ function ColaboradoresPage() {
                   placeholder="Selecione a pessoa"
                 />
 
-                <label className="text-sm font-semibold text-slate-700">
-                  Centro de custo base
-                  <select
-                    className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
-                    value={form.centro_custo_id ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, centro_custo_id: e.target.value ? Number(e.target.value) : null }))}
-                  >
-                    <option value="">Selecione</option>
-                    {centros.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome}
-                      </option>
-                    ))}
-                  </select>
-                </label>
 
                 <label className="text-sm font-semibold text-slate-700">
-                  Tipo de vínculo
+                  Tipo de v�nculo
                   <select
                     className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
                     value={form.tipo_vinculo_id ?? ""}
@@ -573,7 +536,7 @@ function ColaboradoresPage() {
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="text-sm font-semibold text-slate-700">
-                    Data início
+                    Data in�cio
                     <input
                       type="date"
                       className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
@@ -603,7 +566,7 @@ function ColaboradoresPage() {
                 </label>
 
                 <label className="text-sm font-semibold text-slate-700">
-                  Observações
+                  Observa��es
                   <textarea
                     className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
                     rows={4}
@@ -615,8 +578,8 @@ function ColaboradoresPage() {
 
               <div className="space-y-3">
                 <div>
-                  <div className="text-sm font-semibold text-slate-800">Funções do colaborador</div>
-                  <div className="text-xs text-slate-600">Selecione funções e marque uma como principal, se quiser.</div>
+                  <div className="text-sm font-semibold text-slate-800">Fun��es do colaborador</div>
+                  <div className="text-xs text-slate-600">Selecione fun��es e marque uma como principal, se quiser.</div>
                 </div>
 
                 <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1">
@@ -637,8 +600,8 @@ function ColaboradoresPage() {
                                   onChange={() => toggleFuncaoSelecionada(f.id)}
                                 />
                                 <div>
-                                  <div className="font-semibold">{f.nome || "Função"}</div>
-                                  <div className="text-xs text-slate-600">{f.descricao || "Sem descrição"}</div>
+                                  <div className="font-semibold">{f.nome || "Fun��o"}</div>
+                                  <div className="text-xs text-slate-600">{f.descricao || "Sem descri��o"}</div>
                                   {grupoPodeLecionar && <div className="text-xs text-emerald-700">Permite lecionar</div>}
                                 </div>
                               </label>
@@ -662,7 +625,7 @@ function ColaboradoresPage() {
 
                   {funcoesAgrupadas.length === 0 && (
                     <div className="rounded border border-slate-200 bg-white p-3 text-sm text-slate-600">
-                      Nenhuma função ativa cadastrada.
+                      Nenhuma fun��o ativa cadastrada.
                     </div>
                   )}
                 </div>
@@ -684,7 +647,7 @@ function ColaboradoresPage() {
                   disabled={saving}
                   className="rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow disabled:opacity-60"
                 >
-                  {editingId ? "Salvar alterações" : "Salvar colaborador"}
+                  {editingId ? "Salvar altera��es" : "Salvar colaborador"}
                 </button>
               </div>
             </form>
@@ -698,3 +661,5 @@ function ColaboradoresPage() {
 export default function Page() {
   return <ColaboradoresPage />;
 }
+
+
