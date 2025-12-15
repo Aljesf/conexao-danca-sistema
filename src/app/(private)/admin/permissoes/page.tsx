@@ -1,3 +1,5 @@
-import PageReal from "@/app/(private)/config/permissoes/page";
+import PlaceholderPage from "@/components/PlaceholderPage";
 
-export default PageReal;
+export default function Page() {
+  return <PlaceholderPage title="Permissões" description="Tela ainda será implementada." />;
+}

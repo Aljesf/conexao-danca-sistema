@@ -1,5 +1,5 @@
 # RELATORIO-DIAGNOSTICO-ROTAS
-Gerado em: 2025-12-15T16:06:55.488Z
+Gerado em: 2025-12-15T16:22:35.880Z
 Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 
 ## A) Rotas reais (page.tsx)
@@ -58,8 +58,8 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 - [PLACEHOLDER] /admin/loja/estoque - src/app/(private)/admin/loja/estoque/page.tsx (contexto: admin, linhas: 5)
 - [PLACEHOLDER] /admin/loja/fornecedores - src/app/(private)/admin/loja/fornecedores/page.tsx (contexto: admin, linhas: 432)
 - [PLACEHOLDER] /admin/loja/gestao-estoque - src/app/(private)/admin/loja/gestao-estoque/page.tsx (contexto: admin, linhas: 2535)
-- [REAL] /admin/perfis - src/app/(private)/admin/perfis/page.tsx (contexto: admin, linhas: 2)
-- [REAL] /admin/permissoes - src/app/(private)/admin/permissoes/page.tsx (contexto: admin, linhas: 2)
+- [PLACEHOLDER] /admin/perfis - src/app/(private)/admin/perfis/page.tsx (contexto: admin, linhas: 4)
+- [PLACEHOLDER] /admin/permissoes - src/app/(private)/admin/permissoes/page.tsx (contexto: admin, linhas: 4)
 - [PLACEHOLDER] /admin/relatorios - src/app/(private)/admin/relatorios/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/grupos - src/app/(private)/admin/relatorios/alunos/grupos/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/status - src/app/(private)/admin/relatorios/alunos/status/page.tsx (contexto: admin, linhas: 18)
@@ -73,7 +73,7 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 - [PLACEHOLDER] /admin/relatorios/financeiro/receber - src/app/(private)/admin/relatorios/financeiro/receber/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/financeiro/resumo - src/app/(private)/admin/relatorios/financeiro/resumo/page.tsx (contexto: admin, linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/social - src/app/(private)/admin/relatorios/social/page.tsx (contexto: admin, linhas: 18)
-- [PLACEHOLDER] /admin/usuarios - src/app/(private)/admin/usuarios/page.tsx (contexto: admin, linhas: 18)
+- [PLACEHOLDER] /admin/usuarios - src/app/(private)/admin/usuarios/page.tsx (contexto: admin, linhas: 4)
 - [REAL] /alunos/curriculo - src/app/(private)/alunos/curriculo/page.tsx (contexto: outros, linhas: 100)
 - [REAL] /avaliacoes/turma/[avaliacaoId]/lancamento - src/app/(private)/avaliacoes/turma/[avaliacaoId]/lancamento/page.tsx (contexto: outros, linhas: 61)
 - [PLACEHOLDER] /calendario - src/app/(private)/calendario/page.tsx (contexto: outros, linhas: 4)
@@ -164,7 +164,7 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
 - src/app/api (rotas): /api/_debug-user, /api/academico/professores/lista-simples, /api/admin/ia, /api/alunos, /api/alunos/[id], /api/auditoria, /api/auditoria/log, /api/cobrancas, /api/curriculo/[pessoaId]/pdf, /api/financeiro/cartao/bandeiras, /api/financeiro/cartao/bandeiras/opcoes, /api/financeiro/cartao/maquinas, /api/financeiro/cartao/maquinas/opcoes, /api/financeiro/cartao/recebiveis, /api/financeiro/cartao/regras, /api/financeiro/categorias, /api/financeiro/categorias-despesa, /api/financeiro/categorias-receita, /api/financeiro/centros-custo, /api/financeiro/cobrancas/registrar-pagamento-presencial, /api/financeiro/cobrancas/reprocessar-classificacao, /api/financeiro/contas-financeiras, /api/financeiro/contas-financeiras/centros, /api/financeiro/contas-pagar, /api/financeiro/contas-pagar/[id], /api/financeiro/contas-pagar/pagar, /api/financeiro/contas-receber, /api/financeiro/contas-receber/receber, /api/financeiro/credito-conexao/contas, /api/financeiro/credito-conexao/faturas, /api/financeiro/credito-conexao/faturas/[id], /api/financeiro/credito-conexao/faturas/[id]/fechar, /api/financeiro/credito-conexao/faturas/[id]/lancamentos, /api/financeiro/credito-conexao/faturas/fechar, /api/financeiro/credito-conexao/faturas/incluir-pendencias, /api/financeiro/credito-conexao/regras-parcelas, /api/financeiro/dashboard, /api/financeiro/dashboard-inteligente, /api/financeiro/dashboard-inteligente/cron-diario, /api/financeiro/dashboard-inteligente/historico, /api/financeiro/dashboard-inteligente/reanalisar, /api/financeiro/formas-pagamento, /api/financeiro/formas-pagamento/dicionario, /api/financeiro/movimento, /api/financeiro/plano-contas, /api/integracoes/neofin/cobrancas/gerar-boleto, /api/integracoes/neofin/cobrancas/sync-boleto, /api/internal/schema, /api/loja/atributos, /api/loja/cadastros, /api/loja/cadastros/[id], /api/loja/categorias, /api/loja/categorias/[id], /api/loja/compras, /api/loja/compras/[id], /api/loja/debug/criar-venda-teste, /api/loja/diagnostico/estoque-movimentos, /api/loja/estoque, /api/loja/estoque/ajuste-manual, /api/loja/estoque/entrada, /api/loja/estoque/movimentos, /api/loja/fornecedores, /api/loja/produtos, /api/loja/produtos/categorias, /api/loja/produtos/subcategorias/[id], /api/loja/variantes, /api/loja/variantes/padrao, /api/loja/vendas, /api/loja/vendas/[id], /api/matriculas/novo, /api/pessoas, /api/pessoas/[id], /api/pessoas/[id]/foto, /api/pessoas/busca, /api/pessoas/rapido, /api/professores, /api/professores/[id], /api/teste, /api/turmas, /api/turmas/busca, /api/usuarios/create-from-pessoa
 
 ## D) Contagens e ranking
-- Totais -> REAL: 34, PLACEHOLDER: 112, SUSPEITA: 4, Total: 150
+- Totais -> REAL: 32, PLACEHOLDER: 114, SUSPEITA: 4, Total: 150
 - Top 20 maiores páginas (por linhas):
   - /admin/loja/gestao-estoque (2535 linhas) - src/app/(private)/admin/loja/gestao-estoque/page.tsx
   - /loja/caixa (1712 linhas) - src/app/(private)/loja/caixa/page.tsx
@@ -190,11 +190,12 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
   - /admin/colaboradores (2 linhas) - src/app/(private)/admin/colaboradores/page.tsx
   - /admin/colaboradores/tipos-funcao (2 linhas) - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx
   - /admin/colaboradores/tipos-vinculo (2 linhas) - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx
-  - /admin/perfis (2 linhas) - src/app/(private)/admin/perfis/page.tsx
-  - /admin/permissoes (2 linhas) - src/app/(private)/admin/permissoes/page.tsx
   - /academico/frequencia (4 linhas) - src/app/(private)/academico/frequencia/page.tsx
   - /academico/modalidades (4 linhas) - src/app/(private)/academico/modalidades/page.tsx
   - /academico/turmas/grade (4 linhas) - src/app/(private)/academico/turmas/grade/page.tsx
+  - /admin/perfis (4 linhas) - src/app/(private)/admin/perfis/page.tsx
+  - /admin/permissoes (4 linhas) - src/app/(private)/admin/permissoes/page.tsx
+  - /admin/usuarios (4 linhas) - src/app/(private)/admin/usuarios/page.tsx
   - /calendario (4 linhas) - src/app/(private)/calendario/page.tsx
   - /calendario/eventos-externos (4 linhas) - src/app/(private)/calendario/eventos-externos/page.tsx
   - /calendario/eventos-internos (4 linhas) - src/app/(private)/calendario/eventos-internos/page.tsx
@@ -206,6 +207,5 @@ Fonte: varredura do filesystem (scripts/auditarRotas.ts)
   - /comercial/ballet-cafe/categorias (4 linhas) - src/app/(private)/comercial/ballet-cafe/categorias/page.tsx
   - /comercial/ballet-cafe/compras (4 linhas) - src/app/(private)/comercial/ballet-cafe/compras/page.tsx
   - /comercial/ballet-cafe/estoque (4 linhas) - src/app/(private)/comercial/ballet-cafe/estoque/page.tsx
-  - /comercial/ballet-cafe/financeiro (4 linhas) - src/app/(private)/comercial/ballet-cafe/financeiro/page.tsx
 
 > Status calculado por heurística simples: REAL (conteúdo/tabelas/fetch), PLACEHOLDER (muito curto ou contém TODO/placeholder), SUSPEITA (mínimo de código sem sinais claros).

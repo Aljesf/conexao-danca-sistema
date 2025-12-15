@@ -33,7 +33,7 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🚧 👤 Usuários", href: "/admin/usuarios" },
       { label: "🚧 🧬 Perfis", href: "/admin/perfis" },
       { label: "🚧 🔐 Permissões", href: "/admin/permissoes" },
-      { label: "🚧 🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" },
+      { label: "🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" },
     ],
   },
   {

@@ -1,3 +1,5 @@
-import PageReal from "@/app/(private)/config/perfis/page";
+import PlaceholderPage from "@/components/PlaceholderPage";
 
-export default PageReal;
+export default function Page() {
+  return <PlaceholderPage title="Perfis" description="Tela ainda será implementada." />;
+}
