@@ -40,7 +40,7 @@ export async function GET(req: Request) {
       referencia_id,
       observacao,
       created_at,
-      variante:loja_produto_variantes ( id, sku )
+      variante:loja_produto_variantes!fk_loja_movimentos_variante ( id, sku )
     `;
 
     const buildQuery = (select: string) => {
