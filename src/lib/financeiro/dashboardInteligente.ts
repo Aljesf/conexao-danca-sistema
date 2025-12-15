@@ -9,10 +9,37 @@ export type TendenciaValor = {
   descricao?: "BASE_ZERO_SUBIU" | "ZEROU" | "SEM_MOVIMENTO" | null;
 };
 
+export type TendenciaInadimplencia = {
+  valor_atrasado_centavos: number | null;
+  quantidade_titulos_atrasados: number | null;
+  atraso_medio_dias: number | null;
+  tendencia_sinal: "↑" | "↓" | "→" | null;
+  etiqueta?: "base_zero" | "sem_historico" | "reduziu" | "dados_insuficientes" | null;
+  dados_insuficientes?: boolean;
+};
+
+export type TendenciaConcentracaoReceita = {
+  top3_percentual: number | null;
+  top5_percentual: number | null;
+  observacao: string | null;
+  dados_insuficientes?: boolean;
+};
+
+export type TendenciaRecorrenciaReceita = {
+  recorrente_percentual: number | null;
+  pontual_percentual: number | null;
+  base_pagadores: number | null;
+  observacao: string | null;
+  dados_insuficientes?: boolean;
+};
+
 export type TendenciaResumo = {
   entradas: TendenciaValor;
   saidas: TendenciaValor;
   resultado: TendenciaValor;
+  inadimplencia?: TendenciaInadimplencia | null;
+  concentracao_receita?: TendenciaConcentracaoReceita | null;
+  recorrencia_receita?: TendenciaRecorrenciaReceita | null;
 };
 
 export type SerieFluxoItem = {
@@ -171,6 +198,223 @@ function filtrarPorCentro(movs: any[], centroId: number): any[] {
   return movs.filter((m) => Number(m?.centro_custo_id) === centroId);
 }
 
+function diffDias(dataBase: string, dataComparacao: string): number {
+  const base = new Date(`${dataBase}T00:00:00Z`);
+  const comp = new Date(`${dataComparacao}T00:00:00Z`);
+  const diffMs = base.getTime() - comp.getTime();
+  if (Number.isNaN(diffMs) || diffMs <= 0) return 0;
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+type CobrancaAtrasada = { valor_centavos: number; vencimento?: string | null };
+
+function calcularInadimplencia(
+  cobrancasAtrasadas: CobrancaAtrasada[] | null,
+  hoje: string,
+  inicioJanela: string,
+  inicioJanelaAnterior: string
+): TendenciaInadimplencia {
+  if (!Array.isArray(cobrancasAtrasadas)) {
+    return {
+      valor_atrasado_centavos: null,
+      quantidade_titulos_atrasados: null,
+      atraso_medio_dias: null,
+      tendencia_sinal: null,
+      etiqueta: "dados_insuficientes",
+      dados_insuficientes: true,
+    };
+  }
+
+  const fimJanelaAnterior = addDays(inicioJanela, -1);
+  const atrasadas = cobrancasAtrasadas
+    .map((c) => ({
+      valor: Number(c?.valor_centavos || 0) || 0,
+      vencimento: String(c?.vencimento || "").slice(0, 10),
+    }))
+    .filter((c) => c.valor > 0 && c.vencimento && c.vencimento < hoje);
+
+  if (atrasadas.length === 0) {
+    return {
+      valor_atrasado_centavos: 0,
+      quantidade_titulos_atrasados: 0,
+      atraso_medio_dias: null,
+      tendencia_sinal: "→",
+      etiqueta: "sem_historico",
+      dados_insuficientes: false,
+    };
+  }
+
+  const valor_total = atrasadas.reduce((acc, c) => acc + c.valor, 0);
+  const quantidade = atrasadas.length;
+  const atraso_medio =
+    quantidade > 0
+      ? Number(
+          (
+            atrasadas.reduce((acc, c) => acc + diffDias(hoje, c.vencimento), 0) / quantidade
+          ).toFixed(1)
+        )
+      : null;
+
+  const valor_atual = atrasadas
+    .filter((c) => c.vencimento >= inicioJanela && c.vencimento < hoje)
+    .reduce((acc, c) => acc + c.valor, 0);
+  const valor_anterior = atrasadas
+    .filter((c) => c.vencimento >= inicioJanelaAnterior && c.vencimento <= fimJanelaAnterior)
+    .reduce((acc, c) => acc + c.valor, 0);
+
+  let tendencia_sinal: TendenciaInadimplencia["tendencia_sinal"] = "→";
+  let etiqueta: TendenciaInadimplencia["etiqueta"] = null;
+  if (valor_anterior === 0 && valor_atual === 0) {
+    tendencia_sinal = "→";
+    etiqueta = "sem_historico";
+  } else if (valor_anterior === 0 && valor_atual > 0) {
+    tendencia_sinal = "↑";
+    etiqueta = "base_zero";
+  } else if (valor_atual === 0 && valor_anterior > 0) {
+    tendencia_sinal = "↓";
+    etiqueta = "reduziu";
+  } else if (valor_atual > valor_anterior * 1.05) {
+    tendencia_sinal = "↑";
+  } else if (valor_atual < valor_anterior * 0.95) {
+    tendencia_sinal = "↓";
+  }
+
+  return {
+    valor_atrasado_centavos: valor_total,
+    quantidade_titulos_atrasados: quantidade,
+    atraso_medio_dias: atraso_medio,
+    tendencia_sinal,
+    etiqueta,
+    dados_insuficientes: false,
+  };
+}
+
+type RecebimentoNormalizado = { valor: number; pessoa_id: number | null; data: string };
+
+function filtrarRecebimentosPorJanela(
+  cobrancasRecebidas: any[] | null,
+  inicioJanela: string,
+  fimJanela: string
+): RecebimentoNormalizado[] | null {
+  if (!Array.isArray(cobrancasRecebidas)) return null;
+  return cobrancasRecebidas
+    .map((c) => {
+      const data = String(c?.data_pagamento || c?.vencimento || "").slice(0, 10);
+      return {
+        valor: Number(c?.valor_centavos || 0) || 0,
+        pessoa_id: c?.pessoa_id ?? null,
+        data,
+      };
+    })
+    .filter((c) => c.valor > 0 && c.data && c.data >= inicioJanela && c.data <= fimJanela);
+}
+
+function calcularConcentracaoReceita(
+  recebimentos: RecebimentoNormalizado[] | null
+): TendenciaConcentracaoReceita {
+  if (!Array.isArray(recebimentos)) {
+    return {
+      top3_percentual: null,
+      top5_percentual: null,
+      observacao: "dados insuficientes",
+      dados_insuficientes: true,
+    };
+  }
+
+  if (recebimentos.length === 0) {
+    return {
+      top3_percentual: null,
+      top5_percentual: null,
+      observacao: "sem dados",
+      dados_insuficientes: true,
+    };
+  }
+
+  const total = recebimentos.reduce((acc, r) => acc + r.valor, 0);
+  if (total <= 0) {
+    return {
+      top3_percentual: null,
+      top5_percentual: null,
+      observacao: "sem dados",
+      dados_insuficientes: true,
+    };
+  }
+
+  const porPessoa = new Map<string, number>();
+  recebimentos.forEach((r) => {
+    const key = r.pessoa_id !== null ? String(r.pessoa_id) : "__sem_pessoa__";
+    porPessoa.set(key, (porPessoa.get(key) || 0) + r.valor);
+  });
+  const valoresOrdenados = Array.from(porPessoa.values()).sort((a, b) => b - a);
+  const somaTop3 = valoresOrdenados.slice(0, 3).reduce((acc, v) => acc + v, 0);
+  const somaTop5 = valoresOrdenados.slice(0, 5).reduce((acc, v) => acc + v, 0);
+
+  return {
+    top3_percentual: Number(((somaTop3 / total) * 100).toFixed(1)),
+    top5_percentual: Number(((somaTop5 / total) * 100).toFixed(1)),
+    observacao: null,
+    dados_insuficientes: false,
+  };
+}
+
+function calcularRecorrenciaReceita(
+  recebimentos: RecebimentoNormalizado[] | null
+): TendenciaRecorrenciaReceita {
+  if (!Array.isArray(recebimentos)) {
+    return {
+      recorrente_percentual: null,
+      pontual_percentual: null,
+      base_pagadores: null,
+      observacao: "dados insuficientes",
+      dados_insuficientes: true,
+    };
+  }
+
+  if (recebimentos.length === 0) {
+    return {
+      recorrente_percentual: null,
+      pontual_percentual: null,
+      base_pagadores: 0,
+      observacao: "sem dados",
+      dados_insuficientes: true,
+    };
+  }
+
+  const total = recebimentos.reduce((acc, r) => acc + r.valor, 0);
+  if (total <= 0) {
+    return {
+      recorrente_percentual: null,
+      pontual_percentual: null,
+      base_pagadores: recebimentos.length,
+      observacao: "sem dados",
+      dados_insuficientes: true,
+    };
+  }
+
+  const porPessoa = new Map<string, { valor: number; qtd: number }>();
+  recebimentos.forEach((r) => {
+    const key = r.pessoa_id !== null ? String(r.pessoa_id) : "__sem_pessoa__";
+    const atual = porPessoa.get(key) || { valor: 0, qtd: 0 };
+    porPessoa.set(key, { valor: atual.valor + r.valor, qtd: atual.qtd + 1 });
+  });
+
+  let valorRecorrente = 0;
+  let valorPontual = 0;
+  porPessoa.forEach((v) => {
+    if (v.qtd > 1) valorRecorrente += v.valor;
+    else valorPontual += v.valor;
+  });
+
+  return {
+    recorrente_percentual: Number(((valorRecorrente / total) * 100).toFixed(1)),
+    pontual_percentual: Number(((valorPontual / total) * 100).toFixed(1)),
+    base_pagadores: porPessoa.size,
+    observacao:
+      valorRecorrente > valorPontual ? "predominio_recorrente" : "predominio_pontual",
+    dados_insuficientes: false,
+  };
+}
+
 async function carregarCentrosAtivos(
   supabase: SupabaseClient
 ): Promise<Array<{ id: number; codigo: string | null; nome: string | null }>> {
@@ -234,6 +478,21 @@ export async function gerarSnapshot(
     .gte("vencimento", `${hoje}T00:00:00`)
     .lte("vencimento", `${fimSerieFutura}T23:59:59`);
   if (errPagar) throw errPagar;
+
+  const { data: cobrancasAtrasadas, error: errCobAtrasadas } = await supabase
+    .from("cobrancas")
+    .select("valor_centavos, status, vencimento")
+    .lt("vencimento", `${hoje}T00:00:00`)
+    .neq("status", "RECEBIDO");
+  if (errCobAtrasadas) throw errCobAtrasadas;
+
+  const { data: cobrancasRecebidas, error: errCobRecebidas } = await supabase
+    .from("cobrancas")
+    .select("valor_centavos, status, vencimento, data_pagamento, pessoa_id")
+    .eq("status", "RECEBIDO")
+    .gte("data_pagamento", `${inicioJanela}T00:00:00`)
+    .lte("data_pagamento", `${hoje}T23:59:59`);
+  if (errCobRecebidas) throw errCobRecebidas;
 
   const movimentosTodos = [...(movimentosAntes || []), ...(movimentos || [])];
   const saldoMovimentos = somaMovimentos(movimentosTodos);
@@ -402,6 +661,16 @@ export async function gerarSnapshot(
     });
   }
 
+  const inadimplencia = calcularInadimplencia(
+    cobrancasAtrasadas,
+    hoje,
+    inicioJanela,
+    inicioJanelaAnterior
+  );
+  const recebimentos30d = filtrarRecebimentosPorJanela(cobrancasRecebidas, inicioJanela, hoje);
+  const concentracao_receita = calcularConcentracaoReceita(recebimentos30d);
+  const recorrencia_receita = calcularRecorrenciaReceita(recebimentos30d);
+
   const snapshot: SnapshotFinanceiro = {
     data_base: hoje,
     periodo_inicio: inicioJanela,
@@ -415,6 +684,9 @@ export async function gerarSnapshot(
       entradas: entradasTrend,
       saidas: saidasTrend,
       resultado: resultadoTrend,
+      inadimplencia,
+      concentracao_receita,
+      recorrencia_receita,
     },
     resumo_por_centro,
     serie_fluxo_caixa,
