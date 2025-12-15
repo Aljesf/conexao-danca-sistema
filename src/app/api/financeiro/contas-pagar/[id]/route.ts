@@ -40,13 +40,19 @@ export async function GET(
         centro_custo_id,
         categoria_id,
         pessoa_id,
+        centro_custo_id,
+        categoria_id,
+        pessoa_id,
         descricao,
         valor_centavos,
         vencimento,
         data_pagamento,
         status,
         metodo_pagamento,
-        observacoes
+        observacoes,
+        centros_custo:centro_custo_id (codigo, nome),
+        categorias_financeiras:categoria_id (codigo, nome, tipo),
+        pessoas:pessoa_id (nome)
       `
       )
       .eq("id", idNum)
@@ -97,7 +103,13 @@ export async function GET(
       ok: true,
       data: {
         ...conta,
+        centro_custo_codigo: (conta as any)?.centros_custo?.codigo ?? null,
+        centro_custo_nome: (conta as any)?.centros_custo?.nome ?? null,
+        categoria_codigo: (conta as any)?.categorias_financeiras?.codigo ?? null,
+        categoria_nome: (conta as any)?.categorias_financeiras?.nome ?? null,
+        pessoa_nome: (conta as any)?.pessoas?.nome ?? null,
         total_pago_centavos: totalPago,
+        saldo_centavos: Math.max(Number((conta as any)?.valor_centavos || 0) - totalPago, 0),
         pagamentos: pagamentos ?? [],
       },
     });

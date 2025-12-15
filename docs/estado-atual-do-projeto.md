@@ -13,6 +13,17 @@
 - Regras de calculo: caixa_hoje = sum movimentos ate hoje; entradas_30d = cobrancas pendentes por vencimento; saidas_30d = contas_pagar pendentes por vencimento; folego = caixa/(saidas/30); tendencia compara janela 30d atual vs anterior; serie 90d historico + 30d futuro; alertas simples (folego<10, saidas +20%, entradas -20%).
 - Segurança: payload enviado ao GPT e restrito ao snapshot enxuto (sem dados pessoais); se OPENAI_API_KEY ausente, apenas alertas calculados sao retornados.
 
+## Contas a pagar (Admin)
+- Tela `/admin/financeiro/contas-pagar` usa dados reais via `GET /api/financeiro/contas-pagar` (sem seeds).
+- Registro de pagamento via `POST /api/financeiro/contas-pagar/pagar` insere em `contas_pagar_pagamentos`, cria `movimento_financeiro` (DESPESA) e atualiza status/saldo.
+- Detalhe via `GET /api/financeiro/contas-pagar/[id]` retorna pagamentos, `total_pago_centavos` e `saldo_centavos` (`saldo = max(valor_centavos - sum(principal+juros-desconto), 0)`).
+- Ordenação: vencimento asc, id desc; filtros: status, centro_custo_id, categoria_id, pessoa_id, data_inicio/data_fim (vencimento).
+
+## Contas a receber (Admin)
+- Tela `/admin/financeiro/contas-receber` consome `GET /api/financeiro/contas-receber`.
+- Registro de recebimento via `POST /api/financeiro/contas-receber/receber` insere em `recebimentos`, cria `movimento_financeiro` (ENTRADA origem=COBRANCA) e seta status RECEBIDO quando saldo zera.
+- Cálculo: `total_recebido_centavos = sum(recebimentos.valor_centavos)`; `saldo_centavos = max(valor_centavos - total_recebido_centavos, 0)`; ordenação por vencimento asc, id desc; filtros: status, centro_custo_id, pessoa_id, data_inicio/data_fim.
+
 ## Centros de custo
 - **FIN (Intermediacao Financeira)** - ponto central para registrar recebimentos quando a cobranca nao tem centro definido.
 - **ESC / CAF** - usados como destino direto para cobrancas de origem ESCOLA ou CAFE (quando configurados).

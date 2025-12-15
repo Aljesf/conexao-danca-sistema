@@ -1,254 +1,347 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
-
-// Segue modelo docs/modelo_financeiro.md. Dados mockados; conectar Supabase (tabela cobrancas) futuramente.
-
-type StatusCobranca = "PENDENTE" | "PAGO" | "ATRASADO";
-type Centro = "ESCOLA" | "LOJA" | "CAFE";
+import { formatBRLFromCents } from "@/lib/formatters/money";
+import { formatDateISO } from "@/lib/formatters/date";
 
 type Cobranca = {
   id: number;
-  pessoa: string;
   descricao: string;
-  valorCentavos: number;
-  vencimento: string;
-  status: StatusCobranca;
-  centroCusto: Centro;
-  origemTipo: string;
-  linkPagamento?: string;
+  valor_centavos: number;
+  vencimento: string | null;
+  status: string;
+  pessoa_nome?: string | null;
+  centro_custo_nome?: string | null;
+  centro_custo_codigo?: string | null;
+  total_recebido_centavos: number;
+  saldo_centavos: number;
 };
 
-const seedCobrancas: Cobranca[] = [
-  {
-    id: 1,
-    pessoa: "Ana Souza",
-    descricao: "Mensalidade Outubro",
-    valorCentavos: 32000,
-    vencimento: "2025-10-10",
-    status: "PENDENTE",
-    centroCusto: "ESCOLA",
-    origemTipo: "MENSALIDADE",
-    linkPagamento: "https://pagamento.exemplo/1",
-  },
-  {
-    id: 2,
-    pessoa: "Bruno Lima",
-    descricao: "Workshop Jazz",
-    valorCentavos: 15000,
-    vencimento: "2025-10-05",
-    status: "ATRASADO",
-    centroCusto: "ESCOLA",
-    origemTipo: "WORKSHOP",
-  },
-  {
-    id: 3,
-    pessoa: "Cliente Loja",
-    descricao: "Compra Loja - Pedido #123",
-    valorCentavos: 8900,
-    vencimento: "2025-10-12",
-    status: "PENDENTE",
-    centroCusto: "LOJA",
-    origemTipo: "VENDA_LOJA",
-  },
-  {
-    id: 4,
-    pessoa: "Maria Café",
-    descricao: "Encomenda Café",
-    valorCentavos: 4500,
-    vencimento: "2025-10-03",
-    status: "PAGO",
-    centroCusto: "CAFE",
-    origemTipo: "VENDA_CAFE",
-  },
-];
+type ListResponse = {
+  ok: boolean;
+  cobrancas?: Cobranca[];
+  error?: string;
+};
 
-function formatBRL(v: number) {
-  return (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+type ReceberResponse = {
+  ok: boolean;
+  error?: string;
+};
+
+type ReceberForm = {
+  valor_centavos: number;
+  data_pagamento: string;
+  metodo_pagamento: string;
+  observacoes: string;
+};
+
+const STATUS_OPCOES = ["TODOS", "PENDENTE", "RECEBIDO", "PAGO"] as const;
+
+function hojeISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function ContasReceberPage() {
-  const [lista, setLista] = useState<Cobranca[]>(seedCobrancas);
-  const [filtros, setFiltros] = useState<{ status: StatusCobranca | "TODOS"; centro: Centro | "TODOS"; busca: string }>({
-    status: "TODOS",
-    centro: "TODOS",
-    busca: "",
+  const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [statusFiltro, setStatusFiltro] = useState<(typeof STATUS_OPCOES)[number]>("TODOS");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [modalCobranca, setModalCobranca] = useState<Cobranca | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [form, setForm] = useState<ReceberForm>({
+    valor_centavos: 0,
+    data_pagamento: hojeISO(),
+    metodo_pagamento: "PIX",
+    observacoes: "",
   });
 
-  const filtradas = useMemo(() => {
-    return lista.filter((c) => {
-      const statusOk = filtros.status === "TODOS" || c.status === filtros.status;
-      const centroOk = filtros.centro === "TODOS" || c.centroCusto === filtros.centro;
-      const busca = filtros.busca.toLowerCase().trim();
-      const buscaOk =
-        !busca ||
-        c.pessoa.toLowerCase().includes(busca) ||
-        c.descricao.toLowerCase().includes(busca) ||
-        c.origemTipo.toLowerCase().includes(busca);
-      return statusOk && centroOk && buscaOk;
-    });
-  }, [lista, filtros]);
-
-  function marcarPago(id: number) {
-    setLista((prev) => prev.map((c) => (c.id === id ? { ...c, status: "PAGO" } : c)));
+  async function loadCobrancas() {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (statusFiltro && statusFiltro !== "TODOS") params.set("status", statusFiltro);
+      if (dataInicio) params.set("data_inicio", dataInicio);
+      if (dataFim) params.set("data_fim", dataFim);
+      const res = await fetch(`/api/financeiro/contas-receber?${params.toString()}`);
+      const json = (await res.json()) as ListResponse;
+      if (!res.ok || !json?.ok || !json.cobrancas) {
+        throw new Error(json?.error || "Erro ao carregar contas a receber.");
+      }
+      setCobrancas(json.cobrancas);
+    } catch (err: any) {
+      setError(err?.message || "Erro inesperado ao carregar contas.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const totais = useMemo(() => {
-    return filtradas.reduce(
-      (acc, c) => {
-        if (c.status !== "PAGO") acc.aberto += c.valorCentavos;
-        if (c.status === "ATRASADO") acc.atraso += c.valorCentavos;
-        return acc;
-      },
-      { aberto: 0, atraso: 0 }
-    );
-  }, [filtradas]);
+  useEffect(() => {
+    loadCobrancas();
+  }, []);
+
+  function abrirModal(c: Cobranca) {
+    setModalCobranca(c);
+    setForm({
+      valor_centavos: c.saldo_centavos || c.valor_centavos,
+      data_pagamento: hojeISO(),
+      metodo_pagamento: "PIX",
+      observacoes: "",
+    });
+  }
+
+  async function salvarRecebimento(e: React.FormEvent) {
+    e.preventDefault();
+    if (!modalCobranca) return;
+    setSalvando(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/financeiro/contas-receber/receber", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cobranca_id: modalCobranca.id,
+          valor_centavos: form.valor_centavos,
+          data_pagamento: form.data_pagamento,
+          metodo_pagamento: form.metodo_pagamento,
+          observacoes: form.observacoes || null,
+        }),
+      });
+      const json = (await res.json()) as ReceberResponse;
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Erro ao registrar recebimento.");
+      }
+      setModalCobranca(null);
+      await loadCobrancas();
+    } catch (err: any) {
+      setError(err?.message || "Erro ao registrar recebimento.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  const totalAberto = useMemo(
+    () => cobrancas.reduce((acc, c) => acc + (c.saldo_centavos || 0), 0),
+    [cobrancas]
+  );
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 to-white px-4 py-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4">
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h1 className="text-lg font-semibold text-slate-800">Contas a receber</h1>
-          <p className="text-sm text-slate-600">
-            Base na tabela <strong>cobrancas</strong>. Use o modelo financeiro para integração com Supabase.
-          </p>
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-800">Contas a receber</h1>
+            <p className="text-sm text-slate-600">Dados reais de cobranças e recebimentos.</p>
+          </div>
+          <button
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={loadCobrancas}
+            disabled={loading}
+          >
+            Recarregar
+          </button>
         </div>
-
         <FinanceHelpCard
-          subtitle="Cobranças e recebimentos futuros."
+          subtitle="Operação real"
           items={[
-            "Visualize mensalidades, workshops e outras cobranças.",
-            "Use os filtros para ver cobranças pendentes, pagas ou atrasadas.",
-            "Cada cobrança pertence a um centro de custo.",
-            "No futuro, esta tela será integrada à Nelfim para sincronizar boletos.",
+            "Lista de cobranças filtradas por status e período.",
+            "Total recebido/saldo calculados pelos recebimentos reais.",
+            "Registrar recebimento atualiza saldo e status para RECEBIDO quando zerar.",
           ]}
         />
-
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800">Filtros</h3>
-          <p className="text-sm text-slate-600">Status, centro de custo e busca por pessoa/descrição.</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-4">
-            <label className="text-sm text-slate-700">
-              Status
-              <select
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
-                value={filtros.status}
-                onChange={(e) => setFiltros({ ...filtros, status: e.target.value as StatusCobranca | "TODOS" })}
-              >
-                <option value="TODOS">Todos</option>
-                <option value="PENDENTE">Pendente</option>
-                <option value="PAGO">Pago</option>
-                <option value="ATRASADO">Atrasado</option>
-              </select>
-            </label>
-            <label className="text-sm text-slate-700">
-              Centro de custo
-              <select
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
-                value={filtros.centro}
-                onChange={(e) => setFiltros({ ...filtros, centro: e.target.value as Centro | "TODOS" })}
-              >
-                <option value="TODOS">Todos</option>
-                <option value="ESCOLA">Escola</option>
-                <option value="LOJA">Loja</option>
-                <option value="CAFE">Café</option>
-              </select>
-            </label>
-            <label className="md:col-span-2 text-sm text-slate-700">
-              Buscar (pessoa, descrição, origem)
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800"
-                value={filtros.busca}
-                onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-                placeholder="Digite para filtrar"
-              />
-            </label>
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-600">Em aberto</p>
-              <p className="text-xl font-semibold text-slate-800">{formatBRL(totais.aberto)}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-600">Em atraso</p>
-              <p className="text-xl font-semibold text-rose-700">{formatBRL(totais.atraso)}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm text-slate-600">Filtradas</p>
-              <p className="text-xl font-semibold text-slate-800">{filtradas.length} cobranças</p>
-            </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <label className="text-sm text-slate-700">
+            Status
+            <select
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={statusFiltro}
+              onChange={(e) => setStatusFiltro(e.target.value as any)}
+            >
+              {STATUS_OPCOES.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-slate-700">
+            Vencimento início
+            <input
+              type="date"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+            />
+          </label>
+          <label className="text-sm text-slate-700">
+            Vencimento fim
+            <input
+              type="date"
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex gap-2 text-sm">
+          <button
+            className="rounded-md bg-purple-600 px-3 py-2 text-white shadow-sm hover:bg-purple-500 disabled:opacity-60"
+            onClick={loadCobrancas}
+            disabled={loading}
+          >
+            Aplicar filtros
+          </button>
+          <div className="text-xs text-slate-500 flex items-center gap-2">
+            <span>Total em aberto:</span>
+            <span className="font-semibold text-slate-800">{formatBRLFromCents(totalAberto)}</span>
           </div>
         </div>
+        {error ? (
+          <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {error}
+          </div>
+        ) : null}
+      </div>
 
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-slate-800">Cobranças</h3>
-          <p className="text-sm text-slate-600">Clique em “Marcar como pago” para atualizar o status (UI apenas).</p>
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        {loading ? (
+          <p className="text-sm text-slate-600">Carregando...</p>
+        ) : cobrancas.length === 0 ? (
+          <p className="text-sm text-slate-600">Nenhuma cobrança encontrada.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm text-slate-800">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Pessoa</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Descrição</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Vencimento</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Valor</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Centro</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Origem</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Ações</th>
+                  <th className="px-3 py-2 text-left">Vencimento</th>
+                  <th className="px-3 py-2 text-left">Descrição</th>
+                  <th className="px-3 py-2 text-left">Pessoa</th>
+                  <th className="px-3 py-2 text-left">Centro</th>
+                  <th className="px-3 py-2 text-right">Valor</th>
+                  <th className="px-3 py-2 text-right">Recebido</th>
+                  <th className="px-3 py-2 text-right">Saldo</th>
+                  <th className="px-3 py-2 text-center">Status</th>
+                  <th className="px-3 py-2 text-center">Ação</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtradas.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="px-3 py-2 text-slate-800">{c.pessoa}</td>
-                    <td className="px-3 py-2 text-slate-700">{c.descricao}</td>
-                    <td className="px-3 py-2 text-slate-700">{c.vencimento}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-900">{formatBRL(c.valorCentavos)}</td>
+              <tbody>
+                {cobrancas.map((c) => (
+                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2 text-slate-700">{formatDateISO(c.vencimento)}</td>
                     <td className="px-3 py-2">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          c.status === "PAGO"
-                            ? "bg-green-50 text-green-700"
-                            : c.status === "ATRASADO"
-                            ? "bg-rose-50 text-rose-700"
-                            : "bg-orange-50 text-orange-700"
-                        }`}
-                      >
+                      <div className="font-medium">{c.descricao}</div>
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">{c.pessoa_nome || "--"}</td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {c.centro_custo_nome || c.centro_custo_codigo || "--"}
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatBRLFromCents(c.valor_centavos)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {formatBRLFromCents(c.total_recebido_centavos)}
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatBRLFromCents(c.saldo_centavos)}</td>
+                    <td className="px-3 py-2 text-center">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
                         {c.status}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-slate-700">{c.centroCusto}</td>
-                    <td className="px-3 py-2 text-slate-700">{c.origemTipo}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-2">
-                        {c.status !== "PAGO" && (
-                          <button
-                            onClick={() => marcarPago(c.id)}
-                            className="rounded-full bg-purple-600 px-3 py-1 text-xs font-semibold text-white shadow"
-                          >
-                            Marcar como pago
-                          </button>
-                        )}
-                        {c.linkPagamento && (
-                          <a
-                            href={c.linkPagamento}
-                            className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-purple-700"
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Ver link
-                          </a>
-                        )}
-                      </div>
+                    <td className="px-3 py-2 text-center">
+                      <button
+                        className="rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
+                        disabled={c.status === "RECEBIDO" || c.saldo_centavos <= 0}
+                        onClick={() => abrirModal(c)}
+                      >
+                        Registrar recebimento
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        )}
       </div>
+
+      {modalCobranca ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-10 sm:items-center">
+          <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Recebimento</p>
+                <h2 className="text-lg font-semibold text-slate-800">{modalCobranca.descricao}</h2>
+                <p className="text-sm text-slate-600">
+                  Saldo: {formatBRLFromCents(modalCobranca.saldo_centavos)}
+                </p>
+              </div>
+              <button
+                className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-700 hover:bg-slate-50"
+                onClick={() => setModalCobranca(null)}
+              >
+                Fechar
+              </button>
+            </div>
+
+          <form className="mt-4 space-y-3" onSubmit={salvarRecebimento}>
+            <label className="text-sm text-slate-700">
+              Valor (centavos)
+              <input
+                type="number"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={form.valor_centavos}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, valor_centavos: Number(e.target.value || 0) }))
+                }
+              />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm text-slate-700">
+                Data pagamento
+                <input
+                  type="date"
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  value={form.data_pagamento}
+                  onChange={(e) => setForm((f) => ({ ...f, data_pagamento: e.target.value }))}
+                />
+              </label>
+              <label className="text-sm text-slate-700">
+                Método
+                <input
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  value={form.metodo_pagamento}
+                  onChange={(e) => setForm((f) => ({ ...f, metodo_pagamento: e.target.value }))}
+                />
+              </label>
+            </div>
+            <label className="text-sm text-slate-700">
+              Observações
+              <textarea
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={form.observacoes}
+                onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+                rows={3}
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                onClick={() => setModalCobranca(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="rounded-md bg-purple-600 px-3 py-2 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
+                disabled={salvando}
+              >
+                {salvando ? "Salvando..." : "Confirmar recebimento"}
+              </button>
+            </div>
+          </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
