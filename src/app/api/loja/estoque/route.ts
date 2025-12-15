@@ -217,7 +217,7 @@ export async function POST(req: Request) {
       variante_id,
       tipo: operacao === "ENTRADA" ? "ENTRADA" : "SAIDA",
       origem: "AJUSTE_MANUAL",
-      motivo: "AJUSTE_MANUAL",
+      motivo: null,
       referencia_id: null,
       quantidade,
       saldo_antes,
