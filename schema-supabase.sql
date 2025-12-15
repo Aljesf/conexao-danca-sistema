@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2025-12-12T01:06:48.494Z
+-- Snapshot do schema gerado em 2025-12-15T11:19:18.942Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -334,13 +334,13 @@ CREATE TABLE public."contas_pagar_pagamentos" (
   "desconto_centavos" integer NOT NULL DEFAULT 0,
   "data_pagamento" date NOT NULL,
   "metodo_pagamento" text,
+  "observacoes" text,
+  "usuario_id" uuid,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "forma_pagamento_codigo" text,
   "cartao_maquina_id" bigint,
   "cartao_bandeira_id" bigint,
-  "cartao_numero_parcelas" integer,
-  "observacoes" text,
-  "usuario_id" uuid,
-  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+  "cartao_numero_parcelas" integer
 );
 
 -- --------------------------------------------------
@@ -491,6 +491,39 @@ CREATE TABLE public."enderecos_pessoa" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."financeiro_analises_gpt"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_analises_gpt" (
+  "id" bigint NOT NULL DEFAULT nextval('financeiro_analises_gpt_id_seq'::regclass),
+  "created_at" timestamp with time zone DEFAULT now(),
+  "snapshot_id" bigint,
+  "model" text,
+  "alertas" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "texto_curto" text,
+  "raw" jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+
+-- --------------------------------------------------
+-- Tabela: public."financeiro_snapshots"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_snapshots" (
+  "id" bigint NOT NULL DEFAULT nextval('financeiro_snapshots_id_seq'::regclass),
+  "created_at" timestamp with time zone DEFAULT now(),
+  "data_base" date NOT NULL,
+  "periodo_inicio" date NOT NULL,
+  "periodo_fim" date NOT NULL,
+  "centro_custo_id" bigint,
+  "caixa_hoje_centavos" bigint NOT NULL DEFAULT 0,
+  "entradas_previstas_30d_centavos" bigint NOT NULL DEFAULT 0,
+  "saidas_comprometidas_30d_centavos" bigint NOT NULL DEFAULT 0,
+  "folego_caixa_dias" numeric,
+  "tendencia" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "resumo_por_centro" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "serie_fluxo_caixa" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "regras_alerta" jsonb NOT NULL DEFAULT '[]'::jsonb
+);
+
+-- --------------------------------------------------
 -- Tabela: public."formas_pagamento"
 -- --------------------------------------------------
 CREATE TABLE public."formas_pagamento" (
@@ -564,6 +597,39 @@ CREATE TABLE public."habilidades" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."loja_cores"
+-- --------------------------------------------------
+CREATE TABLE public."loja_cores" (
+  "id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "codigo" text,
+  "hex" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."loja_estoque_movimentos"
+-- --------------------------------------------------
+CREATE TABLE public."loja_estoque_movimentos" (
+  "id" bigint NOT NULL,
+  "produto_id" bigint NOT NULL,
+  "tipo" text NOT NULL,
+  "origem" text NOT NULL,
+  "referencia_id" bigint,
+  "quantidade" integer NOT NULL,
+  "motivo" text,
+  "observacao" text,
+  "saldo_antes" integer,
+  "saldo_depois" integer,
+  "custo_unitario_centavos" integer,
+  "created_by" uuid,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "variante_id" bigint
+);
+
+-- --------------------------------------------------
 -- Tabela: public."loja_fornecedor_precos"
 -- --------------------------------------------------
 CREATE TABLE public."loja_fornecedor_precos" (
@@ -586,6 +652,40 @@ CREATE TABLE public."loja_fornecedores" (
   "codigo_interno" text,
   "ativo" boolean NOT NULL DEFAULT true,
   "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."loja_marcas"
+-- --------------------------------------------------
+CREATE TABLE public."loja_marcas" (
+  "id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."loja_modelos"
+-- --------------------------------------------------
+CREATE TABLE public."loja_modelos" (
+  "id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."loja_numeracoes"
+-- --------------------------------------------------
+CREATE TABLE public."loja_numeracoes" (
+  "id" bigint NOT NULL,
+  "valor" integer NOT NULL,
+  "tipo" text NOT NULL DEFAULT 'CALCADO'::text,
+  "ativo" boolean NOT NULL DEFAULT true,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
@@ -618,7 +718,8 @@ CREATE TABLE public."loja_pedidos_compra_itens" (
   "quantidade_recebida" integer NOT NULL DEFAULT 0,
   "preco_custo_centavos" integer NOT NULL DEFAULT 0,
   "observacoes" text,
-  "quantidade_pedida" integer NOT NULL DEFAULT 0
+  "quantidade_pedida" integer NOT NULL DEFAULT 0,
+  "variante_id" bigint NOT NULL
 );
 
 -- --------------------------------------------------
@@ -667,6 +768,24 @@ CREATE TABLE public."loja_produto_categoria_subcategoria" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."loja_produto_variantes"
+-- --------------------------------------------------
+CREATE TABLE public."loja_produto_variantes" (
+  "id" bigint NOT NULL,
+  "produto_id" bigint NOT NULL,
+  "sku" text NOT NULL,
+  "cor_id" bigint,
+  "numeracao_id" bigint,
+  "tamanho_id" bigint,
+  "estoque_atual" integer NOT NULL DEFAULT 0,
+  "preco_venda_centavos" integer,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."loja_produtos"
 -- --------------------------------------------------
 CREATE TABLE public."loja_produtos" (
@@ -684,7 +803,22 @@ CREATE TABLE public."loja_produtos" (
   "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
   "bloqueado_para_venda" boolean NOT NULL DEFAULT false,
   "categoria_subcategoria_id" bigint,
-  "fornecedor_principal_id" bigint
+  "fornecedor_principal_id" bigint,
+  "marca_id" bigint,
+  "modelo_id" bigint
+);
+
+-- --------------------------------------------------
+-- Tabela: public."loja_tamanhos"
+-- --------------------------------------------------
+CREATE TABLE public."loja_tamanhos" (
+  "id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "tipo" text NOT NULL DEFAULT 'ROUPA'::text,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -698,7 +832,8 @@ CREATE TABLE public."loja_venda_itens" (
   "preco_unitario_centavos" integer NOT NULL,
   "total_centavos" integer NOT NULL,
   "beneficiario_pessoa_id" bigint,
-  "observacoes" text
+  "observacoes" text,
+  "variante_id" bigint
 );
 
 -- --------------------------------------------------
@@ -723,7 +858,9 @@ CREATE TABLE public."loja_vendas" (
   "motivo_cancelamento" text,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
-  "cobranca_id" bigint
+  "cobranca_id" bigint,
+  "conta_conexao_id" bigint,
+  "numero_parcelas" integer
 );
 
 -- --------------------------------------------------
@@ -900,13 +1037,13 @@ CREATE TABLE public."recebimentos" (
   "valor_centavos" integer NOT NULL,
   "data_pagamento" timestamp with time zone NOT NULL,
   "metodo_pagamento" text NOT NULL,
+  "origem_sistema" text,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "forma_pagamento_codigo" text,
   "cartao_maquina_id" bigint,
   "cartao_bandeira_id" bigint,
-  "cartao_numero_parcelas" integer,
-  "origem_sistema" text,
-  "observacoes" text,
-  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+  "cartao_numero_parcelas" integer
 );
 
 -- --------------------------------------------------
@@ -1076,3 +1213,4 @@ CREATE TABLE public."vinculos" (
   "responsavel_id" bigint NOT NULL,
   "parentesco" text
 );
+

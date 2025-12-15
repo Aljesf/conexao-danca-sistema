@@ -1,0 +1,1181 @@
+{
+  "generatedAt": "2025-12-15T11:23:48.239Z",
+  "pages": [
+    {
+      "route": "/academico/avaliacoes",
+      "file": "src/app/(private)/academico/avaliacoes/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 93
+    },
+    {
+      "route": "/academico/avaliacoes/conceitos",
+      "file": "src/app/(private)/academico/avaliacoes/conceitos/page.tsx",
+      "context": "academico",
+      "status": "REAL",
+      "lines": 91
+    },
+    {
+      "route": "/academico/avaliacoes/conceitos/[id]/editar",
+      "file": "src/app/(private)/academico/avaliacoes/conceitos/[id]/editar/page.tsx",
+      "context": "academico",
+      "status": "REAL",
+      "lines": 43
+    },
+    {
+      "route": "/academico/avaliacoes/conceitos/novo",
+      "file": "src/app/(private)/academico/avaliacoes/conceitos/novo/page.tsx",
+      "context": "academico",
+      "status": "SUSPEITA",
+      "lines": 19
+    },
+    {
+      "route": "/academico/avaliacoes/modelos",
+      "file": "src/app/(private)/academico/avaliacoes/modelos/page.tsx",
+      "context": "academico",
+      "status": "REAL",
+      "lines": 89
+    },
+    {
+      "route": "/academico/avaliacoes/modelos/[id]/editar",
+      "file": "src/app/(private)/academico/avaliacoes/modelos/[id]/editar/page.tsx",
+      "context": "academico",
+      "status": "REAL",
+      "lines": 51
+    },
+    {
+      "route": "/academico/avaliacoes/modelos/novo",
+      "file": "src/app/(private)/academico/avaliacoes/modelos/novo/page.tsx",
+      "context": "academico",
+      "status": "SUSPEITA",
+      "lines": 22
+    },
+    {
+      "route": "/academico/curriculo",
+      "file": "src/app/(private)/academico/curriculo/page.tsx",
+      "context": "academico",
+      "status": "REAL",
+      "lines": 82
+    },
+    {
+      "route": "/academico/cursos",
+      "file": "src/app/(private)/academico/cursos/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 675
+    },
+    {
+      "route": "/academico/filtro",
+      "file": "src/app/(private)/academico/filtro/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 140
+    },
+    {
+      "route": "/academico/frequencia",
+      "file": "src/app/(private)/academico/frequencia/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/academico/habilidades",
+      "file": "src/app/(private)/academico/habilidades/page.tsx",
+      "context": "academico",
+      "status": "REAL",
+      "lines": 82
+    },
+    {
+      "route": "/academico/modalidades",
+      "file": "src/app/(private)/academico/modalidades/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/academico/modulos",
+      "file": "src/app/(private)/academico/modulos/page.tsx",
+      "context": "academico",
+      "status": "SUSPEITA",
+      "lines": 23
+    },
+    {
+      "route": "/academico/niveis",
+      "file": "src/app/(private)/academico/niveis/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 608
+    },
+    {
+      "route": "/academico/turmas",
+      "file": "src/app/(private)/academico/turmas/page.tsx",
+      "context": "academico",
+      "status": "REAL",
+      "lines": 82
+    },
+    {
+      "route": "/academico/turmas/[turmaId]",
+      "file": "src/app/(private)/academico/turmas/[turmaId]/page.tsx",
+      "context": "academico",
+      "status": "REAL",
+      "lines": 264
+    },
+    {
+      "route": "/academico/turmas/[turmaId]/avaliacoes/[avaliacaoId]",
+      "file": "src/app/(private)/academico/turmas/[turmaId]/avaliacoes/[avaliacaoId]/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 191
+    },
+    {
+      "route": "/academico/turmas/[turmaId]/avaliacoes/nova",
+      "file": "src/app/(private)/academico/turmas/[turmaId]/avaliacoes/nova/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 115
+    },
+    {
+      "route": "/academico/turmas/[turmaId]/professores/adicionar",
+      "file": "src/app/(private)/academico/turmas/[turmaId]/professores/adicionar/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 106
+    },
+    {
+      "route": "/academico/turmas/grade",
+      "file": "src/app/(private)/academico/turmas/grade/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/academico/turmas/nova",
+      "file": "src/app/(private)/academico/turmas/nova/page.tsx",
+      "context": "academico",
+      "status": "PLACEHOLDER",
+      "lines": 431
+    },
+    {
+      "route": "/admin/colaboradores",
+      "file": "src/app/(private)/admin/colaboradores/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/colaboradores/centros-custo",
+      "file": "src/app/(private)/admin/colaboradores/centros-custo/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/colaboradores/jornadas",
+      "file": "src/app/(private)/admin/colaboradores/jornadas/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/colaboradores/tipos-funcao",
+      "file": "src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/colaboradores/tipos-vinculo",
+      "file": "src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/config/cafe",
+      "file": "src/app/(private)/admin/config/cafe/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/config/escola",
+      "file": "src/app/(private)/admin/config/escola/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/config/loja",
+      "file": "src/app/(private)/admin/config/loja/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/financeiro",
+      "file": "src/app/(private)/admin/financeiro/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 587
+    },
+    {
+      "route": "/admin/financeiro/cartao/configuracoes",
+      "file": "src/app/(private)/admin/financeiro/cartao/configuracoes/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 818
+    },
+    {
+      "route": "/admin/financeiro/cartao/recebiveis",
+      "file": "src/app/(private)/admin/financeiro/cartao/recebiveis/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 250
+    },
+    {
+      "route": "/admin/financeiro/categorias",
+      "file": "src/app/(private)/admin/financeiro/categorias/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 389
+    },
+    {
+      "route": "/admin/financeiro/centros-custo",
+      "file": "src/app/(private)/admin/financeiro/centros-custo/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 206
+    },
+    {
+      "route": "/admin/financeiro/contas-financeiras",
+      "file": "src/app/(private)/admin/financeiro/contas-financeiras/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 342
+    },
+    {
+      "route": "/admin/financeiro/contas-pagar",
+      "file": "src/app/(private)/admin/financeiro/contas-pagar/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 539
+    },
+    {
+      "route": "/admin/financeiro/contas-receber",
+      "file": "src/app/(private)/admin/financeiro/contas-receber/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 489
+    },
+    {
+      "route": "/admin/financeiro/credito-conexao/configuracoes",
+      "file": "src/app/(private)/admin/financeiro/credito-conexao/configuracoes/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 355
+    },
+    {
+      "route": "/admin/financeiro/credito-conexao/contas",
+      "file": "src/app/(private)/admin/financeiro/credito-conexao/contas/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 414
+    },
+    {
+      "route": "/admin/financeiro/credito-conexao/faturas",
+      "file": "src/app/(private)/admin/financeiro/credito-conexao/faturas/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 285
+    },
+    {
+      "route": "/admin/financeiro/credito-conexao/faturas/[id]",
+      "file": "src/app/(private)/admin/financeiro/credito-conexao/faturas/[id]/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 394
+    },
+    {
+      "route": "/admin/financeiro/formas-pagamento",
+      "file": "src/app/(private)/admin/financeiro/formas-pagamento/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 470
+    },
+    {
+      "route": "/admin/financeiro/lancamentos-manuais",
+      "file": "src/app/(private)/admin/financeiro/lancamentos-manuais/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 293
+    },
+    {
+      "route": "/admin/financeiro/movimento",
+      "file": "src/app/(private)/admin/financeiro/movimento/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 260
+    },
+    {
+      "route": "/admin/financeiro/plano-contas",
+      "file": "src/app/(private)/admin/financeiro/plano-contas/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 281
+    },
+    {
+      "route": "/admin/ia",
+      "file": "src/app/(private)/admin/ia/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 161
+    },
+    {
+      "route": "/admin/loja/cadastros",
+      "file": "src/app/(private)/admin/loja/cadastros/page.tsx",
+      "context": "admin",
+      "status": "REAL",
+      "lines": 83
+    },
+    {
+      "route": "/admin/loja/categorias",
+      "file": "src/app/(private)/admin/loja/categorias/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 627
+    },
+    {
+      "route": "/admin/loja/compras",
+      "file": "src/app/(private)/admin/loja/compras/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 598
+    },
+    {
+      "route": "/admin/loja/compras/[id]",
+      "file": "src/app/(private)/admin/loja/compras/[id]/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 826
+    },
+    {
+      "route": "/admin/loja/configuracoes",
+      "file": "src/app/(private)/admin/loja/configuracoes/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 14
+    },
+    {
+      "route": "/admin/loja/estoque",
+      "file": "src/app/(private)/admin/loja/estoque/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 5
+    },
+    {
+      "route": "/admin/loja/fornecedores",
+      "file": "src/app/(private)/admin/loja/fornecedores/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 432
+    },
+    {
+      "route": "/admin/loja/gestao-estoque",
+      "file": "src/app/(private)/admin/loja/gestao-estoque/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 2535
+    },
+    {
+      "route": "/admin/perfis",
+      "file": "src/app/(private)/admin/perfis/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/permissoes",
+      "file": "src/app/(private)/admin/permissoes/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios",
+      "file": "src/app/(private)/admin/relatorios/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/alunos/grupos",
+      "file": "src/app/(private)/admin/relatorios/alunos/grupos/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/alunos/status",
+      "file": "src/app/(private)/admin/relatorios/alunos/status/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/alunos/turmas",
+      "file": "src/app/(private)/admin/relatorios/alunos/turmas/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/auditoria",
+      "file": "src/app/(private)/admin/relatorios/auditoria/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/captacao/conversao",
+      "file": "src/app/(private)/admin/relatorios/captacao/conversao/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/comercial/estoque",
+      "file": "src/app/(private)/admin/relatorios/comercial/estoque/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/comercial/vendas",
+      "file": "src/app/(private)/admin/relatorios/comercial/vendas/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/financeiro/movimento",
+      "file": "src/app/(private)/admin/relatorios/financeiro/movimento/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/financeiro/pagar",
+      "file": "src/app/(private)/admin/relatorios/financeiro/pagar/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/financeiro/receber",
+      "file": "src/app/(private)/admin/relatorios/financeiro/receber/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/financeiro/resumo",
+      "file": "src/app/(private)/admin/relatorios/financeiro/resumo/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/relatorios/social",
+      "file": "src/app/(private)/admin/relatorios/social/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/admin/usuarios",
+      "file": "src/app/(private)/admin/usuarios/page.tsx",
+      "context": "admin",
+      "status": "PLACEHOLDER",
+      "lines": 18
+    },
+    {
+      "route": "/alunos/curriculo",
+      "file": "src/app/(private)/alunos/curriculo/page.tsx",
+      "context": "outros",
+      "status": "REAL",
+      "lines": 100
+    },
+    {
+      "route": "/avaliacoes/turma/[avaliacaoId]/lancamento",
+      "file": "src/app/(private)/avaliacoes/turma/[avaliacaoId]/lancamento/page.tsx",
+      "context": "outros",
+      "status": "REAL",
+      "lines": 61
+    },
+    {
+      "route": "/calendario",
+      "file": "src/app/(private)/calendario/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/calendario/eventos-externos",
+      "file": "src/app/(private)/calendario/eventos-externos/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/calendario/eventos-internos",
+      "file": "src/app/(private)/calendario/eventos-internos/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/calendario/feriados",
+      "file": "src/app/(private)/calendario/feriados/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/captacao",
+      "file": "src/app/(private)/captacao/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/captacao/interessados",
+      "file": "src/app/(private)/captacao/interessados/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/captacao/novo",
+      "file": "src/app/(private)/captacao/novo/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/ballet-cafe",
+      "file": "src/app/(private)/comercial/ballet-cafe/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/ballet-cafe/categorias",
+      "file": "src/app/(private)/comercial/ballet-cafe/categorias/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/ballet-cafe/compras",
+      "file": "src/app/(private)/comercial/ballet-cafe/compras/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/ballet-cafe/estoque",
+      "file": "src/app/(private)/comercial/ballet-cafe/estoque/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/ballet-cafe/financeiro",
+      "file": "src/app/(private)/comercial/ballet-cafe/financeiro/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/ballet-cafe/produtos",
+      "file": "src/app/(private)/comercial/ballet-cafe/produtos/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/ballet-cafe/relatorios",
+      "file": "src/app/(private)/comercial/ballet-cafe/relatorios/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/ballet-cafe/vendas",
+      "file": "src/app/(private)/comercial/ballet-cafe/vendas/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja",
+      "file": "src/app/(private)/comercial/loja/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja/categorias",
+      "file": "src/app/(private)/comercial/loja/categorias/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja/compras",
+      "file": "src/app/(private)/comercial/loja/compras/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja/estoque",
+      "file": "src/app/(private)/comercial/loja/estoque/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja/financeiro",
+      "file": "src/app/(private)/comercial/loja/financeiro/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja/pedidos",
+      "file": "src/app/(private)/comercial/loja/pedidos/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja/produtos",
+      "file": "src/app/(private)/comercial/loja/produtos/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja/relatorios",
+      "file": "src/app/(private)/comercial/loja/relatorios/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comercial/loja/vendas",
+      "file": "src/app/(private)/comercial/loja/vendas/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comunicacao/emails",
+      "file": "src/app/(private)/comunicacao/emails/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comunicacao/mensagens",
+      "file": "src/app/(private)/comunicacao/mensagens/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/comunicacao/templates",
+      "file": "src/app/(private)/comunicacao/templates/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/config/colaboradores",
+      "file": "src/app/(private)/config/colaboradores/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 642
+    },
+    {
+      "route": "/config/colaboradores/tipos-funcao",
+      "file": "src/app/(private)/config/colaboradores/tipos-funcao/page.tsx",
+      "context": "outros",
+      "status": "REAL",
+      "lines": 387
+    },
+    {
+      "route": "/config/colaboradores/tipos-vinculo",
+      "file": "src/app/(private)/config/colaboradores/tipos-vinculo/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 294
+    },
+    {
+      "route": "/config/comercial/ballet-cafe",
+      "file": "src/app/(private)/config/comercial/ballet-cafe/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 11
+    },
+    {
+      "route": "/config/comercial/loja",
+      "file": "src/app/(private)/config/comercial/loja/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 11
+    },
+    {
+      "route": "/config/contratos",
+      "file": "src/app/(private)/config/contratos/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/config/enderecos",
+      "file": "src/app/(private)/config/enderecos/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/config/escola",
+      "file": "src/app/(private)/config/escola/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 11
+    },
+    {
+      "route": "/config/escola/colaboradores",
+      "file": "src/app/(private)/config/escola/colaboradores/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/config/escola/professores",
+      "file": "src/app/(private)/config/escola/professores/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 425
+    },
+    {
+      "route": "/config/integacoes",
+      "file": "src/app/(private)/config/integacoes/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/config/perfis",
+      "file": "src/app/(private)/config/perfis/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/config/permissoes",
+      "file": "src/app/(private)/config/permissoes/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/escola/academico/turmas",
+      "file": "src/app/(private)/escola/academico/turmas/page.tsx",
+      "context": "outros",
+      "status": "REAL",
+      "lines": 76
+    },
+    {
+      "route": "/escola/academico/turmas/nova",
+      "file": "src/app/(private)/escola/academico/turmas/nova/page.tsx",
+      "context": "outros",
+      "status": "REAL",
+      "lines": 262
+    },
+    {
+      "route": "/escola/pessoas",
+      "file": "src/app/(private)/escola/pessoas/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 5
+    },
+    {
+      "route": "/escola/pessoas/[id]",
+      "file": "src/app/(private)/escola/pessoas/[id]/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 9
+    },
+    {
+      "route": "/escola/pessoas/nova",
+      "file": "src/app/(private)/escola/pessoas/nova/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 5
+    },
+    {
+      "route": "/financeiro",
+      "file": "src/app/(private)/financeiro/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 246
+    },
+    {
+      "route": "/financeiro/caixa",
+      "file": "src/app/(private)/financeiro/caixa/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/financeiro/cobrancas/[id]",
+      "file": "src/app/(private)/financeiro/cobrancas/[id]/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 266
+    },
+    {
+      "route": "/financeiro/cobrancas/nova",
+      "file": "src/app/(private)/financeiro/cobrancas/nova/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 40
+    },
+    {
+      "route": "/financeiro/movimentacao",
+      "file": "src/app/(private)/financeiro/movimentacao/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/financeiro/pagar",
+      "file": "src/app/(private)/financeiro/pagar/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/financeiro/receber",
+      "file": "src/app/(private)/financeiro/receber/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/loja/caixa",
+      "file": "src/app/(private)/loja/caixa/page.tsx",
+      "context": "loja",
+      "status": "PLACEHOLDER",
+      "lines": 1712
+    },
+    {
+      "route": "/loja/estoque",
+      "file": "src/app/(private)/loja/estoque/page.tsx",
+      "context": "loja",
+      "status": "PLACEHOLDER",
+      "lines": 425
+    },
+    {
+      "route": "/loja/fornecedores",
+      "file": "src/app/(private)/loja/fornecedores/page.tsx",
+      "context": "loja",
+      "status": "PLACEHOLDER",
+      "lines": 158
+    },
+    {
+      "route": "/loja/produtos",
+      "file": "src/app/(private)/loja/produtos/page.tsx",
+      "context": "loja",
+      "status": "PLACEHOLDER",
+      "lines": 621
+    },
+    {
+      "route": "/loja/vendas",
+      "file": "src/app/(private)/loja/vendas/page.tsx",
+      "context": "loja",
+      "status": "PLACEHOLDER",
+      "lines": 256
+    },
+    {
+      "route": "/loja/vendas/[id]",
+      "file": "src/app/(private)/loja/vendas/[id]/page.tsx",
+      "context": "loja",
+      "status": "PLACEHOLDER",
+      "lines": 345
+    },
+    {
+      "route": "/matriculas",
+      "file": "src/app/(private)/matriculas/page.tsx",
+      "context": "outros",
+      "status": "REAL",
+      "lines": 136
+    },
+    {
+      "route": "/matriculas/novo",
+      "file": "src/app/(private)/matriculas/novo/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 810
+    },
+    {
+      "route": "/movimento/acoes",
+      "file": "src/app/(private)/movimento/acoes/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/movimento/acolhimento",
+      "file": "src/app/(private)/movimento/acolhimento/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/movimento/bolsas",
+      "file": "src/app/(private)/movimento/bolsas/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/movimento/informacoes-sociais",
+      "file": "src/app/(private)/movimento/informacoes-sociais/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/page.tsx",
+      "file": "src/app/(private)/page.tsx",
+      "context": "outros",
+      "status": "SUSPEITA",
+      "lines": 35
+    },
+    {
+      "route": "/pessoas",
+      "file": "src/app/(private)/pessoas/page.tsx",
+      "context": "pessoas",
+      "status": "PLACEHOLDER",
+      "lines": 135
+    },
+    {
+      "route": "/pessoas/[id]",
+      "file": "src/app/(private)/pessoas/[id]/page.tsx",
+      "context": "pessoas",
+      "status": "REAL",
+      "lines": 842
+    },
+    {
+      "route": "/pessoas/[id]/curriculo",
+      "file": "src/app/(private)/pessoas/[id]/curriculo/page.tsx",
+      "context": "pessoas",
+      "status": "REAL",
+      "lines": 339
+    },
+    {
+      "route": "/pessoas/colaboradores",
+      "file": "src/app/(private)/pessoas/colaboradores/page.tsx",
+      "context": "pessoas",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/pessoas/interessados",
+      "file": "src/app/(private)/pessoas/interessados/page.tsx",
+      "context": "pessoas",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/pessoas/nova",
+      "file": "src/app/(private)/pessoas/nova/page.tsx",
+      "context": "pessoas",
+      "status": "PLACEHOLDER",
+      "lines": 329
+    },
+    {
+      "route": "/relatorios",
+      "file": "src/app/(private)/relatorios/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/relatorios/auditoria",
+      "file": "src/app/(private)/relatorios/auditoria/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/turmas",
+      "file": "src/app/(private)/turmas/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 324
+    },
+    {
+      "route": "/turmas/frequencia",
+      "file": "src/app/(private)/turmas/frequencia/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/turmas/grade",
+      "file": "src/app/(private)/turmas/grade/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    },
+    {
+      "route": "/turmas/nova",
+      "file": "src/app/(private)/turmas/nova/page.tsx",
+      "context": "outros",
+      "status": "PLACEHOLDER",
+      "lines": 4
+    }
+  ],
+  "quasiRoutes": [
+    "/academico/turmas/[turmaId]/professores/[profId]/encerrar",
+    "/financeiro/cobrancas/[id]/reenviar"
+  ],
+  "apiRoutes": [
+    "/api/_debug-user",
+    "/api/academico/professores/lista-simples",
+    "/api/admin/ia",
+    "/api/alunos",
+    "/api/alunos/[id]",
+    "/api/auditoria",
+    "/api/auditoria/log",
+    "/api/cobrancas",
+    "/api/curriculo/[pessoaId]/pdf",
+    "/api/financeiro/cartao/bandeiras",
+    "/api/financeiro/cartao/bandeiras/opcoes",
+    "/api/financeiro/cartao/maquinas",
+    "/api/financeiro/cartao/maquinas/opcoes",
+    "/api/financeiro/cartao/recebiveis",
+    "/api/financeiro/cartao/regras",
+    "/api/financeiro/categorias",
+    "/api/financeiro/categorias-despesa",
+    "/api/financeiro/categorias-receita",
+    "/api/financeiro/centros-custo",
+    "/api/financeiro/cobrancas/registrar-pagamento-presencial",
+    "/api/financeiro/cobrancas/reprocessar-classificacao",
+    "/api/financeiro/contas-financeiras",
+    "/api/financeiro/contas-financeiras/centros",
+    "/api/financeiro/contas-pagar",
+    "/api/financeiro/contas-pagar/[id]",
+    "/api/financeiro/contas-pagar/pagar",
+    "/api/financeiro/contas-receber",
+    "/api/financeiro/contas-receber/receber",
+    "/api/financeiro/credito-conexao/contas",
+    "/api/financeiro/credito-conexao/faturas",
+    "/api/financeiro/credito-conexao/faturas/[id]",
+    "/api/financeiro/credito-conexao/faturas/[id]/fechar",
+    "/api/financeiro/credito-conexao/faturas/[id]/lancamentos",
+    "/api/financeiro/credito-conexao/faturas/fechar",
+    "/api/financeiro/credito-conexao/faturas/incluir-pendencias",
+    "/api/financeiro/credito-conexao/regras-parcelas",
+    "/api/financeiro/dashboard",
+    "/api/financeiro/dashboard-inteligente",
+    "/api/financeiro/dashboard-inteligente/cron-diario",
+    "/api/financeiro/dashboard-inteligente/historico",
+    "/api/financeiro/dashboard-inteligente/reanalisar",
+    "/api/financeiro/formas-pagamento",
+    "/api/financeiro/formas-pagamento/dicionario",
+    "/api/financeiro/movimento",
+    "/api/financeiro/plano-contas",
+    "/api/integracoes/neofin/cobrancas/gerar-boleto",
+    "/api/integracoes/neofin/cobrancas/sync-boleto",
+    "/api/internal/schema",
+    "/api/loja/atributos",
+    "/api/loja/cadastros",
+    "/api/loja/cadastros/[id]",
+    "/api/loja/categorias",
+    "/api/loja/categorias/[id]",
+    "/api/loja/compras",
+    "/api/loja/compras/[id]",
+    "/api/loja/debug/criar-venda-teste",
+    "/api/loja/diagnostico/estoque-movimentos",
+    "/api/loja/estoque",
+    "/api/loja/estoque/ajuste-manual",
+    "/api/loja/estoque/entrada",
+    "/api/loja/estoque/movimentos",
+    "/api/loja/fornecedores",
+    "/api/loja/produtos",
+    "/api/loja/produtos/categorias",
+    "/api/loja/produtos/subcategorias/[id]",
+    "/api/loja/variantes",
+    "/api/loja/variantes/padrao",
+    "/api/loja/vendas",
+    "/api/loja/vendas/[id]",
+    "/api/matriculas/novo",
+    "/api/pessoas",
+    "/api/pessoas/[id]",
+    "/api/pessoas/[id]/foto",
+    "/api/pessoas/busca",
+    "/api/pessoas/rapido",
+    "/api/professores",
+    "/api/professores/[id]",
+    "/api/teste",
+    "/api/turmas",
+    "/api/turmas/busca",
+    "/api/usuarios/create-from-pessoa"
+  ],
+  "components": [
+    "components/AppShell.tsx",
+    "components/AuthGuard.tsx",
+    "components/Container.tsx",
+    "components/ContextConfigForm.tsx",
+    "components/ContextSelector.tsx",
+    "components/EditarFotoModal.tsx",
+    "components/FinanceHelpCard.tsx",
+    "components/FormCard.tsx",
+    "components/FormInput.tsx",
+    "components/MovimentoButton.tsx",
+    "components/PessoaAvatar.tsx",
+    "components/PlaceholderPage.tsx",
+    "components/PrimaryButton.tsx",
+    "components/Sidebar.tsx",
+    "components/StatCard.tsx",
+    "components/Topbar.tsx",
+    "components/UserBadge.tsx",
+    "components/admin",
+    "components/ui"
+  ],
+  "libEntries": [
+    "lib/academico",
+    "lib/auditoriaLog.ts",
+    "lib/avaliacoes",
+    "lib/cobrancasNeofin.ts",
+    "lib/financeiro",
+    "lib/formatters",
+    "lib/ia",
+    "lib/loja",
+    "lib/neofinClient.ts",
+    "lib/nextCookies.ts",
+    "lib/openaiClient.ts",
+    "lib/supabaseBrowser.ts",
+    "lib/supabaseClient.ts",
+    "lib/supabaseRoute.ts",
+    "lib/supabaseServer.ts",
+    "lib/supabaseServerSSR.ts"
+  ]
+}

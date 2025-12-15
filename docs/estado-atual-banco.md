@@ -1,124 +1,908 @@
-﻿# Estado Atual do Banco de Dados - Conexao Danca
-# Versao: 2025-12-12
-# Fonte: schema-supabase.sql (snapshot real)
+# Estado Atual do Banco de Dados
+Atualizado em: 2025-12-15 11:22
+Fonte: docs/schema-supabase.sql (snapshot real)
 
-> Snapshot atualizado; recorte do Credito Conexao em docs/snippets/schema-credito-conexao.md.
-> Este documento descreve **o estado real do banco**. Modelos conceituais e documentos antigos servem como referencia historica, mas a verdade oficial esta aqui e no snapshot atual do schema.
+Total de tabelas: 78
 
----
+> Documento gerado automaticamente por scripts/generateEstadoAtualBanco.ts. Use o snapshot como verdade oficial.
 
-## 1. VisÃ£o Geral
-- DomÃ­nios presentes: Pessoas/Identidade, Colaboradores/Professores, AcadÃªmico (Cursos/Turmas/AvaliaÃ§Ãµes), MatrÃ­culas (implementaÃ§Ã£o real), Financeiro, Loja, AdministraÃ§Ã£o/Auditoria.
-- Tabelas **canÃ´nicas**: `pessoas`, `profiles`, `pessoas_roles`, `centros_custo`, `plano_contas`, `categorias_financeiras`, `contas_financeiras`, `cobrancas`, `recebimentos`, `contas_pagar`, `contas_pagar_pagamentos`, `movimento_financeiro`, `matriculas`, `turma_aluno`, `turmas`, `cursos`, `niveis`, `modulos`, `habilidades`, `avaliacoes_*`.
-- Tabelas **legadas** (manter, mas planejar desativaÃ§Ã£o): `alunos`, `alunos_turmas`, `endereco`, `enderecos`, campos JSON de endereÃ§o em `pessoas`.
-- Loja v0 estÃ¡ materializada em tabelas prÃ³prias (vide seÃ§Ã£o 7) e jÃ¡ integra parcialmente financeiro/estoque.
+## alunos
+- id: bigint NOT NULL DEFAULT nextval('alunos_id_seq'::regclass)
+- nome: text NOT NULL
+- email: text
+- telefone: text
+- data_nascimento: date
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- user_id: uuid DEFAULT auth.uid()
+- user_email: text
 
----
+## alunos_turmas
+- id: bigint NOT NULL DEFAULT nextval('alunos_turmas_id_seq'::regclass)
+- aluno_id: bigint NOT NULL
+- turma_id: bigint NOT NULL
+- dt_inicio: date NOT NULL DEFAULT CURRENT_DATE
+- dt_fim: date
+- situacao: text NOT NULL DEFAULT 'ativo'::text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- user_id: uuid
+- user_email: text
 
-## 2. DomÃ­nio Pessoas / Identidade
-- **pessoas**: pessoa fÃ­sica/jurÃ­dica, com `cpf`, `cnpj`, `nome_social`, `nome_fantasia`, `razao_social`, `telefone`, `telefone_secundario`, `email`, `tipo_pessoa`, `ativo`, `genero`, `estado_civil`, `foto_url`, `neofin_customer_id`, `created_by/updated_by` â†’ FKs para `profiles`/`auth.users`. Possui `endereco_id` (FK para `enderecos`) e campo legado `endereco` (jsonb).
-- **profiles**: perfil do usuÃ¡rio (um para um com auth.users), `pessoa_id` UNIQUE.
-- **pessoas_roles**: vincula papÃ©is de domÃ­nio a pessoas.
-- EndereÃ§os:
-  - **enderecos_pessoa** (canÃ´nico atual): FK para `pessoas`, `ruas`, `bairros`; campos de logradouro livres.
-  - **enderecos**, **ruas**, **bairros**: dicionÃ¡rios canÃ´nicos de endereÃ§o.
-  - **endereco** (singular) e campo json em `pessoas`: legados.
+## auditoria_logs
+- id: uuid NOT NULL DEFAULT gen_random_uuid()
+- user_id: uuid NOT NULL
+- acao: text NOT NULL
+- entidade: text
+- entidade_id: text
+- detalhes: jsonb
+- ip: text
+- user_agent: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
 
----
+## avaliacao_aluno_resultado
+- id: bigint NOT NULL DEFAULT nextval('avaliacao_aluno_resultado_id_seq'::regclass)
+- turma_avaliacao_id: bigint NOT NULL
+- pessoa_id: bigint NOT NULL
+- conceito_final_id: bigint
+- conceitos_por_grupo: jsonb
+- observacoes_professor: text
+- data_avaliacao: date NOT NULL
+- avaliador_id: bigint
+- criado_em: timestamp with time zone NOT NULL DEFAULT now()
+- atualizado_em: timestamp with time zone NOT NULL DEFAULT now()
 
-## 3. DomÃ­nio Colaboradores / Professores
-- **colaboradores**: FK para `pessoas`, opcional `centro_custo_id`, `tipo_vinculo`, datas, ativo.
-- **funcoes_colaborador**, **funcoes_grupo**, **colaborador_funcoes**: cargos e funÃ§Ãµes.
-- **tipos_vinculo_colaborador**, **config_pagamento_colaborador**, **modelos_pagamento_colaborador**: regras de vÃ­nculo e pagamento.
-- **colaborador_jornada**, **colaborador_jornada_dias**: jornada de trabalho.
-- **professores**: FK para `colaboradores`, `tipos_professor`.
+## avaliacoes_conceitos
+- id: bigint NOT NULL DEFAULT nextval('avaliacoes_conceitos_id_seq'::regclass)
+- codigo: text NOT NULL
+- rotulo: text NOT NULL
+- descricao: text
+- ordem: integer NOT NULL DEFAULT 1
+- cor_hex: text
+- ativo: boolean NOT NULL DEFAULT true
+- criado_em: timestamp with time zone NOT NULL DEFAULT now()
+- atualizado_em: timestamp with time zone NOT NULL DEFAULT now()
 
----
+## avaliacoes_modelo
+- id: bigint NOT NULL DEFAULT nextval('avaliacoes_modelo_id_seq'::regclass)
+- nome: text NOT NULL
+- descricao: text
+- tipo_avaliacao: USER-DEFINED NOT NULL
+- obrigatoria: boolean NOT NULL DEFAULT false
+- grupos: jsonb NOT NULL
+- conceitos_ids: ARRAY NOT NULL DEFAULT '{}'::bigint[]
+- ativo: boolean NOT NULL DEFAULT true
+- criado_em: timestamp with time zone NOT NULL DEFAULT now()
+- atualizado_em: timestamp with time zone NOT NULL DEFAULT now()
 
-## 4. DomÃ­nio AcadÃªmico / Turmas / AvaliaÃ§Ãµes
-- CatÃ¡logo acadÃªmico: **cursos**, **niveis**, **modulos**, **habilidades**.
-- Turmas: **turmas** (campos: `tipo_turma`, `turno`, `status`, datas, carga horÃ¡ria, observaÃ§Ãµes), **turmas_horarios**.
-- RelaÃ§Ãµes turma-professor: **turma_professores**.
-- AvaliaÃ§Ãµes: **avaliacoes_conceitos**, **avaliacoes_modelo**, **turma_avaliacoes**, **avaliacao_aluno_resultado** (FKs para `pessoas`, `colaboradores`, `avaliacoes_conceitos`).
+## bairros
+- id: uuid NOT NULL DEFAULT uuid_generate_v4()
+- nome: text NOT NULL
+- cidade: text
+- estado: text
+- ativo: boolean DEFAULT true
+- created_at: timestamp with time zone DEFAULT now()
+- updated_at: timestamp with time zone DEFAULT now()
 
----
+## cartao_bandeiras
+- id: bigint NOT NULL DEFAULT nextval('cartao_bandeiras_id_seq'::regclass)
+- nome: text NOT NULL
+- codigo: text
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
 
-## 5. DomÃ­nio MatrÃ­culas / Alunos / VÃ­nculos (ImplementaÃ§Ã£o Real)
-- **matriculas** (canÃ´nica): `pessoa_id`, `responsavel_financeiro_id`, `tipo_matricula`, `vinculo_id` (FK `turmas.turma_id`), `plano_matricula_id`, `contrato_modelo_id`, `contrato_emitido_id`, `status`, `ano_referencia`, `data_matricula`, `observacoes`, timestamps e audit.
-- **turma_aluno** (canÃ´nica): `aluno_pessoa_id` (FK `pessoas`), `turma_id` (FK `turmas`), `matricula_id` (FK `matriculas`), datas inÃ­cio/fim, `status`.
-- **vinculos**: relaciona aluno â†” responsÃ¡vel (ambos `pessoas`), `parentesco`.
-- Legado: **alunos**, **alunos_turmas** (devem ser mantidos apenas para compatibilidade, nÃ£o usar em fluxos novos).
-- Nota: A implementaÃ§Ã£o real de matrÃ­culas e turma_aluno evoluiu alÃ©m do modelo conceitual antigo; este estado real Ã© a referÃªncia oficial.
+## cartao_maquinas
+- id: bigint NOT NULL DEFAULT nextval('cartao_maquinas_id_seq'::regclass)
+- nome: text NOT NULL
+- operadora: text
+- conta_financeira_id: bigint NOT NULL
+- centro_custo_id: integer NOT NULL
+- ativo: boolean NOT NULL DEFAULT true
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
 
----
+## cartao_recebiveis
+- id: bigint NOT NULL DEFAULT nextval('cartao_recebiveis_id_seq'::regclass)
+- venda_id: bigint NOT NULL
+- maquina_id: bigint NOT NULL
+- bandeira_id: bigint NOT NULL
+- conta_financeira_id: bigint NOT NULL
+- valor_bruto_centavos: integer NOT NULL
+- taxa_operadora_centavos: integer NOT NULL DEFAULT 0
+- valor_liquido_centavos: integer NOT NULL
+- numero_parcelas: integer NOT NULL DEFAULT 1
+- data_prevista_pagamento: date NOT NULL
+- status: text NOT NULL DEFAULT 'PREVISTO'::text
+- data_pagamento_real: date
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
 
-## 6. DomÃ­nio Financeiro
-- DicionÃ¡rios: **centros_custo**, **plano_contas**, **categorias_financeiras**, **contas_financeiras**.
-- Contas a receber: **cobrancas** (`pessoa_id`, `valor_centavos`, `vencimento`, `status`, `centro_custo_id`, `origem_tipo`, `origem_id`, meios de pagamento).
-- Recebimentos: **recebimentos** (FK `cobranca_id`, `centro_custo_id`, valor, data, `metodo_pagamento`, `origem_sistema`).
-- Contas a pagar: **contas_pagar** (FK `centro_custo_id`, `categoria_id`, `pessoa_id`, `valor_centavos`, `vencimento`, `status`, `metodo_pagamento`, audit).
-- Pagamentos: **contas_pagar_pagamentos** (FK `conta_pagar_id`, `centro_custo_id`, `conta_financeira_id`, valores principal/juros/desconto, data, audit).
-- Movimento financeiro: **movimento_financeiro** (tipo DESPESA/RECEITA, `centro_custo_id`, valor, data, `origem`, `origem_id`).
+## cartao_regras_operacao
+- id: bigint NOT NULL DEFAULT nextval('cartao_regras_operacao_id_seq'::regclass)
+- maquina_id: bigint NOT NULL
+- bandeira_id: bigint NOT NULL
+- tipo_transacao: text NOT NULL
+- prazo_recebimento_dias: integer NOT NULL DEFAULT 30
+- taxa_percentual: numeric NOT NULL DEFAULT 0
+- taxa_fixa_centavos: integer NOT NULL DEFAULT 0
+- permitir_parcelado: boolean NOT NULL DEFAULT true
+- max_parcelas: integer NOT NULL DEFAULT 12
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
 
----
+## categorias_financeiras
+- id: integer NOT NULL DEFAULT nextval('categorias_financeiras_id_seq'::regclass)
+- tipo: text NOT NULL
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- ativo: boolean NOT NULL DEFAULT true
+- plano_conta_id: integer
 
-## 7. DomÃ­nio Loja (ImplementaÃ§Ã£o Real)
-- Produtos e fornecedores:
-  - **loja_produtos**: `codigo`, `nome`, `descricao`, `categoria`, `preco_venda_centavos`, `unidade`, `estoque_atual`, `ativo`, `observacoes`, timestamps; opcional `fornecedor_principal_id`.
-  - **loja_fornecedores**: FK `pessoa_id`, `codigo_interno`, `ativo`, `observacoes`, timestamps.
-  - **loja_fornecedor_precos**: histÃ³rico de custos por fornecedor/produto.
-- Vendas:
-  - **loja_vendas**: `cliente_pessoa_id`, `tipo_venda` (VENDA/CREDIARIO_INTERNO/ENTREGA_FIGURINO), `valor_total_centavos`, `desconto_centavos`, `forma_pagamento`, `status_pagamento`, `status_venda`, datas, observaÃ§Ãµes, `vendedor_user_id`, `cobranca_id`, timestamps.
-  - **loja_venda_itens**: `venda_id`, `produto_id`, `quantidade`, `preco_unitario_centavos`, `total_centavos`, `beneficiario_pessoa_id`, `observacoes`.
-  - **loja_estoque_movimentos** (quando presente): `produto_id`, `tipo` (ENTRADA/SAIDA/AJUSTE), `quantidade`, `origem` (VENDA/CANCELAMENTO_VENDA/COMPRA/AJUSTE_MANUAL), `referencia_id`, `observacao`, `created_by`, `created_at`.
-- Compras:
-  - **loja_pedidos_compra**: `fornecedor_id`, `data_pedido`, `status` (RASCUNHO/EM_ANDAMENTO/PARCIAL/CONCLUIDO/CANCELADO), `valor_estimado_centavos`, `observacoes`, timestamps, `created_by/updated_by`, `conta_pagar_id`.
-  - **loja_pedidos_compra_itens**: `pedido_id`, `produto_id`, `quantidade_solicitada`, `quantidade_recebida`, `preco_custo_centavos`, `observacoes`.
-  - **loja_pedidos_compra_recebimentos**: `pedido_id`, `item_id`, `produto_id`, `quantidade_recebida`, `preco_custo_centavos`, `data_recebimento`, `observacao`, `created_by`, `created_at`.
-- IntegraÃ§Ãµes atuais:
-  - Vendas podem gerar `cobrancas`/`recebimentos` (crediÃ¡rio interno, vendas Ã  vista com liquidaÃ§Ã£o).
-  - Compras podem preencher `conta_pagar_id` e atualizar `contas_pagar`/`contas_pagar_pagamentos`; pagamentos geram `movimento_financeiro` (despesa).
-  - Estoque: saÃ­das em vendas, entradas em cancelamento/recebimentos de compra/ajuste manual.
+## centros_custo
+- id: integer NOT NULL DEFAULT nextval('centros_custo_id_seq'::regclass)
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- ativo: boolean NOT NULL DEFAULT true
 
----
+## cobrancas
+- id: bigint NOT NULL DEFAULT nextval('cobrancas_id_seq'::regclass)
+- pessoa_id: bigint NOT NULL
+- descricao: text NOT NULL
+- valor_centavos: integer NOT NULL
+- moeda: text NOT NULL DEFAULT 'BRL'::text
+- vencimento: date NOT NULL
+- data_pagamento: date
+- status: text NOT NULL DEFAULT 'PENDENTE'::text
+- metodo_pagamento: text
+- neofin_charge_id: text
+- neofin_payload: jsonb
+- link_pagamento: text
+- linha_digitavel: text
+- observacoes: text
+- created_at: timestamp with time zone DEFAULT now()
+- updated_at: timestamp with time zone DEFAULT now()
+- centro_custo_id: integer
+- origem_tipo: text
+- origem_id: bigint
 
-## 8. AdministraÃ§Ã£o / Auditoria / SeguranÃ§a
-- **roles_sistema**, **usuario_roles**: papÃ©is e vÃ­nculos de usuÃ¡rios.
-- **auditoria_logs**: aÃ§Ãµes com `user_id`, `acao`, `entidade`, `detalhes`, `ip`, `user_agent`.
-- ConfiguraÃ§Ã£o/integraÃ§Ã£o: ver docs de VNB e rotas Admin (nÃ£o hÃ¡ tabelas especÃ­ficas alÃ©m de dicionÃ¡rios jÃ¡ listados).
+## colaborador_funcoes
+- id: bigint NOT NULL DEFAULT nextval('colaborador_funcoes_id_seq'::regclass)
+- colaborador_id: bigint NOT NULL
+- funcao_id: integer NOT NULL
+- principal: boolean NOT NULL DEFAULT false
+- ativo: boolean NOT NULL DEFAULT true
 
----
+## colaborador_jornada
+- id: bigint NOT NULL DEFAULT nextval('colaborador_jornada_id_seq'::regclass)
+- colaborador_id: bigint NOT NULL
+- tipo_vinculo_id: integer
+- inicio_vigencia: date NOT NULL
+- fim_vigencia: date
+- observacoes: text
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
 
-## 9. ðŸ“Œ DiferenÃ§as entre Modelo Conceitual e ImplementaÃ§Ã£o Real Atual
+## colaborador_jornada_dias
+- id: bigint NOT NULL DEFAULT nextval('colaborador_jornada_dias_id_seq'::regclass)
+- jornada_id: bigint NOT NULL
+- dia_semana: text NOT NULL
+- entrada_1: time without time zone
+- saida_1: time without time zone
+- entrada_2: time without time zone
+- saida_2: time without time zone
+- ativo: boolean NOT NULL DEFAULT true
 
-### MatrÃ­culas
-- ImplementaÃ§Ã£o real usa `matriculas` (canÃ´nica) + `turma_aluno` com FK explÃ­cita para `matriculas` e `pessoas`, status e datas; supera o modelo conceitual antigo.
-- ResponsÃ¡vel financeiro e aluno sÃ£o pessoas distintas; vÃ­nculo para turma via `vinculo_id` (turma) e `matricula_id` em `turma_aluno`.
-- O estado atual Ã© a **fonte oficial**; nÃ£o reverter para o modelo legado (`alunos`, `alunos_turmas`).
+## colaboradores
+- id: bigint NOT NULL DEFAULT nextval('colaboradores_id_seq'::regclass)
+- pessoa_id: integer NOT NULL
+- centro_custo_id: integer
+- tipo_vinculo: text
+- data_inicio: date
+- data_fim: date
+- ativo: boolean NOT NULL DEFAULT true
+- observacoes: text
+- tipo_vinculo_id: integer
 
-### Loja
-- ImplementaÃ§Ã£o real inclui vendas, itens, estoque, compras, fornecedores, histÃ³rico de custos e integraÃ§Ãµes financeiras (cobrancas/contas_pagar/movimento_financeiro), indo alÃ©m do modelo-loja-v0.md.
-- BeneficiÃ¡rio por item, crediÃ¡rio interno com cobranÃ§a, compras com conta a pagar e movimentos de estoque.  
-- O modelo-loja-v0.md Ã© histÃ³rico; a implementaÃ§Ã£o atual prevalece.
+## config_pagamento_colaborador
+- id: bigint NOT NULL DEFAULT nextval('config_pagamento_colaborador_id_seq'::regclass)
+- colaborador_id: bigint NOT NULL
+- funcao_id: integer
+- modelo_pagamento_id: integer NOT NULL
+- valor_centavos: integer
+- ativo: boolean NOT NULL DEFAULT true
+- observacoes: text
 
-### Outros mÃ³dulos
-- EndereÃ§os: modelo real usa `enderecos`/`ruas`/`bairros` + `enderecos_pessoa`; modelos antigos de endereÃ§o permanecem apenas por compatibilidade.
-- AvaliaÃ§Ãµes e currÃ­culo: estruturas reais de avaliaÃ§Ãµes/habilidades/turma_avaliacoes podem divergir de versÃµes conceituais; priorizar o schema atual.
+## contas_financeiras
+- id: bigint NOT NULL DEFAULT nextval('contas_financeiras_id_seq'::regclass)
+- centro_custo_id: integer
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- tipo: text NOT NULL
+- banco: text
+- agencia: text
+- numero_conta: text
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
 
-**ConclusÃ£o:** As diferenÃ§as sÃ£o evoluÃ§Ãµes naturais e refletem a realidade do sistema; o estado atual deve sempre prevalecer sobre modelos antigos.
+## contas_pagar
+- id: bigint NOT NULL DEFAULT nextval('contas_pagar_id_seq'::regclass)
+- centro_custo_id: integer NOT NULL
+- categoria_id: integer
+- pessoa_id: integer
+- descricao: text NOT NULL
+- valor_centavos: integer NOT NULL
+- vencimento: date NOT NULL
+- data_pagamento: date
+- status: text NOT NULL DEFAULT 'PENDENTE'::text
+- metodo_pagamento: text
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
 
----
+## contas_pagar_pagamentos
+- id: bigint NOT NULL DEFAULT nextval('contas_pagar_pagamentos_id_seq'::regclass)
+- conta_pagar_id: bigint NOT NULL
+- centro_custo_id: integer NOT NULL
+- conta_financeira_id: integer
+- valor_principal_centavos: integer NOT NULL
+- juros_centavos: integer NOT NULL DEFAULT 0
+- desconto_centavos: integer NOT NULL DEFAULT 0
+- data_pagamento: date NOT NULL
+- metodo_pagamento: text
+- observacoes: text
+- usuario_id: uuid
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- forma_pagamento_codigo: text
+- cartao_maquina_id: bigint
+- cartao_bandeira_id: bigint
+- cartao_numero_parcelas: integer
 
-## 10. Resumo para Futuras RefatoraÃ§Ãµes
-- Partir SEMPRE do schema real (snapshot atual) e deste documento.
-- Planejar descontinuaÃ§Ã£o de tabelas legadas (`alunos`, `alunos_turmas`, `endereco`, `enderecos`, campo json em `pessoas`).
-- Consolidar integraÃ§Ãµes Financeiro â†” Loja (cobranÃ§as/recebimentos e contas_pagar/pagamentos) e Estoque â†” Loja (movimentos automÃ¡ticos).
-- Manter MatrÃ­culas e Turma_Aluno como canÃ´nicos; evitar regressÃ£o para modelos antigos.
+## credito_conexao_contas
+- id: bigint NOT NULL DEFAULT nextval('credito_conexao_contas_id_seq'::regclass)
+- pessoa_titular_id: bigint NOT NULL
+- tipo_conta: text NOT NULL
+- descricao_exibicao: text
+- dia_fechamento: integer NOT NULL DEFAULT 10
+- dia_vencimento: integer
+- centro_custo_principal_id: integer
+- conta_financeira_origem_id: bigint
+- conta_financeira_destino_id: bigint
+- limite_maximo_centavos: integer
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+- limite_autorizado_centavos: integer
 
----
+## credito_conexao_fatura_lancamentos
+- fatura_id: bigint NOT NULL
+- lancamento_id: bigint NOT NULL
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
 
-## 11. RodapÃ©
-- Data do snapshot: 2025-12-12.
-- Esta versÃ£o substitui completamente qualquer versÃ£o anterior de `docs/estado-atual-banco.md`. Atualize novamente apÃ³s mudanÃ§as relevantes no schema.
+## credito_conexao_faturas
+- id: bigint NOT NULL DEFAULT nextval('credito_conexao_faturas_id_seq'::regclass)
+- conta_conexao_id: bigint NOT NULL
+- periodo_referencia: text NOT NULL
+- data_fechamento: date NOT NULL
+- data_vencimento: date
+- valor_total_centavos: integer NOT NULL
+- status: text NOT NULL DEFAULT 'ABERTA'::text
+- cobranca_id: bigint
+- neofin_invoice_id: text
+- folha_pagamento_id: bigint
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+- valor_taxas_centavos: integer NOT NULL DEFAULT 0
 
+## credito_conexao_lancamentos
+- id: bigint NOT NULL DEFAULT nextval('credito_conexao_lancamentos_id_seq'::regclass)
+- conta_conexao_id: bigint NOT NULL
+- origem_sistema: text NOT NULL
+- origem_id: bigint
+- descricao: text
+- valor_centavos: integer NOT NULL
+- data_lancamento: date NOT NULL DEFAULT CURRENT_DATE
+- status: text NOT NULL DEFAULT 'PENDENTE_FATURA'::text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+- numero_parcelas: integer
 
+## credito_conexao_regras_parcelas
+- id: bigint NOT NULL DEFAULT nextval('credito_conexao_regras_parcelas_id_seq'::regclass)
+- tipo_conta: text NOT NULL
+- numero_parcelas_min: integer NOT NULL
+- numero_parcelas_max: integer NOT NULL
+- valor_minimo_centavos: integer NOT NULL DEFAULT 0
+- taxa_percentual: numeric NOT NULL DEFAULT 0
+- taxa_fixa_centavos: integer NOT NULL DEFAULT 0
+- centro_custo_id: integer
+- categoria_financeira_id: integer
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## cursos
+- id: bigint NOT NULL DEFAULT nextval('cursos_id_seq'::regclass)
+- nome: text NOT NULL
+- metodologia: text
+- situacao: text NOT NULL DEFAULT 'Ativo'::text
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## endereco
+- endereco_id: bigint NOT NULL DEFAULT nextval('endereco_endereco_id_seq'::regclass)
+- logradouro: text
+- numero: text
+- complemento: text
+- bairro: text
+- cidade: text
+- uf: text
+- cep: text
+
+## enderecos
+- id: bigint NOT NULL DEFAULT nextval('enderecos_id_seq'::regclass)
+- logradouro: text NOT NULL
+- numero: text
+- complemento: text
+- bairro: text
+- cidade: text NOT NULL
+- uf: character NOT NULL
+- cep: text
+- referencia: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone
+
+## enderecos_pessoa
+- id: uuid NOT NULL DEFAULT uuid_generate_v4()
+- pessoa_id: bigint
+- rua_id: uuid
+- bairro_id: uuid
+- logradouro: text
+- bairro: text
+- cidade: text
+- estado: text
+- cep: text
+- numero: text
+- complemento: text
+- referencia: text
+- created_at: timestamp with time zone DEFAULT now()
+- updated_at: timestamp with time zone DEFAULT now()
+
+## financeiro_analises_gpt
+- id: bigint NOT NULL DEFAULT nextval('financeiro_analises_gpt_id_seq'::regclass)
+- created_at: timestamp with time zone DEFAULT now()
+- snapshot_id: bigint
+- model: text
+- alertas: jsonb NOT NULL DEFAULT '[]'::jsonb
+- texto_curto: text
+- raw: jsonb NOT NULL DEFAULT '{}'::jsonb
+
+## financeiro_snapshots
+- id: bigint NOT NULL DEFAULT nextval('financeiro_snapshots_id_seq'::regclass)
+- created_at: timestamp with time zone DEFAULT now()
+- data_base: date NOT NULL
+- periodo_inicio: date NOT NULL
+- periodo_fim: date NOT NULL
+- centro_custo_id: bigint
+- caixa_hoje_centavos: bigint NOT NULL DEFAULT 0
+- entradas_previstas_30d_centavos: bigint NOT NULL DEFAULT 0
+- saidas_comprometidas_30d_centavos: bigint NOT NULL DEFAULT 0
+- folego_caixa_dias: numeric
+- tendencia: jsonb NOT NULL DEFAULT '{}'::jsonb
+- resumo_por_centro: jsonb NOT NULL DEFAULT '[]'::jsonb
+- serie_fluxo_caixa: jsonb NOT NULL DEFAULT '[]'::jsonb
+- regras_alerta: jsonb NOT NULL DEFAULT '[]'::jsonb
+
+## formas_pagamento
+- id: bigint NOT NULL DEFAULT nextval('formas_pagamento_id_seq'::regclass)
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- tipo_base: text NOT NULL
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## formas_pagamento_contexto
+- id: bigint NOT NULL DEFAULT nextval('formas_pagamento_contexto_id_seq'::regclass)
+- centro_custo_id: integer NOT NULL
+- forma_pagamento_codigo: text NOT NULL
+- descricao_exibicao: text NOT NULL
+- ativo: boolean NOT NULL DEFAULT true
+- ordem_exibicao: integer NOT NULL DEFAULT 0
+- conta_financeira_id: bigint
+- cartao_maquina_id: bigint
+- carteira_tipo: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## funcoes_colaborador
+- id: integer NOT NULL DEFAULT nextval('funcoes_colaborador_id_seq'::regclass)
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- grupo: text NOT NULL
+- descricao: text
+- ativo: boolean NOT NULL DEFAULT true
+- grupo_id: bigint
+
+## funcoes_grupo
+- id: bigint NOT NULL DEFAULT nextval('funcoes_grupo_id_seq'::regclass)
+- nome: text NOT NULL
+- pode_lecionar: boolean NOT NULL DEFAULT false
+- descricao: text
+- ativo: boolean NOT NULL DEFAULT true
+- ordem: integer
+- centro_custo_id: bigint
+
+## habilidades
+- id: bigint NOT NULL DEFAULT nextval('habilidades_id_seq'::regclass)
+- curso_id: bigint NOT NULL
+- nivel_id: bigint NOT NULL
+- modulo_id: bigint NOT NULL
+- nome: text NOT NULL
+- tipo: text
+- descricao: text
+- criterio_avaliacao: text
+- ordem: integer NOT NULL DEFAULT 1
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_cores
+- id: bigint NOT NULL
+- nome: text NOT NULL
+- codigo: text
+- hex: text
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_estoque_movimentos
+- id: bigint NOT NULL
+- produto_id: bigint NOT NULL
+- tipo: text NOT NULL
+- origem: text NOT NULL
+- referencia_id: bigint
+- quantidade: integer NOT NULL
+- motivo: text
+- observacao: text
+- saldo_antes: integer
+- saldo_depois: integer
+- custo_unitario_centavos: integer
+- created_by: uuid
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- variante_id: bigint
+
+## loja_fornecedor_precos
+- id: bigint NOT NULL DEFAULT nextval('loja_fornecedor_precos_id_seq'::regclass)
+- fornecedor_id: bigint NOT NULL
+- produto_id: bigint NOT NULL
+- preco_custo_centavos: integer NOT NULL
+- moeda: text NOT NULL DEFAULT 'BRL'::text
+- data_referencia: date NOT NULL DEFAULT CURRENT_DATE
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_fornecedores
+- id: bigint NOT NULL DEFAULT nextval('loja_fornecedores_id_seq'::regclass)
+- pessoa_id: bigint NOT NULL
+- codigo_interno: text
+- ativo: boolean NOT NULL DEFAULT true
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_marcas
+- id: bigint NOT NULL
+- nome: text NOT NULL
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_modelos
+- id: bigint NOT NULL
+- nome: text NOT NULL
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_numeracoes
+- id: bigint NOT NULL
+- valor: integer NOT NULL
+- tipo: text NOT NULL DEFAULT 'CALCADO'::text
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_pedidos_compra
+- id: bigint NOT NULL DEFAULT nextval('loja_pedidos_compra_id_seq'::regclass)
+- fornecedor_id: bigint NOT NULL
+- data_pedido: timestamp with time zone NOT NULL DEFAULT now()
+- status: text NOT NULL DEFAULT 'RASCUNHO'::text
+- valor_estimado_centavos: integer NOT NULL DEFAULT 0
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+- created_by: uuid
+- updated_by: uuid
+- conta_pagar_id: bigint
+
+## loja_pedidos_compra_itens
+- id: bigint NOT NULL DEFAULT nextval('loja_pedidos_compra_itens_id_seq'::regclass)
+- pedido_id: bigint NOT NULL
+- produto_id: bigint NOT NULL
+- quantidade_solicitada: integer NOT NULL
+- quantidade_recebida: integer NOT NULL DEFAULT 0
+- preco_custo_centavos: integer NOT NULL DEFAULT 0
+- observacoes: text
+- quantidade_pedida: integer NOT NULL DEFAULT 0
+- variante_id: bigint NOT NULL
+
+## loja_pedidos_compra_recebimentos
+- id: bigint NOT NULL DEFAULT nextval('loja_pedidos_compra_recebimentos_id_seq'::regclass)
+- pedido_id: bigint NOT NULL
+- item_id: bigint NOT NULL
+- produto_id: bigint NOT NULL
+- quantidade_recebida: integer NOT NULL
+- preco_custo_centavos: integer NOT NULL
+- data_recebimento: timestamp with time zone NOT NULL DEFAULT now()
+- observacao: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- created_by: uuid
+- quantidade: integer NOT NULL
+
+## loja_produto_categoria
+- id: bigint NOT NULL
+- nome: text NOT NULL
+- codigo: text
+- ativo: boolean NOT NULL DEFAULT true
+- criado_em: timestamp with time zone NOT NULL DEFAULT now()
+- atualizado_em: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_produto_categoria_subcategoria
+- id: bigint NOT NULL
+- categoria_id: bigint NOT NULL
+- nome: text NOT NULL
+- codigo: text
+- ativo: boolean NOT NULL DEFAULT true
+- centro_custo_id: bigint
+- receita_categoria_id: bigint
+- despesa_categoria_id: bigint
+- criado_em: timestamp with time zone NOT NULL DEFAULT now()
+- atualizado_em: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_produto_variantes
+- id: bigint NOT NULL
+- produto_id: bigint NOT NULL
+- sku: text NOT NULL
+- cor_id: bigint
+- numeracao_id: bigint
+- tamanho_id: bigint
+- estoque_atual: integer NOT NULL DEFAULT 0
+- preco_venda_centavos: integer
+- ativo: boolean NOT NULL DEFAULT true
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_produtos
+- id: bigint NOT NULL DEFAULT nextval('loja_produtos_id_seq'::regclass)
+- codigo: text
+- nome: text NOT NULL
+- descricao: text
+- categoria: text
+- preco_venda_centavos: integer NOT NULL
+- unidade: text NOT NULL DEFAULT 'UN'::text
+- estoque_atual: integer NOT NULL DEFAULT 0
+- ativo: boolean NOT NULL DEFAULT true
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+- bloqueado_para_venda: boolean NOT NULL DEFAULT false
+- categoria_subcategoria_id: bigint
+- fornecedor_principal_id: bigint
+- marca_id: bigint
+- modelo_id: bigint
+
+## loja_tamanhos
+- id: bigint NOT NULL
+- nome: text NOT NULL
+- tipo: text NOT NULL DEFAULT 'ROUPA'::text
+- ordem: integer NOT NULL DEFAULT 0
+- ativo: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## loja_venda_itens
+- id: bigint NOT NULL DEFAULT nextval('loja_venda_itens_id_seq'::regclass)
+- venda_id: bigint NOT NULL
+- produto_id: bigint NOT NULL
+- quantidade: integer NOT NULL
+- preco_unitario_centavos: integer NOT NULL
+- total_centavos: integer NOT NULL
+- beneficiario_pessoa_id: bigint
+- observacoes: text
+- variante_id: bigint
+
+## loja_vendas
+- id: bigint NOT NULL DEFAULT nextval('loja_vendas_id_seq'::regclass)
+- cliente_pessoa_id: bigint NOT NULL
+- tipo_venda: text NOT NULL
+- valor_total_centavos: integer NOT NULL
+- desconto_centavos: integer NOT NULL DEFAULT 0
+- forma_pagamento: text NOT NULL
+- status_pagamento: text NOT NULL
+- status_venda: text NOT NULL DEFAULT 'ATIVA'::text
+- data_venda: timestamp with time zone NOT NULL DEFAULT now()
+- data_vencimento: date
+- observacoes: text
+- observacao_vendedor: text
+- vendedor_user_id: uuid
+- cancelada_em: timestamp with time zone
+- cancelada_por_user_id: uuid
+- motivo_cancelamento: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+- cobranca_id: bigint
+- conta_conexao_id: bigint
+- numero_parcelas: integer
+
+## matriculas
+- id: bigint NOT NULL
+- pessoa_id: bigint NOT NULL
+- responsavel_financeiro_id: bigint NOT NULL
+- tipo_matricula: USER-DEFINED NOT NULL
+- vinculo_id: bigint NOT NULL
+- plano_matricula_id: bigint
+- contrato_modelo_id: bigint
+- contrato_emitido_id: bigint
+- contrato_pdf_url: text
+- status: USER-DEFINED NOT NULL
+- ano_referencia: integer
+- data_matricula: date NOT NULL DEFAULT CURRENT_DATE
+- data_encerramento: date
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+- created_by: uuid
+- updated_by: uuid
+
+## modelos_pagamento_colaborador
+- id: integer NOT NULL DEFAULT nextval('modelos_pagamento_colaborador_id_seq'::regclass)
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- tipo: text NOT NULL
+- descricao: text
+- unidade: text
+- centro_custo_id: integer
+- categoria_financeira_id: integer
+- ativo: boolean NOT NULL DEFAULT true
+
+## modulos
+- id: bigint NOT NULL DEFAULT nextval('modulos_id_seq'::regclass)
+- curso_id: bigint NOT NULL
+- nivel_id: bigint NOT NULL
+- nome: text NOT NULL
+- descricao: text
+- ordem: integer NOT NULL DEFAULT 1
+- obrigatorio: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## movimento_financeiro
+- id: bigint NOT NULL DEFAULT nextval('movimento_financeiro_id_seq'::regclass)
+- tipo: text NOT NULL
+- centro_custo_id: integer NOT NULL
+- valor_centavos: integer NOT NULL
+- data_movimento: timestamp with time zone NOT NULL
+- origem: text NOT NULL
+- origem_id: bigint
+- descricao: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- usuario_id: uuid
+
+## niveis
+- id: bigint NOT NULL DEFAULT nextval('niveis_id_seq'::regclass)
+- curso_id: bigint NOT NULL
+- nome: text NOT NULL
+- faixa_etaria_sugerida: text
+- pre_requisito_nivel_id: bigint
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- updated_at: timestamp with time zone NOT NULL DEFAULT now()
+- idade_minima: integer
+- idade_maxima: integer
+
+## pessoas
+- id: bigint NOT NULL DEFAULT nextval('pessoas_id_seq'::regclass)
+- user_id: uuid
+- nome: text NOT NULL
+- email: text
+- telefone: text
+- nascimento: date
+- cpf: text
+- endereco: jsonb
+- created_at: timestamp with time zone DEFAULT now()
+- updated_at: timestamp with time zone DEFAULT now()
+- tipo_pessoa: text DEFAULT 'FISICA'::text
+- ativo: boolean DEFAULT true
+- observacoes: text
+- neofin_customer_id: text
+- created_by: uuid
+- updated_by: uuid
+- foto_url: text
+- nome_social: text
+- genero: USER-DEFINED NOT NULL DEFAULT 'NAO_INFORMADO'::genero_pessoa
+- estado_civil: USER-DEFINED
+- nacionalidade: text
+- naturalidade: text
+- telefone_secundario: text
+- cnpj: text
+- razao_social: text
+- nome_fantasia: text
+- inscricao_estadual: text
+- endereco_id: bigint
+
+## pessoas_roles
+- id: bigint NOT NULL DEFAULT nextval('pessoas_roles_id_seq'::regclass)
+- pessoa_id: bigint NOT NULL
+- role: text NOT NULL
+- created_at: timestamp with time zone DEFAULT now()
+
+## plano_contas
+- id: integer NOT NULL DEFAULT nextval('plano_contas_id_seq'::regclass)
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- tipo: text NOT NULL
+- parent_id: integer
+
+## professores
+- id: bigint NOT NULL DEFAULT nextval('professores_id_seq'::regclass)
+- colaborador_id: bigint NOT NULL
+- tipo_professor_id: integer
+- bio: text
+- ativo: boolean NOT NULL DEFAULT true
+- observacoes: text
+
+## profiles
+- user_id: uuid NOT NULL
+- full_name: text
+- is_admin: boolean NOT NULL DEFAULT false
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- pessoa_id: integer NOT NULL
+
+## recebimentos
+- id: bigint NOT NULL DEFAULT nextval('recebimentos_id_seq'::regclass)
+- cobranca_id: bigint
+- centro_custo_id: integer
+- valor_centavos: integer NOT NULL
+- data_pagamento: timestamp with time zone NOT NULL
+- metodo_pagamento: text NOT NULL
+- origem_sistema: text
+- observacoes: text
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- forma_pagamento_codigo: text
+- cartao_maquina_id: bigint
+- cartao_bandeira_id: bigint
+- cartao_numero_parcelas: integer
+
+## roles_sistema
+- id: uuid NOT NULL DEFAULT gen_random_uuid()
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- descricao: text
+- editavel: boolean NOT NULL DEFAULT true
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+- permissoes: jsonb
+- ativo: boolean NOT NULL DEFAULT true
+
+## ruas
+- id: uuid NOT NULL DEFAULT uuid_generate_v4()
+- bairro_id: uuid
+- nome: text NOT NULL
+- cep: text
+- ativo: boolean DEFAULT true
+- created_at: timestamp with time zone DEFAULT now()
+- updated_at: timestamp with time zone DEFAULT now()
+
+## tipos_professor
+- id: integer NOT NULL DEFAULT nextval('tipos_professor_id_seq'::regclass)
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- descricao: text
+
+## tipos_vinculo_colaborador
+- id: integer NOT NULL DEFAULT nextval('tipos_vinculo_colaborador_id_seq'::regclass)
+- codigo: text NOT NULL
+- nome: text NOT NULL
+- descricao: text
+- usa_jornada: boolean NOT NULL DEFAULT false
+- usa_vigencia: boolean NOT NULL DEFAULT true
+- eh_professor_por_natureza: boolean NOT NULL DEFAULT false
+- gera_folha: boolean NOT NULL DEFAULT false
+- exige_config_pagamento: boolean NOT NULL DEFAULT false
+- ativo: boolean NOT NULL DEFAULT true
+
+## turma_aluno
+- turma_aluno_id: bigint NOT NULL DEFAULT nextval('turma_aluno_turma_aluno_id_seq'::regclass)
+- turma_id: bigint NOT NULL
+- aluno_pessoa_id: bigint NOT NULL
+- dt_inicio: date DEFAULT CURRENT_DATE
+- dt_fim: date
+- status: text DEFAULT 'ativo'::text
+- matricula_id: bigint
+
+## turma_avaliacoes
+- id: bigint NOT NULL DEFAULT nextval('turma_avaliacoes_id_seq'::regclass)
+- turma_id: bigint NOT NULL
+- avaliacao_modelo_id: bigint NOT NULL
+- titulo: text NOT NULL
+- descricao: text
+- obrigatoria: boolean NOT NULL DEFAULT false
+- data_prevista: date
+- data_realizada: date
+- status: text NOT NULL DEFAULT 'RASCUNHO'::text
+- criado_em: timestamp with time zone NOT NULL DEFAULT now()
+- atualizado_em: timestamp with time zone NOT NULL DEFAULT now()
+
+## turma_niveis
+- id: bigint NOT NULL DEFAULT nextval('turma_niveis_id_seq'::regclass)
+- turma_id: bigint NOT NULL
+- nivel_id: bigint NOT NULL
+- principal: boolean NOT NULL DEFAULT false
+
+## turma_professores
+- id: bigint NOT NULL DEFAULT nextval('turma_professores_id_seq'::regclass)
+- turma_id: bigint NOT NULL
+- colaborador_id: bigint NOT NULL
+- funcao_id: bigint NOT NULL
+- principal: boolean NOT NULL DEFAULT false
+- data_inicio: date NOT NULL DEFAULT CURRENT_DATE
+- data_fim: date
+- ativo: boolean NOT NULL DEFAULT true
+- observacoes: text
+
+## turmas
+- turma_id: bigint NOT NULL DEFAULT nextval('turmas_turma_id_seq'::regclass)
+- nome: text NOT NULL
+- curso: text
+- nivel: text
+- capacidade: integer
+- dias_semana: ARRAY
+- hora_inicio: time without time zone
+- hora_fim: time without time zone
+- ativo: boolean DEFAULT true
+- professor_id: bigint
+- user_email: text
+- created_at: timestamp with time zone DEFAULT now()
+- tipo_turma: text DEFAULT 'REGULAR'::text
+- turno: text
+- ano_referencia: integer
+- data_inicio: date
+- data_fim: date
+- status: text DEFAULT 'EM_PREPARACAO'::text
+- encerramento_automatico: boolean DEFAULT false
+- periodo_letivo_id: bigint
+- carga_horaria_prevista: numeric
+- frequencia_minima_percentual: numeric
+- observacoes: text
+
+## turmas_horarios
+- id: bigint NOT NULL DEFAULT nextval('turmas_horarios_id_seq'::regclass)
+- turma_id: bigint NOT NULL
+- day_of_week: smallint NOT NULL
+- inicio: time without time zone NOT NULL
+- fim: time without time zone NOT NULL
+
+## usuario_roles
+- id: uuid NOT NULL DEFAULT gen_random_uuid()
+- user_id: uuid NOT NULL
+- role_id: uuid NOT NULL
+- created_at: timestamp with time zone NOT NULL DEFAULT now()
+
+## vinculos
+- id: bigint NOT NULL DEFAULT nextval('vinculos_id_seq'::regclass)
+- aluno_id: bigint NOT NULL
+- responsavel_id: bigint NOT NULL
+- parentesco: text
