@@ -32,8 +32,12 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🚧 👤 Usuários", href: "/admin/usuarios" },
       { label: "🚧 🧬 Perfis", href: "/admin/perfis" },
       { label: "🚧 🔐 Permissões", href: "/admin/permissoes" },
-      { label: "🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" },
     ],
+  },
+  {
+    id: "admin-auditoria",
+    title: "Governança & Auditoria",
+    items: [{ label: "🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" }],
   },
   {
     id: "admin-financeiro",
