@@ -37,6 +37,10 @@ export async function POST(req: NextRequest) {
     desconto_centavos = 0,
     data_pagamento,
     metodo_pagamento = null,
+    forma_pagamento_codigo = null,
+    cartao_maquina_id = null,
+    cartao_bandeira_id = null,
+    cartao_numero_parcelas = null,
     observacoes = null,
   } = body ?? {};
 
@@ -57,6 +61,7 @@ export async function POST(req: NextRequest) {
   const juros = Number(juros_centavos || 0);
   const desconto = Number(desconto_centavos || 0);
   const dataPgto = data_pagamento || new Date().toISOString().slice(0, 10);
+  const metodo = (forma_pagamento_codigo as string | null) || metodo_pagamento || null;
 
   try {
     const { data: conta, error: errConta } = await supabaseAdmin
@@ -113,7 +118,11 @@ export async function POST(req: NextRequest) {
         juros_centavos: juros,
         desconto_centavos: desconto,
         data_pagamento: dataPgto,
-        metodo_pagamento,
+        metodo_pagamento: metodo,
+        forma_pagamento_codigo: forma_pagamento_codigo ?? null,
+        cartao_maquina_id: cartao_maquina_id ?? null,
+        cartao_bandeira_id: cartao_bandeira_id ?? null,
+        cartao_numero_parcelas: cartao_numero_parcelas ?? null,
         observacoes,
         usuario_id: null,
         created_at: new Date().toISOString(),

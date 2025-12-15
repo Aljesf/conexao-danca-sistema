@@ -37,9 +37,24 @@ type PagamentoForm = {
   juros_centavos: number;
   desconto_centavos: number;
   data_pagamento: string;
-  metodo_pagamento: string;
+  forma_pagamento_codigo: string;
+  metodo_pagamento_texto: string;
+  cartao_maquina_id: number | null;
+  cartao_bandeira_id: number | null;
+  cartao_numero_parcelas: number | null;
   observacoes: string;
 };
+
+type FormaPagamento = {
+  id: number;
+  codigo: string;
+  nome: string;
+  tipo_base: string;
+  ativo: boolean;
+};
+
+type MaquinaOp = { id: number; nome?: string | null };
+type BandeiraOp = { id: number; nome?: string | null; codigo?: string | null };
 
 const STATUS_OPCOES = ["TODOS", "PENDENTE", "PARCIAL", "PAGO", "CANCELADO"] as const;
 
@@ -56,12 +71,21 @@ export default function ContasPagarPage() {
   const [dataFim, setDataFim] = useState("");
   const [modalConta, setModalConta] = useState<ContaPagar | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [formas, setFormas] = useState<FormaPagamento[]>([]);
+  const [maquinas, setMaquinas] = useState<MaquinaOp[]>([]);
+  const [bandeiras, setBandeiras] = useState<BandeiraOp[]>([]);
+  const [refsErro, setRefsErro] = useState<string | null>(null);
+  const [refsLoading, setRefsLoading] = useState(false);
   const [pagamentoForm, setPagamentoForm] = useState<PagamentoForm>({
     valor_centavos: 0,
     juros_centavos: 0,
     desconto_centavos: 0,
     data_pagamento: hojeISO(),
-    metodo_pagamento: "PIX",
+    forma_pagamento_codigo: "",
+    metodo_pagamento_texto: "",
+    cartao_maquina_id: null,
+    cartao_bandeira_id: null,
+    cartao_numero_parcelas: null,
     observacoes: "",
   });
 
@@ -86,8 +110,42 @@ export default function ContasPagarPage() {
     }
   }
 
+  async function loadRefs() {
+    setRefsLoading(true);
+    setRefsErro(null);
+    try {
+      const [formasRes, maquinasRes, bandeirasRes] = await Promise.all([
+        fetch("/api/financeiro/formas-pagamento/dicionario"),
+        fetch("/api/financeiro/cartao/maquinas/opcoes"),
+        fetch("/api/financeiro/cartao/bandeiras/opcoes"),
+      ]);
+
+      const formasJson = await formasRes.json().catch(() => ({}));
+      const maquinasJson = await maquinasRes.json().catch(() => ({}));
+      const bandeirasJson = await bandeirasRes.json().catch(() => ({}));
+
+      if (formasRes.ok && formasJson?.ok && Array.isArray(formasJson.formas)) {
+        setFormas(formasJson.formas);
+      } else {
+        setRefsErro("Falha ao carregar dicionário de formas de pagamento.");
+      }
+
+      if (maquinasRes.ok && maquinasJson?.ok && Array.isArray(maquinasJson.maquinas)) {
+        setMaquinas(maquinasJson.maquinas);
+      }
+      if (bandeirasRes.ok && bandeirasJson?.ok && Array.isArray(bandeirasJson.bandeiras)) {
+        setBandeiras(bandeirasJson.bandeiras);
+      }
+    } catch (err: any) {
+      setRefsErro(err?.message || "Erro ao carregar bases auxiliares.");
+    } finally {
+      setRefsLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadContas();
+    loadRefs();
   }, []);
 
   function abrirModal(conta: ContaPagar) {
@@ -97,10 +155,23 @@ export default function ContasPagarPage() {
       juros_centavos: 0,
       desconto_centavos: 0,
       data_pagamento: hojeISO(),
-      metodo_pagamento: "PIX",
+      forma_pagamento_codigo: "",
+      metodo_pagamento_texto: "",
+      cartao_maquina_id: null,
+      cartao_bandeira_id: null,
+      cartao_numero_parcelas: null,
       observacoes: "",
     });
   }
+
+  const formaSelecionada = useMemo(
+    () => formas.find((f) => f.codigo === pagamentoForm.forma_pagamento_codigo),
+    [formas, pagamentoForm.forma_pagamento_codigo]
+  );
+  const isCartao = useMemo(() => {
+    const tipo = (formaSelecionada?.tipo_base || "").toUpperCase();
+    return tipo.includes("CARTAO") || tipo.includes("CARTÃO") || tipo.includes("CREDITO") || tipo.includes("DEBITO");
+  }, [formaSelecionada]);
 
   async function salvarPagamento(e: React.FormEvent) {
     e.preventDefault();
@@ -108,18 +179,26 @@ export default function ContasPagarPage() {
     setSalvando(true);
     setError(null);
     try {
+      const payload: any = {
+        conta_pagar_id: modalConta.id,
+        valor_centavos: pagamentoForm.valor_centavos,
+        juros_centavos: pagamentoForm.juros_centavos,
+        desconto_centavos: pagamentoForm.desconto_centavos,
+        data_pagamento: pagamentoForm.data_pagamento,
+        metodo_pagamento: pagamentoForm.metodo_pagamento_texto || undefined,
+        forma_pagamento_codigo: pagamentoForm.forma_pagamento_codigo || undefined,
+        observacoes: pagamentoForm.observacoes || null,
+      };
+      if (isCartao) {
+        payload.cartao_maquina_id = pagamentoForm.cartao_maquina_id || null;
+        payload.cartao_bandeira_id = pagamentoForm.cartao_bandeira_id || null;
+        payload.cartao_numero_parcelas = pagamentoForm.cartao_numero_parcelas || null;
+      }
+
       const res = await fetch("/api/financeiro/contas-pagar/pagar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conta_pagar_id: modalConta.id,
-          valor_centavos: pagamentoForm.valor_centavos,
-          juros_centavos: pagamentoForm.juros_centavos,
-          desconto_centavos: pagamentoForm.desconto_centavos,
-          data_pagamento: pagamentoForm.data_pagamento,
-          metodo_pagamento: pagamentoForm.metodo_pagamento,
-          observacoes: pagamentoForm.observacoes || null,
-        }),
+        body: JSON.stringify(payload),
       });
       const json = (await res.json()) as PagarResponse;
       if (!res.ok || !json?.ok) {
@@ -211,6 +290,11 @@ export default function ContasPagarPage() {
         {error ? (
           <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
+          </div>
+        ) : null}
+        {refsErro ? (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+            {refsErro} (usando fallback se necessário)
           </div>
         ) : null}
       </div>
@@ -347,17 +431,106 @@ export default function ContasPagarPage() {
                     }
                   />
                 </label>
+              </div>
+
+              {formas.length > 0 ? (
                 <label className="text-sm text-slate-700">
-                  Método
+                  Forma de pagamento
+                  <select
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    value={pagamentoForm.forma_pagamento_codigo}
+                    onChange={(e) =>
+                      setPagamentoForm((f) => ({
+                        ...f,
+                        forma_pagamento_codigo: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Selecione</option>
+                    {formas
+                      .filter((f) => f.ativo)
+                      .map((f) => (
+                        <option key={f.codigo} value={f.codigo}>
+                          {f.nome} ({f.codigo})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : (
+                <label className="text-sm text-slate-700">
+                  Método (texto)
                   <input
                     className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    value={pagamentoForm.metodo_pagamento}
+                    value={pagamentoForm.metodo_pagamento_texto}
                     onChange={(e) =>
-                      setPagamentoForm((f) => ({ ...f, metodo_pagamento: e.target.value }))
+                      setPagamentoForm((f) => ({ ...f, metodo_pagamento_texto: e.target.value }))
                     }
+                    placeholder="PIX, Dinheiro, Cartão..."
                   />
                 </label>
-              </div>
+              )}
+
+              {isCartao ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Maquininha
+                    <select
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      value={pagamentoForm.cartao_maquina_id ?? ""}
+                      onChange={(e) =>
+                        setPagamentoForm((f) => ({
+                          ...f,
+                          cartao_maquina_id: e.target.value ? Number(e.target.value) : null,
+                        }))
+                      }
+                    >
+                      <option value="">Não especificado</option>
+                      {maquinas.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.nome || `Maquina #${m.id}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Bandeira
+                    <select
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      value={pagamentoForm.cartao_bandeira_id ?? ""}
+                      onChange={(e) =>
+                        setPagamentoForm((f) => ({
+                          ...f,
+                          cartao_bandeira_id: e.target.value ? Number(e.target.value) : null,
+                        }))
+                      }
+                    >
+                      <option value="">Não especificada</option>
+                      {bandeiras.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.nome || b.codigo || `Bandeira #${b.id}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Parcelas
+                    <input
+                      type="number"
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      value={pagamentoForm.cartao_numero_parcelas ?? ""}
+                      onChange={(e) =>
+                        setPagamentoForm((f) => ({
+                          ...f,
+                          cartao_numero_parcelas: e.target.value
+                            ? Number(e.target.value)
+                            : null,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
+
               <label className="text-sm text-slate-700">
                 Observações
                 <textarea

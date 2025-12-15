@@ -29,6 +29,10 @@ export async function POST(req: NextRequest) {
     valor_centavos,
     data_pagamento,
     metodo_pagamento,
+    forma_pagamento_codigo,
+    cartao_maquina_id,
+    cartao_bandeira_id,
+    cartao_numero_parcelas,
     centro_custo_id,
     observacoes,
   } = body ?? {};
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
   }
 
   const dataPgto = (data_pagamento || new Date().toISOString().slice(0, 10)) as string;
-  const metodo = metodo_pagamento || "OUTRO";
+  const metodo = forma_pagamento_codigo || metodo_pagamento || "OUTRO";
 
   try {
     const { data: cobranca, error: errCob } = await supabaseAdmin
@@ -89,6 +93,10 @@ export async function POST(req: NextRequest) {
         valor_centavos: valor,
         data_pagamento: `${dataPgto}T00:00:00Z`,
         metodo_pagamento: metodo,
+        forma_pagamento_codigo: forma_pagamento_codigo ?? null,
+        cartao_maquina_id: cartao_maquina_id ?? null,
+        cartao_bandeira_id: cartao_bandeira_id ?? null,
+        cartao_numero_parcelas: cartao_numero_parcelas ?? null,
         origem_sistema: "ADMIN_FINANCEIRO",
         observacoes: observacoes ?? null,
       })

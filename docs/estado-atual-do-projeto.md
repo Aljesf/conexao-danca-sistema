@@ -18,11 +18,13 @@
 - Registro de pagamento via `POST /api/financeiro/contas-pagar/pagar` insere em `contas_pagar_pagamentos`, cria `movimento_financeiro` (DESPESA) e atualiza status/saldo.
 - Detalhe via `GET /api/financeiro/contas-pagar/[id]` retorna pagamentos, `total_pago_centavos` e `saldo_centavos` (`saldo = max(valor_centavos - sum(principal+juros-desconto), 0)`).
 - Ordenação: vencimento asc, id desc; filtros: status, centro_custo_id, categoria_id, pessoa_id, data_inicio/data_fim (vencimento).
+- Novas colunas (padronização forma de pagamento): `forma_pagamento_codigo`, `cartao_maquina_id`, `cartao_bandeira_id`, `cartao_numero_parcelas` (mantém `metodo_pagamento` legado).
 
 ## Contas a receber (Admin)
 - Tela `/admin/financeiro/contas-receber` consome `GET /api/financeiro/contas-receber`.
 - Registro de recebimento via `POST /api/financeiro/contas-receber/receber` insere em `recebimentos`, cria `movimento_financeiro` (ENTRADA origem=COBRANCA) e seta status RECEBIDO quando saldo zera.
 - Cálculo: `total_recebido_centavos = sum(recebimentos.valor_centavos)`; `saldo_centavos = max(valor_centavos - total_recebido_centavos, 0)`; ordenação por vencimento asc, id desc; filtros: status, centro_custo_id, pessoa_id, data_inicio/data_fim.
+- Novas colunas em `recebimentos`: `forma_pagamento_codigo`, `cartao_maquina_id`, `cartao_bandeira_id`, `cartao_numero_parcelas` (metodo_pagamento mantido para compatibilidade).
 
 ## Centros de custo
 - **FIN (Intermediacao Financeira)** - ponto central para registrar recebimentos quando a cobranca nao tem centro definido.

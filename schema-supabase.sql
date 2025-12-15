@@ -334,6 +334,10 @@ CREATE TABLE public."contas_pagar_pagamentos" (
   "desconto_centavos" integer NOT NULL DEFAULT 0,
   "data_pagamento" date NOT NULL,
   "metodo_pagamento" text,
+  "forma_pagamento_codigo" text,
+  "cartao_maquina_id" bigint,
+  "cartao_bandeira_id" bigint,
+  "cartao_numero_parcelas" integer,
   "observacoes" text,
   "usuario_id" uuid,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
@@ -896,6 +900,10 @@ CREATE TABLE public."recebimentos" (
   "valor_centavos" integer NOT NULL,
   "data_pagamento" timestamp with time zone NOT NULL,
   "metodo_pagamento" text NOT NULL,
+  "forma_pagamento_codigo" text,
+  "cartao_maquina_id" bigint,
+  "cartao_bandeira_id" bigint,
+  "cartao_numero_parcelas" integer,
   "origem_sistema" text,
   "observacoes" text,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
@@ -1068,4 +1076,3 @@ CREATE TABLE public."vinculos" (
   "responsavel_id" bigint NOT NULL,
   "parentesco" text
 );
-

@@ -32,9 +32,24 @@ type ReceberResponse = {
 type ReceberForm = {
   valor_centavos: number;
   data_pagamento: string;
-  metodo_pagamento: string;
+  forma_pagamento_codigo: string;
+  metodo_pagamento_texto: string;
+  cartao_maquina_id: number | null;
+  cartao_bandeira_id: number | null;
+  cartao_numero_parcelas: number | null;
   observacoes: string;
 };
+
+type FormaPagamento = {
+  id: number;
+  codigo: string;
+  nome: string;
+  tipo_base: string;
+  ativo: boolean;
+};
+
+type MaquinaOp = { id: number; nome?: string | null };
+type BandeiraOp = { id: number; nome?: string | null; codigo?: string | null };
 
 const STATUS_OPCOES = ["TODOS", "PENDENTE", "RECEBIDO", "PAGO"] as const;
 
@@ -51,10 +66,19 @@ export default function ContasReceberPage() {
   const [dataFim, setDataFim] = useState("");
   const [modalCobranca, setModalCobranca] = useState<Cobranca | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [formas, setFormas] = useState<FormaPagamento[]>([]);
+  const [maquinas, setMaquinas] = useState<MaquinaOp[]>([]);
+  const [bandeiras, setBandeiras] = useState<BandeiraOp[]>([]);
+  const [refsErro, setRefsErro] = useState<string | null>(null);
+  const [refsLoading, setRefsLoading] = useState(false);
   const [form, setForm] = useState<ReceberForm>({
     valor_centavos: 0,
     data_pagamento: hojeISO(),
-    metodo_pagamento: "PIX",
+    forma_pagamento_codigo: "",
+    metodo_pagamento_texto: "",
+    cartao_maquina_id: null,
+    cartao_bandeira_id: null,
+    cartao_numero_parcelas: null,
     observacoes: "",
   });
 
@@ -79,8 +103,40 @@ export default function ContasReceberPage() {
     }
   }
 
+  async function loadRefs() {
+    setRefsLoading(true);
+    setRefsErro(null);
+    try {
+      const [formasRes, maquinasRes, bandeirasRes] = await Promise.all([
+        fetch("/api/financeiro/formas-pagamento/dicionario"),
+        fetch("/api/financeiro/cartao/maquinas/opcoes"),
+        fetch("/api/financeiro/cartao/bandeiras/opcoes"),
+      ]);
+      const formasJson = await formasRes.json().catch(() => ({}));
+      const maquinasJson = await maquinasRes.json().catch(() => ({}));
+      const bandeirasJson = await bandeirasRes.json().catch(() => ({}));
+
+      if (formasRes.ok && formasJson?.ok && Array.isArray(formasJson.formas)) {
+        setFormas(formasJson.formas);
+      } else {
+        setRefsErro("Falha ao carregar dicionário de formas de pagamento.");
+      }
+      if (maquinasRes.ok && maquinasJson?.ok && Array.isArray(maquinasJson.maquinas)) {
+        setMaquinas(maquinasJson.maquinas);
+      }
+      if (bandeirasRes.ok && bandeirasJson?.ok && Array.isArray(bandeirasJson.bandeiras)) {
+        setBandeiras(bandeirasJson.bandeiras);
+      }
+    } catch (err: any) {
+      setRefsErro(err?.message || "Erro ao carregar bases auxiliares.");
+    } finally {
+      setRefsLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadCobrancas();
+    loadRefs();
   }, []);
 
   function abrirModal(c: Cobranca) {
@@ -88,10 +144,23 @@ export default function ContasReceberPage() {
     setForm({
       valor_centavos: c.saldo_centavos || c.valor_centavos,
       data_pagamento: hojeISO(),
-      metodo_pagamento: "PIX",
+      forma_pagamento_codigo: "",
+      metodo_pagamento_texto: "",
+      cartao_maquina_id: null,
+      cartao_bandeira_id: null,
+      cartao_numero_parcelas: null,
       observacoes: "",
     });
   }
+
+  const formaSelecionada = useMemo(
+    () => formas.find((f) => f.codigo === form.forma_pagamento_codigo),
+    [formas, form.forma_pagamento_codigo]
+  );
+  const isCartao = useMemo(() => {
+    const tipo = (formaSelecionada?.tipo_base || "").toUpperCase();
+    return tipo.includes("CARTAO") || tipo.includes("CARTÃO") || tipo.includes("CREDITO") || tipo.includes("DEBITO");
+  }, [formaSelecionada]);
 
   async function salvarRecebimento(e: React.FormEvent) {
     e.preventDefault();
@@ -99,16 +168,24 @@ export default function ContasReceberPage() {
     setSalvando(true);
     setError(null);
     try {
+      const payload: any = {
+        cobranca_id: modalCobranca.id,
+        valor_centavos: form.valor_centavos,
+        data_pagamento: form.data_pagamento,
+        forma_pagamento_codigo: form.forma_pagamento_codigo || undefined,
+        metodo_pagamento: form.metodo_pagamento_texto || undefined,
+        observacoes: form.observacoes || null,
+      };
+      if (isCartao) {
+        payload.cartao_maquina_id = form.cartao_maquina_id || null;
+        payload.cartao_bandeira_id = form.cartao_bandeira_id || null;
+        payload.cartao_numero_parcelas = form.cartao_numero_parcelas || null;
+      }
+
       const res = await fetch("/api/financeiro/contas-receber/receber", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cobranca_id: modalCobranca.id,
-          valor_centavos: form.valor_centavos,
-          data_pagamento: form.data_pagamento,
-          metodo_pagamento: form.metodo_pagamento,
-          observacoes: form.observacoes || null,
-        }),
+        body: JSON.stringify(payload),
       });
       const json = (await res.json()) as ReceberResponse;
       if (!res.ok || !json?.ok) {
@@ -202,6 +279,11 @@ export default function ContasReceberPage() {
             {error}
           </div>
         ) : null}
+        {refsErro ? (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+            {refsErro} (usando fallback se necessário)
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -282,63 +364,148 @@ export default function ContasReceberPage() {
               </button>
             </div>
 
-          <form className="mt-4 space-y-3" onSubmit={salvarRecebimento}>
-            <label className="text-sm text-slate-700">
-              Valor (centavos)
-              <input
-                type="number"
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                value={form.valor_centavos}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, valor_centavos: Number(e.target.value || 0) }))
-                }
-              />
-            </label>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <form className="mt-4 space-y-3" onSubmit={salvarRecebimento}>
               <label className="text-sm text-slate-700">
-                Data pagamento
+                Valor (centavos)
                 <input
-                  type="date"
+                  type="number"
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={form.data_pagamento}
-                  onChange={(e) => setForm((f) => ({ ...f, data_pagamento: e.target.value }))}
+                  value={form.valor_centavos}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, valor_centavos: Number(e.target.value || 0) }))
+                  }
                 />
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm text-slate-700">
+                  Data pagamento
+                  <input
+                    type="date"
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    value={form.data_pagamento}
+                    onChange={(e) => setForm((f) => ({ ...f, data_pagamento: e.target.value }))}
+                  />
+                </label>
+                {formas.length > 0 ? (
+                  <label className="text-sm text-slate-700">
+                    Forma de pagamento
+                    <select
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      value={form.forma_pagamento_codigo}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, forma_pagamento_codigo: e.target.value }))
+                      }
+                    >
+                      <option value="">Selecione</option>
+                      {formas
+                        .filter((f) => f.ativo)
+                        .map((f) => (
+                          <option key={f.codigo} value={f.codigo}>
+                            {f.nome} ({f.codigo})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label className="text-sm text-slate-700">
+                    Método (texto)
+                    <input
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      value={form.metodo_pagamento_texto}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, metodo_pagamento_texto: e.target.value }))
+                      }
+                      placeholder="PIX, Cartão..."
+                    />
+                  </label>
+                )}
+              </div>
+
+              {isCartao ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-sm text-slate-700">
+                    Maquininha
+                    <select
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      value={form.cartao_maquina_id ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          cartao_maquina_id: e.target.value ? Number(e.target.value) : null,
+                        }))
+                      }
+                    >
+                      <option value="">Não especificado</option>
+                      {maquinas.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.nome || `Maquina #${m.id}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Bandeira
+                    <select
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      value={form.cartao_bandeira_id ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          cartao_bandeira_id: e.target.value ? Number(e.target.value) : null,
+                        }))
+                      }
+                    >
+                      <option value="">Não especificada</option>
+                      {bandeiras.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.nome || b.codigo || `Bandeira #${b.id}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm text-slate-700">
+                    Parcelas
+                    <input
+                      type="number"
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      value={form.cartao_numero_parcelas ?? ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          cartao_numero_parcelas: e.target.value ? Number(e.target.value) : null,
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
+
               <label className="text-sm text-slate-700">
-                Método
-                <input
+                Observações
+                <textarea
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={form.metodo_pagamento}
-                  onChange={(e) => setForm((f) => ({ ...f, metodo_pagamento: e.target.value }))}
+                  value={form.observacoes}
+                  onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+                  rows={3}
                 />
               </label>
-            </div>
-            <label className="text-sm text-slate-700">
-              Observações
-              <textarea
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                value={form.observacoes}
-                onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
-                rows={3}
-              />
-            </label>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={() => setModalCobranca(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="rounded-md bg-purple-600 px-3 py-2 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
-                disabled={salvando}
-              >
-                {salvando ? "Salvando..." : "Confirmar recebimento"}
-              </button>
-            </div>
-          </form>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  onClick={() => setModalCobranca(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-md bg-purple-600 px-3 py-2 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
+                  disabled={salvando}
+                >
+                  {salvando ? "Salvando..." : "Confirmar recebimento"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}
