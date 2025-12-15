@@ -37,7 +37,10 @@ export const adminSidebar: SidebarSection[] = [
   {
     id: "admin-auditoria",
     title: "Governança & Auditoria",
-    items: [{ label: "🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" }],
+    items: [
+      { label: "📘 Construtor de Relatórios", href: "/admin/relatorios/construtor" },
+      { label: "🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" },
+    ],
   },
   {
     id: "admin-financeiro",
@@ -56,24 +59,6 @@ export const adminSidebar: SidebarSection[] = [
       { label: "💳 Configuração de cartões", href: "/admin/financeiro/cartao/configuracoes" },
       { label: "💳 Recebíveis de cartão", href: "/admin/financeiro/cartao/recebiveis" },
       { label: "🚧 ✍️ Lançamentos manuais", href: "/admin/financeiro/lancamentos-manuais" },
-    ],
-  },
-  {
-    id: "admin-relatorios-diretor",
-    title: "Painel do Diretor - Relatórios",
-    items: [
-      { label: "🚧 📑 Relatórios", href: "/admin/relatorios" },
-      { label: "🚧 Alunos por turma", href: "/admin/relatorios/alunos/turmas" },
-      { label: "🚧 Alunos ativos e inativos", href: "/admin/relatorios/alunos/status" },
-      { label: "🚧 Grupos & Projetos", href: "/admin/relatorios/alunos/grupos" },
-      { label: "🚧 Conversão de interessados", href: "/admin/relatorios/captacao/conversao" },
-      { label: "🚧 💹 Resumo financeiro", href: "/admin/relatorios/financeiro/resumo" },
-      { label: "🚧 🔄 Movimentação financeira", href: "/admin/relatorios/financeiro/movimento" },
-      { label: "🚧 💵 Contas a receber", href: "/admin/relatorios/financeiro/receber" },
-      { label: "🚧 📤 Contas a pagar", href: "/admin/relatorios/financeiro/pagar" },
-      { label: "🚧 🛍️ Vendas por período", href: "/admin/relatorios/comercial/vendas" },
-      { label: "🚧 📦 Estoque crítico", href: "/admin/relatorios/comercial/estoque" },
-      { label: "🚧 ❤️ Bolsas e ações sociais", href: "/admin/relatorios/social" },
     ],
   },
   {
