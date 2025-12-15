@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
+import PageReal from "@/app/(private)/config/colaboradores/page";
 
-export default function Page() {
-  redirect("/config/colaboradores");
-}
+export default PageReal;

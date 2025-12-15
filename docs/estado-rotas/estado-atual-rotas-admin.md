@@ -1,15 +1,15 @@
 # Estado atual das rotas - Admin
-Atualizado em: 2025-12-15 14:53
+Atualizado em: 2025-12-15 16:07
 Fonte: varredura do filesystem (scripts/generateRotasPages.ts)
 Referencia: docs/estado-rotas/RELATORIO-DIAGNOSTICO-ROTAS.md
-Auditado em: 2025-12-15T14:53:16.821Z
+Auditado em: 2025-12-15T16:06:55.488Z
 
 ## Rotas
-- [REAL] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 4)
+- [REAL] /admin/colaboradores - src/app/(private)/admin/colaboradores/page.tsx (linhas: 2)
 - [PLACEHOLDER] /admin/colaboradores/centros-custo - src/app/(private)/admin/colaboradores/centros-custo/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/colaboradores/jornadas - src/app/(private)/admin/colaboradores/jornadas/page.tsx (linhas: 18)
-- [REAL] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (linhas: 4)
-- [REAL] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (linhas: 4)
+- [REAL] /admin/colaboradores/tipos-funcao - src/app/(private)/admin/colaboradores/tipos-funcao/page.tsx (linhas: 2)
+- [REAL] /admin/colaboradores/tipos-vinculo - src/app/(private)/admin/colaboradores/tipos-vinculo/page.tsx (linhas: 2)
 - [PLACEHOLDER] /admin/config/cafe - src/app/(private)/admin/config/cafe/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/config/escola - src/app/(private)/admin/config/escola/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/config/loja - src/app/(private)/admin/config/loja/page.tsx (linhas: 18)
@@ -38,8 +38,8 @@ Auditado em: 2025-12-15T14:53:16.821Z
 - [PLACEHOLDER] /admin/loja/estoque - src/app/(private)/admin/loja/estoque/page.tsx (linhas: 5)
 - [PLACEHOLDER] /admin/loja/fornecedores - src/app/(private)/admin/loja/fornecedores/page.tsx (linhas: 432)
 - [PLACEHOLDER] /admin/loja/gestao-estoque - src/app/(private)/admin/loja/gestao-estoque/page.tsx (linhas: 2535)
-- [PLACEHOLDER] /admin/perfis - src/app/(private)/admin/perfis/page.tsx (linhas: 18)
-- [PLACEHOLDER] /admin/permissoes - src/app/(private)/admin/permissoes/page.tsx (linhas: 18)
+- [REAL] /admin/perfis - src/app/(private)/admin/perfis/page.tsx (linhas: 2)
+- [REAL] /admin/permissoes - src/app/(private)/admin/permissoes/page.tsx (linhas: 2)
 - [PLACEHOLDER] /admin/relatorios - src/app/(private)/admin/relatorios/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/grupos - src/app/(private)/admin/relatorios/alunos/grupos/page.tsx (linhas: 18)
 - [PLACEHOLDER] /admin/relatorios/alunos/status - src/app/(private)/admin/relatorios/alunos/status/page.tsx (linhas: 18)

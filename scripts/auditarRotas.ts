@@ -77,6 +77,9 @@ function determineStatus(content: string, linesCount: number): RouteStatus {
   if (/(todo|em constru[cç][aã]o|placeholder|em breve)/.test(lc)) {
     return "PLACEHOLDER";
   }
+  if (/pageReal/i.test(content) || /from\s+["']@\/app\/\(private\)\/config/i.test(content)) {
+    return "REAL";
+  }
   if (/redirect\s*\(/i.test(content)) return "REAL";
   if (linesCount < 15) return "PLACEHOLDER";
 

@@ -1,5 +1,5 @@
 # ADMIN-MAPA-ROTAS-FORA-DO-ADMIN
-Gerado em: 2025-12-15T14:52:49.610Z
+Gerado em: 2025-12-15T16:06:47.572Z
 Fonte: scripts/mapearRotasAdminForaDoAdmin.ts (varredura do filesystem)
 
 ## Rotas de interesse fora do /admin

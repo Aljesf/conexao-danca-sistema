@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
+import PageReal from "@/app/(private)/config/colaboradores/tipos-vinculo/page";
 
-export default function Page() {
-  redirect("/config/colaboradores/tipos-vinculo");
-}
+export default PageReal;
