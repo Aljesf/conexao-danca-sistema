@@ -1,4 +1,4 @@
-"use client";
+Ôªø"use client";
 
 import { useEffect, useState } from "react";
 
@@ -50,8 +50,8 @@ export default function ContasCreditoConexaoPage() {
       const json = await res.json();
       setContas(json.contas ?? []);
     } catch (e: unknown) {
-      console.error("Erro ao carregar contas de CrÈdito Conex„o", e);
-      setErro("Erro ao carregar contas de CrÈdito Conex„o.");
+      console.error("Erro ao carregar contas de Cr√©dito Conex√£o", e);
+      setErro("Erro ao carregar contas de Cr√©dito Conex√£o.");
     } finally {
       setLoading(false);
     }
@@ -133,23 +133,23 @@ export default function ContasCreditoConexaoPage() {
       });
 
       if (!res.ok) {
-        console.error("Erro ao salvar conta CrÈdito Conex„o", await res.text());
-        setErro("Erro ao salvar conta de CrÈdito Conex„o.");
+        console.error("Erro ao salvar conta Cr√©dito Conex√£o", await res.text());
+        setErro("Erro ao salvar conta de Cr√©dito Conex√£o.");
         return;
       }
 
       await carregarContas();
       resetForm();
     } catch (e: unknown) {
-      console.error("Erro ao salvar conta CrÈdito Conex„o", e);
-      setErro("Erro ao salvar conta de CrÈdito Conex„o.");
+      console.error("Erro ao salvar conta Cr√©dito Conex√£o", e);
+      setErro("Erro ao salvar conta de Cr√©dito Conex√£o.");
     } finally {
       setSaving(false);
     }
   }
 
   function formatCurrency(centavos?: number | null) {
-    if (centavos == null) return "ó";
+    if (centavos == null) return "‚Äî";
     return (centavos / 100).toLocaleString("pt-BR", {
       style: "currency",
       currency: "BRL",
@@ -159,10 +159,10 @@ export default function ContasCreditoConexaoPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">CrÈdito Conex„o ó Contas</h1>
+        <h1 className="text-2xl font-semibold">Cr√©dito Conex√£o ‚Äî Contas</h1>
         <p className="text-sm text-gray-600">
-          Cadastre aqui as contas de Cart„o Conex„o Aluno/Colaborador. Cada conta representa um
-          titular (respons·vel ou colaborador) com limites e datas de fatura.
+          Cadastre aqui as contas de Cart√£o Conex√£o Aluno/Colaborador. Cada conta representa um
+          titular (respons√°vel ou colaborador) com limites e datas de fatura.
         </p>
       </div>
 
@@ -188,10 +188,10 @@ export default function ContasCreditoConexaoPage() {
                     <th className="px-3 py-2 text-left">Tipo</th>
                     <th className="px-3 py-2 text-left">Fechamento</th>
                     <th className="px-3 py-2 text-left">Vencimento</th>
-                    <th className="px-3 py-2 text-left">Limite m·x.</th>
+                    <th className="px-3 py-2 text-left">Limite m√°x.</th>
                     <th className="px-3 py-2 text-left">Limite aut.</th>
                     <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-center">AÁıes</th>
+                    <th className="px-3 py-2 text-center">A√ß√µes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -204,7 +204,7 @@ export default function ContasCreditoConexaoPage() {
                       <td className="px-3 py-2">{c.tipo_conta}</td>
                       <td className="px-3 py-2">dia {c.dia_fechamento}</td>
                       <td className="px-3 py-2">
-                        {c.dia_vencimento ? `dia ${c.dia_vencimento}` : "ó"}
+                        {c.dia_vencimento ? `dia ${c.dia_vencimento}` : "‚Äî"}
                       </td>
                       <td className="px-3 py-2">
                         {formatCurrency(c.limite_maximo_centavos ?? null)}
@@ -240,11 +240,11 @@ export default function ContasCreditoConexaoPage() {
           )}
         </div>
 
-        {/* Formul·rio */}
+        {/* Formul√°rio */}
         <div className="border rounded-xl bg-white shadow-sm p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">
-              {editandoId ? `Editar conta #${editandoId}` : "Nova conta de CrÈdito Conex„o"}
+              {editandoId ? `Editar conta #${editandoId}` : "Nova conta de Cr√©dito Conex√£o"}
             </h2>
             {editandoId && (
               <button
@@ -275,8 +275,8 @@ export default function ContasCreditoConexaoPage() {
                 required
               />
               <p className="mt-1 text-[11px] text-gray-500">
-                Por enquanto, informe o ID da pessoa (respons·vel ou colaborador). Em uma etapa
-                futura vamos integrar este formul·rio direto ‡ ficha da pessoa.
+                Por enquanto, informe o ID da pessoa (respons√°vel ou colaborador). Em uma etapa
+                futura vamos integrar este formul√°rio direto √† ficha da pessoa.
               </p>
             </div>
 
@@ -293,13 +293,13 @@ export default function ContasCreditoConexaoPage() {
                     }))
                   }
                 >
-                  <option value="ALUNO">Cart„o Conex„o Aluno</option>
-                  <option value="COLABORADOR">Cart„o Conex„o Colaborador</option>
+                  <option value="ALUNO">Cart√£o Conex√£o Aluno</option>
+                  <option value="COLABORADOR">Cart√£o Conex√£o Colaborador</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700">
-                  DescriÁ„o exibida (opcional)
+                  Descri√ß√£o exibida (opcional)
                 </label>
                 <input
                   className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
@@ -358,7 +358,7 @@ export default function ContasCreditoConexaoPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700">
-                  Limite m·ximo (R$)
+                  Limite m√°ximo (R$)
                 </label>
                 <input
                   type="number"
@@ -437,3 +437,4 @@ export default function ContasCreditoConexaoPage() {
     </div>
   );
 }
+
