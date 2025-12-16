@@ -677,7 +677,6 @@ export default function PessoaDetalhesPage() {
                 </div>
               )}
 
-              {/* Aba: Endereco */}
               {abaAtiva === "endereco" && (
                 <div className="space-y-6">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
@@ -923,7 +922,6 @@ export default function PessoaDetalhesPage() {
     </div>
   );
 }
-
 
 
 
