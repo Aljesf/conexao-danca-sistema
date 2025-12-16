@@ -210,10 +210,15 @@ export default function LojaCaixaPage() {
       return;
     }
 
+    const tipo_venda =
+      tipoOperacao === "ENTREGA_ADMIN"
+        ? "ENTREGA_FIGURINO"
+        : "VENDA";
+
     const payload: any = {
       cliente_pessoa_id: comprador.id,
       tipo_operacao: tipoOperacao,
-      tipo_venda: tipoOperacao === "ENTREGA_ADMIN" ? "ENTREGA_FIGURINO" : "VENDA",
+      tipo_venda,
       itens: itens.map((it) => ({
         produto_id: it.produto.id,
         quantidade: it.quantidade,
