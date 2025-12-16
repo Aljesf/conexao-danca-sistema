@@ -7,58 +7,35 @@ export const adminSidebar: SidebarSection[] = [
     items: [{ label: "📊 Painel de administração", href: "/admin" }],
   },
   {
-    id: "admin-config-unidades",
-    title: "Configurações das unidades",
-    items: [
-      { label: "🏫 Configuração da escola", href: "/admin/config/escola" },
-      { label: "🛍️ Configuração da loja", href: "/admin/config/loja" },
-      { label: "☕ Configuração do Ballet Café", href: "/admin/config/cafe" },
-    ],
-  },
-  {
-    id: "admin-colaboradores",
-    title: "Colaboradores",
-    items: [
-      { label: "👥 Gestão de colaboradores", href: "/admin/colaboradores" },
-      { label: "🔗 Tipos de vínculo", href: "/admin/colaboradores/tipos-vinculo" },
-      { label: "🧩 Tipos de função", href: "/admin/colaboradores/tipos-funcao" },
-      { label: "🚧 🕒 Jornadas de trabalho", href: "/admin/colaboradores/jornadas" },
-    ],
-  },
-  {
-    id: "admin-usuarios",
-    title: "Usuários & Segurança",
-    items: [
-      { label: "👤 Usuários", href: "/admin/usuarios" },
-      { label: "🧬 Perfis", href: "/admin/perfis" },
-      { label: "🔐 Permissões", href: "/admin/permissoes" },
-    ],
-  },
-  {
-    id: "admin-auditoria",
-    title: "Governança & Auditoria",
-    items: [
-      { label: "📘 Construtor de Relatórios", href: "/admin/relatorios/construtor" },
-      { label: "🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" },
-    ],
-  },
-  {
     id: "admin-financeiro",
     title: "Financeiro (Admin)",
     items: [
       { label: "📈 Dashboard financeiro", href: "/admin/financeiro" },
+      { label: "💵 Contas a receber", href: "/admin/financeiro/contas-receber" },
+      { label: "📤 Contas a pagar", href: "/admin/financeiro/contas-pagar" },
       { label: "🧾 Centros de custo (financeiro)", href: "/admin/financeiro/centros-custo" },
       { label: "📚 Plano de contas", href: "/admin/financeiro/plano-contas" },
       { label: "🗂️ Categorias financeiras", href: "/admin/financeiro/categorias" },
-      { label: "💵 Contas a receber", href: "/admin/financeiro/contas-receber" },
-      { label: "📤 Contas a pagar", href: "/admin/financeiro/contas-pagar" },
-      { label: "🔄 Movimento", href: "/admin/financeiro/movimento" },
       { label: "🏦 Contas financeiras", href: "/admin/financeiro/contas-financeiras" },
-      { label: "💳 Crédito Conexão (contas)", href: "/admin/financeiro/credito-conexao/contas" },
-      { label: "💳 Faturas Crédito Conexão", href: "/admin/financeiro/credito-conexao/faturas" },
+      { label: "📊 Movimento", href: "/admin/financeiro/movimento" },
+      { label: "✍️ Lançamentos manuais", href: "/admin/financeiro/lancamentos-manuais" },
+    ],
+  },
+  {
+    id: "admin-cartoes",
+    title: "Cartões (Admin)",
+    items: [
       { label: "💳 Configuração de cartões", href: "/admin/financeiro/cartao/configuracoes" },
       { label: "💳 Recebíveis de cartão", href: "/admin/financeiro/cartao/recebiveis" },
-      { label: "✍️ Lançamentos manuais", href: "/admin/financeiro/lancamentos-manuais" },
+    ],
+  },
+  {
+    id: "admin-credito-conexao",
+    title: "Crédito Conexão (Admin)",
+    items: [
+      { label: "🪪 Contas", href: "/admin/financeiro/credito-conexao/contas" },
+      { label: "🧾 Faturas", href: "/admin/financeiro/credito-conexao/faturas" },
+      { label: "⚙️ Configurações", href: "/admin/financeiro/credito-conexao/configuracoes" },
     ],
   },
   {
@@ -70,7 +47,42 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🚚 Fornecedores", href: "/admin/loja/fornecedores" },
       { label: "🏷️ Categorias", href: "/admin/loja/categorias" },
       { label: "📦 Estoque", href: "/admin/loja/estoque" },
-      { label: "⚙️ Configurações da loja", href: "/admin/loja/configuracoes" },
+    ],
+  },
+  {
+    id: "admin-colaboradores",
+    title: "Colaboradores",
+    items: [
+      { label: "👥 Gestão de colaboradores", href: "/admin/colaboradores" },
+      { label: "🔗 Tipos de vínculo", href: "/admin/colaboradores/tipos-vinculo" },
+      { label: "🧩 Tipos de função", href: "/admin/colaboradores/tipos-funcao" },
+      { label: "🕒 Jornadas de trabalho", href: "/admin/colaboradores/jornadas" },
+    ],
+  },
+  {
+    id: "admin-config-unidades",
+    title: "Configurações das unidades",
+    items: [
+      { label: "🏫 Configuração da escola", href: "/admin/config/escola" },
+      { label: "🛍️ Configuração da loja", href: "/admin/config/loja" },
+      { label: "☕ Configuração do Ballet Café", href: "/admin/config/cafe" },
+    ],
+  },
+  {
+    id: "admin-auditoria",
+    title: "Governança & Auditoria",
+    items: [
+      { label: "📘 Construtor de Relatórios", href: "/admin/relatorios/construtor" },
+      { label: "🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" },
+    ],
+  },
+  {
+    id: "admin-usuarios",
+    title: "Usuários & Segurança",
+    items: [
+      { label: "👤 Usuários", href: "/admin/usuarios" },
+      { label: "🧬 Perfis", href: "/admin/perfis" },
+      { label: "🔐 Permissões", href: "/admin/permissoes" },
     ],
   },
   {
