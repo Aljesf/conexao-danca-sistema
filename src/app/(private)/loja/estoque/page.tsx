@@ -96,13 +96,32 @@ export default function LojaEstoquePage() {
       const res = await fetch(`/api/loja/estoque/movimentos?${params.toString()}`, {
         cache: "no-store",
       });
-      const json: ApiResponse<MovimentoEstoque[]> = await res.json();
-      if (!res.ok || !json.ok || !json.data) {
-        setErroMovimentos(json.error || "Erro ao carregar movimentos.");
+      const raw = await res.text();
+      let json: any = {};
+      try {
+        json = raw ? JSON.parse(raw) : {};
+      } catch {
+        json = {};
+      }
+
+      if (!res.ok || json?.ok === false) {
+        const msg =
+          json?.error ||
+          `Erro ao carregar movimentos (status ${res.status}${
+            json?.details ? `: ${json.details}` : ""
+          })`;
+        console.error("Erro ao carregar movimentos:", msg, raw);
+        setErroMovimentos(msg);
         setMovimentos([]);
         return;
       }
-      setMovimentos(json.data);
+
+      const dados = Array.isArray(json?.movimentos)
+        ? json.movimentos
+        : Array.isArray(json?.data)
+        ? json.data
+        : [];
+      setMovimentos(dados);
     } catch (err) {
       console.error("Erro ao carregar movimentos:", err);
       setErroMovimentos("Erro inesperado ao carregar movimentos.");
