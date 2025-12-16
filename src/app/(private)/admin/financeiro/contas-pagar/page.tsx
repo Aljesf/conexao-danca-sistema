@@ -103,8 +103,9 @@ export default function ContasPagarPage() {
         throw new Error(json?.error || "Erro ao carregar contas a pagar.");
       }
       setContas(json.contas);
-    } catch (err: any) {
-      setError(err?.message || "Erro inesperado ao carregar contas.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro inesperado ao carregar contas.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -136,8 +137,9 @@ export default function ContasPagarPage() {
       if (bandeirasRes.ok && bandeirasJson?.ok && Array.isArray(bandeirasJson.bandeiras)) {
         setBandeiras(bandeirasJson.bandeiras);
       }
-    } catch (err: any) {
-      setRefsErro(err?.message || "Erro ao carregar bases auxiliares.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao carregar bases auxiliares.";
+      setRefsErro(message);
     } finally {
       setRefsLoading(false);
     }
@@ -179,7 +181,7 @@ export default function ContasPagarPage() {
     setSalvando(true);
     setError(null);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         conta_pagar_id: modalConta.id,
         valor_centavos: pagamentoForm.valor_centavos,
         juros_centavos: pagamentoForm.juros_centavos,

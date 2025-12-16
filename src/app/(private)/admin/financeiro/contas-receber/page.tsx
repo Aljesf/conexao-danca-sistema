@@ -96,8 +96,9 @@ export default function ContasReceberPage() {
         throw new Error(json?.error || "Erro ao carregar contas a receber.");
       }
       setCobrancas(json.cobrancas);
-    } catch (err: any) {
-      setError(err?.message || "Erro inesperado ao carregar contas.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro inesperado ao carregar contas.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -127,8 +128,9 @@ export default function ContasReceberPage() {
       if (bandeirasRes.ok && bandeirasJson?.ok && Array.isArray(bandeirasJson.bandeiras)) {
         setBandeiras(bandeirasJson.bandeiras);
       }
-    } catch (err: any) {
-      setRefsErro(err?.message || "Erro ao carregar bases auxiliares.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao carregar bases auxiliares.";
+      setRefsErro(message);
     } finally {
       setRefsLoading(false);
     }
@@ -168,7 +170,7 @@ export default function ContasReceberPage() {
     setSalvando(true);
     setError(null);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         cobranca_id: modalCobranca.id,
         valor_centavos: form.valor_centavos,
         data_pagamento: form.data_pagamento,
@@ -193,8 +195,9 @@ export default function ContasReceberPage() {
       }
       setModalCobranca(null);
       await loadCobrancas();
-    } catch (err: any) {
-      setError(err?.message || "Erro ao registrar recebimento.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao registrar recebimento.";
+      setError(message);
     } finally {
       setSalvando(false);
     }

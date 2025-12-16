@@ -27,9 +27,10 @@ export default function CentrosCustoPage() {
         const json = await resp.json();
         if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao carregar centros de custo.");
         setCentros(json.data ?? []);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
-        alert(err.message || "Erro ao carregar centros de custo.");
+        const message = err instanceof Error ? err.message : "Erro ao carregar centros de custo.";
+        alert(message);
       } finally {
         setLoading(false);
       }
@@ -71,9 +72,10 @@ export default function CentrosCustoPage() {
         setCentros((prev) => [json.data, ...prev]);
       }
       resetForm();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert(err.message || "Erro ao salvar centro de custo.");
+      const message = err instanceof Error ? err.message : "Erro ao salvar centro de custo.";
+      alert(message);
     } finally {
       setSaving(false);
     }
@@ -89,9 +91,10 @@ export default function CentrosCustoPage() {
       const json = await resp.json();
       if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao atualizar centro de custo.");
       setCentros((prev) => prev.map((c) => (c.id === item.id ? json.data : c)));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert(err.message || "Erro ao atualizar centro de custo.");
+      const message = err instanceof Error ? err.message : "Erro ao atualizar centro de custo.";
+      alert(message);
     }
   }
 

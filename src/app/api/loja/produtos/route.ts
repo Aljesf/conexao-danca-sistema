@@ -148,7 +148,7 @@ export async function GET(req: NextRequest) {
       })) ?? [];
 
     // Estoque pela view de variantes
-    let estoqueMap = new Map<number, number>();
+    const estoqueMap = new Map<number, number>();
     if (itemsRaw.length > 0) {
       const ids = itemsRaw.map((p) => p.id);
       const { data: estoqueData, error: estoqueError } = await supabaseAdmin

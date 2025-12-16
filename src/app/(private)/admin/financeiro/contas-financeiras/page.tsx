@@ -64,7 +64,7 @@ export default function ContasFinanceirasPage() {
 
       setContas(contasJson.contas ?? []);
       setCentros(centrosJson.centros ?? []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Erro ao carregar contas financeiras", e);
       setErro("Erro ao carregar contas financeiras.");
     } finally {
@@ -138,7 +138,7 @@ export default function ContasFinanceirasPage() {
 
       await carregarDados();
       resetForm();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Erro ao salvar conta financeira", e);
       setErro("Erro ao salvar conta financeira.");
     } finally {

@@ -208,8 +208,9 @@ export default function FinanceiroDashboardPage() {
         hasKey: json.has_openai_key,
         model: json.model_usado,
       });
-    } catch (err: any) {
-      setError(err?.message || "Erro inesperado ao carregar dashboard.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro inesperado ao carregar dashboard.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -236,8 +237,9 @@ export default function FinanceiroDashboardPage() {
         hasKey: json.has_openai_key,
         model: json.model_usado,
       });
-    } catch (err: any) {
-      setError(err?.message || "Erro ao reanalisar dashboard.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao reanalisar dashboard.";
+      setError(message);
     } finally {
       setReanalisando(false);
     }

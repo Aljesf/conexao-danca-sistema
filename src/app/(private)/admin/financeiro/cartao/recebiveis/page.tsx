@@ -72,9 +72,10 @@ export default function RecebiveisCartaoPage() {
       }
 
       setRecebiveis(json.recebiveis ?? []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Erro ao carregar recebiveis de cartao:", e);
-      setErro(e?.message || "Erro ao carregar recebiveis de cartao.");
+      const message = e instanceof Error ? e.message : "Erro ao carregar recebiveis de cartao.";
+      setErro(message);
       setRecebiveis([]);
     } finally {
       setLoading(false);
@@ -109,9 +110,10 @@ export default function RecebiveisCartaoPage() {
       }
 
       await carregarRecebiveis();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Erro ao baixar recebivel de cartao", e);
-      setErro("Erro ao registrar repasse do cartao.");
+      const message = e instanceof Error ? e.message : "Erro ao registrar repasse do cartao.";
+      setErro(message);
     } finally {
       setBaixandoId(null);
     }

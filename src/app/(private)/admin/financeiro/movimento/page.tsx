@@ -101,9 +101,10 @@ export default function MovimentoFinanceiroPage() {
         }
 
         setMovimentos(json.movimentos ?? []);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erro ao carregar movimentos financeiros:", err);
-        setErro(err?.message || "Erro ao carregar movimentos financeiros.");
+        const message = err instanceof Error ? err.message : "Erro ao carregar movimentos financeiros.";
+        setErro(message);
         setMovimentos([]);
       } finally {
         setLoading(false);

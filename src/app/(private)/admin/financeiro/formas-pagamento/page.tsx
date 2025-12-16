@@ -102,14 +102,16 @@ export default function FormasPagamentoContextoPage() {
       setCentros(centrosJson.centros ?? []);
       setFormasDic(formasDicJson.formas ?? []);
       setContas(
-        (contasJson.contas ?? []).map((c: any) => ({
-          id: c.id,
-          codigo: c.codigo,
-          nome: c.nome,
-        }))
+        (contasJson.contas ?? []).map((c) => {
+          if (!c || typeof c !== "object") {
+            return { id: 0, codigo: "", nome: "" };
+          }
+          const conta = c as { id?: number; codigo?: string; nome?: string };
+          return { id: conta.id ?? 0, codigo: conta.codigo ?? "", nome: conta.nome ?? "" };
+        })
       );
       setMaquinasCartao(maquinasJson.maquinas ?? []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       setErro("Erro ao carregar bases de formas de pagamento.");
     } finally {
@@ -126,7 +128,7 @@ export default function FormasPagamentoContextoPage() {
       if (!res.ok) throw new Error(await res.text());
       const json = await res.json();
       setFormasContexto(json.formas ?? []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       setErro("Erro ao carregar formas de pagamento para o centro selecionado.");
     } finally {
@@ -219,7 +221,7 @@ export default function FormasPagamentoContextoPage() {
 
       await carregarContexto(centroSelecionado);
       resetForm(centroSelecionado);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       setErro("Erro ao salvar forma de pagamento do contexto.");
     } finally {

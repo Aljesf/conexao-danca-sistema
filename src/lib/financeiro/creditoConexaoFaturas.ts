@@ -45,10 +45,11 @@ export async function ensureFaturaAberta(
   };
 
   let periodoAtual = periodo;
-  let { data: fatura, error } = await buscar(periodoAtual);
+  const { data: faturaInicial, error } = await buscar(periodoAtual);
   if (error) {
     throw error;
   }
+  let fatura = faturaInicial;
 
   if (fatura?.status === "PAGA") {
     periodoAtual = addMonth(periodoAtual);

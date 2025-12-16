@@ -163,9 +163,10 @@ export default function CategoriasFinanceirasPage() {
         if (!catResp.ok || !catJson.ok) throw new Error(catJson.error || "Erro ao carregar categorias financeiras.");
         setPlanos(pcJson.data ?? []);
         setCategorias(catJson.data ?? []);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
-        alert(err.message || "Erro ao carregar dados financeiros.");
+        const message = err instanceof Error ? err.message : "Erro ao carregar dados financeiros.";
+        alert(message);
       } finally {
         setLoading(false);
       }
@@ -235,9 +236,10 @@ export default function CategoriasFinanceirasPage() {
         setCategorias((prev) => prev.map((c) => (c.id === json.data.id ? json.data : c)));
       }
       setModalCategoria({ open: false });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert(err.message || "Erro ao salvar categoria financeira.");
+      const message = err instanceof Error ? err.message : "Erro ao salvar categoria financeira.";
+      alert(message);
     } finally {
       setSaving(false);
     }
@@ -253,9 +255,10 @@ export default function CategoriasFinanceirasPage() {
       const json = await resp.json();
       if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao atualizar categoria financeira.");
       setCategorias((prev) => prev.map((c) => (c.id === json.data.id ? json.data : c)));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert(err.message || "Erro ao atualizar categoria financeira.");
+      const message = err instanceof Error ? err.message : "Erro ao atualizar categoria financeira.";
+      alert(message);
     }
   }
 

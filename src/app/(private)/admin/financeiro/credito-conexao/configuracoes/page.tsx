@@ -57,7 +57,7 @@ export default function ConfiguracoesCreditoConexaoPage() {
 
       const json = await res.json();
       setRegras(json.regras ?? []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Erro ao carregar regras de parcelamento", e);
       setErro("Erro ao carregar regras de parcelamento.");
     } finally {
@@ -122,7 +122,7 @@ export default function ConfiguracoesCreditoConexaoPage() {
 
       await carregarRegras();
       resetForm();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Erro ao salvar regra de parcelamento", e);
       setErro("Erro ao salvar regra de parcelamento.");
     } finally {

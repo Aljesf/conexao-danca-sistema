@@ -34,12 +34,12 @@ const seedPlanoContas: ContaContabil[] = [
   { id: 16, codigo: "2.4", nome: "Despesas do Café", tipo: "DESPESA", parentId: 10 },
 ];
 
-const mapApiToConta = (row: any): ContaContabil => ({
-  id: row.id,
-  codigo: row.codigo,
-  nome: row.nome,
-  tipo: row.tipo,
-  parentId: row.parent_id ?? null,
+const mapApiToConta = (row: Record<string, unknown>): ContaContabil => ({
+  id: Number(row.id),
+  codigo: String(row.codigo ?? ""),
+  nome: String(row.nome ?? ""),
+  tipo: (row.tipo as TipoConta) ?? "",
+  parentId: (row.parent_id as number | null | undefined) ?? null,
 });
 
 function buildTree(nodes: ContaContabil[], tipo: TipoConta): TreeNode[] {
@@ -143,7 +143,7 @@ export default function PlanoContasPage() {
       setContas((prev) => [...prev, mapApiToConta(json.data)]);
       setShowModal(false);
       resetForm();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       alert(err.message || "Erro ao salvar conta contábil.");
     } finally {

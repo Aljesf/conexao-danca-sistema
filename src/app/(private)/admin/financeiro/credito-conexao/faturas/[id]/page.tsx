@@ -3,14 +3,40 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 
-type Fatura = any;
+type Fatura = {
+  id?: number;
+  conta_conexao_id?: number;
+  periodo_referencia?: string | null;
+  data_fechamento?: string | null;
+  data_vencimento?: string | null;
+  valor_total_centavos?: number | null;
+  valor_taxas_centavos?: number | null;
+  status?: string;
+  cobranca?: {
+    id?: number;
+    status?: string | null;
+    neofin_charge_id?: string | null;
+    link_pagamento?: string | null;
+    linha_digitavel?: string | null;
+  };
+};
+
+type LancamentoFatura = {
+  id?: number;
+  origem_sistema?: string | null;
+  origem_id?: number | null;
+  descricao?: string | null;
+  valor_centavos?: number | null;
+  numero_parcelas?: number | null;
+  status?: string | null;
+};
 
 export default function DetalheFaturaCreditoConexaoPage() {
   const params = useParams();
   const faturaId = Number(params?.id);
 
   const [fatura, setFatura] = useState<Fatura | null>(null);
-  const [lancamentos, setLancamentos] = useState<any[]>([]);
+  const [lancamentos, setLancamentos] = useState<LancamentoFatura[]>([]);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [fechando, setFechando] = useState(false);
@@ -59,9 +85,9 @@ export default function DetalheFaturaCreditoConexaoPage() {
       const fJson = await fRes.json();
       const lJson = await lRes.json();
 
-      setFatura(fJson.fatura ?? null);
-      setLancamentos(lJson.lancamentos ?? []);
-    } catch (e: any) {
+      setFatura((fJson?.fatura as Fatura | null) ?? null);
+      setLancamentos((lJson?.lancamentos as LancamentoFatura[] | null | undefined) ?? []);
+    } catch (e: unknown) {
       console.error(e);
       setErro("Erro ao carregar detalhe da fatura.");
     } finally {
