@@ -45,9 +45,10 @@ export default function AdicionarProfessorTurmaPage({
       if (error) throw error;
 
       router.push(`/academico/turmas/${turmaId}`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setErro(e?.message ?? "Erro ao adicionar professor na turma.");
+      const message = e instanceof Error ? e.message : "Erro ao adicionar professor na turma.";
+      setErro(message);
       setSaving(false);
     }
   }

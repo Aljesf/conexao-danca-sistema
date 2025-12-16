@@ -49,13 +49,27 @@ async function carregarAlunosMatriculados(turmaId: number): Promise<AlunoMatricu
   }
 
   return (
-    data?.map((row: any) => ({
-      id: row.id,
-      pessoa_id: row.pessoa_id,
-      status: row.status ?? null,
-      data_matricula: row.data_matricula ?? null,
-      nome: row.aluno?.nome ?? "Aluno",
-    })) ?? []
+    data?.map((row) => {
+      if (!row || typeof row !== "object") {
+        return { id: 0, pessoa_id: 0, status: null, data_matricula: null, nome: "Aluno" };
+      }
+
+      const r = row as {
+        id?: number;
+        pessoa_id?: number;
+        status?: string | null;
+        data_matricula?: string | null;
+        aluno?: { nome?: string | null };
+      };
+
+      return {
+        id: r.id ?? 0,
+        pessoa_id: r.pessoa_id ?? 0,
+        status: r.status ?? null,
+        data_matricula: r.data_matricula ?? null,
+        nome: r.aluno?.nome ?? "Aluno",
+      };
+    }) ?? []
   );
 }
 

@@ -122,15 +122,17 @@ export default function ConfiguracoesCartaoPage() {
       setMaquinas(mJson.maquinas ?? []);
       setRegras(rJson.regras ?? []);
       setContasFinanceiras(
-        (contasJson.contas ?? []).map((c: any) => ({
-          id: c.id,
-          nome: c.nome,
-          codigo: c.codigo,
-        })),
+        (contasJson.contas ?? []).map((c) => {
+          if (!c || typeof c !== "object") {
+            return { id: 0, nome: "Conta", codigo: undefined };
+          }
+          const conta = c as { id?: number; nome?: string; codigo?: string | null };
+          return { id: conta.id ?? 0, nome: conta.nome ?? "Conta", codigo: conta.codigo ?? undefined };
+        }),
       );
       setCentrosCusto(centrosJson.centros ?? []);
       setMaquinasOpcoes(maqOpsJson.maquinas ?? []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       setErro("Erro ao carregar configurações de cartão.");
     } finally {
@@ -237,7 +239,7 @@ export default function ConfiguracoesCartaoPage() {
 
       await carregarTudo();
       resetBandeiraForm();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       setErro("Erro ao salvar bandeira.");
     } finally {
@@ -273,7 +275,7 @@ export default function ConfiguracoesCartaoPage() {
 
       await carregarTudo();
       resetMaquinaForm();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       setErro("Erro ao salvar maquininha.");
     } finally {
@@ -312,7 +314,7 @@ export default function ConfiguracoesCartaoPage() {
 
       await carregarTudo();
       resetRegraForm();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       setErro("Erro ao salvar regra de cartão.");
     } finally {

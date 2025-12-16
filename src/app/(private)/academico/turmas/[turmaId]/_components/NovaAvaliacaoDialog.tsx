@@ -46,12 +46,18 @@ export function NovaAvaliacaoDialog({ turmaId, onCreated }: NovaAvaliacaoDialogP
         return;
       }
 
-      const lista = (data ?? []).map((m: any) => ({
-        id: m.id,
-        nome: m.nome,
-        tipo_avaliacao: m.tipo_avaliacao,
-        obrigatoria: m.obrigatoria,
-      }));
+      const lista = (data ?? []).map((m) => {
+        if (!m || typeof m !== "object") {
+          return { id: 0, nome: "Modelo", tipo_avaliacao: null, obrigatoria: false };
+        }
+        const modelo = m as { id?: number; nome?: string; tipo_avaliacao?: string | null; obrigatoria?: boolean };
+        return {
+          id: modelo.id ?? 0,
+          nome: modelo.nome ?? "Modelo",
+          tipo_avaliacao: modelo.tipo_avaliacao ?? null,
+          obrigatoria: Boolean(modelo.obrigatoria),
+        };
+      });
       setModelos(lista);
       if (lista.length > 0) {
         setModeloId(String(lista[0].id));

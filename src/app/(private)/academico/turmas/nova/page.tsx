@@ -152,9 +152,10 @@ export default function NovaTurmaPage() {
       // TODO: professores auxiliares via turma_professores (usar professoresAuxiliares)
 
       router.push("/academico/turmas");
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setErro(e?.message ?? "Erro inesperado ao salvar turma.");
+      const message = e instanceof Error ? e.message : "Erro inesperado ao salvar turma.";
+      setErro(message);
       setSaving(false);
       return;
     }

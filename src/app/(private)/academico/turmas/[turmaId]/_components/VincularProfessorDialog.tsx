@@ -51,7 +51,15 @@ export function VincularProfessorDialog({ turmaId, onLinked }: VincularProfessor
         console.error("Erro ao carregar funcoes:", error);
         return;
       }
-      setFuncoes((data ?? []).map((f: any) => ({ id: f.id, nome: f.nome, codigo: f.codigo })));
+      setFuncoes(
+        (data ?? []).map((f) => {
+          if (!f || typeof f !== "object") {
+            return { id: 0, nome: "Funcao", codigo: null };
+          }
+          const funcao = f as { id?: number; nome?: string; codigo?: string | null };
+          return { id: funcao.id ?? 0, nome: funcao.nome ?? "Funcao", codigo: funcao.codigo ?? null };
+        }),
+      );
     }
 
     void carregarProfessores();
