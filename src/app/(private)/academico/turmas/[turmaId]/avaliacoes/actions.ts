@@ -24,7 +24,7 @@ export async function criarTurmaAvaliacaoAction(turmaId: number, formData: FormD
       data_prevista: formData.get("data_prevista") || undefined,
     });
 
-    await criarAvaliacaoParaTurma({
+    const payload: Parameters<typeof criarAvaliacaoParaTurma>[0] = {
       turma_id: turmaId,
       avaliacao_modelo_id: parsed.modeloId,
       titulo: parsed.titulo,
@@ -33,12 +33,15 @@ export async function criarTurmaAvaliacaoAction(turmaId: number, formData: FormD
       data_prevista: parsed.data_prevista ?? null,
       status: "RASCUNHO",
       data_realizada: null,
-    } as any);
+    };
+
+    await criarAvaliacaoParaTurma(payload);
 
     revalidatePath(`/academico/turmas/${turmaId}`);
     redirect(`/academico/turmas/${turmaId}#avaliacoes`);
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Erro ao salvar avaliação.";
     console.error("Erro ao criar avaliação da turma:", error);
-    return { error: error?.message ?? "Erro ao salvar avaliação." };
+    return { error: message };
   }
 }

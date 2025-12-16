@@ -19,9 +19,10 @@ export async function criarConceitoAction(data: ConceitoPayload) {
     await criarConceito(normalizePayload(data));
     revalidatePath("/academico/avaliacoes/conceitos");
     redirect("/academico/avaliacoes/conceitos");
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Erro ao criar conceito.";
     console.error("Erro ao criar conceito:", error);
-    return { error: error?.message ?? "Erro ao criar conceito." };
+    return { error: message };
   }
 }
 
@@ -33,9 +34,10 @@ export async function atualizarConceitoAction(
     await atualizarConceito(id, normalizePayload(data));
     revalidatePath("/academico/avaliacoes/conceitos");
     redirect("/academico/avaliacoes/conceitos");
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Erro ao atualizar conceito.";
     console.error("Erro ao atualizar conceito:", error);
-    return { error: error?.message ?? "Erro ao atualizar conceito." };
+    return { error: message };
   }
 }
 

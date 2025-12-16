@@ -8,7 +8,7 @@ import {
   atualizarModelo,
   criarModelo,
 } from "@/lib/avaliacoes/modelosServer";
-import type { GrupoAvaliacao, TipoAvaliacao } from "@/types/avaliacoes";
+import type { TipoAvaliacao } from "@/types/avaliacoes";
 
 const grupoSchema = z.object({
   nome: z.string().min(1, "Informe o nome do grupo"),
@@ -36,23 +36,25 @@ export type ModeloFormInput = z.infer<typeof modeloSchema>;
 export async function criarModeloAction(data: ModeloFormInput) {
   try {
     const payload = modeloSchema.parse(data);
-    await criarModelo(payload as any);
+    await criarModelo(payload);
     revalidatePath("/academico/avaliacoes/modelos");
     redirect("/academico/avaliacoes/modelos");
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Erro ao criar modelo.";
     console.error("Erro ao criar modelo:", error);
-    return { error: error?.message ?? "Erro ao criar modelo." };
+    return { error: message };
   }
 }
 
 export async function atualizarModeloAction(id: number, data: ModeloFormInput) {
   try {
     const payload = modeloSchema.parse(data);
-    await atualizarModelo(id, payload as any);
+    await atualizarModelo(id, payload);
     revalidatePath("/academico/avaliacoes/modelos");
     redirect("/academico/avaliacoes/modelos");
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Erro ao atualizar modelo.";
     console.error("Erro ao atualizar modelo:", error);
-    return { error: error?.message ?? "Erro ao atualizar modelo." };
+    return { error: message };
   }
 }

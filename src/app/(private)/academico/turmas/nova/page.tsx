@@ -247,7 +247,8 @@ export default function NovaTurmaPage() {
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-slate-500">
-                Grava como texto em "modalidade" (TODO: migrar para curso_id quando existir).
+                Grava como texto em &quot;modalidade&quot; (TODO: migrar para curso_id quando
+                existir).
               </p>
             </div>
           </div>
@@ -454,7 +455,7 @@ export default function NovaTurmaPage() {
           {/* Info sobre avaliacoes da turma */}
           <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3 text-xs text-slate-600 md:text-sm">
             Apos salvar a turma, voce podera vincular avaliacoes especificas para ela na tela de detalhes da turma, em{" "}
-            <span className="font-medium">"Avaliacoes da turma"</span>. Essas avaliacoes serao usadas para conclusao e curriculo.
+            <span className="font-medium">&quot;Avaliacoes da turma&quot;</span>. Essas avaliacoes serao usadas para conclusao e curriculo.
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button
