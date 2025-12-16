@@ -107,6 +107,8 @@ type ContaConexao = {
   ativo: boolean;
 };
 
+type TipoOperacaoLoja = "VENDA" | "ENTREGA_ADMINISTRATIVA";
+
 // NOTA SOBRE O MODELO DE PAPEIS NA LOJA v0:
 // - "comprador" é a Pessoa que está realizando a compra/pagamento.
 // - "beneficiario" é a Pessoa que vai usar o produto (normalmente aluno), armazenada por item em loja_venda_itens.beneficiario_pessoa_id.
@@ -116,7 +118,7 @@ export default function FrenteCaixaLojaPage() {
 
   const [comprador, setComprador] = useState<PessoaResumo | null>(null);
   const [itens, setItens] = useState<ItemCaixa[]>([]);
-  const [tipoVenda, setTipoVenda] = useState<"VENDA" | "CREDIARIO_INTERNO">("VENDA");
+  const [tipoOperacao, setTipoOperacao] = useState<TipoOperacaoLoja>("VENDA");
 
   // formas de pagamento por contexto (centro LOJA = id 2)
   const [formasPagamentoCtx, setFormasPagamentoCtx] = useState<FormaPagamentoContexto[]>(
@@ -139,6 +141,9 @@ export default function FrenteCaixaLojaPage() {
   const [parcelasConexao, setParcelasConexao] = useState<number>(1);
   const [contasConexao, setContasConexao] = useState<ContaConexao[]>([]);
   const [contaConexaoId, setContaConexaoId] = useState<number | "">("");
+  const [taxaCartaoConexaoCentavos, setTaxaCartaoConexaoCentavos] = useState(0);
+  const [totalFinalCentavos, setTotalFinalCentavos] = useState(0);
+  const [avisoTaxa, setAvisoTaxa] = useState<string | null>(null);
 
   // cadastro rápido de pessoa (comprador/beneficiário)
   const [showCadastroRapido, setShowCadastroRapido] = useState(false);
@@ -313,6 +318,7 @@ export default function FrenteCaixaLojaPage() {
     () => itens.reduce((sum, i) => sum + i.quantidade * i.precoUnitarioCentavos, 0),
     [itens],
   );
+  const subtotalCentavos = totalVenda;
 
   // ======== FORMAS DE PAGAMENTO (CONTEXTO LOJA) =========
   // carregar formas de pagamento do contexto LOJA (centro_custo_id = 2)
