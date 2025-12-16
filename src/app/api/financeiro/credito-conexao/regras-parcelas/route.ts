@@ -68,6 +68,7 @@ export async function POST(req: Request) {
   try {
     const supabase = await getSupabaseServer();
     const body = await req.json();
+    console.log("[credito-conexao] payload recebido:", body);
 
     const {
       id,
@@ -99,22 +100,29 @@ export async function POST(req: Request) {
       );
     }
 
-    const valorMin = Number(valor_minimo_centavos ?? 0);
-    const taxaPerc = Number(taxa_percentual ?? 0);
-    const taxaFixa = Number(taxa_fixa_centavos ?? 0);
-
     const payload: any = {
       tipo_conta,
       numero_parcelas_min: numMin,
       numero_parcelas_max: numMax,
-      valor_minimo_centavos: valorMin,
-      taxa_percentual: taxaPerc,
-      taxa_fixa_centavos: taxaFixa,
+      valor_minimo_centavos: Number(valor_minimo_centavos) || 0,
+      taxa_percentual: Number(taxa_percentual) || 0,
+      taxa_fixa_centavos: Number(taxa_fixa_centavos) || 0,
       centro_custo_id: centro_custo_id ?? null,
       categoria_financeira_id: categoria_financeira_id ?? null,
       ativo: typeof ativo === "boolean" ? ativo : true,
       updated_at: new Date().toISOString(),
     };
+
+    // Campos possivelmente obrigatórios no schema
+    if ("unidade_id" in body) {
+      payload.unidade_id = Number(body.unidade_id) || 1;
+    }
+    if ("created_by" in body) {
+      payload.created_by = body.created_by ?? null;
+    }
+    if ("updated_by" in body) {
+      payload.updated_by = body.updated_by ?? null;
+    }
 
     let result;
 
@@ -134,7 +142,7 @@ export async function POST(req: Request) {
             error: "erro_atualizar_regra_parcelamento",
             details: error.message,
           },
-          { status: 500 },
+          { status: 400 },
         );
       }
 
@@ -155,7 +163,7 @@ export async function POST(req: Request) {
         console.error("Erro ao criar regra de parcelamento Credito Conexao", error);
         return NextResponse.json(
           { ok: false, error: "erro_criar_regra_parcelamento", details: error.message },
-          { status: 500 },
+          { status: 400 },
         );
       }
 
