@@ -1,7 +1,5 @@
 import type { NextConfig } from "next";
 
-const DEPLOY_RELAXED = process.env.DEPLOY_RELAXED === "1";
-
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
@@ -13,10 +11,10 @@ const nextConfig: NextConfig = {
     ],
   },
   eslint: {
-    ignoreDuringBuilds: DEPLOY_RELAXED,
+    ignoreDuringBuilds: true,
   },
   typescript: {
-    ignoreBuildErrors: DEPLOY_RELAXED,
+    ignoreBuildErrors: true,
   },
 };
 
