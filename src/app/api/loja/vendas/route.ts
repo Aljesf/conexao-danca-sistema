@@ -49,6 +49,17 @@ function addDaysISODate(days: number): string {
 
 type CartaoTipoTransacao = "CREDITO_AVISTA" | "CREDITO_PARCELADO";
 
+type VendaItemInsert = {
+  venda_id: number;
+  produto_id: number;
+  quantidade: number;
+  preco_unitario_centavos: number;
+  total_centavos: number;
+  beneficiario_pessoa_id: number | null;
+  observacoes: string | null;
+  variante_id: number | null;
+};
+
 function inferTipoTransacao(parcelas: number): CartaoTipoTransacao {
   return parcelas > 1 ? "CREDITO_PARCELADO" : "CREDITO_AVISTA";
 }
@@ -149,8 +160,44 @@ export async function POST(req: Request) {
 
     const vendaId: number = vendaCriada.id;
 
+    const itensInseridos: VendaItemInsert[] = [];
+    const estoqueAjustes: Array<{
+      produto_id: number;
+      variante_id: number | null;
+      quantidade: number;
+    }> = [];
+
+    const rollbackVenda = async () => {
+      await supabase
+        .from("loja_estoque_movimentos")
+        .delete()
+        .eq("origem", "VENDA")
+        .eq("referencia_id", vendaId);
+
+      for (const ajuste of estoqueAjustes) {
+        const tabela =
+          ajuste.variante_id && ajuste.variante_id > 0
+            ? "loja_produto_variantes"
+            : "loja_produtos";
+        const alvoId = ajuste.variante_id ?? ajuste.produto_id;
+        const { data: estoqueRow } = await supabase
+          .from(tabela)
+          .select("estoque_atual")
+          .eq("id", alvoId)
+          .maybeSingle();
+        const estoqueAtual = Number((estoqueRow as any)?.estoque_atual ?? 0) || 0;
+        await supabase
+          .from(tabela)
+          .update({ estoque_atual: estoqueAtual + ajuste.quantidade })
+          .eq("id", alvoId);
+      }
+
+      await supabase.from("loja_venda_itens").delete().eq("venda_id", vendaId);
+      await supabase.from("loja_vendas").delete().eq("id", vendaId);
+    };
+
     if (Array.isArray(itensUnknown) && itensUnknown.length > 0) {
-      const itensToInsert: JsonRecord[] = [];
+      const itensToInsert: VendaItemInsert[] = [];
 
       for (const it of itensUnknown) {
         if (!isRecord(it)) continue;
@@ -162,7 +209,7 @@ export async function POST(req: Request) {
 
         if (!produtoId || !qtd || !precoUnit || !total) continue;
 
-        itensToInsert.push({
+        const item: VendaItemInsert = {
           venda_id: vendaId,
           produto_id: produtoId,
           quantidade: qtd,
@@ -172,20 +219,90 @@ export async function POST(req: Request) {
             asInt(it.beneficiario_pessoa_id ?? it.beneficiarioPessoaId) ?? null,
           observacoes: asString(it.observacoes) ?? null,
           variante_id: asInt(it.variante_id ?? it.varianteId) ?? null,
-        });
+        };
+
+        itensToInsert.push(item);
+        itensInseridos.push(item);
       }
 
       if (itensToInsert.length > 0) {
         const { error: itensErr } = await supabase.from("loja_venda_itens").insert(itensToInsert);
         if (itensErr) {
           // best-effort rollback to avoid orphan sale
-          await supabase.from("loja_venda_itens").delete().eq("venda_id", vendaId);
-          await supabase.from("loja_vendas").delete().eq("id", vendaId);
+          await rollbackVenda();
 
           return NextResponse.json(
             { ok: false, error: "falha_insert_itens", details: itensErr.message },
             { status: 500 }
           );
+        }
+      }
+    }
+
+    if (itensInseridos.length > 0) {
+      const { data: authData } = await supabase.auth.getUser();
+      const createdBy = authData?.user?.id ?? null;
+
+      for (const item of itensInseridos) {
+        const quantidade = Number(item.quantidade) || 0;
+        if (quantidade <= 0) continue;
+
+        const varianteId =
+          typeof item.variante_id === "number" && item.variante_id > 0
+            ? item.variante_id
+            : null;
+        const tabela = varianteId ? "loja_produto_variantes" : "loja_produtos";
+        const alvoId = varianteId ?? item.produto_id;
+
+        const { data: estoqueRow, error: estoqueErr } = await supabase
+          .from(tabela)
+          .select("id, estoque_atual")
+          .eq("id", alvoId)
+          .maybeSingle();
+
+        if (estoqueErr || !estoqueRow) {
+          console.error("[POST /api/loja/vendas] erro ao buscar estoque:", estoqueErr);
+          await rollbackVenda();
+          return NextResponse.json({ ok: false, error: "falha_movimento_estoque" }, { status: 500 });
+        }
+
+        const estoqueAntes = Number((estoqueRow as any)?.estoque_atual ?? 0) || 0;
+        const estoqueDepois = estoqueAntes - quantidade;
+
+        const { error: updateErr } = await supabase
+          .from(tabela)
+          .update({ estoque_atual: estoqueDepois })
+          .eq("id", alvoId);
+
+        if (updateErr) {
+          console.error("[POST /api/loja/vendas] erro ao atualizar estoque:", updateErr);
+          await rollbackVenda();
+          return NextResponse.json({ ok: false, error: "falha_movimento_estoque" }, { status: 500 });
+        }
+
+        estoqueAjustes.push({
+          produto_id: item.produto_id,
+          variante_id: varianteId,
+          quantidade,
+        });
+
+        const { error: movimentoErr } = await supabase.from("loja_estoque_movimentos").insert({
+          produto_id: item.produto_id,
+          variante_id: varianteId,
+          tipo: "SAIDA",
+          origem: "VENDA",
+          referencia_id: vendaId,
+          quantidade,
+          saldo_antes: estoqueAntes,
+          saldo_depois: estoqueDepois,
+          observacao: "Saida automatica por venda no caixa",
+          created_by: createdBy,
+        });
+
+        if (movimentoErr) {
+          console.error("[POST /api/loja/vendas] erro ao inserir movimento estoque:", movimentoErr);
+          await rollbackVenda();
+          return NextResponse.json({ ok: false, error: "falha_movimento_estoque" }, { status: 500 });
         }
       }
     }
@@ -205,8 +322,7 @@ export async function POST(req: Request) {
         .single();
 
       if (maqErr || !maquinaRow?.conta_financeira_id) {
-        await supabase.from("loja_venda_itens").delete().eq("venda_id", vendaId);
-        await supabase.from("loja_vendas").delete().eq("id", vendaId);
+        await rollbackVenda();
 
         return NextResponse.json(
           {
@@ -278,8 +394,7 @@ export async function POST(req: Request) {
       const { error: recErr } = await supabase.from("cartao_recebiveis").insert(recebivelInsert);
 
       if (recErr) {
-        await supabase.from("loja_venda_itens").delete().eq("venda_id", vendaId);
-        await supabase.from("loja_vendas").delete().eq("id", vendaId);
+        await rollbackVenda();
 
         return NextResponse.json(
           { ok: false, error: "falha_insert_cartao_recebivel", details: recErr.message },

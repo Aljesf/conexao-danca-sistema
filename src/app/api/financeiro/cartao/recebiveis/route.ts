@@ -15,6 +15,12 @@ const supabaseAdmin =
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
+function nowLocalISOString(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString();
+}
+
 export async function GET(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json(
@@ -188,7 +194,7 @@ export async function POST(req: NextRequest) {
     tipo: "RECEITA",
     centro_custo_id: maquina.centro_custo_id,
     valor_centavos: valorLiquidoCentavos,
-    data_movimento: `${dataPagamento}T00:00:00`,
+    data_movimento: nowLocalISOString(),
     origem: "CARTAO_REPASSE",
     origem_id: recebivelId,
     descricao: `Repasse cartao - Venda #${recebivel.venda_id}`,
