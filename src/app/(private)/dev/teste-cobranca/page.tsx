@@ -20,7 +20,7 @@ export default function TesteCobranca() {
       onClick={testar}
       className="p-3 rounded bg-purple-600 text-white"
     >
-      Testar Cobrança
+      Testar CobranВa
     </button>
   );
 }
