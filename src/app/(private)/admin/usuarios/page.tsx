@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import PlaceholderPage from "@/components/PlaceholderPage";
 
 type RoleSistema = {
@@ -269,6 +270,20 @@ export default function AdminUsuariosPage() {
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <Link
+            href="/admin/usuarios/novo"
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "#2563eb",
+              color: "#fff",
+              fontWeight: 700,
+              textDecoration: "none",
+              boxShadow: "0 6px 20px rgba(37,99,235,0.18)",
+            }}
+          >
+            Novo usuário
+          </Link>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}

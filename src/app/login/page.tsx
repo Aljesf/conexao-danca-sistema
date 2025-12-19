@@ -14,7 +14,6 @@ export default function LoginPage() {
   async function entrar() {
     setMsg("");
 
-    // 1) Autentica o usuário
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: senha,
@@ -27,7 +26,6 @@ export default function LoginPage() {
 
     const user = data?.user;
 
-    // 2) AUDITORIA DE LOGIN
     if (user) {
       try {
         await fetch("/api/auditoria/log", {
@@ -45,73 +43,88 @@ export default function LoginPage() {
       }
     }
 
-    // 3) Redireciona para home
     router.replace("/pessoas");
-  }
-
-  async function cadastrar() {
-    setMsg("");
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password: senha,
-    });
-
-    if (error) {
-      setMsg(error.message);
-      return;
-    }
-
-    setMsg("Cadastro criado! Se exigir confirmação, verifique seu e-mail.");
   }
 
   return (
     <main
-      style={{ padding: 24, maxWidth: 420, margin: "40px auto", textAlign: "center" }}
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "linear-gradient(135deg, #f5f7fa 0%, #e4ecf5 100%)",
+        padding: 16,
+      }}
     >
-      <h1 style={{ marginBottom: 20 }}>Entrar</h1>
-
-      <input
-        placeholder="E-mail"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
+      <div
         style={{
-          display: "block",
-          margin: "8px auto",
-          padding: 10,
           width: "100%",
-          borderRadius: 6,
+          maxWidth: 420,
+          background: "#fff",
+          borderRadius: 16,
+          padding: 24,
+          boxShadow: "0 10px 40px rgba(0,0,0,0.08)",
         }}
-      />
+      >
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: "#111827" }}>
+            Sistema Conexão Dança
+          </div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+            Acesso restrito
+          </div>
+        </div>
 
-      <input
-        placeholder="Senha"
-        type="password"
-        value={senha}
-        onChange={(e) => setSenha(e.target.value)}
-        style={{
-          display: "block",
-          margin: "8px auto",
-          padding: 10,
-          width: "100%",
-          borderRadius: 6,
-        }}
-      />
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input
+            placeholder="E-mail"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{
+              padding: 12,
+              width: "100%",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+            }}
+          />
 
-      <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "center" }}>
-        <button onClick={entrar} style={{ padding: "8px 16px" }}>
-          Entrar
-        </button>
-        <button onClick={cadastrar} style={{ padding: "8px 16px" }}>
-          Cadastrar
-        </button>
+          <input
+            placeholder="Senha"
+            type="password"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            style={{
+              padding: 12,
+              width: "100%",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+            }}
+          />
+
+          <button
+            onClick={entrar}
+            style={{
+              padding: "12px 16px",
+              borderRadius: 10,
+              background: "#2563eb",
+              color: "#fff",
+              fontWeight: 700,
+              border: "none",
+              cursor: "pointer",
+              marginTop: 4,
+            }}
+          >
+            Entrar
+          </button>
+        </div>
+
+        {msg && (
+          <p style={{ color: "tomato", marginTop: 12, textAlign: "center", fontSize: 13 }}>
+            {msg}
+          </p>
+        )}
       </div>
-
-      {msg && (
-        <p style={{ color: "tomato", marginTop: 12 }}>
-          {msg}
-        </p>
-      )}
     </main>
   );
 }

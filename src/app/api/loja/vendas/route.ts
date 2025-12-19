@@ -30,6 +30,46 @@ function asString(v: unknown): string | null {
   return null;
 }
 
+function parseCentavos(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v !== "string") return null;
+
+  const s0 = v.trim();
+  if (!s0) return null;
+
+  if (/^\d+$/.test(s0)) return Math.trunc(Number(s0));
+
+  const s = s0
+    .replace(/[R$\s]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+
+  return Math.round(n * 100);
+}
+
+function pickInt(obj: Record<string, unknown>, keys: string[]): number | null {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+    if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) {
+      return Math.trunc(Number(v));
+    }
+  }
+  return null;
+}
+
+function pickCentavos(obj: Record<string, unknown>, keys: string[]): number | null {
+  for (const k of keys) {
+    const v = obj[k];
+    const c = parseCentavos(v);
+    if (typeof c === "number" && Number.isFinite(c)) return c;
+  }
+  return null;
+}
+
 function todayISODate(): string {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -60,6 +100,29 @@ type VendaItemInsert = {
   variante_id: number | null;
 };
 
+function nowLocalISOString(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString();
+}
+
+function isCartaoCredito(forma: string | null): boolean {
+  if (!forma) return false;
+  const code = forma.toUpperCase();
+  const isDebito = code.includes("DEBITO");
+  if (isDebito) return false;
+  return code.includes("CREDITO") || code.includes("CARTAO");
+}
+
+function isPagamentoImediato(forma: string | null): boolean {
+  if (!forma) return false;
+  if (isCartaoCredito(forma)) return false;
+
+  const code = forma.toUpperCase();
+  const immediateKeywords = ["DINHEIRO", "PIX", "TRANSFERENCIA", "TED", "DOC", "AVISTA", "DEBITO"];
+  return immediateKeywords.some((kw) => code.includes(kw));
+}
+
 function inferTipoTransacao(parcelas: number): CartaoTipoTransacao {
   return parcelas > 1 ? "CREDITO_PARCELADO" : "CREDITO_AVISTA";
 }
@@ -79,6 +142,8 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const supabase = await getSupabaseServerSSR();
+    const { data: authData } = await supabase.auth.getUser();
+    const usuarioId = authData?.user?.id ?? null;
 
     const bodyUnknown: unknown = await req.json().catch(() => null);
     if (!isRecord(bodyUnknown)) {
@@ -98,6 +163,9 @@ export async function POST(req: Request) {
         bodyUnknown.formaPagamento ??
         bodyUnknown.forma_pagamento_codigo ??
         bodyUnknown.formaPagamentoCodigo
+    );
+    const formaPagamentoCodigo = asString(
+      bodyUnknown.forma_pagamento_codigo ?? bodyUnknown.formaPagamentoCodigo
     );
     const statusPagamento = asString(bodyUnknown.status_pagamento ?? bodyUnknown.statusPagamento) ?? "PAGO";
 
@@ -196,53 +264,85 @@ export async function POST(req: Request) {
       await supabase.from("loja_vendas").delete().eq("id", vendaId);
     };
 
-    if (Array.isArray(itensUnknown) && itensUnknown.length > 0) {
-      const itensToInsert: VendaItemInsert[] = [];
+    // ====== Itens: agora OBRIGATÓRIO ter pelo menos 1 item válido ======
+    const itensCandidate =
+      (bodyUnknown as any).itens ??
+      (bodyUnknown as any).items ??
+      (bodyUnknown as any).venda_itens;
 
-      for (const it of itensUnknown) {
-        if (!isRecord(it)) continue;
-
-        const produtoId = asInt(it.produto_id ?? it.produtoId);
-        const qtd = asInt(it.quantidade ?? it.qtd);
-        const precoUnit = asInt(it.preco_unitario_centavos ?? it.precoUnitarioCentavos);
-        const total = asInt(it.total_centavos ?? it.totalCentavos);
-
-        if (!produtoId || !qtd || !precoUnit || !total) continue;
-
-        const item: VendaItemInsert = {
-          venda_id: vendaId,
-          produto_id: produtoId,
-          quantidade: qtd,
-          preco_unitario_centavos: precoUnit,
-          total_centavos: total,
-          beneficiario_pessoa_id:
-            asInt(it.beneficiario_pessoa_id ?? it.beneficiarioPessoaId) ?? null,
-          observacoes: asString(it.observacoes) ?? null,
-          variante_id: asInt(it.variante_id ?? it.varianteId) ?? null,
-        };
-
-        itensToInsert.push(item);
-        itensInseridos.push(item);
-      }
-
-      if (itensToInsert.length > 0) {
-        const { error: itensErr } = await supabase.from("loja_venda_itens").insert(itensToInsert);
-        if (itensErr) {
-          // best-effort rollback to avoid orphan sale
-          await rollbackVenda();
-
-          return NextResponse.json(
-            { ok: false, error: "falha_insert_itens", details: itensErr.message },
-            { status: 500 }
-          );
-        }
-      }
+    if (!Array.isArray(itensCandidate) || itensCandidate.length === 0) {
+      await supabase.from("loja_vendas").delete().eq("id", vendaId);
+      return NextResponse.json({ ok: false, error: "itens_obrigatorios" }, { status: 400 });
     }
 
-    if (itensInseridos.length > 0) {
-      const { data: authData } = await supabase.auth.getUser();
-      const createdBy = authData?.user?.id ?? null;
+    const itensToInsert: VendaItemInsert[] = [];
 
+    for (const raw of itensCandidate) {
+      if (!isRecord(raw)) continue;
+
+      const produtoId = pickInt(raw, ["produto_id", "produtoId", "produto_id_num", "produto"]);
+      const varianteId = pickInt(raw, ["variante_id", "varianteId", "sku_id", "variante"]);
+      const qtd = pickInt(raw, ["quantidade", "qtd", "qtde", "quantity"]);
+      const precoUnitCent = pickCentavos(raw, [
+        "preco_unitario_centavos",
+        "precoUnitarioCentavos",
+        "preco_unitario",
+        "precoUnit",
+        "preco",
+      ]);
+      const totalCent = pickCentavos(raw, [
+        "total_centavos",
+        "totalCentavos",
+        "total",
+        "valor_total_item",
+      ]);
+
+      if (!produtoId || !qtd || !precoUnitCent) continue;
+
+      const totalFinal = totalCent ?? Math.max(0, qtd * precoUnitCent);
+
+      const item: VendaItemInsert = {
+        venda_id: vendaId,
+        produto_id: produtoId,
+        quantidade: qtd,
+        preco_unitario_centavos: precoUnitCent,
+        total_centavos: totalFinal,
+        beneficiario_pessoa_id:
+          pickInt(raw, [
+            "beneficiario_pessoa_id",
+            "beneficiarioPessoaId",
+            "aluno_pessoa_id",
+            "alunoPessoaId",
+          ]) ?? null,
+        observacoes: asString(raw.observacoes) ?? null,
+        variante_id: varianteId ?? null,
+      };
+
+      itensToInsert.push(item);
+    }
+
+    if (itensToInsert.length === 0) {
+      await supabase.from("loja_vendas").delete().eq("id", vendaId);
+      return NextResponse.json(
+        { ok: false, error: "itens_invalidos", details: "nenhum_item_valido_parseado" },
+        { status: 400 }
+      );
+    }
+
+    const { error: itensErr } = await supabase.from("loja_venda_itens").insert(itensToInsert);
+    if (itensErr) {
+      await supabase.from("loja_venda_itens").delete().eq("venda_id", vendaId);
+      await supabase.from("loja_vendas").delete().eq("id", vendaId);
+
+      return NextResponse.json(
+        { ok: false, error: "falha_insert_itens", details: itensErr.message },
+        { status: 500 }
+      );
+    }
+
+    itensInseridos.push(...itensToInsert);
+
+    if (itensInseridos.length > 0) {
       for (const item of itensInseridos) {
         const quantidade = Number(item.quantidade) || 0;
         if (quantidade <= 0) continue;
@@ -296,7 +396,7 @@ export async function POST(req: Request) {
           saldo_antes: estoqueAntes,
           saldo_depois: estoqueDepois,
           observacao: "Saida automatica por venda no caixa",
-          created_by: createdBy,
+          created_by: usuarioId,
         });
 
         if (movimentoErr) {
@@ -304,6 +404,58 @@ export async function POST(req: Request) {
           await rollbackVenda();
           return NextResponse.json({ ok: false, error: "falha_movimento_estoque" }, { status: 500 });
         }
+      }
+    }
+
+    const formaBase = formaPagamentoCodigo || formaPagamento;
+    const movimentoFinanceiroImediato = isPagamentoImediato(formaBase);
+
+    if (movimentoFinanceiroImediato && valorTotalCentavos > 0) {
+      let centroCustoId =
+        asInt(bodyUnknown.centro_custo_id ?? bodyUnknown.centroCustoId) ?? null;
+
+      if (!centroCustoId) {
+        const { data: formaCtx, error: formaCtxError } = await supabase
+          .from("formas_pagamento_contexto")
+          .select("centro_custo_id")
+          .eq("forma_pagamento_codigo", formaBase)
+          .eq("ativo", true)
+          .order("ordem_exibicao", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (formaCtxError) {
+          console.error(
+            "[POST /api/loja/vendas] erro ao buscar centro de custo da forma de pagamento:",
+            formaCtxError
+          );
+        }
+
+        centroCustoId = asInt((formaCtx as any)?.centro_custo_id ?? null);
+      }
+
+      if (centroCustoId) {
+        const { error: movFinErr } = await supabase.from("movimento_financeiro").insert({
+          tipo: "RECEITA",
+          centro_custo_id: centroCustoId,
+          valor_centavos: valorTotalCentavos,
+          data_movimento: nowLocalISOString(),
+          origem: "VENDA_LOJA",
+          origem_id: vendaId,
+          descricao: `Venda Loja #${vendaId} - ${formaPagamento}`,
+          usuario_id: usuarioId,
+        });
+
+        if (movFinErr) {
+          console.error(
+            "[POST /api/loja/vendas] erro ao registrar movimento financeiro imediato:",
+            movFinErr
+          );
+        }
+      } else {
+        console.error(
+          "[POST /api/loja/vendas] centro_custo_id nao encontrado para movimento financeiro imediato."
+        );
       }
     }
 
@@ -409,7 +561,9 @@ export async function POST(req: Request) {
         venda: vendaCriada,
         meta: {
           data_servidor: todayISODate(),
+          itens_inseridos: itensInseridos.length,
         },
+        redirect_url: `/loja/vendas/${vendaId}`,
       },
       { status: 201 }
     );

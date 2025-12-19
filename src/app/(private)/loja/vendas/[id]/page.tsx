@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 type Venda = {
   id: number;
@@ -75,6 +75,7 @@ type ApiResponse<T = any> = {
 
 export default function VendaDetalhePage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const vendaId = params?.id ? String(params.id) : "";
   const [venda, setVenda] = useState<Venda | null>(null);
   const [itens, setItens] = useState<Item[]>([]);
@@ -162,10 +163,30 @@ export default function VendaDetalhePage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Detalhe da venda</h1>
-        <p className="text-sm text-gray-600">
-          Recibo simplificado da venda #{vendaId} na AJ Dance Store.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Detalhe da venda</h1>
+            <p className="text-sm text-gray-600">
+              Recibo simplificado da venda #{vendaId} na AJ Dance Store.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-md border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+              onClick={() => router.push("/loja/caixa")}
+            >
+              Voltar ao caixa
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"
+              onClick={() => window.print()}
+            >
+              Imprimir
+            </button>
+          </div>
+        </div>
       </header>
 
       {mensagem && (
