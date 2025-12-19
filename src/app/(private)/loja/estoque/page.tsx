@@ -13,12 +13,22 @@ type ProdutoEstoqueResumo = {
 type MovimentoEstoque = {
   id: number;
   produto_id: number;
+  variante_id: number | null;
+  sku?: string | null;
   tipo: "ENTRADA" | "SAIDA" | "AJUSTE";
   quantidade: number;
   origem: string;
   referencia_id?: number | null;
   observacao?: string | null;
   created_at: string;
+};
+
+type ProdutoVariante = {
+  id: number;
+  sku: string | null;
+  cor?: string | null;
+  tamanho?: string | null;
+  numeracao?: string | null;
 };
 
 type ApiResponse<T = any> = {
@@ -35,6 +45,8 @@ export default function LojaEstoquePage() {
 
   const [produtoSelecionado, setProdutoSelecionado] =
     useState<ProdutoEstoqueResumo | null>(null);
+  const [variantes, setVariantes] = useState<ProdutoVariante[]>([]);
+  const [varianteSelecionada, setVarianteSelecionada] = useState<string>("");
   const [movimentos, setMovimentos] = useState<MovimentoEstoque[]>([]);
   const [loadingMovimentos, setLoadingMovimentos] = useState(false);
   const [erroMovimentos, setErroMovimentos] = useState<string | null>(null);
@@ -58,6 +70,17 @@ export default function LojaEstoquePage() {
       a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })
     );
   }, [produtos]);
+
+  const variantesMap = useMemo(() => {
+    const map = new Map<number, string>();
+    variantes.forEach((v) => {
+      if (Number.isFinite(v.id)) {
+        const labelParts = [v.sku, v.cor, v.tamanho, v.numeracao].filter(Boolean);
+        map.set(v.id, labelParts.join(" - ") || v.sku || `Variante #${v.id}`);
+      }
+    });
+    return map;
+  }, [variantes]);
 
   async function carregarProdutos() {
     setErroProdutos(null);
@@ -85,13 +108,39 @@ export default function LojaEstoquePage() {
     }
   }
 
-  async function carregarMovimentos(produtoId: number) {
+  async function carregarVariantes(produtoId: number) {
+    try {
+      setVariantes([]);
+      const res = await fetch(`/api/loja/variantes?produto_id=${produtoId}`);
+      const raw = await res.text();
+      let json: any = {};
+      try {
+        json = raw ? JSON.parse(raw) : {};
+      } catch {
+        json = {};
+      }
+      if (!res.ok || json?.ok === false) {
+        console.error("Erro ao carregar variantes:", json?.error || raw);
+        return;
+      }
+      const lista = Array.isArray(json?.variantes) ? json.variantes : [];
+      setVariantes(lista);
+    } catch (err) {
+      console.error("Erro inesperado ao carregar variantes:", err);
+      setVariantes([]);
+    }
+  }
+
+  async function carregarMovimentos(produtoId: number, varianteId?: number | null) {
     setErroMovimentos(null);
     setLoadingMovimentos(true);
     try {
       const params = new URLSearchParams();
       params.set("produto_id", String(produtoId));
       params.set("limit", "50");
+      if (varianteId && Number.isFinite(varianteId)) {
+        params.set("variante_id", String(varianteId));
+      }
 
       const res = await fetch(`/api/loja/estoque/movimentos?${params.toString()}`, {
         cache: "no-store",
@@ -121,7 +170,12 @@ export default function LojaEstoquePage() {
         : Array.isArray(json?.data)
         ? json.data
         : [];
-      setMovimentos(dados);
+      const normalizados = dados.map((m: any) => ({
+        ...m,
+        variante_id: m?.variante_id ?? null,
+        sku: m?.sku ?? null,
+      }));
+      setMovimentos(normalizados);
     } catch (err) {
       console.error("Erro ao carregar movimentos:", err);
       setErroMovimentos("Erro inesperado ao carregar movimentos.");
@@ -133,6 +187,9 @@ export default function LojaEstoquePage() {
 
   function selecionarProduto(p: ProdutoEstoqueResumo) {
     setProdutoSelecionado(p);
+    setVariantes([]);
+    setVarianteSelecionada("");
+    carregarVariantes(p.id);
     carregarMovimentos(p.id);
     setMensagem(null);
     setMensagemTipo(null);
@@ -142,6 +199,24 @@ export default function LojaEstoquePage() {
     if (qtd <= 0) return { label: "Zerado", color: "text-rose-600" };
     if (qtd <= 5) return { label: "Baixo", color: "text-amber-600" };
     return { label: "OK", color: "text-emerald-600" };
+  }
+
+  function labelVariante(v: ProdutoVariante) {
+    const parts = [v.sku, v.cor, v.tamanho, v.numeracao].filter(Boolean);
+    return parts.join(" - ") || v.sku || `Variante #${v.id}`;
+  }
+
+  function labelVarianteMovimento(m: MovimentoEstoque) {
+    if (!m.variante_id) return "-";
+    return variantesMap.get(m.variante_id) || m.sku || `Variante #${m.variante_id}`;
+  }
+
+  function handleVarianteChange(value: string) {
+    setVarianteSelecionada(value);
+    if (produtoSelecionado) {
+      const varId = value ? Number(value) : null;
+      carregarMovimentos(produtoSelecionado.id, varId);
+    }
   }
 
   async function handleAjusteManual(e: React.FormEvent) {
@@ -181,7 +256,8 @@ export default function LojaEstoquePage() {
 
       // Recarrega lista e movimentos
       await carregarProdutos();
-      await carregarMovimentos(produtoSelecionado.id);
+      const varId = varianteSelecionada ? Number(varianteSelecionada) : null;
+      await carregarMovimentos(produtoSelecionado.id, varId);
 
       // Atualiza saldo na seleção atual
       const atualizado = produtos.find((p) => p.id === produtoSelecionado.id);
@@ -330,6 +406,26 @@ export default function LojaEstoquePage() {
 
         {produtoSelecionado ? (
           <>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600">
+                  Filtrar por variante
+                </label>
+                <select
+                  value={varianteSelecionada}
+                  onChange={(e) => handleVarianteChange(e.target.value)}
+                  className="border rounded-md px-2 py-1 text-sm"
+                >
+                  <option value="">Todas (produto)</option>
+                  {variantes.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {labelVariante(v)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-3">
               <div className="md:col-span-2 border rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
@@ -349,6 +445,7 @@ export default function LojaEstoquePage() {
                       <tr>
                         <th className="px-2 py-1 text-left">Data</th>
                         <th className="px-2 py-1 text-left">Tipo</th>
+                        <th className="px-2 py-1 text-left">Variante</th>
                         <th className="px-2 py-1 text-right">Qtd</th>
                         <th className="px-2 py-1 text-left">Origem</th>
                         <th className="px-2 py-1 text-left">Obs.</th>
@@ -358,7 +455,7 @@ export default function LojaEstoquePage() {
                       {movimentos.length === 0 && (
                         <tr>
                           <td
-                            colSpan={5}
+                            colSpan={6}
                             className="px-2 py-3 text-center text-gray-500"
                           >
                             Nenhum movimento encontrado.
@@ -372,6 +469,9 @@ export default function LojaEstoquePage() {
                           </td>
                           <td className="px-2 py-1 font-semibold text-gray-800">
                             {m.tipo}
+                          </td>
+                          <td className="px-2 py-1 text-gray-700">
+                            {labelVarianteMovimento(m)}
                           </td>
                           <td className="px-2 py-1 text-right text-gray-800">
                             {m.quantidade}

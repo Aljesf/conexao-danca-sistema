@@ -1,5 +1,4 @@
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +16,9 @@ export async function GET(req: Request) {
     const produto_id = Number(url.searchParams.get("produto_id"));
     const varianteIdRaw = url.searchParams.get("variante_id");
     const variante_id = varianteIdRaw ? Number(varianteIdRaw) : null;
+    const limitParam = Number(url.searchParams.get("limit"));
+    const limit =
+      Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 200;
 
     if (!Number.isFinite(produto_id) || produto_id <= 0) {
       return json({ ok: false, error: "produto_id invalido." }, 400);
@@ -25,8 +27,7 @@ export async function GET(req: Request) {
       return json({ ok: false, error: "variante_id invalido." }, 400);
     }
 
-    const cookieStore = await cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const supabase = await getSupabaseServerSSR();
 
     const selectFull = `
       id,
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
         .select(select)
         .eq("produto_id", produto_id)
         .order("created_at", { ascending: false })
-        .limit(80);
+        .limit(limit);
 
       if (variante_id) q = q.eq("variante_id", variante_id);
       return q;

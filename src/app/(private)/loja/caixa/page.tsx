@@ -925,10 +925,20 @@ export default function FrenteCaixaLojaPage() {
         return;
       }
       const vendaId =
-        json.data?.venda?.id || json.data?.id || json.data?.venda_id || null;
+        json.data?.venda?.id || json.venda?.id || json.data?.id || json.data?.venda_id || null;
+      const redirectUrl =
+        json.redirect_url ||
+        json.data?.redirect_url ||
+        (vendaId ? `/loja/vendas/${vendaId}` : null);
       setMensagemTipo("success");
       setMensagem("Venda registrada com sucesso.");
-      if (vendaId) router.push(`/loja/vendas/${vendaId}`);
+      if (redirectUrl) {
+        router.push(redirectUrl);
+      } else if (vendaId) {
+        router.push(`/loja/vendas/${vendaId}`);
+      } else {
+        console.warn("Venda registrada, mas URL de redirecionamento ausente.", json);
+      }
     } catch (err) {
       console.error("Erro ao finalizar venda:", err);
       setMensagem("Erro inesperado ao finalizar venda.");
