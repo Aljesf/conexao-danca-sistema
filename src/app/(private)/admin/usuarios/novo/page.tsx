@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import PessoaLookup, { PessoaLookupItem } from "@/components/PessoaLookup";
 
 type RoleSistema = { id: string; codigo: string; nome: string; ativo: boolean };
 
 export default function NovoUsuarioPage() {
-  const [pessoaId, setPessoaId] = useState<string>("");
+  const [pessoa, setPessoa] = useState<PessoaLookupItem | null>(null);
   const [email, setEmail] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [roles, setRoles] = useState<RoleSistema[]>([]);
@@ -43,9 +44,8 @@ export default function NovoUsuarioPage() {
     setMensagem(null);
     setRedirectTo(null);
 
-    const pessoaNum = Number(pessoaId);
-    if (!Number.isFinite(pessoaNum) || pessoaNum <= 0) {
-      setErro("Informe o ID da pessoa.");
+    if (!pessoa) {
+      setErro("Selecione a pessoa.");
       return;
     }
     if (!email.trim()) {
@@ -63,7 +63,7 @@ export default function NovoUsuarioPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pessoa_id: pessoaNum,
+          pessoa_id: pessoa.id,
           email: email.trim(),
           roles_ids: selecionadas,
           is_admin: isAdmin,
@@ -79,7 +79,7 @@ export default function NovoUsuarioPage() {
 
       setMensagem("Convite enviado para o e-mail. A pessoa deve abrir o link e definir a senha.");
       setRedirectTo(json?.invite?.redirectTo || null);
-      setPessoaId("");
+      setPessoa(null);
       setEmail("");
       setIsAdmin(false);
       setSelecionadas([]);
@@ -90,6 +90,12 @@ export default function NovoUsuarioPage() {
     }
   }
 
+  useEffect(() => {
+    if (pessoa?.email && !email.trim()) {
+      setEmail(pessoa.email);
+    }
+  }, [pessoa, email]);
+
   return (
     <div style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Cadastrar novo usuário</h1>
@@ -99,18 +105,13 @@ export default function NovoUsuarioPage() {
       </p>
 
       <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-        <div>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-            Pessoa ID
-          </label>
-          <input
-            type="number"
-            value={pessoaId}
-            onChange={(e) => setPessoaId(e.target.value)}
-            placeholder="Ex.: 123"
-            style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-          />
-        </div>
+        <PessoaLookup
+          label="Pessoa (cadastro existente)"
+          placeholder="Buscar por nome, e-mail ou CPF (2+ caracteres)"
+          value={pessoa}
+          onChange={setPessoa}
+          ctaNovaPessoaHref="/pessoas/nova"
+        />
 
         <div>
           <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
