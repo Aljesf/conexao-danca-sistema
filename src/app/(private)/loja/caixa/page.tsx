@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import PessoaLookup, { PessoaLookupItem } from "@/components/PessoaLookup";
 import { useRouter } from "next/navigation";
 
 type PessoaResumo = {
@@ -170,9 +171,6 @@ export default function FrenteCaixaLojaPage() {
   const [itemSelecionandoAluno, setItemSelecionandoAluno] = useState<string | null>(
     null,
   );
-  const [buscaAluno, setBuscaAluno] = useState("");
-  const [resultadoAluno, setResultadoAluno] = useState<PessoaResumo[]>([]);
-  const [buscandoAluno, setBuscandoAluno] = useState(false);
 
   // busca produtos
   const [buscaProduto, setBuscaProduto] = useState("");
@@ -240,43 +238,6 @@ export default function FrenteCaixaLojaPage() {
     run();
     return () => controller.abort();
   }, [buscaComprador]);
-
-  // busca beneficiario
-  useEffect(() => {
-    if (!itemSelecionandoAluno) {
-      setResultadoAluno([]);
-      return;
-    }
-    const term = buscaAluno.trim();
-    if (term.length < 2) {
-      setResultadoAluno([]);
-      return;
-    }
-    const controller = new AbortController();
-    async function run() {
-      setBuscandoAluno(true);
-      try {
-        const resp = await fetch(
-          `/api/pessoas/busca?query=${encodeURIComponent(term)}`,
-          { signal: controller.signal, credentials: "include" },
-        );
-        if (!resp.ok) {
-          setResultadoAluno([]);
-          return;
-        }
-        const data = (await resp.json()) as { ok: boolean; pessoas: PessoaResumo[] };
-        setResultadoAluno(data.pessoas ?? []);
-      } catch (e) {
-        if (!controller.signal.aborted) {
-          setResultadoAluno([]);
-        }
-      } finally {
-        setBuscandoAluno(false);
-      }
-    }
-    run();
-    return () => controller.abort();
-  }, [buscaAluno, itemSelecionandoAluno]);
 
   // busca produtos
   useEffect(() => {
@@ -763,8 +724,6 @@ export default function FrenteCaixaLojaPage() {
         ),
       );
       setItemSelecionandoAluno(null);
-      setBuscaAluno("");
-      setResultadoAluno([]);
     }
     setShowCadastroRapido(false);
   }
@@ -1292,64 +1251,38 @@ export default function FrenteCaixaLojaPage() {
                   className="text-[11px] text-gray-500 hover:underline"
                   onClick={() => {
                     setItemSelecionandoAluno(null);
-                    setBuscaAluno("");
-                    setResultadoAluno([]);
                   }}
                 >
                   Fechar
                 </button>
               </div>
-              <input
-                value={buscaAluno}
-                onChange={(e) => setBuscaAluno(e.target.value)}
-                className="w-full border rounded-md px-3 py-2 text-sm"
+              <PessoaLookup
+                label=""
                 placeholder="Buscar aluno/pessoa (2+ caracteres)"
+                hint=""
+                value={null}
+                onChange={(pessoa: PessoaLookupItem | null) => {
+                  if (!pessoa) return;
+                  setItens((prev) =>
+                    prev.map((row) =>
+                      row.idTemp === itemSelecionandoAluno
+                        ? { ...row, beneficiario: pessoa as PessoaResumo }
+                        : row,
+                    ),
+                  );
+                  setItemSelecionandoAluno(null);
+                }}
+                allowCreate={false}
               />
-              {buscandoAluno && (
-                <p className="text-[11px] text-gray-500">Buscando pessoas...</p>
-              )}
-              <div className="max-h-48 overflow-y-auto border rounded-md divide-y bg-white">
-                {resultadoAluno.map((p) => (
-                  <button
-                    key={`al-${p.id}`}
-                    type="button"
-                    onClick={() => {
-                      setItens((prev) =>
-                        prev.map((row) =>
-                          row.idTemp === itemSelecionandoAluno
-                            ? { ...row, beneficiario: p }
-                            : row,
-                        ),
-                      );
-                      setItemSelecionandoAluno(null);
-                      setBuscaAluno("");
-                      setResultadoAluno([]);
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                  >
-                    {p.nome_completo || p.nome || "Sem nome"} (ID {p.id})
-                  </button>
-                ))}
-                {!buscandoAluno &&
-                  resultadoAluno.length === 0 &&
-                  buscaAluno.trim().length >= 2 && (
-                    <div className="p-2">
-                      <button
-                        type="button"
-                        className="text-xs text-indigo-600 hover:underline"
-                        onClick={() => abrirCadastroRapido("BENEFICIARIO", itemSelecionandoAluno)}
-                      >
-                        Cadastrar novo usuário (beneficiário)
-                      </button>
-                    </div>
-                  )}
-                {!buscandoAluno &&
-                  resultadoAluno.length === 0 &&
-                  buscaAluno.trim().length >= 2 && (
-                    <p className="text-xs text-gray-500 px-3 py-2">
-                      Nenhuma pessoa encontrada para esta busca.
-                    </p>
-                  )}
+
+              <div className="pt-1">
+                <button
+                  type="button"
+                  className="text-xs text-indigo-600 hover:underline"
+                  onClick={() => abrirCadastroRapido("BENEFICIARIO", itemSelecionandoAluno)}
+                >
+                  Cadastrar novo usuário (beneficiário)
+                </button>
               </div>
             </div>
           )}
@@ -1951,3 +1884,6 @@ function CadastroPessoaRapidaModal({
     </div>
   );
 }
+
+
+
