@@ -47,7 +47,7 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🛒 Compras", href: "/admin/loja/compras" },
       { label: "🚚 Fornecedores", href: "/admin/loja/fornecedores" },
       { label: "🏷️ Categorias", href: "/admin/loja/categorias" },
-      { label: "📦 Estoque", href: "/admin/loja/estoque" },
+      { label: "⚙️ Configurações do produto", href: "/admin/loja/cadastros" },
     ],
   },
   {

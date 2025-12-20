@@ -1,308 +1,319 @@
-﻿"use client";
+"use client";
 
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
-type FaturaConexao = {
+type ApiConta = {
+  id: number;
+  tipo_conta: string;
+  descricao_exibicao: string | null;
+  pessoa_nome: string;
+  pessoa_cpf: string | null;
+};
+
+type ApiRow = {
   id: number;
   conta_conexao_id: number;
+  titulo_conta: string;
+  pessoa_nome: string;
+  pessoa_cpf: string | null;
+  tipo_conta: string | null;
   periodo_referencia: string;
-  data_fechamento: string | null;
+  data_fechamento: string;
   data_vencimento: string | null;
-  valor_total_centavos: number;
-  valor_taxas_centavos: number;
+  compras_centavos: number;
+  taxas_centavos: number;
+  total_centavos: number;
   status: string;
-  created_at: string;
-  conta?: {
-    id: number;
-    descricao_exibicao?: string | null;
-    tipo_conta?: string | null;
-    pessoa_titular_id?: number | null;
-    titular?: {
-      id: number;
-      nome: string | null;
-      cpf: string | null;
-    } | null;
-  } | null;
 };
 
-type ContaConexao = {
-  id: number;
-  descricao_exibicao?: string | null;
+type ApiResp = {
+  ok: boolean;
+  periodo?: string;
+  contas?: ApiConta[];
+  rows?: ApiRow[];
+  error?: string;
 };
 
-export default function FaturasCreditoConexaoPage() {
-  const [faturas, setFaturas] = useState<FaturaConexao[]>([]);
-  const [contas, setContas] = useState<ContaConexao[]>([]);
-  const [contaSelecionada, setContaSelecionada] = useState<number | "">("");
-  const [periodo, setPeriodo] = useState<string>(new Date().toISOString().slice(0, 7));
-  const [loading, setLoading] = useState(false);
-  const [including, setIncluding] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const router = useRouter();
+function formatBRLFromCentavos(v: number): string {
+  const n = (v ?? 0) / 100;
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
-  async function carregarFaturas() {
+function monthLabel(periodo: string): string {
+  const [y, m] = periodo.split("-");
+  const month = Number(m);
+  const months = [
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
+  ];
+  return `${months[Math.max(1, Math.min(12, month)) - 1]} de ${y}`;
+}
+
+function addMonths(periodo: string, delta: number): string {
+  const [y, m] = periodo.split("-").map((x) => Number(x));
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  d.setUTCMonth(d.getUTCMonth() + delta);
+  const yy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${yy}-${mm}`;
+}
+
+function currentPeriodo(): string {
+  const d = new Date();
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${yy}-${mm}`;
+}
+
+export default function AdminCreditoConexaoFaturasPage() {
+  const [periodo, setPeriodo] = useState<string>(currentPeriodo());
+  const [q, setQ] = useState<string>("");
+  const [contaId, setContaId] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [contas, setContas] = useState<ApiConta[]>([]);
+  const [rows, setRows] = useState<ApiRow[]>([]);
+
+  const periodoHuman = useMemo(() => monthLabel(periodo), [periodo]);
+
+  async function carregar() {
+    setLoading(true);
+    setError(null);
+
     try {
-      setLoading(true);
-      setErro(null);
+      const sp = new URLSearchParams();
+      sp.set("periodo", periodo);
+      if (q.trim()) sp.set("q", q.trim());
+      if (contaId.trim()) sp.set("conta_id", contaId.trim());
 
-      const params = new URLSearchParams();
-      if (periodo) params.set("periodo_referencia", periodo);
-      if (contaSelecionada) params.set("conta_conexao_id", String(contaSelecionada));
+      const res = await fetch(`/api/credito-conexao/faturas?${sp.toString()}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
 
-      const res = await fetch(`/api/financeiro/credito-conexao/faturas?${params.toString()}`);
-      if (!res.ok) throw new Error(await res.text());
-      const json = await res.json();
-      setFaturas(json.faturas ?? []);
-    } catch (e) {
-      console.error("Erro ao carregar faturas Credito Conexao", e);
-      setErro("Erro ao carregar faturas do Cartao Conexao.");
+      const data = (await res.json()) as ApiResp;
+
+      if (!data.ok) {
+        setError(data.error ?? "Erro ao carregar faturas do Cartão Conexão.");
+        setContas([]);
+        setRows([]);
+        return;
+      }
+
+      setContas(data.contas ?? []);
+      setRows(data.rows ?? []);
+    } catch {
+      setError("Erro ao carregar faturas do Cartão Conexão.");
+      setContas([]);
+      setRows([]);
     } finally {
       setLoading(false);
     }
   }
 
-  async function carregarContas() {
-    try {
-      const res = await fetch("/api/financeiro/credito-conexao/contas");
-      const json = await res.json();
-      setContas(json.contas ?? []);
-    } catch {
-      // ignore
-    }
-  }
-
   useEffect(() => {
-    carregarFaturas();
-    carregarContas();
-  }, []);
-
-  useEffect(() => {
-    carregarFaturas();
+    void carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodo, contaSelecionada]);
+  }, [periodo, contaId]);
 
-  function formatDate(dateStr: string | null) {
-    if (!dateStr) return "—";
-    const d = new Date(dateStr);
-    if (Number.isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString("pt-BR");
-  }
-
-  function formatCurrency(centavos: number) {
-    return (centavos / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
-  }
-
-  function ajustarPeriodo(deltaMes: number) {
-    const [anoStr, mesStr] = periodo.split("-").map((v) => Number(v));
-    if (!anoStr || !mesStr) return;
-    const novaData = new Date(anoStr, mesStr - 1 + deltaMes, 1);
-    setPeriodo(novaData.toISOString().slice(0, 7));
-  }
-
-  function formatStatus(status: string) {
-    switch (status) {
-      case "ABERTA":
-        return "Aberta";
-      case "PAGA":
-        return "Paga";
-      case "EM_ATRASO":
-        return "Em atraso";
-      case "CANCELADA":
-        return "Cancelada";
-      default:
-        return status;
-    }
-  }
-
-  async function incluirPendencias() {
-    if (!contaSelecionada) {
-      setErro("Selecione uma conta para incluir pendencias.");
-      return;
-    }
-    try {
-      setIncluding(true);
-      setErro(null);
-      const res = await fetch("/api/financeiro/credito-conexao/faturas/incluir-pendencias", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          conta_conexao_id: Number(contaSelecionada),
-          incluir_origens: ["LOJA"],
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        setErro(json.error || "Falha ao incluir pendencias.");
-        return;
-      }
-      await carregarFaturas();
-      if (json.fatura_id) {
-        router.push(`/admin/financeiro/credito-conexao/faturas/${json.fatura_id}`);
-      }
-    } catch (e) {
-      console.error(e);
-      setErro("Erro ao incluir pendencias.");
-    } finally {
-      setIncluding(false);
-    }
+  function onBuscar() {
+    void carregar();
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Credito Conexao â€” Faturas</h1>
-        <p className="text-sm text-gray-600">
-          Visualize as faturas geradas do Cartao Conexao (Aluno/Colaborador), com valores de
-          compras, taxas e total consolidado.
-        </p>
-      </div>
+    <div style={{ padding: 24 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Crédito Conexão — Faturas</h1>
+      <p style={{ marginTop: 6, color: "#555" }}>
+        Visualize as faturas geradas do Cartão Conexão (Aluno/Colaborador), com valores de compras, taxas e total consolidado.
+      </p>
 
-      {erro && <div className="text-sm text-red-600">{erro}</div>}
+      {error ? (
+        <div style={{ marginTop: 12, color: "#b00020", fontWeight: 600 }}>
+          {error}
+        </div>
+      ) : null}
 
-      <div className="border rounded-xl bg-white shadow-sm">
-        <div className="px-4 py-3 border-b flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold">Faturas</h2>
-              <button
-                type="button"
-                onClick={carregarFaturas}
-                className="text-xs px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700"
-              >
-                Atualizar
-              </button>
-            </div>
-            <div className="flex items-center gap-1 text-xs">
-              <button
-                type="button"
-                className="px-2 py-1 rounded-md border text-slate-700 hover:bg-slate-50"
-                onClick={() => ajustarPeriodo(-1)}
-              >
-                ◀ mês anterior
-              </button>
-              <input
-                type="month"
-                value={periodo}
-                onChange={(e) => setPeriodo(e.target.value)}
-                className="border rounded-md px-2 py-1"
-              />
-              <button
-                type="button"
-                className="px-2 py-1 rounded-md border text-slate-700 hover:bg-slate-50"
-                onClick={() => ajustarPeriodo(1)}
-              >
-                mês seguinte ▶
-              </button>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={contaSelecionada}
-              onChange={(e) => setContaSelecionada(e.target.value ? Number(e.target.value) : "")}
-              className="text-xs border rounded-md px-2 py-1"
-            >
-              <option value="">Conta CrÃ©dito ConexÃ£o...</option>
-              {contas.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.descricao_exibicao || `Conta #${c.id}`}
+      <div
+        style={{
+          marginTop: 16,
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          padding: 12,
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          type="button"
+          onClick={carregar}
+          disabled={loading}
+          style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
+        >
+          Atualizar
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPeriodo(addMonths(periodo, -1))}
+          disabled={loading}
+          style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
+        >
+          mês anterior
+        </button>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 13, color: "#333" }}>{periodoHuman}</span>
+          <select
+            value={periodo}
+            onChange={(e) => setPeriodo(e.target.value)}
+            disabled={loading}
+            style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
+          >
+            {Array.from({ length: 25 }).map((_, i) => {
+              const p = addMonths(currentPeriodo(), i - 12);
+              return (
+                <option key={p} value={p}>
+                  {monthLabel(p)}
                 </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={incluirPendencias}
-              disabled={including}
-              className="text-xs px-3 py-1 rounded-full bg-indigo-100 hover:bg-indigo-200 text-indigo-700 disabled:opacity-60"
-            >
-              {including ? "Incluindo..." : "Incluir pendÃªncias (LOJA)"}
-            </button>
-          </div>
+              );
+            })}
+          </select>
         </div>
 
-        {loading ? (
-          <div className="p-4 text-sm text-gray-600">Carregando faturas...</div>
-        ) : faturas.length === 0 ? (
-          <div className="p-4 text-sm text-gray-600">Nenhuma fatura cadastrada.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500">
+        <button
+          type="button"
+          onClick={() => setPeriodo(addMonths(periodo, 1))}
+          disabled={loading}
+          style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
+        >
+          mês seguinte
+        </button>
+
+        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <select
+            value={contaId}
+            onChange={(e) => setContaId(e.target.value)}
+            disabled={loading}
+            style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6, minWidth: 220 }}
+          >
+            <option value="">Todas as contas</option>
+            {contas.map((c) => {
+              const label =
+                (c.descricao_exibicao?.trim() ? c.descricao_exibicao.trim() : `Cartão Conexão ${c.tipo_conta}`) +
+                ` — ${c.pessoa_nome}`;
+              return (
+                <option key={c.id} value={String(c.id)}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
+
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por pessoa (nome/CPF)"
+            disabled={loading}
+            style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6, minWidth: 240 }}
+          />
+
+          <button
+            type="button"
+            onClick={onBuscar}
+            disabled={loading}
+            style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
+          >
+            Buscar
+          </button>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 14, border: "1px solid #ddd", borderRadius: 8, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: "#fafafa" }}>
+                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>ID</th>
+                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Conta</th>
+                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Período</th>
+                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Fechamento</th>
+                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Vencimento</th>
+                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Compras</th>
+                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Taxas</th>
+                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Total</th>
+                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {loading ? (
                 <tr>
-                  <th className="px-3 py-2 text-left">ID</th>
-                  <th className="px-3 py-2 text-left">Conta</th>
-                  <th className="px-3 py-2 text-left">PerÃ­odo</th>
-                  <th className="px-3 py-2 text-left">Fechamento</th>
-                  <th className="px-3 py-2 text-left">Vencimento</th>
-                  <th className="px-3 py-2 text-right">Compras</th>
-                  <th className="px-3 py-2 text-right">Taxas</th>
-                  <th className="px-3 py-2 text-right">Total</th>
-                  <th className="px-3 py-2 text-left">Status</th>
+                  <td colSpan={9} style={{ padding: 12 }}>
+                    Carregando...
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {faturas.map((f) => {
-                  const valorTotal = f.valor_total_centavos;
-                  const valorTaxas = f.valor_taxas_centavos ?? 0;
-                  const valorCompras = valorTotal - valorTaxas;
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} style={{ padding: 12 }}>
+                    Nenhuma fatura para este filtro.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => {
+                  const contaLinha = (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <div style={{ fontWeight: 700 }}>{r.titulo_conta}</div>
+                      <div style={{ color: "#555" }}>
+                        {r.pessoa_nome}
+                        {r.pessoa_cpf ? ` — CPF ${r.pessoa_cpf}` : ""}
+                      </div>
+                    </div>
+                  );
 
                   return (
-                    <tr key={f.id} className="border-t">
-                      <td className="px-3 py-2">
-                        <Link
-                          href={`/admin/financeiro/credito-conexao/faturas/${f.id}`}
-                          className="text-indigo-600 hover:underline"
-                        >
-                          {f.id}
-                        </Link>
+                    <tr key={r.id}>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>
+                        <Link href={`/admin/financeiro/credito-conexao/faturas/${r.id}`}>{r.id}</Link>
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium">
-                          {f.conta?.descricao_exibicao || `Conta #${f.conta_conexao_id}`}
-                        </div>
-                        {f.conta?.titular?.nome && (
-                          <div className="text-xs text-gray-600">
-                            {f.conta.titular.nome}
-                            {f.conta.titular.cpf ? ` — CPF ${f.conta.titular.cpf}` : ""}
-                          </div>
-                        )}
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{contaLinha}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.periodo_referencia}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.data_fechamento}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.data_vencimento ?? "—"}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
+                        {formatBRLFromCentavos(r.compras_centavos)}
                       </td>
-                      <td className="px-3 py-2">{f.periodo_referencia}</td>
-                      <td className="px-3 py-2">{formatDate(f.data_fechamento)}</td>
-                      <td className="px-3 py-2">{formatDate(f.data_vencimento)}</td>
-                      <td className="px-3 py-2 text-right">{formatCurrency(valorCompras)}</td>
-                      <td className="px-3 py-2 text-right">{formatCurrency(valorTaxas)}</td>
-                      <td className="px-3 py-2 text-right">{formatCurrency(valorTotal)}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            f.status === "ABERTA"
-                              ? "bg-amber-50 text-amber-700"
-                              : f.status === "PAGA"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : f.status === "EM_ATRASO"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-gray-100 text-gray-600"
-                          }`}
-                        >
-                          {formatStatus(f.status)}
-                        </span>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
+                        {formatBRLFromCentavos(r.taxas_centavos)}
                       </td>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
+                        {formatBRLFromCentavos(r.total_centavos)}
+                      </td>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.status}</td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 12, color: "#666", fontSize: 12 }}>
+        Observação: o sistema garante (cria) as faturas do mês selecionado para as contas ativas, evitando erro em meses sem compras.
       </div>
     </div>
   );
 }
-
-
-

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
@@ -21,6 +21,7 @@ type Props = {
   apiPath?: string;
   ctaNovaPessoaHref?: string;
   hint?: string;
+  allowCreate?: boolean;
 };
 
 export default function PessoaLookup({
@@ -32,6 +33,7 @@ export default function PessoaLookup({
   apiPath = "/api/pessoas/busca",
   ctaNovaPessoaHref = "/pessoas/nova",
   hint,
+  allowCreate = true,
 }: Props) {
   const [q, setQ] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -124,7 +126,7 @@ export default function PessoaLookup({
         >
           <div style={{ fontWeight: 700 }}>{value.nome}</div>
           <div style={{ fontSize: 13, opacity: 0.8 }}>
-            ID {value.id} • {value.email ?? "sem e-mail"} • {value.cpf ?? "sem CPF"}
+            ID {value.id} â€¢ {value.email ?? "sem e-mail"} â€¢ {value.cpf ?? "sem CPF"}
           </div>
           <button
             onClick={() => onChange(null)}
@@ -151,16 +153,16 @@ export default function PessoaLookup({
             >
               <div style={{ fontWeight: 650 }}>{p.nome}</div>
               <div style={{ fontSize: 13, opacity: 0.8 }}>
-                ID {p.id} • {p.email ?? "sem e-mail"} • {p.cpf ?? "sem CPF"} • {p.telefone ?? "sem telefone"}
+                ID {p.id} â€¢ {p.email ?? "sem e-mail"} â€¢ {p.cpf ?? "sem CPF"} â€¢ {p.telefone ?? "sem telefone"}
               </div>
             </button>
           ))}
         </div>
       ) : null}
 
-      {!value ? (
+      {!value && allowCreate ? (
         <div style={{ fontSize: 13, opacity: 0.85 }}>
-          Não encontrou?{" "}
+          NÃ£o encontrou?{" "}
           <Link href={ctaNovaPessoaHref} style={{ textDecoration: "underline" }}>
             Cadastrar nova pessoa
           </Link>
