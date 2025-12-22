@@ -19,7 +19,7 @@ export default async function ConceitosPage() {
               Acadêmico
             </p>
             <h1 className="text-2xl font-semibold text-slate-900">
-              Conceitos de avaliação
+              📚 Conceitos de avaliação
             </h1>
             <p className="text-sm text-slate-500">
               Gerencie códigos e rótulos de conceitos usados nas avaliações.

@@ -116,7 +116,7 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Academico</p>
           <h1 className="text-3xl font-semibold leading-tight text-slate-900">
-            {turma.nome ?? turma.nome_turma ?? `Turma #${turmaKey}`}
+            📚 {turma.nome ?? turma.nome_turma ?? `Turma #${turmaKey}`}
           </h1>
           <p className="text-sm text-slate-500">{cursoNivel}</p>
         </div>

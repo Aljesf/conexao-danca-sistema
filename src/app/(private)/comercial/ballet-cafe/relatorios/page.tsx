@@ -1,5 +1,5 @@
 import PlaceholderPage from "@/components/PlaceholderPage";
 
 export default function Page() {
-  return <PlaceholderPage title="Ballet Caf? ? Relat?rios" />;
+  return <PlaceholderPage title="☕ Ballet Caf? ? Relat?rios" />;
 }

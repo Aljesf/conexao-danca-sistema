@@ -8,7 +8,7 @@ export default function NovoConceitoPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             Avaliações
           </p>
-          <h1 className="text-2xl font-semibold text-slate-900">Novo conceito</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">📚 Novo conceito</h1>
           <p className="text-sm text-slate-500">
             Cadastre um conceito para usar nas avaliações das turmas.
           </p>

@@ -62,7 +62,7 @@ export default async function AvaliacaoDetalhePage({
     <div className="px-4 py-6">
       <div className="mx-auto max-w-5xl space-y-4">
         <header className="rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-sm">
-          <h1 className="text-xl font-semibold text-slate-900">{avaliacao.titulo}</h1>
+          <h1 className="text-xl font-semibold text-slate-900">📚 {avaliacao.titulo}</h1>
           <p className="text-sm text-slate-600">
             {turma?.nome ?? "Turma"} · {turma?.curso ?? "Curso"}{" "}
             {turma?.nivel ? `· ${turma.nivel}` : ""}{" "}

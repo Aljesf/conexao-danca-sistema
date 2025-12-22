@@ -26,7 +26,7 @@ export default async function EditarConceitoPage({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             Avaliações
           </p>
-          <h1 className="text-2xl font-semibold text-slate-900">Editar conceito</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">📚 Editar conceito</h1>
           <p className="text-sm text-slate-500">
             Ajuste os dados do conceito selecionado.
           </p>

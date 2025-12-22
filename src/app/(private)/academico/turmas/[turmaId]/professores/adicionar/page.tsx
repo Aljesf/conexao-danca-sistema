@@ -56,7 +56,7 @@ export default function AdicionarProfessorTurmaPage({
   return (
     <div className="px-4 py-6">
       <div className="mx-auto max-w-md space-y-4">
-        <h1 className="text-xl font-semibold text-slate-900">Adicionar professor à turma</h1>
+        <h1 className="text-xl font-semibold text-slate-900">📚 Adicionar professor à turma</h1>
 
         {erro && (
           <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700">

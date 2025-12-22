@@ -35,7 +35,7 @@ export default async function AvaliacoesDashboardPage() {
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Acadêmico</p>
-          <h1 className="text-2xl font-semibold text-slate-900">Avaliações</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">📚 Avaliações</h1>
           <p className="text-sm text-slate-500">
             Gerencie conceitos, modelos e avaliações aplicadas nas turmas.
           </p>
