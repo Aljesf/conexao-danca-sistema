@@ -29,7 +29,7 @@ export default async function CurriculoListaPage() {
             Acadêmico
           </p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-            Currículos
+            📚 Currículos
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Consulte o currículo detalhado de cada pessoa.

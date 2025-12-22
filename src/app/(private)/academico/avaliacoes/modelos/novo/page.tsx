@@ -12,7 +12,7 @@ export default async function NovoModeloPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             Avaliações
           </p>
-          <h1 className="text-2xl font-semibold text-slate-900">Novo modelo de avaliação</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">📚 Novo modelo de avaliação</h1>
           <p className="text-sm text-slate-500">
             Defina grupos e conceitos permitidos para aplicar nas turmas.
           </p>

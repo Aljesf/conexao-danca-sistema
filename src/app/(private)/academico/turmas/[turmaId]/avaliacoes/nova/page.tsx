@@ -28,7 +28,7 @@ export default async function NovaAvaliacaoDaTurmaPage({
             Avaliações
           </p>
           <h1 className="text-2xl font-semibold text-slate-900">
-            Nova avaliação da turma
+            📚 Nova avaliação da turma
           </h1>
           <p className="text-sm text-slate-500">
             {turma.nome ?? turma.nome_turma} • {turma.curso ?? turma.modalidade ?? "—"}

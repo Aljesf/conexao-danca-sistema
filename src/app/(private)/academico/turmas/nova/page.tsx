@@ -168,7 +168,7 @@ export default function NovaTurmaPage() {
       <div className="mx-auto max-w-6xl space-y-6">
         <header>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Academico</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-900">Nova turma</h1>
+          <h1 className="mt-1 text-2xl font-semibold text-slate-900">📚 Nova turma</h1>
           <p className="mt-1 text-sm text-slate-500">Preencha os dados basicos da turma e os horarios por dia.</p>
         </header>
 

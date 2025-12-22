@@ -22,7 +22,7 @@ export default async function ModelosPage() {
               Avaliações
             </p>
             <h1 className="text-2xl font-semibold text-slate-900">
-              Modelos de avaliação
+              📚 Modelos de avaliação
             </h1>
             <p className="text-sm text-slate-500">
               Estruture grupos e conceitos permitidos para aplicar em turmas.

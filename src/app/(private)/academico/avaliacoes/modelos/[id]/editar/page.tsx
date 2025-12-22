@@ -33,7 +33,7 @@ export default async function EditarModeloPage({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
             Avaliações
           </p>
-          <h1 className="text-2xl font-semibold text-slate-900">Editar modelo</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">📚 Editar modelo</h1>
           <p className="text-sm text-slate-500">
             Ajuste o modelo de avaliação selecionado.
           </p>
