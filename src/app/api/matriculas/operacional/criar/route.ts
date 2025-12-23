@@ -41,6 +41,7 @@ type CriarCobrancaInput = {
   pessoa_id: number;
   centro_custo_id: number | null;
   valor_centavos: number;
+  descricao: string;
   vencimento: string; // YYYY-MM-DD
   origem_tipo: string; // "MATRICULA"
   origem_subtipo: string; // "PRORATA_AJUSTE" | "ANUIDADE_PARCELA"
@@ -91,6 +92,26 @@ function parsePositiveInt(value: unknown): number | null {
 
 function roundCentavos(value: number): number {
   return Math.round(value);
+}
+
+function buildDescricao(params: {
+  anoReferencia: number;
+  turmaId: number;
+  origemSubtipo: "PRORATA_AJUSTE" | "ANUIDADE_PARCELA";
+  parcelaNumero: number | null;
+  totalParcelas: number | null;
+}): string {
+  const { anoReferencia, turmaId, origemSubtipo, parcelaNumero, totalParcelas } = params;
+
+  if (origemSubtipo === "PRORATA_AJUSTE") {
+    return `Matricula ${anoReferencia} - Pro-rata (ajuste inicial) - Turma ${turmaId}`;
+  }
+
+  if (parcelaNumero && totalParcelas) {
+    return `Matricula ${anoReferencia} - Parcela ${parcelaNumero}/${totalParcelas} - Turma ${turmaId}`;
+  }
+
+  return `Matricula ${anoReferencia} - Cobranca - Turma ${turmaId}`;
 }
 
 function addMonths(year: number, month: number, add: number): { year: number; month: number } {
@@ -202,6 +223,7 @@ async function inserirCobranca(client: DbClient, c: CriarCobrancaInput): Promise
       pessoa_id,
       centro_custo_id,
       valor_centavos,
+      descricao,
       vencimento,
       status,
       origem_tipo,
@@ -214,7 +236,7 @@ async function inserirCobranca(client: DbClient, c: CriarCobrancaInput): Promise
       multa_percentual_aplicavel,
       juros_mora_percentual_mensal_aplicavel
     ) VALUES (
-      $1,$2,$3,$4,'ABERTA',$5,$6,$7,$8,$9,$10,$11,$12,$13
+      $1,$2,$3,$4,$5,'ABERTA',$6,$7,$8,$9,$10,$11,$12,$13,$14
     )
     RETURNING id
     `,
@@ -222,6 +244,7 @@ async function inserirCobranca(client: DbClient, c: CriarCobrancaInput): Promise
       c.pessoa_id,
       c.centro_custo_id,
       c.valor_centavos,
+      c.descricao,
       c.vencimento,
       c.origem_tipo,
       c.origem_subtipo,
@@ -464,6 +487,13 @@ export async function POST(req: Request) {
             pessoa_id: respFinId,
             centro_custo_id: preco.centro_custo_id,
             valor_centavos: valorProrata,
+            descricao: buildDescricao({
+              anoReferencia: anoRef,
+              turmaId,
+              origemSubtipo: "PRORATA_AJUSTE",
+              parcelaNumero: null,
+              totalParcelas: null,
+            }),
             vencimento: vencProrata,
             origem_tipo: "MATRICULA",
             origem_subtipo: "PRORATA_AJUSTE",
@@ -496,6 +526,13 @@ export async function POST(req: Request) {
           pessoa_id: respFinId,
           centro_custo_id: preco.centro_custo_id,
           valor_centavos: valorParcela,
+          descricao: buildDescricao({
+            anoReferencia: anoRef,
+            turmaId,
+            origemSubtipo: "ANUIDADE_PARCELA",
+            parcelaNumero,
+            totalParcelas: 12,
+          }),
           vencimento: venc,
           origem_tipo: "MATRICULA",
           origem_subtipo: "ANUIDADE_PARCELA",
