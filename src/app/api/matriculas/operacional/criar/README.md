@@ -16,6 +16,7 @@ Criar matricula operacional completa (transacao unica):
   - `data_inicio_encargos = vencimento`
 - `multa_percentual_aplicavel` e `juros_mora_percentual_mensal_aplicavel` vem de `matricula_configuracoes` ativa
 - mes comercial = 30 dias
+- Atualizacao: `cobrancas.descricao` e obrigatorio (NOT NULL) e e preenchido automaticamente pela API.
 
 ## Payload
 ```json
