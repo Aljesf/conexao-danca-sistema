@@ -4,12 +4,12 @@ export const escolaSidebar: SidebarSection[] = [
   {
     id: "escola-inicio",
     title: "Início",
-    items: [{ label: "🚧 🏫 Início", href: "/" }],
+    items: [{ label: "🚧 🏫 Início", href: "/escola" }], // TODO(migracao): rota /escola ainda não existe
   },
   {
     id: "escola-caixa",
     title: "Caixa (Escola)",
-    items: [{ label: "🚧 💳 Frente de caixa", href: "/financeiro/caixa" }],
+    items: [{ label: "🚧 💳 Frente de caixa", href: "/escola/caixa" }], // TODO(migracao): ainda sem equivalente confirmado
   },
   {
     id: "escola-calendario",
@@ -46,7 +46,7 @@ export const escolaSidebar: SidebarSection[] = [
       { label: "🚧 🎓 Lista de alunos", href: "/alunos" },
       { label: "🚧 🎓 Matrículas", href: "/alunos/matriculas" },
       { label: "🚧 🎓 Currículo", href: "/alunos/curriculo" },
-      { label: "🚧 🎓 Grupos de alunos", href: "/alunos/grupos" },
+      { label: "🚧 🎓 Grupos de alunos", href: "/escola/alunos/grupos" }, // TODO(migracao): rota ainda não existe
     ],
   },
   {
@@ -57,7 +57,7 @@ export const escolaSidebar: SidebarSection[] = [
       { label: "🚧 📚 Níveis", href: "/academico/niveis" },
       { label: "🚧 📚 Módulos", href: "/academico/modulos" },
       { label: "🚧 📚 Avaliações", href: "/academico/avaliacoes" },
-      { label: "🚧 📚 Professores", href: "/academico/professores" },
+      { label: "🚧 📚 Professores", href: "/escola/academico/professores" }, // TODO(migracao): rota ainda não existe
       { label: "📚 Nova turma", href: "/escola/academico/turmas/nova" },
       { label: "📚 Turmas", href: "/escola/academico/turmas" },
       { label: "🚧 📚 Grade", href: "/academico/turmas/grade" },
