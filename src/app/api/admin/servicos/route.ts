@@ -1,75 +1,76 @@
-import { NextResponse } from "next/server";
-import { Pool } from "pg";
+﻿import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs";
-
-const pool = new Pool({
-  connectionString: process.env.SUPABASE_DB_URL,
-  ssl: process.env.SUPABASE_DB_URL?.includes("sslmode=require")
-    ? { rejectUnauthorized: false }
-    : undefined,
-});
-
-type ServicoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "ESPETACULO" | "EVENTO";
-
-type ServicoPayload = {
-  tipo: ServicoTipo;
-  origem_tabela?: string | null;
-  origem_id?: number | null;
-  ano_referencia?: number | null;
-  titulo: string;
-  descricao?: string | null;
-  ativo?: boolean;
+type ServicoRow = {
+  id: number;
+  tipo: string;
+  titulo: string | null;
+  ativo: boolean;
+  ano_referencia: number | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
-export async function GET() {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query(`SELECT * FROM public.servicos ORDER BY ativo DESC, id DESC`);
-    return NextResponse.json({ ok: true, servicos: rows }, { status: 200 });
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "erro_desconhecido";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
-  } finally {
-    client.release();
+// Observacao:
+// - Esta rota e ADMIN: usar SERVICE_ROLE para leitura e evitar travas de RLS.
+// - Caso voce ja tenha um helper padrao no projeto (ex.: getSupabaseServerSSR),
+//   pode substituir o createClient daqui por ele, mantendo a logica de tratamento.
+
+function getSupabaseAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRole) {
+    throw new Error("ENV ausente: NEXT_PUBLIC_SUPABASE_URL e/ou SUPABASE_SERVICE_ROLE_KEY");
   }
+
+  return createClient(url, serviceRole, {
+    auth: { persistSession: false },
+  });
 }
 
-export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as ServicoPayload | null;
-  if (!body?.tipo || !body?.titulo?.trim()) {
-    return NextResponse.json({ ok: false, error: "tipo_e_titulo_obrigatorios" }, { status: 400 });
-  }
-
-  const client = await pool.connect();
+export async function GET() {
   try {
-    const ativo = typeof body.ativo === "boolean" ? body.ativo : true;
+    const supabase = getSupabaseAdminClient();
 
-    const { rows } = await client.query(
-      `
-      INSERT INTO public.servicos (
-        tipo, origem_tabela, origem_id, ano_referencia, titulo, descricao, ativo, created_at, updated_at
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,now(),now()
-      )
-      RETURNING *
-      `,
-      [
-        body.tipo,
-        body.origem_tabela ?? null,
-        body.origem_id ?? null,
-        body.ano_referencia ?? null,
-        body.titulo.trim(),
-        body.descricao ?? null,
-        ativo,
-      ],
+    // Query simples e robusta:
+    // - Sem joins (para nao quebrar por coluna/relacionamento ainda em migracao)
+    // - Ordenacao por id (mais seguro)
+    const { data, error } = await supabase
+      .from("servicos")
+      .select("id,tipo,titulo,ativo,ano_referencia,created_at,updated_at")
+      .order("id", { ascending: false });
+
+    if (error) {
+      console.error("[api/admin/servicos] Supabase error:", {
+        message: error.message,
+        details: (error as unknown as { details?: string }).details,
+        hint: (error as unknown as { hint?: string }).hint,
+        code: (error as unknown as { code?: string }).code,
+      });
+
+      // Nao devolver 500 "cego" sem contexto
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "erro_ao_listar_servicos",
+          message: error.message,
+        },
+        { status: 500 },
+      );
+    }
+
+    const servicos = (data ?? []) as ServicoRow[];
+
+    return NextResponse.json({ ok: true, servicos }, { status: 200 });
+  } catch (err) {
+    console.error("[api/admin/servicos] Unhandled error:", err);
+
+    const message = err instanceof Error ? err.message : "Erro inesperado no servidor";
+
+    return NextResponse.json(
+      { ok: false, error: "erro_interno", message },
+      { status: 500 },
     );
-
-    return NextResponse.json({ ok: true, servico: rows[0] }, { status: 201 });
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "erro_desconhecido";
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
-  } finally {
-    client.release();
   }
 }
