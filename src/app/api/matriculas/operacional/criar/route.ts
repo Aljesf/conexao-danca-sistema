@@ -3,6 +3,8 @@ import { Pool } from "pg";
 
 export const runtime = "nodejs";
 
+type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA";
+
 type CriarMatriculaOperacionalBody = {
   pessoa_id: number;
   responsavel_financeiro_id: number;
@@ -11,6 +13,7 @@ type CriarMatriculaOperacionalBody = {
   data_matricula?: string; // YYYY-MM-DD (default: current_date)
   mes_inicio_cobranca?: number; // 1..12
   gerar_prorata?: boolean; // default true
+  metodo_liquidacao?: MetodoLiquidacao; // default CARTAO_CONEXAO
 };
 
 type MatriculaConfigAtiva = {
@@ -54,6 +57,16 @@ type CriarCobrancaInput = {
   juros_mora_percentual_mensal_aplicavel: string;
 };
 
+type CriarLancamentoCartaoInput = {
+  conta_conexao_id: number;
+  valor_centavos: number;
+  numero_parcelas: number; // 1
+  status: "PENDENTE_FATURA";
+  origem_sistema: "MATRICULA";
+  origem_id: number; // matriculas.id
+  descricao: string;
+};
+
 type DbClient = {
   query: (q: string, p?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
 };
@@ -94,7 +107,7 @@ function roundCentavos(value: number): number {
   return Math.round(value);
 }
 
-function buildDescricao(params: {
+function buildDescricaoCobranca(params: {
   anoReferencia: number;
   turmaId: number;
   origemSubtipo: "PRORATA_AJUSTE" | "ANUIDADE_PARCELA";
@@ -112,6 +125,24 @@ function buildDescricao(params: {
   }
 
   return `Matricula ${anoReferencia} - Cobranca - Turma ${turmaId}`;
+}
+
+function buildDescricaoLancamento(params: {
+  anoReferencia: number;
+  turmaId: number;
+  origemSubtipo: "PRORATA_AJUSTE" | "ANUIDADE_PARCELA";
+  parcelaNumero: number | null;
+  totalParcelas: number | null;
+  vencimentoISO: string;
+}): string {
+  const base = buildDescricaoCobranca({
+    anoReferencia: params.anoReferencia,
+    turmaId: params.turmaId,
+    origemSubtipo: params.origemSubtipo,
+    parcelaNumero: params.parcelaNumero,
+    totalParcelas: params.totalParcelas,
+  });
+  return `${base} - Venc ${params.vencimentoISO}`;
 }
 
 function addMonths(year: number, month: number, add: number): { year: number; month: number } {
@@ -135,7 +166,7 @@ async function getConfigAtiva(client: DbClient): Promise<MatriculaConfigAtiva | 
     WHERE ativo = true
     ORDER BY id DESC
     LIMIT 1
-    `
+    `,
   );
 
   if (rows.length === 0) return null;
@@ -154,7 +185,7 @@ async function getConfigAtiva(client: DbClient): Promise<MatriculaConfigAtiva | 
 async function getPrecoTurmaAtivo(
   client: DbClient,
   turmaId: number,
-  anoRef: number
+  anoRef: number,
 ): Promise<PrecoTurmaAtivo | null> {
   const { rows } = await client.query(
     `
@@ -171,7 +202,7 @@ async function getPrecoTurmaAtivo(
     ORDER BY id DESC
     LIMIT 1
     `,
-    [turmaId, anoRef]
+    [turmaId, anoRef],
   );
 
   if (rows.length === 0) return null;
@@ -183,9 +214,7 @@ async function getPrecoTurmaAtivo(
     ano_referencia: Number(r.ano_referencia),
     plano_id: Number(r.plano_id),
     centro_custo_id:
-      r.centro_custo_id === null || r.centro_custo_id === undefined
-        ? null
-        : Number(r.centro_custo_id),
+      r.centro_custo_id === null || r.centro_custo_id === undefined ? null : Number(r.centro_custo_id),
   };
 }
 
@@ -202,7 +231,7 @@ async function getPlanoAtivo(client: DbClient, planoId: number): Promise<PlanoAt
       AND id = $1
     LIMIT 1
     `,
-    [planoId]
+    [planoId],
   );
 
   if (rows.length === 0) return null;
@@ -255,10 +284,93 @@ async function inserirCobranca(client: DbClient, c: CriarCobrancaInput): Promise
       c.data_inicio_encargos,
       c.multa_percentual_aplicavel,
       c.juros_mora_percentual_mensal_aplicavel,
-    ]
+    ],
   );
 
   return { id: Number(rows[0]?.id) };
+}
+
+async function ensureContaConexaoAluno(
+  client: DbClient,
+  responsavelFinanceiroId: number,
+  centroCustoPrincipalId: number | null,
+  vencimentoDiaPadrao: number,
+): Promise<number> {
+  const { rows: existing } = await client.query(
+    `
+    SELECT id, ativo
+    FROM public.credito_conexao_contas
+    WHERE pessoa_titular_id = $1
+      AND tipo_conta = 'ALUNO'
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    [responsavelFinanceiroId],
+  );
+
+  if (existing.length > 0) {
+    const row = existing[0];
+    const id = Number(row.id);
+    const ativo = row.ativo === true || row.ativo === "true";
+    if (!ativo) {
+      throw new Error("conta_conexao_inativa");
+    }
+    return id;
+  }
+
+  const { rows } = await client.query(
+    `
+    INSERT INTO public.credito_conexao_contas (
+      pessoa_titular_id,
+      tipo_conta,
+      descricao_exibicao,
+      dia_fechamento,
+      dia_vencimento,
+      centro_custo_principal_id,
+      ativo,
+      created_at,
+      updated_at
+    ) VALUES (
+      $1,'ALUNO',NULL,10,$2,$3,true,now(),now()
+    )
+    RETURNING id
+    `,
+    [responsavelFinanceiroId, vencimentoDiaPadrao, centroCustoPrincipalId],
+  );
+
+  return Number(rows[0]?.id);
+}
+
+async function inserirLancamentoCartao(client: DbClient, l: CriarLancamentoCartaoInput): Promise<number> {
+  const { rows } = await client.query(
+    `
+    INSERT INTO public.credito_conexao_lancamentos (
+      conta_conexao_id,
+      valor_centavos,
+      numero_parcelas,
+      status,
+      origem_sistema,
+      origem_id,
+      descricao,
+      created_at,
+      updated_at
+    ) VALUES (
+      $1,$2,$3,$4,$5,$6,$7,now(),now()
+    )
+    RETURNING id
+    `,
+    [
+      l.conta_conexao_id,
+      l.valor_centavos,
+      l.numero_parcelas,
+      l.status,
+      l.origem_sistema,
+      l.origem_id,
+      l.descricao,
+    ],
+  );
+
+  return Number(rows[0]?.id);
 }
 
 export async function POST(req: Request) {
@@ -279,16 +391,16 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: "payload_invalido",
-          message:
-            "pessoa_id, responsavel_financeiro_id, turma_id, ano_referencia sao obrigatorios e devem ser inteiros > 0.",
+          message: "pessoa_id, responsavel_financeiro_id, turma_id, ano_referencia sao obrigatorios e devem ser inteiros > 0.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const dataMatricula = body.data_matricula && typeof body.data_matricula === "string"
-      ? body.data_matricula
-      : null;
+    const metodoLiquidacao: MetodoLiquidacao = (body.metodo_liquidacao ?? "CARTAO_CONEXAO") as MetodoLiquidacao;
+
+    const dataMatricula =
+      body.data_matricula && typeof body.data_matricula === "string" ? body.data_matricula : null;
     if (dataMatricula && !isValidISODate(dataMatricula)) {
       return NextResponse.json({ error: "data_matricula_invalida" }, { status: 400 });
     }
@@ -307,78 +419,48 @@ export async function POST(req: Request) {
       const config = await getConfigAtiva(client);
       if (!config) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "configuracao_inexistente", message: "Nao existe configuracao ativa." },
-          { status: 422 }
-        );
+        return NextResponse.json({ error: "configuracao_inexistente", message: "Nao existe configuracao ativa." }, { status: 422 });
       }
 
       const preco = await getPrecoTurmaAtivo(client, turmaId, anoRef);
       if (!preco) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "preco_inexistente", message: "Nao existe preco ativo para a turma/ano informado." },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "preco_inexistente", message: "Nao existe preco ativo para a turma/ano informado." }, { status: 400 });
       }
 
       const plano = await getPlanoAtivo(client, preco.plano_id);
       if (!plano) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "plano_inexistente", message: "Plano do preco esta inativo ou nao existe." },
-          { status: 422 }
-        );
+        return NextResponse.json({ error: "plano_inexistente", message: "Plano do preco esta inativo ou nao existe." }, { status: 422 });
       }
 
       const totalParcelas = plano.total_parcelas || config.parcelas_padrao;
       if (totalParcelas !== 12) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error: "parcelas_invalidas",
-            message: `Total de parcelas esperado = 12, recebido = ${totalParcelas}.`,
-          },
-          { status: 422 }
-        );
+        return NextResponse.json({ error: "parcelas_invalidas", message: `Total de parcelas esperado = 12, recebido = ${totalParcelas}.` }, { status: 422 });
       }
 
       const mesComercialDias = config.mes_referencia_dias || 30;
       if (mesComercialDias !== 30) {
         await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error: "mes_comercial_invalido",
-            message: `Mes comercial esperado = 30, recebido = ${mesComercialDias}.`,
-          },
-          { status: 422 }
-        );
+        return NextResponse.json({ error: "mes_comercial_invalido", message: `Mes comercial esperado = 30, recebido = ${mesComercialDias}.` }, { status: 422 });
       }
 
       const diaVenc = clampInt(config.vencimento_dia_padrao, 1, 28);
 
-      const { rows: pessoaRows } = await client.query(
-        "SELECT id FROM public.pessoas WHERE id = $1",
-        [pessoaId]
-      );
+      const { rows: pessoaRows } = await client.query("SELECT id FROM public.pessoas WHERE id = $1", [pessoaId]);
       if (pessoaRows.length === 0) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "pessoa_nao_encontrada" }, { status: 404 });
       }
 
-      const { rows: respRows } = await client.query(
-        "SELECT id FROM public.pessoas WHERE id = $1",
-        [respFinId]
-      );
+      const { rows: respRows } = await client.query("SELECT id FROM public.pessoas WHERE id = $1", [respFinId]);
       if (respRows.length === 0) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "responsavel_nao_encontrado" }, { status: 404 });
       }
 
-      const { rows: turmaRows } = await client.query(
-        "SELECT turma_id FROM public.turmas WHERE turma_id = $1",
-        [turmaId]
-      );
+      const { rows: turmaRows } = await client.query("SELECT turma_id FROM public.turmas WHERE turma_id = $1", [turmaId]);
       if (turmaRows.length === 0) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "turma_nao_encontrada" }, { status: 404 });
@@ -394,7 +476,7 @@ export async function POST(req: Request) {
           AND (status IS NULL OR LOWER(status) = 'ativo')
         LIMIT 1
         `,
-        [turmaId, pessoaId]
+        [turmaId, pessoaId],
       );
       if (vinculoAtivoRows.length > 0) {
         await client.query("ROLLBACK");
@@ -414,11 +496,12 @@ export async function POST(req: Request) {
           plano_matricula_id,
           ano_referencia,
           data_matricula,
-          status
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'ATIVA')
-        RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, plano_matricula_id, ano_referencia, data_matricula, status
+          status,
+          metodo_liquidacao
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'ATIVA',$8)
+        RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, plano_matricula_id, ano_referencia, data_matricula, status, metodo_liquidacao
         `,
-        [pessoaId, respFinId, "REGULAR", turmaId, plano.id, anoRef, dataMatriculaEfetiva]
+        [pessoaId, respFinId, "REGULAR", turmaId, plano.id, anoRef, dataMatriculaEfetiva, metodoLiquidacao],
       );
 
       const matricula = matriculaRows[0];
@@ -435,9 +518,26 @@ export async function POST(req: Request) {
         ) VALUES ($1,$2,$3,$4,'ativo')
         RETURNING turma_aluno_id, turma_id, aluno_pessoa_id, matricula_id, dt_inicio, status
         `,
-        [turmaId, pessoaId, matriculaId, dataMatriculaEfetiva]
+        [turmaId, pessoaId, matriculaId, dataMatriculaEfetiva],
       );
       const turmaAluno = vincRows[0];
+
+      if (metodoLiquidacao === "CARTAO_CONEXAO") {
+        const { rows: jaExiste } = await client.query(
+          `
+          SELECT id
+          FROM public.credito_conexao_lancamentos
+          WHERE origem_sistema = 'MATRICULA'
+            AND origem_id = $1
+          LIMIT 1
+          `,
+          [matriculaId],
+        );
+        if (jaExiste.length > 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: "matricula_financeiro_ja_gerado" }, { status: 409 });
+        }
+      }
 
       const createdCobrancas: Array<{
         id: number;
@@ -445,6 +545,13 @@ export async function POST(req: Request) {
         vencimento: string;
         valor_centavos: number;
         parcela_numero: number | null;
+      }> = [];
+
+      const createdLancamentos: Array<{
+        id: number;
+        descricao: string;
+        valor_centavos: number;
+        status: "PENDENTE_FATURA";
       }> = [];
 
       const dt = new Date(`${String(dataMatriculaEfetiva)}T00:00:00Z`);
@@ -468,6 +575,11 @@ export async function POST(req: Request) {
         startMonth = next.month;
       }
 
+      let contaConexaoId: number | null = null;
+      if (metodoLiquidacao === "CARTAO_CONEXAO") {
+        contaConexaoId = await ensureContaConexaoAluno(client, respFinId, preco.centro_custo_id, diaVenc);
+      }
+
       if (gerarProrata) {
         let vencBase = { year: baseYear, month: baseMonth };
         if (diaInicio > diaVenc) {
@@ -476,82 +588,127 @@ export async function POST(req: Request) {
         const vencProrata = toISODate(vencBase.year, vencBase.month, diaVenc);
 
         const diasUso =
-          diaInicio <= diaVenc
-            ? diaVenc - diaInicio
-            : mesComercialDias - diaInicio + diaVenc;
+          diaInicio <= diaVenc ? diaVenc - diaInicio : mesComercialDias - diaInicio + diaVenc;
         const fator = diasUso > 0 ? diasUso / mesComercialDias : 0;
         const valorProrata = roundCentavos(plano.valor_mensal_base_centavos * fator);
 
         if (valorProrata > 0) {
-          const cobr = await inserirCobranca(client, {
-            pessoa_id: respFinId,
-            centro_custo_id: preco.centro_custo_id,
-            valor_centavos: valorProrata,
-            descricao: buildDescricao({
+          if (metodoLiquidacao === "COBRANCAS_LEGADO") {
+            const cobr = await inserirCobranca(client, {
+              pessoa_id: respFinId,
+              centro_custo_id: preco.centro_custo_id,
+              valor_centavos: valorProrata,
+              descricao: buildDescricaoCobranca({
+                anoReferencia: anoRef,
+                turmaId,
+                origemSubtipo: "PRORATA_AJUSTE",
+                parcelaNumero: null,
+                totalParcelas: null,
+              }),
+              vencimento: vencProrata,
+              origem_tipo: "MATRICULA",
+              origem_subtipo: "PRORATA_AJUSTE",
+              origem_id: matriculaId,
+              parcela_numero: null,
+              total_parcelas: null,
+              data_prevista_pagamento: vencProrata,
+              data_inicio_encargos: vencProrata,
+              multa_percentual_aplicavel: config.multa_percentual_padrao,
+              juros_mora_percentual_mensal_aplicavel: config.juros_mora_percentual_mensal_padrao,
+            });
+
+            createdCobrancas.push({
+              id: cobr.id,
+              origem_subtipo: "PRORATA_AJUSTE",
+              vencimento: vencProrata,
+              valor_centavos: valorProrata,
+              parcela_numero: null,
+            });
+          } else if (metodoLiquidacao === "CARTAO_CONEXAO" && contaConexaoId) {
+            const desc = buildDescricaoLancamento({
               anoReferencia: anoRef,
               turmaId,
               origemSubtipo: "PRORATA_AJUSTE",
               parcelaNumero: null,
               totalParcelas: null,
+              vencimentoISO: vencProrata,
+            });
+
+            const idLanc = await inserirLancamentoCartao(client, {
+              conta_conexao_id: contaConexaoId,
+              valor_centavos: valorProrata,
+              numero_parcelas: 1,
+              status: "PENDENTE_FATURA",
+              origem_sistema: "MATRICULA",
+              origem_id: matriculaId,
+              descricao: desc,
+            });
+
+            createdLancamentos.push({ id: idLanc, descricao: desc, valor_centavos: valorProrata, status: "PENDENTE_FATURA" });
+          }
+        }
+      }
+
+      const valorParcela = roundCentavos(plano.valor_anuidade_centavos / 12);
+
+      for (let i = 0; i < 12; i += 1) {
+        const parcelaNumero = i + 1;
+        const m = addMonths(startYear, startMonth, i);
+        const venc = toISODate(m.year, m.month, diaVenc);
+
+        if (metodoLiquidacao === "COBRANCAS_LEGADO") {
+          const cobr = await inserirCobranca(client, {
+            pessoa_id: respFinId,
+            centro_custo_id: preco.centro_custo_id,
+            valor_centavos: valorParcela,
+            descricao: buildDescricaoCobranca({
+              anoReferencia: anoRef,
+              turmaId,
+              origemSubtipo: "ANUIDADE_PARCELA",
+              parcelaNumero,
+              totalParcelas: 12,
             }),
-            vencimento: vencProrata,
+            vencimento: venc,
             origem_tipo: "MATRICULA",
-            origem_subtipo: "PRORATA_AJUSTE",
+            origem_subtipo: "ANUIDADE_PARCELA",
             origem_id: matriculaId,
-            parcela_numero: null,
-            total_parcelas: null,
-            data_prevista_pagamento: vencProrata,
-            data_inicio_encargos: vencProrata,
+            parcela_numero: parcelaNumero,
+            total_parcelas: 12,
+            data_prevista_pagamento: venc,
+            data_inicio_encargos: venc,
             multa_percentual_aplicavel: config.multa_percentual_padrao,
             juros_mora_percentual_mensal_aplicavel: config.juros_mora_percentual_mensal_padrao,
           });
 
           createdCobrancas.push({
             id: cobr.id,
-            origem_subtipo: "PRORATA_AJUSTE",
-            vencimento: vencProrata,
-            valor_centavos: valorProrata,
-            parcela_numero: null,
+            origem_subtipo: "ANUIDADE_PARCELA",
+            vencimento: venc,
+            valor_centavos: valorParcela,
+            parcela_numero: parcelaNumero,
           });
-        }
-      }
-
-      const valorParcela = roundCentavos(plano.valor_anuidade_centavos / 12);
-      for (let i = 0; i < 12; i += 1) {
-        const parcelaNumero = i + 1;
-        const m = addMonths(startYear, startMonth, i);
-        const venc = toISODate(m.year, m.month, diaVenc);
-
-        const cobr = await inserirCobranca(client, {
-          pessoa_id: respFinId,
-          centro_custo_id: preco.centro_custo_id,
-          valor_centavos: valorParcela,
-          descricao: buildDescricao({
+        } else if (metodoLiquidacao === "CARTAO_CONEXAO" && contaConexaoId) {
+          const desc = buildDescricaoLancamento({
             anoReferencia: anoRef,
             turmaId,
             origemSubtipo: "ANUIDADE_PARCELA",
             parcelaNumero,
             totalParcelas: 12,
-          }),
-          vencimento: venc,
-          origem_tipo: "MATRICULA",
-          origem_subtipo: "ANUIDADE_PARCELA",
-          origem_id: matriculaId,
-          parcela_numero: parcelaNumero,
-          total_parcelas: 12,
-          data_prevista_pagamento: venc,
-          data_inicio_encargos: venc,
-          multa_percentual_aplicavel: config.multa_percentual_padrao,
-          juros_mora_percentual_mensal_aplicavel: config.juros_mora_percentual_mensal_padrao,
-        });
+            vencimentoISO: venc,
+          });
 
-        createdCobrancas.push({
-          id: cobr.id,
-          origem_subtipo: "ANUIDADE_PARCELA",
-          vencimento: venc,
-          valor_centavos: valorParcela,
-          parcela_numero: parcelaNumero,
-        });
+          const idLanc = await inserirLancamentoCartao(client, {
+            conta_conexao_id: contaConexaoId,
+            valor_centavos: valorParcela,
+            numero_parcelas: 1,
+            status: "PENDENTE_FATURA",
+            origem_sistema: "MATRICULA",
+            origem_id: matriculaId,
+            descricao: desc,
+          });
+
+          createdLancamentos.push({ id: idLanc, descricao: desc, valor_centavos: valorParcela, status: "PENDENTE_FATURA" });
+        }
       }
 
       await client.query("COMMIT");
@@ -568,11 +725,13 @@ export async function POST(req: Request) {
             plano_id: plano.id,
             data_matricula: String(matricula?.data_matricula),
             status: String(matricula?.status),
+            metodo_liquidacao: String(matricula?.metodo_liquidacao ?? metodoLiquidacao),
           },
           turma_aluno: turmaAluno,
-          cobrancas: createdCobrancas,
+          cobrancas: metodoLiquidacao === "COBRANCAS_LEGADO" ? createdCobrancas : [],
+          lancamentos_cartao: metodoLiquidacao === "CARTAO_CONEXAO" ? createdLancamentos : [],
         },
-        { status: 201 }
+        { status: 201 },
       );
     } catch (e: unknown) {
       try {
