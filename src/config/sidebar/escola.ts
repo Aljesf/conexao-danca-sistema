@@ -42,9 +42,9 @@ export const escolaSidebar: SidebarSection[] = [
     id: "escola-alunos",
     title: "Alunos",
     items: [
+      { label: "Matrículas", href: "/escola/matriculas" },
       { label: "🚧 🎓 Novo aluno", href: "/alunos/novo" },
       { label: "🚧 🎓 Lista de alunos", href: "/alunos" },
-      { label: "🚧 🎓 Matrículas", href: "/alunos/matriculas" },
       { label: "🚧 🎓 Currículo", href: "/alunos/curriculo" },
       { label: "🚧 🎓 Grupos de alunos", href: "/escola/alunos/grupos" }, // TODO(migracao): rota ainda não existe
     ],
