@@ -8,7 +8,8 @@ type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA";
 type CriarMatriculaOperacionalBody = {
   pessoa_id: number;
   responsavel_financeiro_id: number;
-  turma_id: number;
+  turma_id?: number;
+  servico_id?: number;
   ano_referencia: number;
   data_matricula?: string; // YYYY-MM-DD (default: current_date)
   mes_inicio_cobranca?: number; // 1..12
@@ -25,9 +26,26 @@ type MatriculaConfigAtiva = {
   juros_mora_percentual_mensal_padrao: string;
 };
 
+type ServicoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "ESPETACULO" | "EVENTO";
+
+type ServicoAtivo = {
+  id: number;
+  tipo: ServicoTipo;
+  origem_id: number | null;
+  titulo: string;
+};
+
 type PrecoTurmaAtivo = {
   id: number;
   turma_id: number;
+  ano_referencia: number;
+  plano_id: number;
+  centro_custo_id: number | null;
+};
+
+type PrecoServicoAtivo = {
+  id: number;
+  servico_id: number;
   ano_referencia: number;
   plano_id: number;
   centro_custo_id: number | null;
@@ -109,27 +127,27 @@ function roundCentavos(value: number): number {
 
 function buildDescricaoCobranca(params: {
   anoReferencia: number;
-  turmaId: number;
+  referenciaLabel: string;
   origemSubtipo: "PRORATA_AJUSTE" | "ANUIDADE_PARCELA";
   parcelaNumero: number | null;
   totalParcelas: number | null;
 }): string {
-  const { anoReferencia, turmaId, origemSubtipo, parcelaNumero, totalParcelas } = params;
+  const { anoReferencia, referenciaLabel, origemSubtipo, parcelaNumero, totalParcelas } = params;
 
   if (origemSubtipo === "PRORATA_AJUSTE") {
-    return `Matricula ${anoReferencia} - Pro-rata (ajuste inicial) - Turma ${turmaId}`;
+    return `Matricula ${anoReferencia} - Pro-rata (ajuste inicial) - ${referenciaLabel}`;
   }
 
   if (parcelaNumero && totalParcelas) {
-    return `Matricula ${anoReferencia} - Parcela ${parcelaNumero}/${totalParcelas} - Turma ${turmaId}`;
+    return `Matricula ${anoReferencia} - Parcela ${parcelaNumero}/${totalParcelas} - ${referenciaLabel}`;
   }
 
-  return `Matricula ${anoReferencia} - Cobranca - Turma ${turmaId}`;
+  return `Matricula ${anoReferencia} - Cobranca - ${referenciaLabel}`;
 }
 
 function buildDescricaoLancamento(params: {
   anoReferencia: number;
-  turmaId: number;
+  referenciaLabel: string;
   origemSubtipo: "PRORATA_AJUSTE" | "ANUIDADE_PARCELA";
   parcelaNumero: number | null;
   totalParcelas: number | null;
@@ -137,7 +155,7 @@ function buildDescricaoLancamento(params: {
 }): string {
   const base = buildDescricaoCobranca({
     anoReferencia: params.anoReferencia,
-    turmaId: params.turmaId,
+    referenciaLabel: params.referenciaLabel,
     origemSubtipo: params.origemSubtipo,
     parcelaNumero: params.parcelaNumero,
     totalParcelas: params.totalParcelas,
@@ -182,6 +200,33 @@ async function getConfigAtiva(client: DbClient): Promise<MatriculaConfigAtiva | 
   };
 }
 
+async function getServicoAtivo(client: DbClient, servicoId: number): Promise<ServicoAtivo | null> {
+  const { rows } = await client.query(
+    `
+    SELECT
+      id,
+      tipo,
+      origem_id,
+      titulo
+    FROM public.servicos
+    WHERE ativo = true
+      AND id = $1
+    LIMIT 1
+    `,
+    [servicoId],
+  );
+
+  if (rows.length === 0) return null;
+  const r = rows[0];
+
+  return {
+    id: Number(r.id),
+    tipo: String(r.tipo) as ServicoTipo,
+    origem_id: r.origem_id === null || r.origem_id === undefined ? null : Number(r.origem_id),
+    titulo: String(r.titulo),
+  };
+}
+
 async function getPrecoTurmaAtivo(
   client: DbClient,
   turmaId: number,
@@ -211,6 +256,42 @@ async function getPrecoTurmaAtivo(
   return {
     id: Number(r.id),
     turma_id: Number(r.turma_id),
+    ano_referencia: Number(r.ano_referencia),
+    plano_id: Number(r.plano_id),
+    centro_custo_id:
+      r.centro_custo_id === null || r.centro_custo_id === undefined ? null : Number(r.centro_custo_id),
+  };
+}
+
+async function getPrecoServicoAtivo(
+  client: DbClient,
+  servicoId: number,
+  anoRef: number,
+): Promise<PrecoServicoAtivo | null> {
+  const { rows } = await client.query(
+    `
+    SELECT
+      id,
+      servico_id,
+      ano_referencia,
+      plano_id,
+      centro_custo_id
+    FROM public.matricula_precos_servico
+    WHERE ativo = true
+      AND servico_id = $1
+      AND ano_referencia = $2
+    ORDER BY id DESC
+    LIMIT 1
+    `,
+    [servicoId, anoRef],
+  );
+
+  if (rows.length === 0) return null;
+  const r = rows[0];
+
+  return {
+    id: Number(r.id),
+    servico_id: Number(r.servico_id),
     ano_referencia: Number(r.ano_referencia),
     plano_id: Number(r.plano_id),
     centro_custo_id:
@@ -384,15 +465,23 @@ export async function POST(req: Request) {
 
     const pessoaId = parsePositiveInt(body.pessoa_id);
     const respFinId = parsePositiveInt(body.responsavel_financeiro_id);
-    const turmaId = parsePositiveInt(body.turma_id);
+    const turmaIdInput = parsePositiveInt(body.turma_id);
+    const servicoId = parsePositiveInt(body.servico_id);
     const anoRef = parsePositiveInt(body.ano_referencia);
 
-    if (!pessoaId || !respFinId || !turmaId || !anoRef) {
+    if (!pessoaId || !respFinId || !anoRef || (!turmaIdInput && !servicoId)) {
       return NextResponse.json(
         {
           error: "payload_invalido",
-          message: "pessoa_id, responsavel_financeiro_id, turma_id, ano_referencia sao obrigatorios e devem ser inteiros > 0.",
+          message:
+            "pessoa_id, responsavel_financeiro_id, ano_referencia e (turma_id ou servico_id) sao obrigatorios e devem ser inteiros > 0.",
         },
+        { status: 400 },
+      );
+    }
+    if (turmaIdInput && servicoId) {
+      return NextResponse.json(
+        { error: "payload_invalido", message: "Informe apenas um entre turma_id e servico_id." },
         { status: 400 },
       );
     }
@@ -422,10 +511,48 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "configuracao_inexistente", message: "Nao existe configuracao ativa." }, { status: 422 });
       }
 
-      const preco = await getPrecoTurmaAtivo(client, turmaId, anoRef);
+      let servico: ServicoAtivo | null = null;
+      let turmaId: number | null = turmaIdInput;
+
+      if (servicoId) {
+        servico = await getServicoAtivo(client, servicoId);
+        if (!servico) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: "servico_inexistente", message: "Servico nao encontrado ou inativo." }, { status: 404 });
+        }
+
+        if (servico.tipo === "TURMA") {
+          const origemId =
+            servico.origem_id !== null && servico.origem_id !== undefined ? Number(servico.origem_id) : null;
+          if (!origemId || origemId <= 0) {
+            await client.query("ROLLBACK");
+            return NextResponse.json(
+              { error: "servico_origem_invalida", message: "Servico TURMA sem origem valida." },
+              { status: 422 },
+            );
+          }
+          turmaId = origemId;
+        } else {
+          turmaId = null;
+        }
+      }
+
+      const preco = servicoId
+        ? await getPrecoServicoAtivo(client, servicoId, anoRef)
+        : turmaId
+          ? await getPrecoTurmaAtivo(client, turmaId, anoRef)
+          : null;
       if (!preco) {
         await client.query("ROLLBACK");
-        return NextResponse.json({ error: "preco_inexistente", message: "Nao existe preco ativo para a turma/ano informado." }, { status: 400 });
+        return NextResponse.json(
+          {
+            error: "preco_inexistente",
+            message: servicoId
+              ? "Nao existe preco ativo para o servico/ano informado."
+              : "Nao existe preco ativo para a turma/ano informado.",
+          },
+          { status: 400 },
+        );
       }
 
       const plano = await getPlanoAtivo(client, preco.plano_id);
@@ -460,27 +587,29 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "responsavel_nao_encontrado" }, { status: 404 });
       }
 
-      const { rows: turmaRows } = await client.query("SELECT turma_id FROM public.turmas WHERE turma_id = $1", [turmaId]);
-      if (turmaRows.length === 0) {
-        await client.query("ROLLBACK");
-        return NextResponse.json({ error: "turma_nao_encontrada" }, { status: 404 });
-      }
+      if (turmaId) {
+        const { rows: turmaRows } = await client.query("SELECT turma_id FROM public.turmas WHERE turma_id = $1", [turmaId]);
+        if (turmaRows.length === 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: "turma_nao_encontrada" }, { status: 404 });
+        }
 
-      const { rows: vinculoAtivoRows } = await client.query(
-        `
-        SELECT turma_aluno_id
-        FROM public.turma_aluno
-        WHERE turma_id = $1
-          AND aluno_pessoa_id = $2
-          AND dt_fim IS NULL
-          AND (status IS NULL OR LOWER(status) = 'ativo')
-        LIMIT 1
-        `,
-        [turmaId, pessoaId],
-      );
-      if (vinculoAtivoRows.length > 0) {
-        await client.query("ROLLBACK");
-        return NextResponse.json({ error: "vinculo_ativo_existente" }, { status: 409 });
+        const { rows: vinculoAtivoRows } = await client.query(
+          `
+          SELECT turma_aluno_id
+          FROM public.turma_aluno
+          WHERE turma_id = $1
+            AND aluno_pessoa_id = $2
+            AND dt_fim IS NULL
+            AND (status IS NULL OR LOWER(status) = 'ativo')
+          LIMIT 1
+          `,
+          [turmaId, pessoaId],
+        );
+        if (vinculoAtivoRows.length > 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: "vinculo_ativo_existente" }, { status: 409 });
+        }
       }
 
       const dataMatriculaEfetiva =
@@ -497,30 +626,34 @@ export async function POST(req: Request) {
           ano_referencia,
           data_matricula,
           status,
-          metodo_liquidacao
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'ATIVA',$8)
-        RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, plano_matricula_id, ano_referencia, data_matricula, status, metodo_liquidacao
+          metodo_liquidacao,
+          servico_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'ATIVA',$8,$9)
+        RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, plano_matricula_id, ano_referencia, data_matricula, status, metodo_liquidacao, servico_id
         `,
-        [pessoaId, respFinId, "REGULAR", turmaId, plano.id, anoRef, dataMatriculaEfetiva, metodoLiquidacao],
+        [pessoaId, respFinId, "REGULAR", turmaId, plano.id, anoRef, dataMatriculaEfetiva, metodoLiquidacao, servicoId ?? null],
       );
 
       const matricula = matriculaRows[0];
       const matriculaId = Number(matricula?.id);
 
-      const { rows: vincRows } = await client.query(
-        `
-        INSERT INTO public.turma_aluno (
-          turma_id,
-          aluno_pessoa_id,
-          matricula_id,
-          dt_inicio,
-          status
-        ) VALUES ($1,$2,$3,$4,'ativo')
-        RETURNING turma_aluno_id, turma_id, aluno_pessoa_id, matricula_id, dt_inicio, status
-        `,
-        [turmaId, pessoaId, matriculaId, dataMatriculaEfetiva],
-      );
-      const turmaAluno = vincRows[0];
+      let turmaAluno: Record<string, unknown> | null = null;
+      if (turmaId) {
+        const { rows: vincRows } = await client.query(
+          `
+          INSERT INTO public.turma_aluno (
+            turma_id,
+            aluno_pessoa_id,
+            matricula_id,
+            dt_inicio,
+            status
+          ) VALUES ($1,$2,$3,$4,'ativo')
+          RETURNING turma_aluno_id, turma_id, aluno_pessoa_id, matricula_id, dt_inicio, status
+          `,
+          [turmaId, pessoaId, matriculaId, dataMatriculaEfetiva],
+        );
+        turmaAluno = vincRows[0];
+      }
 
       if (metodoLiquidacao === "CARTAO_CONEXAO") {
         const { rows: jaExiste } = await client.query(
@@ -553,6 +686,8 @@ export async function POST(req: Request) {
         valor_centavos: number;
         status: "PENDENTE_FATURA";
       }> = [];
+
+      const referenciaLabel = turmaId ? `Turma ${turmaId}` : servico ? `Servico ${servico.id}` : "Servico";
 
       const dt = new Date(`${String(dataMatriculaEfetiva)}T00:00:00Z`);
       const baseYear = dt.getUTCFullYear();
@@ -600,7 +735,7 @@ export async function POST(req: Request) {
               valor_centavos: valorProrata,
               descricao: buildDescricaoCobranca({
                 anoReferencia: anoRef,
-                turmaId,
+                referenciaLabel,
                 origemSubtipo: "PRORATA_AJUSTE",
                 parcelaNumero: null,
                 totalParcelas: null,
@@ -627,7 +762,7 @@ export async function POST(req: Request) {
           } else if (metodoLiquidacao === "CARTAO_CONEXAO" && contaConexaoId) {
             const desc = buildDescricaoLancamento({
               anoReferencia: anoRef,
-              turmaId,
+              referenciaLabel,
               origemSubtipo: "PRORATA_AJUSTE",
               parcelaNumero: null,
               totalParcelas: null,
@@ -663,7 +798,7 @@ export async function POST(req: Request) {
             valor_centavos: valorParcela,
             descricao: buildDescricaoCobranca({
               anoReferencia: anoRef,
-              turmaId,
+              referenciaLabel,
               origemSubtipo: "ANUIDADE_PARCELA",
               parcelaNumero,
               totalParcelas: 12,
@@ -690,7 +825,7 @@ export async function POST(req: Request) {
         } else if (metodoLiquidacao === "CARTAO_CONEXAO" && contaConexaoId) {
           const desc = buildDescricaoLancamento({
             anoReferencia: anoRef,
-            turmaId,
+            referenciaLabel,
             origemSubtipo: "ANUIDADE_PARCELA",
             parcelaNumero,
             totalParcelas: 12,
@@ -720,7 +855,11 @@ export async function POST(req: Request) {
             id: matriculaId,
             pessoa_id: Number(matricula?.pessoa_id),
             responsavel_financeiro_id: Number(matricula?.responsavel_financeiro_id),
-            turma_id: turmaId,
+            turma_id: turmaId ?? null,
+            servico_id:
+              matricula?.servico_id === null || matricula?.servico_id === undefined
+                ? null
+                : Number(matricula?.servico_id),
             ano_referencia: Number(matricula?.ano_referencia),
             plano_id: plano.id,
             data_matricula: String(matricula?.data_matricula),
