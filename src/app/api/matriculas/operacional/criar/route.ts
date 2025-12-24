@@ -26,12 +26,15 @@ type MatriculaConfigAtiva = {
   juros_mora_percentual_mensal_padrao: string;
 };
 
-type ServicoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "ESPETACULO" | "EVENTO";
+type ServicoTipo = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+
+type ServicoReferenciaTipo = "TURMA" | "LEGADO";
 
 type ServicoAtivo = {
   id: number;
   tipo: ServicoTipo;
-  origem_id: number | null;
+  referencia_tipo: ServicoReferenciaTipo;
+  referencia_id: number | null;
   titulo: string;
 };
 
@@ -206,7 +209,8 @@ async function getServicoAtivo(client: DbClient, servicoId: number): Promise<Ser
     SELECT
       id,
       tipo,
-      origem_id,
+      referencia_tipo,
+      referencia_id,
       titulo
     FROM public.servicos
     WHERE ativo = true
@@ -222,7 +226,8 @@ async function getServicoAtivo(client: DbClient, servicoId: number): Promise<Ser
   return {
     id: Number(r.id),
     tipo: String(r.tipo) as ServicoTipo,
-    origem_id: r.origem_id === null || r.origem_id === undefined ? null : Number(r.origem_id),
+    referencia_tipo: String(r.referencia_tipo) as ServicoReferenciaTipo,
+    referencia_id: r.referencia_id === null || r.referencia_id === undefined ? null : Number(r.referencia_id),
     titulo: String(r.titulo),
   };
 }
@@ -513,6 +518,7 @@ export async function POST(req: Request) {
 
       let servico: ServicoAtivo | null = null;
       let turmaId: number | null = turmaIdInput;
+      let vinculoId: number | null = turmaIdInput;
 
       if (servicoId) {
         servico = await getServicoAtivo(client, servicoId);
@@ -521,17 +527,20 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "servico_inexistente", message: "Servico nao encontrado ou inativo." }, { status: 404 });
         }
 
-        if (servico.tipo === "TURMA") {
-          const origemId =
-            servico.origem_id !== null && servico.origem_id !== undefined ? Number(servico.origem_id) : null;
-          if (!origemId || origemId <= 0) {
-            await client.query("ROLLBACK");
-            return NextResponse.json(
-              { error: "servico_origem_invalida", message: "Servico TURMA sem origem valida." },
-              { status: 422 },
-            );
-          }
-          turmaId = origemId;
+        const referenciaId =
+          servico.referencia_id !== null && servico.referencia_id !== undefined ? Number(servico.referencia_id) : null;
+        if (!referenciaId || referenciaId <= 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "servico_referencia_invalida", message: "Servico sem referencia valida." },
+            { status: 422 },
+          );
+        }
+
+        vinculoId = referenciaId;
+
+        if (servico.referencia_tipo === "TURMA") {
+          turmaId = referenciaId;
         } else {
           turmaId = null;
         }
@@ -615,6 +624,8 @@ export async function POST(req: Request) {
       const dataMatriculaEfetiva =
         dataMatricula ?? String((await client.query("SELECT current_date AS d")).rows[0]?.d);
 
+      const tipoMatricula = servico?.tipo ?? "REGULAR";
+
       const { rows: matriculaRows } = await client.query(
         `
         INSERT INTO public.matriculas (
@@ -631,7 +642,7 @@ export async function POST(req: Request) {
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,'ATIVA',$8,$9)
         RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, plano_matricula_id, ano_referencia, data_matricula, status, metodo_liquidacao, servico_id
         `,
-        [pessoaId, respFinId, "REGULAR", turmaId, plano.id, anoRef, dataMatriculaEfetiva, metodoLiquidacao, servicoId ?? null],
+        [pessoaId, respFinId, tipoMatricula, vinculoId, plano.id, anoRef, dataMatriculaEfetiva, metodoLiquidacao, servicoId ?? null],
       );
 
       const matricula = matriculaRows[0];
