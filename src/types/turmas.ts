@@ -11,7 +11,6 @@ export interface Turma {
   nome_turma?: string; // compatibilidade antiga
   tipo_turma: TipoTurma | null;
   turno: TurnoTurma | null;
-  serie: string | null;
   nivel: string | null;
   ano_referencia: number | null;
   curso: string | null;

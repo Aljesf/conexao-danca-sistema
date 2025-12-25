@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import type { StatusTurma, TipoTurma, TurnoTurma } from "@/types/turmas";
 
 type Curso = { id: number; nome: string };
-type Nivel = { id: number; nome: string; curso_id: number | null };
+type Nivel = {
+  id: number;
+  nome: string;
+  curso_id: number | null;
+  idade_minima: number | null;
+  idade_maxima: number | null;
+};
 type Professor = { id: number; nome: string };
 
 const TIPOS_TURMA: TipoTurma[] = ["REGULAR", "CURSO_LIVRE", "ENSAIO"];
@@ -22,6 +28,99 @@ const DIAS_SEMANA = [
   { value: 5, label: "Sex" },
   { value: 6, label: "Sab" },
 ];
+
+function abreviarDia(valor: string): string | null {
+  const normalizado = valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "");
+
+  switch (normalizado) {
+    case "DOM":
+    case "DOMINGO":
+      return "Dom";
+    case "SEG":
+    case "SEGUNDA":
+    case "SEGUNDAFEIRA":
+      return "Seg";
+    case "TER":
+    case "TERCA":
+    case "TERCAFEIRA":
+      return "Ter";
+    case "QUA":
+    case "QUARTA":
+    case "QUARTAFEIRA":
+      return "Qua";
+    case "QUI":
+    case "QUINTA":
+    case "QUINTAFEIRA":
+      return "Qui";
+    case "SEX":
+    case "SEXTA":
+    case "SEXTAFEIRA":
+      return "Sex";
+    case "SAB":
+    case "SABADO":
+      return "Sab";
+    default:
+      return null;
+  }
+}
+
+function compactarNiveis(resumo: string | null): string {
+  const partes = (resumo ?? "")
+    .split(",")
+    .map((parte) => parte.trim())
+    .filter((parte) => parte.length > 0);
+
+  if (partes.length === 0) return "";
+
+  const abreviados = partes.map((parte) => parte.replace(/^nivel\s*/i, "N").replace(/\s+/g, " "));
+
+  if (abreviados.length <= 2) {
+    return abreviados.join("/");
+  }
+
+  const primeiros = abreviados.slice(0, 2).join("/");
+  return `${primeiros}/+${abreviados.length - 2}`;
+}
+
+function montarNomeTurma(params: {
+  curso?: string | null;
+  nivelResumo?: string | null;
+  turno?: string | null;
+  dias?: string[];
+  ano?: number;
+}): string {
+  const curso = params.curso?.trim() || "Turma";
+  const nivel = compactarNiveis(params.nivelResumo ?? null);
+
+  const turnoMap: Record<string, string> = {
+    MANHA: "Manha",
+    TARDE: "Tarde",
+    NOITE: "Noite",
+    INTEGRAL: "Integral",
+  };
+  const turno = params.turno ? turnoMap[String(params.turno).toUpperCase()] ?? String(params.turno) : "";
+
+  const diasOrdenados = (params.dias ?? [])
+    .map((dia) => abreviarDia(dia) ?? dia)
+    .filter((dia) => dia)
+    .map((dia) => String(dia));
+
+  const ordemDia: Record<string, number> = { Dom: 0, Seg: 1, Ter: 2, Qua: 3, Qui: 4, Sex: 5, Sab: 6 };
+  const diasUnicos = Array.from(new Set(diasOrdenados));
+  diasUnicos.sort((a, b) => (ordemDia[a] ?? 99) - (ordemDia[b] ?? 99));
+  const dias = diasUnicos.length > 0 ? diasUnicos.join("/") : "";
+
+  const partes = [curso, nivel, turno, dias].filter((parte) => parte && String(parte).trim().length > 0);
+  if (params.ano) {
+    partes.push(String(params.ano));
+  }
+
+  return partes.join(" - ");
+}
 
 export default function NovaTurmaPage() {
   const router = useRouter();
@@ -41,8 +140,13 @@ export default function NovaTurmaPage() {
   const [professoresAuxiliares, setProfessoresAuxiliares] = useState<string[]>([]);
 
   const [diasSelecionados, setDiasSelecionados] = useState<number[]>([]);
+  const [turnoSelecionado, setTurnoSelecionado] = useState<string>("");
   const anoAtual = new Date().getFullYear();
   const anosReferencia = Array.from({ length: 4 }, (_, i) => anoAtual - 1 + i);
+  const [anoReferencia, setAnoReferencia] = useState<number>(anoAtual);
+
+  const [nomeManualHabilitado, setNomeManualHabilitado] = useState(false);
+  const [nomeManual, setNomeManual] = useState("");
 
   useEffect(() => {
     async function carregar() {
@@ -76,14 +180,14 @@ export default function NovaTurmaPage() {
       const cursoIdNum = Number(cursoId);
       const { data: niveisData, error: niveisError } = await supabase
         .from("niveis")
-        .select("id, nome, curso_id")
+        .select("id, nome, curso_id, idade_minima, idade_maxima")
         .eq("curso_id", cursoIdNum)
         .order("ordem", { ascending: true });
 
       if (niveisError) {
         const { data: niveisFallback, error: niveisFallbackError } = await supabase
           .from("niveis")
-          .select("id, nome, curso_id")
+          .select("id, nome, curso_id, idade_minima, idade_maxima")
           .eq("curso_id", cursoIdNum)
           .order("nome", { ascending: true });
         if (niveisFallbackError) {
@@ -103,6 +207,47 @@ export default function NovaTurmaPage() {
       active = false;
     };
   }, [cursoId, supabase]);
+
+  const cursoSelecionado = useMemo(() => cursos.find((c) => String(c.id) === cursoId) ?? null, [cursos, cursoId]);
+  const niveisSelecionadosObjs = useMemo(
+    () => niveis.filter((n) => niveisSelecionados.includes(String(n.id))),
+    [niveis, niveisSelecionados],
+  );
+  const nivelResumo = useMemo(
+    () => (niveisSelecionadosObjs.length > 0 ? niveisSelecionadosObjs.map((n) => n.nome).join(", ") : null),
+    [niveisSelecionadosObjs],
+  );
+  const faixaEtariaPrevista = useMemo(() => {
+    const mins = niveisSelecionadosObjs
+      .map((n) => n.idade_minima)
+      .filter((v): v is number => typeof v === "number");
+    const maxs = niveisSelecionadosObjs
+      .map((n) => n.idade_maxima)
+      .filter((v): v is number => typeof v === "number");
+
+    return {
+      min: mins.length ? Math.min(...mins) : null,
+      max: maxs.length ? Math.max(...maxs) : null,
+    };
+  }, [niveisSelecionadosObjs]);
+  const diasLabels = useMemo(
+    () =>
+      diasSelecionados
+        .map((d) => DIAS_SEMANA.find((dia) => dia.value === d)?.label)
+        .filter((d): d is string => Boolean(d)),
+    [diasSelecionados],
+  );
+  const nomeGerado = useMemo(
+    () =>
+      montarNomeTurma({
+        curso: cursoSelecionado?.nome ?? null,
+        nivelResumo,
+        turno: turnoSelecionado || null,
+        dias: diasLabels,
+        ano: anoReferencia,
+      }),
+    [cursoSelecionado, nivelResumo, turnoSelecionado, diasLabels, anoReferencia],
+  );
 
   const toggleNivel = (id: string) => {
     setNiveisSelecionados((prev) => (prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id]));
@@ -130,11 +275,8 @@ export default function NovaTurmaPage() {
         return;
       }
 
-      const cursoSelecionado = cursos.find((c) => String(c.id) === cursoId);
       const cursoTexto = cursoSelecionado?.nome ?? "";
-
-      const niveisSelecionadosObjs = niveis.filter((n) => niveisSelecionados.includes(String(n.id)));
-      const nivelTexto = niveisSelecionadosObjs.map((n) => n.nome).join(", ") || null;
+      const nivelTexto = nivelResumo;
       const niveisIdsPayload = Array.from(
         new Set(
           niveisSelecionados
@@ -154,12 +296,13 @@ export default function NovaTurmaPage() {
       const cargaStr = formData.get("carga_horaria_prevista") as string | null;
       const freqStr = formData.get("frequencia_minima") as string | null;
 
-      const diasMarcadosLabels = diasSelecionados;
+      const diasMarcados = diasSelecionados;
+      const nomeFinal =
+        nomeManualHabilitado && nomeManual.trim().length > 0 ? nomeManual.trim() : nomeGerado;
 
       const payload = {
-        nome: formData.get("nome") as string,
+        nome: nomeFinal,
         tipo_turma: tipoTurma,
-        serie: (formData.get("serie") as string) || null,
         turno: (formData.get("turno") as string) || null,
         status: (formData.get("status") as string) || "EM_PREPARACAO",
         nivel: nivelTexto,
@@ -170,9 +313,7 @@ export default function NovaTurmaPage() {
         frequencia_minima_percentual: freqStr ? Number(freqStr) : null,
         data_inicio: (formData.get("data_inicio") as string) || null,
         data_fim: (formData.get("data_fim") as string) || null,
-        dias_semana: diasMarcadosLabels.length
-          ? diasMarcadosLabels.map((d) => DIAS_SEMANA.find((dia) => dia.value === d)?.label ?? "").join(",")
-          : null,
+        dias_semana: diasLabels.length ? diasLabels : null,
         hora_inicio: null,
         hora_fim: null,
         professor_id: professorPrincipalId ? Number(professorPrincipalId) : null,
@@ -180,7 +321,7 @@ export default function NovaTurmaPage() {
       };
       const horarios: { day: number; inicio: string; fim: string }[] = [];
       for (const dia of DIAS_SEMANA) {
-        if (diasMarcadosLabels.includes(dia.value)) {
+        if (diasMarcados.includes(dia.value)) {
           const inicio = formData.get(`inicio_${dia.value}`) as string | null;
           const fim = formData.get(`fim_${dia.value}`) as string | null;
           if (inicio && fim) {
@@ -261,7 +402,12 @@ export default function NovaTurmaPage() {
 
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Turno</label>
-              <select name="turno" className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+              <select
+                name="turno"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                value={turnoSelecionado}
+                onChange={(e) => setTurnoSelecionado(e.target.value)}
+              >
                 <option value="">-</option>
                 {TURNOS.map((t) => (
                   <option key={`turno-${t}`} value={t}>
@@ -274,12 +420,33 @@ export default function NovaTurmaPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nome da turma</label>
+              <div className="flex items-end justify-between gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nome da turma</label>
+                {!nomeManualHabilitado && (
+                  <button
+                    type="button"
+                    className="text-xs text-slate-500 underline hover:text-slate-700"
+                    onClick={() => {
+                      setNomeManualHabilitado(true);
+                      setNomeManual((prev) => (prev.trim().length > 0 ? prev : nomeGerado));
+                    }}
+                  >
+                    Editar manualmente
+                  </button>
+                )}
+              </div>
               <input
                 name="nome"
-                required
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                readOnly={!nomeManualHabilitado}
+                value={nomeManualHabilitado ? nomeManual : nomeGerado}
+                onChange={(e) => setNomeManual(e.target.value)}
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${
+                  nomeManualHabilitado ? "border-slate-200 bg-white" : "border-slate-200 bg-slate-50"
+                }`}
               />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Nome gerado automaticamente a partir do curso, niveis, turno, dias e ano.
+              </p>
             </div>
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Curso</label>
@@ -334,13 +501,17 @@ export default function NovaTurmaPage() {
               ) : (
                 <p className="text-xs text-slate-500">Escolha primeiro um curso para ver os niveis.</p>
               )}
+              <div className="mt-2 text-xs text-slate-500">
+                Faixa etaria prevista: {faixaEtariaPrevista.min ?? "-"} a {faixaEtariaPrevista.max ?? "-"}
+              </div>
             </div>
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ano de referencia</label>
               <select
                 name="ano_referencia"
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                defaultValue={anoAtual}
+                value={anoReferencia}
+                onChange={(e) => setAnoReferencia(Number(e.target.value))}
               >
                 {anosReferencia.map((ano) => (
                   <option key={`ano-${ano}`} value={ano}>

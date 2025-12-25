@@ -6,6 +6,102 @@ import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function abreviarDia(valor: string): string | null {
+  const normalizado = valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "");
+
+  switch (normalizado) {
+    case "DOMINGO":
+    case "DOM":
+      return "Dom";
+    case "SEGUNDA":
+    case "SEGUNDAFEIRA":
+    case "SEG":
+      return "Seg";
+    case "TERCA":
+    case "TERCAFEIRA":
+    case "TER":
+      return "Ter";
+    case "QUARTA":
+    case "QUARTAFEIRA":
+    case "QUA":
+      return "Qua";
+    case "QUINTA":
+    case "QUINTAFEIRA":
+    case "QUI":
+      return "Qui";
+    case "SEXTA":
+    case "SEXTAFEIRA":
+    case "SEX":
+      return "Sex";
+    case "SABADO":
+    case "SAB":
+      return "Sab";
+    default:
+      return null;
+  }
+}
+
+function compactarNiveis(resumo: string | null | undefined): string {
+  const partes = (resumo ?? "")
+    .split(",")
+    .map((parte) => parte.trim())
+    .filter((parte) => parte.length > 0);
+
+  if (partes.length === 0) return "";
+
+  const abreviados = partes.map((parte) => {
+    const semPrefixo = parte.replace(/^nivel\s*/i, "N");
+    return semPrefixo.replace(/\s+/g, " ");
+  });
+
+  if (abreviados.length <= 2) {
+    return abreviados.join("/");
+  }
+
+  const primeiros = abreviados.slice(0, 2).join("/");
+  return `${primeiros}/+${abreviados.length - 2}`;
+}
+
+function montarNomeTurma(params: {
+  curso?: string | null;
+  nivelResumo?: string | null;
+  turno?: string | null;
+  dias?: string[];
+  ano?: number | null;
+}): string {
+  const curso = params.curso?.trim() || "Turma";
+  const nivel = compactarNiveis(params.nivelResumo);
+
+  const turnoMap: Record<string, string> = {
+    MANHA: "Manha",
+    TARDE: "Tarde",
+    NOITE: "Noite",
+    INTEGRAL: "Integral",
+  };
+  const turno = params.turno ? turnoMap[String(params.turno).toUpperCase()] ?? String(params.turno) : "";
+
+  const diasOrdenados = (params.dias ?? [])
+    .map((dia) => abreviarDia(dia) ?? dia)
+    .filter((dia) => dia)
+    .map((dia) => String(dia));
+
+  const ordemDia: Record<string, number> = { Dom: 0, Seg: 1, Ter: 2, Qua: 3, Qui: 4, Sex: 5, Sab: 6 };
+  const diasUnicos = Array.from(new Set(diasOrdenados));
+  diasUnicos.sort((a, b) => (ordemDia[a] ?? 99) - (ordemDia[b] ?? 99));
+  const dias = diasUnicos.length > 0 ? diasUnicos.join("/") : "";
+
+  const partes = [curso, nivel, turno, dias].filter((parte) => parte && String(parte).trim().length > 0);
+  if (params.ano) {
+    partes.push(String(params.ano));
+  }
+
+  return partes.join(" - ");
+}
+
 export async function GET() {
   const supabase = await getSupabaseServer();
   const {
@@ -55,7 +151,7 @@ export async function POST(req: Request) {
 
   const payload = await req.json(); // { turma: {...}, horarios: [...] }
   const niveisIdsRaw = Array.isArray(payload.niveis_ids) ? payload.niveis_ids : null;
-  let niveisIds: number[] = [];
+  const niveisIds: number[] = [];
 
   if (niveisIdsRaw) {
     const seen = new Set<number>();
@@ -71,9 +167,37 @@ export async function POST(req: Request) {
     }
   }
 
+  const turmaPayload = { ...(payload.turma ?? {}) } as Record<string, unknown>;
+  if ("serie" in turmaPayload) {
+    delete (turmaPayload as { serie?: unknown }).serie;
+  }
+  const nomeRaw = typeof turmaPayload.nome === "string" ? turmaPayload.nome.trim() : "";
+  const diasRaw = turmaPayload.dias_semana;
+  if (typeof diasRaw === "string") {
+    return NextResponse.json(
+      { error: "dias_semana_invalido", message: "dias_semana deve ser array de strings, nao string." },
+      { status: 400 },
+    );
+  }
+  const diasLista = Array.isArray(diasRaw) ? diasRaw.map((dia) => String(dia)) : [];
+
+  const nomeGerado = montarNomeTurma({
+    curso: turmaPayload.curso ?? null,
+    nivelResumo: turmaPayload.nivel ?? null,
+    turno: turmaPayload.turno ?? null,
+    dias: diasLista,
+    ano: turmaPayload.ano_referencia ?? null,
+  });
+
+  const turmaInsert = {
+    ...turmaPayload,
+    nome: nomeRaw || nomeGerado,
+    dias_semana: diasLista.length > 0 ? diasLista : null,
+  };
+
   const { data: turma, error } = await supabase
     .from("turmas")
-    .insert([payload.turma])
+    .insert([turmaInsert])
     .select("*")
     .single();
 
