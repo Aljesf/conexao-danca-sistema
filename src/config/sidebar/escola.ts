@@ -58,7 +58,7 @@ export const escolaSidebar: SidebarSection[] = [
       { label: "🚧 📚 Módulos", href: "/academico/modulos" },
       { label: "🚧 📚 Avaliações", href: "/academico/avaliacoes" },
       { label: "🚧 📚 Professores", href: "/escola/academico/professores" }, // TODO(migracao): rota ainda não existe
-      { label: "📚 Nova turma", href: "/escola/academico/turmas/nova" },
+      { label: "📚 Nova turma", href: "/academico/turmas/nova" },
       { label: "📚 Turmas", href: "/escola/academico/turmas" },
       { label: "🚧 📚 Grade", href: "/academico/turmas/grade" },
       { label: "🚧 📚 Frequência", href: "/academico/frequencia" },

@@ -1,5 +1,7 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <PlaceholderPage title="Nova turma" />;
+export const dynamic = "force-dynamic";
+
+export default function TurmasNovaRedirectPage() {
+  redirect("/academico/turmas/nova");
 }

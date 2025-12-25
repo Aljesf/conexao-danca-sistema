@@ -17,7 +17,7 @@ export default async function TurmasPage() {
             <p className="mt-1 text-sm text-slate-500">Visualize e gerencie as turmas da escola.</p>
           </div>
           <Link
-            href="/escola/academico/turmas/nova"
+            href="/academico/turmas/nova"
             className="inline-flex items-center rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-700"
           >
             + Nova turma
