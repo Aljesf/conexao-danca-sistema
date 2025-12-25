@@ -41,20 +41,6 @@ type ServicoAtivo = {
   titulo: string;
 };
 
-type PrecoTurmaAtivo = {
-  id: number;
-  turma_id: number;
-  ano_referencia: number;
-  centro_custo_id: number | null;
-};
-
-type PrecoServicoAtivo = {
-  id: number;
-  servico_id: number;
-  ano_referencia: number;
-  centro_custo_id: number | null;
-};
-
 type ServicoItemAtivo = {
   id: number;
   servico_id: number;
@@ -194,74 +180,6 @@ async function getServicoAtivo(client: DbClient, servicoId: number): Promise<Ser
     referencia_tipo: String(r.referencia_tipo) as ServicoReferenciaTipo,
     referencia_id: r.referencia_id === null || r.referencia_id === undefined ? null : Number(r.referencia_id),
     titulo: String(r.titulo),
-  };
-}
-
-async function getPrecoTurmaAtivo(
-  client: DbClient,
-  turmaId: number,
-  anoRef: number,
-): Promise<PrecoTurmaAtivo | null> {
-  const { rows } = await client.query(
-    `
-    SELECT
-      id,
-      turma_id,
-      ano_referencia,
-      centro_custo_id
-    FROM public.matricula_precos_turma
-    WHERE ativo = true
-      AND turma_id = $1
-      AND ano_referencia = $2
-    ORDER BY id DESC
-    LIMIT 1
-    `,
-    [turmaId, anoRef],
-  );
-
-  if (rows.length === 0) return null;
-  const r = rows[0];
-
-  return {
-    id: Number(r.id),
-    turma_id: Number(r.turma_id),
-    ano_referencia: Number(r.ano_referencia),
-    centro_custo_id:
-      r.centro_custo_id === null || r.centro_custo_id === undefined ? null : Number(r.centro_custo_id),
-  };
-}
-
-async function getPrecoServicoAtivo(
-  client: DbClient,
-  servicoId: number,
-  anoRef: number,
-): Promise<PrecoServicoAtivo | null> {
-  const { rows } = await client.query(
-    `
-    SELECT
-      id,
-      servico_id,
-      ano_referencia,
-      centro_custo_id
-    FROM public.matricula_precos_servico
-    WHERE ativo = true
-      AND servico_id = $1
-      AND ano_referencia = $2
-    ORDER BY id DESC
-    LIMIT 1
-    `,
-    [servicoId, anoRef],
-  );
-
-  if (rows.length === 0) return null;
-  const r = rows[0];
-
-  return {
-    id: Number(r.id),
-    servico_id: Number(r.servico_id),
-    ano_referencia: Number(r.ano_referencia),
-    centro_custo_id:
-      r.centro_custo_id === null || r.centro_custo_id === undefined ? null : Number(r.centro_custo_id),
   };
 }
 
@@ -459,6 +377,13 @@ export async function POST(req: Request) {
       }
 
       const itensInput = itensSelecionados ?? [];
+      if (itensInput.length === 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "itens_obrigatorios", message: "Para este fluxo, selecione ao menos 1 item com preco ativo." },
+          { status: 400 },
+        );
+      }
       let itensCalculados: Array<{
         item_id: number;
         quantidade: number;
@@ -561,24 +486,6 @@ export async function POST(req: Request) {
             moeda: precoAtivo.moeda,
           };
         });
-      }
-
-      const preco = servicoId
-        ? await getPrecoServicoAtivo(client, servicoId, anoRef)
-        : turmaId
-          ? await getPrecoTurmaAtivo(client, turmaId, anoRef)
-          : null;
-      if (!preco) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error: "preco_inexistente",
-            message: servicoId
-              ? "Nao existe preco ativo para o servico/ano informado."
-              : "Nao existe preco ativo para a turma/ano informado.",
-          },
-          { status: 400 },
-        );
       }
 
       const { rows: pessoaRows } = await client.query("SELECT id, nascimento FROM public.pessoas WHERE id = $1", [pessoaId]);
@@ -752,7 +659,7 @@ export async function POST(req: Request) {
         contaConexaoId = await ensureContaConexaoAluno(
           client,
           responsavelFinanceiroId,
-          preco.centro_custo_id,
+          null,
           diaVenc,
         );
       }
