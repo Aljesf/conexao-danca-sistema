@@ -7,7 +7,7 @@ type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA";
 
 type CriarMatriculaOperacionalBody = {
   pessoa_id: number;
-  responsavel_financeiro_id: number;
+  responsavel_financeiro_id?: number;
   turma_id?: number;
   servico_id?: number;
   ano_referencia: number;
@@ -122,6 +122,25 @@ function clampInt(n: number, min: number, max: number): number {
 function parsePositiveInt(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) return null;
   return value;
+}
+
+function calcularIdade(nascimentoISO: string | null): number | null {
+  if (!nascimentoISO) return null;
+  const match = nascimentoISO.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const ano = Number(match[1]);
+  const mes = Number(match[2]);
+  const dia = Number(match[3]);
+  if (!ano || !mes || !dia) return null;
+
+  const hoje = new Date();
+  let idade = hoje.getUTCFullYear() - ano;
+  const mesAtual = hoje.getUTCMonth() + 1;
+  const diaAtual = hoje.getUTCDate();
+  if (mesAtual < mes || (mesAtual === mes && diaAtual < dia)) {
+    idade -= 1;
+  }
+  return idade;
 }
 
 function roundCentavos(value: number): number {
@@ -469,17 +488,31 @@ export async function POST(req: Request) {
     const body = bodyUnknown as Partial<CriarMatriculaOperacionalBody>;
 
     const pessoaId = parsePositiveInt(body.pessoa_id);
-    const respFinId = parsePositiveInt(body.responsavel_financeiro_id);
+    const responsavelFinanceiroIdInput = parsePositiveInt(body.responsavel_financeiro_id);
     const turmaIdInput = parsePositiveInt(body.turma_id);
     const servicoId = parsePositiveInt(body.servico_id);
     const anoRef = parsePositiveInt(body.ano_referencia);
 
-    if (!pessoaId || !respFinId || !anoRef || (!turmaIdInput && !servicoId)) {
+    if (
+      body.responsavel_financeiro_id !== undefined &&
+      body.responsavel_financeiro_id !== null &&
+      !responsavelFinanceiroIdInput
+    ) {
+      return NextResponse.json(
+        {
+          error: "payload_invalido",
+          message: "responsavel_financeiro_id deve ser inteiro > 0 quando informado.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!pessoaId || !anoRef || (!turmaIdInput && !servicoId)) {
       return NextResponse.json(
         {
           error: "payload_invalido",
           message:
-            "pessoa_id, responsavel_financeiro_id, ano_referencia e (turma_id ou servico_id) sao obrigatorios e devem ser inteiros > 0.",
+            "pessoa_id, ano_referencia e (turma_id ou servico_id) sao obrigatorios e devem ser inteiros > 0.",
         },
         { status: 400 },
       );
@@ -584,13 +617,43 @@ export async function POST(req: Request) {
 
       const diaVenc = clampInt(config.vencimento_dia_padrao, 1, 28);
 
-      const { rows: pessoaRows } = await client.query("SELECT id FROM public.pessoas WHERE id = $1", [pessoaId]);
+      const { rows: pessoaRows } = await client.query("SELECT id, nascimento FROM public.pessoas WHERE id = $1", [pessoaId]);
       if (pessoaRows.length === 0) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "pessoa_nao_encontrada" }, { status: 404 });
       }
 
-      const { rows: respRows } = await client.query("SELECT id FROM public.pessoas WHERE id = $1", [respFinId]);
+      const nascimento = pessoaRows[0]?.nascimento ? String(pessoaRows[0].nascimento) : null;
+      let responsavelFinanceiroId = responsavelFinanceiroIdInput;
+
+      if (!responsavelFinanceiroId) {
+        const idade = calcularIdade(nascimento);
+        if (idade === null) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "nascimento_invalido", message: "Data de nascimento invalida para o aluno." },
+            { status: 400 },
+          );
+        }
+
+        if (idade >= 18) {
+          responsavelFinanceiroId = pessoaId;
+        } else {
+          console.warn("[matriculas/operacional/criar] responsavel financeiro obrigatorio para menor de idade.", {
+            pessoa_id: pessoaId,
+          });
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            {
+              error: "responsavel_financeiro_obrigatorio_menor",
+              message: "Responsavel financeiro obrigatorio para aluno menor de idade.",
+            },
+            { status: 400 },
+          );
+        }
+      }
+
+      const { rows: respRows } = await client.query("SELECT id FROM public.pessoas WHERE id = $1", [responsavelFinanceiroId]);
       if (respRows.length === 0) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "responsavel_nao_encontrado" }, { status: 404 });
@@ -642,7 +705,17 @@ export async function POST(req: Request) {
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,'ATIVA',$8,$9)
         RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, plano_matricula_id, ano_referencia, data_matricula, status, metodo_liquidacao, servico_id
         `,
-        [pessoaId, respFinId, tipoMatricula, vinculoId, plano.id, anoRef, dataMatriculaEfetiva, metodoLiquidacao, servicoId ?? null],
+        [
+          pessoaId,
+          responsavelFinanceiroId,
+          tipoMatricula,
+          vinculoId,
+          plano.id,
+          anoRef,
+          dataMatriculaEfetiva,
+          metodoLiquidacao,
+          servicoId ?? null,
+        ],
       );
 
       const matricula = matriculaRows[0];
@@ -723,7 +796,12 @@ export async function POST(req: Request) {
 
       let contaConexaoId: number | null = null;
       if (metodoLiquidacao === "CARTAO_CONEXAO") {
-        contaConexaoId = await ensureContaConexaoAluno(client, respFinId, preco.centro_custo_id, diaVenc);
+        contaConexaoId = await ensureContaConexaoAluno(
+          client,
+          responsavelFinanceiroId,
+          preco.centro_custo_id,
+          diaVenc,
+        );
       }
 
       if (gerarProrata) {
@@ -741,7 +819,7 @@ export async function POST(req: Request) {
         if (valorProrata > 0) {
           if (metodoLiquidacao === "COBRANCAS_LEGADO") {
             const cobr = await inserirCobranca(client, {
-              pessoa_id: respFinId,
+              pessoa_id: responsavelFinanceiroId,
               centro_custo_id: preco.centro_custo_id,
               valor_centavos: valorProrata,
               descricao: buildDescricaoCobranca({
@@ -804,7 +882,7 @@ export async function POST(req: Request) {
 
         if (metodoLiquidacao === "COBRANCAS_LEGADO") {
           const cobr = await inserirCobranca(client, {
-            pessoa_id: respFinId,
+            pessoa_id: responsavelFinanceiroId,
             centro_custo_id: preco.centro_custo_id,
             valor_centavos: valorParcela,
             descricao: buildDescricaoCobranca({
