@@ -26,12 +26,7 @@ type ItemSelecionado = {
 };
 
 type MatriculaConfigAtiva = {
-  id: number;
-  parcelas_padrao: number;
-  mes_referencia_dias: number;
   vencimento_dia_padrao: number;
-  multa_percentual_padrao: string;
-  juros_mora_percentual_mensal_padrao: string;
 };
 
 type ServicoTipo = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
@@ -50,7 +45,6 @@ type PrecoTurmaAtivo = {
   id: number;
   turma_id: number;
   ano_referencia: number;
-  plano_id: number;
   centro_custo_id: number | null;
 };
 
@@ -58,7 +52,6 @@ type PrecoServicoAtivo = {
   id: number;
   servico_id: number;
   ano_referencia: number;
-  plano_id: number;
   centro_custo_id: number | null;
 };
 
@@ -75,30 +68,6 @@ type ServicoItemPrecoAtivo = {
   item_id: number;
   valor_centavos: number;
   moeda: string;
-};
-
-type PlanoAtivo = {
-  id: number;
-  valor_mensal_base_centavos: number;
-  valor_anuidade_centavos: number;
-  total_parcelas: number;
-};
-
-type CriarCobrancaInput = {
-  pessoa_id: number;
-  centro_custo_id: number | null;
-  valor_centavos: number;
-  descricao: string;
-  vencimento: string; // YYYY-MM-DD
-  origem_tipo: string; // "MATRICULA"
-  origem_subtipo: string; // "PRORATA_AJUSTE" | "ANUIDADE_PARCELA"
-  origem_id: number; // matricula_id
-  parcela_numero: number | null;
-  total_parcelas: number | null;
-  data_prevista_pagamento: string; // YYYY-MM-DD
-  data_inicio_encargos: string; // YYYY-MM-DD
-  multa_percentual_aplicavel: string;
-  juros_mora_percentual_mensal_aplicavel: string;
 };
 
 type CriarLancamentoCartaoInput = {
@@ -128,14 +97,6 @@ function isValidISODate(value: string): boolean {
   if (Number.isNaN(d.getTime())) return false;
   const [y, m, day] = value.split("-").map((v) => Number(v));
   return d.getUTCFullYear() === y && d.getUTCMonth() + 1 === m && d.getUTCDate() === day;
-}
-
-function pad2(n: number): string {
-  return n.toString().padStart(2, "0");
-}
-
-function toISODate(y: number, m: number, d: number): string {
-  return `${y}-${pad2(m)}-${pad2(d)}`;
 }
 
 function clampInt(n: number, min: number, max: number): number {
@@ -187,61 +148,11 @@ function roundCentavos(value: number): number {
   return Math.round(value);
 }
 
-function buildDescricaoCobranca(params: {
-  anoReferencia: number;
-  referenciaLabel: string;
-  origemSubtipo: "PRORATA_AJUSTE" | "ANUIDADE_PARCELA";
-  parcelaNumero: number | null;
-  totalParcelas: number | null;
-}): string {
-  const { anoReferencia, referenciaLabel, origemSubtipo, parcelaNumero, totalParcelas } = params;
-
-  if (origemSubtipo === "PRORATA_AJUSTE") {
-    return `Matricula ${anoReferencia} - Pro-rata (ajuste inicial) - ${referenciaLabel}`;
-  }
-
-  if (parcelaNumero && totalParcelas) {
-    return `Matricula ${anoReferencia} - Parcela ${parcelaNumero}/${totalParcelas} - ${referenciaLabel}`;
-  }
-
-  return `Matricula ${anoReferencia} - Cobranca - ${referenciaLabel}`;
-}
-
-function buildDescricaoLancamento(params: {
-  anoReferencia: number;
-  referenciaLabel: string;
-  origemSubtipo: "PRORATA_AJUSTE" | "ANUIDADE_PARCELA";
-  parcelaNumero: number | null;
-  totalParcelas: number | null;
-  vencimentoISO: string;
-}): string {
-  const base = buildDescricaoCobranca({
-    anoReferencia: params.anoReferencia,
-    referenciaLabel: params.referenciaLabel,
-    origemSubtipo: params.origemSubtipo,
-    parcelaNumero: params.parcelaNumero,
-    totalParcelas: params.totalParcelas,
-  });
-  return `${base} - Venc ${params.vencimentoISO}`;
-}
-
-function addMonths(year: number, month: number, add: number): { year: number; month: number } {
-  const idx = year * 12 + (month - 1) + add;
-  const newYear = Math.floor(idx / 12);
-  const newMonth = (idx % 12) + 1;
-  return { year: newYear, month: newMonth };
-}
-
 async function getConfigAtiva(client: DbClient): Promise<MatriculaConfigAtiva | null> {
   const { rows } = await client.query(
     `
     SELECT
-      id,
-      parcelas_padrao,
-      mes_referencia_dias,
-      vencimento_dia_padrao,
-      multa_percentual_padrao,
-      juros_mora_percentual_mensal_padrao
+      vencimento_dia_padrao
     FROM public.matricula_configuracoes
     WHERE ativo = true
     ORDER BY id DESC
@@ -253,12 +164,7 @@ async function getConfigAtiva(client: DbClient): Promise<MatriculaConfigAtiva | 
   const r = rows[0];
 
   return {
-    id: Number(r.id),
-    parcelas_padrao: Number(r.parcelas_padrao),
-    mes_referencia_dias: Number(r.mes_referencia_dias),
     vencimento_dia_padrao: Number(r.vencimento_dia_padrao),
-    multa_percentual_padrao: String(r.multa_percentual_padrao),
-    juros_mora_percentual_mensal_padrao: String(r.juros_mora_percentual_mensal_padrao),
   };
 }
 
@@ -302,7 +208,6 @@ async function getPrecoTurmaAtivo(
       id,
       turma_id,
       ano_referencia,
-      plano_id,
       centro_custo_id
     FROM public.matricula_precos_turma
     WHERE ativo = true
@@ -321,7 +226,6 @@ async function getPrecoTurmaAtivo(
     id: Number(r.id),
     turma_id: Number(r.turma_id),
     ano_referencia: Number(r.ano_referencia),
-    plano_id: Number(r.plano_id),
     centro_custo_id:
       r.centro_custo_id === null || r.centro_custo_id === undefined ? null : Number(r.centro_custo_id),
   };
@@ -338,7 +242,6 @@ async function getPrecoServicoAtivo(
       id,
       servico_id,
       ano_referencia,
-      plano_id,
       centro_custo_id
     FROM public.matricula_precos_servico
     WHERE ativo = true
@@ -357,82 +260,9 @@ async function getPrecoServicoAtivo(
     id: Number(r.id),
     servico_id: Number(r.servico_id),
     ano_referencia: Number(r.ano_referencia),
-    plano_id: Number(r.plano_id),
     centro_custo_id:
       r.centro_custo_id === null || r.centro_custo_id === undefined ? null : Number(r.centro_custo_id),
   };
-}
-
-async function getPlanoAtivo(client: DbClient, planoId: number): Promise<PlanoAtivo | null> {
-  const { rows } = await client.query(
-    `
-    SELECT
-      id,
-      valor_mensal_base_centavos,
-      valor_anuidade_centavos,
-      total_parcelas
-    FROM public.matricula_planos
-    WHERE ativo = true
-      AND id = $1
-    LIMIT 1
-    `,
-    [planoId],
-  );
-
-  if (rows.length === 0) return null;
-  const r = rows[0];
-
-  return {
-    id: Number(r.id),
-    valor_mensal_base_centavos: Number(r.valor_mensal_base_centavos),
-    valor_anuidade_centavos: Number(r.valor_anuidade_centavos),
-    total_parcelas: Number(r.total_parcelas),
-  };
-}
-
-async function inserirCobranca(client: DbClient, c: CriarCobrancaInput): Promise<{ id: number }> {
-  const { rows } = await client.query(
-    `
-    INSERT INTO public.cobrancas (
-      pessoa_id,
-      centro_custo_id,
-      valor_centavos,
-      descricao,
-      vencimento,
-      status,
-      origem_tipo,
-      origem_subtipo,
-      origem_id,
-      parcela_numero,
-      total_parcelas,
-      data_prevista_pagamento,
-      data_inicio_encargos,
-      multa_percentual_aplicavel,
-      juros_mora_percentual_mensal_aplicavel
-    ) VALUES (
-      $1,$2,$3,$4,$5,'ABERTA',$6,$7,$8,$9,$10,$11,$12,$13,$14
-    )
-    RETURNING id
-    `,
-    [
-      c.pessoa_id,
-      c.centro_custo_id,
-      c.valor_centavos,
-      c.descricao,
-      c.vencimento,
-      c.origem_tipo,
-      c.origem_subtipo,
-      c.origem_id,
-      c.parcela_numero,
-      c.total_parcelas,
-      c.data_prevista_pagamento,
-      c.data_inicio_encargos,
-      c.multa_percentual_aplicavel,
-      c.juros_mora_percentual_mensal_aplicavel,
-    ],
-  );
-
-  return { id: Number(rows[0]?.id) };
 }
 
 async function ensureContaConexaoAluno(
@@ -587,13 +417,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "data_matricula_invalida" }, { status: 400 });
     }
 
-    const gerarProrata = body.gerar_prorata !== false;
-
-    const mesInicioCobranca =
-      typeof body.mes_inicio_cobranca === "number" && Number.isInteger(body.mes_inicio_cobranca)
-        ? clampInt(body.mes_inicio_cobranca, 1, 12)
-        : null;
-
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -603,6 +426,7 @@ export async function POST(req: Request) {
         await client.query("ROLLBACK");
         return NextResponse.json({ error: "configuracao_inexistente", message: "Nao existe configuracao ativa." }, { status: 422 });
       }
+      const diaVenc = clampInt(config.vencimento_dia_padrao, 1, 28);
 
       let servico: ServicoAtivo | null = null;
       let turmaId: number | null = turmaIdInput;
@@ -757,26 +581,6 @@ export async function POST(req: Request) {
         );
       }
 
-      const plano = await getPlanoAtivo(client, preco.plano_id);
-      if (!plano) {
-        await client.query("ROLLBACK");
-        return NextResponse.json({ error: "plano_inexistente", message: "Plano do preco esta inativo ou nao existe." }, { status: 422 });
-      }
-
-      const totalParcelas = plano.total_parcelas || config.parcelas_padrao;
-      if (totalParcelas !== 12) {
-        await client.query("ROLLBACK");
-        return NextResponse.json({ error: "parcelas_invalidas", message: `Total de parcelas esperado = 12, recebido = ${totalParcelas}.` }, { status: 422 });
-      }
-
-      const mesComercialDias = config.mes_referencia_dias || 30;
-      if (mesComercialDias !== 30) {
-        await client.query("ROLLBACK");
-        return NextResponse.json({ error: "mes_comercial_invalido", message: `Mes comercial esperado = 30, recebido = ${mesComercialDias}.` }, { status: 422 });
-      }
-
-      const diaVenc = clampInt(config.vencimento_dia_padrao, 1, 28);
-
       const { rows: pessoaRows } = await client.query("SELECT id, nascimento FROM public.pessoas WHERE id = $1", [pessoaId]);
       if (pessoaRows.length === 0) {
         await client.query("ROLLBACK");
@@ -860,21 +664,19 @@ export async function POST(req: Request) {
           responsavel_financeiro_id,
           tipo_matricula,
           vinculo_id,
-          plano_matricula_id,
           ano_referencia,
           data_matricula,
           status,
           metodo_liquidacao,
           servico_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'ATIVA',$8,$9)
-        RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, plano_matricula_id, ano_referencia, data_matricula, status, metodo_liquidacao, servico_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,'ATIVA',$7,$8)
+        RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, ano_referencia, data_matricula, status, metodo_liquidacao, servico_id
         `,
         [
           pessoaId,
           responsavelFinanceiroId,
           tipoMatricula,
           vinculoId,
-          plano.id,
           anoRef,
           dataMatriculaEfetiva,
           metodoLiquidacao,
@@ -945,29 +747,6 @@ export async function POST(req: Request) {
         status: "PENDENTE_FATURA";
       }> = [];
 
-      const referenciaLabel = turmaId ? `Turma ${turmaId}` : servico ? `Servico ${servico.id}` : "Servico";
-
-      const dt = new Date(`${String(dataMatriculaEfetiva)}T00:00:00Z`);
-      const baseYear = dt.getUTCFullYear();
-      const baseMonth = dt.getUTCMonth() + 1;
-      const diaInicio = clampInt(dt.getUTCDate(), 1, mesComercialDias);
-
-      let startYear = baseYear;
-      let startMonth = mesInicioCobranca ?? baseMonth;
-      if (mesInicioCobranca !== null) {
-        if (startMonth < baseMonth) {
-          startYear = baseYear + 1;
-        } else if (startMonth === baseMonth && diaInicio > diaVenc) {
-          const next = addMonths(startYear, startMonth, 1);
-          startYear = next.year;
-          startMonth = next.month;
-        }
-      } else if (diaInicio > diaVenc) {
-        const next = addMonths(baseYear, baseMonth, 1);
-        startYear = next.year;
-        startMonth = next.month;
-      }
-
       let contaConexaoId: number | null = null;
       if (metodoLiquidacao === "CARTAO_CONEXAO") {
         contaConexaoId = await ensureContaConexaoAluno(
@@ -979,145 +758,6 @@ export async function POST(req: Request) {
       }
 
       const usarItensNoCartao = itensCalculados.length > 0 && metodoLiquidacao === "CARTAO_CONEXAO";
-      const gerarFinanceiroPadrao = !usarItensNoCartao;
-
-      if (gerarProrata && gerarFinanceiroPadrao) {
-        let vencBase = { year: baseYear, month: baseMonth };
-        if (diaInicio > diaVenc) {
-          vencBase = addMonths(baseYear, baseMonth, 1);
-        }
-        const vencProrata = toISODate(vencBase.year, vencBase.month, diaVenc);
-
-        const diasUso =
-          diaInicio <= diaVenc ? diaVenc - diaInicio : mesComercialDias - diaInicio + diaVenc;
-        const fator = diasUso > 0 ? diasUso / mesComercialDias : 0;
-        const valorProrata = roundCentavos(plano.valor_mensal_base_centavos * fator);
-
-        if (valorProrata > 0) {
-          if (metodoLiquidacao === "COBRANCAS_LEGADO") {
-            const cobr = await inserirCobranca(client, {
-              pessoa_id: responsavelFinanceiroId,
-              centro_custo_id: preco.centro_custo_id,
-              valor_centavos: valorProrata,
-              descricao: buildDescricaoCobranca({
-                anoReferencia: anoRef,
-                referenciaLabel,
-                origemSubtipo: "PRORATA_AJUSTE",
-                parcelaNumero: null,
-                totalParcelas: null,
-              }),
-              vencimento: vencProrata,
-              origem_tipo: "MATRICULA",
-              origem_subtipo: "PRORATA_AJUSTE",
-              origem_id: matriculaId,
-              parcela_numero: null,
-              total_parcelas: null,
-              data_prevista_pagamento: vencProrata,
-              data_inicio_encargos: vencProrata,
-              multa_percentual_aplicavel: config.multa_percentual_padrao,
-              juros_mora_percentual_mensal_aplicavel: config.juros_mora_percentual_mensal_padrao,
-            });
-
-            createdCobrancas.push({
-              id: cobr.id,
-              origem_subtipo: "PRORATA_AJUSTE",
-              vencimento: vencProrata,
-              valor_centavos: valorProrata,
-              parcela_numero: null,
-            });
-          } else if (metodoLiquidacao === "CARTAO_CONEXAO" && contaConexaoId) {
-            const desc = buildDescricaoLancamento({
-              anoReferencia: anoRef,
-              referenciaLabel,
-              origemSubtipo: "PRORATA_AJUSTE",
-              parcelaNumero: null,
-              totalParcelas: null,
-              vencimentoISO: vencProrata,
-            });
-
-            const idLanc = await inserirLancamentoCartao(client, {
-              conta_conexao_id: contaConexaoId,
-              valor_centavos: valorProrata,
-              numero_parcelas: 1,
-              status: "PENDENTE_FATURA",
-              origem_sistema: "MATRICULA",
-              origem_id: matriculaId,
-              descricao: desc,
-            });
-
-            createdLancamentos.push({ id: idLanc, descricao: desc, valor_centavos: valorProrata, status: "PENDENTE_FATURA" });
-          }
-        }
-      }
-
-      if (gerarFinanceiroPadrao) {
-        const valorParcela = roundCentavos(plano.valor_anuidade_centavos / 12);
-
-        for (let i = 0; i < 12; i += 1) {
-          const parcelaNumero = i + 1;
-          const m = addMonths(startYear, startMonth, i);
-          const venc = toISODate(m.year, m.month, diaVenc);
-
-          if (metodoLiquidacao === "COBRANCAS_LEGADO") {
-            const cobr = await inserirCobranca(client, {
-              pessoa_id: responsavelFinanceiroId,
-              centro_custo_id: preco.centro_custo_id,
-              valor_centavos: valorParcela,
-              descricao: buildDescricaoCobranca({
-                anoReferencia: anoRef,
-                referenciaLabel,
-                origemSubtipo: "ANUIDADE_PARCELA",
-                parcelaNumero,
-                totalParcelas: 12,
-              }),
-              vencimento: venc,
-              origem_tipo: "MATRICULA",
-              origem_subtipo: "ANUIDADE_PARCELA",
-              origem_id: matriculaId,
-              parcela_numero: parcelaNumero,
-              total_parcelas: 12,
-              data_prevista_pagamento: venc,
-              data_inicio_encargos: venc,
-              multa_percentual_aplicavel: config.multa_percentual_padrao,
-              juros_mora_percentual_mensal_aplicavel: config.juros_mora_percentual_mensal_padrao,
-            });
-
-            createdCobrancas.push({
-              id: cobr.id,
-              origem_subtipo: "ANUIDADE_PARCELA",
-              vencimento: venc,
-              valor_centavos: valorParcela,
-              parcela_numero: parcelaNumero,
-            });
-          } else if (metodoLiquidacao === "CARTAO_CONEXAO" && contaConexaoId) {
-            const desc = buildDescricaoLancamento({
-              anoReferencia: anoRef,
-              referenciaLabel,
-              origemSubtipo: "ANUIDADE_PARCELA",
-              parcelaNumero,
-              totalParcelas: 12,
-              vencimentoISO: venc,
-            });
-
-            const idLanc = await inserirLancamentoCartao(client, {
-              conta_conexao_id: contaConexaoId,
-              valor_centavos: valorParcela,
-              numero_parcelas: 1,
-              status: "PENDENTE_FATURA",
-              origem_sistema: "MATRICULA",
-              origem_id: matriculaId,
-              descricao: desc,
-            });
-
-            createdLancamentos.push({
-              id: idLanc,
-              descricao: desc,
-              valor_centavos: valorParcela,
-              status: "PENDENTE_FATURA",
-            });
-          }
-        }
-      }
 
       if (itensCalculados.length > 0) {
         for (const item of itensCalculados) {
@@ -1188,7 +828,6 @@ export async function POST(req: Request) {
                 ? null
                 : Number(matricula?.servico_id),
             ano_referencia: Number(matricula?.ano_referencia),
-            plano_id: plano.id,
             data_matricula: String(matricula?.data_matricula),
             status: String(matricula?.status),
             metodo_liquidacao: String(matricula?.metodo_liquidacao ?? metodoLiquidacao),
