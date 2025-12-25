@@ -52,7 +52,7 @@ export async function GET(req: Request) {
 
     const { data: turmas, error } = await supabase
       .from("turmas")
-      .select("turma_id,nome,curso,nivel,tipo_turma,ano_referencia,capacidade,status,ativo")
+      .select("turma_id,nome,curso,nivel,tipo_turma,ano_referencia,capacidade,status,ativo,idade_minima,idade_maxima")
       .eq("ativo", true)
       .eq("curso", curso)
       .eq("tipo_turma", tipoTurma)
@@ -63,7 +63,21 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "erro_listar_turmas", message: error.message }, { status: 500 });
     }
 
-    const lista = (turmas ?? []).map((t) => ({ ...(t as Record<string, unknown>), suggested: idade !== null }));
+    const lista = (turmas ?? []).map((t) => {
+      const row = t as Record<string, unknown>;
+      const min = row.idade_minima === null || row.idade_minima === undefined ? null : Number(row.idade_minima);
+      const max = row.idade_maxima === null || row.idade_maxima === undefined ? null : Number(row.idade_maxima);
+      const suggested =
+        idade !== null && min !== null && max !== null ? idade >= min && idade <= max : false;
+      return { ...row, suggested };
+    });
+
+    lista.sort((a, b) => {
+      const aSuggested = (a as { suggested?: boolean }).suggested ? 1 : 0;
+      const bSuggested = (b as { suggested?: boolean }).suggested ? 1 : 0;
+      if (aSuggested !== bSuggested) return bSuggested - aSuggested;
+      return String((a as { nome?: string }).nome ?? "").localeCompare(String((b as { nome?: string }).nome ?? ""), "pt-BR");
+    });
 
     return NextResponse.json({ ok: true, turmas: lista, idade }, { status: 200 });
   } catch (e) {

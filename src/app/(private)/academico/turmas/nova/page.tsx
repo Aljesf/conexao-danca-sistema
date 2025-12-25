@@ -124,6 +124,12 @@ export default function NovaTurmaPage() {
     setSaving(true);
 
     try {
+      if (!cursoId) {
+        setErro("Selecione um curso.");
+        setSaving(false);
+        return;
+      }
+
       const cursoSelecionado = cursos.find((c) => String(c.id) === cursoId);
       const cursoTexto = cursoSelecionado?.nome ?? "";
 
@@ -137,6 +143,13 @@ export default function NovaTurmaPage() {
         ),
       );
 
+      const tipoTurma = (formData.get("tipo_turma") as string) || "REGULAR";
+      if ((tipoTurma === "REGULAR" || tipoTurma === "CURSO_LIVRE") && niveisIdsPayload.length === 0) {
+        setErro("Selecione ao menos um nivel.");
+        setSaving(false);
+        return;
+      }
+
       const anoRefStr = formData.get("ano_referencia") as string | null;
       const cargaStr = formData.get("carga_horaria_prevista") as string | null;
       const freqStr = formData.get("frequencia_minima") as string | null;
@@ -145,7 +158,7 @@ export default function NovaTurmaPage() {
 
       const payload = {
         nome: formData.get("nome") as string,
-        tipo_turma: (formData.get("tipo_turma") as string) || "REGULAR",
+        tipo_turma: tipoTurma,
         serie: (formData.get("serie") as string) || null,
         turno: (formData.get("turno") as string) || null,
         status: (formData.get("status") as string) || "EM_PREPARACAO",

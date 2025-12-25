@@ -27,6 +27,8 @@ type TurmaOpcao = {
   nivel: string | null;
   tipo_turma: string | null;
   ano_referencia: number | null;
+  idade_minima?: number | null;
+  idade_maxima?: number | null;
   capacidade: number | null;
   status: string | null;
   ativo: boolean | null;
@@ -129,7 +131,10 @@ function labelTipoMatricula(tipo: TipoMatricula): string {
 function labelTurmaOption(tipo: TipoMatricula, turma: TurmaOpcao): string {
   const nome = turma.nome?.trim() ? turma.nome : `Turma #${turma.turma_id}`;
   const ano = turma.ano_referencia ?? "-";
-  const base = `${labelTipoMatricula(tipo)} - ${nome} (${ano})`;
+  const min = turma.idade_minima ?? "-";
+  const max = turma.idade_maxima ?? "-";
+  const faixa = `Faixa: ${min}-${max}`;
+  const base = `${labelTipoMatricula(tipo)} - ${nome} (${ano}) | ${faixa}`;
   return turma.suggested ? `Sugestao: ${base}` : base;
 }
 
