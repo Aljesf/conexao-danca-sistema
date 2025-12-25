@@ -140,6 +140,10 @@ export default function NovaTurmaPage() {
   const [professoresAuxiliares, setProfessoresAuxiliares] = useState<string[]>([]);
 
   const [diasSelecionados, setDiasSelecionados] = useState<number[]>([]);
+  const [horariosPorDia, setHorariosPorDia] = useState<Record<number, { inicio: string; fim: string }>>(() =>
+    Object.fromEntries(DIAS_SEMANA.map((dia) => [dia.value, { inicio: "", fim: "" }])),
+  );
+  const [lastHorario, setLastHorario] = useState<{ inicio: string; fim: string } | null>(null);
   const [turnoSelecionado, setTurnoSelecionado] = useState<string>("");
   const anoAtual = new Date().getFullYear();
   const anosReferencia = Array.from({ length: 4 }, (_, i) => anoAtual - 1 + i);
@@ -258,7 +262,37 @@ export default function NovaTurmaPage() {
   };
 
   const toggleDia = (value: number) => {
-    setDiasSelecionados((prev) => (prev.includes(value) ? prev.filter((d) => d !== value) : [...prev, value]));
+    setDiasSelecionados((prev) => {
+      const ativo = prev.includes(value);
+      if (ativo) {
+        return prev.filter((d) => d !== value);
+      }
+
+      setHorariosPorDia((prevHor) => {
+        const atual = prevHor[value] ?? { inicio: "", fim: "" };
+        if (!atual.inicio && !atual.fim && lastHorario) {
+          return {
+            ...prevHor,
+            [value]: { inicio: lastHorario.inicio, fim: lastHorario.fim },
+          };
+        }
+        return prevHor;
+      });
+
+      return [...prev, value];
+    });
+  };
+
+  const atualizarHorario = (diaValue: number, campo: "inicio" | "fim", valor: string) => {
+    setHorariosPorDia((prev) => {
+      const atual = prev[diaValue] ?? { inicio: "", fim: "" };
+      const next = { ...prev, [diaValue]: { ...atual, [campo]: valor } };
+      const horarioFinal = next[diaValue];
+      if (horarioFinal.inicio && horarioFinal.fim) {
+        setLastHorario({ inicio: horarioFinal.inicio, fim: horarioFinal.fim });
+      }
+      return next;
+    });
   };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -300,6 +334,12 @@ export default function NovaTurmaPage() {
       const nomeFinal =
         nomeManualHabilitado && nomeManual.trim().length > 0 ? nomeManual.trim() : nomeGerado;
 
+      if (diasLabels.length === 0) {
+        setErro("Selecione ao menos um dia da semana.");
+        setSaving(false);
+        return;
+      }
+
       const payload = {
         nome: nomeFinal,
         tipo_turma: tipoTurma,
@@ -313,19 +353,24 @@ export default function NovaTurmaPage() {
         frequencia_minima_percentual: freqStr ? Number(freqStr) : null,
         data_inicio: (formData.get("data_inicio") as string) || null,
         data_fim: (formData.get("data_fim") as string) || null,
-        dias_semana: diasLabels.length ? diasLabels : null,
+        dias_semana: diasLabels,
         hora_inicio: null,
         hora_fim: null,
         professor_id: professorPrincipalId ? Number(professorPrincipalId) : null,
         observacoes: (formData.get("observacoes") as string) || null,
       };
-      const horarios: { day: number; inicio: string; fim: string }[] = [];
+      const horariosPorDiaPayload: { dia_semana: string; inicio: string; fim: string }[] = [];
       for (const dia of DIAS_SEMANA) {
         if (diasMarcados.includes(dia.value)) {
-          const inicio = formData.get(`inicio_${dia.value}`) as string | null;
-          const fim = formData.get(`fim_${dia.value}`) as string | null;
+          const horario = horariosPorDia[dia.value] ?? { inicio: "", fim: "" };
+          const inicio = horario.inicio || null;
+          const fim = horario.fim || null;
           if (inicio && fim) {
-            horarios.push({ day: dia.value, inicio, fim });
+            horariosPorDiaPayload.push({ dia_semana: dia.label, inicio, fim });
+          } else {
+            setErro("Preencha horario de inicio e fim para os dias marcados.");
+            setSaving(false);
+            return;
           }
         }
       }
@@ -333,7 +378,11 @@ export default function NovaTurmaPage() {
       const response = await fetch("/api/turmas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ turma: payload, horarios, niveis_ids: niveisIdsPayload }),
+        body: JSON.stringify({
+          turma: payload,
+          horarios_por_dia: horariosPorDiaPayload,
+          niveis_ids: niveisIdsPayload,
+        }),
       });
       const json = (await response.json()) as { error?: string };
 
@@ -602,6 +651,8 @@ export default function NovaTurmaPage() {
                           name={`inicio_${dia.value}`}
                           className="w-24 rounded-xl border border-slate-200 bg-white px-2 py-1 text-[11px]"
                           disabled={!ativo}
+                          value={horariosPorDia[dia.value]?.inicio ?? ""}
+                          onChange={(e) => atualizarHorario(dia.value, "inicio", e.target.value)}
                         />
                       </div>
                       <div className="flex items-center justify-between gap-1">
@@ -611,6 +662,8 @@ export default function NovaTurmaPage() {
                           name={`fim_${dia.value}`}
                           className="w-24 rounded-xl border border-slate-200 bg-white px-2 py-1 text-[11px]"
                           disabled={!ativo}
+                          value={horariosPorDia[dia.value]?.fim ?? ""}
+                          onChange={(e) => atualizarHorario(dia.value, "fim", e.target.value)}
                         />
                       </div>
                     </div>

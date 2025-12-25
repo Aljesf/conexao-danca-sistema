@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { listarTurmas } from "@/lib/academico/turmasServer";
 import type { Turma } from "@/types/turmas";
 
@@ -41,8 +41,13 @@ export default async function TurmasPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {turmas.map((turma) => (
-                  <tr key={turma.id}>
+                {turmas.map((turma) => {
+                  const turmaId = turma.turma_id ?? turma.id;
+                  const diasTexto = Array.isArray(turma.dias_semana)
+                    ? turma.dias_semana.join(", ")
+                    : turma.dias_semana ?? "";
+                  return (
+                  <tr key={turmaId}>
                     <td className="px-3 py-2 font-medium">{turma.nome}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col">
@@ -52,7 +57,7 @@ export default async function TurmasPage() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col text-xs text-slate-600">
-                        <span>{turma.dias_semana?.join(", ") || "—"}</span>
+                        <span>{diasTexto || "—"}</span>
                         <span>
                           {turma.hora_inicio && turma.hora_fim
                             ? `${turma.hora_inicio.slice(0, 5)} às ${turma.hora_fim.slice(0, 5)}`
@@ -64,12 +69,13 @@ export default async function TurmasPage() {
                     <td className="px-3 py-2 text-xs">{turma.ano_referencia ?? "—"}</td>
                     <td className="px-3 py-2 text-xs">{turma.status}</td>
                     <td className="px-3 py-2 text-right text-xs">
-                      <Link href={`/escola/academico/turmas/${turma.id}`} className="text-violet-600 hover:underline">
+                      <Link href={`/escola/academico/turmas/${turmaId}`} className="text-violet-600 hover:underline">
                         Detalhes
                       </Link>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
