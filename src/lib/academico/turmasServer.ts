@@ -37,6 +37,7 @@ export async function listarTurmas(params?: {
         status,
         data_inicio,
         data_fim,
+        dias_semana,
         carga_horaria_prevista,
         frequencia_minima_percentual,
         ativo
@@ -62,7 +63,35 @@ export async function listarTurmas(params?: {
     return [];
   }
 
-  return (data ?? []) as Turma[];
+  const turmas = (data ?? []) as Turma[];
+  if (turmas.length === 0) {
+    return turmas;
+  }
+
+  const turmaIds = turmas
+    .map((t) => Number(t.turma_id ?? t.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+
+  if (turmaIds.length === 0) {
+    return turmas;
+  }
+
+  const { data: horarios, error: horariosError } = await supabase
+    .from("turmas_horarios")
+    .select("turma_id")
+    .in("turma_id", turmaIds);
+
+  if (horariosError) {
+    console.error("Erro ao carregar horarios das turmas:", horariosError);
+    return turmas;
+  }
+
+  const turmasComHorario = new Set((horarios ?? []).map((h) => Number(h.turma_id)));
+
+  return turmas.map((t) => ({
+    ...t,
+    tem_horario: turmasComHorario.has(Number(t.turma_id ?? t.id)),
+  }));
 }
 
 export async function listarTurma(id: number) {

@@ -359,14 +359,14 @@ export default function NovaTurmaPage() {
         professor_id: professorPrincipalId ? Number(professorPrincipalId) : null,
         observacoes: (formData.get("observacoes") as string) || null,
       };
-      const horariosPorDiaPayload: { dia_semana: string; inicio: string; fim: string }[] = [];
+      const horariosPorDiaPayload: { day_of_week: number; inicio: string; fim: string }[] = [];
       for (const dia of DIAS_SEMANA) {
         if (diasMarcados.includes(dia.value)) {
           const horario = horariosPorDia[dia.value] ?? { inicio: "", fim: "" };
           const inicio = horario.inicio || null;
           const fim = horario.fim || null;
           if (inicio && fim) {
-            horariosPorDiaPayload.push({ dia_semana: dia.label, inicio, fim });
+            horariosPorDiaPayload.push({ day_of_week: dia.value, inicio, fim });
           } else {
             setErro("Preencha horario de inicio e fim para os dias marcados.");
             setSaving(false);
@@ -384,10 +384,10 @@ export default function NovaTurmaPage() {
           niveis_ids: niveisIdsPayload,
         }),
       });
-      const json = (await response.json()) as { error?: string };
+      const json = (await response.json()) as { error?: string; message?: string };
 
       if (!response.ok) {
-        throw new Error(json.error ?? "Erro ao criar turma");
+        throw new Error(json.message ?? json.error ?? "Erro ao criar turma");
       }
 
       // TODO: professores auxiliares via turma_professores (usar professoresAuxiliares)

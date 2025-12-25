@@ -19,11 +19,23 @@ const DIA_VALUE_BY_ALIAS = new Map(
   DIAS_SEMANA_MAP.flatMap((d) => [d.label, ...d.aliases].map((alias) => [alias, d.value] as const)),
 );
 
+function isHorarioValido(value: string | null): boolean {
+  if (!value) return false;
+  return /^\d{2}:\d{2}(:\d{2})?$/.test(value);
+}
+
 function normalizeDiaValue(value: unknown): number | null {
   if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 6) {
     return value;
   }
   if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^\d+$/.test(trimmed)) {
+      const num = Number(trimmed);
+      if (Number.isInteger(num) && num >= 0 && num <= 6) {
+        return num;
+      }
+    }
     const key = value
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
@@ -70,7 +82,7 @@ function parseHorariosPorDia(
     const inicio = typeof record.inicio === "string" ? record.inicio : null;
     const fim = typeof record.fim === "string" ? record.fim : null;
 
-    if (diaValue === null || !diaLabel || !inicio || !fim) {
+    if (diaValue === null || !diaLabel || !isHorarioValido(inicio) || !isHorarioValido(fim)) {
       return null;
     }
 
@@ -125,7 +137,12 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
 
   const supabase = await getSupabaseServer();
   const body = await _req.json(); // { turma: {...}, horarios_por_dia: [...] }
-  const turmaPayload = { ...(body.turma ?? {}) } as Record<string, unknown>;
+  const turmaPayload = { ...(body.turma ?? body) } as Record<string, unknown>;
+  for (const key of ["horarios_por_dia", "horarios"]) {
+    if (key in turmaPayload) {
+      delete turmaPayload[key];
+    }
+  }
   for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by"]) {
     if (key in turmaPayload) {
       delete turmaPayload[key];
@@ -134,6 +151,7 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
 
   const diasParsed = parseDiasSemanal(turmaPayload.dias_semana);
   const horariosParsed = parseHorariosPorDia(body.horarios_por_dia ?? body.horarios);
+  const horariosProvided = "horarios_por_dia" in body || "horarios" in body;
 
   if (horariosParsed === null) {
     return NextResponse.json(
@@ -142,11 +160,17 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
     );
   }
 
+  if (horariosProvided && horariosParsed.length === 0) {
+    return NextResponse.json(
+      { error: "horarios_obrigatorios", message: "Defina ao menos um dia e horario." },
+      { status: 400 },
+    );
+  }
+
   const diasWasProvided = "dias_semana" in turmaPayload;
-  const horariosProvided = horariosParsed.length > 0;
   let diasEfetivos = diasParsed;
 
-  if ((!diasEfetivos || diasEfetivos.length === 0) && horariosProvided) {
+  if (horariosProvided && horariosParsed.length > 0) {
     diasEfetivos = Array.from(new Set(horariosParsed.map((h) => h.dia_label)));
   }
 
@@ -167,7 +191,7 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (horariosProvided) {
+  if (horariosProvided && horariosParsed.length > 0) {
     await supabase.from("turmas_horarios").delete().eq("turma_id", id);
 
     const diasSet = new Set(diasEfetivos ?? []);
@@ -184,7 +208,7 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
     if (e2) return NextResponse.json({ error: e2.message }, { status: 500 });
   }
 
-  return NextResponse.json({ data }, { status: 200 });
+  return NextResponse.json({ data, horarios_por_dia: horariosParsed }, { status: 200 });
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {

@@ -89,7 +89,7 @@
 - Botao "Incluir pendencias" disponivel na lista de faturas (Admin) para disparar o processo por conta.
 
 ## Turmas (horarios e detalhes)
-- Cadastro de turma envia `dias_semana` como array e valida dias marcados (evita `dias_semana_invalido` por string).
-- Horarios por dia enviados como `horarios_por_dia` e gravados em `turmas_horarios` (dia_semana + inicio/fim).
+- Modelo oficial de horarios: `public.turmas_horarios` (`day_of_week`, `inicio`, `fim`).
+- API usa `horarios_por_dia` (com `day_of_week`) e normaliza `dias_semana` como array.
 - Detalhe de turma em `/escola/academico/turmas/[id]` consome `/api/turmas/:id` + `/api/turmas/:id/historico`.
 - UX: ao marcar novo dia na criacao, copia o ultimo horario preenchido.

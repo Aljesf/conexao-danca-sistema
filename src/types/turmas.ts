@@ -22,6 +22,7 @@ export interface Turma {
   dias_semana: string | string[] | null;
   hora_inicio: string | null;
   hora_fim: string | null;
+  tem_horario?: boolean | null;
   professor_id: number | null;
   observacoes: string | null;
   ativo?: boolean | null;
