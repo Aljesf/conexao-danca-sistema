@@ -1,7 +1,0 @@
-[api/admin/servicos] Supabase error: {
-  message: "Could not find the table 'public.servicos' in the schema cache",
-  details: null,
-  hint: "Perhaps you meant the table 'public.enderecos'",
-  code: 'PGRST205'
-}
-^C

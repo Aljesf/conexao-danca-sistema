@@ -629,6 +629,10 @@ export async function POST(req: Request) {
       if (!responsavelFinanceiroId) {
         const idade = calcularIdade(nascimento);
         if (idade === null) {
+          console.warn("[matriculas/operacional/criar] nascimento invalido para aluno.", {
+            pessoa_id: pessoaId,
+            nascimento,
+          });
           await client.query("ROLLBACK");
           return NextResponse.json(
             { error: "nascimento_invalido", message: "Data de nascimento invalida para o aluno." },
