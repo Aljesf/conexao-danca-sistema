@@ -246,6 +246,10 @@ export default function NovaMatriculaPage() {
   }, []);
 
   useEffect(() => {
+    void carregarCursos();
+  }, []);
+
+  useEffect(() => {
     let ativo = true;
     (async () => {
       if (!alunoSelecionado?.id) {
