@@ -54,6 +54,22 @@ export async function POST(req: Request) {
   }
 
   const payload = await req.json(); // { turma: {...}, horarios: [...] }
+  const niveisIdsRaw = Array.isArray(payload.niveis_ids) ? payload.niveis_ids : null;
+  let niveisIds: number[] = [];
+
+  if (niveisIdsRaw) {
+    const seen = new Set<number>();
+    for (const raw of niveisIdsRaw) {
+      const id = Number(raw);
+      if (!Number.isInteger(id) || id <= 0) {
+        return NextResponse.json({ error: "niveis_ids_invalidos" }, { status: 400 });
+      }
+      if (!seen.has(id)) {
+        seen.add(id);
+        niveisIds.push(id);
+      }
+    }
+  }
 
   const { data: turma, error } = await supabase
     .from("turmas")
@@ -65,9 +81,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const turmaId = Number((turma as { turma_id?: number; id?: number })?.turma_id ?? turma?.id);
+
+  if (niveisIds.length > 0) {
+    const rows = niveisIds.map((nivelId, index) => ({
+      turma_id: turmaId,
+      nivel_id: nivelId,
+      principal: index === 0,
+    }));
+
+    const { error: errNiveis } = await supabase.from("turma_niveis").insert(rows);
+
+    if (errNiveis) {
+      return NextResponse.json({ error: errNiveis.message }, { status: 500 });
+    }
+  }
+
   if (Array.isArray(payload.horarios) && payload.horarios.length) {
     const rows = payload.horarios.map((h: any) => ({
-      turma_id: turma.id,
+      turma_id: turmaId,
       day_of_week: h.day,
       inicio: h.inicio,
       fim: h.fim,
@@ -85,10 +117,10 @@ export async function POST(req: Request) {
     usuario_id: usuarioId ?? "",
     usuario_nome: usuarioNome,
     entidade: "turma",
-    entidade_id: turma.id,
+    entidade_id: turmaId,
     acao: "CREATE",
-    descricao: `Criou turma ${turma.nome ?? ""} (#${turma.id})`,
+    descricao: `Criou turma ${turma.nome ?? ""} (#${turmaId})`,
   });
 
-  return NextResponse.json({ data: turma }, { status: 201 });
+  return NextResponse.json({ data: turma, niveis_ids: niveisIds }, { status: 201 });
 }

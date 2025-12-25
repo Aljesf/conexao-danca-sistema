@@ -41,19 +41,14 @@ export default function NovaTurmaPage() {
   const [professoresAuxiliares, setProfessoresAuxiliares] = useState<string[]>([]);
 
   const [diasSelecionados, setDiasSelecionados] = useState<number[]>([]);
+  const anoAtual = new Date().getFullYear();
+  const anosReferencia = Array.from({ length: 4 }, (_, i) => anoAtual - 1 + i);
 
   useEffect(() => {
     async function carregar() {
       const { data: cursosData, error: cursosError } = await supabase.from("cursos").select("id, nome").order("nome");
       if (cursosError) console.error("Erro ao carregar cursos:", cursosError);
       setCursos(cursosData ?? []);
-
-      const { data: niveisData, error: niveisError } = await supabase
-        .from("niveis")
-        .select("id, nome, curso_id")
-        .order("nome", { ascending: true });
-      if (niveisError) console.error("Erro ao carregar niveis:", niveisError);
-      setNiveis(niveisData ?? []);
 
       const { data: profsData, error: profsError } = await supabase
         .from("vw_professores")
@@ -69,7 +64,45 @@ export default function NovaTurmaPage() {
     void carregar();
   }, [supabase]);
 
-  const niveisDoCurso = cursoId ? niveis.filter((n) => String(n.curso_id ?? "") === String(cursoId)) : [];
+  useEffect(() => {
+    let active = true;
+    async function carregarNiveis() {
+      if (!cursoId) {
+        setNiveis([]);
+        setNiveisSelecionados([]);
+        return;
+      }
+
+      const cursoIdNum = Number(cursoId);
+      const { data: niveisData, error: niveisError } = await supabase
+        .from("niveis")
+        .select("id, nome, curso_id")
+        .eq("curso_id", cursoIdNum)
+        .order("ordem", { ascending: true });
+
+      if (niveisError) {
+        const { data: niveisFallback, error: niveisFallbackError } = await supabase
+          .from("niveis")
+          .select("id, nome, curso_id")
+          .eq("curso_id", cursoIdNum)
+          .order("nome", { ascending: true });
+        if (niveisFallbackError) {
+          console.error("Erro ao carregar niveis:", niveisFallbackError);
+          if (active) setNiveis([]);
+          return;
+        }
+        if (active) setNiveis(niveisFallback ?? []);
+        return;
+      }
+
+      if (active) setNiveis(niveisData ?? []);
+    }
+
+    void carregarNiveis();
+    return () => {
+      active = false;
+    };
+  }, [cursoId, supabase]);
 
   const toggleNivel = (id: string) => {
     setNiveisSelecionados((prev) => (prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id]));
@@ -95,7 +128,14 @@ export default function NovaTurmaPage() {
       const cursoTexto = cursoSelecionado?.nome ?? "";
 
       const niveisSelecionadosObjs = niveis.filter((n) => niveisSelecionados.includes(String(n.id)));
-      const nivelTexto = niveisSelecionadosObjs.map((n) => n.nome).join(" / ") || null;
+      const nivelTexto = niveisSelecionadosObjs.map((n) => n.nome).join(", ") || null;
+      const niveisIdsPayload = Array.from(
+        new Set(
+          niveisSelecionados
+            .map((id) => Number(id))
+            .filter((id) => Number.isInteger(id) && id > 0),
+        ),
+      );
 
       const anoRefStr = formData.get("ano_referencia") as string | null;
       const cargaStr = formData.get("carga_horaria_prevista") as string | null;
@@ -108,9 +148,11 @@ export default function NovaTurmaPage() {
         tipo_turma: (formData.get("tipo_turma") as string) || "REGULAR",
         serie: (formData.get("serie") as string) || null,
         turno: (formData.get("turno") as string) || null,
+        status: (formData.get("status") as string) || "EM_PREPARACAO",
         nivel: nivelTexto,
         ano_referencia: anoRefStr ? Number(anoRefStr) : null,
-        modalidade: cursoTexto || null,
+        curso: cursoTexto || null,
+        capacidade: formData.get("capacidade") ? Number(formData.get("capacidade")) : null,
         carga_horaria_prevista: cargaStr ? Number(cargaStr) : null,
         frequencia_minima_percentual: freqStr ? Number(freqStr) : null,
         data_inicio: (formData.get("data_inicio") as string) || null,
@@ -123,30 +165,26 @@ export default function NovaTurmaPage() {
         professor_id: professorPrincipalId ? Number(professorPrincipalId) : null,
         observacoes: (formData.get("observacoes") as string) || null,
       };
-
-      const { data: created, error } = await supabase.from("turmas").insert(payload).select("id").single();
-      if (error || !created) {
-        throw new Error(error?.message ?? "Erro ao criar turma");
-      }
-
-      const turmaId = Number(created.id);
-
-      const horarios: { turma_id: number; day_of_week: number; inicio: string; fim: string }[] = [];
+      const horarios: { day: number; inicio: string; fim: string }[] = [];
       for (const dia of DIAS_SEMANA) {
         if (diasMarcadosLabels.includes(dia.value)) {
           const inicio = formData.get(`inicio_${dia.value}`) as string | null;
           const fim = formData.get(`fim_${dia.value}`) as string | null;
           if (inicio && fim) {
-            horarios.push({ turma_id: turmaId, day_of_week: dia.value, inicio, fim });
+            horarios.push({ day: dia.value, inicio, fim });
           }
         }
       }
 
-      if (horarios.length > 0) {
-        const { error: errHorarios } = await supabase.from("turmas_horarios").insert(horarios);
-        if (errHorarios) {
-          console.error("Erro ao salvar horarios da turma:", errHorarios);
-        }
+      const response = await fetch("/api/turmas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ turma: payload, horarios, niveis_ids: niveisIdsPayload }),
+      });
+      const json = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(json.error ?? "Erro ao criar turma");
       }
 
       // TODO: professores auxiliares via turma_professores (usar professoresAuxiliares)
@@ -248,8 +286,7 @@ export default function NovaTurmaPage() {
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-slate-500">
-                Grava como texto em &quot;modalidade&quot; (TODO: migrar para curso_id quando
-                existir).
+                Grava como texto em &quot;curso&quot; (TODO: migrar para curso_id quando existir).
               </p>
             </div>
           </div>
@@ -261,8 +298,8 @@ export default function NovaTurmaPage() {
               </label>
               {cursoId ? (
                 <div className="flex flex-wrap gap-2">
-                  {niveisDoCurso.length === 0 && <span className="text-xs text-slate-500">Nenhum nivel para este curso.</span>}
-                  {niveisDoCurso.map((n) => (
+                  {niveis.length === 0 && <span className="text-xs text-slate-500">Nenhum nivel para este curso.</span>}
+                  {niveis.map((n) => (
                     <label
                       key={`nivel-${n.id}`}
                       className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs ${
@@ -287,11 +324,17 @@ export default function NovaTurmaPage() {
             </div>
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ano de referencia</label>
-              <input
+              <select
                 name="ano_referencia"
-                type="number"
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-              />
+                defaultValue={anoAtual}
+              >
+                {anosReferencia.map((ano) => (
+                  <option key={`ano-${ano}`} value={ano}>
+                    {ano}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Capacidade (opcional)</label>
