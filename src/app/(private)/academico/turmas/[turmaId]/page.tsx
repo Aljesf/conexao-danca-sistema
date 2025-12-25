@@ -24,6 +24,17 @@ type AlunoMatriculado = {
   nome: string;
 };
 
+type TurmaHistoricoItem = {
+  id: number;
+  turma_id: number;
+  ocorrida_em: string | null;
+  actor_user_id: string | null;
+  evento: string;
+  resumo: string | null;
+  diff: Record<string, unknown> | null;
+  snapshot: Record<string, unknown> | null;
+};
+
 async function carregarAlunosMatriculados(turmaId: number): Promise<AlunoMatriculado[]> {
   const supabase = await getSupabaseServer();
   const { data, error } = await supabase
@@ -73,11 +84,70 @@ async function carregarAlunosMatriculados(turmaId: number): Promise<AlunoMatricu
   );
 }
 
+async function carregarHistoricoTurma(turmaId: number): Promise<TurmaHistoricoItem[]> {
+  const supabase = await getSupabaseServer();
+  const { data, error } = await supabase
+    .from("turmas_historico")
+    .select("id,turma_id,ocorrida_em,actor_user_id,evento,resumo,diff,snapshot")
+    .eq("turma_id", turmaId)
+    .order("ocorrida_em", { ascending: false })
+    .limit(30);
+
+  if (error) {
+    console.error("Erro ao carregar historico da turma:", error);
+    return [];
+  }
+
+  return (
+    data?.map((row) => {
+      if (!row || typeof row !== "object") {
+        return {
+          id: 0,
+          turma_id: turmaId,
+          ocorrida_em: null,
+          actor_user_id: null,
+          evento: "UPDATE",
+          resumo: null,
+          diff: null,
+          snapshot: null,
+        };
+      }
+
+      const r = row as Record<string, unknown>;
+
+      return {
+        id: Number(r.id ?? 0),
+        turma_id: Number(r.turma_id ?? turmaId),
+        ocorrida_em: (r.ocorrida_em as string | null) ?? null,
+        actor_user_id: (r.actor_user_id as string | null) ?? null,
+        evento: String(r.evento ?? "UPDATE"),
+        resumo: (r.resumo as string | null) ?? null,
+        diff: (r.diff as Record<string, unknown> | null) ?? null,
+        snapshot: (r.snapshot as Record<string, unknown> | null) ?? null,
+      };
+    }) ?? []
+  );
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "Nao informado";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("pt-BR");
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "Nao informado";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("pt-BR");
+}
+
+function formatValor(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+  if (Array.isArray(value)) return value.map(formatValor).join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 type TurmaPageProps = {
@@ -90,11 +160,12 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
     notFound();
   }
 
-  const [turma, professoresBase, avaliacoes, alunos] = await Promise.all([
+  const [turma, professoresBase, avaliacoes, alunos, historico] = await Promise.all([
     obterTurmaPorId(turmaId),
     listarProfessoresDaTurma(turmaId),
     listarAvaliacoesDaTurma(turmaId),
     carregarAlunosMatriculados(turmaId),
+    carregarHistoricoTurma(turmaId),
   ]);
 
   if (!turma) {
@@ -151,6 +222,69 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
             {turma.observacoes}
           </p>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <header>
+          <h2 className="text-xl font-semibold text-slate-900">Historico</h2>
+          <p className="text-sm text-slate-500">Registro automatico de alteracoes na turma.</p>
+        </header>
+        <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
+          {historico.length === 0 ? (
+            <p className="text-sm text-slate-500">Nenhum historico registrado.</p>
+          ) : (
+            <div className="space-y-3">
+              {historico.map((item) => {
+                const diffObj =
+                  item.diff && typeof item.diff === "object" && !Array.isArray(item.diff)
+                    ? (item.diff as Record<string, unknown>)
+                    : null;
+                const diffEntries = diffObj ? Object.entries(diffObj) : [];
+
+                return (
+                  <div
+                    key={`hist-${item.id}`}
+                    className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{item.resumo ?? item.evento}</p>
+                        <p className="text-xs text-slate-500">
+                          {formatDateTime(item.ocorrida_em)} | Actor: {item.actor_user_id ?? "sistema"}
+                        </p>
+                      </div>
+                      <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                        {item.evento}
+                      </span>
+                    </div>
+                    {diffEntries.length === 0 ? (
+                      <p className="mt-2 text-xs text-slate-500">Sem detalhes registrados.</p>
+                    ) : (
+                      <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                        {diffEntries.map(([campo, valores]) => {
+                          const valueObj =
+                            valores && typeof valores === "object" && !Array.isArray(valores)
+                              ? (valores as Record<string, unknown>)
+                              : null;
+                          const hasOldNew = Boolean(valueObj && ("old" in valueObj || "new" in valueObj));
+                          const oldVal = hasOldNew ? formatValor(valueObj?.old) : formatValor(valores);
+                          const newVal = hasOldNew ? formatValor(valueObj?.new) : "";
+
+                          return (
+                            <li key={`${item.id}-${campo}`}>
+                              <span className="font-medium text-slate-700">{campo}:</span>{" "}
+                              {hasOldNew ? `${oldVal} -> ${newVal}` : oldVal}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="space-y-3">

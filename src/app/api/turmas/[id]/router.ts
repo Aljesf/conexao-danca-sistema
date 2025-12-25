@@ -9,11 +9,27 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
   const id = Number(params.id);
   const supabase = await getSupabaseServer();
   const body = await _req.json(); // { turma: {...}, horarios: [...] }
+  const turmaPayload = { ...(body.turma ?? {}) } as Record<string, unknown>;
+  for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by"]) {
+    if (key in turmaPayload) {
+      delete turmaPayload[key];
+    }
+  }
+  const diasRaw = turmaPayload.dias_semana;
+  if (typeof diasRaw === "string") {
+    return NextResponse.json(
+      { error: "dias_semana_invalido", message: "dias_semana deve ser array de strings, nao string." },
+      { status: 400 },
+    );
+  }
+  if (Array.isArray(diasRaw)) {
+    turmaPayload.dias_semana = diasRaw.map((dia) => String(dia));
+  }
 
   // atualiza turma
   const { data, error } = await supabase
     .from("turmas")
-    .update(body.turma)
+    .update(turmaPayload)
     .eq("id", id)
     .select("*")
     .single();

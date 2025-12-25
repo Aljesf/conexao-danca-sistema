@@ -127,7 +127,8 @@ export async function GET() {
       online,
       professor_id,
       professor:pessoas ( id, nome, email ),
-      horarios:turmas_horarios ( day_of_week, inicio, fim )
+      horarios:turmas_horarios ( day_of_week, inicio, fim ),
+      updated_at
     `)
     .order("id", { ascending: true })
     .limit(200);
@@ -168,8 +169,10 @@ export async function POST(req: Request) {
   }
 
   const turmaPayload = { ...(payload.turma ?? {}) } as Record<string, unknown>;
-  if ("serie" in turmaPayload) {
-    delete (turmaPayload as { serie?: unknown }).serie;
+  for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by"]) {
+    if (key in turmaPayload) {
+      delete turmaPayload[key];
+    }
   }
   const nomeRaw = typeof turmaPayload.nome === "string" ? turmaPayload.nome.trim() : "";
   const diasRaw = turmaPayload.dias_semana;
