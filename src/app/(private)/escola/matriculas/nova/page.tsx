@@ -16,18 +16,23 @@ type PessoaDetalhe = {
   nascimento?: string | null;
 };
 
-type ServicoTipo = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 
-type ServicoRow = {
-  id: number;
-  tipo: ServicoTipo;
-  titulo: string | null;
-  ativo: boolean;
-  ano_referencia?: number | null;
-  referencia_tipo?: string | null;
-  referencia_id?: number | null;
-  turma_nome?: string | null;
-  turma_id?: number | null;
+type MetodoLiquidacao = "CARTAO_CONEXAO" | "OUTRO";
+
+type TurmaOpcao = {
+  turma_id: number;
+  nome: string | null;
+  curso: string | null;
+  nivel: string | null;
+  tipo_turma: string | null;
+  ano_referencia: number | null;
+  capacidade: number | null;
+  status: string | null;
+  ativo: boolean | null;
+  suggested?: boolean;
+  idade_base?: number | null;
+  servico_id?: number | null;
 };
 
 type ServicoItemRow = {
@@ -66,6 +71,13 @@ type CriarMatriculaResp = {
   message?: string;
 };
 
+type CriarLoteResp = {
+  ok: boolean;
+  results?: Array<{ ok: boolean; index: number; matricula_id?: number; error?: string }>;
+  error?: string;
+  message?: string;
+};
+
 type SchemaCheckItem = {
   key: string;
   ok: boolean;
@@ -80,12 +92,22 @@ type SchemaCheckResp = {
   message?: string;
 };
 
-function labelTipoServico(tipo: string): string {
+type LoteSelecao = {
+  curso: string;
+  tipo: TipoMatricula;
+  turma_id: number;
+  turma_nome: string | null;
+  ano_referencia: number | null;
+  servico_id: number | null;
+  itens: Array<{ item_id: number; quantidade: number }>;
+};
+
+function labelTipoMatricula(tipo: TipoMatricula): string {
   switch (tipo) {
     case "REGULAR":
       return "Turma regular";
     case "CURSO_LIVRE":
-      return "Curso livre (Workshop)";
+      return "Curso livre";
     case "PROJETO_ARTISTICO":
       return "Projeto artistico";
     default:
@@ -93,13 +115,11 @@ function labelTipoServico(tipo: string): string {
   }
 }
 
-function labelServico(servico: ServicoRow): string {
-  if (servico.referencia_tipo === "TURMA" && servico.turma_nome) {
-    const ano = servico.ano_referencia ?? "-";
-    return `${labelTipoServico(servico.tipo)} - ${servico.turma_nome} (${ano})`;
-  }
-  const titulo = servico.titulo?.trim() ? servico.titulo : `Servico #${servico.id}`;
-  return `${labelTipoServico(servico.tipo)} - ${titulo}`;
+function labelTurmaOption(tipo: TipoMatricula, turma: TurmaOpcao): string {
+  const nome = turma.nome?.trim() ? turma.nome : `Turma #${turma.turma_id}`;
+  const ano = turma.ano_referencia ?? "-";
+  const base = `${labelTipoMatricula(tipo)} - ${nome} (${ano})`;
+  return turma.suggested ? `Sugestao: ${base}` : base;
 }
 
 function calcularIdade(nascimentoISO: string | null): number | null {
@@ -154,28 +174,31 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 export default function NovaMatriculaPage() {
   const router = useRouter();
 
+  const [passo, setPasso] = useState<1 | 2 | 3 | 4>(1);
+
+  const [cursos, setCursos] = useState<string[]>([]);
+  const [cursoSelecionado, setCursoSelecionado] = useState<string>("");
+  const [tipoSelecionado, setTipoSelecionado] = useState<TipoMatricula>("REGULAR");
+
+  const [turmas, setTurmas] = useState<TurmaOpcao[]>([]);
+  const [turmasErro, setTurmasErro] = useState<string | null>(null);
+  const [turmasCarregando, setTurmasCarregando] = useState(false);
+  const [idadeSugestao, setIdadeSugestao] = useState<number | null>(null);
+  const [turmaSelecionada, setTurmaSelecionada] = useState<TurmaOpcao | null>(null);
+
   const [anoRef, setAnoRef] = useState<number>(2026);
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [mesInicio, setMesInicio] = useState<number | "AUTO">("AUTO");
   const [gerarProrata, setGerarProrata] = useState<boolean>(true);
-  // Servico
-  const [servicos, setServicos] = useState<ServicoRow[]>([]);
-  const [servicoId, setServicoId] = useState<number | null>(null);
-  const servicoSelecionado = useMemo(
-    () => servicos.find((s) => s.id === servicoId) ?? null,
-    [servicos, servicoId],
-  );
 
   const [itensDisponiveis, setItensDisponiveis] = useState<ItemDisponivel[]>([]);
   const [itensSelecionados, setItensSelecionados] = useState<Record<number, number>>({});
   const [itensCarregando, setItensCarregando] = useState(false);
   const [itensErro, setItensErro] = useState<string | null>(null);
-  // Metodo de liquidacao
-  const [metodoLiquidacao, setMetodoLiquidacao] = useState<"CARTAO_CONEXAO" | "OUTRO">("CARTAO_CONEXAO");
 
-  const [passo, setPasso] = useState<1 | 2 | 3>(1);
+  const [metodoLiquidacao, setMetodoLiquidacao] = useState<MetodoLiquidacao>("CARTAO_CONEXAO");
+  const [matriculasLote, setMatriculasLote] = useState<LoteSelecao[]>([]);
 
-  // Pessoas
   const [alunoSelecionado, setAlunoSelecionado] = useState<PessoaResumo | null>(null);
   const [responsavelSelecionado, setResponsavelSelecionado] = useState<PessoaResumo | null>(null);
   const [idadeAluno, setIdadeAluno] = useState<number | null>(null);
@@ -189,10 +212,22 @@ export default function NovaMatriculaPage() {
   const schemaBloqueado = (schemaChecks !== null && !schemaChecks.ok) || !!schemaErro;
   const menorDeIdade = idadeAluno !== null && idadeAluno < 18;
   const exigeResponsavel = menorDeIdade;
-  const podeAvancarPasso1 = !!servicoId;
+
+  const servicoIdSelecionado = turmaSelecionada?.servico_id ?? null;
+
+  const turmasFiltradas = useMemo(() => {
+    if (tipoSelecionado === "PROJETO_ARTISTICO") return [];
+    return turmas.filter((t) => {
+      if (tipoSelecionado === "REGULAR") return t.tipo_turma === "REGULAR";
+      if (tipoSelecionado === "CURSO_LIVRE") return t.tipo_turma === "CURSO_LIVRE";
+      return true;
+    });
+  }, [turmas, tipoSelecionado]);
+
+  const podeAvancarPasso1 = cursoSelecionado.trim().length > 0 && !!tipoSelecionado;
   const podeAvancarPasso2 = !!alunoSelecionado;
-  const podeConcluir =
-    !!servicoId && !!alunoSelecionado && (!exigeResponsavel || !!responsavelSelecionado);
+  const podeAvancarPasso3 = !!turmaSelecionada;
+  const podeConcluir = !!turmaSelecionada && !!alunoSelecionado && (!exigeResponsavel || !!responsavelSelecionado);
 
   useEffect(() => {
     let ativo = true;
@@ -235,6 +270,26 @@ export default function NovaMatriculaPage() {
     };
   }, [alunoSelecionado, responsavelSelecionado]);
 
+  useEffect(() => {
+    if (!cursoSelecionado) {
+      setTurmas([]);
+      setTurmaSelecionada(null);
+      setIdadeSugestao(null);
+      return;
+    }
+    void carregarTurmas();
+  }, [cursoSelecionado, alunoSelecionado?.id]);
+
+  useEffect(() => {
+    if (turmaSelecionada && typeof turmaSelecionada.ano_referencia === "number") {
+      setAnoRef(turmaSelecionada.ano_referencia);
+    }
+  }, [turmaSelecionada]);
+
+  useEffect(() => {
+    void carregarItensPorServico(servicoIdSelecionado);
+  }, [servicoIdSelecionado, tipoSelecionado]);
+
   async function copiarSql(sql: string) {
     if (!navigator?.clipboard?.writeText) return;
     try {
@@ -244,35 +299,47 @@ export default function NovaMatriculaPage() {
     }
   }
 
-  async function carregarServicos() {
+  async function carregarCursos() {
     setErro(null);
     try {
-      // Reuso da API Admin (por enquanto). Se você quiser, depois criamos uma rota "opções" no contexto escola.
-      const data = await fetchJSON<{ ok: boolean; servicos: ServicoRow[] }>("/api/admin/servicos");
-      const lista = (data.servicos ?? []).filter((s) => s.ativo);
-      setServicos(lista);
-
-      if (lista.length === 1 && !servicoId) {
-        const unico = lista[0];
-        setServicoId(unico.id);
-        setAnoRef((prev) => (typeof unico.ano_referencia === "number" ? unico.ano_referencia : prev));
-        void carregarItensPorServico(unico);
-      }
+      const data = await fetchJSON<{ ok: boolean; cursos: string[] }>("/api/escola/matriculas/opcoes/cursos");
+      setCursos(data.cursos ?? []);
     } catch (e: unknown) {
-      setErro(e instanceof Error ? e.message : "Falha ao carregar serviços");
+      setErro(e instanceof Error ? e.message : "Falha ao carregar cursos");
     }
   }
 
-  async function carregarItensPorServico(se: ServicoRow | null) {
+  async function carregarTurmas() {
+    if (!cursoSelecionado) return;
+    setTurmasCarregando(true);
+    setTurmasErro(null);
+    try {
+      const params = new URLSearchParams({ curso: cursoSelecionado });
+      if (alunoSelecionado?.id) params.set("aluno_id", String(alunoSelecionado.id));
+      const data = await fetchJSON<{ ok: boolean; turmas: TurmaOpcao[]; idade?: number | null }>(
+        `/api/escola/matriculas/opcoes/turmas?${params.toString()}`,
+      );
+      setTurmas(data.turmas ?? []);
+      setIdadeSugestao(typeof data.idade === "number" ? data.idade : null);
+    } catch (e: unknown) {
+      setTurmasErro(e instanceof Error ? e.message : "Falha ao carregar turmas");
+      setTurmas([]);
+      setIdadeSugestao(null);
+    } finally {
+      setTurmasCarregando(false);
+    }
+  }
+
+  async function carregarItensPorServico(servicoId: number | null) {
     setItensErro(null);
     setItensDisponiveis([]);
     setItensSelecionados({});
-    if (!se) return;
+    if (!servicoId) return;
 
     setItensCarregando(true);
     try {
       const data = await fetchJSON<{ ok: boolean; itens: ServicoItemRow[] }>(
-        `/api/admin/escola/servicos/${se.id}/itens`,
+        `/api/admin/escola/servicos/${servicoId}/itens`,
       );
       const itensBase = (data.itens ?? []).filter((it) => it.ativo);
 
@@ -302,7 +369,7 @@ export default function NovaMatriculaPage() {
       setItensDisponiveis(itensComPreco);
 
       const selecionados: Record<number, number> = {};
-      if (se.tipo === "REGULAR") {
+      if (tipoSelecionado === "REGULAR") {
         const mensalidade = itensComPreco.find(
           (it) => it.codigo === "MENSALIDADE" && it.preco_ativo_centavos !== null,
         );
@@ -339,6 +406,51 @@ export default function NovaMatriculaPage() {
     });
   }
 
+  function buildItensPayload(): Array<{ item_id: number; quantidade: number }> {
+    return Object.entries(itensSelecionados)
+      .map(([id, quantidade]) => ({ item_id: Number(id), quantidade }))
+      .filter((it) => Number.isInteger(it.item_id) && it.item_id > 0 && it.quantidade > 0);
+  }
+
+  function validarItens(itensPayload: Array<{ item_id: number; quantidade: number }>): string | null {
+    if (itensPayload.length === 0) return null;
+    if (!servicoIdSelecionado) return "Itens exigem servico vinculado a turma.";
+    const itensSemPreco = itensPayload.filter((it) => {
+      const info = itensDisponiveis.find((item) => item.id === it.item_id);
+      return !info || info.preco_ativo_centavos === null;
+    });
+    if (itensSemPreco.length > 0) return "Existem itens selecionados sem preco ativo.";
+    return null;
+  }
+
+  function montarSelecaoAtual(): LoteSelecao | null {
+    if (!cursoSelecionado) {
+      setErro("Selecione um curso.");
+      return null;
+    }
+    if (!turmaSelecionada) {
+      setErro("Selecione uma turma.");
+      return null;
+    }
+
+    const itensPayload = buildItensPayload();
+    const itensErroMsg = validarItens(itensPayload);
+    if (itensErroMsg) {
+      setErro(itensErroMsg);
+      return null;
+    }
+
+    return {
+      curso: cursoSelecionado,
+      tipo: tipoSelecionado,
+      turma_id: turmaSelecionada.turma_id,
+      turma_nome: turmaSelecionada.nome ?? null,
+      ano_referencia: typeof anoRef === "number" ? anoRef : null,
+      servico_id: servicoIdSelecionado,
+      itens: itensPayload,
+    };
+  }
+
   function handleAlunoChange(pessoa: PessoaResumo | null) {
     const prevAlunoId = alunoSelecionado?.id ?? null;
     setAlunoSelecionado(pessoa);
@@ -363,19 +475,51 @@ export default function NovaMatriculaPage() {
   function irParaProximoPasso() {
     setErro(null);
     if (passo === 1 && !podeAvancarPasso1) {
-      setErro("Selecione um servico.");
+      setErro("Selecione um curso e o tipo.");
       return;
     }
     if (passo === 2 && !podeAvancarPasso2) {
       setErro("Selecione o aluno.");
       return;
     }
-    setPasso((prev) => (prev < 3 ? ((prev + 1) as 1 | 2 | 3) : prev));
+    if (passo === 3 && !podeAvancarPasso3) {
+      setErro("Selecione uma turma.");
+      return;
+    }
+    setPasso((prev) => (prev < 4 ? ((prev + 1) as 1 | 2 | 3 | 4) : prev));
   }
 
   function voltarPasso() {
     setErro(null);
-    setPasso((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3) : prev));
+    setPasso((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3 | 4) : prev));
+  }
+
+  function adicionarOutraSelecao() {
+    setErro(null);
+    if (schemaBloqueado) {
+      setErro("Ambiente incompleto para matricula.");
+      return;
+    }
+    if (!alunoSelecionado) {
+      setErro("Selecione o aluno.");
+      return;
+    }
+    if (exigeResponsavel && !responsavelSelecionado) {
+      setErro("Responsavel financeiro obrigatorio para menor de idade.");
+      return;
+    }
+
+    const selecao = montarSelecaoAtual();
+    if (!selecao) return;
+
+    setMatriculasLote((prev) => [...prev, selecao]);
+    setTurmaSelecionada(null);
+    setTurmas([]);
+    setCursoSelecionado("");
+    setItensDisponiveis([]);
+    setItensSelecionados({});
+    setItensErro(null);
+    setPasso(1);
   }
 
   async function onCriar() {
@@ -386,62 +530,85 @@ export default function NovaMatriculaPage() {
       return;
     }
 
-
-    if (!servicoId) {
-      setErro("Selecione um servico.");
-      return;
-    }
-
-    const alunoId = alunoSelecionado?.id ?? null;
-    const responsavelId = responsavelSelecionado?.id ?? null;
-
-    if (!alunoId) {
+    if (!alunoSelecionado) {
       setErro("Selecione o aluno.");
       return;
     }
 
-    if (exigeResponsavel && !responsavelId) {
+    if (exigeResponsavel && !responsavelSelecionado) {
       setErro("Responsavel financeiro obrigatorio para menor de idade.");
       return;
     }
 
-    const se = servicoSelecionado;
-    if (!se) {
-      setErro("Servico invalido.");
-      return;
-    }
+    const selecaoAtual = montarSelecaoAtual();
+    if (!selecaoAtual) return;
 
-    const itensPayload = Object.entries(itensSelecionados)
-      .map(([id, quantidade]) => ({ item_id: Number(id), quantidade }))
-      .filter((it) => Number.isInteger(it.item_id) && it.item_id > 0 && it.quantidade > 0);
+    const loteFinal = [...matriculasLote, selecaoAtual];
 
-    if (itensPayload.length > 0) {
-      const itensSemPreco = itensPayload.filter((it) => {
-        const info = itensDisponiveis.find((item) => item.id === it.item_id);
-        return !info || info.preco_ativo_centavos === null;
-      });
-      if (itensSemPreco.length > 0) {
-        setErro("Existem itens selecionados sem preco ativo.");
+    if (loteFinal.length > 1) {
+      const semServico = loteFinal.find((s) => !s.servico_id);
+      if (semServico) {
+        setErro("Lote exige servico_id para cada selecao nesta versao.");
         return;
       }
+
+      setLoading(true);
+      try {
+        const payload = {
+          aluno_pessoa_id: alunoSelecionado.id,
+          responsavel_financeiro_pessoa_id: responsavelSelecionado?.id,
+          ano_referencia: anoRef,
+          data_matricula: dataMatricula,
+          metodo_liquidacao: metodoLiquidacao,
+          matriculas: loteFinal.map((s) => ({
+            servico_id: s.servico_id ?? undefined,
+            itens: s.itens,
+          })),
+        };
+
+        const data = await fetchJSON<CriarLoteResp>("/api/matriculas/operacional/criar-lote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const primeiroOk = (data.results ?? []).find((r) => r.ok && r.matricula_id);
+        if (primeiroOk?.matricula_id) {
+          router.push(`/escola/matriculas/${primeiroOk.matricula_id}`);
+        } else {
+          setErro("Lote criado, mas nao foi possivel abrir a matricula automaticamente.");
+        }
+      } catch (e: unknown) {
+        setErro(e instanceof Error ? e.message : "Falha ao criar matriculas em lote");
+      } finally {
+        setLoading(false);
+      }
+      return;
     }
 
     setLoading(true);
     try {
       const payload: Record<string, unknown> = {
-        pessoa_id: alunoId,
+        pessoa_id: alunoSelecionado.id,
         ano_referencia: anoRef,
         data_matricula: dataMatricula,
         gerar_prorata: gerarProrata,
-        servico_id: servicoId,
+        metodo_liquidacao: metodoLiquidacao,
       };
 
-      if (responsavelId) payload.responsavel_financeiro_id = responsavelId;
+      if (responsavelSelecionado?.id) {
+        payload.responsavel_financeiro_id = responsavelSelecionado.id;
+      }
 
-      if (itensPayload.length > 0) payload.itens = itensPayload;
+      if (selecaoAtual.servico_id) {
+        payload.servico_id = selecaoAtual.servico_id;
+      } else {
+        payload.turma_id = selecaoAtual.turma_id;
+      }
 
+      if (selecaoAtual.itens.length > 0) payload.itens = selecaoAtual.itens;
       if (mesInicio !== "AUTO") payload.mes_inicio_cobranca = mesInicio;
-      payload.metodo_liquidacao = metodoLiquidacao;
+
       const data = await fetchJSON<CriarMatriculaResp>("/api/matriculas/operacional/criar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -449,21 +616,23 @@ export default function NovaMatriculaPage() {
       });
 
       const id = data.matricula?.id;
-      if (!id) throw new Error("Resposta inválida: matrícula sem id.");
+      if (!id) throw new Error("Resposta invalida: matricula sem id.");
       router.push(`/escola/matriculas/${id}`);
     } catch (e: unknown) {
-      setErro(e instanceof Error ? e.message : "Falha ao criar matrícula");
+      setErro(e instanceof Error ? e.message : "Falha ao criar matricula");
     } finally {
       setLoading(false);
     }
   }
+
+  const resumoItens = buildItensPayload();
 
   return (
     <div className="p-4">
       <div className="mb-4">
         <h1 className="text-xl font-semibold">Nova matricula (Escola)</h1>
         <p className="text-sm text-muted-foreground">
-        Selecione o servico, informe aluno e responsavel. Ao concluir, o sistema registra a matricula e aplica a liquidacao escolhida.
+          Selecione curso, aluno, turma e itens. Ao concluir, o sistema registra a matricula e aplica a liquidacao escolhida.
         </p>
       </div>
 
@@ -498,9 +667,7 @@ export default function NovaMatriculaPage() {
       ) : null}
 
       {erro ? (
-        <div className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          {erro}
-        </div>
+        <div className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">{erro}</div>
       ) : null}
 
       <div className="rounded-lg border p-4">
@@ -508,26 +675,20 @@ export default function NovaMatriculaPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3">
               <div className="min-w-[260px] flex-1">
-                <label className="text-sm font-medium">Servico</label>
+                <label className="text-sm font-medium">Curso</label>
                 <div className="mt-1 flex gap-2">
                   <select
                     className="w-full rounded-md border px-2 py-2 text-sm"
-                    value={servicoId ?? ""}
+                    value={cursoSelecionado}
                     onChange={(e) => {
-                      const v = e.target.value ? Number(e.target.value) : null;
-                      setServicoId(v);
-                      const se = servicos.find((s) => s.id === v) ?? null;
-                      if (se) {
-                        void carregarItensPorServico(se);
-                      } else {
-                        void carregarItensPorServico(null);
-                      }
+                      setCursoSelecionado(e.target.value);
+                      setTurmaSelecionada(null);
                     }}
                   >
                     <option value="">Selecione...</option>
-                    {servicos.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {labelServico(s)}
+                    {cursos.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
                       </option>
                     ))}
                   </select>
@@ -535,69 +696,27 @@ export default function NovaMatriculaPage() {
                   <button
                     type="button"
                     className="rounded-md border px-3 text-sm hover:bg-muted"
-                    onClick={() => void carregarServicos()}
+                    onClick={() => void carregarCursos()}
                     disabled={loading}
                   >
                     Carregar
                   </button>
                 </div>
-
               </div>
 
-              <div className="min-w-[180px]">
-                <label className="text-sm font-medium">Ano referencia</label>
-                <input
-                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
-                  type="number"
-                  value={anoRef}
-                  onChange={(e) => setAnoRef(Number(e.target.value))}
-                  min={2000}
-                  max={2100}
-                />
-              </div>
-
-              <div className="min-w-[180px]">
-                <label className="text-sm font-medium">Data matricula</label>
-                <input
-                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
-                  type="date"
-                  value={dataMatricula}
-                  onChange={(e) => setDataMatricula(e.target.value)}
-                />
-              </div>
-
-              <div className="min-w-[200px]">
-                <label className="text-sm font-medium">Mes inicio cobranca</label>
+              <div className="min-w-[220px]">
+                <label className="text-sm font-medium">Tipo</label>
                 <select
                   className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
-                  value={mesInicio}
-                  onChange={(e) => {
-                    const v = e.target.value === "AUTO" ? "AUTO" : Number(e.target.value);
-                    setMesInicio(v);
-                  }}
+                  value={tipoSelecionado}
+                  onChange={(e) => setTipoSelecionado(e.target.value as TipoMatricula)}
                 >
-                  <option value="AUTO">Auto</option>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="min-w-[160px]">
-                <label className="text-sm font-medium">Gerar pro-rata</label>
-                <select
-                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
-                  value={gerarProrata ? "SIM" : "NAO"}
-                  onChange={(e) => setGerarProrata(e.target.value === "SIM")}
-                >
-                  <option value="SIM">Sim</option>
-                  <option value="NAO">Nao</option>
+                  <option value="REGULAR">Turma regular</option>
+                  <option value="CURSO_LIVRE">Curso livre</option>
+                  <option value="PROJETO_ARTISTICO">Projeto artistico</option>
                 </select>
               </div>
             </div>
-
           </div>
         ) : null}
 
@@ -615,6 +734,99 @@ export default function NovaMatriculaPage() {
 
         {passo === 3 ? (
           <div className="space-y-4">
+            {tipoSelecionado === "PROJETO_ARTISTICO" ? (
+              <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm">
+                Selecao de projetos artisticos ainda nao esta disponivel neste fluxo.
+              </div>
+            ) : null}
+
+            <div className="min-w-[260px]">
+              <label className="text-sm font-medium">Turma</label>
+              {turmasCarregando ? (
+                <p className="mt-1 text-xs text-muted-foreground">Carregando turmas...</p>
+              ) : null}
+              {turmasErro ? <p className="mt-1 text-xs text-red-700">{turmasErro}</p> : null}
+              {idadeSugestao !== null ? (
+                <p className="mt-1 text-xs text-muted-foreground">Sugestao por idade: {idadeSugestao} anos</p>
+              ) : null}
+              <select
+                className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                value={turmaSelecionada?.turma_id ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value ? Number(e.target.value) : null;
+                  const turma = turmasFiltradas.find((t) => t.turma_id === v) ?? null;
+                  setTurmaSelecionada(turma);
+                }}
+                disabled={loading || tipoSelecionado === "PROJETO_ARTISTICO"}
+              >
+                <option value="">Selecione...</option>
+                {turmasFiltradas.map((t) => (
+                  <option key={t.turma_id} value={t.turma_id}>
+                    {labelTurmaOption(tipoSelecionado, t)}
+                  </option>
+                ))}
+              </select>
+              {!turmasCarregando && turmasFiltradas.length === 0 && tipoSelecionado !== "PROJETO_ARTISTICO" ? (
+                <p className="mt-2 text-xs text-muted-foreground">Nenhuma turma encontrada para este curso.</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {passo === 4 ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium">Ano referencia</label>
+                <input
+                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                  type="number"
+                  value={anoRef}
+                  onChange={(e) => setAnoRef(Number(e.target.value))}
+                  min={2000}
+                  max={2100}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Data matricula</label>
+                <input
+                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                  type="date"
+                  value={dataMatricula}
+                  onChange={(e) => setDataMatricula(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Mes inicio cobranca</label>
+                <select
+                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                  value={mesInicio}
+                  onChange={(e) => {
+                    const v = e.target.value === "AUTO" ? "AUTO" : Number(e.target.value);
+                    setMesInicio(v);
+                  }}
+                >
+                  <option value="AUTO">Auto</option>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Gerar pro-rata</label>
+                <select
+                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                  value={gerarProrata ? "SIM" : "NAO"}
+                  onChange={(e) => setGerarProrata(e.target.value === "SIM")}
+                >
+                  <option value="SIM">Sim</option>
+                  <option value="NAO">Nao</option>
+                </select>
+              </div>
+            </div>
+
             <PessoaSearchBox
               label="Responsavel financeiro"
               placeholder="Buscar responsavel (2+ caracteres)"
@@ -633,7 +845,7 @@ export default function NovaMatriculaPage() {
               <select
                 className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
                 value={metodoLiquidacao}
-                onChange={(e) => setMetodoLiquidacao(e.target.value as "CARTAO_CONEXAO" | "OUTRO")}
+                onChange={(e) => setMetodoLiquidacao(e.target.value as MetodoLiquidacao)}
                 disabled={loading}
               >
                 <option value="CARTAO_CONEXAO">Cartao Conexao</option>
@@ -643,11 +855,16 @@ export default function NovaMatriculaPage() {
 
             <div className="rounded-md border p-3 text-sm">
               <div className="font-medium">Itens da matricula</div>
+              {servicoIdSelecionado === null ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Esta turma ainda nao tem servico vinculado. Itens nao estao disponiveis.
+                </p>
+              ) : null}
               {itensCarregando ? (
                 <p className="mt-2 text-xs text-muted-foreground">Carregando itens do servico...</p>
               ) : null}
               {itensErro ? <p className="mt-2 text-xs text-red-700">{itensErro}</p> : null}
-              {!itensCarregando && itensDisponiveis.length === 0 ? (
+              {!itensCarregando && itensDisponiveis.length === 0 && servicoIdSelecionado !== null ? (
                 <p className="mt-2 text-xs text-muted-foreground">Sem itens cadastrados para este servico.</p>
               ) : null}
               {itensDisponiveis.length > 0 ? (
@@ -656,7 +873,10 @@ export default function NovaMatriculaPage() {
                     const selecionado = itensSelecionados[item.id] ?? 0;
                     const semPreco = item.preco_ativo_centavos === null;
                     return (
-                      <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-2">
+                      <div
+                        key={item.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-2"
+                      >
                         <label className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
@@ -686,25 +906,28 @@ export default function NovaMatriculaPage() {
                   })}
                 </div>
               ) : null}
-              <p className="mt-2 text-xs text-muted-foreground">
-                Itens sem preco ativo ficam bloqueados para selecao.
-              </p>
+              <p className="mt-2 text-xs text-muted-foreground">Itens sem preco ativo ficam bloqueados.</p>
             </div>
 
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
-              <div className="font-medium">Resumo</div>
+              <div className="font-medium">Resumo atual</div>
               <div className="mt-2 grid gap-1">
                 <div>
-                  <span className="text-muted-foreground">Servico:</span>{" "}
-                  {servicoSelecionado ? labelServico(servicoSelecionado) : "Nao selecionado"}
+                  <span className="text-muted-foreground">Curso:</span> {cursoSelecionado || "Nao selecionado"}
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Aluno:</span>{" "}
-                  {alunoSelecionado?.nome ?? "Nao selecionado"}
+                  <span className="text-muted-foreground">Turma:</span>{" "}
+                  {turmaSelecionada ? labelTurmaOption(tipoSelecionado, turmaSelecionada) : "Nao selecionada"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Aluno:</span> {alunoSelecionado?.nome ?? "Nao selecionado"}
                 </div>
                 <div>
                   <span className="text-muted-foreground">Responsavel financeiro:</span>{" "}
                   {responsavelSelecionado?.nome ?? "Nao selecionado"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Itens:</span> {resumoItens.length}
                 </div>
                 <div>
                   <span className="text-muted-foreground">Liquidacao:</span>{" "}
@@ -721,10 +944,23 @@ export default function NovaMatriculaPage() {
                 </p>
               )}
             </div>
+
+            {matriculasLote.length > 0 ? (
+              <div className="rounded-md border p-3 text-sm">
+                <div className="font-medium">Selecoes adicionadas</div>
+                <ul className="mt-2 list-disc pl-5">
+                  {matriculasLote.map((s, idx) => (
+                    <li key={`${s.turma_id}-${idx}`}>
+                      {s.curso} - {s.turma_nome ?? `Turma #${s.turma_id}`} ({labelTipoMatricula(s.tipo)})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        <div className="mt-6 flex items-center justify-between">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
             className="rounded-md border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
@@ -734,28 +970,40 @@ export default function NovaMatriculaPage() {
             Voltar
           </button>
 
-          {passo < 3 ? (
+          {passo < 4 ? (
             <button
               type="button"
               className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
               onClick={() => void irParaProximoPasso()}
-              disabled={loading || (passo === 1 ? !podeAvancarPasso1 : !podeAvancarPasso2)}
+              disabled={
+                loading || (passo === 1 ? !podeAvancarPasso1 : passo === 2 ? !podeAvancarPasso2 : !podeAvancarPasso3)
+              }
             >
               Proximo
             </button>
           ) : (
-            <button
-              type="button"
-              className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-              onClick={() => void onCriar()}
-              disabled={loading || schemaBloqueado || !podeConcluir}
-            >
-              {loading ? "Criando..." : "Criar matricula"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-md border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50"
+                onClick={() => void adicionarOutraSelecao()}
+                disabled={loading || schemaBloqueado || !podeConcluir}
+              >
+                Adicionar outro curso/turma
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+                onClick={() => void onCriar()}
+                disabled={loading || schemaBloqueado || !podeConcluir}
+              >
+                {loading ? "Criando..." : "Concluir matricula"}
+              </button>
+            </div>
           )}
         </div>
 
-        {passo === 3 ? (
+        {passo === 4 ? (
           <p className="mt-2 text-right text-xs text-muted-foreground">
             Voce podera revisar detalhes e lancamentos na tela da matricula apos concluir.
           </p>
@@ -764,8 +1012,3 @@ export default function NovaMatriculaPage() {
     </div>
   );
 }
-
-
-
-
-
