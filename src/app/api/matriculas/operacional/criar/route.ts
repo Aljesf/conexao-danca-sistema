@@ -6,15 +6,23 @@ export const runtime = "nodejs";
 type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA";
 
 type CriarMatriculaOperacionalBody = {
-  pessoa_id: number;
+  pessoa_id?: number;
+  aluno_pessoa_id?: number;
   responsavel_financeiro_id?: number;
+  responsavel_financeiro_pessoa_id?: number;
   turma_id?: number;
   servico_id?: number;
-  ano_referencia: number;
+  ano_referencia?: number;
   data_matricula?: string; // YYYY-MM-DD (default: current_date)
   mes_inicio_cobranca?: number; // 1..12
   gerar_prorata?: boolean; // default true
   metodo_liquidacao?: MetodoLiquidacao; // default CARTAO_CONEXAO
+  itens?: Array<{ item_id: number; quantidade?: number }>;
+};
+
+type ItemSelecionado = {
+  item_id: number;
+  quantidade: number;
 };
 
 type MatriculaConfigAtiva = {
@@ -52,6 +60,21 @@ type PrecoServicoAtivo = {
   ano_referencia: number;
   plano_id: number;
   centro_custo_id: number | null;
+};
+
+type ServicoItemAtivo = {
+  id: number;
+  servico_id: number;
+  codigo: string;
+  nome: string;
+  tipo_item: string;
+};
+
+type ServicoItemPrecoAtivo = {
+  id: number;
+  item_id: number;
+  valor_centavos: number;
+  moeda: string;
 };
 
 type PlanoAtivo = {
@@ -122,6 +145,23 @@ function clampInt(n: number, min: number, max: number): number {
 function parsePositiveInt(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) return null;
   return value;
+}
+
+function normalizeItensInput(value: unknown): ItemSelecionado[] | null {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return null;
+  const map = new Map<number, number>();
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") return null;
+    const record = raw as Record<string, unknown>;
+    const itemId = parsePositiveInt(record.item_id);
+    if (!itemId) return null;
+    const quantidadeRaw = record.quantidade === undefined ? 1 : record.quantidade;
+    const quantidade = parsePositiveInt(quantidadeRaw);
+    if (!quantidade) return null;
+    map.set(itemId, (map.get(itemId) ?? 0) + quantidade);
+  }
+  return Array.from(map, ([item_id, quantidade]) => ({ item_id, quantidade }));
 }
 
 function calcularIdade(nascimentoISO: string | null): number | null {
@@ -487,17 +527,23 @@ export async function POST(req: Request) {
     const bodyUnknown: unknown = await req.json();
     const body = bodyUnknown as Partial<CriarMatriculaOperacionalBody>;
 
-    const pessoaId = parsePositiveInt(body.pessoa_id);
-    const responsavelFinanceiroIdInput = parsePositiveInt(body.responsavel_financeiro_id);
+    const pessoaId = parsePositiveInt(body.pessoa_id ?? body.aluno_pessoa_id);
+    const responsavelFinanceiroRaw =
+      body.responsavel_financeiro_id ?? body.responsavel_financeiro_pessoa_id;
+    const responsavelFinanceiroIdInput = parsePositiveInt(responsavelFinanceiroRaw);
     const turmaIdInput = parsePositiveInt(body.turma_id);
     const servicoId = parsePositiveInt(body.servico_id);
     const anoRef = parsePositiveInt(body.ano_referencia);
+    const itensSelecionados = normalizeItensInput(body.itens);
 
-    if (
-      body.responsavel_financeiro_id !== undefined &&
-      body.responsavel_financeiro_id !== null &&
-      !responsavelFinanceiroIdInput
-    ) {
+    if (itensSelecionados === null) {
+      return NextResponse.json(
+        { error: "payload_invalido", message: "itens deve ser uma lista valida de item_id/quantidade." },
+        { status: 400 },
+      );
+    }
+
+    if (responsavelFinanceiroRaw !== undefined && responsavelFinanceiroRaw !== null && !responsavelFinanceiroIdInput) {
       return NextResponse.json(
         {
           error: "payload_invalido",
@@ -513,6 +559,15 @@ export async function POST(req: Request) {
           error: "payload_invalido",
           message:
             "pessoa_id, ano_referencia e (turma_id ou servico_id) sao obrigatorios e devem ser inteiros > 0.",
+        },
+        { status: 400 },
+      );
+    }
+    if ((itensSelecionados?.length ?? 0) > 0 && !servicoId) {
+      return NextResponse.json(
+        {
+          error: "payload_invalido",
+          message: "itens requerem servico_id valido.",
         },
         { status: 400 },
       );
@@ -577,6 +632,111 @@ export async function POST(req: Request) {
         } else {
           turmaId = null;
         }
+      }
+
+      const itensInput = itensSelecionados ?? [];
+      let itensCalculados: Array<{
+        item_id: number;
+        quantidade: number;
+        nome: string;
+        codigo: string;
+        valor_centavos: number;
+        moeda: string;
+      }> = [];
+
+      if (itensInput.length > 0 && servicoId) {
+        const itemIds = itensInput.map((it) => it.item_id);
+        const { rows: itemRows } = await client.query(
+          `
+          SELECT
+            id,
+            servico_id,
+            codigo,
+            nome,
+            tipo_item
+          FROM public.servico_itens
+          WHERE servico_id = $1
+            AND ativo = true
+            AND id = ANY($2::bigint[])
+          `,
+          [servicoId, itemIds],
+        );
+
+        if (itemRows.length !== itemIds.length) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "item_invalido", message: "Existem itens invalidos para o servico informado." },
+            { status: 400 },
+          );
+        }
+
+        const itensById = new Map<number, ServicoItemAtivo>();
+        itemRows.forEach((r) => {
+          itensById.set(Number(r.id), {
+            id: Number(r.id),
+            servico_id: Number(r.servico_id),
+            codigo: String(r.codigo),
+            nome: String(r.nome),
+            tipo_item: String(r.tipo_item),
+          });
+        });
+
+        const { rows: precoRows } = await client.query(
+          `
+          SELECT DISTINCT ON (item_id)
+            id,
+            item_id,
+            valor_centavos,
+            moeda
+          FROM public.servico_itens_precos
+          WHERE ativo = true
+            AND item_id = ANY($1::bigint[])
+          ORDER BY item_id, id DESC
+          `,
+          [itemIds],
+        );
+
+        const precoByItem = new Map<number, ServicoItemPrecoAtivo>();
+        precoRows.forEach((r) => {
+          precoByItem.set(Number(r.item_id), {
+            id: Number(r.id),
+            item_id: Number(r.item_id),
+            valor_centavos: Number(r.valor_centavos),
+            moeda: String(r.moeda),
+          });
+        });
+
+        const itensSemPreco = itemIds.filter((id) => !precoByItem.has(id));
+        if (itensSemPreco.length > 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "item_sem_preco", message: "Existem itens sem preco ativo." },
+            { status: 400 },
+          );
+        }
+
+        itensCalculados = itensInput.map((it) => {
+          const info = itensById.get(it.item_id);
+          const precoAtivo = precoByItem.get(it.item_id);
+          if (!info || !precoAtivo) {
+            return {
+              item_id: it.item_id,
+              quantidade: it.quantidade,
+              nome: "Item",
+              codigo: "",
+              valor_centavos: 0,
+              moeda: "BRL",
+            };
+          }
+          return {
+            item_id: it.item_id,
+            quantidade: it.quantidade,
+            nome: info.nome,
+            codigo: info.codigo,
+            valor_centavos: roundCentavos(precoAtivo.valor_centavos * it.quantidade),
+            moeda: precoAtivo.moeda,
+          };
+        });
       }
 
       const preco = servicoId
@@ -768,6 +928,16 @@ export async function POST(req: Request) {
         parcela_numero: number | null;
       }> = [];
 
+      const createdItens: Array<{
+        id: number;
+        item_id: number;
+        quantidade: number;
+        valor_centavos: number;
+        moeda: string;
+        nome: string;
+        codigo: string;
+      }> = [];
+
       const createdLancamentos: Array<{
         id: number;
         descricao: string;
@@ -808,7 +978,10 @@ export async function POST(req: Request) {
         );
       }
 
-      if (gerarProrata) {
+      const usarItensNoCartao = itensCalculados.length > 0 && metodoLiquidacao === "CARTAO_CONEXAO";
+      const gerarFinanceiroPadrao = !usarItensNoCartao;
+
+      if (gerarProrata && gerarFinanceiroPadrao) {
         let vencBase = { year: baseYear, month: baseMonth };
         if (diaInicio > diaVenc) {
           vencBase = addMonths(baseYear, baseMonth, 1);
@@ -877,57 +1050,113 @@ export async function POST(req: Request) {
         }
       }
 
-      const valorParcela = roundCentavos(plano.valor_anuidade_centavos / 12);
+      if (gerarFinanceiroPadrao) {
+        const valorParcela = roundCentavos(plano.valor_anuidade_centavos / 12);
 
-      for (let i = 0; i < 12; i += 1) {
-        const parcelaNumero = i + 1;
-        const m = addMonths(startYear, startMonth, i);
-        const venc = toISODate(m.year, m.month, diaVenc);
+        for (let i = 0; i < 12; i += 1) {
+          const parcelaNumero = i + 1;
+          const m = addMonths(startYear, startMonth, i);
+          const venc = toISODate(m.year, m.month, diaVenc);
 
-        if (metodoLiquidacao === "COBRANCAS_LEGADO") {
-          const cobr = await inserirCobranca(client, {
-            pessoa_id: responsavelFinanceiroId,
-            centro_custo_id: preco.centro_custo_id,
-            valor_centavos: valorParcela,
-            descricao: buildDescricaoCobranca({
+          if (metodoLiquidacao === "COBRANCAS_LEGADO") {
+            const cobr = await inserirCobranca(client, {
+              pessoa_id: responsavelFinanceiroId,
+              centro_custo_id: preco.centro_custo_id,
+              valor_centavos: valorParcela,
+              descricao: buildDescricaoCobranca({
+                anoReferencia: anoRef,
+                referenciaLabel,
+                origemSubtipo: "ANUIDADE_PARCELA",
+                parcelaNumero,
+                totalParcelas: 12,
+              }),
+              vencimento: venc,
+              origem_tipo: "MATRICULA",
+              origem_subtipo: "ANUIDADE_PARCELA",
+              origem_id: matriculaId,
+              parcela_numero: parcelaNumero,
+              total_parcelas: 12,
+              data_prevista_pagamento: venc,
+              data_inicio_encargos: venc,
+              multa_percentual_aplicavel: config.multa_percentual_padrao,
+              juros_mora_percentual_mensal_aplicavel: config.juros_mora_percentual_mensal_padrao,
+            });
+
+            createdCobrancas.push({
+              id: cobr.id,
+              origem_subtipo: "ANUIDADE_PARCELA",
+              vencimento: venc,
+              valor_centavos: valorParcela,
+              parcela_numero: parcelaNumero,
+            });
+          } else if (metodoLiquidacao === "CARTAO_CONEXAO" && contaConexaoId) {
+            const desc = buildDescricaoLancamento({
               anoReferencia: anoRef,
               referenciaLabel,
               origemSubtipo: "ANUIDADE_PARCELA",
               parcelaNumero,
               totalParcelas: 12,
-            }),
-            vencimento: venc,
-            origem_tipo: "MATRICULA",
-            origem_subtipo: "ANUIDADE_PARCELA",
-            origem_id: matriculaId,
-            parcela_numero: parcelaNumero,
-            total_parcelas: 12,
-            data_prevista_pagamento: venc,
-            data_inicio_encargos: venc,
-            multa_percentual_aplicavel: config.multa_percentual_padrao,
-            juros_mora_percentual_mensal_aplicavel: config.juros_mora_percentual_mensal_padrao,
-          });
+              vencimentoISO: venc,
+            });
 
-          createdCobrancas.push({
-            id: cobr.id,
-            origem_subtipo: "ANUIDADE_PARCELA",
-            vencimento: venc,
-            valor_centavos: valorParcela,
-            parcela_numero: parcelaNumero,
-          });
-        } else if (metodoLiquidacao === "CARTAO_CONEXAO" && contaConexaoId) {
-          const desc = buildDescricaoLancamento({
-            anoReferencia: anoRef,
-            referenciaLabel,
-            origemSubtipo: "ANUIDADE_PARCELA",
-            parcelaNumero,
-            totalParcelas: 12,
-            vencimentoISO: venc,
-          });
+            const idLanc = await inserirLancamentoCartao(client, {
+              conta_conexao_id: contaConexaoId,
+              valor_centavos: valorParcela,
+              numero_parcelas: 1,
+              status: "PENDENTE_FATURA",
+              origem_sistema: "MATRICULA",
+              origem_id: matriculaId,
+              descricao: desc,
+            });
 
+            createdLancamentos.push({
+              id: idLanc,
+              descricao: desc,
+              valor_centavos: valorParcela,
+              status: "PENDENTE_FATURA",
+            });
+          }
+        }
+      }
+
+      if (itensCalculados.length > 0) {
+        for (const item of itensCalculados) {
+          const { rows: itensRows } = await client.query(
+            `
+            INSERT INTO public.matriculas_itens (
+              matricula_id,
+              item_id,
+              quantidade,
+              valor_centavos,
+              moeda,
+              created_at
+            ) VALUES (
+              $1,$2,$3,$4,$5,now()
+            )
+            RETURNING id, item_id, quantidade, valor_centavos, moeda
+            `,
+            [matriculaId, item.item_id, item.quantidade, item.valor_centavos, item.moeda],
+          );
+
+          const row = itensRows[0];
+          createdItens.push({
+            id: Number(row?.id),
+            item_id: Number(row?.item_id),
+            quantidade: Number(row?.quantidade),
+            valor_centavos: Number(row?.valor_centavos),
+            moeda: String(row?.moeda ?? item.moeda),
+            nome: item.nome,
+            codigo: item.codigo,
+          });
+        }
+      }
+
+      if (usarItensNoCartao && contaConexaoId) {
+        for (const item of itensCalculados) {
+          const desc = `Matricula: ${item.nome}`;
           const idLanc = await inserirLancamentoCartao(client, {
             conta_conexao_id: contaConexaoId,
-            valor_centavos: valorParcela,
+            valor_centavos: item.valor_centavos,
             numero_parcelas: 1,
             status: "PENDENTE_FATURA",
             origem_sistema: "MATRICULA",
@@ -935,7 +1164,12 @@ export async function POST(req: Request) {
             descricao: desc,
           });
 
-          createdLancamentos.push({ id: idLanc, descricao: desc, valor_centavos: valorParcela, status: "PENDENTE_FATURA" });
+          createdLancamentos.push({
+            id: idLanc,
+            descricao: desc,
+            valor_centavos: item.valor_centavos,
+            status: "PENDENTE_FATURA",
+          });
         }
       }
 
@@ -960,7 +1194,9 @@ export async function POST(req: Request) {
             metodo_liquidacao: String(matricula?.metodo_liquidacao ?? metodoLiquidacao),
           },
           turma_aluno: turmaAluno,
+          itens: createdItens,
           cobrancas: metodoLiquidacao === "COBRANCAS_LEGADO" ? createdCobrancas : [],
+          lancamentos: metodoLiquidacao === "CARTAO_CONEXAO" ? createdLancamentos : [],
           lancamentos_cartao: metodoLiquidacao === "CARTAO_CONEXAO" ? createdLancamentos : [],
         },
         { status: 201 },

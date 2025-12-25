@@ -42,6 +42,35 @@ type TurmaRow = {
   ano_referencia?: number | null;
 };
 
+type ServicoItemRow = {
+  id: number;
+  servico_id: number;
+  codigo: string;
+  nome: string;
+  descricao?: string | null;
+  tipo_item: string;
+  obrigatorio: boolean;
+  ativo: boolean;
+};
+
+type ServicoItemPrecoRow = {
+  id: number;
+  item_id: number;
+  valor_centavos: number;
+  moeda: string;
+  ativo: boolean;
+};
+
+type ItemDisponivel = {
+  id: number;
+  codigo: string;
+  nome: string;
+  tipo_item: string;
+  obrigatorio: boolean;
+  preco_ativo_centavos: number | null;
+  moeda: string;
+};
+
 type CriarMatriculaResp = {
   ok: boolean;
   matricula?: { id: number };
@@ -108,6 +137,17 @@ function calcularIdade(nascimentoISO: string | null): number | null {
   return idade;
 }
 
+function formatBRL(centavos: number | null): string {
+  if (centavos === null) return "Sem preco";
+  return (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function parseQuantidade(value: string): number | null {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const text = await res.text();
@@ -142,6 +182,11 @@ export default function NovaMatriculaPage() {
     () => servicos.find((s) => s.id === servicoId) ?? null,
     [servicos, servicoId],
   );
+
+  const [itensDisponiveis, setItensDisponiveis] = useState<ItemDisponivel[]>([]);
+  const [itensSelecionados, setItensSelecionados] = useState<Record<number, number>>({});
+  const [itensCarregando, setItensCarregando] = useState(false);
+  const [itensErro, setItensErro] = useState<string | null>(null);
 
   // Turma (apenas se serviço = TURMA)
   const [turmas, setTurmas] = useState<TurmaRow[]>([]);
@@ -231,10 +276,87 @@ export default function NovaMatriculaPage() {
         setServicoId(unico.id);
         setAnoRef((prev) => (typeof unico.ano_referencia === "number" ? unico.ano_referencia : prev));
         void carregarTurmasPorServico(unico);
+        void carregarItensPorServico(unico);
       }
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Falha ao carregar serviços");
     }
+  }
+
+  async function carregarItensPorServico(se: ServicoRow | null) {
+    setItensErro(null);
+    setItensDisponiveis([]);
+    setItensSelecionados({});
+    if (!se) return;
+
+    setItensCarregando(true);
+    try {
+      const data = await fetchJSON<{ ok: boolean; itens: ServicoItemRow[] }>(
+        `/api/admin/escola/servicos/${se.id}/itens`,
+      );
+      const itensBase = (data.itens ?? []).filter((it) => it.ativo);
+
+      const precosList = await Promise.all(
+        itensBase.map(async (it) => {
+          const resp = await fetchJSON<{ ok: boolean; precos: ServicoItemPrecoRow[] }>(
+            `/api/admin/escola/itens/${it.id}/precos`,
+          );
+          return resp.precos ?? [];
+        }),
+      );
+
+      const itensComPreco: ItemDisponivel[] = itensBase.map((it, idx) => {
+        const precos = precosList[idx] ?? [];
+        const precoAtivo = precos.find((p) => p.ativo) ?? null;
+        return {
+          id: it.id,
+          codigo: it.codigo,
+          nome: it.nome,
+          tipo_item: it.tipo_item,
+          obrigatorio: it.obrigatorio,
+          preco_ativo_centavos: precoAtivo ? Number(precoAtivo.valor_centavos) : null,
+          moeda: precoAtivo?.moeda ?? "BRL",
+        };
+      });
+
+      setItensDisponiveis(itensComPreco);
+
+      const selecionados: Record<number, number> = {};
+      if (se.tipo === "REGULAR") {
+        const mensalidade = itensComPreco.find(
+          (it) => it.codigo === "MENSALIDADE" && it.preco_ativo_centavos !== null,
+        );
+        if (mensalidade) {
+          selecionados[mensalidade.id] = 1;
+        }
+      }
+      setItensSelecionados(selecionados);
+    } catch (e: unknown) {
+      setItensErro(e instanceof Error ? e.message : "Falha ao carregar itens do servico.");
+    } finally {
+      setItensCarregando(false);
+    }
+  }
+
+  function toggleItemSelecionado(itemId: number, checked: boolean) {
+    setItensSelecionados((prev) => {
+      const next = { ...prev };
+      if (checked) {
+        next[itemId] = prev[itemId] ?? 1;
+      } else {
+        delete next[itemId];
+      }
+      return next;
+    });
+  }
+
+  function atualizarQuantidadeItem(itemId: number, value: string) {
+    const quantidade = parseQuantidade(value);
+    if (!quantidade) return;
+    setItensSelecionados((prev) => {
+      if (!prev[itemId]) return prev;
+      return { ...prev, [itemId]: quantidade };
+    });
   }
 
   function handleAlunoChange(pessoa: PessoaResumo | null) {
@@ -335,6 +457,21 @@ export default function NovaMatriculaPage() {
       return;
     }
 
+    const itensPayload = Object.entries(itensSelecionados)
+      .map(([id, quantidade]) => ({ item_id: Number(id), quantidade }))
+      .filter((it) => Number.isInteger(it.item_id) && it.item_id > 0 && it.quantidade > 0);
+
+    if (itensPayload.length > 0) {
+      const itensSemPreco = itensPayload.filter((it) => {
+        const info = itensDisponiveis.find((item) => item.id === it.item_id);
+        return !info || info.preco_ativo_centavos === null;
+      });
+      if (itensSemPreco.length > 0) {
+        setErro("Existem itens selecionados sem preco ativo.");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const payload: Record<string, unknown> = {
@@ -346,6 +483,8 @@ export default function NovaMatriculaPage() {
       };
 
       if (responsavelId) payload.responsavel_financeiro_id = responsavelId;
+
+      if (itensPayload.length > 0) payload.itens = itensPayload;
 
       if (turmaFinal) payload.turma_id = turmaFinal;
       if (mesInicio !== "AUTO") payload.mes_inicio_cobranca = mesInicio;
@@ -426,7 +565,12 @@ export default function NovaMatriculaPage() {
                       const v = e.target.value ? Number(e.target.value) : null;
                       setServicoId(v);
                       const se = servicos.find((s) => s.id === v) ?? null;
-                      if (se) void carregarTurmasPorServico(se);
+                      if (se) {
+                        void carregarTurmasPorServico(se);
+                        void carregarItensPorServico(se);
+                      } else {
+                        void carregarItensPorServico(null);
+                      }
                     }}
                   >
                     <option value="">Selecione...</option>
@@ -552,6 +696,56 @@ export default function NovaMatriculaPage() {
                 Aluno menor de idade: selecione um responsavel financeiro.
               </p>
             ) : null}
+
+            <div className="rounded-md border p-3 text-sm">
+              <div className="font-medium">Itens da matricula</div>
+              {itensCarregando ? (
+                <p className="mt-2 text-xs text-muted-foreground">Carregando itens do servico...</p>
+              ) : null}
+              {itensErro ? <p className="mt-2 text-xs text-red-700">{itensErro}</p> : null}
+              {!itensCarregando && itensDisponiveis.length === 0 ? (
+                <p className="mt-2 text-xs text-muted-foreground">Sem itens cadastrados para este servico.</p>
+              ) : null}
+              {itensDisponiveis.length > 0 ? (
+                <div className="mt-2 grid gap-2">
+                  {itensDisponiveis.map((item) => {
+                    const selecionado = itensSelecionados[item.id] ?? 0;
+                    const semPreco = item.preco_ativo_centavos === null;
+                    return (
+                      <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-2">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selecionado > 0}
+                            disabled={loading || semPreco}
+                            onChange={(e) => toggleItemSelecionado(item.id, e.target.checked)}
+                          />
+                          <span>
+                            {item.nome} ({item.codigo})
+                          </span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <span className={semPreco ? "text-xs text-red-700" : "text-xs text-muted-foreground"}>
+                            {formatBRL(item.preco_ativo_centavos)}
+                          </span>
+                          <input
+                            className="w-20 rounded border px-2 py-1 text-xs"
+                            type="number"
+                            min={1}
+                            value={selecionado > 0 ? selecionado : 1}
+                            disabled={loading || semPreco || selecionado === 0}
+                            onChange={(e) => atualizarQuantidadeItem(item.id, e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <p className="mt-2 text-xs text-muted-foreground">
+                Itens sem preco ativo ficam bloqueados para selecao.
+              </p>
+            </div>
 
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
               <div className="font-medium">Resumo</div>
