@@ -3,7 +3,7 @@ import { Pool } from "pg";
 
 export const runtime = "nodejs";
 
-type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA";
+type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
 
 type CriarMatriculaOperacionalBody = {
   pessoa_id?: number;
@@ -36,7 +36,7 @@ type MatriculaConfigAtiva = {
 
 type ServicoTipo = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 
-type ServicoReferenciaTipo = "TURMA" | "LEGADO";
+type ServicoReferenciaTipo = "TURMA" | "LEGADO" | "PROJETO";
 
 type ServicoAtivo = {
   id: number;
@@ -617,20 +617,20 @@ export async function POST(req: Request) {
 
         const referenciaId =
           servico.referencia_id !== null && servico.referencia_id !== undefined ? Number(servico.referencia_id) : null;
-        if (!referenciaId || referenciaId <= 0) {
-          await client.query("ROLLBACK");
-          return NextResponse.json(
-            { error: "servico_referencia_invalida", message: "Servico sem referencia valida." },
-            { status: 422 },
-          );
-        }
-
-        vinculoId = referenciaId;
 
         if (servico.referencia_tipo === "TURMA") {
+          if (!referenciaId || referenciaId <= 0) {
+            await client.query("ROLLBACK");
+            return NextResponse.json(
+              { error: "servico_referencia_invalida", message: "Servico TURMA sem referencia valida." },
+              { status: 422 },
+            );
+          }
+          vinculoId = referenciaId;
           turmaId = referenciaId;
         } else {
           turmaId = null;
+          vinculoId = null;
         }
       }
 

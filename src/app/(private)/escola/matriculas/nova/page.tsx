@@ -16,30 +16,18 @@ type PessoaDetalhe = {
   nascimento?: string | null;
 };
 
-type ServicoTipo =
-  | "REGULAR"
-  | "CURSO_LIVRE"
-  | "PROJETO_ARTISTICO"
-  | "TURMA"
-  | "WORKSHOP"
-  | "ESPETACULO"
-  | "EVENTO";
+type ServicoTipo = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 
 type ServicoRow = {
   id: number;
   tipo: ServicoTipo;
-  titulo: string;
-  ativo: boolean;
-  origem_tabela?: string | null;
-  origem_id?: number | null;
-  ano_referencia?: number | null;
-};
-
-type TurmaRow = {
-  turma_id: number;
-  nome: string;
+  titulo: string | null;
   ativo: boolean;
   ano_referencia?: number | null;
+  referencia_tipo?: string | null;
+  referencia_id?: number | null;
+  turma_nome?: string | null;
+  turma_id?: number | null;
 };
 
 type ServicoItemRow = {
@@ -100,22 +88,18 @@ function labelTipoServico(tipo: string): string {
       return "Curso livre (Workshop)";
     case "PROJETO_ARTISTICO":
       return "Projeto artistico";
-    case "TURMA":
-      return "Turma";
-    case "WORKSHOP":
-      return "Workshop";
-    case "ESPETACULO":
-      return "Espetaculo";
-    case "EVENTO":
-      return "Evento";
     default:
       return tipo;
   }
 }
 
-function labelServico(servico: { tipo: string; ano_referencia?: number | null }): string {
-  const ano = servico.ano_referencia ?? "sem ano";
-  return `${labelTipoServico(servico.tipo)} - ${ano}`;
+function labelServico(servico: ServicoRow): string {
+  if (servico.referencia_tipo === "TURMA" && servico.turma_nome) {
+    const ano = servico.ano_referencia ?? "-";
+    return `${labelTipoServico(servico.tipo)} - ${servico.turma_nome} (${ano})`;
+  }
+  const titulo = servico.titulo?.trim() ? servico.titulo : `Servico #${servico.id}`;
+  return `${labelTipoServico(servico.tipo)} - ${titulo}`;
 }
 
 function calcularIdade(nascimentoISO: string | null): number | null {
@@ -174,8 +158,7 @@ export default function NovaMatriculaPage() {
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [mesInicio, setMesInicio] = useState<number | "AUTO">("AUTO");
   const [gerarProrata, setGerarProrata] = useState<boolean>(true);
-
-  // Serviço
+  // Servico
   const [servicos, setServicos] = useState<ServicoRow[]>([]);
   const [servicoId, setServicoId] = useState<number | null>(null);
   const servicoSelecionado = useMemo(
@@ -187,10 +170,8 @@ export default function NovaMatriculaPage() {
   const [itensSelecionados, setItensSelecionados] = useState<Record<number, number>>({});
   const [itensCarregando, setItensCarregando] = useState(false);
   const [itensErro, setItensErro] = useState<string | null>(null);
-
-  // Turma (apenas se serviço = TURMA)
-  const [turmas, setTurmas] = useState<TurmaRow[]>([]);
-  const [turmaId, setTurmaId] = useState<number | null>(null);
+  // Metodo de liquidacao
+  const [metodoLiquidacao, setMetodoLiquidacao] = useState<"CARTAO_CONEXAO" | "OUTRO">("CARTAO_CONEXAO");
 
   const [passo, setPasso] = useState<1 | 2 | 3>(1);
 
@@ -275,7 +256,6 @@ export default function NovaMatriculaPage() {
         const unico = lista[0];
         setServicoId(unico.id);
         setAnoRef((prev) => (typeof unico.ano_referencia === "number" ? unico.ano_referencia : prev));
-        void carregarTurmasPorServico(unico);
         void carregarItensPorServico(unico);
       }
     } catch (e: unknown) {
@@ -398,24 +378,6 @@ export default function NovaMatriculaPage() {
     setPasso((prev) => (prev > 1 ? ((prev - 1) as 1 | 2 | 3) : prev));
   }
 
-  async function carregarTurmasPorServico(se: ServicoRow) {
-    // Para o v1, se serviço TURMA tiver origem_id, usamos.
-    // Se você quiser listar turmas ativas para escolha, precisamos de um endpoint de turmas/opções (não faremos agora).
-    // Aqui fazemos um caminho simples: se existir origem_id, fixa a turma.
-    if (se.tipo !== "TURMA") {
-      setTurmaId(null);
-      return;
-    }
-    if (typeof se.origem_id === "number" && se.origem_id > 0) {
-      setTurmaId(se.origem_id);
-      setTurmas([]);
-      return;
-    }
-
-    // fallback: se não tiver origem_id, você escolhe manualmente pelo campo numérico (turmaId).
-    setTurmas([]);
-  }
-
   async function onCriar() {
     setErro(null);
 
@@ -449,14 +411,6 @@ export default function NovaMatriculaPage() {
       return;
     }
 
-    // TURMA exige turma_id (via origem_id ou digitado)
-    const turmaObrigatoria = se.tipo === "TURMA";
-    const turmaFinal = turmaObrigatoria ? turmaId : null;
-    if (turmaObrigatoria && (!turmaFinal || turmaFinal <= 0)) {
-      setErro("Servico do tipo TURMA exige turma_id.");
-      return;
-    }
-
     const itensPayload = Object.entries(itensSelecionados)
       .map(([id, quantidade]) => ({ item_id: Number(id), quantidade }))
       .filter((it) => Number.isInteger(it.item_id) && it.item_id > 0 && it.quantidade > 0);
@@ -486,10 +440,8 @@ export default function NovaMatriculaPage() {
 
       if (itensPayload.length > 0) payload.itens = itensPayload;
 
-      if (turmaFinal) payload.turma_id = turmaFinal;
       if (mesInicio !== "AUTO") payload.mes_inicio_cobranca = mesInicio;
-
-      // Não enviar metodo_liquidacao => default CARTAO_CONEXAO
+      payload.metodo_liquidacao = metodoLiquidacao;
       const data = await fetchJSON<CriarMatriculaResp>("/api/matriculas/operacional/criar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -511,7 +463,7 @@ export default function NovaMatriculaPage() {
       <div className="mb-4">
         <h1 className="text-xl font-semibold">Nova matricula (Escola)</h1>
         <p className="text-sm text-muted-foreground">
-        Selecione o servico, informe aluno e responsavel. Ao concluir, o sistema registra a matricula e lanca no Cartao Conexao.
+        Selecione o servico, informe aluno e responsavel. Ao concluir, o sistema registra a matricula e aplica a liquidacao escolhida.
         </p>
       </div>
 
@@ -566,7 +518,6 @@ export default function NovaMatriculaPage() {
                       setServicoId(v);
                       const se = servicos.find((s) => s.id === v) ?? null;
                       if (se) {
-                        void carregarTurmasPorServico(se);
                         void carregarItensPorServico(se);
                       } else {
                         void carregarItensPorServico(null);
@@ -576,7 +527,7 @@ export default function NovaMatriculaPage() {
                     <option value="">Selecione...</option>
                     {servicos.map((s) => (
                       <option key={s.id} value={s.id}>
-                        [{labelTipoServico(s.tipo)}] {s.titulo}
+                        {labelServico(s)}
                       </option>
                     ))}
                   </select>
@@ -591,11 +542,6 @@ export default function NovaMatriculaPage() {
                   </button>
                 </div>
 
-                {servicoSelecionado?.tipo === "TURMA" && servicoSelecionado?.origem_id ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Servico TURMA vinculado automaticamente a turma_id = {servicoSelecionado.origem_id}.
-                  </p>
-                ) : null}
               </div>
 
               <div className="min-w-[180px]">
@@ -652,21 +598,6 @@ export default function NovaMatriculaPage() {
               </div>
             </div>
 
-            {servicoSelecionado?.tipo === "TURMA" && !servicoSelecionado?.origem_id ? (
-              <div>
-                <label className="text-sm font-medium">Turma ID</label>
-                <input
-                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
-                  type="number"
-                  value={turmaId ?? ""}
-                  onChange={(e) => setTurmaId(e.target.value ? Number(e.target.value) : null)}
-                  placeholder="Informe turma_id"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  (v1) Se o servico TURMA nao tem origem_id, informe manualmente o turma_id.
-                </p>
-              </div>
-            ) : null}
           </div>
         ) : null}
 
@@ -696,6 +627,19 @@ export default function NovaMatriculaPage() {
                 Aluno menor de idade: selecione um responsavel financeiro.
               </p>
             ) : null}
+
+            <div className="min-w-[220px]">
+              <label className="text-sm font-medium">Liquidacao</label>
+              <select
+                className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                value={metodoLiquidacao}
+                onChange={(e) => setMetodoLiquidacao(e.target.value as "CARTAO_CONEXAO" | "OUTRO")}
+                disabled={loading}
+              >
+                <option value="CARTAO_CONEXAO">Cartao Conexao</option>
+                <option value="OUTRO">Outro</option>
+              </select>
+            </div>
 
             <div className="rounded-md border p-3 text-sm">
               <div className="font-medium">Itens da matricula</div>
@@ -763,12 +707,19 @@ export default function NovaMatriculaPage() {
                   {responsavelSelecionado?.nome ?? "Nao selecionado"}
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Liquidacao:</span>{" "}Cartao Conexao
+                  <span className="text-muted-foreground">Liquidacao:</span>{" "}
+                  {metodoLiquidacao === "CARTAO_CONEXAO" ? "Cartao Conexao" : "Outro"}
                 </div>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                A matricula cria lancamentos no Cartao Conexao. A fatura e gerada no ciclo do cartao.
-              </p>
+              {metodoLiquidacao === "CARTAO_CONEXAO" ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  A matricula cria lancamentos no Cartao Conexao. A fatura e gerada no ciclo do cartao.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Liquidacao definida como Outro. Nenhum lancamento sera criado automaticamente.
+                </p>
+              )}
             </div>
           </div>
         ) : null}
@@ -813,3 +764,8 @@ export default function NovaMatriculaPage() {
     </div>
   );
 }
+
+
+
+
+

@@ -7,8 +7,17 @@ type ServicoRow = {
   titulo: string | null;
   ativo: boolean;
   ano_referencia: number | null;
+  referencia_tipo?: string | null;
+  referencia_id?: number | null;
   created_at: string | null;
   updated_at: string | null;
+};
+
+type TurmaRow = {
+  turma_id: number;
+  nome: string | null;
+  tipo_turma: string | null;
+  capacidade: number | null;
 };
 
 // Observacao:
@@ -38,7 +47,7 @@ export async function GET() {
     // - Ordenacao por id (mais seguro)
     const { data, error } = await supabase
       .from("servicos")
-      .select("id,tipo,titulo,ativo,ano_referencia,created_at,updated_at")
+      .select("id,tipo,titulo,ativo,ano_referencia,referencia_tipo,referencia_id,created_at,updated_at")
       .order("id", { ascending: false });
 
     if (error) {
@@ -60,7 +69,62 @@ export async function GET() {
       );
     }
 
-    const servicos = (data ?? []) as ServicoRow[];
+    const servicosBase = (data ?? []) as ServicoRow[];
+    const turmaIds = servicosBase
+      .filter((s) => s.referencia_tipo === "TURMA" && s.referencia_id)
+      .map((s) => Number(s.referencia_id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    const turmaById = new Map<number, TurmaRow>();
+    if (turmaIds.length > 0) {
+      const { data: turmas, error: turmaError } = await supabase
+        .from("turmas")
+        .select("turma_id,nome,tipo_turma,capacidade")
+        .in("turma_id", turmaIds);
+
+      if (turmaError) {
+        console.error("[api/admin/servicos] Supabase turmas error:", {
+          message: turmaError.message,
+          details: (turmaError as unknown as { details?: string }).details,
+          hint: (turmaError as unknown as { hint?: string }).hint,
+          code: (turmaError as unknown as { code?: string }).code,
+        });
+        return NextResponse.json(
+          { ok: false, error: "erro_listar_turmas", message: turmaError.message },
+          { status: 500 },
+        );
+      }
+
+      (turmas ?? []).forEach((t) => {
+        turmaById.set(Number(t.turma_id), {
+          turma_id: Number(t.turma_id),
+          nome: t.nome ?? null,
+          tipo_turma: t.tipo_turma ?? null,
+          capacidade: t.capacidade ?? null,
+        });
+      });
+    }
+
+    const servicos = servicosBase.map((s) => {
+      const turmaId = s.referencia_tipo === "TURMA" ? Number(s.referencia_id) : null;
+      const turma = turmaId ? turmaById.get(turmaId) ?? null : null;
+      const anoLabel = s.ano_referencia ? ` ${s.ano_referencia}` : "";
+      const titulo =
+        s.titulo && s.titulo.trim()
+          ? s.titulo
+          : turma?.nome
+            ? `${turma.nome}${anoLabel}`
+            : `Servico #${s.id}`;
+
+      return {
+        ...s,
+        titulo,
+        turma_nome: turma?.nome ?? null,
+        turma_id: turma?.turma_id ?? (turmaId || null),
+        turma_tipo_turma: turma?.tipo_turma ?? null,
+        turma_capacidade: turma?.capacidade ?? null,
+      };
+    });
 
     return NextResponse.json({ ok: true, servicos }, { status: 200 });
   } catch (err) {
