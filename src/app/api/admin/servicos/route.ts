@@ -20,6 +20,15 @@ type TurmaRow = {
   capacidade: number | null;
 };
 
+type ServicoPayload = {
+  tipo?: string | null;
+  titulo?: string | null;
+  ano_referencia?: number | null;
+  ativo?: boolean | null;
+  referencia_tipo?: string | null;
+  referencia_id?: number | null;
+};
+
 // Observacao:
 // - Esta rota e ADMIN: usar SERVICE_ROLE para leitura e evitar travas de RLS.
 // - Caso voce ja tenha um helper padrao no projeto (ex.: getSupabaseServerSSR),
@@ -136,5 +145,58 @@ export async function GET() {
       { ok: false, error: "erro_interno", message },
       { status: 500 },
     );
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const supabase = getSupabaseAdminClient();
+    const body = (await req.json().catch(() => null)) as ServicoPayload | null;
+
+    const tipo = body?.tipo?.toString().trim() ?? "";
+    const titulo = body?.titulo?.toString().trim() ?? "";
+    const ano = body?.ano_referencia ?? null;
+    const referenciaTipo = body?.referencia_tipo ?? null;
+    const referenciaIdRaw = body?.referencia_id ?? null;
+
+    if (!tipo) {
+      return NextResponse.json({ ok: false, error: "tipo_obrigatorio" }, { status: 400 });
+    }
+    if (!titulo) {
+      return NextResponse.json({ ok: false, error: "titulo_obrigatorio" }, { status: 400 });
+    }
+
+    const anoRef =
+      typeof ano === "number" && Number.isInteger(ano)
+        ? ano
+        : ano === null || ano === undefined
+          ? null
+          : null;
+    const referenciaId =
+      typeof referenciaIdRaw === "number" && Number.isInteger(referenciaIdRaw) && referenciaIdRaw > 0
+        ? referenciaIdRaw
+        : null;
+
+    const { data, error } = await supabase
+      .from("servicos")
+      .insert({
+        tipo,
+        titulo,
+        ano_referencia: anoRef,
+        referencia_tipo: referenciaTipo,
+        referencia_id: referenciaId,
+        ativo: typeof body?.ativo === "boolean" ? body?.ativo : true,
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      return NextResponse.json({ ok: false, error: "erro_criar_servico", message: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, servico: data }, { status: 201 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro inesperado no servidor";
+    return NextResponse.json({ ok: false, error: "erro_interno", message }, { status: 500 });
   }
 }

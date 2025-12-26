@@ -38,6 +38,8 @@ export async function listarTurmas(params?: {
         data_inicio,
         data_fim,
         dias_semana,
+        espaco_id,
+        espaco:espacos ( id, nome, tipo, capacidade, local_id, local:locais ( id, nome, tipo ) ),
         carga_horaria_prevista,
         frequencia_minima_percentual,
         ativo

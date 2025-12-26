@@ -14,6 +14,8 @@ type Nivel = {
   idade_maxima: number | null;
 };
 type Professor = { id: number; nome: string };
+type Local = { id: number; nome: string; tipo: string };
+type Espaco = { id: number; local_id: number; nome: string; tipo: string; capacidade: number | null };
 
 const TIPOS_TURMA: TipoTurma[] = ["REGULAR", "CURSO_LIVRE", "ENSAIO"];
 const TURNOS: TurnoTurma[] = ["MANHA", "TARDE", "NOITE", "INTEGRAL"];
@@ -135,6 +137,11 @@ export default function NovaTurmaPage() {
   const [niveis, setNiveis] = useState<Nivel[]>([]);
   const [niveisSelecionados, setNiveisSelecionados] = useState<string[]>([]);
 
+  const [locais, setLocais] = useState<Local[]>([]);
+  const [localId, setLocalId] = useState<string>("");
+  const [espacos, setEspacos] = useState<Espaco[]>([]);
+  const [espacoId, setEspacoId] = useState<string>("");
+
   const [professores, setProfessores] = useState<Professor[]>([]);
   const [professorPrincipalId, setProfessorPrincipalId] = useState<string>("");
   const [professoresAuxiliares, setProfessoresAuxiliares] = useState<string[]>([]);
@@ -157,6 +164,14 @@ export default function NovaTurmaPage() {
       const { data: cursosData, error: cursosError } = await supabase.from("cursos").select("id, nome").order("nome");
       if (cursosError) console.error("Erro ao carregar cursos:", cursosError);
       setCursos(cursosData ?? []);
+
+      const locaisResp = await fetch("/api/locais");
+      if (locaisResp.ok) {
+        const locaisJson = (await locaisResp.json()) as { locais?: Local[] };
+        setLocais(locaisJson.locais ?? []);
+      } else {
+        console.error("Erro ao carregar locais");
+      }
 
       const { data: profsData, error: profsError } = await supabase
         .from("vw_professores")
@@ -212,6 +227,37 @@ export default function NovaTurmaPage() {
     };
   }, [cursoId, supabase]);
 
+  useEffect(() => {
+    let active = true;
+    async function carregarEspacos() {
+      if (!localId) {
+        setEspacos([]);
+        setEspacoId("");
+        return;
+      }
+
+      const resp = await fetch(`/api/locais/${localId}/espacos`);
+      if (!resp.ok) {
+        console.error("Erro ao carregar espacos");
+        if (active) {
+          setEspacos([]);
+          setEspacoId("");
+        }
+        return;
+      }
+
+      const json = (await resp.json()) as { espacos?: Espaco[] };
+      if (!active) return;
+      setEspacos(json.espacos ?? []);
+      setEspacoId("");
+    }
+
+    void carregarEspacos();
+    return () => {
+      active = false;
+    };
+  }, [localId]);
+
   const cursoSelecionado = useMemo(() => cursos.find((c) => String(c.id) === cursoId) ?? null, [cursos, cursoId]);
   const niveisSelecionadosObjs = useMemo(
     () => niveis.filter((n) => niveisSelecionados.includes(String(n.id))),
@@ -252,6 +298,14 @@ export default function NovaTurmaPage() {
       }),
     [cursoSelecionado, nivelResumo, turnoSelecionado, diasLabels, anoReferencia],
   );
+  const professoresUnicos = useMemo(() => {
+    const map = new Map<number, Professor>();
+    professores.forEach((prof) => {
+      if (!prof || !Number.isFinite(prof.id)) return;
+      if (!map.has(prof.id)) map.set(prof.id, prof);
+    });
+    return Array.from(map.values());
+  }, [professores]);
 
   const toggleNivel = (id: string) => {
     setNiveisSelecionados((prev) => (prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id]));
@@ -308,6 +362,16 @@ export default function NovaTurmaPage() {
         setSaving(false);
         return;
       }
+      if (!localId) {
+        setErro("Selecione um local.");
+        setSaving(false);
+        return;
+      }
+      if (!espacoId) {
+        setErro("Selecione um espaco.");
+        setSaving(false);
+        return;
+      }
 
       const cursoTexto = cursoSelecionado?.nome ?? "";
       const nivelTexto = nivelResumo;
@@ -348,6 +412,7 @@ export default function NovaTurmaPage() {
         nivel: nivelTexto,
         ano_referencia: anoRefStr ? Number(anoRefStr) : null,
         curso: cursoTexto || null,
+        espaco_id: Number(espacoId),
         capacidade: formData.get("capacidade") ? Number(formData.get("capacidade")) : null,
         carga_horaria_prevista: cargaStr ? Number(cargaStr) : null,
         frequencia_minima_percentual: freqStr ? Number(freqStr) : null,
@@ -497,34 +562,74 @@ export default function NovaTurmaPage() {
                 Nome gerado automaticamente a partir do curso, niveis, turno, dias e ano.
               </p>
             </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Curso</label>
-              <select
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={cursoId}
-                onChange={(e) => {
-                  setCursoId(e.target.value);
-                  setNiveisSelecionados([]);
-                }}
-              >
-                <option value="">-</option>
-                {cursos.map((c) => (
-                  <option key={`curso-${c.id}`} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Grava como texto em &quot;curso&quot; (TODO: migrar para curso_id quando existir).
-              </p>
-            </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Curso</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={cursoId}
+              onChange={(e) => {
+                setCursoId(e.target.value);
+                setNiveisSelecionados([]);
+              }}
+            >
+              <option value="">-</option>
+              {cursos.map((c) => (
+                <option key={`curso-${c.id}`} value={c.id}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Grava como texto em &quot;curso&quot; (TODO: migrar para curso_id quando existir).
+            </p>
           </div>
+        </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Nivel (pode ser mais de um nivel, ex.: Nivel 1 / Nivel 2)
-              </label>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Local</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={localId}
+              onChange={(e) => {
+                setLocalId(e.target.value);
+                setEspacoId("");
+              }}
+            >
+              <option value="">-</option>
+              {locais.map((local) => (
+                <option key={`local-${local.id}`} value={local.id}>
+                  {local.nome} ({local.tipo})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Espaco</label>
+            <select
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={espacoId}
+              onChange={(e) => setEspacoId(e.target.value)}
+              disabled={!localId}
+            >
+              <option value="">{localId ? "-" : "Selecione um local"}</option>
+              {espacos.map((espaco) => (
+                <option key={`espaco-${espaco.id}`} value={espaco.id}>
+                  {espaco.nome} ({espaco.tipo})
+                </option>
+              ))}
+            </select>
+            {localId && espacos.length === 0 && (
+              <p className="mt-1 text-[11px] text-slate-500">Nenhum espaco cadastrado para este local.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Nivel (pode ser mais de um nivel, ex.: Nivel 1 / Nivel 2)
+            </label>
               {cursoId ? (
                 <div className="flex flex-wrap gap-2">
                   {niveis.length === 0 && <span className="text-xs text-slate-500">Nenhum nivel para este curso.</span>}
@@ -588,7 +693,7 @@ export default function NovaTurmaPage() {
                 onChange={(e) => setProfessorPrincipalId(e.target.value)}
               >
                 <option value="">-</option>
-                {professores.map((p) => (
+                {professoresUnicos.map((p) => (
                   <option key={`prof-${p.id}`} value={p.id}>
                     {p.nome}
                   </option>
@@ -598,7 +703,7 @@ export default function NovaTurmaPage() {
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Professores auxiliares / estagiarios</label>
               <div className="mt-2 flex flex-wrap gap-2">
-                {professores
+                {professoresUnicos
                   .filter((p) => p.id !== Number(professorPrincipalId))
                   .map((prof) => (
                     <label
@@ -613,7 +718,9 @@ export default function NovaTurmaPage() {
                       <span>{prof.nome}</span>
                     </label>
                   ))}
-                {professores.length === 0 && <span className="text-xs text-slate-500">Nenhum professor encontrado.</span>}
+                {professoresUnicos.length === 0 && (
+                  <span className="text-xs text-slate-500">Nenhum professor encontrado.</span>
+                )}
               </div>
               <p className="mt-1 text-[11px] text-slate-500">TODO: Vincular auxiliares via turma_professores apos criar a turma.</p>
             </div>

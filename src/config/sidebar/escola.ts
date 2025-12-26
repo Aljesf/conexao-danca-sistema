@@ -65,6 +65,14 @@ export const escolaSidebar: SidebarSection[] = [
     ],
   },
   {
+    id: "escola-config",
+    title: "Configuracoes",
+    items: [
+      { label: "Servicos", href: "/escola/configuracoes/servicos" },
+      { label: "Precos de servico", href: "/escola/configuracoes/servicos/precos" },
+    ],
+  },
+  {
     id: "escola-movimento",
     title: "Movimento Conexão Dança",
     items: [

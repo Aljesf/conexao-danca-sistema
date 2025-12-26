@@ -1,3 +1,8 @@
+> ⚠️ DOCUMENTO LEGADO  
+> Este arquivo descreve regras anteriores de matrícula.  
+> A fonte única de verdade é:  
+> Regras Oficiais de Matrícula (Conexão Dança) – v1
+
 Backlog - Matriculas v1 (Plano oficial)
 Ordem obrigatoria (nao quebrar)
 

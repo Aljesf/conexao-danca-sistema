@@ -1,3 +1,7 @@
+> ℹ️ DOCUMENTO EM ADEQUAÇÃO  
+> Este documento será atualizado para refletir  
+> as Regras Oficiais de Matrícula (Conexão Dança) – v1
+
 # Estado atual do projeto - Financeiro e rateio
 
 ## Dashboard financeiro (Admin)
@@ -93,3 +97,16 @@
 - API usa `horarios_por_dia` (com `day_of_week`) e normaliza `dias_semana` como array.
 - Detalhe de turma em `/escola/academico/turmas/[id]` consome `/api/turmas/:id` + `/api/turmas/:id/historico`.
 - UX: ao marcar novo dia na criacao, copia o ultimo horario preenchido.
+- Modelo Local -> Espaco -> Turma: `public.locais`, `public.espacos`, `turmas.espaco_id`.
+- Nova turma exige `espaco_id` (select encadeado Local/Espaco).
+- Paginas de cadastro: `/escola/academico/locais` e `/escola/academico/espacos`.
+- Menus Admin: Configuracoes (Escola) -> Locais/Espacos.
+- Correcoes de keys duplicadas (React) na Nova Turma.
+- Grade semanal por espaco: planejada para `/escola/academico/grade`.
+
+## Matriculas (servicos por turma)
+- Wizard `/escola/matriculas/nova` busca servicos vinculados a turma via `GET /api/escola/turmas/:id/servicos` (inclui preco vigente por ano).
+- Se a turma nao tiver servico, a UI exibe aviso e link para `/escola/turmas/[turmaId]/servicos`.
+- Telas Escola para operacao sem SQL manual: `/escola/configuracoes/servicos`, `/escola/configuracoes/servicos/precos`, `/escola/turmas/[turmaId]/servicos`.
+- Erros 409 retornam `code: MATRICULA_DUPLICADA` + `message` (UI exibe a mensagem e evita duplo submit).
+- Sugestao por idade considera `data_matricula`; nascimento invalido gera aviso e nao sugere idade.

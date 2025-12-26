@@ -1,3 +1,8 @@
+> ⚠️ DOCUMENTO LEGADO  
+> Este arquivo descreve regras anteriores de matrícula.  
+> A fonte única de verdade é:  
+> Regras Oficiais de Matrícula (Conexão Dança) – v1
+
 # API 5 - Aplicar acordo em cobranca (Matriculas)
 
 POST `/api/matriculas/operacional/aplicar-acordo`

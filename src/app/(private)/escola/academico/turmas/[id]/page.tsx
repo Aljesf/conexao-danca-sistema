@@ -1,8 +1,22 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+
+type LocalResumo = {
+  id: number;
+  nome: string;
+  tipo: string;
+};
+
+type EspacoResumo = {
+  id: number;
+  local_id: number;
+  nome: string;
+  tipo: string;
+  local?: LocalResumo | null;
+};
 
 type TurmaDetalhe = {
   turma_id?: number;
@@ -18,6 +32,8 @@ type TurmaDetalhe = {
   data_fim?: string | null;
   dias_semana?: string[] | string | null;
   observacoes?: string | null;
+  espaco_id?: number | null;
+  espaco?: EspacoResumo | null;
 };
 
 type HorarioPorDia = {
@@ -129,6 +145,8 @@ export default function EscolaTurmaDetalhePage() {
   const diasTexto = Array.isArray(turma?.dias_semana)
     ? turma?.dias_semana.join(", ")
     : turma?.dias_semana ?? "-";
+  const localNome = turma?.espaco?.local?.nome ?? "-";
+  const espacoNome = turma?.espaco?.nome ?? (turma?.espaco_id ? `Espaco #${turma.espaco_id}` : "-");
 
   return (
     <div className="p-6">
@@ -136,9 +154,7 @@ export default function EscolaTurmaDetalhePage() {
         <header className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Academico</p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-900">
-              {turma?.nome ?? `Turma #${turmaId}`}
-            </h1>
+            <h1 className="mt-1 text-2xl font-semibold text-slate-900">{turma?.nome ?? `Turma #${turmaId}`}</h1>
             <p className="mt-1 text-sm text-slate-500">{cursoNivel}</p>
           </div>
           <div className="flex gap-2">
@@ -150,6 +166,12 @@ export default function EscolaTurmaDetalhePage() {
               Voltar
             </button>
             <Link
+              href={`/escola/turmas/${turmaId}/servicos`}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-300"
+            >
+              Servicos
+            </Link>
+            <Link
               href={`/academico/turmas/${turmaId}`}
               className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-700"
             >
@@ -159,9 +181,7 @@ export default function EscolaTurmaDetalhePage() {
         </header>
 
         {erro && (
-          <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">
-            {erro}
-          </div>
+          <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">{erro}</div>
         )}
 
         <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
@@ -170,6 +190,8 @@ export default function EscolaTurmaDetalhePage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
               <p className="mt-1 text-sm text-slate-900">{turma?.status ?? "-"}</p>
               <p className="text-xs text-slate-500">Tipo: {turma?.tipo_turma ?? "-"}</p>
+              <p className="text-xs text-slate-500">Local: {localNome}</p>
+              <p className="text-xs text-slate-500">Espaco: {espacoNome}</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Calendario</p>
@@ -207,7 +229,7 @@ export default function EscolaTurmaDetalhePage() {
                     key={`${h.dia_semana}-${idx}`}
                     className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-700"
                   >
-                    <span className="font-semibold">{h.dia_semana}</span> — {h.inicio} a {h.fim}
+                    <span className="font-semibold">{h.dia_semana}</span> - {h.inicio} a {h.fim}
                   </div>
                 ))}
               </div>
@@ -263,8 +285,7 @@ export default function EscolaTurmaDetalhePage() {
 
                             return (
                               <li key={`${item.id}-${campo}`}>
-                                <span className="font-medium text-slate-700">{campo}:</span>{" "}
-                                {hasOldNew ? `${oldVal} -> ${newVal}` : oldVal}
+                                <span className="font-medium text-slate-700">{campo}:</span> {hasOldNew ? `${oldVal} -> ${newVal}` : oldVal}
                               </li>
                             );
                           })}

@@ -1,8 +1,21 @@
-// Tipos baseados no "Modelo de Turmas — Conexão Dança v1.1.2"
-
-export type TipoTurma = "REGULAR" | "CURSO_LIVRE" | "ENSAIO";
+﻿export type TipoTurma = "REGULAR" | "CURSO_LIVRE" | "ENSAIO";
 export type StatusTurma = "EM_PREPARACAO" | "ATIVA" | "ENCERRADA" | "CANCELADA";
 export type TurnoTurma = "MANHA" | "TARDE" | "NOITE" | "INTEGRAL";
+
+export type LocalResumo = {
+  id: number;
+  nome: string;
+  tipo: string;
+};
+
+export type EspacoResumo = {
+  id: number;
+  local_id: number;
+  nome: string;
+  tipo: string;
+  capacidade: number | null;
+  local?: LocalResumo | null;
+};
 
 export interface Turma {
   turma_id?: number;
@@ -23,6 +36,8 @@ export interface Turma {
   hora_inicio: string | null;
   hora_fim: string | null;
   tem_horario?: boolean | null;
+  espaco_id?: number | null;
+  espaco?: EspacoResumo | null;
   professor_id: number | null;
   observacoes: string | null;
   ativo?: boolean | null;
@@ -34,7 +49,7 @@ export interface Turma {
 export interface TurmaHorario {
   id: number;
   turma_id: number;
-  day_of_week: number; // 0 (domingo) a 6 (sábado)
+  day_of_week: number; // 0 (domingo) a 6 (sabado)
   inicio: string; // "HH:MM:SS"
   fim: string; // "HH:MM:SS"
 }

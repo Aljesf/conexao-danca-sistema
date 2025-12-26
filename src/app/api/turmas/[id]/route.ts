@@ -105,7 +105,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const supabase = await getSupabaseServer();
   const { data: turma, error } = await supabase
     .from("turmas")
-    .select("*")
+    .select("*, espaco:espacos ( id, nome, tipo, capacidade, local_id, local:locais ( id, nome, tipo ) )")
     .eq("turma_id", turmaId)
     .single();
 
@@ -143,9 +143,25 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
       delete turmaPayload[key];
     }
   }
-  for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by"]) {
+  for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by", "local_id"]) {
     if (key in turmaPayload) {
       delete turmaPayload[key];
+    }
+  }
+
+  if ("espaco_id" in turmaPayload) {
+    const rawEspaco = turmaPayload.espaco_id;
+    if (rawEspaco === null || rawEspaco === undefined || rawEspaco === "") {
+      turmaPayload.espaco_id = null;
+    } else {
+      const espacoId = Number(rawEspaco);
+      if (!Number.isInteger(espacoId) || espacoId <= 0) {
+        return NextResponse.json(
+          { error: "espaco_id_invalido", message: "Informe um espaco valido para a turma." },
+          { status: 400 },
+        );
+      }
+      turmaPayload.espaco_id = espacoId;
     }
   }
 

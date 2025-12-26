@@ -70,6 +70,14 @@ export const adminSidebar: SidebarSection[] = [
     ],
   },
   {
+    id: "admin-config-escola",
+    title: "Configurações (Escola)",
+    items: [
+      { label: "📍 Locais", href: "/admin/configuracoes/locais" },
+      { label: "🏷️ Espaços", href: "/admin/configuracoes/espacos" },
+    ],
+  },
+  {
     id: "admin-auditoria",
     title: "Governança & Auditoria",
     items: [

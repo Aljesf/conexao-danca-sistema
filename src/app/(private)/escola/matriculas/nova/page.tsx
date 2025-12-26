@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PessoaSearchBox from "@/components/PessoaSearchBox";
 
@@ -46,6 +47,35 @@ type ServicoAdmin = {
   turma_nome?: string | null;
   turma_id?: number | null;
 };
+
+type ServicoPrecoPlano = {
+  id: number;
+  codigo: string;
+  nome: string;
+  valor_mensal_base_centavos: number;
+  valor_anuidade_centavos: number;
+};
+
+type ServicoPrecoVigente = {
+  servico_id: number;
+  ano_referencia: number;
+  plano_id: number;
+  ativo: boolean;
+  plano: ServicoPrecoPlano | null;
+};
+
+type ServicoTurma = {
+  id: number;
+  tipo: string;
+  titulo: string | null;
+  ativo: boolean;
+  ano_referencia?: number | null;
+  referencia_tipo?: string | null;
+  referencia_id?: number | null;
+  preco_vigente?: ServicoPrecoVigente | null;
+};
+
+type ServicoBase = ServicoAdmin | ServicoTurma;
 
 type ServicoItemRow = {
   id: number;
@@ -138,23 +168,16 @@ function labelTurmaOption(tipo: TipoMatricula, turma: TurmaOpcao): string {
   return turma.suggested ? `Sugestao: ${base}` : base;
 }
 
-function labelServicoAdmin(servico: ServicoAdmin): string {
+function labelServicoBase(servico: ServicoBase): string {
   const titulo = servico.titulo?.trim() ? servico.titulo : `Servico #${servico.id}`;
   const ano = servico.ano_referencia ?? null;
   return ano ? `${titulo} (${ano})` : titulo;
 }
 
-function resolveServicoPorTurma(servicos: ServicoAdmin[], turmaId: number, tipo: TipoMatricula): ServicoAdmin | null {
-  return (
-    servicos.find((s) => {
-      if (!s.ativo) return false;
-      if (String(s.tipo) !== tipo) return false;
-      const refId = s.referencia_id ?? s.turma_id ?? null;
-      if (!refId || refId !== turmaId) return false;
-      if (s.referencia_tipo && s.referencia_tipo !== "TURMA") return false;
-      return true;
-    }) ?? null
-  );
+function getPrecoVigente(servico: ServicoBase | null): ServicoPrecoVigente | null {
+  if (!servico) return null;
+  if (!("preco_vigente" in servico)) return null;
+  return servico.preco_vigente ?? null;
 }
 
 function calcularIdade(nascimentoISO: string | null): number | null {
@@ -187,6 +210,19 @@ function parseQuantidade(value: string): number | null {
   return n;
 }
 
+function extractErrorMessage(data: unknown, status: number): string {
+  if (!data || typeof data !== "object") return `HTTP ${status}`;
+  const record = data as Record<string, unknown>;
+  if (typeof record.message === "string" && record.message.trim()) return record.message;
+  if (typeof record.error === "string" && record.error.trim()) return record.error;
+  if (record.error && typeof record.error === "object") {
+    const errObj = record.error as Record<string, unknown>;
+    if (typeof errObj.message === "string" && errObj.message.trim()) return errObj.message;
+  }
+  if (typeof record.code === "string" && record.code.trim()) return record.code;
+  return `HTTP ${status}`;
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const text = await res.text();
@@ -197,11 +233,7 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     data = { raw: text };
   }
   if (!res.ok) {
-    const msg =
-      typeof data === "object" && data && "message" in data
-        ? String((data as Record<string, unknown>).message)
-        : `HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new Error(extractErrorMessage(data, res.status));
   }
   return data as T;
 }
@@ -219,6 +251,7 @@ export default function NovaMatriculaPage() {
   const [turmasErro, setTurmasErro] = useState<string | null>(null);
   const [turmasCarregando, setTurmasCarregando] = useState(false);
   const [idadeSugestao, setIdadeSugestao] = useState<number | null>(null);
+  const [idadeAviso, setIdadeAviso] = useState<string | null>(null);
   const [turmaSelecionada, setTurmaSelecionada] = useState<TurmaOpcao | null>(null);
 
   const [servicosAdmin, setServicosAdmin] = useState<ServicoAdmin[]>([]);
@@ -227,6 +260,9 @@ export default function NovaMatriculaPage() {
   const [servicoProjetoId, setServicoProjetoId] = useState<number | null>(null);
   const [servicoTurmaId, setServicoTurmaId] = useState<number | null>(null);
   const [servicoVinculoErro, setServicoVinculoErro] = useState<string | null>(null);
+  const [servicosTurma, setServicosTurma] = useState<ServicoTurma[]>([]);
+  const [servicosTurmaErro, setServicosTurmaErro] = useState<string | null>(null);
+  const [servicosTurmaCarregando, setServicosTurmaCarregando] = useState(false);
 
   const [anoRef, setAnoRef] = useState<number>(2026);
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -258,10 +294,10 @@ export default function NovaMatriculaPage() {
   const servicoIdSelecionado =
     tipoSelecionado === "PROJETO_ARTISTICO" ? servicoProjetoId : servicoTurmaId;
 
-  const servicoSelecionado = useMemo(
-    () => servicosAdmin.find((s) => s.id === servicoIdSelecionado) ?? null,
-    [servicosAdmin, servicoIdSelecionado],
-  );
+  const servicoSelecionado = useMemo(() => {
+    const lista = tipoSelecionado === "PROJETO_ARTISTICO" ? servicosAdmin : servicosTurma;
+    return lista.find((s) => s.id === servicoIdSelecionado) ?? null;
+  }, [tipoSelecionado, servicosAdmin, servicosTurma, servicoIdSelecionado]);
 
   const servicosProjeto = useMemo(
     () => servicosAdmin.filter((s) => s.ativo && s.tipo === "PROJETO_ARTISTICO"),
@@ -324,9 +360,13 @@ export default function NovaMatriculaPage() {
     setTurmaSelecionada(null);
     setTurmasErro(null);
     setIdadeSugestao(null);
+    setIdadeAviso(null);
     setServicoTurmaId(null);
     setServicoProjetoId(null);
     setServicoVinculoErro(null);
+    setServicosTurma([]);
+    setServicosTurmaErro(null);
+    setServicosTurmaCarregando(false);
     setItensDisponiveis([]);
     setItensSelecionados({});
     setItensErro(null);
@@ -345,16 +385,22 @@ export default function NovaMatriculaPage() {
 
   useEffect(() => {
     if (tipoSelecionado === "PROJETO_ARTISTICO") return;
-    if (!turmaSelecionada) return;
-    if (servicosAdmin.length > 0 || servicosCarregando) return;
-    void carregarServicosAdmin();
-  }, [tipoSelecionado, turmaSelecionada, servicosAdmin.length, servicosCarregando]);
+    if (!turmaSelecionada) {
+      setServicosTurma([]);
+      setServicosTurmaErro(null);
+      setServicoTurmaId(null);
+      setServicoVinculoErro(null);
+      return;
+    }
+    const anoReferencia = turmaSelecionada.ano_referencia ?? anoRef;
+    void carregarServicosTurma(turmaSelecionada.turma_id, anoReferencia);
+  }, [tipoSelecionado, turmaSelecionada, turmaSelecionada?.ano_referencia, anoRef]);
 
   useEffect(() => {
     if (passo !== 4 || tipoSelecionado === "PROJETO_ARTISTICO") return;
     if (!cursoSelecionado) return;
     void carregarTurmas();
-  }, [passo, tipoSelecionado, cursoSelecionado, alunoSelecionado?.id]);
+  }, [passo, tipoSelecionado, cursoSelecionado, alunoSelecionado?.id, dataMatricula]);
 
   useEffect(() => {
     if (tipoSelecionado === "PROJETO_ARTISTICO") {
@@ -362,19 +408,11 @@ export default function NovaMatriculaPage() {
       setServicoVinculoErro(null);
       return;
     }
-
     if (!turmaSelecionada) {
       setServicoTurmaId(null);
       setServicoVinculoErro(null);
-      return;
     }
-
-    if (servicosAdmin.length === 0) return;
-
-    const servico = resolveServicoPorTurma(servicosAdmin, turmaSelecionada.turma_id, tipoSelecionado);
-    setServicoTurmaId(servico?.id ?? null);
-    setServicoVinculoErro(servico ? null : "Nenhum servico vinculado a esta turma.");
-  }, [turmaSelecionada, servicosAdmin, tipoSelecionado]);
+  }, [turmaSelecionada, tipoSelecionado]);
 
   useEffect(() => {
     if (turmaSelecionada && typeof turmaSelecionada.ano_referencia === "number") {
@@ -441,6 +479,40 @@ export default function NovaMatriculaPage() {
     }
   }
 
+  async function carregarServicosTurma(turmaId: number, anoReferencia: number | null) {
+    setServicosTurmaErro(null);
+    setServicosTurmaCarregando(true);
+    setServicoVinculoErro(null);
+    try {
+      const params = new URLSearchParams();
+      if (Number.isInteger(anoReferencia)) params.set("ano_referencia", String(anoReferencia));
+      const qs = params.toString();
+      const data = await fetchJSON<{
+        ok: boolean;
+        servicos?: ServicoTurma[];
+        message?: string;
+      }>(`/api/escola/turmas/${turmaId}/servicos${qs ? `?${qs}` : ""}`);
+
+      if (!data.ok) {
+        throw new Error(data.message ?? "Falha ao carregar servicos da turma");
+      }
+
+      const lista = (data.servicos ?? []).filter((s) => s.ativo);
+      setServicosTurma(lista);
+
+      const servico = lista[0] ?? null;
+      setServicoTurmaId(servico?.id ?? null);
+      setServicoVinculoErro(servico ? null : "Nenhum servico vinculado a esta turma.");
+    } catch (e: unknown) {
+      setServicosTurmaErro(e instanceof Error ? e.message : "Falha ao carregar servicos da turma");
+      setServicosTurma([]);
+      setServicoTurmaId(null);
+      setServicoVinculoErro("Nenhum servico vinculado a esta turma.");
+    } finally {
+      setServicosTurmaCarregando(false);
+    }
+  }
+
   async function carregarTurmas() {
     if (!cursoSelecionado || tipoSelecionado === "PROJETO_ARTISTICO") return;
     setTurmasCarregando(true);
@@ -451,18 +523,24 @@ export default function NovaMatriculaPage() {
         tipo: tipoSelecionado,
       });
       if (alunoSelecionado?.id) params.set("aluno_id", String(alunoSelecionado.id));
-      const data = await fetchJSON<{ ok: boolean; turmas: TurmaOpcao[]; idade?: number | null }>(
-        `/api/escola/matriculas/opcoes/turmas?${params.toString()}`,
-      );
+      if (dataMatricula) params.set("data_matricula", dataMatricula);
+      const data = await fetchJSON<{
+        ok: boolean;
+        turmas: TurmaOpcao[];
+        idade?: number | null;
+        idade_aviso?: string | null;
+      }>(`/api/escola/matriculas/opcoes/turmas?${params.toString()}`);
       if (!data.ok) {
         throw new Error("Falha ao carregar turmas");
       }
       setTurmas(data.turmas ?? []);
       setIdadeSugestao(typeof data.idade === "number" ? data.idade : null);
+      setIdadeAviso(data.idade_aviso ?? null);
     } catch (e: unknown) {
       setTurmasErro(e instanceof Error ? e.message : "Falha ao carregar turmas");
       setTurmas([]);
       setIdadeSugestao(null);
+      setIdadeAviso(null);
     } finally {
       setTurmasCarregando(false);
     }
@@ -551,7 +629,7 @@ export default function NovaMatriculaPage() {
   }
 
   function validarItens(itensPayload: Array<{ item_id: number; quantidade: number }>): string | null {
-    if (itensPayload.length === 0) return null;
+    if (itensPayload.length === 0) return "Selecione ao menos 1 item com preco ativo.";
     if (!servicoIdSelecionado) return "Itens exigem servico valido.";
     const itensSemPreco = itensPayload.filter((it) => {
       const info = itensDisponiveis.find((item) => item.id === it.item_id);
@@ -582,7 +660,7 @@ export default function NovaMatriculaPage() {
         turma_nome: null,
         ano_referencia: typeof anoRef === "number" ? anoRef : null,
         servico_id: servicoIdSelecionado,
-        servico_label: servicoSelecionado ? labelServicoAdmin(servicoSelecionado) : null,
+        servico_label: servicoSelecionado ? labelServicoBase(servicoSelecionado) : null,
         itens: itensPayload,
       };
     }
@@ -603,7 +681,7 @@ export default function NovaMatriculaPage() {
       turma_nome: turmaSelecionada.nome ?? null,
       ano_referencia: typeof anoRef === "number" ? anoRef : null,
       servico_id: servicoIdSelecionado,
-      servico_label: servicoSelecionado ? labelServicoAdmin(servicoSelecionado) : null,
+      servico_label: servicoSelecionado ? labelServicoBase(servicoSelecionado) : null,
       itens: itensPayload,
     };
   }
@@ -696,6 +774,7 @@ export default function NovaMatriculaPage() {
   }
 
   async function onCriar() {
+    if (loading) return;
     setErro(null);
 
     if (schemaBloqueado) {
@@ -883,7 +962,7 @@ export default function NovaMatriculaPage() {
                     <option value="">Selecione...</option>
                     {servicosProjeto.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {labelServicoAdmin(s)}
+                        {labelServicoBase(s)}
                       </option>
                     ))}
                   </select>
@@ -947,7 +1026,9 @@ export default function NovaMatriculaPage() {
                 <p className="mt-1 text-xs text-muted-foreground">Carregando turmas...</p>
               ) : null}
               {turmasErro ? <p className="mt-1 text-xs text-red-700">{turmasErro}</p> : null}
-              {idadeSugestao !== null ? (
+              {idadeAviso ? (
+                <p className="mt-1 text-xs text-red-700">{idadeAviso}</p>
+              ) : idadeSugestao !== null ? (
                 <p className="mt-1 text-xs text-muted-foreground">Sugestao por idade: {idadeSugestao} anos</p>
               ) : null}
               <select
@@ -970,14 +1051,28 @@ export default function NovaMatriculaPage() {
               {!turmasCarregando && turmas.length === 0 ? (
                 <p className="mt-2 text-xs text-muted-foreground">Nenhuma turma encontrada para este curso.</p>
               ) : null}
-              {servicosCarregando ? (
+              {servicosTurmaCarregando ? (
                 <p className="mt-2 text-xs text-muted-foreground">Validando servico vinculado...</p>
               ) : null}
-              {servicoVinculoErro ? <p className="mt-2 text-xs text-red-700">{servicoVinculoErro}</p> : null}
-              {turmaSelecionada && servicoSelecionado ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Servico vinculado: {labelServicoAdmin(servicoSelecionado)}
+              {servicosTurmaErro ? <p className="mt-2 text-xs text-red-700">{servicosTurmaErro}</p> : null}
+              {servicoVinculoErro && turmaSelecionada ? (
+                <p className="mt-2 text-xs text-red-700">
+                  {servicoVinculoErro}{" "}
+                  <Link className="underline" href={`/escola/turmas/${turmaSelecionada.turma_id}/servicos`}>
+                    Vincular servico
+                  </Link>
                 </p>
+              ) : null}
+              {turmaSelecionada && servicoSelecionado ? (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  <div>Servico vinculado: {labelServicoBase(servicoSelecionado)}</div>
+                  {getPrecoVigente(servicoSelecionado)?.plano ? (
+                    <div>
+                      Preco vigente: {getPrecoVigente(servicoSelecionado)?.plano?.nome} (
+                      {formatBRL(getPrecoVigente(servicoSelecionado)?.plano?.valor_mensal_base_centavos ?? null)})
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </div>
@@ -1128,7 +1223,7 @@ export default function NovaMatriculaPage() {
                 {tipoSelecionado === "PROJETO_ARTISTICO" ? (
                   <div>
                     <span className="text-muted-foreground">Servico:</span>{" "}
-                    {servicoSelecionado ? labelServicoAdmin(servicoSelecionado) : "Nao selecionado"}
+                    {servicoSelecionado ? labelServicoBase(servicoSelecionado) : "Nao selecionado"}
                   </div>
                 ) : (
                   <>

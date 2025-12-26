@@ -1,4 +1,8 @@
-﻿# 📘 Vinculação — Modelo Antigo (tipo_matricula/vinculo_id) → Modelo Novo (servico_id)
+> ℹ️ DOCUMENTO EM ADEQUAÇÃO  
+> Este documento será atualizado para refletir  
+> as Regras Oficiais de Matrícula (Conexão Dança) – v1
+
+# 📘 Vinculação — Modelo Antigo (tipo_matricula/vinculo_id) → Modelo Novo (servico_id)
 
 Gerado em: 2025-12-24T12:38:08-03:00
 

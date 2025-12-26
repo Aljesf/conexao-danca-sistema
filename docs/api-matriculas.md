@@ -1,3 +1,7 @@
+> ℹ️ DOCUMENTO EM ADEQUAÇÃO  
+> Este documento será atualizado para refletir  
+> as Regras Oficiais de Matrícula (Conexão Dança) – v1
+
 # 📘 API — Matrículas  
 Sistema Conexão Dança  
 Versão: 2025-12-02  

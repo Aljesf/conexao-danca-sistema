@@ -8,17 +8,24 @@ function sbAdmin() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function idadeFromNascimento(nascimento: string | null): number | null {
+function parseISODate(value: string | null): Date | null {
+  if (!value) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function idadeFromNascimento(nascimento: string | null, referencia: Date): number | null {
   if (!nascimento) return null;
   const m = nascimento.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
   const ano = Number(m[1]);
   const mes = Number(m[2]);
   const dia = Number(m[3]);
-  const hoje = new Date();
-  let idade = hoje.getUTCFullYear() - ano;
-  const mesA = hoje.getUTCMonth() + 1;
-  const diaA = hoje.getUTCDate();
+  let idade = referencia.getUTCFullYear() - ano;
+  const mesA = referencia.getUTCMonth() + 1;
+  const diaA = referencia.getUTCDate();
   if (mesA < mes || (mesA === mes && diaA < dia)) idade -= 1;
   return idade;
 }
@@ -30,12 +37,15 @@ export async function GET(req: Request) {
     const tipo = (url.searchParams.get("tipo") ?? "REGULAR").trim();
     const curso = (url.searchParams.get("curso") ?? "").trim();
     const alunoId = Number(url.searchParams.get("aluno_id") ?? "");
+    const dataMatriculaParam = url.searchParams.get("data_matricula");
+    const dataReferencia = parseISODate(dataMatriculaParam) ?? new Date();
 
     if (!curso) {
       return NextResponse.json({ ok: false, error: "curso_obrigatorio" }, { status: 400 });
     }
 
     let idade: number | null = null;
+    let idadeAviso: string | null = null;
     if (alunoId) {
       const { data: pessoa, error: pErr } = await supabase
         .from("pessoas")
@@ -44,7 +54,18 @@ export async function GET(req: Request) {
         .maybeSingle();
 
       if (!pErr && pessoa) {
-        idade = idadeFromNascimento((pessoa as { nascimento: string | null }).nascimento ?? null);
+        const nascimento = (pessoa as { nascimento: string | null }).nascimento ?? null;
+        if (!nascimento) {
+          idade = null;
+        } else {
+          const idadeCalculada = idadeFromNascimento(nascimento, dataReferencia);
+          if (idadeCalculada === null) {
+            idadeAviso = "Nascimento invalido para sugestao por idade.";
+            console.warn("[opcoes/turmas] nascimento invalido para sugestao:", { alunoId, nascimento });
+          } else {
+            idade = idadeCalculada;
+          }
+        }
       }
     }
 
@@ -79,7 +100,7 @@ export async function GET(req: Request) {
       return String((a as { nome?: string }).nome ?? "").localeCompare(String((b as { nome?: string }).nome ?? ""), "pt-BR");
     });
 
-    return NextResponse.json({ ok: true, turmas: lista, idade }, { status: 200 });
+    return NextResponse.json({ ok: true, turmas: lista, idade, idade_aviso: idadeAviso }, { status: 200 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "erro_interno";
     return NextResponse.json({ ok: false, error: "erro_interno", message: msg }, { status: 500 });

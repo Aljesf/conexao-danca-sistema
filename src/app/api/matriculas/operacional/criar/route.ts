@@ -534,6 +534,35 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "responsavel_nao_encontrado" }, { status: 404 });
       }
 
+      const { rows: matriculaExistente } = await client.query(
+        `
+        SELECT id
+        FROM public.matriculas
+        WHERE pessoa_id = $1
+          AND status <> 'CANCELADA'
+          AND (
+            ($2::bigint IS NOT NULL AND servico_id = $2)
+            OR ($3::bigint IS NOT NULL AND vinculo_id = $3)
+          )
+        ORDER BY id DESC
+        LIMIT 1
+        `,
+        [pessoaId, servicoId ?? null, vinculoId ?? null],
+      );
+
+      if (matriculaExistente.length > 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "matricula_duplicada",
+            code: "MATRICULA_DUPLICADA",
+            message: "Ja existe uma matricula ativa para este aluno na turma/servico informado.",
+            matricula_id: Number(matriculaExistente[0]?.id),
+          },
+          { status: 409 },
+        );
+      }
+
       if (turmaId) {
         const { rows: turmaRows } = await client.query("SELECT turma_id FROM public.turmas WHERE turma_id = $1", [turmaId]);
         if (turmaRows.length === 0) {
@@ -555,7 +584,14 @@ export async function POST(req: Request) {
         );
         if (vinculoAtivoRows.length > 0) {
           await client.query("ROLLBACK");
-          return NextResponse.json({ error: "vinculo_ativo_existente" }, { status: 409 });
+          return NextResponse.json(
+            {
+              error: "vinculo_ativo_existente",
+              code: "MATRICULA_DUPLICADA",
+              message: "O aluno ja possui vinculo ativo nesta turma.",
+            },
+            { status: 409 },
+          );
         }
       }
 
@@ -625,7 +661,14 @@ export async function POST(req: Request) {
         );
         if (jaExiste.length > 0) {
           await client.query("ROLLBACK");
-          return NextResponse.json({ error: "matricula_financeiro_ja_gerado" }, { status: 409 });
+          return NextResponse.json(
+            {
+              error: "matricula_financeiro_ja_gerado",
+              code: "MATRICULA_DUPLICADA",
+              message: "Lancamentos financeiros ja foram gerados para esta matricula.",
+            },
+            { status: 409 },
+          );
         }
       }
 

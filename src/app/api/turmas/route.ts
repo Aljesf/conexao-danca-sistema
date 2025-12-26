@@ -204,6 +204,8 @@ export async function GET() {
       online,
       professor_id,
       professor:pessoas ( id, nome, email ),
+      espaco_id,
+      espaco:espacos ( id, nome, tipo, capacidade, local_id, local:locais ( id, nome, tipo ) ),
       dias_semana,
       horarios:turmas_horarios ( day_of_week, inicio, fim ),
       updated_at
@@ -261,13 +263,29 @@ export async function POST(req: Request) {
       delete turmaPayload[key];
     }
   }
-  for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by"]) {
+  for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by", "local_id"]) {
     if (key in turmaPayload) {
       delete turmaPayload[key];
     }
   }
   const nomeRaw = typeof turmaPayload.nome === "string" ? turmaPayload.nome.trim() : "";
   const horariosParsed = parseHorariosPorDia(payload.horarios_por_dia ?? payload.horarios);
+
+  if ("espaco_id" in turmaPayload) {
+    const rawEspaco = turmaPayload.espaco_id;
+    if (rawEspaco === null || rawEspaco === undefined || rawEspaco === "") {
+      delete turmaPayload.espaco_id;
+    } else {
+      const espacoId = Number(rawEspaco);
+      if (!Number.isInteger(espacoId) || espacoId <= 0) {
+        return NextResponse.json(
+          { error: "espaco_id_invalido", message: "Informe um espaco valido para a turma." },
+          { status: 400 },
+        );
+      }
+      turmaPayload.espaco_id = espacoId;
+    }
+  }
 
   if (horariosParsed === null) {
     return NextResponse.json(

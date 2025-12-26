@@ -33,6 +33,7 @@ export default async function TurmasPage() {
                 <tr>
                   <th className="px-3 py-2 text-left">Turma</th>
                   <th className="px-3 py-2 text-left">Curso / Nivel</th>
+                  <th className="px-3 py-2 text-left">Local / Espaco</th>
                   <th className="px-3 py-2 text-left">Dias / Horario</th>
                   <th className="px-3 py-2 text-left">Tipo</th>
                   <th className="px-3 py-2 text-left">Ano</th>
@@ -50,6 +51,9 @@ export default async function TurmasPage() {
                     typeof turma.tem_horario === "boolean"
                       ? turma.tem_horario
                       : Boolean(turma.hora_inicio && turma.hora_fim);
+                  const localNome = turma.espaco?.local?.nome ?? "-";
+                  const espacoNome =
+                    turma.espaco?.nome ?? (turma.espaco_id ? `Espaco #${turma.espaco_id}` : "-");
                   const rowKey = turmaId ?? turma.nome ?? "turma-sem-id";
                   if (!turmaId) {
                     console.error("[escola/turmas] Turma sem id:", turma);
@@ -61,6 +65,12 @@ export default async function TurmasPage() {
                         <div className="flex flex-col">
                           <span>{turma.curso}</span>
                           {turma.nivel && <span className="text-xs text-slate-500">{turma.nivel}</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col">
+                          <span>{localNome}</span>
+                          <span className="text-xs text-slate-500">{espacoNome}</span>
                         </div>
                       </td>
                       <td className="px-3 py-2">

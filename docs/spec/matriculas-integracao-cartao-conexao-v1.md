@@ -1,3 +1,7 @@
+> ℹ️ DOCUMENTO EM ADEQUAÇÃO  
+> Este documento será atualizado para refletir  
+> as Regras Oficiais de Matrícula (Conexão Dança) – v1
+
 # Spec - Matriculas integradas ao Cartao Conexao (v1)
 
 Gerado em: 2025-12-23T18:11:21.1914542-03:00

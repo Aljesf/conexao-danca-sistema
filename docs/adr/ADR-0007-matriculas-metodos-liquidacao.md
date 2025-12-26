@@ -1,3 +1,7 @@
+> ℹ️ DOCUMENTO EM ADEQUAÇÃO  
+> Este documento será atualizado para refletir  
+> as Regras Oficiais de Matrícula (Conexão Dança) – v1
+
 # ADR-0007 - Matriculas: metodo de liquidacao (Cartao Conexao vs Credito/Bolsa)
 
 ## Contexto

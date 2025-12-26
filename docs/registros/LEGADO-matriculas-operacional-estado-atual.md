@@ -1,3 +1,8 @@
+> ⚠️ DOCUMENTO LEGADO  
+> Este arquivo descreve regras anteriores de matrícula.  
+> A fonte única de verdade é:  
+> Regras Oficiais de Matrícula (Conexão Dança) – v1
+
 # Estado Atual - Matriculas (Operacional)
 
 Gerado em: 2025-12-23T17:50:10.7217809-03:00

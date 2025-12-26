@@ -1,3 +1,8 @@
+> ⚠️ DOCUMENTO LEGADO  
+> Este arquivo descreve regras anteriores de matrícula.  
+> A fonte única de verdade é:  
+> Regras Oficiais de Matrícula (Conexão Dança) – v1
+
 # 📘 Estado Atual do Domínio — Matrículas / Alunos / Vínculos  
 Sistema Conexão Dança  
 Versão: 2025-12-02  
