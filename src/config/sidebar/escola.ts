@@ -73,6 +73,13 @@ export const escolaSidebar: SidebarSection[] = [
     ],
   },
   {
+    id: "escola-config-matriculas",
+    title: "Configuracoes (Escola)",
+    items: [
+      { label: "⚙️ 🧾 Tabelas de matricula", href: "/escola/configuracoes/matriculas/tabelas" },
+    ],
+  },
+  {
     id: "escola-movimento",
     title: "Movimento Conexão Dança",
     items: [
