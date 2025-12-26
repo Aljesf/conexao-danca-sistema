@@ -36,6 +36,29 @@ type MatriculaNovoPayload = {
   observacoes?: string | null;
 };
 
+type MatriculaTabelaRow = {
+  id: number;
+  produto_tipo: string;
+  referencia_tipo: string;
+  referencia_id: number;
+  ano_referencia: number | null;
+  ativo: boolean;
+  titulo: string | null;
+};
+
+type MatriculaTabelaItemRow = {
+  id: number;
+  valor_centavos: number;
+};
+
+type ContaConexaoRow = {
+  id: number;
+  ativo: boolean;
+};
+
+const DIA_CORTE_PRORATA = 12;
+const DIA_INICIO_LETIVO_JANEIRO = 12;
+
 function isValidDateYYYYMMDD(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(`${value}T00:00:00Z`);
@@ -114,6 +137,97 @@ function parsePoliticaPrimeiroPagamento(value: unknown): PoliticaPrimeiroPagamen
   return "invalid";
 }
 
+function parsePagamentoEntrada(value: unknown): PagamentoEntrada | null | "invalid" {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return "invalid";
+  const record = value as Record<string, unknown>;
+  const metodoPagamento = safeString(record.metodo_pagamento);
+  const valorCentavos = normalizeInt(record.valor_centavos);
+  const dataPagamento = safeString(record.data_pagamento);
+  if (!metodoPagamento || valorCentavos === null || valorCentavos < 0) return "invalid";
+  if (dataPagamento && !isValidDateYYYYMMDD(dataPagamento)) return "invalid";
+  return {
+    metodo_pagamento: metodoPagamento,
+    valor_centavos: valorCentavos,
+    data_pagamento: dataPagamento ?? null,
+    observacoes: safeString(record.observacoes),
+  };
+}
+
+function parseDateParts(dateStr: string): { year: number; month: number; day: number } {
+  const [y, m, d] = dateStr.split("-").map((v) => Number(v));
+  return { year: y, month: m, day: d };
+}
+
+function getLastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function formatYearMonth(year: number, month: number): string {
+  const mm = String(month).padStart(2, "0");
+  return `${year}-${mm}`;
+}
+
+function calcValorProRata(
+  valorMensalidade: number,
+  startDay: number,
+  baseStartDay: number,
+  lastDay: number
+): number {
+  const baseDays = lastDay - baseStartDay + 1;
+  if (baseDays <= 0) return 0;
+  const prorataStart = Math.max(startDay, baseStartDay);
+  const prorataDays = Math.max(0, lastDay - prorataStart + 1);
+  if (prorataDays <= 0) return 0;
+  return Math.round((valorMensalidade * prorataDays) / baseDays);
+}
+
+async function ensureContaConexaoAluno(
+  supabase: ReturnType<typeof createClient>,
+  responsavelId: number,
+  vencimentoDia: number,
+  responsavelNome: string | null
+): Promise<number> {
+  const { data: contaExistente, error: contaErr } = await supabase
+    .from("credito_conexao_contas")
+    .select("id,ativo")
+    .eq("pessoa_titular_id", responsavelId)
+    .eq("tipo_conta", "ALUNO")
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<ContaConexaoRow>();
+
+  if (contaErr) {
+    throw new Error("conta_conexao_lookup_failed");
+  }
+
+  if (contaExistente) {
+    if (!contaExistente.ativo) {
+      throw new Error("conta_conexao_inativa");
+    }
+    return Number(contaExistente.id);
+  }
+
+  const descricao = responsavelNome ? `Cartao Conexao - ${responsavelNome}` : `Cartao Conexao - ${responsavelId}`;
+  const { data: contaCriada, error: contaInsertErr } = await supabase
+    .from("credito_conexao_contas")
+    .insert({
+      pessoa_titular_id: responsavelId,
+      tipo_conta: "ALUNO",
+      descricao_exibicao: descricao,
+      dia_vencimento: vencimentoDia,
+      ativo: true,
+    })
+    .select("id")
+    .single();
+
+  if (contaInsertErr || !contaCriada) {
+    throw new Error("conta_conexao_insert_failed");
+  }
+
+  return Number((contaCriada as { id: number }).id);
+}
+
 export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -190,11 +304,16 @@ export async function POST(req: Request) {
     return badRequest("politica_primeiro_pagamento invalida.");
   }
 
+  const pagamentoEntrada = parsePagamentoEntrada(payload.pagamento_entrada);
+  if (pagamentoEntrada === "invalid") {
+    return badRequest("pagamento_entrada invalido.");
+  }
+
   const observacoes = safeString(payload.observacoes);
 
   const { data: pessoa, error: pessoaErr } = await supabase
     .from("pessoas")
-    .select("id")
+    .select("id,nome")
     .eq("id", pessoaId)
     .maybeSingle();
   if (pessoaErr) return serverError("Failed to query pessoa.");
@@ -202,7 +321,7 @@ export async function POST(req: Request) {
 
   const { data: responsavel, error: respErr } = await supabase
     .from("pessoas")
-    .select("id")
+    .select("id,nome")
     .eq("id", responsavelId)
     .maybeSingle();
   if (respErr) return serverError("Failed to query responsavel financeiro.");
@@ -235,6 +354,100 @@ export async function POST(req: Request) {
     }
   }
 
+  const politicaEfetiva: PoliticaPrimeiroPagamento = politica ?? { modo: "PADRAO", motivo_excecao: null };
+  if (politicaEfetiva.modo === "ADIAR_PARA_VENCIMENTO" && pagamentoEntrada) {
+    return badRequest("pagamento_entrada nao permitido quando modo=ADIAR_PARA_VENCIMENTO.");
+  }
+
+  const vencimentoReferencia = vencRef ?? 12;
+
+  let tabelaMatricula: MatriculaTabelaRow | null = null;
+  if (tabelaMatriculaId !== null) {
+    const { data: tabelaData, error: tabelaErr } = await supabase
+      .from("matricula_tabelas")
+      .select("id,produto_tipo,referencia_tipo,referencia_id,ano_referencia,ativo,titulo")
+      .eq("id", tabelaMatriculaId)
+      .eq("ativo", true)
+      .maybeSingle<MatriculaTabelaRow>();
+
+    if (tabelaErr) return serverError("Failed to query matricula_tabelas.");
+    if (!tabelaData) {
+      return conflict("TABELA_MATRICULA_INEXISTENTE", "Tabela de Matricula nao encontrada ou inativa.");
+    }
+    tabelaMatricula = tabelaData;
+  } else {
+    let tabelaQuery = supabase
+      .from("matricula_tabelas")
+      .select("id,produto_tipo,referencia_tipo,referencia_id,ano_referencia,ativo,titulo")
+      .eq("ativo", true)
+      .eq("referencia_tipo", "TURMA")
+      .eq("referencia_id", vinculoId)
+      .eq("produto_tipo", tipoMatricula)
+      .order("id", { ascending: false })
+      .limit(1);
+
+    if (tipoMatricula === "REGULAR") {
+      tabelaQuery = tabelaQuery.eq("ano_referencia", anoReferencia);
+    }
+
+    const { data: tabelaData, error: tabelaErr } = await tabelaQuery.maybeSingle<MatriculaTabelaRow>();
+    if (tabelaErr) return serverError("Failed to query matricula_tabelas.");
+    if (!tabelaData) {
+      return conflict("TABELA_MATRICULA_INEXISTENTE", "Tabela de Matricula ativa nao encontrada para esta turma.");
+    }
+    tabelaMatricula = tabelaData;
+  }
+
+  const tabelaMatriculaIdFinal = Number(tabelaMatricula.id);
+  const { data: mensalidadeItem, error: mensalidadeErr } = await supabase
+    .from("matricula_tabela_itens")
+    .select("id,valor_centavos")
+    .eq("tabela_id", tabelaMatriculaIdFinal)
+    .eq("codigo_item", "MENSALIDADE")
+    .eq("tipo_item", "RECORRENTE")
+    .eq("ativo", true)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<MatriculaTabelaItemRow>();
+
+  if (mensalidadeErr) return serverError("Failed to query matricula_tabela_itens.");
+  if (!mensalidadeItem) {
+    return conflict("MENSALIDADE_NAO_CONFIGURADA", "Item MENSALIDADE recorrente nao configurado na tabela.");
+  }
+
+  const valorMensalidade = Number(mensalidadeItem.valor_centavos);
+  if (!Number.isFinite(valorMensalidade) || valorMensalidade < 0) {
+    return serverError("Valor da mensalidade invalido.");
+  }
+
+  const { year, month, day } = parseDateParts(dataMatricula);
+  const lastDay = getLastDayOfMonth(year, month);
+  const isJanuary = month === 1;
+  const aplicaProrata = isJanuary ? day > DIA_INICIO_LETIVO_JANEIRO : day > DIA_CORTE_PRORATA;
+
+  let valorProrata = 0;
+  if (aplicaProrata) {
+    const baseStart = isJanuary ? DIA_INICIO_LETIVO_JANEIRO : 1;
+    valorProrata = calcValorProRata(valorMensalidade, day, baseStart, lastDay);
+  }
+
+  if (politicaEfetiva.modo === "ADIAR_PARA_VENCIMENTO" && valorProrata === 0) {
+    return badRequest("politica_primeiro_pagamento invalida sem prorata.");
+  }
+
+  if (pagamentoEntrada && valorProrata === 0) {
+    return badRequest("pagamento_entrada nao permitido quando nao ha prorata.");
+  }
+
+  if (pagamentoEntrada && pagamentoEntrada.valor_centavos !== valorProrata) {
+    return badRequest("pagamento_entrada.valor_centavos deve ser igual ao valor_prorata.");
+  }
+
+  const mensalidadeMonth = aplicaProrata ? month + 1 : month;
+  const mensalidadeYear = mensalidadeMonth > 12 ? year + 1 : year;
+  const mensalidadeMonthFinal = mensalidadeMonth > 12 ? 1 : mensalidadeMonth;
+  const mensalidadeAnoMes = formatYearMonth(mensalidadeYear, mensalidadeMonthFinal);
+
   const insertMatricula: Record<string, unknown> = {
     pessoa_id: pessoaId,
     responsavel_financeiro_id: responsavelId,
@@ -244,9 +457,9 @@ export async function POST(req: Request) {
     status: "ATIVA",
     data_matricula: dataMatricula,
     data_inicio_vinculo: dataInicioVinculo,
-    tabela_matricula_id: tabelaMatriculaId,
+    tabela_matricula_id: tabelaMatriculaIdFinal,
     plano_pagamento_id: planoPagamentoId,
-    vencimento_padrao_referencia: vencRef ?? 12,
+    vencimento_padrao_referencia: vencimentoReferencia,
     observacoes: observacoes ?? null,
   };
 
@@ -302,19 +515,134 @@ export async function POST(req: Request) {
     turmaAluno = novoVinculo as Record<string, unknown>;
   }
 
-  if (politica?.modo === "ADIAR_PARA_VENCIMENTO") {
-    const motivo = politica.motivo_excecao.trim();
-    const vencimentoCalculado = calcVencimentoAdiado(dataMatricula, vencRef ?? 12);
-    const { error: evErr } = await supabase.from("matricula_eventos").insert({
-      matricula_id: matriculaCriada.id,
-      tipo_evento: "EXCECAO_PRIMEIRO_PAGAMENTO_CONCEDIDA",
-      dados: {
-        motivo_excecao: motivo,
-        vencimento_calculado: vencimentoCalculado,
-        modo: "ADIAR_PARA_VENCIMENTO",
-      },
-    });
-    if (evErr) return serverError("Matricula criada, mas falha ao registrar evento de excecao.");
+  const responsavelNome = safeString((responsavel as { nome?: unknown }).nome);
+
+  let creditoLancamentoId: number | null = null;
+  let cobrancaId: number | null = null;
+  let recebimentoId: number | null = null;
+  let vencimentoProrata: string | null = null;
+
+  if (valorMensalidade > 0) {
+    try {
+      const contaConexaoId = await ensureContaConexaoAluno(supabase, responsavelId, vencimentoReferencia, responsavelNome);
+      const descricaoLanc = `Mensalidade (${mensalidadeAnoMes}) - Matricula #${matriculaCriada.id}`;
+      const { data: lanc, error: lancErr } = await supabase
+        .from("credito_conexao_lancamentos")
+        .insert({
+          conta_conexao_id: contaConexaoId,
+          origem_sistema: "MATRICULA",
+          origem_id: matriculaCriada.id,
+          descricao: descricaoLanc,
+          valor_centavos: valorMensalidade,
+          status: "PENDENTE_FATURA",
+          data_lancamento: dataMatricula,
+        })
+        .select("id")
+        .single();
+      if (lancErr || !lanc) {
+        return serverError("Matricula criada, mas falha ao criar lancamento no Cartao Conexao.");
+      }
+      creditoLancamentoId = Number((lanc as { id: number }).id);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "conta_conexao_error";
+      if (message === "conta_conexao_inativa") {
+        return conflict("conta_conexao_inativa", "Conta Conexao do responsavel financeiro esta inativa.");
+      }
+      return serverError("Matricula criada, mas falha ao preparar conta/lancamento do Cartao Conexao.");
+    }
+  }
+
+  if (valorProrata > 0) {
+    const descricaoEntrada = `Entrada (Pro-rata) Matricula #${matriculaCriada.id} - ${formatYearMonth(year, month)}`;
+    if (politicaEfetiva.modo === "ADIAR_PARA_VENCIMENTO") {
+      vencimentoProrata = calcVencimentoAdiado(dataMatricula, vencimentoReferencia);
+      const { data: cobranca, error: cobrancaErr } = await supabase
+        .from("cobrancas")
+        .insert({
+          pessoa_id: responsavelId,
+          descricao: descricaoEntrada,
+          valor_centavos: valorProrata,
+          moeda: "BRL",
+          vencimento: vencimentoProrata,
+          status: "PENDENTE",
+          origem_tipo: "MATRICULA_ENTRADA",
+          origem_id: matriculaCriada.id,
+        })
+        .select("id")
+        .single();
+      if (cobrancaErr || !cobranca) {
+        return serverError("Matricula criada, mas falha ao criar cobranca de entrada.");
+      }
+      cobrancaId = Number((cobranca as { id: number }).id);
+
+      const { error: evErr } = await supabase.from("matricula_eventos").insert({
+        matricula_id: matriculaCriada.id,
+        tipo_evento: "EXCECAO_PRIMEIRO_PAGAMENTO_CONCEDIDA",
+        dados: {
+          motivo_excecao: politicaEfetiva.motivo_excecao,
+          vencimento_calculado: vencimentoProrata,
+          valor_prorata: valorProrata,
+          modo: "ADIAR_PARA_VENCIMENTO",
+        },
+      });
+      if (evErr) {
+        return serverError("Matricula criada, mas falha ao registrar evento de excecao.");
+      }
+    } else {
+      vencimentoProrata = dataMatricula;
+      const { data: cobranca, error: cobrancaErr } = await supabase
+        .from("cobrancas")
+        .insert({
+          pessoa_id: responsavelId,
+          descricao: descricaoEntrada,
+          valor_centavos: valorProrata,
+          moeda: "BRL",
+          vencimento: vencimentoProrata,
+          status: "PENDENTE",
+          origem_tipo: "MATRICULA_ENTRADA",
+          origem_id: matriculaCriada.id,
+        })
+        .select("id")
+        .single();
+      if (cobrancaErr || !cobranca) {
+        return serverError("Matricula criada, mas falha ao criar cobranca de entrada.");
+      }
+      cobrancaId = Number((cobranca as { id: number }).id);
+
+      if (pagamentoEntrada) {
+        const dataPagamento = pagamentoEntrada.data_pagamento ?? dataMatricula;
+        const dataPagamentoIso = `${dataPagamento}T00:00:00Z`;
+        const { data: recebimento, error: recErr } = await supabase
+          .from("recebimentos")
+          .insert({
+            cobranca_id: cobrancaId,
+            valor_centavos: valorProrata,
+            data_pagamento: dataPagamentoIso,
+            metodo_pagamento: pagamentoEntrada.metodo_pagamento,
+            origem_sistema: "MATRICULA_ENTRADA",
+            observacoes: pagamentoEntrada.observacoes ?? null,
+          })
+          .select("id")
+          .single();
+        if (recErr || !recebimento) {
+          return serverError("Matricula criada, mas falha ao registrar recebimento da entrada.");
+        }
+        recebimentoId = Number((recebimento as { id: number }).id);
+
+        const { error: cobUpdErr } = await supabase
+          .from("cobrancas")
+          .update({
+            status: "PAGO",
+            data_pagamento: dataPagamento,
+            metodo_pagamento: pagamentoEntrada.metodo_pagamento,
+            observacoes: pagamentoEntrada.observacoes ?? null,
+          })
+          .eq("id", cobrancaId);
+        if (cobUpdErr) {
+          return serverError("Matricula criada, mas falha ao atualizar cobranca da entrada.");
+        }
+      }
+    }
   }
 
   return NextResponse.json(
@@ -322,6 +650,12 @@ export async function POST(req: Request) {
       ok: true,
       matricula: matriculaCriada,
       turma_aluno: turmaAluno,
+      tabela_matricula_id: tabelaMatriculaIdFinal,
+      valor_mensalidade: valorMensalidade,
+      valor_prorata: valorProrata,
+      credito_conexao_lancamento_id: creditoLancamentoId,
+      cobranca_id: cobrancaId,
+      recebimento_id: recebimentoId,
     },
     { status: 201 }
   );

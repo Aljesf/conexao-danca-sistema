@@ -1,0 +1,23 @@
+
+> conexao-dados@0.1.0 dev
+> next dev --turbopack
+
+   ▲ Next.js 15.4.10 (Turbopack)
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.3.105:3000
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2s
+ ○ Compiling / ...
+ ✓ Compiled / in 2.7s
+ GET / 307 in 3145ms
+ GET / 307 in 109ms
+ ✓ Compiled /api/matriculas/novo in 273ms
+ POST /api/matriculas/novo 400 in 414ms
+ POST /api/matriculas/novo 400 in 84ms
+ POST /api/matriculas/novo 400 in 101ms
+ POST /api/matriculas/novo 201 in 4623ms
+ POST /api/matriculas/novo 201 in 1416ms
+ POST /api/matriculas/novo 201 in 7664ms
+ POST /api/matriculas/novo 201 in 1365ms
