@@ -97,9 +97,95 @@ Ela substitui integralmente qualquer conceito anterior de "servico".
 
 Esses aspectos pertencem ao Plano de Pagamento e ao Cartao Conexao.
 
-## 6. Anuidade (obrigacao financeira)
+## 6. Pagamentos, Vencimentos e Cartao Interno Conexao
 
-### 6.1 Conceito
+### 6.1. Fonte do vencimento financeiro
+
+Os vencimentos financeiros das mensalidades, anuidades e demais cobrancas recorrentes nao sao definidos pela matricula.
+
+O vencimento efetivo e aplicado exclusivamente pelo Cartao Interno Conexao, conforme a politica financeira vigente da Instituicao.
+
+A matricula tem como funcao:
+
+- formalizar o vinculo;
+- definir valores e regras aplicaveis;
+- originar lancamentos financeiros;
+- referenciar a politica de vencimento vigente no momento da matricula, para fins de rastreabilidade e auditoria.
+
+Em nenhuma hipotese a matricula deve ser tratada como titulo financeiro ou conta a receber de mensalidade.
+
+### 6.2. Entrada e Pro-rata (Primeira Cobranca)
+
+A Entrada (Pro-rata) corresponde ao valor proporcional do primeiro periodo de aulas quando o aluno ingressa com o ciclo mensal ja em andamento.
+
+Regra geral (fevereiro a dezembro)
+
+Matriculas realizadas ate o dia de corte institucional:
+
+- nao geram pro-rata;
+- a mensalidade do mes vigente e considerada integral e segue o fluxo normal do Cartao Interno Conexao.
+
+Matriculas realizadas apos o dia de corte institucional:
+
+- geram Entrada (Pro-rata);
+- o pro-rata corresponde ao periodo entre a data da matricula e o ultimo dia do mes;
+- a mensalidade integral passa a vigorar a partir do mes seguinte.
+
+Regra especifica de janeiro
+
+O periodo letivo de janeiro tem inicio em data definida institucionalmente.
+
+Quando houver Entrada (Pro-rata) em janeiro, o calculo considera exclusivamente o periodo letivo, nao o mes civil completo.
+
+Matriculas realizadas antes do inicio do periodo letivo de janeiro nao geram pro-rata.
+
+### 6.3. Forma de pagamento da Entrada (Pro-rata)
+
+Regra padrao
+
+Quando existir Entrada (Pro-rata), esta deve ser paga no ato da matricula, por meio de pagamento direto (caixa).
+
+A Entrada (Pro-rata):
+
+- nao integra o Cartao Interno Conexao;
+- nao gera parcelas recorrentes;
+- refere-se exclusivamente ao primeiro periodo proporcional de aulas.
+
+Excecao operacional -- negociacao cliente a cliente
+
+A Instituicao pode, de forma excepcional e negociada, autorizar que a Entrada (Pro-rata) nao seja paga no ato, sendo adiada para o proximo vencimento financeiro aplicavel.
+
+Essa excecao:
+
+- nao altera valores contratuais;
+- altera apenas o momento e a forma do primeiro pagamento.
+
+Governanca obrigatoria da excecao
+
+Toda excecao deve:
+
+- possuir motivo registrado, de forma objetiva;
+- identificar quem autorizou a excecao;
+- registrar data e hora da autorizacao;
+- ser marcada explicitamente como excecao de primeiro pagamento para fins de auditoria.
+
+A excecao nao descaracteriza a regra padrao e nao cria precedente automatico para outras matriculas.
+
+### 6.4. Separacao entre ciclo de servico e ciclo financeiro
+
+O sistema distingue claramente:
+
+- ciclo de servico (competencia): periodo de aulas ao qual o pagamento se refere;
+- ciclo financeiro (vencimento): data de vencimento aplicada pelo Cartao Interno Conexao.
+
+O padrao vigente adota:
+
+- competencia baseada no mes civil, com excecoes institucionais (ex.: janeiro);
+- vencimento definido e controlado exclusivamente pelo Cartao Interno Conexao.
+
+## 7. Anuidade (obrigacao financeira)
+
+### 7.1 Conceito
 
 Nos cursos regulares, a obrigacao financeira e uma anuidade, executada por meio de mensalidades.
 
@@ -109,9 +195,9 @@ A anuidade:
 - pode ser composta por varios itens;
 - e independente da forma de pagamento.
 
-## 7. Plano de Pagamento
+## 8. Plano de Pagamento
 
-### 7.1 Conceito
+### 8.1 Conceito
 
 Plano de Pagamento define exclusivamente como a anuidade sera paga, e nunca o valor.
 
@@ -128,14 +214,14 @@ O plano:
 - nao altera o ciclo da cobranca;
 - nao altera o vencimento padrao definido pela escola e pelo Cartao Conexao.
 
-### 7.2 Regra obrigatoria de comunicacao
+### 8.2 Regra obrigatoria de comunicacao
 
 > Nota:
 > "O plano de pagamento define apenas o parcelamento da anuidade. O valor devido e definido na Tabela de Matricula."
 
-## 8. Ciclo de cobranca e Pro-rata — Modelo A (regra oficial)
+## 9. Ciclo de cobranca e Pro-rata — Modelo A (regra oficial)
 
-### 8.1 Ciclo de cobranca
+### 9.1 Ciclo de cobranca
 
 O ciclo financeiro da mensalidade corresponde sempre ao mes-calendario, do dia 1º ao ultimo dia do mes.
 
@@ -143,7 +229,7 @@ O vencimento define apenas a data limite de pagamento, nao o periodo coberto pel
 
 A mensalidade sempre quita um ciclo mensal completo, salvo quando aplicada Entrada (Pro-rata).
 
-### 8.2 Pro-rata — Modelo A
+### 9.2 Pro-rata — Modelo A
 
 O sistema adota o Modelo A de pro-rata:
 
@@ -151,7 +237,7 @@ O sistema adota o Modelo A de pro-rata:
 - cobrancas seguintes sao sempre integrais;
 - o pro-rata ajusta apenas o valor, nunca o vencimento.
 
-### 8.3 Condicao de aplicacao do Pro-rata
+### 9.3 Condicao de aplicacao do Pro-rata
 
 A matricula exige pagamento imediato da primeira cobranca.
 
@@ -175,7 +261,7 @@ A Entrada (Pro-rata):
 - nao integra o plano de pagamento;
 - nao entra no Cartao Conexao.
 
-### 8.4 Regra especifica para o mes de janeiro
+### 9.4 Regra especifica para o mes de janeiro
 
 O periodo letivo de janeiro inicia-se no dia 12.
 
@@ -190,7 +276,7 @@ Matriculas realizadas:
 
 A mensalidade cheia subsequente inicia-se em fevereiro.
 
-### 8.5 Primeira cobranca (regra de ouro)
+### 9.5 Primeira cobranca (regra de ouro)
 
 A primeira cobranca sempre corresponde ao primeiro ciclo efetivo de aulas.
 
@@ -200,34 +286,6 @@ O pagamento pode ser antecipado quando o inicio das aulas ocorrer em mes posteri
 (ex.: matricula em julho com inicio em agosto).
 
 Nunca se cobra mensalidade cheia e pro-rata para o mesmo ciclo mensal.
-
-## 9. Vencimentos, mora e juros
-
-### 9.1 Vencimento padrao
-
-A escola possui um dia de vencimento padrao configuravel.
-
-Atualmente, o padrao adotado e o dia 12.
-
-O vencimento:
-
-- define apenas a data limite de pagamento;
-- nao define o periodo coberto pela mensalidade;
-- pode ser alterado futuramente sem impactar a logica da matricula.
-
-### 9.2 Cartao Conexao
-
-O Cartao Conexao e o motor financeiro central.
-
-Ele e responsavel por:
-
-- vencimento efetivo;
-- inicio da mora;
-- aplicacao de multa;
-- aplicacao de juros;
-- regras de atraso.
-
-A matricula nao calcula multa ou juros.
 
 ## 10. Instrumentos Juridicos
 

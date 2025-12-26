@@ -1,209 +1,287 @@
-# 📘 Modelo Físico — Domínio de Matrículas (Alvo)
-Sistema Conexão Dança  
-Status: Documento físico-alvo (SQL conceitual)  
-Base normativa: **Regras Oficiais de Matrícula (Conexão Dança) – v1**  
-Observação: este documento NÃO é migration; é referência para as próximas etapas.
+﻿📘 Modelo Físico — Domínio de Matrículas (Alvo)
 
----
+Sistema Conexão Dança
+Status: Documento físico-alvo (referência técnica)
+Base normativa: Regras Oficiais de Matrícula (Conexão Dança) – v1
 
-## 0. Objetivo
+⚠️ Este documento NÃO é migration SQL.
+Ele define como o banco DEVE ficar para que o sistema respeite as regras oficiais.
 
-Definir o **modelo físico alvo** do domínio de Matrículas, alinhado às regras oficiais, garantindo:
+0. Objetivo do Modelo Físico
 
-- Pessoa como centro;
-- Matrícula como ato contratual + financeiro;
-- **Tabela de Matrícula** como fonte única de valores;
-- Plano de pagamento como “como pagar” (sem valores);
-- **Entrada (Pró-rata)** como cobrança no ato, fora do Cartão Conexão;
-- Mensalidades cheias como lançamentos no Cartão Conexão;
-- Data de início do vínculo configurável (matrícula hoje para iniciar no futuro).
+Definir o modelo físico alvo do domínio Matrículas, garantindo:
 
----
+Pessoa como centro do sistema;
 
-## 1. Princípios físicos obrigatórios (v1)
+Matrícula como ato contratual e gatilho financeiro;
 
-1) **Valores vêm da Tabela de Matrícula**
-- Nenhuma tabela de plano de pagamento deve carregar valor de mensalidade.
-- Contratos não armazenam valores; referenciam Tabela de Matrícula e regras oficiais.
+Tabela de Matrícula como fonte única de valores;
 
-2) **Ciclo da mensalidade é mês-calendário**
-- Cobertura: dia 1º ao último dia do mês.
-- Vencimento padrão (ex.: dia 12) é **data limite**, não “fim do ciclo”.
-- Vencimento é configurável em “Configurações da Escola”.
+Plano de pagamento definindo apenas como pagar;
 
-3) **Entrada (Pró-rata)**
-- Quando aplicável, gera cobrança imediata (no ato) e NÃO entra no Cartão Conexão.
-- Janeiro possui regra específica de período letivo (12 a 31) para cálculo do pró-rata quando aplicável.
+Entrada (Pró-rata) fora do Cartão Conexão;
 
-4) **Cartão Conexão**
-- Mensalidades cheias (ciclos completos) geram lançamentos no Cartão Conexão.
-- Mora/juros não pertencem à matrícula; pertencem ao Cartão Conexão (motor financeiro).
+Mensalidades cheias lançadas no Cartão Conexão;
 
-5) **Matrícula exige primeira cobrança paga**
-- A efetivação da matrícula depende do pagamento da primeira cobrança.
-- Pode haver pagamento antecipado quando o início do vínculo for futuro (ex.: julho → agosto).
+Vencimento financeiro controlado exclusivamente pelo Cartão Conexão;
 
----
+Parametrização institucional e auditoria completa.
 
-## 2. Entidades físicas principais
+1. Princípios físicos obrigatórios
+1.1 Pessoa no centro
 
-- `matriculas` (ato e vínculo oficial)
-- `turma_aluno` (vínculo operacional pessoa ↔ turma, atrelado à matrícula)
-- `matricula_tabelas` (Tabela de Matrícula — itens/valores por contexto)
-- `matricula_tabela_itens` (itens cobrados e seus valores)
-- `matricula_planos_pagamento` (como pagar; sem valores)
-- Integração:
-  - `credito_conexao_lancamentos`, `credito_conexao_faturas` (Cartão Conexão)
-  - `cobrancas`, `recebimentos` (cobrança direta/entrada no ato e outras situações fora do cartão)
+Toda matrícula referencia exclusivamente:
 
----
+pessoas.id (aluno);
 
-## 3. Tabela `matriculas` (canônica)
+pessoas.id (responsável financeiro).
 
-Papel: unidade oficial que vincula Pessoa, Responsável Financeiro, Produto/Vínculo e parâmetros de cobrança.
+Não existe “aluno” fora de pessoas.
 
-Campos físicos recomendados (conceito):
+1.2 Matrícula NÃO é financeiro
 
-- `id` (PK)
-- `pessoa_id` (FK → `pessoas.id`) — aluno
-- `responsavel_financeiro_id` (FK → `pessoas.id`)
-- `tipo_matricula` (enum/text com CHECK): `REGULAR`, `CURSO_LIVRE`, `PROJETO_ARTISTICO`
-- `vinculo_id` (FK principal do destino pedagógico)
-  - v1: para REGULAR/CURSO_LIVRE aponta para `turmas.turma_id`
-  - (futuro) PROJETO_ARTISTICO aponta para entidade de projeto
-- `ano_referencia` (int; obrigatório para REGULAR)
-- `status` (enum/text com CHECK): `ATIVA`, `TRANCADA`, `CANCELADA`, `CONCLUIDA`
-- `data_matricula` (date) — data do ato
-- `data_inicio_vinculo` (date) — **início das aulas** (configurável)
-- `data_encerramento` (date; opcional)
-- `tabela_matricula_id` (FK → `matricula_tabelas.id`) — fonte única de valores
-- `plano_pagamento_id` (FK → `matricula_planos_pagamento.id`) — apenas “como pagar”
-- `vencimento_dia_padrao` (int; opcional)
-  - Observação: pode ser redundante para “congelar” a regra aplicada no ato, caso a configuração mude no futuro.
-- `observacoes` (text)
-- auditoria: `created_at`, `updated_at`, `created_by`, `updated_by`
+A matrícula:
 
-Índices/constraints recomendadas:
-- índice por `pessoa_id`, `responsavel_financeiro_id`, `status`, `tipo_matricula`, `ano_referencia`, `vinculo_id`
-- para REGULAR: impedir duplicidade ativa por (pessoa_id, vinculo_id, ano_referencia) com status não cancelado.
+não define vencimento financeiro;
 
----
+não gera contas a receber de mensalidade;
 
-## 4. Tabela `matricula_tabelas` (Tabela de Matrícula)
+não calcula mora, multa ou juros.
 
-Papel: definir oficialmente itens e valores aplicáveis à matrícula.
+A matrícula:
 
-Campos recomendados:
-- `id` (PK)
-- `produto_tipo` (text/enum): `REGULAR`, `CURSO_LIVRE`, `PROJETO_ARTISTICO` (ou equivalente)
-- `referencia_tipo` (text): `TURMA` | `PRODUTO` | `PROJETO` (v1 pode focar em TURMA/PRODUTO)
-- `referencia_id` (bigint) — ex.: turma_id quando referencia_tipo = TURMA
-- `ano_referencia` (int) — obrigatório em REGULAR
-- `titulo` (text) — nome exibido
-- `ativo` (bool)
-- auditoria: created/updated
+origina lançamentos;
+
+referencia regras vigentes;
+
+registra auditoria.
+
+1.3 Cartão Conexão é o motor financeiro
+
+Mensalidades cheias → credito_conexao_lancamentos;
+
+Vencimento, juros e mora → Cartão Conexão;
+
+Entrada (Pró-rata) → cobrança direta (cobrancas / recebimentos).
+
+2. Entidades físicas principais
+
+matriculas — entidade canônica do vínculo
+
+turma_aluno — vínculo operacional pessoa ↔ turma
+
+matricula_tabelas — tabela de precificação oficial
+
+matricula_tabela_itens — itens e valores
+
+matricula_planos_pagamento — forma de pagamento (sem valores)
+
+Integrações:
+
+credito_conexao_lancamentos
+
+credito_conexao_faturas
+
+cobrancas
+
+recebimentos
+
+3. Tabela matriculas (canônica)
+3.1 Papel
+
+Representa o ato formal de matrícula, vinculando:
+
+Pessoa → Produto/Turma → Regras financeiras → Contrato.
+
+3.2 Campos físicos recomendados
+Campo	Tipo	Descrição
+id	PK	Identificador
+pessoa_id	FK pessoas	Aluno
+responsavel_financeiro_id	FK pessoas	Pagador
+tipo_matricula	enum	REGULAR / CURSO_LIVRE / PROJETO_ARTISTICO
+vinculo_id	bigint	Turma ou projeto
+ano_referencia	int	Obrigatório para REGULAR
+status	enum	ATIVA / TRANCADA / CANCELADA / CONCLUIDA
+data_matricula	date	Data do ato
+data_inicio_vinculo	date	Início efetivo das aulas
+data_encerramento	date	Opcional
+tabela_matricula_id	FK	Fonte única de valores
+plano_pagamento_id	FK	Como pagar (sem valores)
+vencimento_padrao_referencia	int	Snapshot da política vigente
+observacoes	text	Uso interno
+auditoria	timestamps / users	rastreabilidade
+3.3 Campo de vencimento (atenção)
+
+vencimento_padrao_referencia:
+
+não agenda cobrança;
+
+não cria vencimento financeiro;
+
+serve apenas para:
+
+auditoria;
+
+reconstrução histórica;
+
+conferência humana.
+
+O vencimento real sempre vem do Cartão Conexão.
+
+4. Tabela matricula_tabelas (Tabela de Matrícula)
+4.1 Papel
+
+Definir quais itens são cobrados e seus valores.
+
+É a única fonte de valores.
+
+4.2 Campos recomendados
+
+id
+
+produto_tipo (REGULAR / CURSO_LIVRE / PROJETO_ARTISTICO)
+
+referencia_tipo (TURMA / PRODUTO / PROJETO)
+
+referencia_id
+
+ano_referencia
+
+titulo
+
+ativo
+
+auditoria
+
+5. Tabela matricula_tabela_itens
+5.1 Campos
+
+id
+
+tabela_id
+
+codigo_item (MENSALIDADE, MATERIAL, FIGURINO...)
+
+descricao
+
+tipo_item (RECORRENTE / UNICO / EVENTUAL)
+
+valor_centavos
+
+ativo
+
+ordem
+
+5.2 Regra importante
+
+Entrada (Pró-rata) NÃO é item da tabela.
+Ela é cálculo operacional sobre a mensalidade.
+
+6. Tabela matricula_planos_pagamento
+6.1 Papel
+
+Definir como pagar, nunca quanto pagar.
+
+6.2 Campos
+
+id
+
+titulo
+
+periodicidade (MENSAL, AVISTA, etc.)
+
+numero_parcelas
+
+permite_prorata
+
+ativo
+
+7. Pró-rata e janeiro (suporte físico)
+
+Pró-rata aplica-se somente à primeira cobrança;
+
+Janeiro possui início letivo específico (ex.: dia 12);
+
+Datas devem ser parametrizáveis, nunca hardcoded.
+
+Recomendação:
+
+Configurações institucionais em Admin → Escola.
+
+8. Exceção do primeiro pagamento (auditoria)
+
+Quando a Entrada (Pró-rata) não for paga no ato:
+
+Campos recomendados (na matrícula ou tabela de eventos):
+
+excecao_primeiro_pagamento (bool)
+
+motivo_excecao
+
+excecao_autorizada_por
+
+excecao_criada_em
 
 Regra:
-- Valores e itens são definidos em `matricula_tabela_itens`.
-- A matrícula sempre aponta para uma tabela vigente (`tabela_matricula_id`).
 
----
+Exceção não altera valor, apenas o momento/canal.
 
-## 5. Tabela `matricula_tabela_itens` (itens e valores)
+9. Integração com Cartão Conexão
+9.1 Mensalidade cheia
 
-Campos recomendados:
-- `id` (PK)
-- `tabela_id` (FK → `matricula_tabelas.id`)
-- `codigo_item` (text/enum) — ex.: `MENSALIDADE`, `MATERIAL`, `FIGURINO`, etc.
-- `descricao` (text)
-- `tipo_item` (text/enum): `RECORRENTE`, `UNICO`, `EVENTUAL`
-- `valor_centavos` (int) — valor do item (fonte única)
-- `ativo` (bool)
-- `ordem` (int)
+Criar credito_conexao_lancamento
 
-Regra:
-- Mensalidade recorrente deve existir para REGULAR quando aplicável.
-- Entrada (Pró-rata) não é item da tabela; é cálculo operacional sobre a mensalidade do ciclo.
+origem_sistema = 'MATRICULA'
 
----
+origem_id = matriculas.id
 
-## 6. Tabela `matricula_planos_pagamento` (como pagar; sem valores)
+9.2 Entrada (Pró-rata)
 
-Campos recomendados:
-- `id` (PK)
-- `titulo` (text)
-- `periodicidade` (text/enum): `MENSAL`, `TRIMESTRAL`, `AVISTA`, etc.
-- `numero_parcelas` (int; opcional)
-- `permite_prorata` (bool) — regra de aplicação (modelo A)
-- `ativo` (bool)
+Criar cobrancas
 
-Regra:
-- Este plano não possui valores.
-- Valores e itens sempre vêm da Tabela de Matrícula.
+Registrar recebimentos
 
----
+Não criar lançamento no Cartão Conexão
 
-## 7. Integração com Cartão Conexão (Crédito Conexão)
+10. Tabela turma_aluno
 
-### 7.1 Mensalidades cheias → Cartão Conexão
-- Para cada ciclo mensal completo, criar `credito_conexao_lancamento`:
-  - `origem_sistema = 'MATRICULA'`
-  - `origem_id = matriculas.id`
-  - `descricao` e `valor_centavos` (da mensalidade)
-  - `status = PENDENTE_FATURA`
+Deve conter matricula_id;
 
-### 7.2 Entrada (Pró-rata) → fora do Cartão Conexão
-- Entrada (Pró-rata) deve gerar cobrança/recebimento imediato:
-  - cria registro em `cobrancas` com `origem_tipo = 'MATRICULA_ENTRADA'` e `origem_id = matriculas.id`
-  - registra `recebimentos` no ato
-  - não cria lançamento no Cartão Conexão
+FK explícita para pessoas;
 
----
+Representa o vínculo operacional.
 
-## 8. Integração com `cobrancas` e `recebimentos`
+11. Canônico x Legado
+Canônico
 
-Uso recomendado:
-- `cobrancas` e `recebimentos` representam cobranças e pagamentos diretos fora do cartão.
-- Entrada (Pró-rata) e itens avulsos pagos no ato são os casos mais comuns.
+matriculas
 
-Campos existentes relevantes:
-- `cobrancas.origem_tipo`, `cobrancas.origem_id` devem referenciar matrícula/entrada/itens avulsos.
-- `recebimentos` registra o pagamento no ato.
+pessoas
 
----
+turma_aluno
 
-## 9. Regra específica de janeiro (suporte físico)
+matricula_tabelas
 
-Janeiro tem regra operacional específica para pró-rata:
-- Período letivo inicia em 12/01
-- Pró-rata de janeiro, quando aplicável, considera apenas o intervalo 12–31.
+matricula_tabela_itens
 
-Recomendação física:
-- Registrar parâmetros do calendário letivo em tabela de configuração (ex.: `escola_config_financeiro` ou `periodos_letivos`), para não “fixar” datas em código.
-- O modelo físico deve permitir parametrizar:
-  - `dia_inicio_letivo_janeiro` (ex.: 12)
-  - `dia_vencimento_padrao` (ex.: 12)
+Legado
 
----
+alunos
 
-## 10. Tabela `turma_aluno` (vínculo operacional)
+alunos_turmas
 
-- Deve manter `matricula_id` preenchido para matrículas REGULAR/CURSO_LIVRE.
-- Deve ter FK explícita `aluno_pessoa_id` → `pessoas.id`.
-- Deve ter FK `matricula_id` → `matriculas.id`.
+Novo código não deve depender do legado.
 
----
+12. Conclusão
 
-## 11. Observações finais
+Este modelo físico garante:
 
-- Este modelo físico deve ser lido em conjunto com:
-  - `matricula-regras-oficiais-v1.md` (normativo)
-  - `modelo-de-matriculas.md` (manual operacional)
-  - `credito-conexao-v1.0.md` (motor financeiro do Cartão Conexão)
-- As migrations SQL serão geradas depois, em etapa própria (Fluxo: SQL → API → Páginas → Prints → Ajustes).
+conformidade normativa;
 
-Fim do conteúdo.
+clareza financeira;
 
-Regras:
-- Não alterar outros arquivos.
-- Apenas substituir o conteúdo do arquivo alvo.
+rastreabilidade;
+
+base segura para SQL, API e UI.
+
+Qualquer implementação futura deve ser validada contra este documento.

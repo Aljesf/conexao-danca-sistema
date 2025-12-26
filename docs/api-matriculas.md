@@ -1,65 +1,82 @@
-> ℹ️ DOCUMENTO EM ADEQUAÇÃO  
-> Este documento será atualizado para refletir  
-> as Regras Oficiais de Matrícula (Conexão Dança) – v1
-
-# 📘 API — Matrículas  
+﻿# 📘 API — Matrículas
 Sistema Conexão Dança  
-Versão: 2025-12-02  
+Status: Documento em adequação (alinhado às Regras Oficiais v1)  
+Base normativa: **Regras Oficiais de Matrícula (Conexão Dança) – v1**  
+Base técnica: **Modelo Físico — Domínio de Matrículas (Alvo)**
+
+---
 
 ## 0. Contexto
 
-Este documento define a **API oficial de Matrículas**, começando pelo endpoint:
+Este documento define a API oficial do domínio de Matrículas, começando pelo endpoint:
 
 - `POST /api/matriculas/novo`
 
-Objetivo da rota:
+Objetivo da rota (v2):
 
-- Criar uma **nova matrícula** na tabela `matriculas` (fonte oficial de vínculo pedagógico/financeiro).
-- Criar o **vínculo operacional** em `turma_aluno` associando a pessoa à turma com `matricula_id`.
+- Criar uma nova matrícula na tabela `matriculas` (unidade oficial do vínculo).
+- Criar/garantir vínculo operacional em `turma_aluno` com `matricula_id`.
+- Gerar os registros financeiros conforme as regras oficiais:
+  - **Mensalidade cheia** → lançamento no **Cartão Conexão** (`credito_conexao_lancamentos`).
+  - **Entrada (Pró-rata)** → cobrança direta (`cobrancas` + `recebimentos`), fora do Cartão Conexão.
+  - Suportar **exceção negociável** da Entrada (adiar para vencimento) com auditoria.
 
-Escopo da **Fase 1**:
+Escopo (primeira entrega desta API):
 
-- Matrículas para **turmas regulares** (principalmente `tipo_matricula = 'REGULAR'`) e **cursos livres**, usando:
-  - `pessoa_id` e `responsavel_financeiro_id` **já existentes** em `pessoas`;
-  - `vinculo_id` apontando para `turmas.turma_id` (no caso de REGULAR/CURSO_LIVRE).
-- Não cria pessoas novas.
-- Não cria turmas novas.
-- Não gera contratos nem cobranças automaticamente (isso será tratado em etapas posteriores).
+- Matrículas para `REGULAR` e `CURSO_LIVRE` (vínculo em `turmas.turma_id`).
+- Não cria pessoas.
+- Não cria turmas.
+- Não gera contrato/PDF ainda (fases futuras).
+- Financeiro limitado ao necessário para:
+  - Entrada (pró-rata) e
+  - Lançamento da mensalidade cheia no Cartão Conexão.
 
 ---
 
 ## 1. Rota e Método
 
-- **Método:** `POST`  
-- **URL:** `/api/matriculas/novo`  
-- **Formato de corpo:** `application/json`  
-- **Resposta:** `application/json`  
+- Método: `POST`
+- URL: `/api/matriculas/novo`
+- Content-Type: `application/json`
+- Resposta: `application/json`
 
-A rota será implementada em:
-
+Implementação prevista:
 - `src/app/api/matriculas/novo/route.ts`
 
 ---
 
-## 2. Autenticação e Permissões
+## 2. Autenticação e permissões
 
-- A rota exige **usuário autenticado** (via Supabase Auth / middleware padrão do projeto).  
-- Apenas usuários com permissão adequada podem criar matrículas. Exemplo (conceitual):
-
-  - Roles permitidos: `ADMIN`, `SECRETARIA`, `COORDENACAO`, ou outro grupo definido em `roles_sistema`.  
-  - A verificação de permissão pode checar:
-    - o role no `profiles` + `usuario_roles`;  
-    - e/ou um campo de permissões em `roles_sistema.permissoes` (JSONB).
-
-> Implementação concreta de permissão fica na camada de auth/middleware. Aqui, a regra é: **se não autorizado → HTTP 403**.
+- Usuário autenticado (Supabase Auth).
+- Roles permitidos (exemplo): `ADMIN`, `SECRETARIA`, `COORDENACAO`.
+- Se não autorizado → `403`.
 
 ---
 
-## 3. Payload do `POST /api/matriculas/novo`
+## 3. Princípios obrigatórios (API)
 
-### 3.1. Estrutura Geral
+### 3.1 Matrícula não define vencimento financeiro
 
-Corpo esperado (JSON):
+A API **não deve**:
+- criar “mensalidade” em `cobrancas`;
+- definir “data de vencimento” para mensalidade;
+- tratar `vencimento` como campo editável da matrícula.
+
+O vencimento financeiro real pertence ao **Cartão Conexão**.
+
+A matrícula pode registrar apenas:
+- `vencimento_padrao_referencia` (snapshot da política vigente).
+
+### 3.2 Separação financeira
+
+- Mensalidade cheia → `credito_conexao_lancamentos` (Cartão Conexão).
+- Entrada (Pró-rata) → `cobrancas`/`recebimentos` (pagamento no ato) OU cobrança pendente quando houver exceção.
+
+---
+
+## 4. Payload do `POST /api/matriculas/novo`
+
+### 4.1 Estrutura geral
 
 ```json
 {
@@ -67,295 +84,140 @@ Corpo esperado (JSON):
   "responsavel_financeiro_id": 456,
   "tipo_matricula": "REGULAR",
   "vinculo_id": 789,
-  "ano_referencia": 2025,
-  "data_matricula": "2025-02-10",
-  "observacoes": "Matrícula feita na recepção.",
-  "origem": "painel_admin",
-  "criar_vinculo_turma": true
-}
-```
-
-### 3.2. Campos Detalhados
-
-| Campo                     | Tipo             | Obrigatório | Observações                                                                                                                                           |
-| ------------------------- | ---------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pessoa_id                 | integer          | ✔️          | `pessoas.id` da pessoa que está sendo matriculada (aluno). Deve existir em `pessoas`.                                                                 |
-| responsavel_financeiro_id | integer          | ✔️          | `pessoas.id` do responsável financeiro. Pode ser igual ao `pessoa_id` (maior de idade) ou diferente (pai/mãe/responsável). Deve existir em `pessoas`. |
-| tipo_matricula            | string           | ✔️          | Deve ser um dos valores: `REGULAR`, `CURSO_LIVRE`, `PROJETO_ARTISTICO`. Na Fase 1, foco em REGULAR e CURSO_LIVRE.                                     |
-| vinculo_id                | integer          | ✔️          | Para REGULAR/CURSO_LIVRE: `turmas.turma_id` da turma em que o aluno será matriculado. No futuro, também poderá ser id de projeto artístico.           |
-| ano_referencia            | integer          | ⬜ / cond.   | Obrigatório quando `tipo_matricula = 'REGULAR'` (ano letivo). Para outros tipos, pode ser opcional ou ignorado.                                       |
-| data_matricula            | string (date)    | ⬜           | Data da matrícula. Se não for enviada, a API usará a data do servidor (current_date). Também pode ser usada como `dt_inicio` em `turma_aluno`.        |
-| observacoes               | string           | ⬜           | Observações internas sobre a matrícula (texto livre).                                                                                                |
-| origem                    | string           | ⬜           | Fonte da criação: ex.: `painel_admin`, `app_responsavel`, `importacao`. Ajuda em auditoria.                                                          |
-| criar_vinculo_turma       | boolean          | ⬜ (default true) | Se true, cria também o registro em `turma_aluno`. Em casos avançados (migração manual), pode ser false.                                               |
-
-Campos como `plano_matricula_id`, `contrato_modelo_id`, `contrato_emitido_id` não são tratados nesta fase pela rota; serão adicionados quando o fluxo de contratos/cobranças estiver fechado.
-
----
-
-## 4. Regras de Validação
-
-### 4.1. Validações Básicas de Tipo/Formato
-
-- `pessoa_id`: obrigatório, inteiro > 0.
-- `responsavel_financeiro_id`: obrigatório, inteiro > 0.
-- `tipo_matricula`: obrigatório, string, limitado aos valores da enum.
-- `vinculo_id`: obrigatório, inteiro > 0.
-- `ano_referencia`:
-  - obrigatório se `tipo_matricula = 'REGULAR'`;
-  - se presente, deve ser >= 2000 e <= (ano_atual + 1).
-- `data_matricula` (se presente): deve ser data válida no formato ISO `YYYY-MM-DD`.
-- `observacoes`: se presente, string não absurdamente longa (ex.: limitar a 2000 caracteres).
-- `origem`: se presente, string curta (ex.: até 100 caracteres).
-- `criar_vinculo_turma`: se presente, boolean.
-
-Se qualquer validação básica falhar → HTTP 400 (Bad Request) com detalhes.
-
-### 4.2. Validações de Existência
-
-- `pessoa_id` deve existir em `pessoas` e estar marcada como ativa (se houver flag de ativo).
-- `responsavel_financeiro_id` deve existir em `pessoas` e preferencialmente estar ativa.
-- `vinculo_id` deve existir em `turmas` e a turma deve estar em situação que permita matrícula (ex.: `status IN ('ATIVA', 'ABERTA_INSCRICOES')` — ajustar à realidade).
-
-Se alguma dessas entidades não for encontrada → HTTP 404 (Not Found) com mensagem adequada (ex.: `"pessoa_nao_encontrada"`, `"responsavel_nao_encontrado"`, `"turma_nao_encontrada"`).
-
-### 4.3. Regras de Negócio (Matrículas Duplicadas)
-
-Para `tipo_matricula = 'REGULAR'`, não deve existir outra matrícula ativa do mesmo tipo para a mesma pessoa na mesma turma e ano, por exemplo:
-
-Buscar em `matriculas`:
-
-- `pessoa_id = payload.pessoa_id`
-- `tipo_matricula = 'REGULAR'`
-- `vinculo_id = payload.vinculo_id`
-- `ano_referencia = payload.ano_referencia`
-- `status IN ('ATIVA', 'TRANCADA')` (ajustar à regra interna)
-
-Se já existir, a rota deve retornar HTTP 409 (Conflict) com um erro tipo `"matricula_duplicada"` e, opcionalmente, os dados básicos da matrícula existente.
-
-Essa regra deve ser compatível com a futura constraint parcial:
-
-```sql
-UNIQUE (pessoa_id, tipo_matricula, vinculo_id)
-WHERE tipo_matricula = 'REGULAR';
-```
-
-### 4.4. Validações de Responsável Financeiro
-
-- Permitir que `responsavel_financeiro_id = pessoa_id` (ex.: adulto que paga a própria matrícula).
-- Se `responsavel_financeiro_id != pessoa_id`, no futuro a API pode (opcionalmente) validar se existe um vínculo em `vinculos` (aluno ↔ responsável). Nesta fase, isso pode ser apenas uma recomendação, não bloqueante.
-
----
-
-## 5. Fluxo Interno da Rota
-
-A operação deve ser feita em transação (uma única transação no banco):
-
-### 5.1. Passos (alto nível)
-
-1. Validar autenticação/role.
-2. Ler e validar o payload (estrutura e tipos).
-3. Validar existência de `pessoa_id`, `responsavel_financeiro_id` e turma (`vinculo_id`).
-4. Verificar se já existe matrícula duplicada (regra de negócio).
-5. Criar registro em `matriculas`.
-6. Se `criar_vinculo_turma = true`, criar registro em `turma_aluno`.
-7. Retornar a matrícula criada e o vínculo da turma (se criado).
-
-### 5.2. Pseudo-fluxo Detalhado
-
-```ts
-// 1. Autenticação e permissão
-const user = requireAuth(request);
-assertHasRole(user, ["ADMIN", "SECRETARIA", "COORDENACAO"]);
-
-// 2. Validar payload básico
-const payload = await request.json();
-// ... validações de tipo/campos obrigatórios ...
-
-// 3. Buscar entidades
-const pessoa = await db.pessoas.findById(payload.pessoa_id);
-if (!pessoa) return 404;
-
-const responsavel = await db.pessoas.findById(payload.responsavel_financeiro_id);
-if (!responsavel) return 404;
-
-const turma = await db.turmas.findById(payload.vinculo_id);
-if (!turma) return 404;
-
-// 4. Regra de duplicidade (REGULAR)
-if (payload.tipo_matricula === "REGULAR") {
-  const existente = await db.matriculas.findOne({
-    pessoa_id: payload.pessoa_id,
-    tipo_matricula: "REGULAR",
-    vinculo_id: payload.vinculo_id,
-    ano_referencia: payload.ano_referencia,
-    status_in: ["ATIVA", "TRANCADA"],
-  });
-
-  if (existente) {
-    return Response.json(
-      { error: "matricula_duplicada", matricula: existente },
-      { status: 409 }
-    );
-  }
-}
-
-// 5. Iniciar transação
-await db.transaction(async (tx) => {
-  // 5.1. Criar matrícula
-  const matricula = await tx.matriculas
-    .insert({
-      pessoa_id: payload.pessoa_id,
-      responsavel_financeiro_id: payload.responsavel_financeiro_id,
-      tipo_matricula: payload.tipo_matricula,
-      vinculo_id: payload.vinculo_id,
-      ano_referencia: payload.ano_referencia ?? null,
-      data_matricula: payload.data_matricula ?? today(),
-      status: "ATIVA",
-      observacoes: payload.observacoes ?? null,
-      // campos de auditoria (created_by etc.) derivados do user
-    })
-    .returning("*");
-
-  let turmaAluno = null;
-
-  // 5.2. Criar vínculo em turma_aluno (opcional)
-  if (payload.criar_vinculo_turma !== false) {
-    turmaAluno = await tx.turma_aluno
-      .insert({
-        turma_id: payload.vinculo_id,
-        aluno_pessoa_id: payload.pessoa_id,
-        dt_inicio: payload.data_matricula ?? today(),
-        status: "ativo", // ajustar ao enum real
-        matricula_id: matricula.id,
-      })
-      .returning("*");
-  }
-
-  // 5.3. Retornar resultado
-  return { matricula, turmaAluno };
-});
-```
-
-Observações:
-
-- A transação deve garantir que ou ambos os registros (`matriculas` e `turma_aluno`) são criados, ou nenhum é.
-- Em caso de erro na inserção de `turma_aluno`, a matrícula também deve ser revertida.
-
----
-
-## 6. Respostas da API
-
-### 6.1. Sucesso
-
-- HTTP 201 (Created)
-
-Exemplo de corpo:
-
-```json
-{
-  "ok": true,
-  "matricula": {
-    "id": 1001,
-    "pessoa_id": 123,
-    "responsavel_financeiro_id": 456,
-    "tipo_matricula": "REGULAR",
-    "vinculo_id": 789,
-    "ano_referencia": 2025,
-    "data_matricula": "2025-02-10",
-    "data_encerramento": null,
-    "status": "ATIVA",
-    "observacoes": "Matrícula feita na recepção.",
-    "created_at": "2025-02-10T12:00:00Z",
-    "created_by": "user-uuid",
-    "updated_at": "2025-02-10T12:00:00Z",
-    "updated_by": "user-uuid"
+  "ano_referencia": 2026,
+  "data_matricula": "2026-02-10",
+  "data_inicio_vinculo": "2026-02-10",
+  "tabela_matricula_id": 10,
+  "plano_pagamento_id": 3,
+  "vencimento_padrao_referencia": 12,
+  "politica_primeiro_pagamento": {
+    "modo": "PADRAO",
+    "motivo_excecao": null
   },
-  "turma_aluno": {
-    "turma_aluno_id": 5555,
-    "turma_id": 789,
-    "aluno_pessoa_id": 123,
-    "dt_inicio": "2025-02-10",
-    "dt_fim": null,
-    "status": "ativo",
-    "matricula_id": 1001
-  }
+  "pagamento_entrada": {
+    "metodo_pagamento": "PIX",
+    "valor_centavos": 25000,
+    "data_pagamento": "2026-02-10",
+    "observacoes": "Pago no ato."
+  },
+  "observacoes": "Matrícula feita na recepção."
 }
 ```
 
-Se `criar_vinculo_turma = false`, o campo `"turma_aluno"` pode vir como null ou simplesmente não ser incluído.
+### 4.2 Campos
 
-### 6.2. Erros Esperados
+Obrigatórios:
 
-- 400 — Bad Request  
-  Payload malformado, campos obrigatórios ausentes ou invalidos.  
-  Exemplo:
+- pessoa_id (int) — pessoas.id do aluno
+- responsavel_financeiro_id (int) — pessoas.id do pagador
+- tipo_matricula (string) — REGULAR | CURSO_LIVRE | PROJETO_ARTISTICO (fase 1: REGULAR/CURSO_LIVRE)
+- vinculo_id (int) — turmas.turma_id
+- data_matricula (date) — default: hoje
+- data_inicio_vinculo (date) — default: data_matricula (define 1º ciclo efetivo)
 
-  ```json
-  {
-    "ok": false,
-    "error": "payload_invalido",
-    "details": {
-      "tipo_matricula": "valor_invalido",
-      "ano_referencia": "obrigatorio_para_regular"
-    }
-  }
-  ```
+Condicionais / recomendados:
 
-- 401 — Unauthorized  
-  Usuário não autenticado.
+- ano_referencia (int) — obrigatório para REGULAR
+- tabela_matricula_id (int) — obrigatório quando o modelo físico estiver ativo
+- plano_pagamento_id (int) — opcional inicialmente (pode ser null)
+- vencimento_padrao_referencia (int) — snapshot; default institucional (ex.: 12)
 
-- 403 — Forbidden  
-  Usuário autenticado, mas sem permissão para criar matrícula.
+Bloco de política (novo):
 
-- 404 — Not Found  
-  Pessoa, responsável ou turma não encontrada.  
-  Exemplo:
+- politica_primeiro_pagamento (opcional):
+  - modo: PADRAO | ADIAR_PARA_VENCIMENTO
+  - motivo_excecao: obrigatório se modo = ADIAR_PARA_VENCIMENTO
 
-  ```json
-  {
-    "ok": false,
-    "error": "turma_nao_encontrada"
-  }
-  ```
+Bloco de pagamento da entrada (opcional):
 
-- 409 — Conflict  
-  Matrícula já existente para aquele conjunto (pessoa, turma, ano, tipo).  
-  Exemplo:
-
-  ```json
-  {
-    "ok": false,
-    "error": "matricula_duplicada",
-    "matricula": {
-      "id": 1000,
-      "pessoa_id": 123,
-      "tipo_matricula": "REGULAR",
-      "vinculo_id": 789,
-      "ano_referencia": 2025,
-      "status": "ATIVA"
-    }
-  }
-  ```
-
-- 500 — Internal Server Error  
-  Erro inesperado no servidor ou no banco. A resposta deve não expor detalhes sensíveis de stack trace, apenas um código genérico e um `request_id` ou similar para auditoria/log.
+- pagamento_entrada:
+  - usado quando houver Entrada (Pró-rata) e pagamento no ato.
+  - se modo = ADIAR_PARA_VENCIMENTO, não deve haver recebimento no ato.
 
 ---
 
-## 7. Considerações Futuras (Extensões da Rota)
+## 5. Regras de validação (resumo)
 
-A rota `POST /api/matriculas/novo` poderá ser expandida em versões futuras para:
+### 5.1 Existência
 
-- Criar pessoa e responsável automaticamente, caso não existam (`pessoa_nova`, `responsavel_novo`).
-- Gerar contrato (HTML/PDF) com base em `contrato_modelo_id` e anexar aos campos:
-  - `contrato_emitido_id`
-  - `contrato_pdf_url`
-- Criar o plano financeiro e cobranças associados:
-  - vincular `matriculas` → `cobrancas` / `recebimentos`.
-- Suportar outros tipos de matrícula (`PROJETO_ARTISTICO`) onde `vinculo_id` aponte para projetos/eventos em vez de turmas regulares.
-- Registros complementares:
-  - criação automática de vínculos em `vinculos` (aluno ↔ responsável), quando fizer sentido;
-  - logs detalhados em `auditoria_logs`.
+- pessoa_id existe em pessoas
+- responsavel_financeiro_id existe em pessoas
+- vinculo_id existe em turmas
 
-Estas extensões devem manter a mesma estrutura básica de validação, transação e resposta, apenas adicionando novos passos após a criação da matrícula.
+### 5.2 Duplicidade (REGULAR)
+
+Não permitir matrícula ativa/trancada para mesma pessoa + turma + ano, conforme regra interna:
+
+- retornar 409 com error = "matricula_duplicada".
+
+### 5.3 Política de primeiro pagamento
+
+Se politica_primeiro_pagamento.modo = ADIAR_PARA_VENCIMENTO:
+
+- motivo_excecao obrigatório (não vazio)
+- registrar auditoria (campos ou evento)
+- Entrada (Pró-rata), quando aplicável, vira cobrança pendente com vencimento calculado, sem recebimento no ato.
+
+### 5.4 Pró-rata
+
+A API deve calcular a Entrada (Pró-rata) quando aplicável, conforme Regras Oficiais v1:
+
+- Pró-rata só na primeira cobrança
+- Janeiro com regra específica (início letivo parametrizável)
+- Pró-rata ajusta valor, nunca vencimento
+- Regra padrão (até corte = mensalidade cheia; após corte = pró-rata)
+
+Observação: parâmetros institucionais (dia de corte, início letivo janeiro, vencimento referência) devem vir de Config Escola (fase SQL posterior).
+
+---
+
+## 6. Fluxo interno (alto nível)
+
+Em transação:
+
+- Validar permissão e payload.
+- Buscar aluno/responsável/turma.
+- Resolver valores (mensalidade) a partir da Tabela de Matrícula (quando já existir).
+- Calcular:
+  - se há mensalidade cheia a lançar,
+  - se há Entrada (Pró-rata) e seu valor.
+- Criar matriculas.
+- Criar/garantir turma_aluno com matricula_id.
+
+Financeiro:
+
+- Mensalidade cheia → inserir em credito_conexao_lancamentos (origem_sistema='MATRICULA', origem_id=matriculas.id).
+- Entrada (Pró-rata):
+  - modo PADRAO: criar cobrancas + recebimentos (pago no ato).
+  - modo ADIAR: criar cobrancas pendente com vencimento calculado; sem recebimento.
+
+---
+
+## 7. Respostas
+
+### 7.1 Sucesso (201)
+
+Retornar:
+
+- matrícula criada
+- vínculo turma_aluno
+- ids financeiros criados (quando houver)
+- valores calculados (mensalidade e pró-rata)
+
+### 7.2 Erros
+
+- 400 payload inválido
+- 401 não autenticado
+- 403 sem permissão
+- 404 entidade não encontrada
+- 409 conflito (duplicidade, etc.)
+- 500 erro interno
+
+---
+
+## 8. Evoluções futuras
+
+- Contratos (geração, emissão, assinatura)
+- Integração completa com Tabela de Matrícula e Planos
+- Matrícula de Projeto Artístico
+- Integração com cobrança Neofin (faturas/boletos) via Cartão Conexão
