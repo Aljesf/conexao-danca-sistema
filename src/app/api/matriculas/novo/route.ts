@@ -1,396 +1,326 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-/**
- * POST /api/matriculas/novo
- *
- * Implementa a criação de uma nova matrícula + vínculo em turma_aluno,
- * conforme docs/api-matriculas.md.
- *
- * Regras principais:
- * - Requer usuário autenticado.
- * - Valida payload.
- * - Valida existência de pessoa, responsável e turma.
- * - Evita matrícula duplicada REGULAR para mesma pessoa/turma/ano.
- * - Cria registro em `matriculas`.
- * - Cria vínculo em `turma_aluno` (turma_id, aluno_pessoa_id, matricula_id).
- * - Em caso de erro ao criar turma_aluno, tenta rollback da matrícula.
- */
+export const runtime = "nodejs";
 
-type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+type PoliticaPrimeiroPagamento =
+  | {
+      modo: "PADRAO";
+      motivo_excecao?: null;
+    }
+  | {
+      modo: "ADIAR_PARA_VENCIMENTO";
+      motivo_excecao: string;
+    };
 
-const TIPO_MATRICULA_PERMITIDOS: TipoMatricula[] = [
-  "REGULAR",
-  "CURSO_LIVRE",
-  "PROJETO_ARTISTICO",
-];
+type PagamentoEntrada = {
+  metodo_pagamento: string;
+  valor_centavos: number;
+  data_pagamento?: string | null; // YYYY-MM-DD
+  observacoes?: string | null;
+};
 
-function badRequest(details: unknown) {
+type MatriculaNovoPayload = {
+  pessoa_id: number;
+  responsavel_financeiro_id: number;
+  tipo_matricula: "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+  vinculo_id: number;
+  ano_referencia?: number | null;
+  data_matricula?: string | null; // YYYY-MM-DD
+  data_inicio_vinculo?: string | null; // YYYY-MM-DD
+  tabela_matricula_id?: number | null;
+  plano_pagamento_id?: number | null;
+  vencimento_padrao_referencia?: number | null;
+  politica_primeiro_pagamento?: PoliticaPrimeiroPagamento | null;
+  pagamento_entrada?: PagamentoEntrada | null;
+  observacoes?: string | null;
+};
+
+function isValidDateYYYYMMDD(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return false;
+  const [y, m, day] = value.split("-").map((v) => Number(v));
+  return d.getUTCFullYear() === y && d.getUTCMonth() + 1 === m && d.getUTCDate() === day;
+}
+
+function badRequest(message: string, details?: Record<string, unknown>) {
   return NextResponse.json(
-    {
-      ok: false,
-      error: "payload_invalido",
-      details,
-    },
+    { ok: false, error: "payload_invalido", message, details: details ?? null },
     { status: 400 }
   );
 }
 
-function unauthorized() {
-  return NextResponse.json(
-    {
-      ok: false,
-      error: "nao_autenticado",
-    },
-    { status: 401 }
-  );
+function conflict(code: string, message: string, details?: Record<string, unknown>) {
+  return NextResponse.json({ ok: false, error: code, message, details: details ?? null }, { status: 409 });
 }
 
-function notFound(error: string, extra?: unknown) {
-  return NextResponse.json(
-    {
-      ok: false,
-      error,
-      ...(extra ? { details: extra } : {}),
-    },
-    { status: 404 }
-  );
+function notFound(code: string, message: string) {
+  return NextResponse.json({ ok: false, error: code, message }, { status: 404 });
 }
 
-function conflict(error: string, extra?: unknown) {
-  return NextResponse.json(
-    {
-      ok: false,
-      error,
-      ...(extra ? { details: extra } : {}),
-    },
-    { status: 409 }
-  );
+function serverError(message: string) {
+  return NextResponse.json({ ok: false, error: "internal_error", message }, { status: 500 });
 }
 
-function internalError(message: string, extra?: unknown) {
-  return NextResponse.json(
-    {
-      ok: false,
-      error: "erro_interno",
-      message,
-      ...(extra ? { details: extra } : {}),
-    },
-    { status: 500 }
-  );
-}
-
-type NovoPayload = {
-  pessoa_id: number;
-  responsavel_financeiro_id: number;
-  tipo_matricula: TipoMatricula;
-  vinculo_id: number;
-  ano_referencia?: number;
-  data_matricula?: string; // YYYY-MM-DD
-  observacoes?: string | null;
-  origem?: string | null;
-  criar_vinculo_turma?: boolean;
-};
-
-function isValidDateISO(dateStr: string): boolean {
-  // Aceita apenas formato YYYY-MM-DD
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return false;
-  // Extra: checar se a data convertida bate com a string (evita 2025-13-40 virar outra coisa)
-  const [year, month, day] = dateStr.split("-").map((v) => parseInt(v, 10));
-  return (
-    d.getUTCFullYear() === year &&
-    d.getUTCMonth() + 1 === month &&
-    d.getUTCDate() === day
-  );
-}
-
-function todayISO(): string {
+function getTodayYYYYMMDD(): string {
   const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return `${y}-${m}-${day}`;
 }
 
-/**
- * Valida estrutura e regras básicas do payload.
- * Retorna { ok: true, payload } se estiver ok,
- * ou { ok: false, errors } se houver problema.
- */
-function validatePayload(
-  body: any
-): { ok: true; payload: NovoPayload } | { ok: false; errors: Record<string, string> } {
-  const errors: Record<string, string> = {};
-
-  if (body == null || typeof body !== "object") {
-    return { ok: false, errors: { _root: "corpo_json_obrigatorio" } };
-  }
-
-  const {
-    pessoa_id,
-    responsavel_financeiro_id,
-    tipo_matricula,
-    vinculo_id,
-    ano_referencia,
-    data_matricula,
-    observacoes,
-    origem,
-    criar_vinculo_turma,
-  } = body as NovoPayload;
-
-  if (!Number.isInteger(pessoa_id) || pessoa_id <= 0) {
-    errors.pessoa_id = "pessoa_id_obrigatorio_inteiro_positivo";
-  }
-
-  if (!Number.isInteger(responsavel_financeiro_id) || responsavel_financeiro_id <= 0) {
-    errors.responsavel_financeiro_id =
-      "responsavel_financeiro_id_obrigatorio_inteiro_positivo";
-  }
-
-  if (typeof tipo_matricula !== "string" || !TIPO_MATRICULA_PERMITIDOS.includes(tipo_matricula as TipoMatricula)) {
-    errors.tipo_matricula = "tipo_matricula_invalido";
-  }
-
-  if (!Number.isInteger(vinculo_id) || vinculo_id <= 0) {
-    errors.vinculo_id = "vinculo_id_obrigatorio_inteiro_positivo";
-  }
-
-  if (tipo_matricula === "REGULAR") {
-    if (!Number.isInteger(ano_referencia)) {
-      errors.ano_referencia = "ano_referencia_obrigatorio_para_regular";
-    } else {
-      const currentYear = new Date().getFullYear();
-      if (ano_referencia! < 2000 || ano_referencia! > currentYear + 1) {
-        errors.ano_referencia = "ano_referencia_fora_do_intervalo";
-      }
-    }
-  } else if (ano_referencia != null) {
-    const currentYear = new Date().getFullYear();
-    if (ano_referencia < 2000 || ano_referencia > currentYear + 1) {
-      errors.ano_referencia = "ano_referencia_fora_do_intervalo";
-    }
-  }
-
-  if (data_matricula != null) {
-    if (typeof data_matricula !== "string" || !isValidDateISO(data_matricula)) {
-      errors.data_matricula = "data_matricula_formato_invalido";
-    }
-  }
-
-  if (observacoes != null && typeof observacoes !== "string") {
-    errors.observacoes = "observacoes_deve_ser_string_ou_null";
-  } else if (typeof observacoes === "string" && observacoes.length > 2000) {
-    errors.observacoes = "observacoes_muito_longa";
-  }
-
-  if (origem != null && typeof origem !== "string") {
-    errors.origem = "origem_deve_ser_string_ou_null";
-  } else if (typeof origem === "string" && origem.length > 100) {
-    errors.origem = "origem_muito_longa";
-  }
-
-  if (criar_vinculo_turma != null && typeof criar_vinculo_turma !== "boolean") {
-    errors.criar_vinculo_turma = "criar_vinculo_turma_deve_ser_booleano";
-  }
-
-  if (Object.keys(errors).length > 0) {
-    return { ok: false, errors };
-  }
-
-  return {
-    ok: true,
-    payload: {
-      pessoa_id,
-      responsavel_financeiro_id,
-      tipo_matricula: tipo_matricula as TipoMatricula,
-      vinculo_id,
-      ano_referencia,
-      data_matricula,
-      observacoes: observacoes ?? null,
-      origem: origem ?? null,
-      criar_vinculo_turma:
-        criar_vinculo_turma === undefined ? true : criar_vinculo_turma,
-    },
-  };
+function normalizeInt(value: unknown): number | null {
+  if (typeof value !== "number") return null;
+  if (!Number.isFinite(value)) return null;
+  if (!Number.isInteger(value)) return null;
+  return value;
 }
 
-export async function POST(request: NextRequest) {
-  const cookieStore = await cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+function safeString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+}
 
-  // 1. Autenticação básica
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+function calcVencimentoAdiado(baseDateYYYYMMDD: string, diaVencimento: number): string {
+  const [y, m, d] = baseDateYYYYMMDD.split("-").map((v) => Number(v));
+  const base = new Date(Date.UTC(y, m - 1, d));
+  const year = base.getUTCFullYear();
+  const month = base.getUTCMonth();
+  const day = base.getUTCDate();
+  const targetMonth = day <= diaVencimento ? month : month + 1;
+  const targetDate = new Date(Date.UTC(year, targetMonth, diaVencimento));
+  const ty = targetDate.getUTCFullYear();
+  const tm = String(targetDate.getUTCMonth() + 1).padStart(2, "0");
+  const td = String(targetDate.getUTCDate()).padStart(2, "0");
+  return `${ty}-${tm}-${td}`;
+}
 
-  if (authError || !user) {
-    return unauthorized();
+function parsePoliticaPrimeiroPagamento(value: unknown): PoliticaPrimeiroPagamento | null | "invalid" {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return "invalid";
+  const record = value as Record<string, unknown>;
+  const modo = safeString(record.modo);
+  if (modo === "PADRAO") {
+    return { modo: "PADRAO", motivo_excecao: null };
+  }
+  if (modo === "ADIAR_PARA_VENCIMENTO") {
+    const motivo = safeString(record.motivo_excecao);
+    if (!motivo) return "invalid";
+    return { modo: "ADIAR_PARA_VENCIMENTO", motivo_excecao: motivo };
+  }
+  return "invalid";
+}
+
+export async function POST(req: Request) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    return serverError("Supabase env vars missing (URL or SERVICE_ROLE).");
   }
 
-  // TODO: no futuro, validar roles/permissões (ADMIN/SECRETARIA/etc.)
-  // usando profiles + usuario_roles/roles_sistema.
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
 
-  // 2. Ler e validar payload
-  let jsonBody: any;
+  let payloadUnknown: unknown;
   try {
-    jsonBody = await request.json();
-  } catch (e) {
-    return badRequest({ _root: "json_invalido" });
+    payloadUnknown = await req.json();
+  } catch {
+    return badRequest("Invalid JSON body.");
   }
 
-  const validation = validatePayload(jsonBody);
-  if (!validation.ok) {
-    return badRequest(validation.errors);
+  if (!payloadUnknown || typeof payloadUnknown !== "object" || Array.isArray(payloadUnknown)) {
+    return badRequest("Payload must be a JSON object.");
   }
 
-  const {
-    pessoa_id,
-    responsavel_financeiro_id,
-    tipo_matricula,
-    vinculo_id,
-    ano_referencia,
-    data_matricula,
-    observacoes,
-    // coluna origem ainda não existe na tabela; manter leitura futura
-    origem: _origem,
-    criar_vinculo_turma,
-  } = validation.payload;
+  const payload = payloadUnknown as Record<string, unknown>;
 
-  const dataMatriculaEfetiva = data_matricula ?? todayISO();
+  const pessoaId = normalizeInt(payload.pessoa_id);
+  const responsavelId = normalizeInt(payload.responsavel_financeiro_id);
+  const vinculoId = normalizeInt(payload.vinculo_id);
 
-  // 3. Validar existência de pessoa, responsável e turma
-  const { data: pessoa, error: pessoaError } = await supabase
+  const tipoMatriculaRaw = safeString(payload.tipo_matricula);
+  const tipoMatricula = tipoMatriculaRaw as MatriculaNovoPayload["tipo_matricula"] | null;
+
+  if (!pessoaId || pessoaId <= 0) return badRequest("pessoa_id invalido.");
+  if (!responsavelId || responsavelId <= 0) return badRequest("responsavel_financeiro_id invalido.");
+  if (!vinculoId || vinculoId <= 0) return badRequest("vinculo_id invalido.");
+  if (!tipoMatricula || !["REGULAR", "CURSO_LIVRE", "PROJETO_ARTISTICO"].includes(tipoMatricula)) {
+    return badRequest("tipo_matricula invalido.");
+  }
+
+  const anoReferencia =
+    payload.ano_referencia === null || payload.ano_referencia === undefined
+      ? null
+      : normalizeInt(payload.ano_referencia);
+  if (tipoMatricula === "REGULAR" && (!anoReferencia || anoReferencia < 2000 || anoReferencia > 2100)) {
+    return badRequest("ano_referencia obrigatorio e valido para REGULAR.");
+  }
+
+  const dataMatricula = safeString(payload.data_matricula) ?? getTodayYYYYMMDD();
+  const dataInicioVinculo = safeString(payload.data_inicio_vinculo) ?? dataMatricula;
+
+  if (!isValidDateYYYYMMDD(dataMatricula)) return badRequest("data_matricula invalida (YYYY-MM-DD).");
+  if (!isValidDateYYYYMMDD(dataInicioVinculo)) return badRequest("data_inicio_vinculo invalida (YYYY-MM-DD).");
+
+  const tabelaMatriculaId =
+    payload.tabela_matricula_id === null || payload.tabela_matricula_id === undefined
+      ? null
+      : normalizeInt(payload.tabela_matricula_id);
+  const planoPagamentoId =
+    payload.plano_pagamento_id === null || payload.plano_pagamento_id === undefined
+      ? null
+      : normalizeInt(payload.plano_pagamento_id);
+
+  const vencRef =
+    payload.vencimento_padrao_referencia === null || payload.vencimento_padrao_referencia === undefined
+      ? null
+      : normalizeInt(payload.vencimento_padrao_referencia);
+
+  if (vencRef !== null && (vencRef < 1 || vencRef > 28)) {
+    return badRequest("vencimento_padrao_referencia invalido (1..28).");
+  }
+
+  const politica = parsePoliticaPrimeiroPagamento(payload.politica_primeiro_pagamento);
+  if (politica === "invalid") {
+    return badRequest("politica_primeiro_pagamento invalida.");
+  }
+
+  const observacoes = safeString(payload.observacoes);
+
+  const { data: pessoa, error: pessoaErr } = await supabase
     .from("pessoas")
     .select("id")
-    .eq("id", pessoa_id)
+    .eq("id", pessoaId)
     .maybeSingle();
+  if (pessoaErr) return serverError("Failed to query pessoa.");
+  if (!pessoa) return notFound("pessoa_nao_encontrada", "Pessoa (aluno) nao encontrada.");
 
-  if (pessoaError) {
-    return internalError("erro_buscar_pessoa", pessoaError.message);
-  }
-  if (!pessoa) {
-    return notFound("pessoa_nao_encontrada");
-  }
-
-  const { data: responsavel, error: respError } = await supabase
+  const { data: responsavel, error: respErr } = await supabase
     .from("pessoas")
     .select("id")
-    .eq("id", responsavel_financeiro_id)
+    .eq("id", responsavelId)
     .maybeSingle();
+  if (respErr) return serverError("Failed to query responsavel financeiro.");
+  if (!responsavel) return notFound("responsavel_nao_encontrado", "Responsavel financeiro nao encontrado.");
 
-  if (respError) {
-    return internalError("erro_buscar_responsavel", respError.message);
-  }
-  if (!responsavel) {
-    return notFound("responsavel_nao_encontrado");
-  }
-
-  const { data: turma, error: turmaError } = await supabase
+  const { data: turma, error: turmaErr } = await supabase
     .from("turmas")
-    .select("turma_id, status")
-    .eq("turma_id", vinculo_id)
+    .select("turma_id")
+    .eq("turma_id", vinculoId)
     .maybeSingle();
+  if (turmaErr) return serverError("Failed to query turma.");
+  if (!turma) return notFound("turma_nao_encontrada", "Turma nao encontrada.");
 
-  if (turmaError) {
-    return internalError("erro_buscar_turma", turmaError.message);
-  }
-  if (!turma) {
-    return notFound("turma_nao_encontrada");
-  }
-
-  // Opcional: checar status da turma (ajuste conforme o enum real)
-  // Ex.: se tiver campo status, evitar matrícula em turma arquivada/encerrada:
-  // if (turma.status && !["ATIVA", "ABERTA_INSCRICOES"].includes(turma.status)) {
-  //   return conflict("turma_nao_aceita_matriculas", { status: turma.status });
-  // }
-
-  // 4. Regra de matrículas duplicadas (REGULAR)
-  if (tipo_matricula === "REGULAR") {
-    const { data: existente, error: dupError } = await supabase
+  if (tipoMatricula === "REGULAR") {
+    const { data: existente, error: dupErr } = await supabase
       .from("matriculas")
-      .select("id, pessoa_id, tipo_matricula, vinculo_id, ano_referencia, status")
-      .eq("pessoa_id", pessoa_id)
+      .select("id,status")
+      .eq("pessoa_id", pessoaId)
       .eq("tipo_matricula", "REGULAR")
-      .eq("vinculo_id", vinculo_id)
-      .eq("ano_referencia", ano_referencia)
+      .eq("vinculo_id", vinculoId)
+      .eq("ano_referencia", anoReferencia)
       .in("status", ["ATIVA", "TRANCADA"])
       .maybeSingle();
 
-    if (dupError && dupError.code !== "PGRST116") {
-      // PGRST116 é "No rows found" no PostgREST; ajustar se necessário
-      return internalError("erro_verificar_matricula_duplicada", dupError.message);
-    }
-
+    if (dupErr) return serverError("Failed to check matricula duplicates.");
     if (existente) {
-      return conflict("matricula_duplicada", {
-        id: existente.id,
-        pessoa_id: existente.pessoa_id,
-        tipo_matricula: existente.tipo_matricula,
-        vinculo_id: existente.vinculo_id,
-        ano_referencia: existente.ano_referencia,
-        status: existente.status,
+      return conflict("matricula_duplicada", "Matricula ativa/trancada ja existe para este aluno/turma/ano.", {
+        matricula_id: existente.id,
       });
     }
   }
 
-  // 5. Criar matrícula em `matriculas`
-  const { data: matricula, error: matriculaError } = await supabase
+  const insertMatricula: Record<string, unknown> = {
+    pessoa_id: pessoaId,
+    responsavel_financeiro_id: responsavelId,
+    tipo_matricula: tipoMatricula,
+    vinculo_id: vinculoId,
+    ano_referencia: anoReferencia,
+    status: "ATIVA",
+    data_matricula: dataMatricula,
+    data_inicio_vinculo: dataInicioVinculo,
+    tabela_matricula_id: tabelaMatriculaId,
+    plano_pagamento_id: planoPagamentoId,
+    vencimento_padrao_referencia: vencRef ?? 12,
+    observacoes: observacoes ?? null,
+  };
+
+  const { data: matriculaCriada, error: matErr } = await supabase
     .from("matriculas")
-    .insert({
-      pessoa_id,
-      responsavel_financeiro_id,
-      tipo_matricula,
-      vinculo_id,
-      ano_referencia: ano_referencia ?? null,
-      data_matricula: dataMatriculaEfetiva,
-      // status inicial: ATIVA (ajustar conforme enum real)
-      status: "ATIVA",
-      observacoes,
-      // campos de auditoria serão preenchidos via triggers ou
-      // podem ser tratados aqui se houver colunas created_by/updated_by
-    })
+    .insert(insertMatricula)
     .select("*")
     .single();
+  if (matErr || !matriculaCriada) return serverError("Failed to create matricula.");
 
-  if (matriculaError || !matricula) {
-    return internalError("erro_criar_matricula", matriculaError?.message);
-  }
+  const { data: vinculoExistente, error: vErr } = await supabase
+    .from("turma_aluno")
+    .select("turma_aluno_id, matricula_id")
+    .eq("turma_id", vinculoId)
+    .eq("aluno_pessoa_id", pessoaId)
+    .is("dt_fim", null)
+    .maybeSingle();
 
-  // 6. Criar vínculo em turma_aluno (se solicitado)
-  let turmaAluno: any = null;
+  if (vErr) return serverError("Failed to query turma_aluno.");
 
-  if (criar_vinculo_turma) {
-    const { data: turmaAlunoData, error: turmaAlunoError } = await supabase
+  let turmaAluno: Record<string, unknown> | null = null;
+
+  if (vinculoExistente) {
+    if (vinculoExistente.matricula_id === null) {
+      const { data: updated, error: upErr } = await supabase
+        .from("turma_aluno")
+        .update({ matricula_id: matriculaCriada.id })
+        .eq("turma_aluno_id", vinculoExistente.turma_aluno_id)
+        .select("*")
+        .single();
+      if (upErr) return serverError("Failed to update turma_aluno with matricula_id.");
+      turmaAluno = updated as Record<string, unknown>;
+    } else {
+      return conflict(
+        "vinculo_turma_duplicado",
+        "Vinculo ativo desta pessoa nesta turma ja possui matricula associada.",
+        { turma_aluno_id: vinculoExistente.turma_aluno_id }
+      );
+    }
+  } else {
+    const { data: novoVinculo, error: insVErr } = await supabase
       .from("turma_aluno")
       .insert({
-        turma_id: vinculo_id,
-        aluno_pessoa_id: pessoa_id,
-        dt_inicio: dataMatriculaEfetiva,
-        dt_fim: null,
-        status: "ativo", // ajustar ao enum/texto real
-        matricula_id: matricula.id,
+        turma_id: vinculoId,
+        aluno_pessoa_id: pessoaId,
+        matricula_id: matriculaCriada.id,
+        dt_inicio: dataInicioVinculo,
+        status: "ativo",
       })
       .select("*")
       .single();
+    if (insVErr) return serverError("Failed to create turma_aluno.");
+    turmaAluno = novoVinculo as Record<string, unknown>;
+  }
 
-    if (turmaAlunoError || !turmaAlunoData) {
-      // Rollback manual: tentar apagar a matrícula recém criada
-      await supabase.from("matriculas").delete().eq("id", matricula.id);
-
-      return internalError("erro_criar_vinculo_turma", turmaAlunoError?.message);
-    }
-
-    turmaAluno = turmaAlunoData;
+  if (politica?.modo === "ADIAR_PARA_VENCIMENTO") {
+    const motivo = politica.motivo_excecao.trim();
+    const vencimentoCalculado = calcVencimentoAdiado(dataMatricula, vencRef ?? 12);
+    const { error: evErr } = await supabase.from("matricula_eventos").insert({
+      matricula_id: matriculaCriada.id,
+      tipo_evento: "EXCECAO_PRIMEIRO_PAGAMENTO_CONCEDIDA",
+      dados: {
+        motivo_excecao: motivo,
+        vencimento_calculado: vencimentoCalculado,
+        modo: "ADIAR_PARA_VENCIMENTO",
+      },
+    });
+    if (evErr) return serverError("Matricula criada, mas falha ao registrar evento de excecao.");
   }
 
   return NextResponse.json(
     {
       ok: true,
-      matricula,
+      matricula: matriculaCriada,
       turma_aluno: turmaAluno,
     },
     { status: 201 }
