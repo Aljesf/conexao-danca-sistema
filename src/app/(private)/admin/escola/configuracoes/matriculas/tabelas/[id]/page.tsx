@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import TabelaMatriculaEditForm from "./TabelaMatriculaEditForm";
 
-type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
 type MatriculaTabela = {
   id: number;

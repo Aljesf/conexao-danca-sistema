@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
 type AlvoItem = {
   id: number;
@@ -55,7 +55,7 @@ export default function TabelaMatriculaNovaForm() {
   const paramAno = searchParams.get("ano");
 
   const [alvoTipo, setAlvoTipo] = useState<AlvoTipo>(
-    ["TURMA", "CURSO_LIVRE", "WORKSHOP", "PROJETO"].includes(paramTipo) ? paramTipo : "TURMA",
+    ["TURMA", "CURSO_LIVRE", "PROJETO"].includes(paramTipo) ? paramTipo : "TURMA",
   );
   const [alvos, setAlvos] = useState<AlvoItem[]>([]);
   const [alvosLoading, setAlvosLoading] = useState(false);
@@ -247,7 +247,6 @@ export default function TabelaMatriculaNovaForm() {
           >
             <option value="TURMA">Turma</option>
             <option value="CURSO_LIVRE">Curso livre</option>
-            <option value="WORKSHOP">Workshop</option>
             <option value="PROJETO">Projeto</option>
           </select>
         </div>

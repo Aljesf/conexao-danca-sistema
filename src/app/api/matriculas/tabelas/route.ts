@@ -4,7 +4,7 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
 
-type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
 type BodyTabela = {
   titulo?: string;
@@ -33,7 +33,7 @@ type LinkComTabela = {
   matricula_tabelas?: { id: number; titulo: string; ano_referencia: number | null; ativo: boolean } | null;
 };
 
-const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "WORKSHOP", "PROJETO"];
+const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "PROJETO"];
 
 function badRequest(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null }, { status: 400 });

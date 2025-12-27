@@ -4,7 +4,7 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
 
-type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
 type MatriculaTabela = {
   id: number;
@@ -34,7 +34,7 @@ function getAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
-const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "WORKSHOP", "PROJETO"];
+const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "PROJETO"];
 
 async function buscarTabelaIdsPorAlvo(admin: ReturnType<typeof createClient>, alvoTipo: AlvoTipo, alvoId: number) {
   const { data, error } = await admin

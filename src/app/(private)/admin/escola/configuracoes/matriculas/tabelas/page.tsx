@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
 type MatriculaTabela = {
   id: number;
@@ -29,7 +29,7 @@ type AlvosPorTipo = Record<AlvoTipo, AlvoOption[]>;
 
 type Counts = Record<AlvoTipo, number>;
 
-const ALVOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "WORKSHOP", "PROJETO"];
+const ALVOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "PROJETO"];
 
 function labelAlvo(tipo: AlvoTipo, row: Record<string, unknown>): AlvoOption {
   if (tipo === "TURMA") {
@@ -47,7 +47,7 @@ function labelAlvo(tipo: AlvoTipo, row: Record<string, unknown>): AlvoOption {
 }
 
 function alvoCounts(links?: Array<{ alvo_tipo: AlvoTipo }>): Counts {
-  const base: Counts = { TURMA: 0, CURSO_LIVRE: 0, WORKSHOP: 0, PROJETO: 0 };
+  const base: Counts = { TURMA: 0, CURSO_LIVRE: 0, PROJETO: 0 };
   (links ?? []).forEach((l) => {
     base[l.alvo_tipo] += 1;
   });
@@ -67,7 +67,6 @@ export default function Page() {
   const [alvosPorTipo, setAlvosPorTipo] = useState<AlvosPorTipo>({
     TURMA: [],
     CURSO_LIVRE: [],
-    WORKSHOP: [],
     PROJETO: [],
   });
   const [alvosErro, setAlvosErro] = useState<string | null>(null);
@@ -113,7 +112,7 @@ export default function Page() {
           }),
         );
         if (!ativo) return;
-        const next: AlvosPorTipo = { TURMA: [], CURSO_LIVRE: [], WORKSHOP: [], PROJETO: [] };
+        const next: AlvosPorTipo = { TURMA: [], CURSO_LIVRE: [], PROJETO: [] };
         results.forEach(([tipo, items]) => {
           next[tipo] = items;
         });
@@ -161,7 +160,6 @@ export default function Page() {
     const result: Record<AlvoTipo, AlvoOption[]> = {
       TURMA: [],
       CURSO_LIVRE: [],
-      WORKSHOP: [],
       PROJETO: [],
     };
     ALVOS.forEach((tipo) => {
@@ -230,8 +228,7 @@ export default function Page() {
                   <div className="col-span-2">{t.produto_tipo}</div>
                   <div className="col-span-2">{t.ano_referencia ?? "-"}</div>
                   <div className="col-span-3 text-xs text-muted-foreground">
-                    Turmas: {counts.TURMA} | Cursos livres: {counts.CURSO_LIVRE} | Workshops: {counts.WORKSHOP} | Projetos:{" "}
-                    {counts.PROJETO}
+                    Turmas: {counts.TURMA} | Cursos livres: {counts.CURSO_LIVRE} | Projetos: {counts.PROJETO}
                   </div>
                   <div className="col-span-1 text-right">
                     <Link className="underline" href={`/admin/escola/configuracoes/matriculas/tabelas/${t.id}`}>

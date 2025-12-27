@@ -8,7 +8,7 @@ type BodyPut = {
   titulo: string;
   ano_referencia: number | null;
   ativo: boolean;
-  alvo_tipo: "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+  alvo_tipo: "TURMA" | "CURSO_LIVRE" | "PROJETO";
   alvo_ids: number[];
 };
 

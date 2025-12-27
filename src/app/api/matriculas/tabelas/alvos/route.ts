@@ -44,16 +44,20 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: true, data }, { status: 200 });
     }
 
-    if (tipo === "CURSO_LIVRE" || tipo === "WORKSHOP") {
+    if (tipo === "WORKSHOP") {
+      return badRequest("WORKSHOP nao e um tipo separado; use CURSO_LIVRE.", { tipo });
+    }
+
+    if (tipo === "CURSO_LIVRE") {
       const { data, error } = await admin.from("cursos_livres").select("id,titulo").order("titulo");
       if (error) {
         if (isMissingRelation(error)) {
           return NextResponse.json(
-            { ok: true, data: [], warning: "Fonte CURSO_LIVRE/WORKSHOP ainda nao configurada no banco." },
+            { ok: true, data: [], warning: "Fonte CURSO_LIVRE ainda nao configurada no banco." },
             { status: 200 },
           );
         }
-        return serverError("Falha ao listar cursos livres/workshops.", { error });
+        return serverError("Falha ao listar cursos livres.", { error });
       }
       return NextResponse.json({ ok: true, data }, { status: 200 });
     }

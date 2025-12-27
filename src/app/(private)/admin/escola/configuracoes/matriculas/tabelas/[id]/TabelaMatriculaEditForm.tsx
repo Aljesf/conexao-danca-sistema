@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
 type AlvoItem = {
   id: number;
@@ -162,7 +162,6 @@ export default function TabelaMatriculaEditForm({
         >
           <option value="TURMA">Turma</option>
           <option value="CURSO_LIVRE">Curso livre</option>
-          <option value="WORKSHOP">Workshop</option>
           <option value="PROJETO">Projeto</option>
         </select>
         <p className="text-xs text-muted-foreground">Tipo definido no cadastro da tabela.</p>
