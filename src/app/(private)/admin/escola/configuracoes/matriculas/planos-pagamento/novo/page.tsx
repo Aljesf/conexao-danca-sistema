@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { PlanosPagamentoForm } from "../PlanosPagamentoForm";
 
 function toBool(value: FormDataEntryValue | null): boolean {
   return value === "on";
@@ -48,70 +49,21 @@ export default function Page() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-xl font-semibold">Novo plano de pagamento</h1>
-        <p className="text-sm text-muted-foreground">
-          Defina periodicidade e regras gerais. Valores ficam na <b>Tabela de Matricula</b>.
-        </p>
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 to-white px-4 py-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-slate-800">Novo plano de pagamento</h1>
+              <p className="text-sm text-slate-600">
+                Defina periodicidade e regras gerais. Valores ficam na <b>Tabela de Matricula</b>.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <PlanosPagamentoForm mode="create" action={create} submitLabel="Criar plano" />
       </div>
-
-      <form action={create} className="rounded-md border p-4 space-y-4">
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Titulo</label>
-          <input
-            name="titulo"
-            className="border rounded-md px-3 py-2 text-sm"
-            placeholder="Ex.: Mensal padrao (Cartao Conexao)"
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Descricao (opcional)</label>
-          <textarea
-            name="descricao"
-            className="border rounded-md px-3 py-2 text-sm"
-            rows={3}
-            placeholder="Regras ou observacoes internas."
-          />
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Periodicidade</label>
-            <select name="periodicidade" className="border rounded-md px-3 py-2 text-sm" defaultValue="MENSAL">
-              <option value="MENSAL">MENSAL</option>
-              <option value="AVISTA">AVISTA</option>
-              <option value="PARCELADO">PARCELADO</option>
-            </select>
-          </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Numero de parcelas</label>
-            <input name="numero_parcelas" type="number" defaultValue={1} className="border rounded-md px-3 py-2 text-sm" />
-            <p className="text-xs text-muted-foreground">Para MENSAL/AVISTA, sera salvo como 1.</p>
-          </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Permite pro-rata</label>
-            <label className="flex items-center gap-2 text-sm mt-2">
-              <input name="permite_prorata" type="checkbox" defaultChecked />
-              Sim
-            </label>
-          </div>
-        </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input name="ativo" type="checkbox" defaultChecked />
-          Plano ativo
-        </label>
-
-        <div className="flex justify-end">
-          <button className="rounded-md bg-black px-3 py-2 text-sm text-white" type="submit">
-            Criar plano
-          </button>
-        </div>
-      </form>
     </div>
   );
 }
