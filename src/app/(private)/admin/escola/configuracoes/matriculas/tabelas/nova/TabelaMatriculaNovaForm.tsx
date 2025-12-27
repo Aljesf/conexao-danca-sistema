@@ -1,16 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-type TurmaOption = {
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+
+type AlvoItem = {
   id: number;
   label: string;
-  anoRef: number | null;
-};
-
-type Props = {
-  turmas: TurmaOption[];
 };
 
 type NovoItem = {
@@ -34,14 +31,41 @@ function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
 
-export default function TabelaMatriculaNovaForm({ turmas }: Props) {
+function labelAlvo(tipo: AlvoTipo, row: Record<string, unknown>): AlvoItem {
+  if (tipo === "TURMA") {
+    const turmaId = Number((row.turma_id ?? row.id) as number);
+    const nome = typeof row.nome === "string" && row.nome.trim() ? row.nome : `Turma ${turmaId}`;
+    return { id: turmaId, label: `${nome} (ID ${turmaId})` };
+  }
+
+  const id = Number(row.id);
+  const titulo =
+    (typeof row.titulo === "string" && row.titulo.trim()) ||
+    (typeof row.nome === "string" && row.nome.trim()) ||
+    `Alvo ${id}`;
+  return { id, label: `${titulo} (ID ${id})` };
+}
+
+export default function TabelaMatriculaNovaForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const paramTipo = (searchParams.get("alvo_tipo") || "TURMA").toUpperCase() as AlvoTipo;
+  const paramId = Number(searchParams.get("alvo_id") || "");
+  const paramAno = searchParams.get("ano");
+
+  const [alvoTipo, setAlvoTipo] = useState<AlvoTipo>(
+    ["TURMA", "CURSO_LIVRE", "WORKSHOP", "PROJETO"].includes(paramTipo) ? paramTipo : "TURMA",
+  );
+  const [alvos, setAlvos] = useState<AlvoItem[]>([]);
+  const [alvosLoading, setAlvosLoading] = useState(false);
+  const [alvosErro, setAlvosErro] = useState<string | null>(null);
+  const [alvosSelecionados, setAlvosSelecionados] = useState<number[]>(paramId ? [paramId] : []);
 
   const [titulo, setTitulo] = useState("");
-  const [anoReferencia, setAnoReferencia] = useState<string>("");
+  const [anoReferencia, setAnoReferencia] = useState<string>(paramAno ?? "");
   const [ativo, setAtivo] = useState(true);
   const [observacoes, setObservacoes] = useState("");
-  const [turmasSelecionadas, setTurmasSelecionadas] = useState<number[]>([]);
 
   const [itens, setItens] = useState<NovoItem[]>([
     {
@@ -59,7 +83,11 @@ export default function TabelaMatriculaNovaForm({ turmas }: Props) {
   const [erro, setErro] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
-  const produtoTipo: "REGULAR" = "REGULAR";
+  const produtoTipo = useMemo(() => {
+    if (alvoTipo === "TURMA") return "REGULAR";
+    if (alvoTipo === "CURSO_LIVRE") return "CURSO_LIVRE";
+    return "PROJETO_ARTISTICO";
+  }, [alvoTipo]);
 
   const anoParsed = useMemo(() => {
     if (!anoReferencia.trim()) return null;
@@ -70,8 +98,8 @@ export default function TabelaMatriculaNovaForm({ turmas }: Props) {
 
   const validacao = useMemo(() => {
     if (!titulo.trim()) return "Informe o titulo da tabela.";
-    if (turmasSelecionadas.length === 0) return "Selecione ao menos 1 turma.";
-    if (produtoTipo === "REGULAR" && !anoParsed) return "Ano de referencia e obrigatorio para REGULAR.";
+    if (!anoParsed) return "Ano de referencia e obrigatorio.";
+    if (alvosSelecionados.length === 0) return "Selecione ao menos 1 alvo.";
     if (itens.length === 0) return "Inclua pelo menos 1 item.";
     for (const item of itens) {
       if (!item.codigo.trim()) return "Todo item precisa de codigo (ex.: MENSALIDADE).";
@@ -79,10 +107,39 @@ export default function TabelaMatriculaNovaForm({ turmas }: Props) {
       if (cents === null) return `Valor invalido para o item ${item.codigo}.`;
     }
     return null;
-  }, [titulo, turmasSelecionadas, produtoTipo, anoParsed, itens]);
+  }, [titulo, anoParsed, alvosSelecionados, itens]);
 
-  function toggleTurma(id: number) {
-    setTurmasSelecionadas((old) => {
+  useEffect(() => {
+    let ativoFlag = true;
+    (async () => {
+      try {
+        setAlvosErro(null);
+        setAlvosLoading(true);
+        const res = await fetch(`/api/matriculas/tabelas/alvos?tipo=${alvoTipo}`);
+        const json = (await res.json()) as { ok?: boolean; data?: Record<string, unknown>[]; message?: string };
+        if (!ativoFlag) return;
+        if (!res.ok || !json.ok) {
+          throw new Error(json.message || "Falha ao carregar alvos.");
+        }
+        const items = (json.data ?? []).map((row) => labelAlvo(alvoTipo, row));
+        setAlvos(items);
+      } catch (e: unknown) {
+        if (ativoFlag) setAlvosErro(e instanceof Error ? e.message : "Falha ao carregar alvos.");
+      } finally {
+        if (ativoFlag) setAlvosLoading(false);
+      }
+    })();
+    return () => {
+      ativoFlag = false;
+    };
+  }, [alvoTipo]);
+
+  useEffect(() => {
+    setAlvosSelecionados(paramId && alvoTipo === paramTipo ? [paramId] : []);
+  }, [alvoTipo, paramId, paramTipo]);
+
+  function toggleAlvo(id: number) {
+    setAlvosSelecionados((old) => {
       const set = new Set(old);
       if (set.has(id)) set.delete(id);
       else set.add(id);
@@ -140,7 +197,8 @@ export default function TabelaMatriculaNovaForm({ turmas }: Props) {
           produto_tipo: produtoTipo,
           ativo,
           observacoes: observacoes || null,
-          turma_ids: turmasSelecionadas,
+          alvo_tipo: alvoTipo,
+          alvo_ids: alvosSelecionados,
           itens: itemsPayload,
         }),
       });
@@ -181,6 +239,46 @@ export default function TabelaMatriculaNovaForm({ turmas }: Props) {
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <div className="space-y-2 md:col-span-2">
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Aplica-se a</label>
+          <select
+            value={alvoTipo}
+            onChange={(e) => setAlvoTipo(e.target.value as AlvoTipo)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+          >
+            <option value="TURMA">Turma</option>
+            <option value="CURSO_LIVRE">Curso livre</option>
+            <option value="WORKSHOP">Workshop</option>
+            <option value="PROJETO">Projeto</option>
+          </select>
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Alvos vinculados</label>
+          <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
+            {alvosLoading ? (
+              <div className="text-sm text-slate-500">Carregando alvos...</div>
+            ) : alvosErro ? (
+              <div className="text-sm text-rose-600">{alvosErro}</div>
+            ) : alvos.length === 0 ? (
+              <div className="text-sm text-slate-500">Nenhum alvo cadastrado.</div>
+            ) : (
+              alvos.map((alvo) => (
+                <label key={alvo.id} className="flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={alvosSelecionados.includes(alvo.id)}
+                    onChange={() => toggleAlvo(alvo.id)}
+                  />
+                  <span>{alvo.label}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <p className="text-xs text-slate-500">Selecione um ou mais alvos para reutilizar a tabela.</p>
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
           <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Titulo</label>
           <input
             value={titulo}
@@ -199,7 +297,7 @@ export default function TabelaMatriculaNovaForm({ turmas }: Props) {
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
             placeholder="Ex.: 2026"
           />
-          <p className="text-xs text-slate-500">Obrigatorio para tabelas REGULAR.</p>
+          <p className="text-xs text-slate-500">Obrigatorio para cobertura e precificacao.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -207,28 +305,6 @@ export default function TabelaMatriculaNovaForm({ turmas }: Props) {
             <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
             Tabela ativa
           </label>
-        </div>
-
-        <div className="space-y-2 md:col-span-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Turmas vinculadas</label>
-          <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
-            {turmas.length === 0 ? (
-              <div className="text-sm text-slate-500">Nenhuma turma cadastrada.</div>
-            ) : (
-              turmas.map((turma) => (
-                <label key={turma.id} className="flex items-start gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={turmasSelecionadas.includes(turma.id)}
-                    onChange={() => toggleTurma(turma.id)}
-                  />
-                  <span>{turma.label}</span>
-                </label>
-              ))
-            )}
-          </div>
-          <p className="text-xs text-slate-500">Selecione uma ou mais turmas para reutilizar a tabela.</p>
         </div>
 
         <div className="space-y-2 md:col-span-2">

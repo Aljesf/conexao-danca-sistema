@@ -1,46 +1,9 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
-import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 import TabelaMatriculaNovaForm from "./TabelaMatriculaNovaForm";
 
-type TurmaRow = {
-  turma_id: number;
-  nome?: string | null;
-  curso?: string | null;
-  nivel?: string | null;
-  ano_referencia?: number | null;
-};
-
-type TurmaOption = {
-  id: number;
-  label: string;
-  anoRef: number | null;
-};
-
-function turmaLabel(t: TurmaRow): string {
-  const partes = [t.curso ?? null, t.nome ?? null, t.nivel ?? null, t.ano_referencia ? `Ano ${t.ano_referencia}` : null].filter(
-    Boolean
-  ) as string[];
-  const base = partes.length ? partes.join(" - ") : "Turma";
-  return `${base} (ID ${t.turma_id})`;
-}
-
-export default async function Page() {
-  const supabase = getSupabaseAdmin();
-
-  const { data, error } = await supabase
-    .from("turmas")
-    .select("turma_id,nome,curso,nivel,ano_referencia")
-    .order("turma_id", { ascending: false });
-
-  const turmas = (data ?? []) as TurmaRow[];
-  const turmaOptions: TurmaOption[] = turmas.map((t) => ({
-    id: t.turma_id,
-    label: turmaLabel(t),
-    anoRef: t.ano_referencia ?? null,
-  }));
-
+export default function Page() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-4 py-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
@@ -49,7 +12,7 @@ export default async function Page() {
             <div>
               <h1 className="text-xl font-semibold text-slate-800">Nova tabela de precos (Escola)</h1>
               <p className="text-sm text-slate-600">
-                Selecione uma ou mais turmas, informe o ano e crie os itens (MENSALIDADE/RECORRENTE).
+                Defina em quais alvos a tabela se aplica e cadastre o ano. Depois, crie os itens (MENSALIDADE/RECORRENTE).
               </p>
             </div>
           </div>
@@ -58,19 +21,13 @@ export default async function Page() {
         <FinanceHelpCard
           subtitle="Entenda esta tela"
           items={[
-            "A tabela pode valer para varias turmas e um ano (REGULAR).",
+            "A tabela pode valer para turmas, cursos livres, workshops ou projetos.",
             "Sem MENSALIDADE/RECORRENTE ativa, a matricula falha com 409.",
-            "Titulo e ano podem ser sugeridos automaticamente pela turma.",
+            "Ano de referencia e obrigatorio para cobertura e precificacao.",
           ]}
         />
 
-        {error ? (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            Falha ao carregar turmas: {error.message}
-          </div>
-        ) : null}
-
-        <TabelaMatriculaNovaForm turmas={turmaOptions} />
+        <TabelaMatriculaNovaForm />
       </div>
     </div>
   );

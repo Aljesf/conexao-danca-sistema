@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
+import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
+
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+
+type MatriculaTabela = {
+  id: number;
+  titulo: string;
+  ano_referencia: number | null;
+  ativo: boolean;
+};
 
 function badRequest(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null }, { status: 400 });
@@ -24,18 +34,31 @@ function getAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
-async function resolveTurmaIdReal(admin: ReturnType<typeof createClient>, turmaInput: number) {
-  const { data, error } = await admin.from("turmas").select("id,turma_id").eq("id", turmaInput).maybeSingle();
-  if (!error && data?.turma_id) return Number(data.turma_id);
-  return turmaInput;
+const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "WORKSHOP", "PROJETO"];
+
+async function buscarTabelaIdsPorAlvo(admin: ReturnType<typeof createClient>, alvoTipo: AlvoTipo, alvoId: number) {
+  const { data, error } = await admin
+    .from("matricula_tabelas_alvos")
+    .select("tabela_id")
+    .eq("alvo_tipo", alvoTipo)
+    .eq("alvo_id", alvoId);
+
+  if (!error) {
+    return { ids: (data ?? []).map((l) => Number((l as { tabela_id: number }).tabela_id)), error: null };
+  }
+
+  return { ids: [], error };
 }
 
-type MatriculaTabela = {
-  id: number;
-  titulo: string;
-  ano_referencia: number | null;
-  ativo: boolean;
-};
+async function buscarTabelaIdsLegado(admin: ReturnType<typeof createClient>, alvoId: number) {
+  const { data, error } = await admin
+    .from("matricula_tabelas_turmas")
+    .select("tabela_id")
+    .eq("turma_id", alvoId);
+
+  if (error) return [];
+  return (data ?? []).map((l) => Number((l as { tabela_id: number }).tabela_id));
+}
 
 export async function GET(req: Request) {
   try {
@@ -46,66 +69,84 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const alunoId = Number(url.searchParams.get("aluno_id") || "");
-    const turmaInput = Number(url.searchParams.get("turma_id") || "");
+    const alvoTipoRaw = String(url.searchParams.get("alvo_tipo") || "TURMA");
+    const alvoIdParam = url.searchParams.get("alvo_id");
+    const turmaIdParam = url.searchParams.get("turma_id");
+    const alvoInput = Number(alvoIdParam || turmaIdParam || "");
     const ano = Number(url.searchParams.get("ano") || "");
 
     if (!alunoId) return badRequest("aluno_id e obrigatorio.");
-    if (!turmaInput) return badRequest("turma_id e obrigatorio.");
+    if (!alvoInput) return badRequest("alvo_id e obrigatorio.");
     if (!ano) return badRequest("ano e obrigatorio.");
 
-    const admin = getAdmin();
-    const turmaId = await resolveTurmaIdReal(admin, turmaInput);
-
-    const { data: piv, error: pivErr } = await admin
-      .from("matricula_tabelas_turmas")
-      .select("tabela_id, matricula_tabelas:tabela_id ( id, titulo, ano_referencia, ativo )")
-      .eq("turma_id", turmaId);
-
-    if (pivErr) return serverError("Falha ao resolver tabela aplicavel (pivot).", { pivErr });
-
-    let candidatas =
-      (piv ?? [])
-        .map((r) => (r as { matricula_tabelas?: MatriculaTabela }).matricula_tabelas)
-        .filter((t): t is MatriculaTabela => !!t)
-        .filter((t) => t.ativo === true && Number(t.ano_referencia) === ano) ?? [];
-
-    if (!candidatas.length) {
-      const { data: legacy, error: legacyErr } = await admin
-        .from("matricula_tabelas")
-        .select("id,titulo,ano_referencia,ativo")
-        .eq("referencia_tipo", "TURMA")
-        .eq("referencia_id", turmaId)
-        .eq("ativo", true)
-        .eq("ano_referencia", ano)
-        .order("id", { ascending: false })
-        .limit(1);
-
-      if (legacyErr) return serverError("Falha ao resolver tabela aplicavel (legado).", { legacyErr });
-      candidatas = (legacy ?? []) as MatriculaTabela[];
+    if (!ALVOS_VALIDOS.includes(alvoTipoRaw as AlvoTipo)) {
+      return badRequest("alvo_tipo invalido.", { alvo_tipo: alvoTipoRaw });
     }
 
-    if (!candidatas.length) {
-      return conflict("Nenhuma tabela ativa encontrada para a turma/ano selecionados.", {
-        turma_id: turmaId,
-        turma_input: turmaInput,
+    const alvoTipo = alvoTipoRaw as AlvoTipo;
+    const admin = getAdmin();
+    const alvoId = alvoTipo === "TURMA" ? await resolveTurmaIdReal(admin, alvoInput) : alvoInput;
+
+    const { ids: tabelaIds, error: linkErr } = await buscarTabelaIdsPorAlvo(admin, alvoTipo, alvoId);
+    if (linkErr) return serverError("Falha ao buscar vinculos da tabela.", { linkErr });
+
+    const tabelaIdsFinal = tabelaIds.length
+      ? tabelaIds
+      : alvoTipo === "TURMA"
+        ? await buscarTabelaIdsLegado(admin, alvoId)
+        : [];
+
+    if (!tabelaIdsFinal.length) {
+      return conflict("Nenhuma tabela vinculada encontrada para o alvo/ano selecionados.", {
+        alvo_tipo: alvoTipo,
+        alvo_id: alvoId,
         ano,
       });
     }
 
-    candidatas.sort((a, b) => Number(b.id) - Number(a.id));
-    const tabela = candidatas[0];
-
-    const { data: mats, error: matsErr } = await admin
-      .from("matriculas")
-      .select("id,vinculo_id,status")
-      .eq("pessoa_id", alunoId)
+    const { data: tabelas, error: tabErr } = await admin
+      .from("matricula_tabelas")
+      .select("id,titulo,ano_referencia,ativo")
+      .in("id", tabelaIdsFinal)
+      .eq("ativo", true)
       .eq("ano_referencia", ano);
 
-    if (matsErr) return serverError("Falha ao contar matriculas do aluno.", { matsErr });
+    if (tabErr) return serverError("Falha ao buscar tabelas aplicaveis.", { tabErr });
 
-    const ativas = (mats ?? []).filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
-    const turmaJaExiste = ativas.some((m) => Number(m.vinculo_id) === turmaId);
-    const qtdModalidades = turmaJaExiste ? ativas.length : ativas.length + 1;
+    if (!tabelas?.length) {
+      return conflict("Nenhuma tabela ativa encontrada para o alvo/ano selecionados.", {
+        alvo_tipo: alvoTipo,
+        alvo_id: alvoId,
+        ano,
+        tabela_ids: tabelaIdsFinal,
+      });
+    }
+
+    if (tabelas.length > 1) {
+      return conflict("Conflito: ha mais de uma tabela ativa para o mesmo alvo/ano. Desative as excedentes.", {
+        alvo_tipo: alvoTipo,
+        alvo_id: alvoId,
+        ano,
+        candidatas: tabelas,
+      });
+    }
+
+    const tabela = tabelas[0] as MatriculaTabela;
+
+    let qtdModalidades = 1;
+    if (alvoTipo === "TURMA") {
+      const { data: mats, error: matsErr } = await admin
+        .from("matriculas")
+        .select("id,vinculo_id,status")
+        .eq("pessoa_id", alunoId)
+        .eq("ano_referencia", ano);
+
+      if (matsErr) return serverError("Falha ao contar matriculas do aluno.", { matsErr });
+
+      const ativas = (mats ?? []).filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
+      const alvoJaExiste = ativas.some((m) => Number(m.vinculo_id) === alvoId);
+      qtdModalidades = alvoJaExiste ? ativas.length : ativas.length + 1;
+    }
 
     const { data: tiers, error: tierErr } = await admin
       .from("matricula_tabelas_precificacao_tiers")
@@ -156,6 +197,7 @@ export async function GET(req: Request) {
           qtd_modalidades: qtdModalidades,
           tier: { id: tier.id, item_codigo: tier.item_codigo, tipo_item: tier.tipo_item },
           item_aplicado: item,
+          alvo: { tipo: alvoTipo, id: alvoId },
         },
       },
       { status: 200 },

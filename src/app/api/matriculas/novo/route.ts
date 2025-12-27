@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 
@@ -10,7 +10,7 @@ type PlanoPagamentoMvp = {
   ciclo_cobranca: "COBRANCA_UNICA" | "COBRANCA_EM_PARCELAS" | "COBRANCA_MENSAL" | null;
   numero_parcelas: number | null;
   termino_cobranca: "FIM_TURMA_CURSO" | "FIM_PROJETO" | "FIM_ANO_LETIVO" | "DATA_ESPECIFICA" | null;
-  data_fim_manual: string | null; // date
+  data_fim_manual: string | null;
   regra_total_devido: "PROPORCIONAL" | "FIXO" | null;
   permite_prorrata: boolean | null;
   ciclo_financeiro: "MENSAL" | "BIMESTRAL" | "TRIMESTRAL" | "SEMESTRAL" | "ANUAL" | null;
@@ -21,50 +21,37 @@ type BodyNovo = {
   pessoa_id: number;
   responsavel_financeiro_id: number;
   tipo_matricula: TipoMatricula;
-  vinculo_id: number; // turmas.turma_id (para MVP)
+  vinculo_id: number;
   ano_referencia?: number | null;
-
-  data_matricula?: string | null; // date
-  data_inicio_vinculo?: string | null; // date
-
+  data_matricula?: string | null;
+  data_inicio_vinculo?: string | null;
   escola_tabela_preco_curso_id?: number | null;
   plano_pagamento_id?: number | null;
-
   forma_liquidacao_padrao?: string | null;
   contrato_modelo_id?: number | null;
-
   observacoes?: string | null;
 };
 
 function badRequest(message: string, details?: Record<string, unknown>) {
-  return NextResponse.json(
-    { ok: false, error: "bad_request", message, details: details ?? null },
-    { status: 400 },
-  );
+  return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null }, { status: 400 });
 }
 
 function conflict(message: string, details?: Record<string, unknown>) {
-  return NextResponse.json(
-    { ok: false, error: "conflict", message, details: details ?? null },
-    { status: 409 },
-  );
+  return NextResponse.json({ ok: false, error: "conflict", message, details: details ?? null }, { status: 409 });
 }
 
 function serverError(message: string, details?: Record<string, unknown>) {
-  return NextResponse.json(
-    { ok: false, error: "server_error", message, details: details ?? null },
-    { status: 500 },
-  );
+  return NextResponse.json({ ok: false, error: "server_error", message, details: details ?? null }, { status: 500 });
 }
 
 function parseDateOrNull(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  // Mantém como ISO date YYYY-MM-DD (o front deve enviar assim).
   return value;
 }
 
 export async function POST(req: Request) {
-  const supabase = createRouteHandlerClient({ cookies });
+  const cookieStore = await cookies();
+  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
 
   const {
     data: { user },
@@ -79,7 +66,7 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as BodyNovo;
   } catch {
-    return badRequest("JSON inválido.");
+    return badRequest("JSON invalido.");
   }
 
   const pessoaId = Number(body.pessoa_id);
@@ -88,29 +75,24 @@ export async function POST(req: Request) {
   const vinculoId = Number(body.vinculo_id);
 
   if (!pessoaId || !respFinId || !tipoMatricula || !vinculoId) {
-    return badRequest("Campos obrigatórios ausentes: pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id.");
+    return badRequest("Campos obrigatorios ausentes: pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id.");
   }
 
   const anoRef = body.ano_referencia ?? null;
 
-  // datas
   const dataMatricula = parseDateOrNull(body.data_matricula) ?? null;
   const dataInicioVinculo = parseDateOrNull(body.data_inicio_vinculo) ?? dataMatricula ?? null;
 
   const escolaTabelaPrecoCursoId = body.escola_tabela_preco_curso_id ?? null;
   const planoPagamentoId = body.plano_pagamento_id ?? null;
 
-  const formaLiquidacaoPadrao =
-    body.forma_liquidacao_padrao ?? null; // declarativo
-  const contratoModeloId =
-    body.contrato_modelo_id ?? null; // declarativo
+  const formaLiquidacaoPadrao = body.forma_liquidacao_padrao ?? null;
+  const contratoModeloId = body.contrato_modelo_id ?? null;
 
-  // Validações mínimas por tipo
   if (tipoMatricula === "REGULAR" && (anoRef === null || typeof anoRef !== "number")) {
-    return badRequest("ano_referencia é obrigatório para tipo_matricula = REGULAR.");
+    return badRequest("ano_referencia e obrigatorio para tipo_matricula = REGULAR.");
   }
 
-  // 1) Validar entidades base (pessoas e turmas)
   const { data: pessoa, error: pessoaErr } = await supabase
     .from("pessoas")
     .select("id")
@@ -118,7 +100,7 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (pessoaErr) return serverError("Falha ao validar pessoa.", { pessoaErr });
-  if (!pessoa) return badRequest("pessoa_id não encontrado.");
+  if (!pessoa) return badRequest("pessoa_id nao encontrado.");
 
   const { data: respFin, error: respErr } = await supabase
     .from("pessoas")
@@ -126,8 +108,8 @@ export async function POST(req: Request) {
     .eq("id", respFinId)
     .maybeSingle();
 
-  if (respErr) return serverError("Falha ao validar responsável financeiro.", { respErr });
-  if (!respFin) return badRequest("responsavel_financeiro_id não encontrado.");
+  if (respErr) return serverError("Falha ao validar responsavel financeiro.", { respErr });
+  if (!respFin) return badRequest("responsavel_financeiro_id nao encontrado.");
 
   const { data: turma, error: turmaErr } = await supabase
     .from("turmas")
@@ -136,9 +118,45 @@ export async function POST(req: Request) {
     .maybeSingle();
 
   if (turmaErr) return serverError("Falha ao validar turma (vinculo_id).", { turmaErr });
-  if (!turma) return badRequest("vinculo_id (turma) não encontrado.");
+  if (!turma) return badRequest("vinculo_id (turma) nao encontrado.");
 
-  // 2) Validar Tabela de Preços (quando informada)
+  if (anoRef !== null) {
+    const resolveUrl = new URL("/api/matriculas/precos/resolver", req.url);
+    resolveUrl.searchParams.set("aluno_id", String(pessoaId));
+    resolveUrl.searchParams.set("alvo_tipo", "TURMA");
+    resolveUrl.searchParams.set("alvo_id", String(vinculoId));
+    resolveUrl.searchParams.set("ano", String(anoRef));
+
+    const resolveRes = await fetch(resolveUrl.toString(), {
+      headers: { cookie: cookieStore.toString() },
+    });
+
+    let resolvePayload: { ok?: boolean; message?: string; details?: Record<string, unknown> } | null = null;
+    try {
+      resolvePayload = (await resolveRes.json()) as {
+        ok?: boolean;
+        message?: string;
+        details?: Record<string, unknown>;
+      };
+    } catch {
+      resolvePayload = null;
+    }
+
+    if (!resolveRes.ok || !resolvePayload?.ok) {
+      const status = resolveRes.status === 409 ? 409 : resolveRes.status === 400 ? 400 : 500;
+      const errorCode = status === 409 ? "conflict" : status === 400 ? "bad_request" : "server_error";
+      return NextResponse.json(
+        {
+          ok: false,
+          error: errorCode,
+          message: resolvePayload?.message || "Falha ao validar precificacao.",
+          details: resolvePayload?.details ?? null,
+        },
+        { status },
+      );
+    }
+  }
+
   if (escolaTabelaPrecoCursoId !== null) {
     const { data: tabelaPreco, error: tabErr } = await supabase
       .from("escola_tabelas_precos_cursos")
@@ -147,11 +165,10 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (tabErr) return serverError("Falha ao validar escola_tabela_preco_curso_id.", { tabErr });
-    if (!tabelaPreco) return badRequest("escola_tabela_preco_curso_id não encontrado.");
-    if (!tabelaPreco.ativo) return badRequest("Tabela de Preços informada está inativa.");
+    if (!tabelaPreco) return badRequest("escola_tabela_preco_curso_id nao encontrado.");
+    if (!tabelaPreco.ativo) return badRequest("Tabela de precos informada esta inativa.");
   }
 
-  // 3) Validar Plano de Pagamento (quando informado)
   let plano: PlanoPagamentoMvp | null = null;
 
   if (planoPagamentoId !== null) {
@@ -175,41 +192,38 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (planoErr) return serverError("Falha ao validar plano_pagamento_id.", { planoErr });
-    if (!planoDb) return badRequest("plano_pagamento_id não encontrado.");
+    if (!planoDb) return badRequest("plano_pagamento_id nao encontrado.");
 
     plano = planoDb as unknown as PlanoPagamentoMvp;
 
-    if (!plano.ativo) return badRequest("Plano de pagamento informado está inativo.");
+    if (!plano.ativo) return badRequest("Plano de pagamento informado esta inativo.");
 
-    // Regras MVP do plano (sem executar financeiro)
     if (!plano.ciclo_cobranca) {
-      return badRequest("Plano de pagamento inválido: ciclo_cobranca ausente.");
+      return badRequest("Plano de pagamento invalido: ciclo_cobranca ausente.");
     }
 
     if (plano.ciclo_cobranca === "COBRANCA_EM_PARCELAS") {
       if (!plano.numero_parcelas || plano.numero_parcelas <= 0) {
-        return badRequest("Plano inválido: COBRANCA_EM_PARCELAS exige numero_parcelas.");
+        return badRequest("Plano invalido: COBRANCA_EM_PARCELAS exige numero_parcelas.");
       }
     }
 
     if (plano.ciclo_cobranca === "COBRANCA_MENSAL") {
       if (!plano.termino_cobranca) {
-        return badRequest("Plano inválido: COBRANCA_MENSAL exige termino_cobranca.");
+        return badRequest("Plano invalido: COBRANCA_MENSAL exige termino_cobranca.");
       }
       if (plano.termino_cobranca === "DATA_ESPECIFICA" && !plano.data_fim_manual) {
-        return badRequest("Plano inválido: DATA_ESPECIFICA exige data_fim_manual.");
+        return badRequest("Plano invalido: DATA_ESPECIFICA exige data_fim_manual.");
       }
-      // FIM_ANO_LETIVO é permitido e depende de ano_referencia (preferencialmente).
       if (plano.termino_cobranca === "FIM_ANO_LETIVO") {
         const anoBase = anoRef ?? (dataInicioVinculo ? Number(String(dataInicioVinculo).slice(0, 4)) : null);
         if (!anoBase || Number.isNaN(anoBase)) {
-          return badRequest("Plano com termino FIM_ANO_LETIVO exige ano_referencia (ou data_inicio_vinculo válida).");
+          return badRequest("Plano com termino FIM_ANO_LETIVO exige ano_referencia (ou data_inicio_vinculo valida).");
         }
       }
     }
   }
 
-  // 4) Anti-duplicidade simples para REGULAR: mesma pessoa + turma + ano com status ATIVA/TRANCADA
   if (tipoMatricula === "REGULAR") {
     const { data: dup, error: dupErr } = await supabase
       .from("matriculas")
@@ -221,13 +235,12 @@ export async function POST(req: Request) {
       .in("status", ["ATIVA", "TRANCADA"])
       .limit(1);
 
-    if (dupErr) return serverError("Falha ao checar duplicidade de matrícula.", { dupErr });
+    if (dupErr) return serverError("Falha ao checar duplicidade de matricula.", { dupErr });
     if (dup && dup.length > 0) {
-      return conflict("Matrícula REGULAR duplicada para a mesma pessoa/turma/ano.", { matricula_id: dup[0]?.id });
+      return conflict("Matricula REGULAR duplicada para a mesma pessoa/turma/ano.", { matricula_id: dup[0]?.id });
     }
   }
 
-  // 5) Criar matrícula (MVP: sem financeiro)
   const insertPayload: Record<string, unknown> = {
     pessoa_id: pessoaId,
     responsavel_financeiro_id: respFinId,
@@ -246,7 +259,6 @@ export async function POST(req: Request) {
     updated_by: user.id,
   };
 
-  // Remove undefined (supabase não gosta)
   for (const k of Object.keys(insertPayload)) {
     if (insertPayload[k] === undefined) delete insertPayload[k];
   }
@@ -254,16 +266,16 @@ export async function POST(req: Request) {
   const { data: matriculaCriada, error: insErr } = await supabase
     .from("matriculas")
     .insert(insertPayload)
-    .select("id, pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id, ano_referencia, data_matricula, data_inicio_vinculo, escola_tabela_preco_curso_id, plano_pagamento_id, forma_liquidacao_padrao, contrato_modelo_id, status")
+    .select(
+      "id, pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id, ano_referencia, data_matricula, data_inicio_vinculo, escola_tabela_preco_curso_id, plano_pagamento_id, forma_liquidacao_padrao, contrato_modelo_id, status",
+    )
     .single();
 
-  if (insErr) return serverError("Falha ao criar matrícula.", { insErr });
+  if (insErr) return serverError("Falha ao criar matricula.", { insErr });
 
-  // 6) Garantir vínculo operacional em turma_aluno (para REGULAR/CURSO_LIVRE)
   if (tipoMatricula === "REGULAR" || tipoMatricula === "CURSO_LIVRE") {
     const dtInicio = dataInicioVinculo ?? dataMatricula ?? null;
 
-    // Ver se já existe vínculo pessoa/turma ativo
     const { data: taExist, error: taErr } = await supabase
       .from("turma_aluno")
       .select("turma_aluno_id, matricula_id")
@@ -280,19 +292,18 @@ export async function POST(req: Request) {
         .insert({
           turma_id: vinculoId,
           aluno_pessoa_id: pessoaId,
-          matricula_id: (matriculaCriada as any).id,
+          matricula_id: (matriculaCriada as { id: number }).id,
           dt_inicio: dtInicio,
           status: "ativo",
         });
 
-      if (taInsErr) return serverError("Falha ao criar vínculo turma_aluno.", { taInsErr });
+      if (taInsErr) return serverError("Falha ao criar vinculo turma_aluno.", { taInsErr });
     } else {
-      // Se existe mas não tem matricula_id, preencher
       const current = taExist[0];
       if (!current.matricula_id) {
         const { error: taUpdErr } = await supabase
           .from("turma_aluno")
-          .update({ matricula_id: (matriculaCriada as any).id })
+          .update({ matricula_id: (matriculaCriada as { id: number }).id })
           .eq("turma_aluno_id", current.turma_aluno_id);
 
         if (taUpdErr) return serverError("Falha ao atualizar matricula_id em turma_aluno.", { taUpdErr });

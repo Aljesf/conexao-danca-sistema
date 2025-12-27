@@ -64,6 +64,7 @@ type PrecoResolverResp = {
     qtd_modalidades: number;
     tier: { id: number; item_codigo: string; tipo_item: string };
     item_aplicado: ItemAplicado;
+    alvo?: { tipo: string; id: number };
   };
   message?: string;
   error?: string;
@@ -155,13 +156,17 @@ export default function NovaMatriculaPage() {
     [turmas, turmaId]
   );
 
+  const precoOk =
+    !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado;
+
   const podeSalvar =
     !!aluno &&
     !!responsavel &&
     !!cursoSelecionado &&
     !!turmaSelecionada &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
-    (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0);
+    (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0) &&
+    precoOk;
 
   useEffect(() => {
     let ativo = true;
@@ -249,7 +254,8 @@ export default function NovaMatriculaPage() {
         setTabelaLoading(true);
         const params = new URLSearchParams({
           aluno_id: String(aluno.id),
-          turma_id: String(turmaId),
+          alvo_tipo: "TURMA",
+          alvo_id: String(turmaId),
           ano: String(anoReferencia),
         });
         const data = await fetchJSON<PrecoResolverResp>(`/api/matriculas/precos/resolver?${params.toString()}`);
@@ -278,6 +284,11 @@ export default function NovaMatriculaPage() {
 
     if (tipo === "REGULAR" && !anoReferencia) {
       setErro("Ano referencia obrigatorio para turma regular.");
+      return;
+    }
+
+    if (!precoOk) {
+      setErro(tabelaErro || "Tabela de precos nao resolvida para a combinacao selecionada.");
       return;
     }
 

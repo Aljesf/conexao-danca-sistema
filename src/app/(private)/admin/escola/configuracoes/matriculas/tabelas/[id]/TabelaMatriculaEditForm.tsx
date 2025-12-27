@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type TurmaOption = {
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+
+type AlvoItem = {
   id: number;
   label: string;
 };
@@ -14,9 +16,24 @@ type Props = {
   anoReferencia: number | null;
   ativo: boolean;
   produtoTipo: "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
-  turmas: TurmaOption[];
-  turmasSelecionadas: number[];
+  alvoTipo: AlvoTipo;
+  alvosSelecionados: number[];
 };
+
+function labelAlvo(tipo: AlvoTipo, row: Record<string, unknown>): AlvoItem {
+  if (tipo === "TURMA") {
+    const turmaId = Number((row.turma_id ?? row.id) as number);
+    const nome = typeof row.nome === "string" && row.nome.trim() ? row.nome : `Turma ${turmaId}`;
+    return { id: turmaId, label: `${nome} (ID ${turmaId})` };
+  }
+
+  const id = Number(row.id);
+  const titulo =
+    (typeof row.titulo === "string" && row.titulo.trim()) ||
+    (typeof row.nome === "string" && row.nome.trim()) ||
+    `Alvo ${id}`;
+  return { id, label: `${titulo} (ID ${id})` };
+}
 
 export default function TabelaMatriculaEditForm({
   tabelaId,
@@ -24,15 +41,18 @@ export default function TabelaMatriculaEditForm({
   anoReferencia,
   ativo: ativoInicial,
   produtoTipo,
-  turmas,
-  turmasSelecionadas: turmasSelecionadasInicial,
+  alvoTipo,
+  alvosSelecionados: alvosSelecionadosInicial,
 }: Props) {
   const router = useRouter();
 
   const [titulo, setTitulo] = useState(tituloInicial);
   const [anoRef, setAnoRef] = useState(anoReferencia ? String(anoReferencia) : "");
   const [ativo, setAtivo] = useState(ativoInicial);
-  const [turmasSelecionadas, setTurmasSelecionadas] = useState<number[]>(turmasSelecionadasInicial);
+  const [alvos, setAlvos] = useState<AlvoItem[]>([]);
+  const [alvosSelecionados, setAlvosSelecionados] = useState<number[]>(alvosSelecionadosInicial);
+  const [alvosLoading, setAlvosLoading] = useState(false);
+  const [alvosErro, setAlvosErro] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -47,13 +67,38 @@ export default function TabelaMatriculaEditForm({
 
   const validacao = useMemo(() => {
     if (!titulo.trim()) return "Informe o titulo da tabela.";
-    if (turmasSelecionadas.length === 0) return "Selecione ao menos 1 turma.";
-    if (produtoTipo === "REGULAR" && !anoParsed) return "Ano de referencia e obrigatorio para REGULAR.";
+    if (!anoParsed) return "Ano de referencia e obrigatorio.";
+    if (alvosSelecionados.length === 0) return "Selecione ao menos 1 alvo.";
     return null;
-  }, [titulo, turmasSelecionadas, produtoTipo, anoParsed]);
+  }, [titulo, anoParsed, alvosSelecionados]);
 
-  function toggleTurma(id: number) {
-    setTurmasSelecionadas((old) => {
+  useEffect(() => {
+    let ativoFlag = true;
+    (async () => {
+      try {
+        setAlvosErro(null);
+        setAlvosLoading(true);
+        const res = await fetch(`/api/matriculas/tabelas/alvos?tipo=${alvoTipo}`);
+        const json = (await res.json()) as { ok?: boolean; data?: Record<string, unknown>[]; message?: string };
+        if (!ativoFlag) return;
+        if (!res.ok || !json.ok) {
+          throw new Error(json.message || "Falha ao carregar alvos.");
+        }
+        const items = (json.data ?? []).map((row) => labelAlvo(alvoTipo, row));
+        setAlvos(items);
+      } catch (e: unknown) {
+        if (ativoFlag) setAlvosErro(e instanceof Error ? e.message : "Falha ao carregar alvos.");
+      } finally {
+        if (ativoFlag) setAlvosLoading(false);
+      }
+    })();
+    return () => {
+      ativoFlag = false;
+    };
+  }, [alvoTipo]);
+
+  function toggleAlvo(id: number) {
+    setAlvosSelecionados((old) => {
       const set = new Set(old);
       if (set.has(id)) set.delete(id);
       else set.add(id);
@@ -81,7 +126,8 @@ export default function TabelaMatriculaEditForm({
           titulo: titulo.trim(),
           ano_referencia: anoParsed,
           ativo,
-          turma_ids: turmasSelecionadas,
+          alvo_tipo: alvoTipo,
+          alvo_ids: alvosSelecionados,
         }),
       });
 
@@ -108,6 +154,21 @@ export default function TabelaMatriculaEditForm({
   return (
     <div className="rounded-md border p-4 space-y-4 max-w-4xl">
       <div className="grid gap-2">
+        <label className="text-sm font-medium">Aplica-se a</label>
+        <select
+          value={alvoTipo}
+          disabled
+          className="border rounded-md px-3 py-2 text-sm bg-slate-50 text-slate-500"
+        >
+          <option value="TURMA">Turma</option>
+          <option value="CURSO_LIVRE">Curso livre</option>
+          <option value="WORKSHOP">Workshop</option>
+          <option value="PROJETO">Projeto</option>
+        </select>
+        <p className="text-xs text-muted-foreground">Tipo definido no cadastro da tabela.</p>
+      </div>
+
+      <div className="grid gap-2">
         <label className="text-sm font-medium">Titulo</label>
         <input
           value={titulo}
@@ -132,28 +193,34 @@ export default function TabelaMatriculaEditForm({
           <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
           Ativa
         </label>
+
+        <div className="flex items-center text-xs text-muted-foreground mt-7">Produto: {produtoTipo}</div>
       </div>
 
       <div className="grid gap-2">
-        <label className="text-sm font-medium">Turmas vinculadas</label>
+        <label className="text-sm font-medium">Alvos vinculados</label>
         <div className="max-h-56 overflow-y-auto rounded-md border bg-white p-3 space-y-2">
-          {turmas.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Nenhuma turma cadastrada.</div>
+          {alvosLoading ? (
+            <div className="text-sm text-muted-foreground">Carregando alvos...</div>
+          ) : alvosErro ? (
+            <div className="text-sm text-red-600">{alvosErro}</div>
+          ) : alvos.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Nenhum alvo cadastrado.</div>
           ) : (
-            turmas.map((turma) => (
-              <label key={turma.id} className="flex items-start gap-2 text-sm">
+            alvos.map((alvo) => (
+              <label key={alvo.id} className="flex items-start gap-2 text-sm">
                 <input
                   type="checkbox"
                   className="mt-1"
-                  checked={turmasSelecionadas.includes(turma.id)}
-                  onChange={() => toggleTurma(turma.id)}
+                  checked={alvosSelecionados.includes(alvo.id)}
+                  onChange={() => toggleAlvo(alvo.id)}
                 />
-                <span>{turma.label}</span>
+                <span>{alvo.label}</span>
               </label>
             ))
           )}
         </div>
-        <p className="text-xs text-muted-foreground">Selecione uma ou mais turmas para vincular a tabela.</p>
+        <p className="text-xs text-muted-foreground">Selecione um ou mais alvos para vincular a tabela.</p>
       </div>
 
       {erro ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div> : null}

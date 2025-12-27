@@ -4,11 +4,11 @@ import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import TabelaMatriculaEditForm from "./TabelaMatriculaEditForm";
 
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "WORKSHOP" | "PROJETO";
+
 type MatriculaTabela = {
   id: number;
   produto_tipo: "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
-  referencia_tipo: "TURMA" | "PRODUTO" | "PROJETO";
-  referencia_id: number;
   ano_referencia: number | null;
   titulo: string;
   ativo: boolean;
@@ -25,43 +25,10 @@ type TabelaItem = {
   ordem: number;
 };
 
-type Turma = {
-  turma_id: number;
-  nome?: string | null;
-  curso?: string | null;
-  nivel?: string | null;
-  turno?: string | null;
-  dias_semana?: string[] | string | null;
-  ano_referencia?: number | null;
+type TabelaAlvo = {
+  alvo_tipo: AlvoTipo;
+  alvo_id: number;
 };
-
-type TurmaVinculo = {
-  turma_id: number;
-  turmas?: Turma | null;
-};
-
-function formatDias(dias: Turma["dias_semana"]): string | null {
-  if (!dias) return null;
-  if (Array.isArray(dias)) {
-    return dias.length ? dias.join(", ") : null;
-  }
-  const trimmed = String(dias).trim();
-  return trimmed.length ? trimmed : null;
-}
-
-function turmaLabel(t: Turma): string {
-  const dias = formatDias(t.dias_semana);
-  const partes = [
-    t.curso ?? null,
-    t.nome ?? null,
-    t.nivel ?? null,
-    t.turno ?? null,
-    dias,
-    t.ano_referencia ? `Ano ${t.ano_referencia}` : null,
-  ].filter(Boolean);
-  const base = partes.length ? partes.join(" - ") : "Turma";
-  return `${base} (ID ${t.turma_id})`;
-}
 
 function parseReaisToCentavos(input: string): number | null {
   const normalized = input.replace(",", ".").trim();
@@ -86,7 +53,7 @@ export default async function Page({ params }: { params: { id: string } }) {
 
   const { data: tabela, error: tabelaErr } = await supabase
     .from("matricula_tabelas")
-    .select("id,produto_tipo,referencia_tipo,referencia_id,ano_referencia,titulo,ativo")
+    .select("id,produto_tipo,ano_referencia,titulo,ativo")
     .eq("id", tabelaId)
     .single();
 
@@ -100,26 +67,22 @@ export default async function Page({ params }: { params: { id: string } }) {
     );
   }
 
-  const [{ data: itens, error: itensErr }, { data: turmasData }, { data: vinculosData, error: vinculosErr }] =
-    await Promise.all([
-      supabase
-        .from("matricula_tabela_itens")
-        .select("id,tabela_id,codigo_item,descricao,tipo_item,valor_centavos,ativo,ordem")
-        .eq("tabela_id", tabelaId)
-        .order("ordem", { ascending: true })
-        .order("id", { ascending: true }),
-      supabase.from("turmas").select("turma_id,nome,curso,nivel,turno,dias_semana,ano_referencia"),
-      supabase
-        .from("matricula_tabelas_turmas")
-        .select("turma_id, turmas:turma_id (turma_id,nome,curso,nivel,turno,dias_semana,ano_referencia)")
-        .eq("tabela_id", tabelaId),
-    ]);
+  const [{ data: itens, error: itensErr }, { data: alvosData, error: alvosErr }] = await Promise.all([
+    supabase
+      .from("matricula_tabela_itens")
+      .select("id,tabela_id,codigo_item,descricao,tipo_item,valor_centavos,ativo,ordem")
+      .eq("tabela_id", tabelaId)
+      .order("ordem", { ascending: true })
+      .order("id", { ascending: true }),
+    supabase.from("matricula_tabelas_alvos").select("alvo_tipo,alvo_id").eq("tabela_id", tabelaId),
+  ]);
 
   const listaItens = (itens ?? []) as TabelaItem[];
-  const turmas = (turmasData ?? []) as Turma[];
-  const vinculos = (vinculosData ?? []) as TurmaVinculo[];
-  const turmasVinculadas = vinculos.map((v) => v.turmas).filter((t): t is Turma => !!t);
-  const turmaIdsVinculadas = vinculos.map((v) => v.turma_id);
+  const alvos = (alvosData ?? []) as TabelaAlvo[];
+
+  const alvoTipos = Array.from(new Set(alvos.map((a) => a.alvo_tipo)));
+  const alvoTipo = alvoTipos[0] ?? "TURMA";
+  const alvoIds = alvos.filter((a) => a.alvo_tipo === alvoTipo).map((a) => a.alvo_id);
 
   const hasMensalidadeAtiva = listaItens.some(
     (i) => i.ativo && i.codigo_item === "MENSALIDADE" && i.tipo_item === "RECORRENTE",
@@ -160,7 +123,6 @@ export default async function Page({ params }: { params: { id: string } }) {
   }
 
   const tabelaInfo = tabela as MatriculaTabela;
-  const turmaOptions = turmas.map((t) => ({ id: t.turma_id, label: turmaLabel(t) }));
 
   return (
     <div className="p-6 space-y-4">
@@ -169,15 +131,18 @@ export default async function Page({ params }: { params: { id: string } }) {
         <p className="text-sm text-muted-foreground">
           {tabelaInfo.produto_tipo} - Ano: {tabelaInfo.ano_referencia ?? "-"}
         </p>
-        {vinculosErr ? (
-          <p className="text-sm text-red-700">Falha ao carregar turmas vinculadas: {vinculosErr.message}</p>
-        ) : turmasVinculadas.length ? (
+        {alvosErr ? (
+          <p className="text-sm text-red-700">Falha ao carregar alvos vinculados: {alvosErr.message}</p>
+        ) : alvos.length ? (
           <p className="text-sm">
-            Turmas vinculadas: <b>{turmasVinculadas.map((t) => turmaLabel(t)).join("; ")}</b>
+            Aplica-se a: <b>{alvoTipo}</b> | Alvos: <b>{alvoIds.join(", ")}</b>
           </p>
         ) : (
-          <p className="text-sm text-muted-foreground">Nenhuma turma vinculada.</p>
+          <p className="text-sm text-muted-foreground">Nenhum alvo vinculado.</p>
         )}
+        {alvoTipos.length > 1 ? (
+          <p className="text-xs text-amber-600">Atencao: esta tabela possui mais de um tipo de alvo vinculado.</p>
+        ) : null}
       </div>
 
       {!hasMensalidadeAtiva ? (
@@ -192,8 +157,8 @@ export default async function Page({ params }: { params: { id: string } }) {
         anoReferencia={tabelaInfo.ano_referencia}
         ativo={tabelaInfo.ativo}
         produtoTipo={tabelaInfo.produto_tipo}
-        turmas={turmaOptions}
-        turmasSelecionadas={turmaIdsVinculadas}
+        alvoTipo={alvoTipo}
+        alvosSelecionados={alvoIds}
       />
 
       <div className="rounded-md border p-4 space-y-3">
