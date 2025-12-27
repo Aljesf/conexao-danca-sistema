@@ -7,6 +7,7 @@ type CicloCobranca = "COBRANCA_UNICA" | "COBRANCA_EM_PARCELAS" | "COBRANCA_MENSA
 type TerminoCobranca = "FIM_TURMA_CURSO" | "FIM_PROJETO" | "FIM_ANO_LETIVO" | "DATA_ESPECIFICA";
 type RegraTotal = "PROPORCIONAL" | "FIXO";
 type CicloFinanceiro = "MENSAL" | "BIMESTRAL" | "TRIMESTRAL" | "SEMESTRAL" | "ANUAL";
+type PoliticaPrimeiraCobranca = "NO_ATO" | "PERMITIR_ADIAR_PARA_CICLO";
 
 type FormaPagamento = { codigo: string; nome: string };
 
@@ -29,6 +30,7 @@ export default function PlanosPagamentoForm(_props: Props) {
 
   const [cicloFinanceiro, setCicloFinanceiro] = useState<CicloFinanceiro>("MENSAL");
   const [formaLiquidacaoPadrao, setFormaLiquidacaoPadrao] = useState<string>("CARTAO_CONEXAO");
+  const [politicaPrimeiraCobranca, setPoliticaPrimeiraCobranca] = useState<PoliticaPrimeiraCobranca>("NO_ATO");
 
   const [observacoes, setObservacoes] = useState("");
 
@@ -100,16 +102,36 @@ export default function PlanosPagamentoForm(_props: Props) {
           permite_prorrata: permiteProrrata,
           ciclo_financeiro: cicloFinanceiro,
           forma_liquidacao_padrao: formaLiquidacaoPadrao || null,
+          politica_primeira_cobranca: politicaPrimeiraCobranca,
           observacoes: observacoes || null,
         }),
       });
 
-      const json = (await res.json()) as { ok: boolean; data?: { id: number }; message?: string };
-
-      if (!res.ok || !json.ok) {
-        throw new Error(json.message || "Falha ao criar plano.");
+      let payload: unknown = null;
+      try {
+        payload = await res.json();
+      } catch {
+        payload = null;
       }
 
+      if (!res.ok) {
+        const msgApi =
+          typeof payload === "object" && payload !== null && "message" in payload
+            ? String((payload as Record<string, unknown>).message)
+            : null;
+
+        console.error("Falha ao criar plano de pagamento:", { status: res.status, payload });
+        setErro(msgApi || "Falha ao criar plano de pagamento.");
+        return;
+      }
+
+      const json = payload as { ok?: boolean; data?: { id: number } };
+      if (!json?.ok) {
+        setErro("Falha ao criar plano de pagamento.");
+        return;
+      }
+
+      setErro(null);
       setOkMsg(`Plano criado com sucesso (ID ${json.data?.id}).`);
       router.refresh();
     } catch (e: unknown) {
@@ -136,7 +158,7 @@ export default function PlanosPagamentoForm(_props: Props) {
             value={nome}
             onChange={(e) => setNome(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-            placeholder="Ex.: Regular 2026 — padrão"
+            placeholder="Ex.: Regular 2026 - padrão"
           />
         </div>
 
@@ -193,7 +215,7 @@ export default function PlanosPagamentoForm(_props: Props) {
                 <option value="DATA_ESPECIFICA">Até uma data específica</option>
               </select>
               <p className="text-xs text-slate-500">
-                No MVP, “fim da turma” e “fim do projeto” serão usados quando houver referência no processo de matrícula. “Fim do ano letivo” usa
+                No MVP, "fim da turma" e "fim do projeto" serão usados quando houver referência no processo de matrícula. "Fim do ano letivo" usa
                 ano de referência.
               </p>
             </div>
@@ -232,6 +254,25 @@ export default function PlanosPagamentoForm(_props: Props) {
             <input type="checkbox" checked={permiteProrrata} onChange={(e) => setPermiteProrrata(e.target.checked)} />
             Permite pró-rata (somente na primeira cobrança)
           </label>
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Política da primeira cobrança
+          </label>
+          <select
+            value={politicaPrimeiraCobranca}
+            onChange={(e) => setPoliticaPrimeiraCobranca(e.target.value as PoliticaPrimeiraCobranca)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+          >
+            <option value="NO_ATO">No ato (padrão)</option>
+            <option value="PERMITIR_ADIAR_PARA_CICLO">
+              Permitir adiar / lançar no ciclo (Cartão Conexão)
+            </option>
+          </select>
+          <p className="text-xs text-slate-500">
+            Define se a primeira cobrança deve ser quitada no ato ou se pode ser adiada e lançada no ciclo (exceção negociável).
+          </p>
         </div>
 
         <div className="space-y-2">
