@@ -1,31 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 
 type CicloCobranca = "COBRANCA_UNICA" | "COBRANCA_EM_PARCELAS" | "COBRANCA_MENSAL";
-type TerminoCobranca =
-  | "FIM_TURMA_CURSO"
-  | "FIM_PROJETO"
-  | "FIM_ANO_LETIVO"
-  | "DATA_ESPECIFICA";
-
+type TerminoCobranca = "FIM_TURMA_CURSO" | "FIM_PROJETO" | "FIM_ANO_LETIVO" | "DATA_ESPECIFICA";
 type RegraTotal = "PROPORCIONAL" | "FIXO";
 type CicloFinanceiro = "MENSAL" | "BIMESTRAL" | "TRIMESTRAL" | "SEMESTRAL" | "ANUAL";
 
-type Props = Record<string, unknown>;
+type FormaPagamento = { codigo: string; nome: string };
 
-function toCents(input: string): number | null {
-  const raw = input.replace(/\s/g, "").replace(".", "").replace(",", ".");
-  const n = Number(raw);
-  if (Number.isNaN(n) || n < 0) return null;
-  return Math.round(n * 100);
-}
+type Props = Record<string, unknown>;
 
 export default function PlanosPagamentoForm(_props: Props) {
   const router = useRouter();
-  const supabase = getSupabaseBrowser();
 
   const [nome, setNome] = useState("");
   const [ativo, setAtivo] = useState(true);
@@ -43,6 +31,9 @@ export default function PlanosPagamentoForm(_props: Props) {
   const [formaLiquidacaoPadrao, setFormaLiquidacaoPadrao] = useState<string>("CARTAO_CONEXAO");
 
   const [observacoes, setObservacoes] = useState("");
+
+  const [formas, setFormas] = useState<FormaPagamento[]>([]);
+  const [formasLoading, setFormasLoading] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -67,6 +58,21 @@ export default function PlanosPagamentoForm(_props: Props) {
     return null;
   }, [nome, isParcelado, numeroParcelasParsed, isMensal, terminoCobranca, isDataEspecifica, dataFimManual]);
 
+  useEffect(() => {
+    async function carregarFormas() {
+      try {
+        setFormasLoading(true);
+        const res = await fetch("/api/formas-pagamento");
+        const json = (await res.json()) as { ok: boolean; data?: FormaPagamento[]; message?: string };
+        if (!res.ok || !json.ok) return;
+        setFormas(json.data ?? []);
+      } finally {
+        setFormasLoading(false);
+      }
+    }
+    carregarFormas();
+  }, []);
+
   async function handleSalvar() {
     setErro(null);
     setOkMsg(null);
@@ -80,35 +86,34 @@ export default function PlanosPagamentoForm(_props: Props) {
     try {
       setSaving(true);
 
-      const payload: Record<string, unknown> = {
-        nome: nome.trim(),
-        ativo,
-        ciclo_cobranca: cicloCobranca,
-        numero_parcelas: isParcelado ? numeroParcelasParsed : null,
-        termino_cobranca: isMensal ? terminoCobranca : null,
-        data_fim_manual: isMensal && isDataEspecifica ? dataFimManual : null,
-        regra_total_devido: regraTotal,
-        permite_prorrata: permiteProrrata,
-        ciclo_financeiro: cicloFinanceiro,
-        forma_liquidacao_padrao: formaLiquidacaoPadrao || null,
-        observacoes: observacoes || null,
-      };
+      const res = await fetch("/api/matriculas/planos-pagamento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: nome.trim(),
+          ativo,
+          ciclo_cobranca: cicloCobranca,
+          numero_parcelas: isParcelado ? numeroParcelasParsed : null,
+          termino_cobranca: isMensal ? terminoCobranca : null,
+          data_fim_manual: isMensal && isDataEspecifica ? dataFimManual : null,
+          regra_total_devido: regraTotal,
+          permite_prorrata: permiteProrrata,
+          ciclo_financeiro: cicloFinanceiro,
+          forma_liquidacao_padrao: formaLiquidacaoPadrao || null,
+          observacoes: observacoes || null,
+        }),
+      });
 
-      const { data, error } = await supabase
-        .from("matricula_planos_pagamento")
-        .insert(payload)
-        .select("id")
-        .single();
+      const json = (await res.json()) as { ok: boolean; data?: { id: number }; message?: string };
 
-      if (error) throw error;
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message || "Falha ao criar plano.");
+      }
 
-      setOkMsg(`Plano criado com sucesso (ID ${data.id}).`);
-      // Ajuste se a rota de lista for diferente no seu projeto:
-      // router.push("/admin/escola/configuracoes/matriculas/planos-pagamento");
+      setOkMsg(`Plano criado com sucesso (ID ${json.data?.id}).`);
       router.refresh();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Erro inesperado ao criar plano.";
-      setErro(msg);
+      setErro(e instanceof Error ? e.message : "Erro inesperado ao criar plano.");
     } finally {
       setSaving(false);
     }
@@ -246,12 +251,20 @@ export default function PlanosPagamentoForm(_props: Props) {
 
         <div className="space-y-2">
           <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Forma de liquidação (declarativa)</label>
-          <input
+          <select
             value={formaLiquidacaoPadrao}
             onChange={(e) => setFormaLiquidacaoPadrao(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-            placeholder="Ex.: CARTAO_CONEXAO / PIX / BOLETO"
-          />
+            disabled={formasLoading}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300 disabled:opacity-70"
+          >
+            <option value="">(não definido)</option>
+            {formas.map((f) => (
+              <option key={f.codigo} value={f.codigo}>
+                {f.nome} ({f.codigo})
+              </option>
+            ))}
+          </select>
+          {formasLoading && <p className="text-xs text-slate-500">Carregando formas de pagamento...</p>}
         </div>
 
         <div className="space-y-2 md:col-span-2">
