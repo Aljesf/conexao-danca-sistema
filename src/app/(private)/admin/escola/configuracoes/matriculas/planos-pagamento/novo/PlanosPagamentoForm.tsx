@@ -215,8 +215,8 @@ export default function PlanosPagamentoForm(_props: Props) {
                 <option value="DATA_ESPECIFICA">Até uma data específica</option>
               </select>
               <p className="text-xs text-slate-500">
-                No MVP, "fim da turma" e "fim do projeto" serão usados quando houver referência no processo de matrícula. "Fim do ano letivo" usa
-                ano de referência.
+                No MVP, &quot;fim da turma&quot; e &quot;fim do projeto&quot; serão usados quando houver referência no processo de matrícula.
+                &quot;Fim do ano letivo&quot; usa ano de referência.
               </p>
             </div>
 

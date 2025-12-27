@@ -70,7 +70,7 @@ export default async function Page() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Tabelas de matricula</h1>
+          <h1 className="text-xl font-semibold">Tabelas de preços (Escola)</h1>
           <p className="text-sm text-muted-foreground">
             Aqui voce configura o preco oficial por turma/ano. Sem uma tabela ativa com <b>MENSALIDADE / RECORRENTE</b>,
             a matricula falha com 409.
@@ -127,8 +127,7 @@ export default async function Page() {
       </div>
 
       <div className="text-xs text-muted-foreground">
-        Nota: no modelo atual, cada tabela se refere a 1 turma/ano. Para compartilhar uma tabela entre turmas, sera
-        necessario um relacionamento dedicado no banco.
+        Nota: a mesma tabela pode ser vinculada a múltiplas turmas via relacionamento dedicado no banco.
       </div>
     </div>
   );

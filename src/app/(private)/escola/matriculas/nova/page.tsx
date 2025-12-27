@@ -41,6 +41,34 @@ type MatriculaResp = {
   error?: string;
 };
 
+type TabelaAplicavel = {
+  id: number;
+  titulo: string;
+  ano_referencia: number | null;
+};
+
+type ItemAplicado = {
+  id: number;
+  codigo_item: string;
+  tipo_item: string;
+  descricao?: string | null;
+  valor_centavos: number;
+  ativo: boolean;
+  ordem: number;
+};
+
+type PrecoResolverResp = {
+  ok: boolean;
+  data?: {
+    tabela: TabelaAplicavel;
+    qtd_modalidades: number;
+    tier: { id: number; item_codigo: string; tipo_item: string };
+    item_aplicado: ItemAplicado;
+  };
+  message?: string;
+  error?: string;
+};
+
 function labelTipo(tipo: TipoMatricula): string {
   return tipo === "REGULAR" ? "Turma regular" : "Curso livre";
 }
@@ -67,6 +95,11 @@ function extractErrorMessage(data: unknown, status: number): string {
     if (typeof record.error === "string" && record.error.trim()) return record.error;
   }
   return `HTTP ${status}`;
+}
+
+function formatCurrency(cents?: number | null): string {
+  if (typeof cents !== "number" || Number.isNaN(cents)) return "-";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
 }
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -108,6 +141,11 @@ export default function NovaMatriculaPage() {
   const [turmasErro, setTurmasErro] = useState<string | null>(null);
   const [carregandoCursos, setCarregandoCursos] = useState(false);
   const [carregandoTurmas, setCarregandoTurmas] = useState(false);
+  const [tabelaAplicavel, setTabelaAplicavel] = useState<TabelaAplicavel | null>(null);
+  const [itemAplicado, setItemAplicado] = useState<ItemAplicado | null>(null);
+  const [qtdModalidades, setQtdModalidades] = useState<number | null>(null);
+  const [tabelaErro, setTabelaErro] = useState<string | null>(null);
+  const [tabelaLoading, setTabelaLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -196,6 +234,39 @@ export default function NovaMatriculaPage() {
       setAnoReferencia(turmaSelecionada.ano_referencia);
     }
   }, [tipo, turmaSelecionada]);
+
+  useEffect(() => {
+    setTabelaAplicavel(null);
+    setItemAplicado(null);
+    setQtdModalidades(null);
+    setTabelaErro(null);
+
+    if (!aluno?.id || !turmaId || !anoReferencia) return;
+
+    let ativo = true;
+    (async () => {
+      try {
+        setTabelaLoading(true);
+        const params = new URLSearchParams({
+          aluno_id: String(aluno.id),
+          turma_id: String(turmaId),
+          ano: String(anoReferencia),
+        });
+        const data = await fetchJSON<PrecoResolverResp>(`/api/matriculas/precos/resolver?${params.toString()}`);
+        if (!ativo) return;
+        setTabelaAplicavel(data.data?.tabela ?? null);
+        setItemAplicado(data.data?.item_aplicado ?? null);
+        setQtdModalidades(typeof data.data?.qtd_modalidades === "number" ? data.data.qtd_modalidades : null);
+      } catch (e: unknown) {
+        if (ativo) setTabelaErro(e instanceof Error ? e.message : "Falha ao resolver tabela aplicável.");
+      } finally {
+        if (ativo) setTabelaLoading(false);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [aluno?.id, turmaId, anoReferencia]);
 
   async function onSubmit() {
     setErro(null);
@@ -453,6 +524,23 @@ export default function NovaMatriculaPage() {
         <div>Tipo: {labelTipo(tipo)}</div>
         <div>Curso: {cursoSelecionado || "-"}</div>
         <div>Turma: {turmaSelecionada ? labelTurma(turmaSelecionada) : "-"}</div>
+        {tabelaLoading ? (
+          <div>Tabela aplicada: carregando...</div>
+        ) : tabelaErro ? (
+          <div className="text-red-600">Tabela aplicada: {tabelaErro}</div>
+        ) : tabelaAplicavel ? (
+          <div>
+            Tabela aplicada: {tabelaAplicavel.titulo} (ID {tabelaAplicavel.id}) - Ano {tabelaAplicavel.ano_referencia ?? "-"}
+          </div>
+        ) : (
+          <div>Tabela aplicada: -</div>
+        )}
+        <div>Modalidades (contagem): {qtdModalidades ?? "-"}</div>
+        <div>
+          Mensalidade aplicada:{" "}
+          {itemAplicado ? `${formatCurrency(itemAplicado.valor_centavos)} (item: ${itemAplicado.codigo_item})` : "-"}
+        </div>
+        <div>Plano de pagamento: Plano padrão aplicado</div>
         <div>Data matricula: {dataMatricula}</div>
         <div>Inicio do vinculo: {dataInicioVinculo}</div>
         <div>Politica: {politicaModo === "PADRAO" ? "Padrao" : "Adiar para vencimento"}</div>

@@ -75,7 +75,7 @@ export const adminSidebar: SidebarSection[] = [
     items: [
       { label: "📍 Locais", href: "/admin/configuracoes/locais" },
       { label: "🏷️ Espaços", href: "/admin/configuracoes/espacos" },
-      { label: "🧾 Tabelas de matrícula", href: "/admin/escola/configuracoes/matriculas/tabelas" },
+      { label: "🧾 Tabelas de preços (Escola)", href: "/admin/escola/configuracoes/matriculas/tabelas" },
       { label: "🧾 Planos de pagamento (matrícula)", href: "/admin/escola/configuracoes/matriculas/planos-pagamento" },
     ],
   },

@@ -76,7 +76,7 @@ export const escolaSidebar: SidebarSection[] = [
     id: "escola-config-matriculas",
     title: "Configuracoes (Escola)",
     items: [
-      { label: "⚙️ 🧾 Tabelas de matricula", href: "/escola/configuracoes/matriculas/tabelas" },
+      { label: "⚙️ 🧾 Tabelas de preços (Escola)", href: "/escola/configuracoes/matriculas/tabelas" },
     ],
   },
   {
