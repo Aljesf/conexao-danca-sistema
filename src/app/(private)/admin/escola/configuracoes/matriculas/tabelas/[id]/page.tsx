@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import TabelaMatriculaEditForm from "./TabelaMatriculaEditForm";
 
 type MatriculaTabela = {
   id: number;
@@ -32,6 +33,11 @@ type Turma = {
   turno?: string | null;
   dias_semana?: string[] | string | null;
   ano_referencia?: number | null;
+};
+
+type TurmaVinculo = {
+  turma_id: number;
+  turmas?: Turma | null;
 };
 
 function formatDias(dias: Turma["dias_semana"]): string | null {
@@ -70,7 +76,8 @@ function formatCentavos(value: number): string {
 }
 
 export default async function Page({ params }: { params: { id: string } }) {
-  const tabelaId = Number(params.id);
+  const { id } = await Promise.resolve(params);
+  const tabelaId = Number(id);
   if (!Number.isFinite(tabelaId) || tabelaId <= 0) {
     redirect("/admin/escola/configuracoes/matriculas/tabelas");
   }
@@ -93,45 +100,30 @@ export default async function Page({ params }: { params: { id: string } }) {
     );
   }
 
-  const [{ data: itens, error: itensErr }, { data: turmasData }] = await Promise.all([
-    supabase
-      .from("matricula_tabela_itens")
-      .select("id,tabela_id,codigo_item,descricao,tipo_item,valor_centavos,ativo,ordem")
-      .eq("tabela_id", tabelaId)
-      .order("ordem", { ascending: true })
-      .order("id", { ascending: true }),
-    supabase.from("turmas").select("turma_id,nome,curso,nivel,turno,dias_semana,ano_referencia"),
-  ]);
+  const [{ data: itens, error: itensErr }, { data: turmasData }, { data: vinculosData, error: vinculosErr }] =
+    await Promise.all([
+      supabase
+        .from("matricula_tabela_itens")
+        .select("id,tabela_id,codigo_item,descricao,tipo_item,valor_centavos,ativo,ordem")
+        .eq("tabela_id", tabelaId)
+        .order("ordem", { ascending: true })
+        .order("id", { ascending: true }),
+      supabase.from("turmas").select("turma_id,nome,curso,nivel,turno,dias_semana,ano_referencia"),
+      supabase
+        .from("matricula_tabelas_turmas")
+        .select("turma_id, turmas:turma_id (turma_id,nome,curso,nivel,turno,dias_semana,ano_referencia)")
+        .eq("tabela_id", tabelaId),
+    ]);
 
   const listaItens = (itens ?? []) as TabelaItem[];
   const turmas = (turmasData ?? []) as Turma[];
-  const turma = turmas.find((t) => t.turma_id === (tabela as MatriculaTabela).referencia_id) ?? null;
+  const vinculos = (vinculosData ?? []) as TurmaVinculo[];
+  const turmasVinculadas = vinculos.map((v) => v.turmas).filter((t): t is Turma => !!t);
+  const turmaIdsVinculadas = vinculos.map((v) => v.turma_id);
 
   const hasMensalidadeAtiva = listaItens.some(
     (i) => i.ativo && i.codigo_item === "MENSALIDADE" && i.tipo_item === "RECORRENTE",
   );
-
-  async function updateTabela(formData: FormData): Promise<void> {
-    "use server";
-
-    const supabase2 = getSupabaseAdmin();
-
-    const titulo = String(formData.get("titulo") ?? "").trim();
-    const ativo = formData.get("ativo") === "on";
-    const anoRaw = String(formData.get("ano_referencia") ?? "").trim();
-    const ano = anoRaw ? Number(anoRaw) : null;
-
-    if (!titulo) throw new Error("Titulo e obrigatorio.");
-
-    const { error } = await supabase2
-      .from("matricula_tabelas")
-      .update({ titulo, ativo, ano_referencia: ano })
-      .eq("id", tabelaId);
-
-    if (error) throw new Error(error.message);
-
-    redirect(`/admin/escola/configuracoes/matriculas/tabelas/${tabelaId}`);
-  }
 
   async function addItem(formData: FormData): Promise<void> {
     "use server";
@@ -168,20 +160,24 @@ export default async function Page({ params }: { params: { id: string } }) {
   }
 
   const tabelaInfo = tabela as MatriculaTabela;
+  const turmaOptions = turmas.map((t) => ({ id: t.turma_id, label: turmaLabel(t) }));
 
   return (
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-xl font-semibold">Tabela #{tabelaInfo.id}</h1>
         <p className="text-sm text-muted-foreground">
-          {tabelaInfo.produto_tipo} - {tabelaInfo.referencia_tipo}:{tabelaInfo.referencia_id} - Ano:{" "}
-          {tabelaInfo.ano_referencia ?? "-"}
+          {tabelaInfo.produto_tipo} - Ano: {tabelaInfo.ano_referencia ?? "-"}
         </p>
-        {turma ? (
+        {vinculosErr ? (
+          <p className="text-sm text-red-700">Falha ao carregar turmas vinculadas: {vinculosErr.message}</p>
+        ) : turmasVinculadas.length ? (
           <p className="text-sm">
-            Turma: <b>{turmaLabel(turma)}</b>
+            Turmas vinculadas: <b>{turmasVinculadas.map((t) => turmaLabel(t)).join("; ")}</b>
           </p>
-        ) : null}
+        ) : (
+          <p className="text-sm text-muted-foreground">Nenhuma turma vinculada.</p>
+        )}
       </div>
 
       {!hasMensalidadeAtiva ? (
@@ -190,36 +186,15 @@ export default async function Page({ params }: { params: { id: string } }) {
         </div>
       ) : null}
 
-      <form action={updateTabela} className="rounded-md border p-4 space-y-3 max-w-3xl">
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Titulo</label>
-          <input name="titulo" defaultValue={tabelaInfo.titulo} className="border rounded-md px-3 py-2 text-sm" />
-          <p className="text-xs text-muted-foreground">Sugestao: inclua curso/turma/ano para facilitar busca.</p>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Ano (REGULAR)</label>
-            <input
-              name="ano_referencia"
-              defaultValue={tabelaInfo.ano_referencia ?? ""}
-              className="border rounded-md px-3 py-2 text-sm"
-              type="number"
-            />
-          </div>
-
-          <label className="flex items-center gap-2 text-sm mt-7">
-            <input name="ativo" type="checkbox" defaultChecked={tabelaInfo.ativo} />
-            Ativa
-          </label>
-        </div>
-
-        <div className="flex justify-end">
-          <button className="rounded-md bg-black px-3 py-2 text-sm text-white" type="submit">
-            Salvar tabela
-          </button>
-        </div>
-      </form>
+      <TabelaMatriculaEditForm
+        tabelaId={tabelaInfo.id}
+        titulo={tabelaInfo.titulo}
+        anoReferencia={tabelaInfo.ano_referencia}
+        ativo={tabelaInfo.ativo}
+        produtoTipo={tabelaInfo.produto_tipo}
+        turmas={turmaOptions}
+        turmasSelecionadas={turmaIdsVinculadas}
+      />
 
       <div className="rounded-md border p-4 space-y-3">
         <h2 className="font-medium">Itens</h2>

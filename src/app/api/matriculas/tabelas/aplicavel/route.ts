@@ -24,6 +24,12 @@ function getAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
+async function resolveTurmaIdReal(admin: ReturnType<typeof createClient>, turmaInput: number) {
+  const { data, error } = await admin.from("turmas").select("id,turma_id").eq("id", turmaInput).maybeSingle();
+  if (!error && data?.turma_id) return Number(data.turma_id);
+  return turmaInput;
+}
+
 export async function GET(req: Request) {
   try {
     const cookieStore = await cookies();
@@ -32,30 +38,38 @@ export async function GET(req: Request) {
     if (!u?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
     const url = new URL(req.url);
-    const turmaId = Number(url.searchParams.get("turma_id") || "");
+    const turmaInput = Number(url.searchParams.get("turma_id") || "");
     const ano = Number(url.searchParams.get("ano") || "");
 
-    if (!turmaId) return badRequest("turma_id é obrigatório.");
-    if (!ano) return badRequest("ano é obrigatório.");
+    if (!turmaInput) return badRequest("turma_id e obrigatorio.");
+    if (!ano) return badRequest("ano e obrigatorio.");
 
     const admin = getAdmin();
+    const turmaId = await resolveTurmaIdReal(admin, turmaInput);
 
     const { data: piv, error: pivErr } = await admin
       .from("matricula_tabelas_turmas")
       .select("tabela_id, matricula_tabelas:tabela_id ( id, titulo, ano_referencia, ativo )")
       .eq("turma_id", turmaId);
 
-    if (pivErr) return serverError("Falha ao resolver tabela aplicável (pivot).", { pivErr });
+    if (pivErr) return serverError("Falha ao resolver tabela aplicavel (pivot).", { pivErr });
 
     const candidatas =
       (piv ?? [])
-        .map((r) => (r as { matricula_tabelas?: { id: number; titulo: string; ano_referencia: number; ativo: boolean } })
-          .matricula_tabelas)
+        .map(
+          (r) =>
+            (r as { matricula_tabelas?: { id: number; titulo: string; ano_referencia: number; ativo: boolean } })
+              .matricula_tabelas,
+        )
         .filter((t): t is { id: number; titulo: string; ano_referencia: number; ativo: boolean } => !!t)
         .filter((t) => t.ativo === true && Number(t.ano_referencia) === ano) ?? [];
 
     if (!candidatas.length) {
-      return conflict("Nenhuma tabela ativa encontrada para a turma/ano selecionados.", { turma_id: turmaId, ano });
+      return conflict("Nenhuma tabela ativa encontrada para a turma/ano selecionados.", {
+        turma_id: turmaId,
+        turma_input: turmaInput,
+        ano,
+      });
     }
 
     candidatas.sort((a, b) => Number(b.id) - Number(a.id));
@@ -75,7 +89,7 @@ export async function GET(req: Request) {
 
     const item = itens?.[0];
     if (!item) {
-      return conflict("Tabela encontrada, mas não há MENSALIDADE/RECORRENTE ativa. Matrícula não pode prosseguir.", {
+      return conflict("Tabela encontrada, mas nao ha MENSALIDADE/RECORRENTE ativa. Matricula nao pode prosseguir.", {
         tabela_id: tabela.id,
       });
     }
@@ -88,9 +102,11 @@ export async function GET(req: Request) {
           item_recorrente: item,
         },
       },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (e: unknown) {
-    return serverError("Erro inesperado ao resolver tabela aplicável.", { message: e instanceof Error ? e.message : String(e) });
+    return serverError("Erro inesperado ao resolver tabela aplicavel.", {
+      message: e instanceof Error ? e.message : String(e),
+    });
   }
 }

@@ -24,6 +24,12 @@ function getAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
+async function resolveTurmaIdReal(admin: ReturnType<typeof createClient>, turmaInput: number) {
+  const { data, error } = await admin.from("turmas").select("id,turma_id").eq("id", turmaInput).maybeSingle();
+  if (!error && data?.turma_id) return Number(data.turma_id);
+  return turmaInput;
+}
+
 type MatriculaTabela = {
   id: number;
   titulo: string;
@@ -40,21 +46,22 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const alunoId = Number(url.searchParams.get("aluno_id") || "");
-    const turmaId = Number(url.searchParams.get("turma_id") || "");
+    const turmaInput = Number(url.searchParams.get("turma_id") || "");
     const ano = Number(url.searchParams.get("ano") || "");
 
-    if (!alunoId) return badRequest("aluno_id é obrigatório.");
-    if (!turmaId) return badRequest("turma_id é obrigatório.");
-    if (!ano) return badRequest("ano é obrigatório.");
+    if (!alunoId) return badRequest("aluno_id e obrigatorio.");
+    if (!turmaInput) return badRequest("turma_id e obrigatorio.");
+    if (!ano) return badRequest("ano e obrigatorio.");
 
     const admin = getAdmin();
+    const turmaId = await resolveTurmaIdReal(admin, turmaInput);
 
     const { data: piv, error: pivErr } = await admin
       .from("matricula_tabelas_turmas")
       .select("tabela_id, matricula_tabelas:tabela_id ( id, titulo, ano_referencia, ativo )")
       .eq("turma_id", turmaId);
 
-    if (pivErr) return serverError("Falha ao resolver tabela aplicável (pivot).", { pivErr });
+    if (pivErr) return serverError("Falha ao resolver tabela aplicavel (pivot).", { pivErr });
 
     let candidatas =
       (piv ?? [])
@@ -73,12 +80,16 @@ export async function GET(req: Request) {
         .order("id", { ascending: false })
         .limit(1);
 
-      if (legacyErr) return serverError("Falha ao resolver tabela aplicável (legado).", { legacyErr });
+      if (legacyErr) return serverError("Falha ao resolver tabela aplicavel (legado).", { legacyErr });
       candidatas = (legacy ?? []) as MatriculaTabela[];
     }
 
     if (!candidatas.length) {
-      return conflict("Nenhuma tabela ativa encontrada para a turma/ano selecionados.", { turma_id: turmaId, ano });
+      return conflict("Nenhuma tabela ativa encontrada para a turma/ano selecionados.", {
+        turma_id: turmaId,
+        turma_input: turmaInput,
+        ano,
+      });
     }
 
     candidatas.sort((a, b) => Number(b.id) - Number(a.id));
@@ -90,7 +101,7 @@ export async function GET(req: Request) {
       .eq("pessoa_id", alunoId)
       .eq("ano_referencia", ano);
 
-    if (matsErr) return serverError("Falha ao contar matrículas do aluno.", { matsErr });
+    if (matsErr) return serverError("Falha ao contar matriculas do aluno.", { matsErr });
 
     const ativas = (mats ?? []).filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
     const turmaJaExiste = ativas.some((m) => Number(m.vinculo_id) === turmaId);
@@ -103,7 +114,7 @@ export async function GET(req: Request) {
       .eq("ativo", true)
       .order("minimo_modalidades", { ascending: true });
 
-    if (tierErr) return serverError("Falha ao buscar tiers de precificação.", { tierErr });
+    if (tierErr) return serverError("Falha ao buscar tiers de precificacao.", { tierErr });
 
     const tier = (tiers ?? []).find((t) => {
       const min = Number(t.minimo_modalidades);
@@ -112,7 +123,7 @@ export async function GET(req: Request) {
     });
 
     if (!tier) {
-      return conflict("Não há tier de precificação configurado para esta tabela (por quantidade de modalidades).", {
+      return conflict("Nao ha tier de precificacao configurado para esta tabela (por quantidade de modalidades).", {
         tabela_id: tabela.id,
         qtdModalidades,
       });
@@ -131,7 +142,7 @@ export async function GET(req: Request) {
 
     const item = itens?.[0];
     if (!item) {
-      return conflict("Tier encontrado, mas o item configurado não existe/está inativo na tabela.", {
+      return conflict("Tier encontrado, mas o item configurado nao existe/esta inativo na tabela.", {
         tabela_id: tabela.id,
         item_codigo: tier.item_codigo,
       });
@@ -150,7 +161,7 @@ export async function GET(req: Request) {
       { status: 200 },
     );
   } catch (e: unknown) {
-    return serverError("Erro inesperado ao resolver preço por modalidades.", {
+    return serverError("Erro inesperado ao resolver preco por modalidades.", {
       message: e instanceof Error ? e.message : String(e),
     });
   }

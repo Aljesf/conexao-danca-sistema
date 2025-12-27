@@ -2,15 +2,23 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 
-type Props = Record<string, unknown>;
+type TurmaOption = {
+  id: number;
+  label: string;
+  anoRef: number | null;
+};
+
+type Props = {
+  turmas: TurmaOption[];
+};
 
 type NovoItem = {
   idTemp: string;
   codigo: string;
   descricao: string;
-  valorReais: string; // input (R$)
+  tipo: "RECORRENTE" | "UNICO";
+  valorReais: string;
   ativo: boolean;
   ordem: number;
 };
@@ -26,20 +34,21 @@ function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
 
-export default function TabelaMatriculaNovaForm(_props: Props) {
+export default function TabelaMatriculaNovaForm({ turmas }: Props) {
   const router = useRouter();
-  const supabase = getSupabaseBrowser();
 
   const [titulo, setTitulo] = useState("");
   const [anoReferencia, setAnoReferencia] = useState<string>("");
   const [ativo, setAtivo] = useState(true);
   const [observacoes, setObservacoes] = useState("");
+  const [turmasSelecionadas, setTurmasSelecionadas] = useState<number[]>([]);
 
   const [itens, setItens] = useState<NovoItem[]>([
     {
       idTemp: uid(),
       codigo: "MENSALIDADE",
       descricao: "Mensalidade",
+      tipo: "RECORRENTE",
       valorReais: "",
       ativo: true,
       ordem: 1,
@@ -50,6 +59,8 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
   const [erro, setErro] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
+  const produtoTipo: "REGULAR" = "REGULAR";
+
   const anoParsed = useMemo(() => {
     if (!anoReferencia.trim()) return null;
     const n = Number(anoReferencia);
@@ -58,16 +69,26 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
   }, [anoReferencia]);
 
   const validacao = useMemo(() => {
-    if (!titulo.trim()) return "Informe o título da tabela.";
-    if (anoReferencia.trim() && !anoParsed) return "Ano de referência inválido (use 2025, 2026, etc.).";
+    if (!titulo.trim()) return "Informe o titulo da tabela.";
+    if (turmasSelecionadas.length === 0) return "Selecione ao menos 1 turma.";
+    if (produtoTipo === "REGULAR" && !anoParsed) return "Ano de referencia e obrigatorio para REGULAR.";
     if (itens.length === 0) return "Inclua pelo menos 1 item.";
     for (const item of itens) {
-      if (!item.codigo.trim()) return "Todo item precisa de código (ex.: MENSALIDADE).";
+      if (!item.codigo.trim()) return "Todo item precisa de codigo (ex.: MENSALIDADE).";
       const cents = toCents(item.valorReais);
-      if (cents === null) return `Valor inválido para o item ${item.codigo}.`;
+      if (cents === null) return `Valor invalido para o item ${item.codigo}.`;
     }
     return null;
-  }, [titulo, anoReferencia, anoParsed, itens]);
+  }, [titulo, turmasSelecionadas, produtoTipo, anoParsed, itens]);
+
+  function toggleTurma(id: number) {
+    setTurmasSelecionadas((old) => {
+      const set = new Set(old);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      return Array.from(set);
+    });
+  }
 
   function addItem() {
     setItens((old) => [
@@ -76,6 +97,7 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
         idTemp: uid(),
         codigo: "",
         descricao: "",
+        tipo: "RECORRENTE",
         valorReais: "",
         ativo: true,
         ordem: old.length + 1,
@@ -100,39 +122,46 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
     try {
       setSaving(true);
 
-      // 1) cria tabela
-      const { data: tabela, error: tabErr } = await supabase
-        .from("escola_tabelas_precos_cursos")
-        .insert({
-          titulo: titulo.trim(),
-          ano_referencia: anoParsed,
-          ativo,
-          observacoes: observacoes || null,
-        })
-        .select("id")
-        .single();
-
-      if (tabErr) throw tabErr;
-
-      // 2) cria itens
       const itemsPayload = itens.map((i) => ({
-        tabela_id: tabela.id,
         codigo: i.codigo.trim().toUpperCase(),
+        tipo: i.tipo,
         descricao: i.descricao.trim() || null,
         valor_centavos: toCents(i.valorReais) ?? 0,
-        moeda: "BRL",
-        ativo: i.ativo,
         ordem: i.ordem,
+        ativo: i.ativo,
       }));
 
-      const { error: itensErr } = await supabase
-        .from("escola_tabelas_precos_cursos_itens")
-        .insert(itemsPayload);
+      const res = await fetch("/api/matriculas/tabelas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo: titulo.trim(),
+          ano_referencia: anoParsed,
+          produto_tipo: produtoTipo,
+          ativo,
+          observacoes: observacoes || null,
+          turma_ids: turmasSelecionadas,
+          itens: itemsPayload,
+        }),
+      });
 
-      if (itensErr) throw itensErr;
+      let payload: { ok?: boolean; data?: { id: number }; message?: string } | null = null;
+      try {
+        payload = (await res.json()) as { ok?: boolean; data?: { id: number }; message?: string };
+      } catch {
+        payload = null;
+      }
 
-      setOkMsg(`Tabela criada com sucesso (ID ${tabela.id}).`);
-      router.refresh();
+      if (!res.ok || !payload?.ok) {
+        throw new Error(payload?.message || "Falha ao criar tabela.");
+      }
+
+      setOkMsg(`Tabela criada com sucesso (ID ${payload.data?.id}).`);
+      if (payload?.data?.id) {
+        router.push(`/admin/escola/configuracoes/matriculas/tabelas/${payload.data.id}`);
+      } else {
+        router.refresh();
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erro inesperado ao criar tabela.";
       setErro(msg);
@@ -144,25 +173,25 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
   return (
     <div className="rounded-3xl border border-violet-100/70 bg-white/95 p-6 shadow-sm backdrop-blur">
       <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-semibold text-slate-900">Tabela de Preços — Cursos (Escola)</h2>
+        <h2 className="text-xl font-semibold text-slate-900">Tabela de precos (Escola)</h2>
         <p className="text-sm text-slate-600">
-          Define apenas itens e valores. Não define parcelamento, pró-rata, forma de liquidação ou regras de pagamento.
+          Define apenas itens e valores. Nao define parcelamento, pro-rata, forma de liquidacao ou regras de pagamento.
         </p>
       </div>
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <div className="space-y-2 md:col-span-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Título</label>
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Titulo</label>
           <input
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-            placeholder="Ex.: Ballet Regular 2026 — Infantil"
+            placeholder="Ex.: Ballet Regular 2026 - Infantil"
           />
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Ano de referência (opcional)</label>
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Ano de referencia</label>
           <input
             value={anoReferencia}
             onChange={(e) => setAnoReferencia(e.target.value)}
@@ -170,6 +199,7 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
             className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
             placeholder="Ex.: 2026"
           />
+          <p className="text-xs text-slate-500">Obrigatorio para tabelas REGULAR.</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -180,7 +210,29 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
         </div>
 
         <div className="space-y-2 md:col-span-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Observações</label>
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Turmas vinculadas</label>
+          <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
+            {turmas.length === 0 ? (
+              <div className="text-sm text-slate-500">Nenhuma turma cadastrada.</div>
+            ) : (
+              turmas.map((turma) => (
+                <label key={turma.id} className="flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={turmasSelecionadas.includes(turma.id)}
+                    onChange={() => toggleTurma(turma.id)}
+                  />
+                  <span>{turma.label}</span>
+                </label>
+              ))
+            )}
+          </div>
+          <p className="text-xs text-slate-500">Selecione uma ou mais turmas para reutilizar a tabela.</p>
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Observacoes</label>
           <textarea
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value)}
@@ -207,7 +259,7 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
           {itens.map((item) => (
             <div key={item.idTemp} className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 md:grid-cols-12">
               <div className="md:col-span-3">
-                <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Código</label>
+                <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Codigo</label>
                 <input
                   value={item.codigo}
                   onChange={(e) =>
@@ -220,8 +272,26 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
                 />
               </div>
 
-              <div className="md:col-span-5">
-                <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Descrição</label>
+              <div className="md:col-span-2">
+                <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Tipo</label>
+                <select
+                  value={item.tipo}
+                  onChange={(e) =>
+                    setItens((old) =>
+                      old.map((x) =>
+                        x.idTemp === item.idTemp ? { ...x, tipo: e.target.value as "RECORRENTE" | "UNICO" } : x,
+                      ),
+                    )
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                >
+                  <option value="RECORRENTE">RECORRENTE</option>
+                  <option value="UNICO">UNICO</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Descricao</label>
                 <input
                   value={item.descricao}
                   onChange={(e) =>
@@ -266,7 +336,7 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
                 />
               </div>
 
-              <div className="flex items-end justify-between gap-3 md:col-span-1">
+              <div className="flex items-end justify-between gap-3 md:col-span-12">
                 <label className="inline-flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
@@ -280,11 +350,7 @@ export default function TabelaMatriculaNovaForm(_props: Props) {
                   Ativo
                 </label>
 
-                <button
-                  type="button"
-                  onClick={() => removeItem(item.idTemp)}
-                  className="text-xs font-medium text-rose-600 hover:text-rose-700"
-                >
+                <button type="button" onClick={() => removeItem(item.idTemp)} className="text-xs font-medium text-rose-600">
                   Remover
                 </button>
               </div>
