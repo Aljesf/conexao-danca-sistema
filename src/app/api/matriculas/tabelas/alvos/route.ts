@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type PostgrestError } from "@supabase/supabase-js";
 
 function badRequest(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null }, { status: 400 });
@@ -21,6 +21,11 @@ function getAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
+function isMissingRelation(err: unknown): boolean {
+  const e = err as PostgrestError | null;
+  return !!e && typeof e.code === "string" && e.code === "42P01";
+}
+
 export async function GET(req: Request) {
   try {
     const cookieStore = await cookies();
@@ -34,31 +39,36 @@ export async function GET(req: Request) {
     const admin = getAdmin();
 
     if (tipo === "TURMA") {
-      const { data, error } = await admin.from("turmas").select("turma_id,nome").order("nome");
+      const { data, error } = await admin.from("turmas").select("id,turma_id,nome").order("nome");
       if (error) return serverError("Falha ao listar turmas.", { error });
-      const rows = (data ?? []).map((row) => ({
-        id: row.turma_id,
-        turma_id: row.turma_id,
-        nome: row.nome,
-      }));
-      return NextResponse.json({ ok: true, data: rows }, { status: 200 });
-    }
-
-    if (tipo === "CURSO_LIVRE") {
-      const { data, error } = await admin.from("cursos_livres").select("id,titulo").order("titulo");
-      if (error) return serverError("Falha ao listar cursos livres.", { error });
       return NextResponse.json({ ok: true, data }, { status: 200 });
     }
 
-    if (tipo === "WORKSHOP") {
-      const { data, error } = await admin.from("workshops").select("id,titulo").order("titulo");
-      if (error) return serverError("Falha ao listar workshops.", { error });
+    if (tipo === "CURSO_LIVRE" || tipo === "WORKSHOP") {
+      const { data, error } = await admin.from("cursos_livres").select("id,titulo").order("titulo");
+      if (error) {
+        if (isMissingRelation(error)) {
+          return NextResponse.json(
+            { ok: true, data: [], warning: "Fonte CURSO_LIVRE/WORKSHOP ainda nao configurada no banco." },
+            { status: 200 },
+          );
+        }
+        return serverError("Falha ao listar cursos livres/workshops.", { error });
+      }
       return NextResponse.json({ ok: true, data }, { status: 200 });
     }
 
     if (tipo === "PROJETO") {
       const { data, error } = await admin.from("projetos").select("id,titulo").order("titulo");
-      if (error) return serverError("Falha ao listar projetos.", { error });
+      if (error) {
+        if (isMissingRelation(error)) {
+          return NextResponse.json(
+            { ok: true, data: [], warning: "Fonte PROJETO ainda nao configurada no banco." },
+            { status: 200 },
+          );
+        }
+        return serverError("Falha ao listar projetos.", { error });
+      }
       return NextResponse.json({ ok: true, data }, { status: 200 });
     }
 

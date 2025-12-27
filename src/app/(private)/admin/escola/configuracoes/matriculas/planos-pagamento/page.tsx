@@ -6,12 +6,12 @@ import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 
 type Plano = {
   id: number;
-  titulo: string;
-  descricao: string | null;
-  periodicidade: "MENSAL" | "AVISTA" | "PARCELADO";
-  numero_parcelas: number;
-  permite_prorata: boolean;
-  ativo: boolean;
+  titulo: string | null;
+  nome: string | null;
+  ciclo_cobranca: "COBRANCA_UNICA" | "COBRANCA_EM_PARCELAS" | "COBRANCA_MENSAL" | null;
+  numero_parcelas: number | null;
+  permite_prorrata: boolean | null;
+  ativo: boolean | null;
   created_at: string;
 };
 
@@ -20,7 +20,7 @@ export default async function Page() {
 
   const { data, error } = await supabase
     .from("matricula_planos_pagamento")
-    .select("id,titulo,descricao,periodicidade,numero_parcelas,permite_prorata,ativo,created_at")
+    .select("id,titulo,nome,ciclo_cobranca,numero_parcelas,permite_prorrata,ativo,created_at")
     .order("ativo", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -34,7 +34,7 @@ export default async function Page() {
             <div>
               <h1 className="text-xl font-semibold text-slate-800">Planos de pagamento (Matricula)</h1>
               <p className="text-sm text-slate-600">
-                O plano define apenas como pagar. Valores ficam na Tabela de Matricula.
+                O plano define apenas como pagar. Valores ficam na Tabela de Precos.
               </p>
             </div>
             <Link
@@ -49,9 +49,9 @@ export default async function Page() {
         <FinanceHelpCard
           subtitle="Entenda esta tela"
           items={[
-            "Periodicidade define o tipo do plano (mensal, a vista ou parcelado).",
-            "Numero de parcelas so faz sentido para PARCELADO.",
-            "Permite pro-rata libera entrada proporcional quando matricula apos o corte.",
+            "Ciclo de cobranca define unico, parcelado ou mensal.",
+            "Numero de parcelas so faz sentido para COBRANCA_EM_PARCELAS.",
+            "Prorrata afeta apenas a primeira cobranca.",
           ]}
         />
 
@@ -68,9 +68,9 @@ export default async function Page() {
                 <tr>
                   <th className="px-3 py-2 text-left font-semibold text-slate-700">ID</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-700">Titulo</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Periodicidade</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Ciclo</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-700">Parcelas</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Pro-rata</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-700">Prorrata</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-700">Ativo</th>
                   <th className="px-3 py-2 text-right font-semibold text-slate-700">Acoes</th>
                 </tr>
@@ -83,24 +83,28 @@ export default async function Page() {
                     </td>
                   </tr>
                 ) : (
-                  planos.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 text-slate-800">{p.id}</td>
-                      <td className="px-3 py-2 text-slate-700">{p.titulo}</td>
-                      <td className="px-3 py-2 text-slate-700">{p.periodicidade}</td>
-                      <td className="px-3 py-2 text-slate-700">{p.numero_parcelas}</td>
-                      <td className="px-3 py-2 text-slate-700">{p.permite_prorata ? "Permite" : "Nao"}</td>
-                      <td className="px-3 py-2 text-slate-700">{p.ativo ? "Sim" : "Nao"}</td>
-                      <td className="px-3 py-2 text-right">
-                        <Link
-                          className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
-                          href={`/admin/escola/configuracoes/matriculas/planos-pagamento/${p.id}`}
-                        >
-                          Abrir
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
+                  planos.map((p) => {
+                    const titulo = p.titulo || p.nome || "Sem titulo";
+                    const parcelas = p.ciclo_cobranca === "COBRANCA_EM_PARCELAS" ? p.numero_parcelas ?? "-" : "-";
+                    return (
+                      <tr key={p.id} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 text-slate-800">{p.id}</td>
+                        <td className="px-3 py-2 text-slate-700">{titulo}</td>
+                        <td className="px-3 py-2 text-slate-700">{p.ciclo_cobranca ?? "-"}</td>
+                        <td className="px-3 py-2 text-slate-700">{parcelas}</td>
+                        <td className="px-3 py-2 text-slate-700">{p.permite_prorrata ? "Permite" : "Nao"}</td>
+                        <td className="px-3 py-2 text-slate-700">{p.ativo ? "Sim" : "Nao"}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Link
+                            className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                            href={`/admin/escola/configuracoes/matriculas/planos-pagamento/${p.id}`}
+                          >
+                            Abrir
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
