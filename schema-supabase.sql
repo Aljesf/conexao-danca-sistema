@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2025-12-26T12:46:22.079Z
+-- Snapshot do schema gerado em 2025-12-27T12:38:46.748Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -501,6 +501,37 @@ CREATE TABLE public."enderecos_pessoa" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."escola_tabelas_precos_cursos"
+-- --------------------------------------------------
+CREATE TABLE public."escola_tabelas_precos_cursos" (
+  "id" bigint NOT NULL,
+  "titulo" text NOT NULL,
+  "ano_referencia" integer,
+  "referencia_tipo" text,
+  "referencia_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."escola_tabelas_precos_cursos_itens"
+-- --------------------------------------------------
+CREATE TABLE public."escola_tabelas_precos_cursos_itens" (
+  "id" bigint NOT NULL,
+  "tabela_id" bigint NOT NULL,
+  "codigo" text NOT NULL,
+  "descricao" text,
+  "valor_centavos" integer NOT NULL,
+  "moeda" text NOT NULL DEFAULT 'BRL'::text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."espacos"
 -- --------------------------------------------------
 CREATE TABLE public."espacos" (
@@ -922,6 +953,18 @@ CREATE TABLE public."matricula_configuracoes" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."matricula_eventos"
+-- --------------------------------------------------
+CREATE TABLE public."matricula_eventos" (
+  "id" bigint NOT NULL,
+  "matricula_id" bigint NOT NULL,
+  "tipo_evento" text NOT NULL,
+  "dados" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "autorizado_por" uuid,
+  "criado_em" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."matricula_planos"
 -- --------------------------------------------------
 CREATE TABLE public."matricula_planos" (
@@ -950,7 +993,17 @@ CREATE TABLE public."matricula_planos_pagamento" (
   "permite_prorata" boolean NOT NULL DEFAULT false,
   "ativo" boolean NOT NULL DEFAULT true,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
-  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "descricao" text,
+  "nome" text,
+  "ciclo_cobranca" text,
+  "termino_cobranca" text,
+  "data_fim_manual" date,
+  "regra_total_devido" text,
+  "permite_prorrata" boolean DEFAULT false,
+  "ciclo_financeiro" text,
+  "forma_liquidacao_padrao" text,
+  "observacoes" text
 );
 
 -- --------------------------------------------------
@@ -1043,7 +1096,10 @@ CREATE TABLE public."matriculas" (
   "data_inicio_vinculo" date,
   "tabela_matricula_id" bigint,
   "plano_pagamento_id" bigint,
-  "vencimento_dia_padrao" integer DEFAULT 12
+  "vencimento_dia_padrao" integer DEFAULT 12,
+  "vencimento_padrao_referencia" integer,
+  "escola_tabela_preco_curso_id" bigint,
+  "forma_liquidacao_padrao" text
 );
 
 -- --------------------------------------------------
