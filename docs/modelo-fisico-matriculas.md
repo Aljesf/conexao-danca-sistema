@@ -1,10 +1,10 @@
-﻿📘 Modelo Físico — Domínio de Matrículas (Alvo)
+?? Modelo Físico — Domínio de Matrículas (Alvo)
 
 Sistema Conexão Dança
 Status: Documento físico-alvo (referência técnica)
 Base normativa: Regras Oficiais de Matrícula (Conexão Dança) – v1
 
-⚠️ Este documento NÃO é migration SQL.
+?? Este documento NÃO é migration SQL.
 Ele define como o banco DEVE ficar para que o sistema respeite as regras oficiais.
 
 0. Objetivo do Modelo Físico
@@ -15,7 +15,7 @@ Pessoa como centro do sistema;
 
 Matrícula como ato contratual e gatilho financeiro;
 
-Tabela de Matrícula como fonte única de valores;
+Tabela de Preços — Cursos (Escola) como fonte única de valores;
 
 Plano de pagamento definindo apenas como pagar;
 
@@ -58,21 +58,21 @@ registra auditoria.
 
 1.3 Cartão Conexão é o motor financeiro
 
-Mensalidades cheias → credito_conexao_lancamentos;
+Mensalidades cheias ? credito_conexao_lancamentos;
 
-Vencimento, juros e mora → Cartão Conexão;
+Vencimento, juros e mora ? Cartão Conexão;
 
-Entrada (Pró-rata) → cobrança direta (cobrancas / recebimentos).
+Entrada (Pró-rata) ? cobrança direta (cobrancas / recebimentos).
 
 2. Entidades físicas principais
 
 matriculas — entidade canônica do vínculo
 
-turma_aluno — vínculo operacional pessoa ↔ turma
+turma_aluno — vínculo operacional pessoa ? turma
 
-matricula_tabelas — tabela de precificação oficial
+escola_tabelas_precos_cursos - tabela de precificacao oficial
 
-matricula_tabela_itens — itens e valores
+escola_tabelas_precos_cursos_itens - itens e valores
 
 matricula_planos_pagamento — forma de pagamento (sem valores)
 
@@ -91,7 +91,7 @@ recebimentos
 
 Representa o ato formal de matrícula, vinculando:
 
-Pessoa → Produto/Turma → Regras financeiras → Contrato.
+Pessoa ? Produto/Turma ? Regras financeiras ? Contrato.
 
 3.2 Campos físicos recomendados
 Campo	Tipo	Descrição
@@ -105,8 +105,10 @@ status	enum	ATIVA / TRANCADA / CANCELADA / CONCLUIDA
 data_matricula	date	Data do ato
 data_inicio_vinculo	date	Início efetivo das aulas
 data_encerramento	date	Opcional
-tabela_matricula_id	FK	Fonte única de valores
+escola_tabela_preco_curso_id	FK	Fonte unica de valores
 plano_pagamento_id	FK	Como pagar (sem valores)
+forma_liquidacao_padrao	text	Declarativo; nao executa pagamento no MVP
+contrato_modelo_id	FK	Modelo de contrato (MVP)
 vencimento_padrao_referencia	int	Snapshot da política vigente
 observacoes	text	Uso interno
 auditoria	timestamps / users	rastreabilidade
@@ -128,10 +130,12 @@ conferência humana.
 
 O vencimento real sempre vem do Cartão Conexão.
 
-4. Tabela matricula_tabelas (Tabela de Matrícula)
+4. Tabela escola_tabelas_precos_cursos (Tabela de Preços — Cursos (Escola))
 4.1 Papel
 
 Definir quais itens são cobrados e seus valores.
+
+A Tabela de Preços — Cursos (Escola) define apenas itens e valores. Não define pagamento, parcelamento, vencimento, pró-rata, juros ou forma de liquidação.
 
 É a única fonte de valores.
 
@@ -153,7 +157,7 @@ ativo
 
 auditoria
 
-5. Tabela matricula_tabela_itens
+5. Tabela escola_tabelas_precos_cursos_itens
 5.1 Campos
 
 id
@@ -180,21 +184,39 @@ Ela é cálculo operacional sobre a mensalidade.
 6. Tabela matricula_planos_pagamento
 6.1 Papel
 
-Definir como pagar, nunca quanto pagar.
+Definir a organizacao temporal do compromisso financeiro (cobrancas).
+Nao executa pagamento e nao gera cobrancas/recebimentos no MVP.
 
 6.2 Campos
 
 id
 
-titulo
-
-periodicidade (MENSAL, AVISTA, etc.)
-
-numero_parcelas
-
-permite_prorata
+nome
 
 ativo
+
+ciclo_cobranca (COBRANCA_UNICA / COBRANCA_EM_PARCELAS / COBRANCA_MENSAL)
+
+numero_parcelas (obrigatorio quando ciclo_cobranca = COBRANCA_EM_PARCELAS)
+
+termino_cobranca (obrigatorio quando ciclo_cobranca = COBRANCA_MENSAL): FIM_TURMA_CURSO / FIM_PROJETO / FIM_ANO_LETIVO / DATA_ESPECIFICA
+
+data_fim_manual (obrigatorio quando termino_cobranca = DATA_ESPECIFICA)
+
+regra_total_devido (PROPORCIONAL / FIXO)
+
+permite_prorrata (bool)
+
+ciclo_financeiro (MENSAL / BIMESTRAL / TRIMESTRAL / SEMESTRAL / ANUAL)
+
+forma_liquidacao_padrao (CARTAO_CONEXAO / PIX / BOLETO / OUTRA)
+
+6.3 Regras do MVP
+
+- Pro-rata afeta apenas a primeira cobranca (valor), nunca a contagem de cobrancas.
+- FIM_ANO_LETIVO: data_termino = 31/12 do ano_referencia.
+  - Fonte preferencial: matriculas.ano_referencia (REGULAR).
+  - Fallback: ano(data_inicio_vinculo) quando necessario.
 
 7. Pró-rata e janeiro (suporte físico)
 
@@ -206,7 +228,7 @@ Datas devem ser parametrizáveis, nunca hardcoded.
 
 Recomendação:
 
-Configurações institucionais em Admin → Escola.
+Configurações institucionais em Admin ? Escola.
 
 8. Exceção do primeiro pagamento (auditoria)
 
@@ -260,9 +282,9 @@ pessoas
 
 turma_aluno
 
-matricula_tabelas
+escola_tabelas_precos_cursos
 
-matricula_tabela_itens
+escola_tabelas_precos_cursos_itens
 
 Legado
 

@@ -1,4 +1,4 @@
-﻿# ADR-0008 - Matriculas referenciam Servico (e nao apenas Turma)
+# ADR-0008 - Matriculas referenciam Servico (e nao apenas Turma)
 
 ## Contexto
 O sistema precisa reutilizar a mesma logica de matricula/financeiro para:

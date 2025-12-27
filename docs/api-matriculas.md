@@ -1,4 +1,4 @@
-﻿# 📘 API — Matrículas
+# ?? API — Matrículas
 Sistema Conexão Dança  
 Status: Documento em adequação (alinhado às Regras Oficiais v1)  
 Base normativa: **Regras Oficiais de Matrícula (Conexão Dança) – v1**  
@@ -17,8 +17,8 @@ Objetivo da rota (v2):
 - Criar uma nova matrícula na tabela `matriculas` (unidade oficial do vínculo).
 - Criar/garantir vínculo operacional em `turma_aluno` com `matricula_id`.
 - Gerar os registros financeiros conforme as regras oficiais:
-  - **Mensalidade cheia** → lançamento no **Cartão Conexão** (`credito_conexao_lancamentos`).
-  - **Entrada (Pró-rata)** → cobrança direta (`cobrancas` + `recebimentos`), fora do Cartão Conexão.
+  - **Mensalidade cheia** ? lançamento no **Cartão Conexão** (`credito_conexao_lancamentos`).
+  - **Entrada (Pró-rata)** ? cobrança direta (`cobrancas` + `recebimentos`), fora do Cartão Conexão.
   - Suportar **exceção negociável** da Entrada (adiar para vencimento) com auditoria.
 
 Escopo (primeira entrega desta API):
@@ -49,7 +49,7 @@ Implementação prevista:
 
 - Usuário autenticado (Supabase Auth).
 - Roles permitidos (exemplo): `ADMIN`, `SECRETARIA`, `COORDENACAO`.
-- Se não autorizado → `403`.
+- Se não autorizado ? `403`.
 
 ---
 
@@ -69,8 +69,8 @@ A matrícula pode registrar apenas:
 
 ### 3.2 Separação financeira
 
-- Mensalidade cheia → `credito_conexao_lancamentos` (Cartão Conexão).
-- Entrada (Pró-rata) → `cobrancas`/`recebimentos` (pagamento no ato) OU cobrança pendente quando houver exceção.
+- Mensalidade cheia ? `credito_conexao_lancamentos` (Cartão Conexão).
+- Entrada (Pró-rata) ? `cobrancas`/`recebimentos` (pagamento no ato) OU cobrança pendente quando houver exceção.
 
 ---
 
@@ -87,8 +87,10 @@ A matrícula pode registrar apenas:
   "ano_referencia": 2026,
   "data_matricula": "2026-02-10",
   "data_inicio_vinculo": "2026-02-10",
-  "tabela_matricula_id": 10,
+  "escola_tabela_preco_curso_id": 10,
   "plano_pagamento_id": 3,
+  "forma_liquidacao_padrao": "CARTAO_CONEXAO",
+  "contrato_modelo_id": 12,
   "vencimento_padrao_referencia": 12,
   "politica_primeiro_pagamento": {
     "modo": "PADRAO",
@@ -118,9 +120,15 @@ Obrigatórios:
 Condicionais / recomendados:
 
 - ano_referencia (int) — obrigatório para REGULAR
-- tabela_matricula_id (int) — obrigatório quando o modelo físico estiver ativo
-- plano_pagamento_id (int) — opcional inicialmente (pode ser null)
-- vencimento_padrao_referencia (int) — snapshot; default institucional (ex.: 12)
+- escola_tabela_preco_curso_id (int) - obrigatório quando o modelo físico estiver ativo; fonte única de valores: Tabela de Preços — Cursos (Escola)
+- plano_pagamento_id (int) - opcional inicialmente (pode ser null); MVP declarativo, sem execucao financeira
+- forma_liquidacao_padrao (string) - declarativa (ex.: CARTAO_CONEXAO, PIX, BOLETO, OUTRA)
+- contrato_modelo_id (int) - referencia de modelo de contrato (MVP)
+- vencimento_padrao_referencia (int) - snapshot; default institucional (ex.: 12)
+
+Plano de Pagamento no MVP e declarativo: define organizacao temporal das cobrancas, sem gerar cobrancas/recebimentos.
+
+A Tabela de Preços — Cursos (Escola) define apenas itens e valores. Não define pagamento, parcelamento, vencimento, pró-rata, juros ou forma de liquidação.
 
 Bloco de política (novo):
 
@@ -177,7 +185,7 @@ Em transação:
 
 - Validar permissão e payload.
 - Buscar aluno/responsável/turma.
-- Resolver valores (mensalidade) a partir da Tabela de Matrícula (quando já existir).
+- Resolver valores a partir da Tabela de Preços — Cursos (Escola) (quando já existir).
 - Calcular:
   - se há mensalidade cheia a lançar,
   - se há Entrada (Pró-rata) e seu valor.
@@ -186,7 +194,7 @@ Em transação:
 
 Financeiro:
 
-- Mensalidade cheia → inserir em credito_conexao_lancamentos (origem_sistema='MATRICULA', origem_id=matriculas.id).
+- Mensalidade cheia ? inserir em credito_conexao_lancamentos (origem_sistema='MATRICULA', origem_id=matriculas.id).
 - Entrada (Pró-rata):
   - modo PADRAO: criar cobrancas + recebimentos (pago no ato).
   - modo ADIAR: criar cobrancas pendente com vencimento calculado; sem recebimento.
@@ -218,6 +226,6 @@ Retornar:
 ## 8. Evoluções futuras
 
 - Contratos (geração, emissão, assinatura)
-- Integração completa com Tabela de Matrícula e Planos
+- Integração completa com Tabela de Preços — Cursos (Escola) e Planos
 - Matrícula de Projeto Artístico
 - Integração com cobrança Neofin (faturas/boletos) via Cartão Conexão

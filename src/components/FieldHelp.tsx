@@ -1,8 +1,14 @@
-"use client";
+﻿"use client";
 
 import { useId, useState } from "react";
 
-export function FieldHelp({ text, label = "Ajuda" }: { text: string; label?: string }) {
+export function FieldHelp({
+  text,
+  label = "Ajuda",
+}: {
+  text: string;
+  label?: string;
+}) {
   const id = useId();
   const [open, setOpen] = useState(false);
 

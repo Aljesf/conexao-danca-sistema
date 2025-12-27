@@ -65,13 +65,13 @@ A turma define:
 - local;
 - organizacao pedagogica.
 
-A turma nao e o objeto comercial da matricula, mas pode influenciar o valor, por meio da Tabela de Matricula.
+A turma nao e o objeto comercial da matricula, mas pode influenciar o valor, por meio da Tabela de Preços — Cursos (Escola).
 
-## 5. Tabela de Matricula (precificacao oficial)
+## 5. Tabela de Preços — Cursos (Escola)
 
 ### 5.1 Definicao
 
-Tabela de Matricula e a definicao oficial dos valores incidentes sobre uma matricula, para um determinado:
+A Tabela de Preços — Cursos (Escola) e a definicao oficial dos valores incidentes sobre uma matricula, para um determinado:
 
 - produto;
 - (opcionalmente) uma turma;
@@ -79,19 +79,19 @@ Tabela de Matricula e a definicao oficial dos valores incidentes sobre uma matri
 
 Ela substitui integralmente qualquer conceito anterior de "servico".
 
-### 5.2 O que a Tabela de Matricula define
+### 5.2 O que a Tabela de Preços — Cursos (Escola) define
 
 - quais itens serao cobrados;
-- o valor base de cada item;
-- a natureza de cada item:
-  - recorrente (mensalidade/anuidade);
-  - unico (taxa, material, figurino);
-  - eventual.
+- o valor base de cada item.
 
-### 5.3 O que a Tabela de Matricula NAO define
+A Tabela de Preços — Cursos (Escola) define apenas itens e valores. Não define pagamento, parcelamento, vencimento, pró-rata, juros ou forma de liquidação.
 
+### 5.3 O que a Tabela de Preços — Cursos (Escola) NAO define
+
+- pagamento e forma de liquidacao;
 - parcelamento;
 - vencimentos;
+- pró-rata;
 - mora ou juros;
 - regras financeiras de atraso.
 
@@ -191,7 +191,7 @@ Nos cursos regulares, a obrigacao financeira e uma anuidade, executada por meio 
 
 A anuidade:
 
-- e definida na Tabela de Matricula;
+- e definida na Tabela de Preços — Cursos (Escola);
 - pode ser composta por varios itens;
 - e independente da forma de pagamento.
 
@@ -199,15 +199,19 @@ A anuidade:
 
 ### 8.1 Conceito
 
-Plano de Pagamento define exclusivamente como a anuidade sera paga, e nunca o valor.
+Plano de Pagamento define exclusivamente a organizacao temporal do compromisso financeiro (cobrancas), e nunca o valor.
+
+No MVP, o plano e declarativo: nao executa pagamento e nao gera cobrancas/recebimentos.
 
 O plano define:
 
-- numero de parcelas;
-- periodicidade;
-- regras de inicio;
-- possibilidade de pro-rata;
-- sugestao de vencimento.
+- ciclo de cobranca;
+- numero de parcelas (quando aplicavel);
+- termino de cobranca (quando aplicavel);
+- regra de total devido (proporcional ou fixo);
+- possibilidade de pro-rata (apenas na primeira cobranca);
+- ciclo financeiro;
+- forma de liquidacao padrao (declarativa).
 
 O plano:
 
@@ -217,7 +221,42 @@ O plano:
 ### 8.2 Regra obrigatoria de comunicacao
 
 > Nota:
-> "O plano de pagamento define apenas o parcelamento da anuidade. O valor devido e definido na Tabela de Matricula."
+> "O plano de pagamento define apenas o parcelamento da anuidade. O valor devido e definido na Tabela de Preços — Cursos (Escola)."
+
+### 8.3 Campos do Plano de Pagamento (MVP)
+
+- nome
+- ativo
+- ciclo_cobranca:
+  - COBRANCA_UNICA
+  - COBRANCA_EM_PARCELAS (exige numero_parcelas)
+  - COBRANCA_MENSAL (exige termino_cobranca)
+- numero_parcelas (obrigatorio quando ciclo_cobranca = COBRANCA_EM_PARCELAS)
+- termino_cobranca:
+  - FIM_TURMA_CURSO
+  - FIM_PROJETO
+  - FIM_ANO_LETIVO
+  - DATA_ESPECIFICA
+- data_fim_manual (obrigatorio quando termino_cobranca = DATA_ESPECIFICA)
+- regra_total_devido:
+  - PROPORCIONAL
+  - FIXO
+- permite_prorrata (bool)
+  - pro-rata afeta apenas a primeira cobranca (valor), nunca a contagem de cobrancas
+- ciclo_financeiro:
+  - MENSAL
+  - BIMESTRAL
+  - TRIMESTRAL
+  - SEMESTRAL
+  - ANUAL
+- forma_liquidacao_padrao (declarativa; nao executa pagamento)
+  - exemplos: CARTAO_CONEXAO, PIX, BOLETO, OUTRA
+
+### 8.4 Regra FIM_ANO_LETIVO (termino_cobranca)
+
+- data_termino = 31/12 do ano_referencia
+- fonte preferencial: matriculas.ano_referencia (REGULAR)
+- fallback: ano(data_inicio_vinculo) quando necessario
 
 ## 9. Ciclo de cobranca e Pro-rata — Modelo A (regra oficial)
 

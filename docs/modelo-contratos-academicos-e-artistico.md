@@ -15,7 +15,7 @@ A efetivação da matrícula está condicionada ao pagamento da primeira cobran�
 
 As partes reconhecem que os termos financeiros e operacionais da matricula sao definidos pelos seguintes documentos normativos:
 
-- **Tabela de Matricula vigente**;
+- **Tabela de Preços — Cursos (Escola) vigente**;
 - **Regras Oficiais de Matricula (Conexao Danca) – v1**;
 - Politicas internas vigentes da Instituicao.
 
@@ -23,7 +23,7 @@ Este contrato **nao define valores, parcelas, pro-rata, vencimento, multa ou jur
 
 ## 4. Forma de cobranca e controle financeiro
 
-A Instituicao utiliza o **Cartao Conexao** como meio central de cobranca e controle financeiro, nos termos das Regras Oficiais de Matricula (Conexao Danca) – v1 e da Tabela de Matricula vigente.
+A Instituicao utiliza o **Cartao Conexao** como meio central de cobranca e controle financeiro, nos termos das Regras Oficiais de Matricula (Conexao Danca) – v1 e da Tabela de Preços — Cursos (Escola) vigente.
 
 A cobranca e o controle de vencimentos, mora, multa e juros sao regidos pelos documentos normativos vigentes e pelo funcionamento do Cartao Conexao.
 
@@ -59,7 +59,7 @@ Quando aplicavel, poderao ser emitidos instrumentos juridicos acessorios (termos
 
 ## 10. Hierarquia documental
 
-Em caso de divergencia entre este contrato e os documentos normativos citados, **prevalecem as Regras Oficiais de Matricula (Conexao Danca) – v1** e a Tabela de Matricula vigente.
+Em caso de divergencia entre este contrato e os documentos normativos citados, **prevalecem as Regras Oficiais de Matricula (Conexao Danca) – v1** e a Tabela de Preços — Cursos (Escola) vigente.
 
 ## 11. Disposicoes gerais
 

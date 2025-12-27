@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { FieldHelp } from "@/components/FieldHelp";
@@ -45,13 +45,13 @@ export function PlanosPagamentoForm({
   }, [periodicidade, parcelas, touchedTitulo]);
 
   const helpPeriodicidade =
-    "Define o tipo do plano. Ex.: MENSAL = recorrencia mensal; AVISTA = pagamento unico; PARCELADO = uma cobranca dividida em N vezes (ex.: anuidade 12x).";
+    "Define o tipo do plano. Ex.: MENSAL = recorrencia mensal; AVISTA = pagamento unico; PARCELADO = cobranca dividida em N vezes.";
   const helpParcelas =
-    "So aparece quando o plano e PARCELADO. Ex.: 12 = 12x. Para MENSAL e AVISTA, o sistema usa 1 automaticamente.";
+    "So aparece quando o plano e PARCELADO. Ex.: 12 = 12x. Para MENSAL e AVISTA, o sistema usa 1.";
   const helpProrata =
-    "Se marcado, o plano permite pro-rata quando a matricula ocorre apos o corte. Ex.: aluno entra dia 20 -> cobra entrada proporcional.";
+    "Se marcado, o plano permite pro-rata quando a matricula ocorre apos o corte. Ex.: aluno entra dia 20.";
   const helpTitulo =
-    "Nome para voce reconhecer rapidamente na lista. O sistema sugere automaticamente. Ex.: 'Mensal (Cartao Conexao)'.";
+    "Nome para reconhecer na lista. O sistema sugere automaticamente. Ex.: 'Mensal (Cartao Conexao)'.";
 
   return (
     <form action={action} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-4">
@@ -76,7 +76,7 @@ export function PlanosPagamentoForm({
       <div className="grid gap-2">
         <label className="text-sm font-semibold text-slate-700">
           Descricao (opcional)
-          <FieldHelp text="Use para regras internas curtas. Ex.: 'Padrao para alunos regulares'." />
+          <FieldHelp text="Use para regras internas curtas. Ex.: Plano padrao para mensalidade." />
         </label>
         <textarea
           name="descricao"

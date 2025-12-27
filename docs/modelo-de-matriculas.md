@@ -16,8 +16,8 @@ Em caso de conflito, prevalece o documento oficial.
 
 - **Ciclo de cobranca (mensalidade):** mes-calendario (dia 1º ao ultimo dia do mes).
 - **Vencimento padrao:** dia 12 (configuravel). O vencimento e a data limite de pagamento; nao define o ciclo.
-- **Tabela de Matricula:** define itens e valores (mensalidade, itens unicos, avulsos).
-- **Plano de Pagamento:** define apenas como pagar (parcelas/periodicidade), nunca o valor.
+- **Tabela de Preços — Cursos (Escola):** define itens e valores.
+- **Plano de Pagamento:** define a organizacao temporal do compromisso financeiro (cobrancas), nunca o valor. No MVP, e declarativo e nao gera cobrancas/recebimentos.
 - **Cartao Conexao:** motor financeiro central (vencimento efetivo, mora, multa e juros).
 
 ---
@@ -33,21 +33,25 @@ Em caso de conflito, prevalece o documento oficial.
 
 3) Selecionar a turma (quando aplicavel)
 - A turma define dias, horarios, professores e local.
-- A turma **nao** e o objeto comercial da matricula, mas pode influenciar o valor via Tabela de Matricula.
+- A turma **nao** e o objeto comercial da matricula, mas pode influenciar o valor via Tabela de Preços — Cursos (Escola).
 
 4) Definir data de inicio do vinculo (inicio das aulas)
 - A data de inicio do vinculo define o **primeiro ciclo efetivo de aulas**.
 - Essa data define qual sera a primeira cobranca (mensalidade cheia ou entrada pro-rata).
 
-5) Confirmar Tabela de Matricula
-- Os valores **vem exclusivamente** da Tabela de Matricula.
+5) Confirmar Tabela de Preços — Cursos (Escola)
+- Os valores **vem exclusivamente** da Tabela de Preços — Cursos (Escola).
 - O plano de pagamento **nao** define valores.
 
-6) Confirmar forma de liquidacao
+6) Confirmar Plano de Pagamento (MVP)
+- Define a organizacao temporal do compromisso financeiro (cobrancas).
+- Nao executa pagamento e nao gera cobrancas/recebimentos neste MVP.
+
+7) Confirmar forma de liquidacao
 - O Cartao Conexao e o motor financeiro central.
 - A operacao deve respeitar as Regras Oficiais de Matricula (v1).
 
-7) Concluir matricula
+8) Concluir matricula
 - Conferir dados finais.
 - Registrar a matricula e executar o fluxo financeiro conforme as regras oficiais.
 
@@ -88,7 +92,7 @@ Matriculas em janeiro:
 ### 5.1 O que vai para o Cartao Conexao
 
 - Mensalidades cheias (ciclos completos).
-- Itens da Tabela de Matricula que forem configurados para seguir o fluxo regular no Cartao Conexao (ex.: itens recorrentes do curso).
+- Itens da Tabela de Preços — Cursos (Escola) que forem configurados para seguir o fluxo regular no Cartao Conexao (ex.: itens recorrentes do curso).
 
 ### 5.2 O que nao vai para o Cartao Conexao
 
@@ -102,21 +106,68 @@ Matriculas em janeiro:
 
 ---
 
-## 6. Tabela de Matricula (itens e valores)
+## 6. Tabela de Preços — Cursos (Escola)
 
-- A Tabela de Matricula define **quais itens** serao cobrados e **os valores**.
+- A Tabela de Preços — Cursos (Escola) define **quais itens** serao cobrados e **os valores**.
+- A Tabela de Preços — Cursos (Escola) define apenas itens e valores. Não define pagamento, parcelamento, vencimento, pró-rata, juros ou forma de liquidação.
 - Ela substitui qualquer conceito anterior de "servico".
 - O plano de pagamento **nao** define valores.
 
 Observacao operacional:
-- Itens unicos/avulsos (ex.: material, figurino, etc.) tambem vem da Tabela de Matricula.
+- Itens adicionais (ex.: material, figurino, etc.) tambem vem da Tabela de Preços — Cursos (Escola).
 - Esses itens nao devem ser confundidos com Entrada (Pro-rata).
 
 ---
 
-## 7. Casos especiais
+## 7. Plano de Pagamento (MVP)
 
-### 7.1 Matricula com inicio futuro (pagamento antecipado)
+- Funcao: definir organizacao temporal do compromisso financeiro (cobrancas).
+- Nao executa pagamento e nao gera cobrancas/recebimentos neste MVP.
+
+Campos:
+- nome
+- ativo
+- ciclo_cobranca:
+  - COBRANCA_UNICA
+  - COBRANCA_EM_PARCELAS (exige numero_parcelas)
+  - COBRANCA_MENSAL (exige termino_cobranca)
+- numero_parcelas (obrigatorio quando ciclo_cobranca = COBRANCA_EM_PARCELAS)
+- termino_cobranca:
+  - FIM_TURMA_CURSO
+  - FIM_PROJETO
+  - FIM_ANO_LETIVO
+  - DATA_ESPECIFICA
+- data_fim_manual (obrigatorio quando termino_cobranca = DATA_ESPECIFICA)
+- regra_total_devido:
+  - PROPORCIONAL
+  - FIXO
+- permite_prorrata (bool)
+  - pro-rata afeta apenas a primeira cobranca (valor), nunca a contagem de cobrancas
+- ciclo_financeiro:
+  - MENSAL
+  - BIMESTRAL
+  - TRIMESTRAL
+  - SEMESTRAL
+  - ANUAL
+- forma_liquidacao_padrao (declarativa; nao executa pagamento)
+  - exemplos: CARTAO_CONEXAO, PIX, BOLETO, OUTRA
+
+Regra FIM_ANO_LETIVO:
+- data_termino = 31/12 do ano_referencia
+- fonte preferencial: matriculas.ano_referencia (REGULAR)
+- fallback: ano(data_inicio_vinculo) quando necessario
+
+Referencias da matricula (MVP):
+- escola_tabela_preco_curso_id
+- plano_pagamento_id
+- forma_liquidacao_padrao
+- contrato_modelo_id
+
+---
+
+## 8. Casos especiais
+
+### 8.1 Matricula com inicio futuro (pagamento antecipado)
 
 Exemplo: matricula em julho com inicio em agosto.
 
@@ -124,14 +175,14 @@ Exemplo: matricula em julho com inicio em agosto.
 - A primeira cobranca deve refletir esse primeiro ciclo (mensalidade cheia de agosto), paga no ato como pagamento antecipado.
 - As cobrancas seguintes entram no fluxo normal do Cartao Conexao.
 
-### 7.2 Matricula em janeiro
+### 8.2 Matricula em janeiro
 
 - Seguir a regra especifica do mes de janeiro (ate e apos dia 12).
 - Entrada de janeiro (pro-rata) e paga no ato quando aplicavel.
 
 ---
 
-## 8. Observacoes finais
+## 9. Observacoes finais
 
 - Este documento e um **manual operacional** e nao cria regras.
 - Em caso de duvida, consultar:

@@ -43,10 +43,10 @@ Snapshot completo em: docs/schema-atual-2025-12-26.sql
   - FOREIGN KEY (updated_by) REFERENCES auth.users(id)
 - Colunas-chave: id, nome, cpf, nascimento, email
 
-### matricula_tabelas
+### escola_tabelas_precos_cursos
 - Status: nao existe no banco atual
 
-### matricula_tabela_itens
+### escola_tabelas_precos_cursos_itens
 - Status: nao existe no banco atual
 
 ### matricula_planos_pagamento
@@ -115,10 +115,10 @@ Snapshot completo em: docs/schema-atual-2025-12-26.sql
 
 Referencia: docs/modelo-fisico-matriculas.md
 
-- matriculas: existe (faltam colunas: data_inicio_vinculo, tabela_matricula_id, plano_pagamento_id, vencimento_dia_padrao)
+- matriculas: existe (faltam colunas: data_inicio_vinculo, escola_tabela_preco_curso_id, plano_pagamento_id, vencimento_dia_padrao)
 - turma_aluno: existe (sem gaps principais)
-- matricula_tabelas: NAO existe (falta criar)
-- matricula_tabela_itens: NAO existe (falta criar)
+- escola_tabelas_precos_cursos: NAO existe (falta criar)
+- escola_tabelas_precos_cursos_itens: NAO existe (falta criar)
 - matricula_planos_pagamento: NAO existe (falta criar)
 - credito_conexao_lancamentos: existe (sem gaps principais)
 - credito_conexao_faturas: existe (sem gaps principais)
