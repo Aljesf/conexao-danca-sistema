@@ -7,7 +7,10 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
  * Fonte de verdade: public.formas_pagamento (schema já existe).
  */
 export async function GET() {
-  const supabase = createRouteHandlerClient({ cookies });
+  const cookieStore = await cookies();
+  const supabase = createRouteHandlerClient({
+    cookies: () => cookieStore,
+  });
 
   const {
     data: { user },

@@ -61,7 +61,10 @@ export async function POST(req: Request) {
   try {
     let supabaseAuth;
     try {
-      supabaseAuth = createRouteHandlerClient({ cookies });
+      const cookieStore = await cookies();
+      supabaseAuth = createRouteHandlerClient({
+        cookies: () => cookieStore,
+      });
     } catch (e: unknown) {
       console.error("[planos-pagamento][POST] erro ao criar supabaseAuth", e);
       return serverError("Falha ao inicializar autenticação do Supabase (env/headers).", safeErrorDetails(e));
@@ -132,6 +135,7 @@ export async function POST(req: Request) {
     }
 
     const payload: Record<string, unknown> = {
+      titulo: body.nome.trim(),
       nome: body.nome.trim(),
       ativo: body.ativo ?? true,
       ciclo_cobranca: ciclo,
