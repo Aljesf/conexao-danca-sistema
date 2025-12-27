@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
-import { PlanosPagamentoForm } from "./PlanosPagamentoForm";
+import PlanosPagamentoForm from "./PlanosPagamentoForm";
 
 function toBool(v: FormDataEntryValue | null): boolean {
   return v === "on";

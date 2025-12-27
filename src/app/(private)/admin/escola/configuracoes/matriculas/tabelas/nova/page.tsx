@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
-import { TabelaMatriculaNovaForm } from "./TabelaMatriculaNovaForm";
+import TabelaMatriculaNovaForm from "./TabelaMatriculaNovaForm";
 
 type TurmaRow = {
   turma_id: number;
