@@ -48,7 +48,7 @@ function calcularIdade(dateStr: string | null): number | null {
   return idade;
 }
 
-// Formata o campo genero em texto leg�vel
+// Formata o campo genero em texto legível
 function formatGenero(
   genero: Pessoa["genero"] | null | undefined
 ): string | null {
@@ -60,7 +60,7 @@ function formatGenero(
     case "OUTRO":
       return "Outro";
     case "NAO_INFORMADO":
-      return "N�o informado";
+      return "Não informado";
     default:
       return null;
   }
@@ -82,7 +82,7 @@ export default function PessoaDetalhesPage() {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // campos edit�veis
+  // campos editáveis
   const [nome, setNome] = useState("");
   const [nomeSocial, setNomeSocial] = useState("");
   const [email, setEmail] = useState("");
@@ -145,7 +145,7 @@ export default function PessoaDetalhesPage() {
         setNaturalidade(data.naturalidade ?? "");
         setObservacoes(data.observacoes ?? "");
 
-        // endere�o vindo da API
+        // endereço vindo da API
         setEndereco((data as any).endereco ?? null);
       } catch (err: any) {
         setErro(
@@ -205,15 +205,15 @@ export default function PessoaDetalhesPage() {
   }
 
   const tipoLabel =
-    pessoa?.tipo_pessoa === "JURIDICA" ? "Pessoa jur�dica" : "Pessoa f�sica";
+    pessoa?.tipo_pessoa === "JURIDICA" ? "Pessoa jurídica" : "Pessoa física";
 
   const idade = calcularIdade(pessoa?.nascimento ?? null);
   const generoLabel = pessoa ? formatGenero(pessoa.genero) : null;
-  const createdByLabel = pessoa?.created_by_name ?? "�";
-  const updatedByLabel = pessoa?.updated_by_name ?? "�";
+  const createdByLabel = pessoa?.created_by_name ?? "-";
+  const updatedByLabel = pessoa?.updated_by_name ?? "-";
 
   const enderecoTitulo = useMemo(
-    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "Endere�o fiscal" : "Endere�o"),
+    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "Endereço fiscal" : "Endereço"),
     [pessoa?.tipo_pessoa]
   );
 
@@ -295,7 +295,7 @@ export default function PessoaDetalhesPage() {
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "Falha ao salvar altera��es.");
+        throw new Error(json.error || "Falha ao salvar alterações.");
       }
 
       const data = json.data as Pessoa;
@@ -303,21 +303,21 @@ export default function PessoaDetalhesPage() {
       setEndereco((data as any).endereco ?? null);
       setEditMode(false);
     } catch (err: any) {
-      setErro(err?.message || "Erro inesperado ao salvar as altera��es.");
+      setErro(err?.message || "Erro inesperado ao salvar as alterações.");
     } finally {
       setSaving(false);
     }
   }
 
   const abas: { id: AbaId; label: string; icon: string }[] = [
-    { id: "dados", label: "Dados da pessoa", icon: "??" },
-    { id: "escolar", label: "Dados escolares", icon: "??" },
-    { id: "observacoes", label: "Observa��es", icon: "??" },
-    { id: "contato", label: "Informa��es de contato", icon: "??" },
-    { id: "endereco", label: enderecoTitulo, icon: "??" },
-    { id: "vinculos", label: "V�nculos no sistema", icon: "??" },
-    { id: "resumo", label: "Resumo financeiro", icon: "??" },
-    { id: "sistema", label: "Dados do sistema", icon: "??" },
+    { id: "dados", label: "👤 Dados da pessoa", icon: "" },
+    { id: "escolar", label: "🎓 Dados escolares", icon: "" },
+    { id: "observacoes", label: "📝 Observações", icon: "" },
+    { id: "contato", label: "📞 Informações de contato", icon: "" },
+    { id: "endereco", label: "📍 Endereço", icon: "" },
+    { id: "vinculos", label: "🔗 Vínculos no sistema", icon: "" },
+    { id: "resumo", label: "💰 Resumo financeiro", icon: "" },
+    { id: "sistema", label: "⚙️ Dados do sistema", icon: "" },
   ];
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-pink-50 via-slate-50 to-white px-4 py-6">
@@ -337,7 +337,7 @@ export default function PessoaDetalhesPage() {
               href={`/pessoas/${id}/curriculo`}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 md:text-xs"
             >
-              Curr�culo
+              Currículo
             </Link>
             <button
               type="button"
@@ -350,7 +350,7 @@ export default function PessoaDetalhesPage() {
           </div>
         </div>
 
-        {/* Cabe�alho com avatar grande e status */}
+        {/* Cabeçalho com avatar grande e status */}
         <header className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-6 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-1 flex-col items-center gap-4 md:flex-row md:items-center">
@@ -379,13 +379,13 @@ export default function PessoaDetalhesPage() {
 
                 {generoLabel && (
                   <p className="mt-0.5 text-sm text-slate-600">
-                    G�nero: {generoLabel}
+                    Gênero: {generoLabel}
                   </p>
                 )}
 
                 <p className="mt-2 max-w-xl text-[15px] text-slate-600">
-                  Vis�o geral deste cadastro. Aqui voc� pode consultar e, se
-                  tiver permiss�o, editar os dados da pessoa.
+                  Visão geral deste cadastro. Aqui você pode consultar e, se
+                  tiver permissão, editar os dados da pessoa.
                 </p>
 
                 {pessoa?.telefone && (
@@ -461,7 +461,7 @@ export default function PessoaDetalhesPage() {
                       {saving
                         ? "Salvando..."
                         : editMode
-                        ? "Salvar altera��es"
+                        ? "Salvar alterações"
                         : "Editar dados"}
                     </button>
                   </div>
@@ -487,7 +487,7 @@ export default function PessoaDetalhesPage() {
           </div>
         )}
 
-        {/* Conte�do principal */}
+        {/* Conteúdo principal */}
         {!loading && pessoa && (
           <>
             {/* NAV de ABAS */}
@@ -512,7 +512,7 @@ export default function PessoaDetalhesPage() {
                 );
               })}
             </nav>
-            {/* Conte�do das abas */}
+            {/* Conteúdo das abas */}
             <div className="rounded-3xl border border-violet-100 bg-white/95 p-6 text-[15px] text-slate-700 shadow-sm backdrop-blur-sm md:p-7">
               {/* Aba: Dados da pessoa */}
               {abaAtiva === "dados" && (
@@ -586,7 +586,7 @@ export default function PessoaDetalhesPage() {
 
                       <div className="grid gap-4 md:grid-cols-2">
                         <div>
-                          <p className="text-sm text-slate-400">G�nero</p>
+                          <p className="text-sm text-slate-400">Gênero</p>
                           {editMode ? (
                             <select
                               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
@@ -596,7 +596,7 @@ export default function PessoaDetalhesPage() {
                               }
                             >
                               <option value="NAO_INFORMADO">
-                                N�o informado
+                                Não informado
                               </option>
                               <option value="MASCULINO">Masculino</option>
                               <option value="FEMININO">Feminino</option>
@@ -620,19 +620,19 @@ export default function PessoaDetalhesPage() {
                                 )
                               }
                             >
-                              <option value="">N�o informado</option>
+                              <option value="">Não informado</option>
                               <option value="SOLTEIRO">Solteiro(a)</option>
                               <option value="CASADO">Casado(a)</option>
                               <option value="DIVORCIADO">Divorciado(a)</option>
-                              <option value="VIUVO">Vi�vo(a)</option>
+                              <option value="VIUVO">Viúvo(a)</option>
                               <option value="UNIAO_ESTAVEL">
-                                Uni�o est�vel
+                                União estável
                               </option>
                               <option value="OUTRO">Outro</option>
                             </select>
                           ) : (
                             <p className="mt-1">
-                              {estadoCivil ? estadoCivil : "N�o informado"}
+                              {estadoCivil ? estadoCivil : "Não informado"}
                             </p>
                           )}
                         </div>
@@ -670,14 +670,14 @@ export default function PessoaDetalhesPage() {
                         <p className="text-sm text-slate-400">Tipo de pessoa</p>
                         <p className="mt-1">
                           {pessoa.tipo_pessoa === "JURIDICA"
-                            ? "Pessoa jur�dica"
-                            : "Pessoa f�sica"}
+                            ? "Pessoa jurídica"
+                            : "Pessoa física"}
                         </p>
                       </div>
 
                       <div>
                         <p className="text-sm text-slate-400">Idade</p>
-                        <p className="mt-1">{idade ?? "N�o informado"}</p>
+                        <p className="mt-1">{idade ?? "Não informado"}</p>
                       </div>
                     </div>
                   </div>
@@ -776,11 +776,11 @@ export default function PessoaDetalhesPage() {
                   </SectionCard>
                 </div>
               )}
-              {/* Aba: Observa��es */}
+              {/* Aba: Observações */}
               {abaAtiva === "observacoes" && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Observa��es
+                    Observações
                   </h2>
                   {editMode ? (
                     <textarea
@@ -791,7 +791,7 @@ export default function PessoaDetalhesPage() {
                     />
                   ) : (
                     <p className="text-slate-700">
-                      {observacoes || "Nenhuma observa��o registrada."}
+                      {observacoes || "Nenhuma observação registrada."}
                     </p>
                   )}
                 </div>
@@ -801,7 +801,7 @@ export default function PessoaDetalhesPage() {
               {abaAtiva === "contato" && (
                 <div className="space-y-6">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Informa��es de contato
+                    Informações de contato
                   </h2>
 
                   <div className="grid gap-6 md:grid-cols-2">
@@ -839,7 +839,7 @@ export default function PessoaDetalhesPage() {
                     <div className="space-y-4">
                       <div>
                         <p className="text-sm text-slate-400">
-                          Telefone secund�rio
+                          Telefone secundário
                         </p>
                         {editMode ? (
                           <input
@@ -1103,6 +1103,10 @@ export default function PessoaDetalhesPage() {
     </div>
   );
 }
+
+
+
+
 
 
 
