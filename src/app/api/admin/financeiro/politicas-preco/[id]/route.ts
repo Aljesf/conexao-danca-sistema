@@ -1,0 +1,46 @@
+import { NextResponse } from "next/server";
+import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+
+function parseId(param: string): number | null {
+  const n = Number(param);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const supabase = await getSupabaseServerSSR();
+  const { id } = await ctx.params;
+  const politicaId = parseId(id);
+
+  if (!politicaId) {
+    return NextResponse.json({ error: "ID invalido." }, { status: 400 });
+  }
+
+  const body = (await req.json().catch(() => null)) as
+    | { nome?: unknown; descricao?: unknown; ativo?: unknown }
+    | null;
+
+  const patch: Record<string, unknown> = {};
+  if (typeof body?.nome === "string" && body.nome.trim()) patch.nome = body.nome.trim();
+  if (typeof body?.descricao === "string") patch.descricao = body.descricao.trim();
+  if (typeof body?.ativo === "boolean") patch.ativo = body.ativo;
+
+  if (Object.keys(patch).length === 0) {
+    return NextResponse.json({ error: "Nada para atualizar." }, { status: 400 });
+  }
+
+  patch.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("financeiro_politicas_preco")
+    .update(patch)
+    .eq("id", politicaId)
+    .select("id,nome,descricao,ativo,created_at,updated_at")
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ politica: data });
+}

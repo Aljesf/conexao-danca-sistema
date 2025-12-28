@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import TabelaMatriculaEditForm from "./TabelaMatriculaEditForm";
+import PoliticaPadraoItensSection from "./PoliticaPadraoItensSection";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 
@@ -284,7 +285,7 @@ export default async function Page({ params }: { params: { id: string } }) {
       <SectionCard title="Vinculo e escopo">
         <div className="space-y-1 text-sm text-muted-foreground">
           <div>
-            Categoria: <span className="text-slate-900">{servicoLabel}</span> · Ano:{" "}
+            Categoria: <span className="text-slate-900">{servicoLabel}</span> - Ano:{" "}
             <span className="text-slate-900">{tabelaInfo.ano_referencia ?? "-"}</span>
           </div>
           {servicoId ? (
@@ -410,6 +411,9 @@ export default async function Page({ params }: { params: { id: string } }) {
           </div>
         </form>
       </SectionCard>
+
+      <PoliticaPadraoItensSection tabelaId={tabelaInfo.id} itens={listaItens} />
     </div>
   );
 }
+

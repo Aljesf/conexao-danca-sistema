@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2025-12-27T12:38:46.748Z
+-- Snapshot do schema gerado em 2025-12-28T16:59:44.049Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -501,6 +501,20 @@ CREATE TABLE public."enderecos_pessoa" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."escola_produtos_educacionais"
+-- --------------------------------------------------
+CREATE TABLE public."escola_produtos_educacionais" (
+  "id" bigint NOT NULL,
+  "tipo" text NOT NULL,
+  "titulo" text NOT NULL,
+  "curso_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "tier_grupo_id" bigint
+);
+
+-- --------------------------------------------------
 -- Tabela: public."escola_tabelas_precos_cursos"
 -- --------------------------------------------------
 CREATE TABLE public."escola_tabelas_precos_cursos" (
@@ -527,6 +541,21 @@ CREATE TABLE public."escola_tabelas_precos_cursos_itens" (
   "moeda" text NOT NULL DEFAULT 'BRL'::text,
   "ativo" boolean NOT NULL DEFAULT true,
   "ordem" integer NOT NULL DEFAULT 0,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."escola_unidades_execucao"
+-- --------------------------------------------------
+CREATE TABLE public."escola_unidades_execucao" (
+  "unidade_execucao_id" bigint NOT NULL,
+  "servico_id" bigint NOT NULL,
+  "denominacao" text NOT NULL,
+  "nome" text NOT NULL,
+  "origem_tipo" text NOT NULL,
+  "origem_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
@@ -577,6 +606,29 @@ CREATE TABLE public."financeiro_snapshots" (
   "resumo_por_centro" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "serie_fluxo_caixa" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "regras_alerta" jsonb NOT NULL DEFAULT '[]'::jsonb
+);
+
+-- --------------------------------------------------
+-- Tabela: public."financeiro_tier_grupos"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_tier_grupos" (
+  "tier_grupo_id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."financeiro_tiers"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_tiers" (
+  "tier_id" bigint NOT NULL,
+  "tier_grupo_id" bigint NOT NULL,
+  "ordem" integer NOT NULL,
+  "valor_centavos" integer NOT NULL,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -965,6 +1017,20 @@ CREATE TABLE public."matricula_eventos" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."matricula_grupos_financeiros"
+-- --------------------------------------------------
+CREATE TABLE public."matricula_grupos_financeiros" (
+  "id" bigint NOT NULL DEFAULT nextval('matricula_grupos_financeiros_id_seq'::regclass),
+  "aluno_id" bigint NOT NULL,
+  "responsavel_financeiro_id" bigint,
+  "ano_referencia" integer NOT NULL,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."matricula_planos"
 -- --------------------------------------------------
 CREATE TABLE public."matricula_planos" (
@@ -988,7 +1054,6 @@ CREATE TABLE public."matricula_planos" (
 CREATE TABLE public."matricula_planos_pagamento" (
   "id" bigint NOT NULL DEFAULT nextval('matricula_planos_pagamento_id_seq'::regclass),
   "titulo" text NOT NULL,
-  "periodicidade" text NOT NULL,
   "numero_parcelas" integer,
   "permite_prorata" boolean NOT NULL DEFAULT false,
   "ativo" boolean NOT NULL DEFAULT true,
@@ -1003,7 +1068,8 @@ CREATE TABLE public."matricula_planos_pagamento" (
   "permite_prorrata" boolean DEFAULT false,
   "ciclo_financeiro" text,
   "forma_liquidacao_padrao" text,
-  "observacoes" text
+  "observacoes" text,
+  "politica_primeira_cobranca" text NOT NULL DEFAULT 'NO_ATO'::text
 );
 
 -- --------------------------------------------------
@@ -1069,6 +1135,51 @@ CREATE TABLE public."matricula_tabelas" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."matricula_tabelas_alvos"
+-- --------------------------------------------------
+CREATE TABLE public."matricula_tabelas_alvos" (
+  "id" bigint NOT NULL DEFAULT nextval('matricula_tabelas_alvos_id_seq'::regclass),
+  "tabela_id" bigint NOT NULL,
+  "alvo_tipo" text NOT NULL,
+  "alvo_id" bigint NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."matricula_tabelas_precificacao_tiers"
+-- --------------------------------------------------
+CREATE TABLE public."matricula_tabelas_precificacao_tiers" (
+  "id" bigint NOT NULL DEFAULT nextval('matricula_tabelas_precificacao_tiers_id_seq'::regclass),
+  "tabela_id" bigint NOT NULL,
+  "minimo_modalidades" integer NOT NULL,
+  "maximo_modalidades" integer,
+  "item_codigo" text NOT NULL,
+  "tipo_item" text NOT NULL DEFAULT 'RECORRENTE'::text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."matricula_tabelas_turmas"
+-- --------------------------------------------------
+CREATE TABLE public."matricula_tabelas_turmas" (
+  "id" bigint NOT NULL DEFAULT nextval('matricula_tabelas_turmas_id_seq'::regclass),
+  "tabela_id" bigint NOT NULL,
+  "turma_id" bigint NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."matricula_tabelas_unidades_execucao"
+-- --------------------------------------------------
+CREATE TABLE public."matricula_tabelas_unidades_execucao" (
+  "id" bigint NOT NULL,
+  "tabela_id" bigint NOT NULL,
+  "unidade_execucao_id" bigint NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."matriculas"
 -- --------------------------------------------------
 CREATE TABLE public."matriculas" (
@@ -1099,7 +1210,9 @@ CREATE TABLE public."matriculas" (
   "vencimento_dia_padrao" integer DEFAULT 12,
   "vencimento_padrao_referencia" integer,
   "escola_tabela_preco_curso_id" bigint,
-  "forma_liquidacao_padrao" text
+  "forma_liquidacao_padrao" text,
+  "grupo_financeiro_id" bigint,
+  "produto_id" bigint
 );
 
 -- --------------------------------------------------
@@ -1462,7 +1575,8 @@ CREATE TABLE public."turmas" (
   "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
   "created_by" uuid,
   "updated_by" uuid,
-  "espaco_id" bigint
+  "espaco_id" bigint,
+  "produto_id" bigint
 );
 
 -- --------------------------------------------------

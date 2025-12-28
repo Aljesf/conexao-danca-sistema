@@ -65,6 +65,7 @@ export const adminSidebar: SidebarSection[] = [
     title: "Configurações das unidades",
     items: [
       { label: "🏫 Configuração da escola", href: "/admin/config/escola" },
+      { label: "Regras de valor", href: "/admin/config/escola/regras-valor" },
       { label: "🛍️ Configuração da loja", href: "/admin/config/loja" },
       { label: "☕ Configuração do Ballet Café", href: "/admin/config/cafe" },
     ],
