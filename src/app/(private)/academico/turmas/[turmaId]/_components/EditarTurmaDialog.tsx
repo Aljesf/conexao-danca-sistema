@@ -22,7 +22,7 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
     event.preventDefault();
     const supabase = getSupabaseBrowser();
     const formData = new FormData(event.currentTarget);
-    const turmaId = turma.turma_id ?? turma.id;
+    const turmaId = turma.turma_id;
 
     const nome = (formData.get("nome") as string).trim();
     if (!nome) {

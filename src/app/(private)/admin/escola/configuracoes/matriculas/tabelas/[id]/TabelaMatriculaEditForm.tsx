@@ -174,9 +174,9 @@ export default function TabelaMatriculaEditForm({
           disabled
           className="border rounded-md px-3 py-2 text-sm bg-slate-50 text-slate-500"
         >
-          <option value="TURMA">Turma</option>
+          <option value="TURMA">Curso regular</option>
           <option value="CURSO_LIVRE">Curso livre</option>
-          <option value="PROJETO">Projeto</option>
+          <option value="PROJETO">Projeto artístico</option>
         </select>
         <p className="text-xs text-muted-foreground">Tipo definido no cadastro da tabela.</p>
       </div>

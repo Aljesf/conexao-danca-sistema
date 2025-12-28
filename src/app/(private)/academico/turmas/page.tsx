@@ -50,7 +50,7 @@ export default async function TurmasPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {turmas.map((turma) => (
-                  <tr key={turma.turma_id ?? turma.id}>
+                  <tr key={turma.turma_id}>
                     <td className="px-3 py-2 font-medium">{turma.nome ?? "Turma"}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-col">
@@ -69,7 +69,7 @@ export default async function TurmasPage() {
                     </td>
                     <td className="px-3 py-2 text-right text-xs">
                       <Link
-                        href={`/academico/turmas/${turma.turma_id ?? turma.id}`}
+                        href={`/academico/turmas/${turma.turma_id}`}
                         className="text-violet-600 hover:underline"
                       >
                         Detalhes

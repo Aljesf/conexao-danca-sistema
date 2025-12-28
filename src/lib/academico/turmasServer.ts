@@ -70,9 +70,7 @@ export async function listarTurmas(params?: {
     return turmas;
   }
 
-  const turmaIds = turmas
-    .map((t) => Number(t.turma_id ?? t.id))
-    .filter((id) => Number.isInteger(id) && id > 0);
+  const turmaIds = turmas.map((t) => Number(t.turma_id)).filter((id) => Number.isInteger(id) && id > 0);
 
   if (turmaIds.length === 0) {
     return turmas;
@@ -92,7 +90,7 @@ export async function listarTurmas(params?: {
 
   return turmas.map((t) => ({
     ...t,
-    tem_horario: turmasComHorario.has(Number(t.turma_id ?? t.id)),
+    tem_horario: turmasComHorario.has(Number(t.turma_id)),
   }));
 }
 

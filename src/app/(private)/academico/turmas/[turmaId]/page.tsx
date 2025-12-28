@@ -172,7 +172,7 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
     notFound();
   }
 
-  const turmaKey = turma.turma_id ?? turma.id ?? turmaId;
+  const turmaKey = turma.turma_id ?? turmaId;
   const professores: TurmaProfessorDetalhe[] =
     professoresBase.map((p) => ({
       ...p,

@@ -43,7 +43,7 @@ export default async function TurmasPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {turmas.map((turma) => {
-                  const turmaId = turma.turma_id ?? turma.id;
+                  const turmaId = turma.turma_id;
                   const diasTexto = Array.isArray(turma.dias_semana)
                     ? turma.dias_semana.join(", ")
                     : turma.dias_semana ?? "";
@@ -56,7 +56,7 @@ export default async function TurmasPage() {
                     turma.espaco?.nome ?? (turma.espaco_id ? `Espaco #${turma.espaco_id}` : "-");
                   const rowKey = turmaId ?? turma.nome ?? "turma-sem-id";
                   if (!turmaId) {
-                    console.error("[escola/turmas] Turma sem id:", turma);
+                    console.error("[escola/turmas] Turma sem turma_id:", turma);
                   }
                   return (
                     <tr key={rowKey}>

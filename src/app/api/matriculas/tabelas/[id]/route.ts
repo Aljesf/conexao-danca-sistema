@@ -62,11 +62,12 @@ function safeDetails(err: unknown): Record<string, unknown> {
   return { error: err };
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
-  console.log("[PUT /api/matriculas/tabelas/:id] start", { id: ctx.params.id, method: req.method });
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const params = await ctx.params;
+  console.log("[PUT /api/matriculas/tabelas/:id] start", { id: params.id, method: req.method });
 
   try {
-    const tabelaIdRaw = ctx.params.id;
+    const tabelaIdRaw = params.id;
     const tabelaId = Number(tabelaIdRaw);
     if (!Number.isFinite(tabelaId) || tabelaId <= 0) {
       return badRequest("ID invalido.", { tabelaId: tabelaIdRaw });
@@ -116,7 +117,7 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
     if (body.alvo_tipo === "TURMA") {
       const { data: turmas, error: turmasErr } = await admin
         .from("turmas")
-        .select("turma_id,produto_id")
+        .select("turma_id, produto_id")
         .in("turma_id", alvoIds);
 
       if (turmasErr) {

@@ -62,10 +62,7 @@ async function existsById(supabase: SupabaseRouteClient, table: string, id: numb
 }
 
 async function existsTurma(supabase: SupabaseRouteClient, turmaId: number) {
-  const byTurmaId = await existsByColumn(supabase, "turmas", "turma_id", turmaId);
-  if (byTurmaId.ok) return byTurmaId;
-  if (byTurmaId.error?.code !== "42703") return byTurmaId;
-  return existsByColumn(supabase, "turmas", "id", turmaId);
+  return existsByColumn(supabase, "turmas", "turma_id", turmaId);
 }
 
 export async function GET(req: Request) {

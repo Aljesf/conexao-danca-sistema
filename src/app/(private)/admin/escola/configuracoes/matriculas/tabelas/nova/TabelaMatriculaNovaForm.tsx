@@ -245,9 +245,9 @@ export default function TabelaMatriculaNovaForm() {
             onChange={(e) => setAlvoTipo(e.target.value as AlvoTipo)}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
           >
-            <option value="TURMA">Turma</option>
+            <option value="TURMA">Curso regular</option>
             <option value="CURSO_LIVRE">Curso livre</option>
-            <option value="PROJETO">Projeto</option>
+            <option value="PROJETO">Projeto artístico</option>
           </select>
         </div>
 

@@ -30,7 +30,7 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
   const { data, error } = await supabase
     .from("turmas")
     .update(turmaPayload)
-    .eq("id", id)
+    .eq("turma_id", id)
     .select("*")
     .single();
 
@@ -57,7 +57,7 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const id = Number(params.id);
   const supabase = await getSupabaseServer();
-  const { error } = await supabase.from("turmas").delete().eq("id", id);
+  const { error } = await supabase.from("turmas").delete().eq("turma_id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

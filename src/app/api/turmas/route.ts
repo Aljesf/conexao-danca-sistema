@@ -221,7 +221,7 @@ export async function GET() {
     const horarios = Array.isArray(row.horarios) ? row.horarios : [];
     return {
       ...row,
-      id: row.turma_id ?? row.id,
+      id: Number(row.turma_id),
       tem_horario: horarios.length > 0,
     };
   });
@@ -327,7 +327,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const turmaId = Number((turma as { turma_id?: number; id?: number })?.turma_id ?? turma?.id);
+  const turmaId = Number((turma as { turma_id?: number })?.turma_id);
 
   if (niveisIds.length > 0) {
     const rows = niveisIds.map((nivelId, index) => ({

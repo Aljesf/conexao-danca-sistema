@@ -21,7 +21,7 @@ export default function Page() {
         <FinanceHelpCard
           subtitle="Entenda esta tela"
           items={[
-            "A tabela pode valer para turmas, cursos livres, workshops ou projetos.",
+            "A tabela pode valer para cursos (regulares/livres) e projetos.",
             "Sem MENSALIDADE/RECORRENTE ativa, a matricula falha com 409.",
             "Ano de referencia e obrigatorio para cobertura e precificacao.",
           ]}
