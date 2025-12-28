@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
@@ -32,6 +32,11 @@ function getAdmin() {
   if (!url) throw new Error("Env ausente: NEXT_PUBLIC_SUPABASE_URL");
   if (!service) throw new Error("Env ausente: SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, service, { auth: { persistSession: false } });
+}
+
+function isSchemaMissing(err: unknown): boolean {
+  const e = err as PostgrestError | null;
+  return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
 }
 
 const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "PROJETO"];
@@ -88,7 +93,12 @@ export async function GET(req: Request) {
     const alvoId = alvoTipo === "TURMA" ? await resolveTurmaIdReal(admin, alvoInput) : alvoInput;
 
     const { ids: tabelaIds, error: linkErr } = await buscarTabelaIdsPorAlvo(admin, alvoTipo, alvoId);
-    if (linkErr) return serverError("Falha ao buscar vinculos da tabela.", { linkErr });
+    if (linkErr) {
+      if (isSchemaMissing(linkErr)) {
+        return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { linkErr });
+      }
+      return serverError("Falha ao buscar vinculos da tabela.", { linkErr });
+    }
 
     const tabelaIdsFinal = tabelaIds.length
       ? tabelaIds
@@ -111,7 +121,12 @@ export async function GET(req: Request) {
       .eq("ativo", true)
       .eq("ano_referencia", ano);
 
-    if (tabErr) return serverError("Falha ao buscar tabelas aplicaveis.", { tabErr });
+    if (tabErr) {
+      if (isSchemaMissing(tabErr)) {
+        return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { tabErr });
+      }
+      return serverError("Falha ao buscar tabelas aplicaveis.", { tabErr });
+    }
 
     if (!tabelas?.length) {
       return conflict("Nenhuma tabela ativa encontrada para o alvo/ano selecionados.", {
@@ -141,7 +156,13 @@ export async function GET(req: Request) {
         .eq("pessoa_id", alunoId)
         .eq("ano_referencia", ano);
 
-      if (matsErr) return serverError("Falha ao contar matriculas do aluno.", { matsErr });
+      if (matsErr) {
+        console.error("[precos/resolver] matsErr", matsErr);
+        if (isSchemaMissing(matsErr)) {
+          return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { matsErr });
+        }
+        return serverError("Falha ao contar matriculas do aluno.", { matsErr });
+      }
 
       const ativas = (mats ?? []).filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
       const alvoJaExiste = ativas.some((m) => Number(m.vinculo_id) === alvoId);
@@ -155,7 +176,12 @@ export async function GET(req: Request) {
       .eq("ativo", true)
       .order("minimo_modalidades", { ascending: true });
 
-    if (tierErr) return serverError("Falha ao buscar tiers de precificacao.", { tierErr });
+    if (tierErr) {
+      if (isSchemaMissing(tierErr)) {
+        return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { tierErr });
+      }
+      return serverError("Falha ao buscar tiers de precificacao.", { tierErr });
+    }
 
     const tier = (tiers ?? []).find((t) => {
       const min = Number(t.minimo_modalidades);
@@ -179,7 +205,12 @@ export async function GET(req: Request) {
       .eq("codigo_item", tier.item_codigo)
       .limit(1);
 
-    if (itensErr) return serverError("Falha ao buscar item da tabela.", { itensErr });
+    if (itensErr) {
+      if (isSchemaMissing(itensErr)) {
+        return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { itensErr });
+      }
+      return serverError("Falha ao buscar item da tabela.", { itensErr });
+    }
 
     const item = itens?.[0];
     if (!item) {
