@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
+import ToolbarRow from "@/components/layout/ToolbarRow";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
@@ -169,96 +172,103 @@ export default function Page() {
     return result;
   }, [alvosPorTipo, coberturaSet]);
 
+  const hasPendencias = useMemo(
+    () => ALVOS.some((tipo) => (pendencias[tipo] ?? []).length > 0),
+    [pendencias],
+  );
+
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Tabelas de precos (Escola)</h1>
-          <p className="text-sm text-muted-foreground">
-            Configure as tabelas oficiais por alvo/ano. Sem uma tabela ativa com <b>MENSALIDADE / RECORRENTE</b>, a
-            matricula falha com 409.
-          </p>
-        </div>
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title="Tabelas de precos (Escola)"
+        description="Configure as tabelas oficiais por alvo/ano. Sem uma tabela ativa com MENSALIDADE/RECORRENTE, a matricula falha com 409."
+        actions={
+          <Link
+            href="/admin/escola/configuracoes/matriculas/tabelas/nova"
+            className="inline-flex items-center rounded-md bg-black px-3 py-2 text-sm text-white"
+          >
+            Nova tabela
+          </Link>
+        }
+      />
 
-        <Link
-          href="/admin/escola/configuracoes/matriculas/tabelas/nova"
-          className="inline-flex items-center rounded-md bg-black px-3 py-2 text-sm text-white"
-        >
-          Nova tabela
-        </Link>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <label className="text-sm font-medium">Ano</label>
-        <input
-          type="number"
-          value={ano}
-          onChange={(e) => setAno(Number(e.target.value))}
-          className="w-28 rounded-md border px-3 py-1.5 text-sm"
-        />
-        {coberturaLoading ? <span className="text-xs text-muted-foreground">Atualizando cobertura...</span> : null}
-      </div>
+      <SectionCard title="Filtro">
+        <ToolbarRow>
+          <div className="grid gap-1">
+            <label className="text-sm font-medium">Ano</label>
+            <input
+              type="number"
+              value={ano}
+              onChange={(e) => setAno(Number(e.target.value))}
+              className="w-28 rounded-md border px-3 py-1.5 text-sm"
+            />
+          </div>
+          {coberturaLoading ? <span className="text-xs text-muted-foreground">Atualizando cobertura...</span> : null}
+        </ToolbarRow>
+      </SectionCard>
 
       {tabelasErro ? (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{tabelasErro}</div>
       ) : null}
 
-      <div className="rounded-md border overflow-hidden">
-        <div className="grid grid-cols-12 bg-muted px-3 py-2 text-xs font-medium">
-          <div className="col-span-1">ID</div>
-          <div className="col-span-3">Titulo</div>
-          <div className="col-span-2">Produto</div>
-          <div className="col-span-2">Ano</div>
-          <div className="col-span-3">Vinculos</div>
-          <div className="col-span-1 text-right">Acoes</div>
-        </div>
-
-        {tabelasLoading ? (
-          <div className="p-4 text-sm text-muted-foreground">Carregando tabelas...</div>
-        ) : tabelas.length === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground">Nenhuma tabela cadastrada.</div>
-        ) : (
-          <div className="divide-y">
-            {tabelas.map((t) => {
-              const counts = alvoCounts(t.matricula_tabelas_alvos);
-              return (
-                <div key={t.id} className="grid grid-cols-12 px-3 py-2 text-sm items-center">
-                  <div className="col-span-1">{t.id}</div>
-                  <div className="col-span-3">{t.titulo}</div>
-                  <div className="col-span-2">{t.produto_tipo}</div>
-                  <div className="col-span-2">{t.ano_referencia ?? "-"}</div>
-                  <div className="col-span-3 text-xs text-muted-foreground">
-                    Turmas: {counts.TURMA} | Cursos livres: {counts.CURSO_LIVRE} | Projetos: {counts.PROJETO}
-                  </div>
-                  <div className="col-span-1 text-right">
-                    <Link className="underline" href={`/admin/escola/configuracoes/matriculas/tabelas/${t.id}`}>
-                      Abrir
-                    </Link>
-                  </div>
-                </div>
-              );
-            })}
+      <SectionCard title="Tabelas encontradas">
+        <div className="rounded-md border overflow-hidden">
+          <div className="grid grid-cols-12 bg-muted px-3 py-2 text-xs font-medium">
+            <div className="col-span-1">ID</div>
+            <div className="col-span-3">Titulo</div>
+            <div className="col-span-2">Produto</div>
+            <div className="col-span-2">Ano</div>
+            <div className="col-span-3">Vinculos</div>
+            <div className="col-span-1 text-right">Acoes</div>
           </div>
-        )}
-      </div>
 
-      <div className="rounded-md border p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-medium">Pendencias de cobertura</h2>
-          {coberturaErro ? <span className="text-sm text-red-700">{coberturaErro}</span> : null}
+          {tabelasLoading ? (
+            <div className="p-4 text-sm text-muted-foreground">Carregando tabelas...</div>
+          ) : tabelas.length === 0 ? (
+            <div className="p-4 text-sm text-muted-foreground">Nenhuma tabela encontrada para este ano.</div>
+          ) : (
+            <div className="divide-y">
+              {tabelas.map((t) => {
+                const counts = alvoCounts(t.matricula_tabelas_alvos);
+                return (
+                  <div key={t.id} className="grid grid-cols-12 px-3 py-2 text-sm items-center">
+                    <div className="col-span-1">{t.id}</div>
+                    <div className="col-span-3">{t.titulo}</div>
+                    <div className="col-span-2">{t.produto_tipo}</div>
+                    <div className="col-span-2">{t.ano_referencia ?? "-"}</div>
+                    <div className="col-span-3 text-xs text-muted-foreground">
+                      Turmas: {counts.TURMA} | Cursos livres: {counts.CURSO_LIVRE} | Projetos: {counts.PROJETO}
+                    </div>
+                    <div className="col-span-1 text-right">
+                      <Link className="underline" href={`/admin/escola/configuracoes/matriculas/tabelas/${t.id}`}>
+                        Abrir
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
+      </SectionCard>
 
+      <SectionCard
+        title="Pendencias de cobertura"
+        actions={coberturaErro ? <span className="text-sm text-red-700">{coberturaErro}</span> : undefined}
+      >
         {alvosErro ? <div className="text-sm text-red-700">{alvosErro}</div> : null}
 
         {alvosLoading ? (
           <div className="text-sm text-muted-foreground">Carregando alvos...</div>
+        ) : !hasPendencias ? (
+          <div className="text-sm text-muted-foreground">Sem pendencias de cobertura para este ano.</div>
         ) : (
           <div className="space-y-4">
             {ALVOS.map((tipo) => {
               const lista = pendencias[tipo] ?? [];
               return (
                 <div key={tipo} className="space-y-2">
-                  <div className="text-sm font-medium">{tipo}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{tipo}</div>
                   {lista.length === 0 ? (
                     <div className="text-xs text-muted-foreground">Sem pendencias.</div>
                   ) : (
@@ -270,7 +280,7 @@ export default function Page() {
                             className="rounded-md border px-3 py-1 text-xs"
                             href={`/admin/escola/configuracoes/matriculas/tabelas/nova?alvo_tipo=${tipo}&alvo_id=${alvo.id}&ano=${ano}`}
                           >
-                            Criar tabela e vincular
+                            Criar e vincular
                           </Link>
                         </div>
                       ))}
@@ -281,7 +291,7 @@ export default function Page() {
             })}
           </div>
         )}
-      </div>
+      </SectionCard>
     </div>
   );
 }

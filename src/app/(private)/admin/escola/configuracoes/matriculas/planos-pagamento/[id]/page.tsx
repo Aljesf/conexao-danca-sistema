@@ -1,7 +1,10 @@
 ﻿export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
 
 type Plano = {
   id: number;
@@ -143,154 +146,172 @@ export default async function Page({ params }: { params: { id: string } }) {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-xl font-semibold">Plano #{plano.id}</h1>
-        <p className="text-sm text-muted-foreground">Edite as regras do plano.</p>
-      </div>
+    <div className="p-6 space-y-6 max-w-5xl">
+      <PageHeader
+        title={`Plano #${plano.id}`}
+        description="Edite as regras do plano de pagamento (ciclo, prorrogacao e politica da primeira cobranca)."
+        actions={
+          <Link
+            href="/admin/escola/configuracoes/matriculas/planos-pagamento"
+            className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
+          >
+            Voltar
+          </Link>
+        }
+      />
 
-      <form action={save} className="rounded-md border p-4 space-y-4">
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Titulo</label>
-          <input
-            name="titulo"
-            defaultValue={plano.titulo || plano.nome || ""}
-            className="border rounded-md px-3 py-2 text-sm"
-          />
-        </div>
+      <form action={save} className="space-y-4">
+        <SectionCard title="Identificacao">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid gap-2 md:col-span-2">
+              <label className="text-sm font-medium">Titulo</label>
+              <input
+                name="titulo"
+                defaultValue={plano.titulo || plano.nome || ""}
+                className="border rounded-md px-3 py-2 text-sm"
+              />
+            </div>
 
-        <div className="grid gap-2">
-          <label className="text-sm font-medium">Observacoes (opcional)</label>
-          <textarea
-            name="observacoes"
-            defaultValue={plano.observacoes ?? ""}
-            className="border rounded-md px-3 py-2 text-sm"
-            rows={3}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Ciclo de cobranca</label>
-            <select
-              name="ciclo_cobranca"
-              className="border rounded-md px-3 py-2 text-sm"
-              defaultValue={plano.ciclo_cobranca ?? ""}
-            >
-              <option value="">Selecione</option>
-              <option value="COBRANCA_UNICA">COBRANCA_UNICA</option>
-              <option value="COBRANCA_EM_PARCELAS">COBRANCA_EM_PARCELAS</option>
-              <option value="COBRANCA_MENSAL">COBRANCA_MENSAL</option>
-            </select>
+            <div className="grid gap-2 md:col-span-2">
+              <label className="text-sm font-medium">Observacoes (opcional)</label>
+              <textarea
+                name="observacoes"
+                defaultValue={plano.observacoes ?? ""}
+                className="border rounded-md px-3 py-2 text-sm"
+                rows={3}
+              />
+            </div>
           </div>
+        </SectionCard>
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Numero de parcelas</label>
-            <input
-              name="numero_parcelas"
-              type="number"
-              defaultValue={plano.numero_parcelas ?? ""}
-              className="border rounded-md px-3 py-2 text-sm"
-            />
+        <SectionCard title="Ciclo e termino">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Ciclo de cobranca</label>
+              <select
+                name="ciclo_cobranca"
+                className="border rounded-md px-3 py-2 text-sm"
+                defaultValue={plano.ciclo_cobranca ?? ""}
+              >
+                <option value="">Selecione</option>
+                <option value="COBRANCA_UNICA">COBRANCA_UNICA</option>
+                <option value="COBRANCA_EM_PARCELAS">COBRANCA_EM_PARCELAS</option>
+                <option value="COBRANCA_MENSAL">COBRANCA_MENSAL</option>
+              </select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Numero de parcelas</label>
+              <input
+                name="numero_parcelas"
+                type="number"
+                defaultValue={plano.numero_parcelas ?? ""}
+                className="border rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Termino da cobranca mensal</label>
+              <select
+                name="termino_cobranca"
+                className="border rounded-md px-3 py-2 text-sm"
+                defaultValue={plano.termino_cobranca ?? ""}
+              >
+                <option value="">Selecione</option>
+                <option value="FIM_TURMA_CURSO">FIM_TURMA_CURSO</option>
+                <option value="FIM_PROJETO">FIM_PROJETO</option>
+                <option value="FIM_ANO_LETIVO">FIM_ANO_LETIVO</option>
+                <option value="DATA_ESPECIFICA">DATA_ESPECIFICA</option>
+              </select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Data fim (manual)</label>
+              <input
+                name="data_fim_manual"
+                type="date"
+                defaultValue={plano.data_fim_manual ?? ""}
+                className="border rounded-md px-3 py-2 text-sm"
+              />
+            </div>
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Termino da cobranca mensal</label>
-            <select
-              name="termino_cobranca"
-              className="border rounded-md px-3 py-2 text-sm"
-              defaultValue={plano.termino_cobranca ?? ""}
-            >
-              <option value="">Selecione</option>
-              <option value="FIM_TURMA_CURSO">FIM_TURMA_CURSO</option>
-              <option value="FIM_PROJETO">FIM_PROJETO</option>
-              <option value="FIM_ANO_LETIVO">FIM_ANO_LETIVO</option>
-              <option value="DATA_ESPECIFICA">DATA_ESPECIFICA</option>
-            </select>
+        <SectionCard title="Regras financeiras">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Regra do total devido</label>
+              <select
+                name="regra_total_devido"
+                className="border rounded-md px-3 py-2 text-sm"
+                defaultValue={plano.regra_total_devido ?? ""}
+              >
+                <option value="">Selecione</option>
+                <option value="PROPORCIONAL">PROPORCIONAL</option>
+                <option value="FIXO">FIXO</option>
+              </select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Ciclo financeiro</label>
+              <select
+                name="ciclo_financeiro"
+                className="border rounded-md px-3 py-2 text-sm"
+                defaultValue={plano.ciclo_financeiro ?? ""}
+              >
+                <option value="">Selecione</option>
+                <option value="MENSAL">MENSAL</option>
+                <option value="BIMESTRAL">BIMESTRAL</option>
+                <option value="TRIMESTRAL">TRIMESTRAL</option>
+                <option value="SEMESTRAL">SEMESTRAL</option>
+                <option value="ANUAL">ANUAL</option>
+              </select>
+            </div>
           </div>
+        </SectionCard>
 
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Data fim (manual)</label>
-            <input
-              name="data_fim_manual"
-              type="date"
-              defaultValue={plano.data_fim_manual ?? ""}
-              className="border rounded-md px-3 py-2 text-sm"
-            />
+        <SectionCard title="Liquidacao e primeira cobranca">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Forma de liquidacao (padrao)</label>
+              <input
+                name="forma_liquidacao_padrao"
+                defaultValue={plano.forma_liquidacao_padrao ?? ""}
+                className="border rounded-md px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">Politica da primeira cobranca</label>
+              <select
+                name="politica_primeira_cobranca"
+                className="border rounded-md px-3 py-2 text-sm"
+                defaultValue={plano.politica_primeira_cobranca ?? "NO_ATO"}
+              >
+                <option value="NO_ATO">NO_ATO</option>
+                <option value="PERMITIR_ADIAR_PARA_CICLO">PERMITIR_ADIAR_PARA_CICLO</option>
+              </select>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input name="permite_prorrata" type="checkbox" defaultChecked={plano.permite_prorrata ?? false} />
+              Permite prorrata (somente na primeira cobranca)
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input name="ativo" type="checkbox" defaultChecked={plano.ativo ?? true} />
+              Plano ativo
+            </label>
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Regra do total devido</label>
-            <select
-              name="regra_total_devido"
-              className="border rounded-md px-3 py-2 text-sm"
-              defaultValue={plano.regra_total_devido ?? ""}
-            >
-              <option value="">Selecione</option>
-              <option value="PROPORCIONAL">PROPORCIONAL</option>
-              <option value="FIXO">FIXO</option>
-            </select>
+        <SectionCard title="Acoes">
+          <div className="flex justify-end">
+            <button className="rounded-md bg-black px-3 py-2 text-sm text-white" type="submit">
+              Salvar plano
+            </button>
           </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Ciclo financeiro</label>
-            <select
-              name="ciclo_financeiro"
-              className="border rounded-md px-3 py-2 text-sm"
-              defaultValue={plano.ciclo_financeiro ?? ""}
-            >
-              <option value="">Selecione</option>
-              <option value="MENSAL">MENSAL</option>
-              <option value="BIMESTRAL">BIMESTRAL</option>
-              <option value="TRIMESTRAL">TRIMESTRAL</option>
-              <option value="SEMESTRAL">SEMESTRAL</option>
-              <option value="ANUAL">ANUAL</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Forma de liquidacao (padrao)</label>
-            <input
-              name="forma_liquidacao_padrao"
-              defaultValue={plano.forma_liquidacao_padrao ?? ""}
-              className="border rounded-md px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium">Politica da primeira cobranca</label>
-            <select
-              name="politica_primeira_cobranca"
-              className="border rounded-md px-3 py-2 text-sm"
-              defaultValue={plano.politica_primeira_cobranca ?? "NO_ATO"}
-            >
-              <option value="NO_ATO">NO_ATO</option>
-              <option value="PERMITIR_ADIAR_PARA_CICLO">PERMITIR_ADIAR_PARA_CICLO</option>
-            </select>
-          </div>
-        </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input name="permite_prorrata" type="checkbox" defaultChecked={plano.permite_prorrata ?? false} />
-          Permite prorrata (somente na primeira cobranca)
-        </label>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input name="ativo" type="checkbox" defaultChecked={plano.ativo ?? true} />
-          Plano ativo
-        </label>
-
-        <div className="flex justify-end">
-          <button className="rounded-md bg-black px-3 py-2 text-sm text-white" type="submit">
-            Salvar plano
-          </button>
-        </div>
+        </SectionCard>
       </form>
     </div>
   );

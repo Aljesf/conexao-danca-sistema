@@ -1,8 +1,11 @@
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import TabelaMatriculaEditForm from "./TabelaMatriculaEditForm";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
 
 type ServicoTipo = "CURSO_REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type ProdutoTipo = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
@@ -264,59 +267,74 @@ export default async function Page({ params }: { params: { id: string } }) {
   const servicoLabel = SERVICO_LABEL[servicoTipo] ?? servicoTipo;
 
   return (
-    <div className="p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Tabela #{tabelaInfo.id}</h1>
-        <p className="text-sm text-muted-foreground">
-          Categoria: {servicoLabel} - Ano: {tabelaInfo.ano_referencia ?? "-"}
-        </p>
-        {servicoId ? (
-          <p className="text-sm">
-            Servico: <b>#{servicoId}</b>
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Servico nao definido.</p>
-        )}
-        {unidadesExecucaoIds.length > 0 ? (
-          <p className="text-sm">
-            Unidades selecionadas: <b>{unidadesExecucaoIds.join(", ")}</b>
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Aplica a todas as unidades de execucao.</p>
-        )}
-        {unidadesErrMsg ? (
-          <p className="text-sm text-red-700">Falha ao carregar unidades de execucao: {unidadesErrMsg}</p>
-        ) : null}
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title={`Tabela #${tabelaInfo.id}`}
+        description="Configure categoria, servico e unidades de execucao. Cadastre itens de cobranca (ex.: MENSALIDADE recorrente)."
+        actions={
+          <Link
+            href="/admin/escola/configuracoes/matriculas/tabelas"
+            className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
+          >
+            Voltar para lista
+          </Link>
+        }
+      />
+
+      <SectionCard title="Vinculo e escopo">
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <div>
+            Categoria: <span className="text-slate-900">{servicoLabel}</span> · Ano:{" "}
+            <span className="text-slate-900">{tabelaInfo.ano_referencia ?? "-"}</span>
+          </div>
+          {servicoId ? (
+            <div>
+              Servico: <span className="text-slate-900">#{servicoId}</span>
+            </div>
+          ) : (
+            <div>Servico nao definido.</div>
+          )}
+          {unidadesExecucaoIds.length > 0 ? (
+            <div>
+              Unidades selecionadas: <span className="text-slate-900">{unidadesExecucaoIds.join(", ")}</span>
+            </div>
+          ) : (
+            <div>Aplica a todas as unidades de execucao.</div>
+          )}
+          {unidadesErrMsg ? <div className="text-red-700">Falha ao carregar unidades: {unidadesErrMsg}</div> : null}
+        </div>
+
         {warnings.length ? (
-          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
+          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
             {warnings.map((w) => (
               <div key={w}>{w}</div>
             ))}
           </div>
         ) : null}
-      </div>
 
-      {!hasMensalidadeAtiva ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Atencao: esta tabela nao tem MENSALIDADE / RECORRENTE ativa. A matricula vai falhar com 409.
+        <div className="mt-4">
+          <TabelaMatriculaEditForm
+            tabelaId={tabelaInfo.id}
+            titulo={tabelaInfo.titulo}
+            anoReferencia={tabelaInfo.ano_referencia}
+            ativo={tabelaInfo.ativo}
+            servicoTipo={servicoTipo}
+            servicoId={servicoId}
+            unidadeExecucaoIds={unidadesExecucaoIds}
+            variant="plain"
+          />
         </div>
-      ) : null}
+      </SectionCard>
 
-      <TabelaMatriculaEditForm
-        tabelaId={tabelaInfo.id}
-        titulo={tabelaInfo.titulo}
-        anoReferencia={tabelaInfo.ano_referencia}
-        ativo={tabelaInfo.ativo}
-        servicoTipo={servicoTipo}
-        servicoId={servicoId}
-        unidadeExecucaoIds={unidadesExecucaoIds}
-      />
-
-      <div className="rounded-md border p-4 space-y-3">
-        <h2 className="font-medium">Itens</h2>
-        <p className="text-sm text-muted-foreground">
-          Para matricula funcionar, cadastre MENSALIDADE com tipo RECORRENTE e valor em R$.
-        </p>
+      <SectionCard
+        title="Itens"
+        description="Para matricula funcionar, cadastre MENSALIDADE com tipo RECORRENTE e valor em R$."
+      >
+        {!hasMensalidadeAtiva ? (
+          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            Atencao: esta tabela nao tem MENSALIDADE / RECORRENTE ativa. A matricula vai falhar com 409.
+          </div>
+        ) : null}
 
         {itensErr ? <div className="text-sm text-red-700">Falha ao carregar itens: {itensErr.message}</div> : null}
 
@@ -347,13 +365,13 @@ export default async function Page({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        <form action={addItem} className="mt-4 grid grid-cols-12 gap-2 items-end">
-          <div className="col-span-3 grid gap-1">
+        <form action={addItem} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
+          <div className="md:col-span-3 grid gap-1">
             <label className="text-xs font-medium">Codigo</label>
             <input name="codigo_item" className="border rounded-md px-2 py-2 text-sm" defaultValue="MENSALIDADE" />
           </div>
 
-          <div className="col-span-2 grid gap-1">
+          <div className="md:col-span-2 grid gap-1">
             <label className="text-xs font-medium">Tipo</label>
             <select name="tipo_item" className="border rounded-md px-2 py-2 text-sm" defaultValue="RECORRENTE">
               <option value="RECORRENTE">RECORRENTE</option>
@@ -362,36 +380,36 @@ export default async function Page({ params }: { params: { id: string } }) {
             </select>
           </div>
 
-          <div className="col-span-2 grid gap-1">
+          <div className="md:col-span-2 grid gap-1">
             <label className="text-xs font-medium">Valor (R$)</label>
             <input name="valor_reais" className="border rounded-md px-2 py-2 text-sm" placeholder="220.00" />
             <p className="text-[11px] text-muted-foreground">Ex.: 220.00 = 22000 centavos</p>
           </div>
 
-          <div className="col-span-3 grid gap-1">
+          <div className="md:col-span-3 grid gap-1">
             <label className="text-xs font-medium">Descricao</label>
             <input name="descricao" className="border rounded-md px-2 py-2 text-sm" placeholder="Mensalidade 2026" />
           </div>
 
-          <div className="col-span-1 grid gap-1">
+          <div className="md:col-span-1 grid gap-1">
             <label className="text-xs font-medium">Ordem</label>
             <input name="ordem" type="number" className="border rounded-md px-2 py-2 text-sm" defaultValue={1} />
           </div>
 
-          <div className="col-span-1 flex items-center gap-2">
+          <div className="md:col-span-1 flex items-center gap-2">
             <label className="text-xs font-medium flex items-center gap-2">
               <input name="ativo" type="checkbox" defaultChecked />
               Ativo
             </label>
           </div>
 
-          <div className="col-span-12 flex justify-end">
+          <div className="md:col-span-12 flex justify-end">
             <button className="rounded-md bg-black px-3 py-2 text-sm text-white" type="submit">
               Adicionar item
             </button>
           </div>
         </form>
-      </div>
+      </SectionCard>
     </div>
   );
 }

@@ -23,6 +23,8 @@ type Props = {
   servicoTipo: ServicoTipo;
   servicoId: number | null;
   unidadeExecucaoIds: number[];
+  variant?: "card" | "plain";
+  className?: string;
 };
 
 export default function TabelaMatriculaEditForm({
@@ -33,6 +35,8 @@ export default function TabelaMatriculaEditForm({
   servicoTipo,
   servicoId: servicoIdInicial,
   unidadeExecucaoIds,
+  variant = "card",
+  className,
 }: Props) {
   const router = useRouter();
 
@@ -210,8 +214,13 @@ export default function TabelaMatriculaEditForm({
     }
   }
 
+  const wrapperClass =
+    variant === "plain"
+      ? `space-y-4 ${className ?? ""}`.trim()
+      : `rounded-md border p-4 space-y-4 max-w-4xl ${className ?? ""}`.trim();
+
   return (
-    <div className="rounded-md border p-4 space-y-4 max-w-4xl">
+    <div className={wrapperClass}>
       <div className="grid gap-2">
         <label className="text-sm font-medium">Categoria do servico</label>
         <select

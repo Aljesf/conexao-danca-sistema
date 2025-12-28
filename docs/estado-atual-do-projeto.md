@@ -84,6 +84,7 @@ Matrículas — Tabelas de Preços e Precificação (Serviço + Unidade de Execu
     - serviço
     - unidades selecionadas
   - Feedback visual de sucesso/erro
+- Admin Matriculas: refatoradas telas de Planos de Pagamento (detalhe), Tabelas de Precos (lista) e Tabela de Precos (detalhe) para o padrao PageHeader/SectionCard/ToolbarRow.
 
 ### Escola — Nova Matrícula
 - Matrícula funcionando ponta a ponta:
