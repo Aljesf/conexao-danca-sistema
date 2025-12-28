@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
-import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
@@ -90,7 +89,7 @@ export async function GET(req: Request) {
 
     const alvoTipo = alvoTipoRaw as AlvoTipo;
     const admin = getAdmin();
-    const alvoId = alvoTipo === "TURMA" ? await resolveTurmaIdReal(admin, alvoInput) : alvoInput;
+    const alvoId = alvoInput;
 
     const { ids: tabelaIds, error: linkErr } = await buscarTabelaIdsPorAlvo(admin, alvoTipo, alvoId);
     if (linkErr) {
@@ -149,10 +148,10 @@ export async function GET(req: Request) {
     const tabela = tabelas[0] as MatriculaTabela;
 
     let qtdModalidades = 1;
-    if (alvoTipo === "TURMA") {
+    if (alvoTipo !== "PROJETO") {
       const { data: mats, error: matsErr } = await admin
         .from("matriculas")
-        .select("id,vinculo_id,status")
+        .select("id,produto_id,vinculo_id,status")
         .eq("pessoa_id", alunoId)
         .eq("ano_referencia", ano);
 
@@ -165,7 +164,46 @@ export async function GET(req: Request) {
       }
 
       const ativas = (mats ?? []).filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
-      const alvoJaExiste = ativas.some((m) => Number(m.vinculo_id) === alvoId);
+
+      const vinculosSemProduto = Array.from(
+        new Set(
+          ativas
+            .filter((m) => !m.produto_id && m.vinculo_id)
+            .map((m) => Number(m.vinculo_id))
+            .filter((id) => Number.isFinite(id) && id > 0),
+        ),
+      );
+
+      const mapaTurmas = new Map<number, number>();
+      if (vinculosSemProduto.length) {
+        const { data: turmas, error: turmasErr } = await admin
+          .from("turmas")
+          .select("turma_id,produto_id")
+          .in("turma_id", vinculosSemProduto);
+
+        if (turmasErr) {
+          if (isSchemaMissing(turmasErr)) {
+            return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { turmasErr });
+          }
+          return serverError("Falha ao resolver turmas do aluno.", { turmasErr });
+        }
+
+        (turmas ?? []).forEach((t) => {
+          const turmaId = Number((t as { turma_id: number }).turma_id);
+          const produtoId = Number((t as { produto_id: number | null }).produto_id);
+          if (Number.isFinite(turmaId) && Number.isFinite(produtoId)) {
+            mapaTurmas.set(turmaId, produtoId);
+          }
+        });
+      }
+
+      const resolveProdutoId = (m: { produto_id?: number | null; vinculo_id?: number | null }) => {
+        if (m.produto_id) return Number(m.produto_id);
+        if (m.vinculo_id) return mapaTurmas.get(Number(m.vinculo_id)) ?? null;
+        return null;
+      };
+
+      const alvoJaExiste = ativas.some((m) => resolveProdutoId(m) === alvoId);
       qtdModalidades = alvoJaExiste ? ativas.length : ativas.length + 1;
     }
 

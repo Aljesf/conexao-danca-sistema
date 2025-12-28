@@ -14,16 +14,14 @@ type ApiErr = {
 };
 
 function badRequest(message: string, details?: Record<string, unknown>) {
-  return NextResponse.json(
-    { ok: false, error: "bad_request", message, details: details ?? null } satisfies ApiErr,
-    { status: 400 },
-  );
+  return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null } satisfies ApiErr, {
+    status: 400,
+  });
 }
 function serverError(message: string, details?: Record<string, unknown>) {
-  return NextResponse.json(
-    { ok: false, error: "server_error", message, details: details ?? null } satisfies ApiErr,
-    { status: 500 },
-  );
+  return NextResponse.json({ ok: false, error: "server_error", message, details: details ?? null } satisfies ApiErr, {
+    status: 500,
+  });
 }
 
 function getAdmin() {
@@ -59,67 +57,42 @@ export async function GET(req: Request) {
     const tipoRaw = String(url.searchParams.get("tipo") || "TURMA").toUpperCase();
 
     if (tipoRaw === "WORKSHOP") return badRequest("WORKSHOP nao e um tipo separado; use CURSO_LIVRE.");
-
-    if (!["TURMA", "CURSO_LIVRE", "PROJETO"].includes(tipoRaw)) {
+    if (!['TURMA', 'CURSO_LIVRE', 'PROJETO'].includes(tipoRaw)) {
       return badRequest("tipo invalido.", { tipo: tipoRaw });
     }
 
     const tipo = tipoRaw as AlvoTipo;
     const admin = getAdmin();
 
-    if (tipo === "TURMA") {
-      const { data, error } = await admin
-        .from("turmas")
-        .select("turma_id, nome")
-        .eq("tipo_turma", "REGULAR")
-        .order("nome", { ascending: true });
+    const produtoTipo =
+      tipo === "TURMA" ? "CURSO_REGULAR" : tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "PROJETO_ARTISTICO";
 
-      if (error) return serverError("Falha ao listar turmas (REGULAR).", { error });
+    const { data, error } = await admin
+      .from("escola_produtos_educacionais")
+      .select("id, titulo")
+      .eq("tipo", produtoTipo)
+      .eq("ativo", true)
+      .order("titulo", { ascending: true });
 
-      const mapped = (data ?? []).map((t) => ({
-        id: Number((t as unknown as { turma_id: number }).turma_id),
-        label: String((t as unknown as { nome: string }).nome),
-      }));
-
-      return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
-    }
-
-    if (tipo === "CURSO_LIVRE") {
-      const { data, error } = await admin
-        .from("turmas")
-        .select("turma_id, nome")
-        .eq("tipo_turma", "CURSO_LIVRE")
-        .order("nome", { ascending: true });
-
-      if (error) return serverError("Falha ao listar turmas (CURSO_LIVRE).", { error });
-
-      const mapped = (data ?? []).map((t) => ({
-        id: Number((t as unknown as { turma_id: number }).turma_id),
-        label: String((t as unknown as { nome: string }).nome),
-      }));
-
-      return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
-    }
-
-    {
-      const { data, error } = await admin.from("projetos_artistico").select("id, titulo").order("titulo");
-
-      if (error) {
-        if (isMissingRelation(error)) {
-          return NextResponse.json(
-            { ok: true, data: [], warning: "Fonte PROJETO ainda nao configurada no banco." } satisfies ApiOk<unknown[]>,
-            { status: 200 },
-          );
-        }
-        return serverError("Falha ao listar projetos artisticos.", { error });
+    if (error) {
+      if (isMissingRelation(error)) {
+        return NextResponse.json(
+          {
+            ok: true,
+            data: [],
+            warning: "Fonte de produtos educacionais ainda nao esta configurada no banco (migracao pendente).",
+          } satisfies ApiOk<unknown[]>,
+          { status: 200 },
+        );
       }
-
-      const mapped = (data ?? []).map((x: { id: number; titulo: string }) => ({
-        id: Number(x.id),
-        label: String(x.titulo),
-      }));
-      return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
+      return serverError("Falha ao listar produtos educacionais.", { error });
     }
+
+    const mapped = (data ?? []).map((x: { id: number; titulo: string }) => ({
+      id: Number(x.id),
+      label: String(x.titulo),
+    }));
+    return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
   } catch (e: unknown) {
     return serverError("Erro inesperado ao listar alvos.", { message: e instanceof Error ? e.message : String(e) });
   }
