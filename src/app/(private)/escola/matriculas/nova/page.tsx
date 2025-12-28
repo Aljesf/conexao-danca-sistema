@@ -247,8 +247,6 @@ export default function NovaMatriculaPage() {
     setTabelaErro(null);
 
     if (!aluno?.id || !turmaId || !anoReferencia) return;
-
-
     let ativo = true;
     const controller = new AbortController();
     const debounceId = window.setTimeout(() => {
@@ -283,8 +281,6 @@ export default function NovaMatriculaPage() {
       controller.abort();
       window.clearTimeout(debounceId);
     };
-
-
   }, [aluno?.id, turmaId, anoReferencia]);
 
   async function onSubmit() {
