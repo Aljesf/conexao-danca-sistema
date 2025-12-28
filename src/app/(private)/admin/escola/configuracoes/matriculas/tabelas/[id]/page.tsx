@@ -4,7 +4,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import TabelaMatriculaEditForm from "./TabelaMatriculaEditForm";
-import PoliticaPadraoItensSection from "./PoliticaPadraoItensSection";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 
@@ -412,7 +411,6 @@ export default async function Page({ params }: { params: { id: string } }) {
         </form>
       </SectionCard>
 
-      <PoliticaPadraoItensSection tabelaId={tabelaInfo.id} itens={listaItens} />
     </div>
   );
 }

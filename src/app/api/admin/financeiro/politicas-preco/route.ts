@@ -14,13 +14,32 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = await getSupabaseServerSSR();
+  const url = new URL(req.url);
+  const ativoParam = url.searchParams.get("ativo");
+  let ativoFilter: boolean | null = null;
 
-  const { data, error } = await supabase
+  if (ativoParam !== null) {
+    if (ativoParam === "true") {
+      ativoFilter = true;
+    } else if (ativoParam === "false") {
+      ativoFilter = false;
+    } else {
+      return NextResponse.json({ error: "Parametro 'ativo' invalido." }, { status: 400 });
+    }
+  }
+
+  let query = supabase
     .from("financeiro_politicas_preco")
     .select("id,nome,descricao,ativo,created_at,updated_at")
     .order("id", { ascending: true });
+
+  if (ativoFilter !== null) {
+    query = query.eq("ativo", ativoFilter);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

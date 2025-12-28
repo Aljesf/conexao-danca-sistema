@@ -92,12 +92,6 @@ export default function AdminConfigEscolaRegrasValorPage() {
             >
               Politicas
             </Link>
-            <Link
-              href="/admin/config/escola/regras-valor/politicas-padrao"
-              className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
-            >
-              Politica padrao
-            </Link>
           </>
         }
       />
