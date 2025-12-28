@@ -131,15 +131,29 @@ export default function TabelaMatriculaEditForm({
         }),
       });
 
-      let payload: { ok?: boolean; message?: string } | null = null;
+      const resClone = res.clone();
+      let payload: { ok?: boolean; message?: string; details?: unknown } | null = null;
+      let rawText: string | null = null;
+
       try {
-        payload = (await res.json()) as { ok?: boolean; message?: string };
+        payload = (await res.json()) as { ok?: boolean; message?: string; details?: unknown };
       } catch {
-        payload = null;
+        try {
+          rawText = await resClone.text();
+        } catch {
+          rawText = null;
+        }
       }
 
       if (!res.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao atualizar tabela.");
+        const msg =
+          (payload?.message && String(payload.message)) ||
+          (rawText
+            ? `Falha ao atualizar (HTTP ${res.status}). Resposta: ${rawText.slice(0, 300)}`
+            : `Falha ao atualizar (HTTP ${res.status}).`);
+        const finalMsg = res.status === 409 ? `Conflito de regra: ${msg}` : msg;
+        setErro(finalMsg);
+        return;
       }
 
       setOkMsg("Tabela atualizada com sucesso.");
