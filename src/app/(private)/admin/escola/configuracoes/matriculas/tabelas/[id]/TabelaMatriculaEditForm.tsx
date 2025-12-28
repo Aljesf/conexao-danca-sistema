@@ -127,7 +127,7 @@ export default function TabelaMatriculaEditForm({
           ano_referencia: anoParsed,
           ativo,
           alvo_tipo: alvoTipo,
-          alvo_ids: alvosSelecionados,
+          alvo_ids: alvosSelecionados.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0),
         }),
       });
 

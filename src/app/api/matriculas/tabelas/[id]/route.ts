@@ -68,6 +68,35 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       alvoIds = Array.from(new Set(alvoIds));
     }
 
+    let produtoId: number | null = null;
+    if (body.alvo_tipo === "TURMA") {
+      const { data: turmas, error: turmasErr } = await admin
+        .from("turmas")
+        .select("turma_id,produto_id")
+        .in("turma_id", alvoIds);
+
+      if (turmasErr) return serverError("Falha ao validar produto das turmas.", { turmasErr });
+
+      const rows = (turmas ?? []) as Array<{ turma_id: number; produto_id: number | null }>;
+      const encontrados = new Set(rows.map((t) => Number(t.turma_id)));
+      const faltantes = alvoIds.filter((id) => !encontrados.has(id));
+      if (faltantes.length) {
+        return badRequest("Uma ou mais turmas nao foram encontradas.", { alvo_ids: faltantes });
+      }
+
+      for (const turma of rows) {
+        if (turma.produto_id === null || turma.produto_id === undefined) {
+          return conflict("Alvos pertencem a produtos diferentes.", { turma_id: turma.turma_id });
+        }
+        const atual = Number(turma.produto_id);
+        if (produtoId === null) {
+          produtoId = atual;
+        } else if (produtoId !== atual) {
+          return conflict("Alvos pertencem a produtos diferentes.", { produto_ids: [produtoId, atual] });
+        }
+      }
+    }
+
     if (body.ativo) {
       const { data: conflitos, error: confErr } = await admin
         .from("matricula_tabelas_alvos")
@@ -100,14 +129,21 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       }
     }
 
+    const updatePayload: Record<string, unknown> = {
+      titulo: body.titulo.trim(),
+      ano_referencia: body.ano_referencia,
+      ativo: !!body.ativo,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (produtoId !== null) {
+      updatePayload.referencia_tipo = "PRODUTO_EDUCACIONAL";
+      updatePayload.referencia_id = produtoId;
+    }
+
     const { error: upErr } = await admin
       .from("matricula_tabelas")
-      .update({
-        titulo: body.titulo.trim(),
-        ano_referencia: body.ano_referencia,
-        ativo: !!body.ativo,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", tabelaId);
 
     if (upErr) return serverError("Falha ao atualizar tabela.", { upErr });
