@@ -1,112 +1,131 @@
-> ℹ️ DOCUMENTO EM ADEQUAÇÃO  
-> Este documento será atualizado para refletir  
-> as Regras Oficiais de Matrícula (Conexão Dança) – v1
+# estado-atual-do-projeto.md
 
-# Estado atual do projeto - Financeiro e rateio
+## Módulo atual
+Matrículas — Tabelas de Preços e Precificação (Serviço + Unidade de Execução)
 
-## Dashboard financeiro (Admin)
-- Tela `/admin/financeiro` agora usa dados reais via `GET /api/financeiro/dashboard` (sem mocks).
-- Endpoint consolida: `pagar_pendente` (contas_pagar status != PAGO), `receber_pendente` (cobrancas status != RECEBIDO/PAGO) e `saldo_periodo` (entradas/receitas - saidas/despesas de movimento_financeiro).
-- Filtros aceitos: `data_inicio`, `data_fim`, `centro_custo_id`. Resumo por centro carrega nomes/codigos de `centros_custo` quando disponiveis.
-- Fontes de dados: tabelas `contas_pagar`, `cobrancas`, `movimento_financeiro` e `centros_custo`.
+---
 
-## Dashboard financeiro inteligente
-- Nova tela `/admin/financeiro` consome `GET /api/financeiro/dashboard-inteligente` (snapshot do dia, sem mocks).
-- Endpoints: `GET /api/financeiro/dashboard-inteligente`, `POST /api/financeiro/dashboard-inteligente/reanalisar`, `POST /api/financeiro/dashboard-inteligente/cron-diario`, `GET /api/financeiro/dashboard-inteligente/historico`.
-- Tabelas novas: `financeiro_snapshots` (consolidado diario, tendencia, serie, alertas) e `financeiro_analises_gpt` (ate 3 alertas + texto curto).
-- Regras de calculo: caixa_hoje = sum movimentos ate hoje; entradas_30d = cobrancas pendentes por vencimento; saidas_30d = contas_pagar pendentes por vencimento; folego = caixa/(saidas/30); tendencia compara janela 30d atual vs anterior; serie 90d historico + 30d futuro; alertas simples (folego<10, saidas +20%, entradas -20%).
-- Segurança: payload enviado ao GPT e restrito ao snapshot enxuto (sem dados pessoais); se OPENAI_API_KEY ausente, apenas alertas calculados sao retornados.
+## SQL concluído
 
-## Contas a pagar (Admin)
-- Tela `/admin/financeiro/contas-pagar` usa dados reais via `GET /api/financeiro/contas-pagar` (sem seeds).
-- Registro de pagamento via `POST /api/financeiro/contas-pagar/pagar` insere em `contas_pagar_pagamentos`, cria `movimento_financeiro` (DESPESA) e atualiza status/saldo.
-- Detalhe via `GET /api/financeiro/contas-pagar/[id]` retorna pagamentos, `total_pago_centavos` e `saldo_centavos` (`saldo = max(valor_centavos - sum(principal+juros-desconto), 0)`).
-- Ordenação: vencimento asc, id desc; filtros: status, centro_custo_id, categoria_id, pessoa_id, data_inicio/data_fim (vencimento).
-- Novas colunas (padronização forma de pagamento): `forma_pagamento_codigo`, `cartao_maquina_id`, `cartao_bandeira_id`, `cartao_numero_parcelas` (mantém `metodo_pagamento` legado).
+- Criação do conceito canônico **Unidade de Execução**:
+  - Tabela `escola_unidades_execucao`
+  - Campos principais:
+    - `unidade_execucao_id`
+    - `servico_id`
+    - `denominacao` (ex.: Turma, Grupo, Elenco, Coreografia, Personagem)
+    - `nome`
+    - `origem_tipo` (TURMA, GRUPO, ELENCO, COREOGRAFIA, etc.)
+    - `origem_id`
+    - `ativo`
+- Backfill automático:
+  - Todas as `turmas` existentes foram convertidas em **Unidades de Execução**
+  - `origem_tipo = 'TURMA'`
+  - `origem_id = turmas.turma_id`
+- Criação do pivot:
+  - `matricula_tabelas_unidades_execucao`
+  - Relaciona **0..N unidades de execução** por tabela de preços
+  - Regra: pivot vazio = tabela válida para **todas** as unidades do serviço
 
-## Contas a receber (Admin)
-- Tela `/admin/financeiro/contas-receber` consome `GET /api/financeiro/contas-receber`.
-- Registro de recebimento via `POST /api/financeiro/contas-receber/receber` insere em `recebimentos`, cria `movimento_financeiro` (ENTRADA origem=COBRANCA) e seta status RECEBIDO quando saldo zera.
-- Cálculo: `total_recebido_centavos = sum(recebimentos.valor_centavos)`; `saldo_centavos = max(valor_centavos - total_recebido_centavos, 0)`; ordenação por vencimento asc, id desc; filtros: status, centro_custo_id, pessoa_id, data_inicio/data_fim.
-- Novas colunas em `recebimentos`: `forma_pagamento_codigo`, `cartao_maquina_id`, `cartao_bandeira_id`, `cartao_numero_parcelas` (metodo_pagamento mantido para compatibilidade).
+---
 
-## Centros de custo
-- **FIN (Intermediacao Financeira)** - ponto central para registrar recebimentos quando a cobranca nao tem centro definido.
-- **ESC / CAF** - usados como destino direto para cobrancas de origem ESCOLA ou CAFE (quando configurados).
+## APIs concluídas
 
-## Fluxo de pagamento presencial (cobrancas)
-1. Endpoint `POST /api/financeiro/cobrancas/registrar-pagamento-presencial`:
-   - Autentica usuario.
-   - Se `cobrancas.centro_custo_id` estiver vazio, busca automaticamente o centro `FIN`.
-   - Marca a cobranca como `PAGO`, cria `recebimentos` com o centro de custo escolhido e registra `movimento_financeiro` de receita.
-   - Envia baixa para a Neofin (quando ha `neofin_charge_id`), sem reverter em caso de falha.
-   - Dispara `processarClassificacaoFinanceira` para ratear o valor.
+### Serviços e Unidades de Execução
+- `GET /api/matriculas/tabelas/servicos`
+  - Lista serviços por categoria:
+    - CURSO_REGULAR
+    - CURSO_LIVRE
+    - PROJETO_ARTISTICO
+- `GET /api/matriculas/tabelas/unidades-execucao?servico_id=`
+  - Lista unidades de execução do serviço
+  - Label padronizado:
+    - `<Denominação>: <Nome> [UE: <id>]`
 
-## Rateio financeiro (processarClassificacaoFinanceira)
-- Entrada: cobranca paga (id, valor, origem_tipo/origem_id, data_pagamento).
-- Limpa movimentos de rateio anteriores (`movimento_financeiro` com `origem = RATEIO_COBRANCA`).
-- Regras:
-  - **CREDITO_CONEXAO_FATURA**: nao gera movimento final (somente FIN).
-  - **ESCOLA**: cria receita para centro `ESC` (codigo).
-  - **CAFE**: cria receita para centro `CAF` (codigo).
-  - **LOJA_VENDA**: busca itens da venda, identifica subcategorias (`loja_produto_categoria_subcategoria`) e soma por `centro_custo_id` da subcategoria; cria receitas de rateio por centro.
-  - Demais origens: nenhum rateio e criado.
+### Tabelas de Preços
+- `POST /api/matriculas/tabelas`
+- `PUT /api/matriculas/tabelas/[id]`
+  - Novo modelo aceito:
+    - `servico_tipo`
+    - `servico_id`
+    - `unidade_execucao_ids[]`
+  - Compatibilidade temporária mantida com:
+    - `alvo_tipo`
+    - `alvo_ids`
+- Salvamento correto:
+  - Referência canônica no serviço
+  - Escopo por unidade de execução via pivot
 
-### Taxa de parcelamento (Credito Conexao)
-- Ao classificar `CREDITO_CONEXAO_FATURA`, busca a regra ativa em `credito_conexao_regras_parcelas` (tipo_conta, faixa de parcelas, valor minimo).
-- Calcula `taxa_centavos = round(valor_cobranca * (taxa_percentual/100)) + taxa_fixa_centavos`.
-- Lanca movimento de receita com `origem = TAXA_CREDITO_CONEXAO` usando o `centro_custo_id` da regra (ou FIN como fallback).
-- O principal (valor da cobranca) segue para rateio normal; a taxa e movimento separado.
+### Precificação
+- `GET /api/matriculas/precos/resolver`
+  - Alinhado ao modelo **Serviço + Unidade de Execução**
+  - Fluxo:
+    1. Resolve `servico_id`
+    2. Resolve `unidade_execucao_id`
+    3. Busca tabela ativa por serviço + ano
+    4. Valida escopo pelo pivot
+    5. Tenta aplicar tier (quando existir)
+    6. **Fallback para MENSALIDADE/RECORRENTE** quando não há tier
+  - Retornos:
+    - `200` quando precificação válida
+    - `409` quando não há cobertura financeira (regra de negócio)
 
-## Observacoes
-- Certifique-se de ter o centro de custo `FIN` criado (ver `SQL/centros_custo.sql`).
-- Para o rateio de LOJA, e necessario que as subcategorias estejam configuradas com `centro_custo_id`.
-- Movimentos de rateio usam `origem = RATEIO_COBRANCA` e `origem_id = <cobranca_id>` para facilitar auditoria/limpeza.
+---
 
-### Auditoria rapida (SQL)
-- Movimentos de taxa/rateio por cobranca:
-  `select origem, origem_id, count(*) qtd from movimento_financeiro where origem_id = <COBRANCA_ID> and origem in ('RATEIO_COBRANCA','TAXA_CREDITO_CONEXAO') group by origem, origem_id;`
-- Movimento do recebimento vinculado a cobranca:
-  `select mf.* from movimento_financeiro mf join recebimentos r on r.id = mf.origem_id where mf.origem = 'RECEBIMENTO' and r.cobranca_id = <COBRANCA_ID> order by mf.id desc;`
+## Páginas / componentes concluídos
 
-## Regra de integridade - Credito Conexao
-- Fatura so pode ser paga se houver lancamentos vinculados (tabela `credito_conexao_fatura_lancamentos`). Sem lancamentos, o pagamento presencial retorna erro `fatura_sem_lancamentos`.
-- Motivo: preservar consistencia contabil e evitar recebimentos/rateios sem consumo.
-- Impacto: taxa (`TAXA_CREDITO_CONEXAO`) e rateio (`RATEIO_COBRANCA`) so sao gerados quando existem lancamentos; idempotencia mantem movimentos se ja houver classificacao.
+### Administração — Tabelas de Preços
+- Nova tabela de preços:
+  - Fluxo: **Categoria do serviço → Serviço → Unidades de Execução**
+  - Opção:
+    - “Aplicar a todas as unidades de execução deste serviço”
+- Editar tabela:
+  - Carregamento correto de:
+    - categoria
+    - serviço
+    - unidades selecionadas
+  - Feedback visual de sucesso/erro
 
-## Fechar fatura (Credito Conexao)
-- Endpoint `/api/financeiro/credito-conexao/faturas/[id]/fechar`:
-  - Recalcula compras, numero de parcelas e taxa de parcelamento (regra ativa em `credito_conexao_regras_parcelas`).
-  - Atualiza `valor_total_centavos`, `valor_taxas_centavos`, vencimento e status da fatura (ABERTA).
-  - Cria ou atualiza a cobranca (`origem_tipo = CREDITO_CONEXAO_FATURA`), respeitando `force=true` para recriar/atualizar.
-- Se a fatura nao tiver lancamentos (`credito_conexao_fatura_lancamentos`), bloqueia com `fatura_sem_lancamentos`.
-- UI: botao "Fechar fatura" no detalhe, visivel quando status e PAGA; mostra erro amigavel se nao houver lancamentos.
+### Escola — Nova Matrícula
+- Matrícula funcionando ponta a ponta:
+  - Seleção de aluno e responsável
+  - Seleção de curso (serviço)
+  - Seleção de turma (unidade de execução)
+  - Ano de referência validado
+- Resumo final exibindo:
+  - Tabela aplicada
+  - Mensalidade aplicada
+  - Plano de pagamento
+- Debounce implementado no resolver para evitar múltiplas chamadas simultâneas
 
-## Venda com Cartao Conexao (Loja)
-- Forma de pagamento base `CARTAO_CONEXAO` exige `conta_conexao_id` e `numero_parcelas` no payload.
-- Ao finalizar a venda, cria/atualiza um registro em `credito_conexao_lancamentos` (`origem_sistema = LOJA`, `origem_id = venda.id`) com status `PENDENTE_FATURA`.
-- Nao cria cobranca/recebimento no ato; o valor sera faturado posteriormente.
+---
 
-## Incluir pendencias na fatura
-- Endpoint `/api/financeiro/credito-conexao/faturas/incluir-pendencias` cria (se necessario) a fatura do periodo e move lancamentos `PENDENTE_FATURA` (origem LOJA por padrao) para ela, marcando-os como `FATURADO`.
-- Recalcula `valor_total_centavos` da fatura apenas com as compras (taxa segue no fechar).
-- Botao "Incluir pendencias" disponivel na lista de faturas (Admin) para disparar o processo por conta.
+## Pendências
 
-## Turmas (horarios e detalhes)
-- Modelo oficial de horarios: `public.turmas_horarios` (`day_of_week`, `inicio`, `fim`).
-- API usa `horarios_por_dia` (com `day_of_week`) e normaliza `dias_semana` como array.
-- Detalhe de turma em `/escola/academico/turmas/[id]` consome `/api/turmas/:id` + `/api/turmas/:id/historico`.
-- UX: ao marcar novo dia na criacao, copia o ultimo horario preenchido.
-- Modelo Local -> Espaco -> Turma: `public.locais`, `public.espacos`, `turmas.espaco_id`.
-- Nova turma exige `espaco_id` (select encadeado Local/Espaco).
-- Paginas de cadastro: `/escola/academico/locais` e `/escola/academico/espacos`.
-- Menus Admin: Configuracoes (Escola) -> Locais/Espacos.
-- Correcoes de keys duplicadas (React) na Nova Turma.
-- Grade semanal por espaco: planejada para `/escola/academico/grade`.
+- Ajuste pontual em `/api/pessoas/[id]`:
+  - Adequar uso de `await ctx.params` (Next.js 15)
+- Refinamentos de UX:
+  - Reduzir logs visuais de 409 intermediários no console
+  - Ajustar textos de ajuda na matrícula nova
 
-## Matriculas (servicos por turma)
-- Wizard `/escola/matriculas/nova` busca servicos vinculados a turma via `GET /api/escola/turmas/:id/servicos` (inclui preco vigente por ano).
-- Se a turma nao tiver servico, a UI exibe aviso e link para `/escola/turmas/[turmaId]/servicos`.
-- Telas Escola para operacao sem SQL manual: `/escola/configuracoes/servicos`, `/escola/configuracoes/servicos/precos`, `/escola/turmas/[turmaId]/servicos`.
-- Erros 409 retornam `code: MATRICULA_DUPLICADA` + `message` (UI exibe a mensagem e evita duplo submit).
-- Sugestao por idade considera `data_matricula`; nascimento invalido gera aviso e nao sugere idade.
+---
+
+## Bloqueios
+Nenhum bloqueio técnico ativo no módulo de Matrículas.
+
+---
+
+## Versão do sistema
+Sistema Conexão Dança — Matrículas  
+Versão lógica: **v1.0 (Serviço + Unidade de Execução)**
+
+---
+
+## Próximas ações
+
+1. Planejar regra avançada de **pacote / múltiplas modalidades (tier dinâmico)**
+   - Contagem de matrículas ativas por aluno
+   - Reprecificação prospectiva
+2. Refinar UX da Matrícula Nova
+3. Avançar para:
+   - Projeto Artístico (criação de unidades de execução específicas)
+   - Vínculo de matrícula diretamente à `unidade_execucao_id`
