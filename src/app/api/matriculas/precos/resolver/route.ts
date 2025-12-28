@@ -335,6 +335,8 @@ export async function GET(req: Request) {
     }
 
     const pivotIds = normalizeNumberArray((pivotRows ?? []).map((r) => (r as { unidade_execucao_id?: number }).unidade_execucao_id));
+    const pivotAplica =
+      pivotIds.length === 0 || (unidadeExecucaoId ? pivotIds.includes(unidadeExecucaoId) : false);
     if (pivotIds.length > 0) {
       if (!unidadeExecucaoId) {
         return conflict("Tabela nao se aplica a unidade selecionada.", {
@@ -522,9 +524,26 @@ export async function GET(req: Request) {
       }
     }
 
+    const valorBaseCentavos = item?.valor_centavos ?? null;
     if (item && tierValorCentavos !== null) {
       item = { ...item, valor_centavos: tierValorCentavos };
     }
+    const valorFinalCentavos = item?.valor_centavos ?? null;
+    const debug =
+      process.env.NODE_ENV !== "production"
+        ? {
+            servico_id: servicoId,
+            unidade_execucao_id: unidadeExecucaoId,
+            tabela_id: tabela.id,
+            pivot_aplica: pivotAplica,
+            tier_grupo_id: tierGrupoId,
+            qtd_modalidades_ativas: quantidadeModalidades ?? qtdModalidades,
+            tier_ordem_aplicada: tierOrdem,
+            valor_base_centavos: valorBaseCentavos,
+            valor_final_centavos: valorFinalCentavos,
+            origem_valor: tierValorCentavos !== null ? "TIER" : "BASE",
+          }
+        : undefined;
 
     return NextResponse.json(
       {
@@ -541,6 +560,7 @@ export async function GET(req: Request) {
           tier: tier ? { id: tier.id, item_codigo: tier.item_codigo, tipo_item: tier.tipo_item } : null,
           item_aplicado: item,
           alvo: { tipo: alvoTipo, id: alvoId },
+          ...(debug ? { debug } : {}),
         },
       },
       { status: 200 },

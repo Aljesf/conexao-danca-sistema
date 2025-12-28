@@ -65,10 +65,24 @@ type PrecoResolverResp = {
     tier?: { id: number; item_codigo: string; tipo_item: string } | null;
     item_aplicado: ItemAplicado;
     alvo?: { tipo: string; id: number };
+    debug?: {
+      servico_id: number | null;
+      unidade_execucao_id: number | null;
+      tabela_id: number;
+      pivot_aplica: boolean;
+      tier_grupo_id: number | null;
+      qtd_modalidades_ativas: number | null;
+      tier_ordem_aplicada: number | null;
+      valor_base_centavos: number | null;
+      valor_final_centavos: number | null;
+      origem_valor: "BASE" | "TIER";
+    };
   };
   message?: string;
   error?: string;
 };
+
+type PrecoDebug = NonNullable<PrecoResolverResp["data"]>["debug"];
 
 function labelTipo(tipo: TipoMatricula): string {
   return tipo === "REGULAR" ? "Turma regular" : "Curso livre";
@@ -120,6 +134,7 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 
 export default function NovaMatriculaPage() {
   const router = useRouter();
+  const isDev = process.env.NODE_ENV !== "production";
 
   const [aluno, setAluno] = useState<PessoaSearchItem | null>(null);
   const [responsavel, setResponsavel] = useState<PessoaSearchItem | null>(null);
@@ -145,6 +160,7 @@ export default function NovaMatriculaPage() {
   const [tabelaAplicavel, setTabelaAplicavel] = useState<TabelaAplicavel | null>(null);
   const [itemAplicado, setItemAplicado] = useState<ItemAplicado | null>(null);
   const [qtdModalidades, setQtdModalidades] = useState<number | null>(null);
+  const [debugInfo, setDebugInfo] = useState<PrecoDebug | null>(null);
   const [tabelaErro, setTabelaErro] = useState<string | null>(null);
   const [tabelaLoading, setTabelaLoading] = useState(false);
 
@@ -244,6 +260,7 @@ export default function NovaMatriculaPage() {
     setTabelaAplicavel(null);
     setItemAplicado(null);
     setQtdModalidades(null);
+    setDebugInfo(null);
     setTabelaErro(null);
 
     if (!aluno?.id || !turmaId || !anoReferencia) return;
@@ -266,6 +283,7 @@ export default function NovaMatriculaPage() {
           setTabelaAplicavel(data.data?.tabela ?? null);
           setItemAplicado(data.data?.item_aplicado ?? null);
           setQtdModalidades(typeof data.data?.qtd_modalidades === "number" ? data.data.qtd_modalidades : null);
+          if (isDev) setDebugInfo(data.data?.debug ?? null);
         } catch (e) {
           if (!ativo) return;
           const name = e && typeof e === "object" && "name" in e ? String(e.name) : "";
@@ -281,7 +299,7 @@ export default function NovaMatriculaPage() {
       controller.abort();
       window.clearTimeout(debounceId);
     };
-  }, [aluno?.id, turmaId, anoReferencia]);
+  }, [aluno?.id, turmaId, anoReferencia, isDev]);
 
   async function onSubmit() {
     setErro(null);
@@ -565,6 +583,25 @@ export default function NovaMatriculaPage() {
         <div>Inicio do vinculo: {dataInicioVinculo}</div>
         <div>Politica: {politicaModo === "PADRAO" ? "Padrao" : "Adiar para vencimento"}</div>
       </div>
+
+      {isDev && debugInfo ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3 text-sm">
+          <div className="font-semibold text-amber-900">Diagnostico de precificacao (dev)</div>
+          <div>
+            Servico/UE/Tabela: {debugInfo.servico_id ?? "-"} / {debugInfo.unidade_execucao_id ?? "-"} /{" "}
+            {debugInfo.tabela_id}
+          </div>
+          <div>Pivot aplica? {debugInfo.pivot_aplica ? "Sim" : "Nao"}</div>
+          <div>
+            Tier grupo / qtd / ordem: {debugInfo.tier_grupo_id ?? "-"} / {debugInfo.qtd_modalidades_ativas ?? "-"} /{" "}
+            {debugInfo.tier_ordem_aplicada ?? "-"}
+          </div>
+          <div>
+            Valor base vs final: {formatCurrency(debugInfo.valor_base_centavos)} →{" "}
+            {formatCurrency(debugInfo.valor_final_centavos)} ({debugInfo.origem_valor})
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex items-center justify-end gap-3">
         <button

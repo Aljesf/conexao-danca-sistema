@@ -274,6 +274,8 @@ export default function TabelaMatriculaEditForm({
             <div className="text-sm text-muted-foreground">Carregando unidades...</div>
           ) : unidadesErro ? (
             <div className="text-sm text-red-600">{unidadesErro}</div>
+          ) : aplicarTodas ? (
+            <div className="text-sm text-muted-foreground">Aplicacao global (todas as unidades).</div>
           ) : unidades.length === 0 ? (
             <div className="text-sm text-muted-foreground">Nenhuma unidade de execucao cadastrada.</div>
           ) : (
@@ -292,7 +294,9 @@ export default function TabelaMatriculaEditForm({
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          {aplicarTodas ? "Aplica a todas as unidades deste servico." : "Selecione uma ou mais unidades para vincular."}
+          {aplicarTodas
+            ? "Aplicacao global (todas as unidades)."
+            : "Selecione uma ou mais unidades para vincular."}
         </p>
       </div>
 
