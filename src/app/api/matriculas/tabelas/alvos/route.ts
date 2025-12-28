@@ -64,8 +64,26 @@ export async function GET(req: Request) {
     const tipo = tipoRaw as AlvoTipo;
     const admin = getAdmin();
 
-    const produtoTipo =
-      tipo === "TURMA" ? "CURSO_REGULAR" : tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "PROJETO_ARTISTICO";
+    if (tipo === "TURMA") {
+      const { data, error } = await admin
+        .from("turmas")
+        .select("turma_id, nome")
+        .eq("tipo_turma", "REGULAR")
+        .order("nome", { ascending: true });
+
+      if (error) {
+        return serverError("Falha ao listar turmas.", { error });
+      }
+
+      const mapped = (data ?? []).map((t: { turma_id: number; nome: string }) => ({
+        id: Number(t.turma_id),
+        label: `${t.nome} [ID: ${t.turma_id}]`,
+      }));
+
+      return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
+    }
+
+    const produtoTipo = tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "PROJETO_ARTISTICO";
 
     const { data, error } = await admin
       .from("escola_produtos_educacionais")
