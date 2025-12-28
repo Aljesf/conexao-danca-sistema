@@ -1,118 +1,169 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
+import { formatBRLFromCents } from "@/lib/formatters/money";
+import { formatDateTimeISO } from "@/lib/formatters/date";
 
-type DetalheResp = {
+type MatriculaDetalheResp = {
   ok: boolean;
-  metodo_liquidacao?: string;
-  matricula?: Record<string, unknown>;
-  aluno?: Record<string, unknown> | null;
-  responsavel_financeiro?: Record<string, unknown> | null;
-  turma?: Record<string, unknown> | null;
-  cobrancas?: Array<Record<string, unknown>>;
-  lancamentos_cartao?: Array<Record<string, unknown>>;
+  matricula?: Record<string, unknown> | null;
+  pessoa?: { id?: number; nome?: string | null } | null;
+  responsavel_financeiro?: { id?: number; nome?: string | null } | null;
+  servico?: { id?: number; titulo?: string | null } | null;
+  turma?: { turma_id?: number; nome?: string | null } | null;
+  unidade_execucao?: { unidade_execucao_id?: number; denominacao?: string | null; nome?: string | null } | null;
+  unidade_execucao_label?: string | null;
+  preco_aplicado?: { valor_centavos?: number; moeda?: string | null; created_at?: string | null } | null;
+  plano_pagamento?: { id?: number; titulo?: string | null; ciclo_cobranca?: string | null; numero_parcelas?: number | null } | null;
   error?: string;
   message?: string;
 };
 
+function extractErrorMessage(data: unknown, status: number): string {
+  if (data && typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim()) return record.message;
+    if (typeof record.error === "string" && record.error.trim()) return record.error;
+  }
+  return `HTTP ${status}`;
+}
+
 async function fetchJSON<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  const txt = await res.text();
-  let data: unknown;
+  const text = await res.text();
+  let data: unknown = null;
   try {
-    data = JSON.parse(txt);
+    data = JSON.parse(text);
   } catch {
-    data = { raw: txt };
+    data = { raw: text };
   }
   if (!res.ok) {
-    const msg =
-      typeof data === "object" && data && "message" in data
-        ? String((data as Record<string, unknown>).message)
-        : `HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new Error(extractErrorMessage(data, res.status));
   }
   return data as T;
+}
+
+function labelFromPessoa(pessoa?: { nome?: string | null } | null, fallbackId?: number | null): string {
+  const nome = pessoa?.nome?.trim();
+  if (nome) return nome;
+  return fallbackId ? `Pessoa #${fallbackId}` : "-";
 }
 
 export default function MatriculaDetalhePage() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
 
-  const [data, setData] = useState<DetalheResp | null>(null);
+  const [data, setData] = useState<MatriculaDetalheResp | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let alive = true;
+    let ativo = true;
     (async () => {
       try {
         setErro(null);
-        const d = await fetchJSON<DetalheResp>(`/api/matriculas/operacional/${id}`);
-        if (alive) setData(d);
+        setLoading(true);
+        const resp = await fetchJSON<MatriculaDetalheResp>(`/api/escola/matriculas/${id}`);
+        if (ativo) setData(resp);
       } catch (e: unknown) {
-        if (alive) setErro(e instanceof Error ? e.message : "Erro ao carregar");
+        if (ativo) setErro(e instanceof Error ? e.message : "Erro ao carregar matricula.");
+      } finally {
+        if (ativo) setLoading(false);
       }
     })();
     return () => {
-      alive = false;
+      ativo = false;
     };
   }, [id]);
 
+  const matricula = data?.matricula ?? null;
+  const pessoaId = useMemo(() => Number(matricula?.pessoa_id ?? NaN), [matricula]);
+  const respId = useMemo(() => Number(matricula?.responsavel_financeiro_id ?? NaN), [matricula]);
+
   return (
-    <div className="p-4">
-      <div>
-        <h1 className="text-xl font-semibold">Matrícula #{id}</h1>
-        <p className="text-sm text-muted-foreground">Detalhe operacional (Cartão Conexão / Legado).</p>
+    <div className="p-4 space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Matricula #{id}</h1>
+          <p className="text-sm text-muted-foreground">Detalhe operacional da matricula.</p>
+        </div>
+        <Link href="/escola/matriculas" className="text-sm text-muted-foreground hover:underline">
+          Voltar para lista
+        </Link>
       </div>
 
-      {erro ? (
-        <div className="mt-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">{erro}</div>
-      ) : null}
+      {erro ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div> : null}
+      {loading && !data ? <div className="text-sm text-muted-foreground">Carregando...</div> : null}
 
-      {!data ? (
-        <div className="mt-4 text-sm text-muted-foreground">Carregando…</div>
-      ) : (
-        <div className="mt-6 grid gap-4">
-          <div className="rounded-lg border p-4 text-sm">
-            <div className="font-medium">Método de liquidação</div>
-            <div className="mt-1">{data.metodo_liquidacao ?? data.matricula?.metodo_liquidacao ?? "-"}</div>
+      {!data ? null : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-lg border p-4 space-y-2">
+            <div className="text-sm font-semibold">Dados principais</div>
+            <div>Aluno: {labelFromPessoa(data.pessoa, Number.isFinite(pessoaId) ? pessoaId : null)}</div>
+            <div>
+              Responsavel: {labelFromPessoa(data.responsavel_financeiro, Number.isFinite(respId) ? respId : null)}
+            </div>
+            <div>Ano: {matricula?.ano_referencia ?? "-"}</div>
+            <div>Status: {String(matricula?.status ?? "-")}</div>
+            <div>Tipo: {String(matricula?.tipo_matricula ?? "-")}</div>
+            <div>Criada em: {formatDateTimeISO(String(matricula?.created_at ?? ""))}</div>
           </div>
 
-          <div className="rounded-lg border p-4 text-sm">
-            <div className="font-medium">Financeiro</div>
+          <div className="rounded-lg border p-4 space-y-2">
+            <div className="text-sm font-semibold">Servico e unidade de execucao</div>
+            <div>
+              Servico: {data.servico?.titulo?.trim() || (data.servico?.id ? `Servico #${data.servico.id}` : "-")}
+            </div>
+            <div>Servico ID: {data.servico?.id ?? "-"}</div>
+            <div>Unidade de execucao: {data.unidade_execucao_label ?? "-"}</div>
+            <div>UE ID: {data.unidade_execucao?.unidade_execucao_id ?? "-"}</div>
+            <div>Turma ID: {data.turma?.turma_id ?? "-"}</div>
+          </div>
 
-            {Array.isArray(data.lancamentos_cartao) && data.lancamentos_cartao.length > 0 ? (
-              <div className="mt-2">
-                <div className="text-xs text-muted-foreground">Lançamentos no Cartão Conexão</div>
-                <ul className="mt-2 list-disc pl-5">
-                  {data.lancamentos_cartao.map((l, idx) => (
-                    <li key={String((l.id ?? idx) as unknown)} className="py-1">
-                      {String(l.descricao ?? "Sem descrição")} — {String(l.valor_centavos ?? "")} —{" "}
-                      <span className="text-xs text-muted-foreground">{String(l.status ?? "")}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+          <div className="rounded-lg border p-4 space-y-2">
+            <div className="text-sm font-semibold">Resumo financeiro</div>
+            <div>
+              Mensalidade aplicada:{" "}
+              {data.preco_aplicado?.valor_centavos !== undefined
+                ? formatBRLFromCents(Number(data.preco_aplicado.valor_centavos))
+                : "-"}
+            </div>
+            <div>Moeda: {data.preco_aplicado?.moeda ?? "-"}</div>
+            <div>
+              Atualizado em: {data.preco_aplicado?.created_at ? formatDateTimeISO(data.preco_aplicado.created_at) : "-"}
+            </div>
+            <div>
+              Plano de pagamento:{" "}
+              {data.plano_pagamento?.titulo?.trim() || (data.plano_pagamento?.id ? `Plano #${data.plano_pagamento.id}` : "-")}
+            </div>
+            <div>
+              Ciclo: {data.plano_pagamento?.ciclo_cobranca ?? "-"}{" "}
+              {data.plano_pagamento?.numero_parcelas ? `(${data.plano_pagamento.numero_parcelas} parcelas)` : ""}
+            </div>
+          </div>
 
-            {Array.isArray(data.cobrancas) && data.cobrancas.length > 0 ? (
-              <div className="mt-4">
-                <div className="text-xs text-muted-foreground">Cobranças (Legado)</div>
-                <ul className="mt-2 list-disc pl-5">
-                  {data.cobrancas.map((c, idx) => (
-                    <li key={String((c.id ?? idx) as unknown)} className="py-1">
-                      {String(c.descricao ?? "Sem descrição")} — {String(c.valor_centavos ?? "")} —{" "}
-                      <span className="text-xs text-muted-foreground">{String(c.status ?? "")}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {(!data.lancamentos_cartao || data.lancamentos_cartao.length === 0) &&
-            (!data.cobrancas || data.cobrancas.length === 0) ? (
-              <div className="mt-2 text-xs text-muted-foreground">Sem itens financeiros retornados.</div>
-            ) : null}
+          <div className="rounded-lg border p-4 space-y-3">
+            <div className="text-sm font-semibold">Acoes</div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded-md border px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+                disabled
+                title="TODO: conectar API de encerramento"
+              >
+                Encerrar
+              </button>
+              <button
+                type="button"
+                className="rounded-md border px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+                disabled
+                title="TODO: conectar API de cancelamento"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
