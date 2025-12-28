@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
+import ToolbarRow from "@/components/layout/ToolbarRow";
 
 type MatriculaListaItem = {
   id: number;
@@ -122,130 +125,143 @@ export default function EscolaMatriculasPage() {
     };
   }, [ano, query]);
 
+  const filteredItems = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return items;
+    return items.filter((item) => {
+      const aluno = item.aluno_nome?.toLowerCase() ?? "";
+      const responsavel = item.responsavel_nome?.toLowerCase() ?? "";
+      return aluno.includes(term) || responsavel.includes(term);
+    });
+  }, [items, query]);
+
   const resumoServicos = useMemo(() => {
     const map = new Map<string, number>();
-    items.forEach((item) => {
+    filteredItems.forEach((item) => {
       const nome = item.servico_nome?.trim() || "-";
       map.set(nome, (map.get(nome) ?? 0) + 1);
     });
     const ordenado = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
     const top = ordenado.slice(0, 5);
     const restantes = ordenado.length - top.length;
-    return { total: items.length, top, restantes };
-  }, [items]);
+    return { total: filteredItems.length, top, restantes };
+  }, [filteredItems]);
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Matriculas (Escola)</h1>
-          <p className="text-sm text-muted-foreground">
-            Lista operacional para validar servico, unidade de execucao e status da matricula.
-          </p>
-        </div>
-        <Link
-          className="inline-flex items-center rounded-md border px-3 py-2 text-sm hover:bg-muted"
-          href="/escola/matriculas/nova"
+    <div className="px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <PageHeader
+          title="Matriculas (Escola)"
+          description="Lista operacional para validar servico, unidade de execucao e status da matricula."
+          actions={
+            <Link
+              className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+              href="/escola/matriculas/nova"
+            >
+              Nova matricula
+            </Link>
+          }
+        />
+
+        <SectionCard className="bg-slate-50/50">
+          <ToolbarRow>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Ano</label>
+              <input
+                type="number"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={ano}
+                min={2000}
+                max={2100}
+                onChange={(e) => setAno(Number(e.target.value))}
+              />
+            </div>
+            <div className="min-w-[240px] flex-1 space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Busca</label>
+              <input
+                type="text"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                placeholder="Nome do aluno ou responsavel"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </ToolbarRow>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs">
+              Total no ano: <span className="font-semibold">{resumoServicos.total}</span>
+            </span>
+            {resumoServicos.top.map(([nome, qtd]) => (
+              <span key={nome} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs">
+                {nome}: <span className="font-semibold">{qtd}</span>
+              </span>
+            ))}
+            {resumoServicos.restantes > 0 ? (
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs">
+                +{resumoServicos.restantes} servicos
+              </span>
+            ) : null}
+          </div>
+          {erro ? <div className="mt-2 text-sm text-rose-600">{erro}</div> : null}
+        </SectionCard>
+
+        <SectionCard
+          title="Matriculas encontradas"
+          actions={loading ? <span className="text-xs text-slate-400">Carregando...</span> : null}
         >
-          Nova matricula
-        </Link>
-      </div>
-
-      <div className="rounded-lg border p-4 space-y-3">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Ano</label>
-            <input
-              type="number"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={ano}
-              min={2000}
-              max={2100}
-              onChange={(e) => setAno(Number(e.target.value))}
-            />
-          </div>
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-sm font-medium">Busca</label>
-            <input
-              type="text"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              placeholder="Nome do aluno ou responsavel"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="rounded-full border px-3 py-1 text-xs">
-            Total no ano: <span className="font-semibold">{resumoServicos.total}</span>
-          </span>
-          {resumoServicos.top.map(([nome, qtd]) => (
-            <span key={nome} className="rounded-full border px-3 py-1 text-xs bg-slate-50">
-              {nome}: <span className="font-semibold">{qtd}</span>
-            </span>
-          ))}
-          {resumoServicos.restantes > 0 ? (
-            <span className="rounded-full border px-3 py-1 text-xs bg-slate-50">
-              +{resumoServicos.restantes} servicos
-            </span>
-          ) : null}
-        </div>
-        {erro ? <div className="text-sm text-red-600">{erro}</div> : null}
-      </div>
-
-      <div className="rounded-lg border overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 text-sm border-b">
-          <span className="font-medium">Matriculas encontradas</span>
-          {loading ? <span className="text-muted-foreground">Carregando...</span> : null}
-        </div>
-        {items.length === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground">
-            {loading ? "Buscando matriculas..." : "Nenhuma matricula encontrada para os filtros atuais."}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-muted/40">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">ID</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase">Aluno</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase">Responsavel</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase">Curso/Servico</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase">Turma/UE</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase">Ano</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase">Status</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase">Criada em</th>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className="border-t">
-                    <td className="px-4 py-2 text-xs text-muted-foreground">{item.id}</td>
-                    <td className="px-4 py-2">{item.aluno_nome}</td>
-                    <td className="px-4 py-2">{item.responsavel_nome ?? "—"}</td>
-                    <td className="px-4 py-2">{item.servico_nome ?? "—"}</td>
-                    <td className="px-4 py-2" title={item.unidade_execucao_label ?? ""}>
-                      {shortUnidadeExecucaoLabel(item.unidade_execucao_label)}
-                    </td>
-                    <td className="px-4 py-2">{item.ano_referencia ?? "-"}</td>
-                    <td className="px-4 py-2">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${statusBadgeClasses(item.status)}`}>
-                        {item.status ?? "-"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">{formatDateTimePtBr(item.created_at)}</td>
-                    <td className="px-4 py-2">
-                      <Link className="text-sm text-indigo-600 hover:underline" href={`/escola/matriculas/${item.id}`}>
-                        Abrir
-                      </Link>
-                    </td>
+          {filteredItems.length === 0 ? (
+            <div className="text-sm text-slate-500">
+              {loading ? "Buscando matriculas..." : "Nenhuma matricula encontrada."}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50/80 text-xs uppercase tracking-[0.14em] text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3 text-left">ID</th>
+                    <th className="px-4 py-3 text-left">Aluno</th>
+                    <th className="px-4 py-3 text-left">Responsavel</th>
+                    <th className="px-4 py-3 text-left">Curso/Servico</th>
+                    <th className="px-4 py-3 text-left">Turma/UE</th>
+                    <th className="px-4 py-3 text-left">Ano</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Criada em</th>
+                    <th className="px-4 py-3 text-left">Acoes</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {filteredItems.map((item) => (
+                    <tr key={item.id} className="align-top">
+                      <td className="px-4 py-3 text-xs text-slate-400">{item.id}</td>
+                      <td className="px-4 py-3 font-medium">{item.aluno_nome}</td>
+                      <td className="px-4 py-3">{item.responsavel_nome ?? "—"}</td>
+                      <td className="px-4 py-3">{item.servico_nome ?? "—"}</td>
+                      <td className="px-4 py-3" title={item.unidade_execucao_label ?? ""}>
+                        {shortUnidadeExecucaoLabel(item.unidade_execucao_label)}
+                      </td>
+                      <td className="px-4 py-3 text-xs">{item.ano_referencia ?? "-"}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${statusBadgeClasses(
+                            item.status,
+                          )}`}
+                        >
+                          {item.status ?? "-"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs">{formatDateTimePtBr(item.created_at)}</td>
+                      <td className="px-4 py-3 text-xs">
+                        <Link className="text-indigo-600 hover:underline" href={`/escola/matriculas/${item.id}`}>
+                          Abrir
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
       </div>
     </div>
   );

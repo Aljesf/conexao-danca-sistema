@@ -141,3 +141,6 @@ Versão lógica: **v1.0 (Serviço + Unidade de Execução)**
 
 - Refatoracao UX: Lista operacional de matriculas (/escola/matriculas) agora exibe aluno, responsavel, servico, turma/UE (nome curto + tooltip), status e resumo por servico.
 
+
+- Criado padrao-base de paginas operacionais (PageHeader/SectionCard/ToolbarRow) e aplicado em /escola/matriculas.
+
