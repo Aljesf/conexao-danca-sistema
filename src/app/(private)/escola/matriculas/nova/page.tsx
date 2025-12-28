@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PessoaSearchBox, { PessoaSearchItem } from "@/components/PessoaSearchBox";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
+import ToolbarRow from "@/components/layout/ToolbarRow";
 
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE";
 
@@ -159,7 +162,6 @@ export default function NovaMatriculaPage() {
   const [carregandoTurmas, setCarregandoTurmas] = useState(false);
   const [tabelaAplicavel, setTabelaAplicavel] = useState<TabelaAplicavel | null>(null);
   const [itemAplicado, setItemAplicado] = useState<ItemAplicado | null>(null);
-  const [qtdModalidades, setQtdModalidades] = useState<number | null>(null);
   const [debugInfo, setDebugInfo] = useState<PrecoDebug | null>(null);
   const [tabelaErro, setTabelaErro] = useState<string | null>(null);
   const [tabelaLoading, setTabelaLoading] = useState(false);
@@ -169,11 +171,10 @@ export default function NovaMatriculaPage() {
 
   const turmaSelecionada = useMemo(
     () => turmas.find((t) => t.turma_id === turmaId) ?? null,
-    [turmas, turmaId]
+    [turmas, turmaId],
   );
 
-  const precoOk =
-    !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado;
+  const precoOk = !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado;
 
   const podeSalvar =
     !!aluno &&
@@ -259,7 +260,6 @@ export default function NovaMatriculaPage() {
   useEffect(() => {
     setTabelaAplicavel(null);
     setItemAplicado(null);
-    setQtdModalidades(null);
     setDebugInfo(null);
     setTabelaErro(null);
 
@@ -282,7 +282,6 @@ export default function NovaMatriculaPage() {
           if (!ativo) return;
           setTabelaAplicavel(data.data?.tabela ?? null);
           setItemAplicado(data.data?.item_aplicado ?? null);
-          setQtdModalidades(typeof data.data?.qtd_modalidades === "number" ? data.data.qtd_modalidades : null);
           if (isDev) setDebugInfo(data.data?.debug ?? null);
         } catch (e) {
           if (!ativo) return;
@@ -368,250 +367,249 @@ export default function NovaMatriculaPage() {
   }
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Nova matricula (Escola)</h1>
-          <p className="text-sm text-muted-foreground">
-            Operacional: selecione aluno, turma e data de inicio. A API cuidara da cobranca conforme as regras oficiais.
-          </p>
-        </div>
-        <Link href="/escola/matriculas" className="text-sm text-muted-foreground hover:underline">
-          Voltar para matriculas
-        </Link>
-      </div>
-
-      {erro ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>
-      ) : null}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border p-4 space-y-4">
-          <h2 className="text-sm font-semibold">Aluno e responsavel financeiro</h2>
-          <PessoaSearchBox
-            label="Aluno"
-            valueId={aluno?.id ?? null}
-            onChange={(p) => {
-              setAluno(p);
-              if (!responsavel) setResponsavel(p);
-            }}
-            placeholder="Buscar aluno (2+ caracteres)"
-          />
-          <PessoaSearchBox
-            label="Responsavel financeiro"
-            valueId={responsavel?.id ?? null}
-            onChange={(p) => setResponsavel(p)}
-            placeholder="Buscar responsavel (2+ caracteres)"
-            disabled={!aluno}
-          />
-          {aluno && responsavel?.id !== aluno.id ? (
-            <button
-              type="button"
-              className="text-xs text-indigo-600 hover:underline"
-              onClick={() => setResponsavel(aluno)}
+    <div className="px-4 py-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <PageHeader
+          title="Nova matricula (Escola)"
+          description="Operacional: selecione aluno, turma e data de inicio. A API cuidara da cobranca conforme as regras oficiais."
+          actions={
+            <Link
+              href="/escola/matriculas"
+              className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:border-slate-300"
             >
-              Usar aluno como responsavel financeiro
-            </button>
-          ) : null}
-        </div>
-
-        <div className="rounded-lg border p-4 space-y-4">
-          <h2 className="text-sm font-semibold">Dados da matricula</h2>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Tipo de matricula</label>
-            <select
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value as TipoMatricula)}
-            >
-              <option value="REGULAR">Turma regular</option>
-              <option value="CURSO_LIVRE">Curso livre</option>
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Data da matricula</label>
-            <input
-              type="date"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={dataMatricula}
-              onChange={(e) => setDataMatricula(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Inicio do vinculo (aulas)</label>
-            <input
-              type="date"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={dataInicioVinculo}
-              onChange={(e) => setDataInicioVinculo(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">
-              Ano referencia {tipo === "REGULAR" ? "(obrigatorio)" : "(opcional)"}
-            </label>
-            <input
-              type="number"
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={anoReferencia}
-              onChange={(e) => setAnoReferencia(Number(e.target.value))}
-              min={2000}
-              max={2100}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-lg border p-4 space-y-4">
-        <h2 className="text-sm font-semibold">Curso e turma</h2>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Curso</label>
-            <select
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={cursoSelecionado}
-              onChange={(e) => {
-                setCursoSelecionado(e.target.value);
-                setTurmaId(null);
-              }}
-              disabled={carregandoCursos}
-            >
-              <option value="">Selecione...</option>
-              {cursos.map((curso) => (
-                <option key={curso} value={curso}>
-                  {curso}
-                </option>
-              ))}
-            </select>
-            {cursosErro ? <p className="text-xs text-red-600">{cursosErro}</p> : null}
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Turma</label>
-            <select
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={turmaId ?? ""}
-              onChange={(e) => setTurmaId(e.target.value ? Number(e.target.value) : null)}
-              disabled={!cursoSelecionado || carregandoTurmas}
-            >
-              <option value="">Selecione...</option>
-              {turmas.map((turma) => (
-                <option key={turma.turma_id} value={turma.turma_id}>
-                  {labelTurma(turma)}
-                </option>
-              ))}
-            </select>
-            {carregandoTurmas ? (
-              <p className="text-xs text-muted-foreground">Carregando turmas...</p>
-            ) : null}
-            {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}
-          </div>
-        </div>
-
-        {idadeAviso ? <p className="text-xs text-amber-600">{idadeAviso}</p> : null}
-        {idadeSugestao !== null ? (
-          <p className="text-xs text-muted-foreground">Idade considerada para sugestao: {idadeSugestao} anos.</p>
-        ) : null}
-      </div>
-
-      <div className="rounded-lg border p-4 space-y-4">
-        <h2 className="text-sm font-semibold">Primeiro pagamento</h2>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Politica</label>
-          <select
-            className="w-full rounded-md border px-3 py-2 text-sm"
-            value={politicaModo}
-            onChange={(e) => setPoliticaModo(e.target.value as "PADRAO" | "ADIAR_PARA_VENCIMENTO")}
-          >
-            <option value="PADRAO">Padrao (entrada paga no ato)</option>
-            <option value="ADIAR_PARA_VENCIMENTO">Adiar para vencimento</option>
-          </select>
-          {politicaModo === "ADIAR_PARA_VENCIMENTO" ? (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Motivo da excecao</label>
-              <textarea
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                rows={3}
-                value={motivoExcecao}
-                onChange={(e) => setMotivoExcecao(e.target.value)}
-              />
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="rounded-lg border p-4 space-y-4">
-        <h2 className="text-sm font-semibold">Observacoes internas</h2>
-        <textarea
-          className="w-full rounded-md border px-3 py-2 text-sm"
-          rows={3}
-          value={observacoes}
-          onChange={(e) => setObservacoes(e.target.value)}
+              Voltar para matriculas
+            </Link>
+          }
         />
-      </div>
 
-      <div className="rounded-lg border p-4 space-y-3 text-sm">
-        <div className="font-semibold">Resumo</div>
-        <div>Aluno: {aluno?.nome ?? "Nao selecionado"}</div>
-        <div>Responsavel: {responsavel?.nome ?? "Nao selecionado"}</div>
-        <div>Tipo: {labelTipo(tipo)}</div>
-        <div>Curso: {cursoSelecionado || "-"}</div>
-        <div>Turma: {turmaSelecionada ? labelTurma(turmaSelecionada) : "-"}</div>
-        {tabelaLoading ? (
-          <div>Tabela aplicada: carregando...</div>
-        ) : tabelaErro ? (
-          <div className="text-red-600">Tabela aplicada: {tabelaErro}</div>
-        ) : tabelaAplicavel ? (
-          <div>
-            Tabela aplicada: {tabelaAplicavel.titulo} (ID {tabelaAplicavel.id}) - Ano {tabelaAplicavel.ano_referencia ?? "-"}
-          </div>
-        ) : (
-          <div>Tabela aplicada: -</div>
-        )}
-        <div>Modalidades (contagem): {qtdModalidades ?? "-"}</div>
-        <div>
-          Mensalidade aplicada:{" "}
-          {itemAplicado ? `${formatCurrency(itemAplicado.valor_centavos)} (item: ${itemAplicado.codigo_item})` : "-"}
+        {erro ? (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>
+        ) : null}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SectionCard title="Aluno e responsavel financeiro">
+            <div className="space-y-4">
+              <PessoaSearchBox
+                label="Aluno"
+                valueId={aluno?.id ?? null}
+                onChange={(p) => {
+                  setAluno(p);
+                  if (!responsavel) setResponsavel(p);
+                }}
+                placeholder="Buscar aluno (2+ caracteres)"
+              />
+              <PessoaSearchBox
+                label="Responsavel financeiro"
+                valueId={responsavel?.id ?? null}
+                onChange={(p) => setResponsavel(p)}
+                placeholder="Buscar responsavel (2+ caracteres)"
+                disabled={!aluno}
+              />
+              {aluno && responsavel?.id !== aluno.id ? (
+                <button
+                  type="button"
+                  className="text-xs text-indigo-600 hover:underline"
+                  onClick={() => setResponsavel(aluno)}
+                >
+                  Usar aluno como responsavel financeiro
+                </button>
+              ) : null}
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Dados da matricula">
+            <div className="grid gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tipo de matricula</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={tipo}
+                  onChange={(e) => setTipo(e.target.value as TipoMatricula)}
+                >
+                  <option value="REGULAR">Turma regular</option>
+                  <option value="CURSO_LIVRE">Curso livre</option>
+                </select>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Data da matricula</label>
+                  <input
+                    type="date"
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    value={dataMatricula}
+                    onChange={(e) => setDataMatricula(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Inicio do vinculo (aulas)</label>
+                  <input
+                    type="date"
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    value={dataInicioVinculo}
+                    onChange={(e) => setDataInicioVinculo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Ano referencia {tipo === "REGULAR" ? "(obrigatorio)" : "(opcional)"}
+                </label>
+                <input
+                  type="number"
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={anoReferencia}
+                  onChange={(e) => setAnoReferencia(Number(e.target.value))}
+                  min={2000}
+                  max={2100}
+                />
+              </div>
+            </div>
+          </SectionCard>
         </div>
-        <div>Plano de pagamento: Plano padrão aplicado</div>
-        <div>Data matricula: {dataMatricula}</div>
-        <div>Inicio do vinculo: {dataInicioVinculo}</div>
-        <div>Politica: {politicaModo === "PADRAO" ? "Padrao" : "Adiar para vencimento"}</div>
-      </div>
 
-      {isDev && debugInfo ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3 text-sm">
-          <div className="font-semibold text-amber-900">Diagnostico de precificacao (dev)</div>
-          <div>
-            Servico/UE/Tabela: {debugInfo.servico_id ?? "-"} / {debugInfo.unidade_execucao_id ?? "-"} /{" "}
-            {debugInfo.tabela_id}
-          </div>
-          <div>Pivot aplica? {debugInfo.pivot_aplica ? "Sim" : "Nao"}</div>
-          <div>
-            Tier grupo / qtd / ordem: {debugInfo.tier_grupo_id ?? "-"} / {debugInfo.qtd_modalidades_ativas ?? "-"} /{" "}
-            {debugInfo.tier_ordem_aplicada ?? "-"}
-          </div>
-          <div>
-            Valor base vs final: {formatCurrency(debugInfo.valor_base_centavos)} →{" "}
-            {formatCurrency(debugInfo.valor_final_centavos)} ({debugInfo.origem_valor})
-          </div>
-        </div>
-      ) : null}
+        <SectionCard title="Curso e turma">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Curso</label>
+              <select
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                value={cursoSelecionado}
+                onChange={(e) => {
+                  setCursoSelecionado(e.target.value);
+                  setTurmaId(null);
+                }}
+                disabled={carregandoCursos}
+              >
+                <option value="">Selecione...</option>
+                {cursos.map((curso) => (
+                  <option key={curso} value={curso}>
+                    {curso}
+                  </option>
+                ))}
+              </select>
+              {cursosErro ? <p className="text-xs text-red-600">{cursosErro}</p> : null}
+            </div>
 
-      <div className="flex items-center justify-end gap-3">
-        <button
-          type="button"
-          className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-          onClick={() => void onSubmit()}
-          disabled={loading || !podeSalvar}
-        >
-          {loading ? "Salvando..." : "Concluir matricula"}
-        </button>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Turma</label>
+              <select
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                value={turmaId ?? ""}
+                onChange={(e) => setTurmaId(e.target.value ? Number(e.target.value) : null)}
+                disabled={!cursoSelecionado || carregandoTurmas}
+              >
+                <option value="">Selecione...</option>
+                {turmas.map((turma) => (
+                  <option key={turma.turma_id} value={turma.turma_id}>
+                    {labelTurma(turma)}
+                  </option>
+                ))}
+              </select>
+              {carregandoTurmas ? (
+                <p className="text-xs text-muted-foreground">Carregando turmas...</p>
+              ) : null}
+              {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}
+            </div>
+          </div>
+
+          {idadeAviso ? <p className="mt-3 text-xs text-amber-600">{idadeAviso}</p> : null}
+          {idadeSugestao !== null ? (
+            <p className="mt-1 text-xs text-muted-foreground">Idade considerada para sugestao: {idadeSugestao} anos.</p>
+          ) : null}
+        </SectionCard>
+
+        <SectionCard title="Primeiro pagamento">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Politica</label>
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={politicaModo}
+              onChange={(e) => setPoliticaModo(e.target.value as "PADRAO" | "ADIAR_PARA_VENCIMENTO")}
+            >
+              <option value="PADRAO">Padrao (entrada paga no ato)</option>
+              <option value="ADIAR_PARA_VENCIMENTO">Adiar para vencimento</option>
+            </select>
+            {politicaModo === "ADIAR_PARA_VENCIMENTO" ? (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Motivo da excecao</label>
+                <textarea
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  rows={3}
+                  value={motivoExcecao}
+                  onChange={(e) => setMotivoExcecao(e.target.value)}
+                />
+              </div>
+            ) : null}
+          </div>
+        </SectionCard>
+
+        <SectionCard title="Observacoes internas">
+          <textarea
+            className="w-full rounded-md border px-3 py-2 text-sm"
+            rows={3}
+            value={observacoes}
+            onChange={(e) => setObservacoes(e.target.value)}
+          />
+        </SectionCard>
+
+        <SectionCard title="Resumo">
+          <div className="grid gap-2 text-sm text-slate-700">
+            <div>Aluno: {aluno?.nome ?? "Nao selecionado"}</div>
+            <div>Responsavel: {responsavel?.nome ?? "Nao selecionado"}</div>
+            <div>Tipo: {labelTipo(tipo)}</div>
+            <div>Curso: {cursoSelecionado || "-"}</div>
+            <div>Turma: {turmaSelecionada ? labelTurma(turmaSelecionada) : "-"}</div>
+            {tabelaLoading ? (
+              <div>Tabela aplicada: carregando...</div>
+            ) : tabelaErro ? (
+              <div className="text-rose-600">Tabela aplicada: {tabelaErro}</div>
+            ) : tabelaAplicavel ? (
+              <div>
+                Tabela aplicada: {tabelaAplicavel.titulo} - Ano {tabelaAplicavel.ano_referencia ?? "-"}
+              </div>
+            ) : (
+              <div>Tabela aplicada: -</div>
+            )}
+            <div>Mensalidade aplicada: {itemAplicado ? formatCurrency(itemAplicado.valor_centavos) : "-"}</div>
+            <div>Plano de pagamento: Plano padrao aplicado</div>
+            <div>Data da matricula: {dataMatricula}</div>
+            <div>Inicio do vinculo: {dataInicioVinculo}</div>
+            <div>Politica: {politicaModo === "PADRAO" ? "Padrao" : "Adiar para vencimento"}</div>
+          </div>
+        </SectionCard>
+
+        {isDev && debugInfo ? (
+          <SectionCard title="Diagnostico de precificacao (dev)" className="border-amber-200 bg-amber-50">
+            <div className="space-y-2 text-sm text-amber-900">
+              <div>
+                Servico/UE/Tabela: {debugInfo.servico_id ?? "-"} / {debugInfo.unidade_execucao_id ?? "-"} /{" "}
+                {debugInfo.tabela_id}
+              </div>
+              <div>Pivot aplica? {debugInfo.pivot_aplica ? "Sim" : "Nao"}</div>
+              <div>
+                Tier grupo / qtd / ordem: {debugInfo.tier_grupo_id ?? "-"} / {debugInfo.qtd_modalidades_ativas ?? "-"} /{" "}
+                {debugInfo.tier_ordem_aplicada ?? "-"}
+              </div>
+              <div>
+                Valor base vs final: {formatCurrency(debugInfo.valor_base_centavos)} {" -> "}
+                {formatCurrency(debugInfo.valor_final_centavos)} ({debugInfo.origem_valor})
+              </div>
+            </div>
+          </SectionCard>
+        ) : null}
+
+        <ToolbarRow className="justify-end">
+          <button
+            type="button"
+            className="rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white shadow-sm disabled:opacity-50"
+            onClick={() => void onSubmit()}
+            disabled={loading || !podeSalvar}
+          >
+            {loading ? "Salvando..." : "Concluir matricula"}
+          </button>
+        </ToolbarRow>
       </div>
     </div>
   );

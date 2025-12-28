@@ -1,15 +1,17 @@
-﻿"use client";
+﻿﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import PessoaAvatar from "@/components/PessoaAvatar";
 import EditarFotoModal from "@/components/EditarFotoModal";
+import SectionCard from "@/components/layout/SectionCard";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import type { EnderecoPessoa, Pessoa } from "@/types/pessoas";
 
 type AbaId =
   | "dados"
+  | "escolar"
   | "observacoes"
   | "contato"
   | "endereco"
@@ -18,6 +20,15 @@ type AbaId =
   | "sistema";
 
 type LocalEndereco = (Partial<EnderecoPessoa> & { pessoa_id?: number }) | null;
+
+type MatriculaPessoaItem = {
+  id: number;
+  ano_referencia: number | null;
+  status: string | null;
+  created_at: string | null;
+  servico_nome: string | null;
+  unidade_execucao_label: string | null;
+};
 
 // calcula idade em anos a partir da data de nascimento (YYYY-MM-DD)
 function calcularIdade(dateStr: string | null): number | null {
@@ -37,7 +48,7 @@ function calcularIdade(dateStr: string | null): number | null {
   return idade;
 }
 
-// Formata o campo genero em texto legível
+// Formata o campo genero em texto leg�vel
 function formatGenero(
   genero: Pessoa["genero"] | null | undefined
 ): string | null {
@@ -49,7 +60,7 @@ function formatGenero(
     case "OUTRO":
       return "Outro";
     case "NAO_INFORMADO":
-      return "Não informado";
+      return "N�o informado";
     default:
       return null;
   }
@@ -71,7 +82,7 @@ export default function PessoaDetalhesPage() {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // campos editáveis
+  // campos edit�veis
   const [nome, setNome] = useState("");
   const [nomeSocial, setNomeSocial] = useState("");
   const [email, setEmail] = useState("");
@@ -85,6 +96,10 @@ export default function PessoaDetalhesPage() {
   const [nacionalidade, setNacionalidade] = useState("");
   const [naturalidade, setNaturalidade] = useState("");
   const [observacoes, setObservacoes] = useState("");
+
+  const [matriculas, setMatriculas] = useState<MatriculaPessoaItem[]>([]);
+  const [matriculasLoading, setMatriculasLoading] = useState(false);
+  const [matriculasErro, setMatriculasErro] = useState<string | null>(null);
 
   const [abaAtiva, setAbaAtiva] = useState<AbaId>("dados");
   const [openFoto, setOpenFoto] = useState(false);
@@ -130,7 +145,7 @@ export default function PessoaDetalhesPage() {
         setNaturalidade(data.naturalidade ?? "");
         setObservacoes(data.observacoes ?? "");
 
-        // endereço vindo da API
+        // endere�o vindo da API
         setEndereco((data as any).endereco ?? null);
       } catch (err: any) {
         setErro(
@@ -158,18 +173,91 @@ export default function PessoaDetalhesPage() {
     return d.toLocaleString("pt-BR");
   }
 
+  function getStatusBadgeInfo(status: string | null) {
+    const value = (status ?? "").toUpperCase();
+    switch (value) {
+      case "ATIVA":
+        return {
+          label: "ATIVA",
+          className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        };
+      case "TRANCADA":
+        return {
+          label: "TRANCADA",
+          className: "border-amber-200 bg-amber-50 text-amber-700",
+        };
+      case "CANCELADA":
+        return {
+          label: "CANCELADA",
+          className: "border-rose-200 bg-rose-50 text-rose-700",
+        };
+      case "CONCLUIDA":
+        return {
+          label: "CONCLUIDA",
+          className: "border-slate-200 bg-slate-100 text-slate-700",
+        };
+      default:
+        return {
+          label: status ?? "-",
+          className: "border-slate-200 bg-slate-100 text-slate-600",
+        };
+    }
+  }
+
   const tipoLabel =
-    pessoa?.tipo_pessoa === "JURIDICA" ? "Pessoa jurídica" : "Pessoa física";
+    pessoa?.tipo_pessoa === "JURIDICA" ? "Pessoa jur�dica" : "Pessoa f�sica";
 
   const idade = calcularIdade(pessoa?.nascimento ?? null);
   const generoLabel = pessoa ? formatGenero(pessoa.genero) : null;
-  const createdByLabel = pessoa?.created_by_name ?? "—";
-  const updatedByLabel = pessoa?.updated_by_name ?? "—";
+  const createdByLabel = pessoa?.created_by_name ?? "�";
+  const updatedByLabel = pessoa?.updated_by_name ?? "�";
 
   const enderecoTitulo = useMemo(
-    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "Endereço fiscal" : "Endereço"),
+    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "Endere�o fiscal" : "Endere�o"),
     [pessoa?.tipo_pessoa]
   );
+
+  useEffect(() => {
+    if (!id || abaAtiva !== "escolar") return;
+    let active = true;
+
+    async function carregarMatriculas() {
+      try {
+        setMatriculasLoading(true);
+        setMatriculasErro(null);
+
+        const res = await fetch(`/api/pessoas/${id}/matriculas`);
+        const json = await res.json();
+
+        if (!res.ok) {
+          throw new Error(json.error || "Falha ao carregar matriculas.");
+        }
+
+        const rawItems = Array.isArray(json.items)
+          ? (json.items as MatriculaPessoaItem[])
+          : [];
+        const seen = new Set<number>();
+        const deduped = rawItems.filter((item) => {
+          if (!item || typeof item.id !== "number") return false;
+          if (seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        });
+
+        if (active) setMatriculas(deduped);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Erro ao carregar matriculas.";
+        if (active) setMatriculasErro(msg);
+      } finally {
+        if (active) setMatriculasLoading(false);
+      }
+    }
+
+    carregarMatriculas();
+    return () => {
+      active = false;
+    };
+  }, [id, abaAtiva]);
 
   async function handleSalvar() {
     if (!pessoa) return;
@@ -207,7 +295,7 @@ export default function PessoaDetalhesPage() {
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "Falha ao salvar alterações.");
+        throw new Error(json.error || "Falha ao salvar altera��es.");
       }
 
       const data = json.data as Pessoa;
@@ -215,7 +303,7 @@ export default function PessoaDetalhesPage() {
       setEndereco((data as any).endereco ?? null);
       setEditMode(false);
     } catch (err: any) {
-      setErro(err?.message || "Erro inesperado ao salvar as alterações.");
+      setErro(err?.message || "Erro inesperado ao salvar as altera��es.");
     } finally {
       setSaving(false);
     }
@@ -223,10 +311,11 @@ export default function PessoaDetalhesPage() {
 
   const abas: { id: AbaId; label: string; icon: string }[] = [
     { id: "dados", label: "Dados da pessoa", icon: "??" },
-    { id: "observacoes", label: "Observações", icon: "??" },
-    { id: "contato", label: "Informações de contato", icon: "??" },
+    { id: "escolar", label: "Dados escolares", icon: "??" },
+    { id: "observacoes", label: "Observa��es", icon: "??" },
+    { id: "contato", label: "Informa��es de contato", icon: "??" },
     { id: "endereco", label: enderecoTitulo, icon: "??" },
-    { id: "vinculos", label: "Vínculos no sistema", icon: "??" },
+    { id: "vinculos", label: "V�nculos no sistema", icon: "??" },
     { id: "resumo", label: "Resumo financeiro", icon: "??" },
     { id: "sistema", label: "Dados do sistema", icon: "??" },
   ];
@@ -248,7 +337,7 @@ export default function PessoaDetalhesPage() {
               href={`/pessoas/${id}/curriculo`}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 md:text-xs"
             >
-              Currículo
+              Curr�culo
             </Link>
             <button
               type="button"
@@ -261,7 +350,7 @@ export default function PessoaDetalhesPage() {
           </div>
         </div>
 
-        {/* Cabeçalho com avatar grande e status */}
+        {/* Cabe�alho com avatar grande e status */}
         <header className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-6 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-1 flex-col items-center gap-4 md:flex-row md:items-center">
@@ -290,13 +379,13 @@ export default function PessoaDetalhesPage() {
 
                 {generoLabel && (
                   <p className="mt-0.5 text-sm text-slate-600">
-                    Gênero: {generoLabel}
+                    G�nero: {generoLabel}
                   </p>
                 )}
 
                 <p className="mt-2 max-w-xl text-[15px] text-slate-600">
-                  Visão geral deste cadastro. Aqui você pode consultar e, se
-                  tiver permissão, editar os dados da pessoa.
+                  Vis�o geral deste cadastro. Aqui voc� pode consultar e, se
+                  tiver permiss�o, editar os dados da pessoa.
                 </p>
 
                 {pessoa?.telefone && (
@@ -372,7 +461,7 @@ export default function PessoaDetalhesPage() {
                       {saving
                         ? "Salvando..."
                         : editMode
-                        ? "Salvar alterações"
+                        ? "Salvar altera��es"
                         : "Editar dados"}
                     </button>
                   </div>
@@ -398,7 +487,7 @@ export default function PessoaDetalhesPage() {
           </div>
         )}
 
-        {/* Conteúdo principal */}
+        {/* Conte�do principal */}
         {!loading && pessoa && (
           <>
             {/* NAV de ABAS */}
@@ -423,7 +512,7 @@ export default function PessoaDetalhesPage() {
                 );
               })}
             </nav>
-            {/* Conteúdo das abas */}
+            {/* Conte�do das abas */}
             <div className="rounded-3xl border border-violet-100 bg-white/95 p-6 text-[15px] text-slate-700 shadow-sm backdrop-blur-sm md:p-7">
               {/* Aba: Dados da pessoa */}
               {abaAtiva === "dados" && (
@@ -497,7 +586,7 @@ export default function PessoaDetalhesPage() {
 
                       <div className="grid gap-4 md:grid-cols-2">
                         <div>
-                          <p className="text-sm text-slate-400">Gênero</p>
+                          <p className="text-sm text-slate-400">G�nero</p>
                           {editMode ? (
                             <select
                               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
@@ -507,7 +596,7 @@ export default function PessoaDetalhesPage() {
                               }
                             >
                               <option value="NAO_INFORMADO">
-                                Não informado
+                                N�o informado
                               </option>
                               <option value="MASCULINO">Masculino</option>
                               <option value="FEMININO">Feminino</option>
@@ -531,19 +620,19 @@ export default function PessoaDetalhesPage() {
                                 )
                               }
                             >
-                              <option value="">Não informado</option>
+                              <option value="">N�o informado</option>
                               <option value="SOLTEIRO">Solteiro(a)</option>
                               <option value="CASADO">Casado(a)</option>
                               <option value="DIVORCIADO">Divorciado(a)</option>
-                              <option value="VIUVO">Viúvo(a)</option>
+                              <option value="VIUVO">Vi�vo(a)</option>
                               <option value="UNIAO_ESTAVEL">
-                                União estável
+                                Uni�o est�vel
                               </option>
                               <option value="OUTRO">Outro</option>
                             </select>
                           ) : (
                             <p className="mt-1">
-                              {estadoCivil ? estadoCivil : "Não informado"}
+                              {estadoCivil ? estadoCivil : "N�o informado"}
                             </p>
                           )}
                         </div>
@@ -581,25 +670,117 @@ export default function PessoaDetalhesPage() {
                         <p className="text-sm text-slate-400">Tipo de pessoa</p>
                         <p className="mt-1">
                           {pessoa.tipo_pessoa === "JURIDICA"
-                            ? "Pessoa jurídica"
-                            : "Pessoa física"}
+                            ? "Pessoa jur�dica"
+                            : "Pessoa f�sica"}
                         </p>
                       </div>
 
                       <div>
                         <p className="text-sm text-slate-400">Idade</p>
-                        <p className="mt-1">{idade ?? "Não informado"}</p>
+                        <p className="mt-1">{idade ?? "N�o informado"}</p>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Aba: Observações */}
+              {/* Aba: Dados escolares */}
+              {abaAtiva === "escolar" && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                    Dados escolares
+                  </h2>
+
+                  <SectionCard title="Matriculas e vinculos escolares">
+                    {matriculasLoading && (
+                      <p className="text-sm text-slate-600">
+                        Carregando matriculas...
+                      </p>
+                    )}
+
+                    {matriculasErro && (
+                      <p className="text-sm text-rose-600">{matriculasErro}</p>
+                    )}
+
+                    {!matriculasLoading &&
+                      !matriculasErro &&
+                      matriculas.length === 0 && (
+                        <p className="text-sm text-slate-600">
+                          Nenhuma matricula vinculada a esta pessoa.
+                        </p>
+                      )}
+
+                    {!matriculasLoading &&
+                      !matriculasErro &&
+                      matriculas.length > 0 && (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-[720px] w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                                <th className="py-2 pr-3">Ano</th>
+                                <th className="py-2 pr-3">Curso/Servico</th>
+                                <th className="py-2 pr-3">Turma/UE</th>
+                                <th className="py-2 pr-3">Status</th>
+                                <th className="py-2 pr-3">Criada em</th>
+                                <th className="py-2 text-right">Acao</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {matriculas.map((item) => {
+                                const badge = getStatusBadgeInfo(item.status);
+                                return (
+                                  <tr key={item.id} className="align-top">
+                                    <td className="py-3 pr-3">
+                                      {item.ano_referencia ?? "-"}
+                                    </td>
+                                    <td className="py-3 pr-3">
+                                      {item.servico_nome ?? "-"}
+                                    </td>
+                                    <td className="py-3 pr-3">
+                                      <span
+                                        title={
+                                          item.unidade_execucao_label ?? undefined
+                                        }
+                                      >
+                                        {item.unidade_execucao_label ?? "-"}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 pr-3">
+                                      <span
+                                        className={
+                                          "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold " +
+                                          badge.className
+                                        }
+                                      >
+                                        {badge.label}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 pr-3">
+                                      {formatDateTime(item.created_at)}
+                                    </td>
+                                    <td className="py-3 text-right">
+                                      <Link
+                                        href={`/escola/matriculas/${item.id}`}
+                                        className="text-xs font-medium text-violet-600 hover:underline"
+                                      >
+                                        Abrir
+                                      </Link>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                  </SectionCard>
+                </div>
+              )}
+              {/* Aba: Observa��es */}
               {abaAtiva === "observacoes" && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Observações
+                    Observa��es
                   </h2>
                   {editMode ? (
                     <textarea
@@ -610,7 +791,7 @@ export default function PessoaDetalhesPage() {
                     />
                   ) : (
                     <p className="text-slate-700">
-                      {observacoes || "Nenhuma observação registrada."}
+                      {observacoes || "Nenhuma observa��o registrada."}
                     </p>
                   )}
                 </div>
@@ -620,7 +801,7 @@ export default function PessoaDetalhesPage() {
               {abaAtiva === "contato" && (
                 <div className="space-y-6">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Informações de contato
+                    Informa��es de contato
                   </h2>
 
                   <div className="grid gap-6 md:grid-cols-2">
@@ -658,7 +839,7 @@ export default function PessoaDetalhesPage() {
                     <div className="space-y-4">
                       <div>
                         <p className="text-sm text-slate-400">
-                          Telefone secundário
+                          Telefone secund�rio
                         </p>
                         {editMode ? (
                           <input
@@ -922,6 +1103,8 @@ export default function PessoaDetalhesPage() {
     </div>
   );
 }
+
+
 
 
 

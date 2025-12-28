@@ -144,3 +144,5 @@ Versão lógica: **v1.0 (Serviço + Unidade de Execução)**
 
 - Criado padrao-base de paginas operacionais (PageHeader/SectionCard/ToolbarRow) e aplicado em /escola/matriculas.
 
+- Pessoas: adicionada aba "Dados escolares" (matriculas/vinculos) em /pessoas/[id] e bloco de vinculos em /pessoas/[id]/curriculo.
+

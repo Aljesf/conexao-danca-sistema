@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { cookies, headers } from "next/headers";
 import type { ReactNode } from "react";
 
 import {
@@ -15,6 +16,61 @@ import type {
   CurriculoFormacaoInterna,
 } from "@/types/curriculo";
 import type { ResultadoAvaliacaoAluno } from "@/types/avaliacoes";
+
+type MatriculaPessoaItem = {
+  id: number;
+  ano_referencia: number | null;
+  status: string | null;
+  created_at: string | null;
+  servico_nome: string | null;
+  unidade_execucao_label: string | null;
+};
+
+function getStatusInfo(status: string | null) {
+  const value = (status ?? "").toUpperCase();
+  switch (value) {
+    case "ATIVA":
+      return { label: "ATIVA", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    case "TRANCADA":
+      return { label: "TRANCADA", className: "border-amber-200 bg-amber-50 text-amber-700" };
+    case "CANCELADA":
+      return { label: "CANCELADA", className: "border-rose-200 bg-rose-50 text-rose-700" };
+    case "CONCLUIDA":
+      return { label: "CONCLUIDA", className: "border-slate-200 bg-slate-100 text-slate-700" };
+    default:
+      return { label: status ?? "-", className: "border-slate-200 bg-slate-100 text-slate-600" };
+  }
+}
+
+function getMatriculasResumo(items: MatriculaPessoaItem[]) {
+  if (!items.length) return [];
+  const anos = items
+    .map((item) => item.ano_referencia ?? 0)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const latestAno = anos.length ? Math.max(...anos) : null;
+  let base = latestAno ? items.filter((item) => item.ano_referencia === latestAno) : items;
+  const ativas = base.filter((item) => (item.status ?? "").toUpperCase() === "ATIVA");
+  if (ativas.length) base = ativas;
+  return base;
+}
+
+async function fetchMatriculasPessoa(pessoaId: number, cookieHeader: string, baseUrl: string) {
+  if (!baseUrl) return [] as MatriculaPessoaItem[];
+  const headersInit: Record<string, string> = {};
+  if (cookieHeader) headersInit.cookie = cookieHeader;
+
+  const res = await fetch(`${baseUrl}/api/pessoas/${pessoaId}/matriculas`, {
+    headers: headersInit,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    return [] as MatriculaPessoaItem[];
+  }
+
+  const json = (await res.json()) as { items?: MatriculaPessoaItem[] };
+  return Array.isArray(json.items) ? json.items : [];
+}
 
 function calcularIdade(dateStr: string | null | undefined): number | null {
   if (!dateStr) return null;
@@ -250,19 +306,27 @@ export default async function CurriculoPage({
     notFound();
   }
 
-  const [pessoa, internas, externas, experiencias, avaliacoes] =
+  const headersList = headers();
+  const host = headersList.get("host");
+  const protocol = headersList.get("x-forwarded-proto") ?? "http";
+  const baseUrl = host ? `${protocol}://${host}` : "";
+  const cookieHeader = cookies().toString();
+
+  const [pessoa, internas, externas, experiencias, avaliacoes, matriculas] =
     await Promise.all([
       buscarDadosBasicosPessoa(pessoaId),
       listarFormacoesInternas(pessoaId),
       listarFormacoesExternas(pessoaId),
       listarExperienciasArtisticas(pessoaId),
       listarAvaliacoesDoAluno(pessoaId),
+      fetchMatriculasPessoa(pessoaId, cookieHeader, baseUrl),
     ]);
 
   if (!pessoa) {
     notFound();
   }
 
+  const matriculasResumo = getMatriculasResumo(matriculas);
   const idade = calcularIdade(pessoa?.nascimento);
 
   return (
@@ -339,6 +403,59 @@ export default async function CurriculoPage({
             </dl>
           </Section>
 
+          <Section title="Vinculos escolares (Matriculas)">
+            {matriculasResumo.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nenhuma matricula encontrada.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {matriculasResumo.map((item) => {
+                  const badge = getStatusInfo(item.status);
+                  const detalhes = [
+                    item.unidade_execucao_label,
+                    item.ano_referencia ? `Ano ${item.ano_referencia}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" - ");
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {item.servico_nome || "Servico"}
+                          </p>
+                          <p className="text-xs text-slate-600">
+                            {detalhes || "Turma nao informada"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={
+                              "rounded-full border px-3 py-1 text-[11px] font-semibold " +
+                              badge.className
+                            }
+                          >
+                            {badge.label}
+                          </span>
+                          <Link
+                            href={`/escola/matriculas/${item.id}`}
+                            className="text-xs text-violet-600 hover:underline"
+                          >
+                            Abrir
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
           <Section title="Formações internas">
             <ListaInterna itens={(internas ?? []) as CurriculoFormacaoInterna[]} />
           </Section>
@@ -363,3 +480,10 @@ export default async function CurriculoPage({
     </div>
   );
 }
+
+
+
+
+
+
+
