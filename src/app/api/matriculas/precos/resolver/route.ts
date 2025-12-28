@@ -76,6 +76,49 @@ function normalizeNumberArray(values: unknown[]): number[] {
   return Array.from(new Set(values.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)));
 }
 
+type TurmaMapResult =
+  | { ok: true; mapa: Map<number, number> }
+  | { ok: false; response: NextResponse };
+
+async function buildMapaTurmas(
+  admin: ReturnType<typeof createClient>,
+  rows: MatriculaRow[],
+): Promise<TurmaMapResult> {
+  const vinculosSemServico = Array.from(
+    new Set(
+      rows
+        .filter((m) => !m.servico_id && m.vinculo_id)
+        .map((m) => Number(m.vinculo_id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  );
+
+  const mapaTurmas = new Map<number, number>();
+  if (!vinculosSemServico.length) return { ok: true, mapa: mapaTurmas };
+
+  const { data, error } = await admin.from("turmas").select("turma_id,produto_id").in("turma_id", vinculosSemServico);
+  if (error) {
+    if (isSchemaMissing(error)) {
+      return { ok: false, response: conflict("Nao foi possivel calcular modalidades (schema pendente).", { error }) };
+    }
+    return { ok: false, response: serverError("Falha ao resolver turmas do aluno.", { error }) };
+  }
+
+  (data ?? []).forEach((t) => {
+    const turmaId = toPositiveNumber((t as { turma_id?: number }).turma_id);
+    const produtoId = toPositiveNumber((t as { produto_id?: number | null }).produto_id);
+    if (turmaId && produtoId) mapaTurmas.set(turmaId, produtoId);
+  });
+
+  return { ok: true, mapa: mapaTurmas };
+}
+
+function resolveServicoId(m: MatriculaRow, mapaTurmas: Map<number, number>): number | null {
+  if (m.servico_id) return m.servico_id;
+  if (m.vinculo_id) return mapaTurmas.get(m.vinculo_id) ?? null;
+  return null;
+}
+
 async function listarMatriculas(
   admin: ReturnType<typeof createClient>,
   alunoId: number,
@@ -136,44 +179,37 @@ async function calcularQtdModalidades(
   const ativas = matsRes.rows.filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
   if (ativas.length === 0) return { ok: true, qtdModalidades: 1 };
 
-  const vinculosSemServico = Array.from(
-    new Set(
-      ativas
-        .filter((m) => !m.servico_id && m.vinculo_id)
-        .map((m) => Number(m.vinculo_id))
-        .filter((id) => Number.isFinite(id) && id > 0),
-    ),
-  );
+  const mapaRes = await buildMapaTurmas(admin, ativas);
+  if (!mapaRes.ok) return mapaRes;
 
-  const mapaTurmas = new Map<number, number>();
-  if (vinculosSemServico.length) {
-    const { data, error } = await admin
-      .from("turmas")
-      .select("turma_id,produto_id")
-      .in("turma_id", vinculosSemServico);
-
-    if (error) {
-      if (isSchemaMissing(error)) {
-        return { ok: false, response: conflict("Nao foi possivel calcular modalidades (schema pendente).", { error }) };
-      }
-      return { ok: false, response: serverError("Falha ao resolver turmas do aluno.", { error }) };
-    }
-
-    (data ?? []).forEach((t) => {
-      const turmaId = toPositiveNumber((t as { turma_id?: number }).turma_id);
-      const produtoId = toPositiveNumber((t as { produto_id?: number | null }).produto_id);
-      if (turmaId && produtoId) mapaTurmas.set(turmaId, produtoId);
-    });
-  }
-
-  const resolveServicoId = (m: MatriculaRow) => {
-    if (m.servico_id) return m.servico_id;
-    if (m.vinculo_id) return mapaTurmas.get(m.vinculo_id) ?? null;
-    return null;
-  };
-
-  const alvoJaExiste = ativas.some((m) => resolveServicoId(m) === servicoId);
+  const alvoJaExiste = ativas.some((m) => resolveServicoId(m, mapaRes.mapa) === servicoId);
   return { ok: true, qtdModalidades: alvoJaExiste ? ativas.length : ativas.length + 1 };
+}
+
+async function calcularModalidadesPorGrupo(
+  admin: ReturnType<typeof createClient>,
+  alunoId: number,
+  ano: number,
+  servicosGrupoIds: number[],
+  servicoId: number,
+): Promise<{ ok: true; quantidadeModalidades: number; ordem: number } | { ok: false; response: NextResponse }> {
+  const matsRes = await listarMatriculas(admin, alunoId, ano);
+  if (!matsRes.ok) return matsRes;
+
+  const ativas = matsRes.rows.filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
+  const mapaRes = await buildMapaTurmas(admin, ativas);
+  if (!mapaRes.ok) return mapaRes;
+
+  const servicoSet = new Set(servicosGrupoIds);
+  const ativasGrupo = ativas
+    .map((m) => ({ servicoId: resolveServicoId(m, mapaRes.mapa) }))
+    .filter((r) => !!r.servicoId && servicoSet.has(r.servicoId));
+
+  const quantidadeBase = ativasGrupo.length;
+  const alvoJaExiste = ativasGrupo.some((r) => r.servicoId === servicoId);
+  const quantidadeModalidades = alvoJaExiste ? quantidadeBase : quantidadeBase + 1;
+
+  return { ok: true, quantidadeModalidades, ordem: quantidadeModalidades };
 }
 
 export async function GET(req: Request) {
@@ -314,6 +350,96 @@ export async function GET(req: Request) {
       }
     }
 
+    let tierGrupoId: number | null = null;
+    let tierOrdem: number | null = null;
+    let quantidadeModalidades: number | null = null;
+    let tierValorCentavos: number | null = null;
+
+    const { data: servicoTier, error: servicoTierErr } = await admin
+      .from("escola_produtos_educacionais")
+      .select("tier_grupo_id")
+      .eq("id", servicoId)
+      .maybeSingle();
+
+    if (servicoTierErr) {
+      if (!isSchemaMissing(servicoTierErr)) {
+        console.error("[precos/resolver] servicoTierErr", servicoTierErr);
+      }
+    } else {
+      tierGrupoId = toPositiveNumber((servicoTier as { tier_grupo_id?: number | null }).tier_grupo_id);
+    }
+
+    if (tierGrupoId) {
+      const { data: servicosGrupo, error: servicosGrupoErr } = await admin
+        .from("escola_produtos_educacionais")
+        .select("id")
+        .eq("tier_grupo_id", tierGrupoId);
+
+      if (servicosGrupoErr) {
+        if (!isSchemaMissing(servicosGrupoErr)) {
+          console.error("[precos/resolver] servicosGrupoErr", servicosGrupoErr);
+        }
+      } else {
+        const servicosGrupoIds = normalizeNumberArray(
+          (servicosGrupo ?? []).map((s) => (s as { id?: number | null }).id),
+        );
+        if (servicosGrupoIds.length) {
+          const qtdGrupoRes = await calcularModalidadesPorGrupo(admin, alunoId, ano, servicosGrupoIds, servicoId);
+          if (qtdGrupoRes.ok) {
+            quantidadeModalidades = qtdGrupoRes.quantidadeModalidades;
+            tierOrdem = qtdGrupoRes.ordem;
+          } else {
+            console.error("[precos/resolver] qtdGrupo", qtdGrupoRes.response);
+          }
+        }
+      }
+
+      if (tierOrdem) {
+        const { data: tierEq, error: tierEqErr } = await admin
+          .from("financeiro_tiers")
+          .select("tier_id,ordem,valor_centavos,ativo")
+          .eq("tier_grupo_id", tierGrupoId)
+          .eq("ordem", tierOrdem)
+          .eq("ativo", true)
+          .maybeSingle();
+
+        if (tierEqErr) {
+          if (!isSchemaMissing(tierEqErr)) {
+            console.error("[precos/resolver] tierEqErr", tierEqErr);
+          }
+        }
+
+        if (tierEq && !tierEqErr) {
+          const valor = Number((tierEq as { valor_centavos?: number }).valor_centavos);
+          if (Number.isFinite(valor) && valor > 0) {
+            tierValorCentavos = valor;
+            tierOrdem = toPositiveNumber((tierEq as { ordem?: number }).ordem) ?? tierOrdem;
+          }
+        } else {
+          const { data: tierMax, error: tierMaxErr } = await admin
+            .from("financeiro_tiers")
+            .select("tier_id,ordem,valor_centavos,ativo")
+            .eq("tier_grupo_id", tierGrupoId)
+            .eq("ativo", true)
+            .order("ordem", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (tierMaxErr) {
+            if (!isSchemaMissing(tierMaxErr)) {
+              console.error("[precos/resolver] tierMaxErr", tierMaxErr);
+            }
+          } else if (tierMax) {
+            const valor = Number((tierMax as { valor_centavos?: number }).valor_centavos);
+            if (Number.isFinite(valor) && valor > 0) {
+              tierValorCentavos = valor;
+              tierOrdem = toPositiveNumber((tierMax as { ordem?: number }).ordem) ?? tierOrdem;
+            }
+          }
+        }
+      }
+    }
+
     let qtdModalidades: number | null = null;
     const qtdRes = await calcularQtdModalidades(admin, alunoId, ano, servicoId, alvoTipo);
     if (qtdRes.ok) {
@@ -396,12 +522,22 @@ export async function GET(req: Request) {
       }
     }
 
+    if (item && tierValorCentavos !== null) {
+      item = { ...item, valor_centavos: tierValorCentavos };
+    }
+
     return NextResponse.json(
       {
         ok: true,
         data: {
           tabela: { id: tabela.id, titulo: tabela.titulo, ano_referencia: tabela.ano_referencia },
           qtd_modalidades: qtdModalidades,
+          quantidade_modalidades: quantidadeModalidades,
+          tier_ordem: tierOrdem,
+          tier_dinamico:
+            tierValorCentavos !== null
+              ? { tier_grupo_id: tierGrupoId, ordem: tierOrdem, valor_centavos: tierValorCentavos }
+              : null,
           tier: tier ? { id: tier.id, item_codigo: tier.item_codigo, tipo_item: tier.tipo_item } : null,
           item_aplicado: item,
           alvo: { tipo: alvoTipo, id: alvoId },
