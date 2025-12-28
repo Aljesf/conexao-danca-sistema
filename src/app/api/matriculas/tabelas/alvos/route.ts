@@ -2,8 +2,14 @@
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
+import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
+type AlvoOption = {
+  id: number;
+  alvo_label: string;
+  servico_nome?: string | null;
+};
 
 type ApiOk<T> = { ok: true; data: T; warning?: string };
 type ApiErr = {
@@ -65,22 +71,117 @@ export async function GET(req: Request) {
     const admin = getAdmin();
 
     if (tipo === "TURMA") {
-      const { data, error } = await admin
+      const { data: turmas, error: turmasErr } = await admin
         .from("turmas")
-        .select("turma_id, nome")
+        .select("turma_id, nome, produto_id")
         .eq("tipo_turma", "REGULAR")
         .order("nome", { ascending: true });
 
-      if (error) {
-        return serverError("Falha ao listar turmas.", { error });
+      if (turmasErr) {
+        return serverError("Falha ao listar turmas.", { error: turmasErr });
       }
 
-      const mapped = (data ?? []).map((t: { turma_id: number; nome: string }) => ({
-        id: Number(t.turma_id),
-        label: `${t.nome} [ID: ${t.turma_id}]`,
-      }));
+      const turmaRows = (turmas ?? []) as Array<{ turma_id: number; nome: string | null; produto_id: number | null }>;
+      const turmaIds = turmaRows
+        .map((t) => Number(t.turma_id))
+        .filter((id) => Number.isFinite(id) && id > 0);
 
-      return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
+      let warning: string | undefined;
+      let ueMap = new Map<
+        number,
+        {
+          unidade_execucao_id: number;
+          denominacao: string | null;
+          nome: string | null;
+          servico_id: number | null;
+        }
+      >();
+
+      if (turmaIds.length) {
+        const { data: ueData, error: ueErr } = await admin
+          .from("escola_unidades_execucao")
+          .select("unidade_execucao_id, denominacao, nome, origem_id, origem_tipo, servico_id")
+          .eq("origem_tipo", "TURMA")
+          .in("origem_id", turmaIds);
+
+        if (ueErr) {
+          if (isMissingRelation(ueErr)) {
+            warning = "Tabela escola_unidades_execucao nao encontrada (migracao pendente).";
+          } else {
+            return serverError("Falha ao listar unidades de execucao.", { error: ueErr });
+          }
+        } else {
+          const rows = (ueData ?? []) as Array<{
+            unidade_execucao_id: number;
+            denominacao: string | null;
+            nome: string | null;
+            origem_id: number | null;
+            origem_tipo: string | null;
+            servico_id: number | null;
+          }>;
+          ueMap = new Map(
+            rows
+              .filter((row) => row.origem_tipo === "TURMA" && Number.isFinite(Number(row.origem_id)))
+              .map((row) => [Number(row.origem_id), row]),
+          );
+        }
+      }
+
+      const servicoIds = new Set<number>();
+      turmaRows.forEach((t) => {
+        const ue = ueMap.get(Number(t.turma_id));
+        const servicoId = Number(ue?.servico_id ?? t.produto_id ?? 0);
+        if (Number.isFinite(servicoId) && servicoId > 0) servicoIds.add(servicoId);
+      });
+
+      const servicoMap = new Map<number, string>();
+      if (servicoIds.size > 0) {
+        const { data: servicos, error: servicosErr } = await admin
+          .from("escola_produtos_educacionais")
+          .select("id, titulo")
+          .in("id", Array.from(servicoIds));
+
+        if (servicosErr) {
+          if (isMissingRelation(servicosErr)) {
+            warning = warning || "Tabela escola_produtos_educacionais nao encontrada (migracao pendente).";
+          } else {
+            return serverError("Falha ao listar servicos.", { error: servicosErr });
+          }
+        } else {
+          (servicos ?? []).forEach((row: { id: number; titulo: string | null }) => {
+            const id = Number(row.id);
+            if (Number.isFinite(id) && id > 0) {
+              const titulo = typeof row.titulo === "string" && row.titulo.trim() ? row.titulo.trim() : `Servico ${id}`;
+              servicoMap.set(id, titulo);
+            }
+          });
+        }
+      }
+
+      const mapped: AlvoOption[] = turmaRows.map((t) => {
+        const turmaId = Number(t.turma_id);
+        const turmaNome = typeof t.nome === "string" ? t.nome : null;
+        const ue = ueMap.get(turmaId);
+        const alvo_label = formatUnidadeExecucaoLabel({
+          unidadeExecucaoId: ue?.unidade_execucao_id ?? null,
+          origemTipo: "TURMA",
+          turmaId,
+          turmaNome,
+          unidadeDenominacao: ue?.denominacao ?? null,
+          unidadeNome: ue?.nome ?? null,
+        });
+
+        const servicoId = Number(ue?.servico_id ?? t.produto_id ?? 0);
+        const servico_nome =
+          Number.isFinite(servicoId) && servicoId > 0 ? servicoMap.get(servicoId) ?? null : null;
+
+        return { id: turmaId, alvo_label, servico_nome };
+      });
+
+      return NextResponse.json(
+        { ok: true, data: mapped, warning } satisfies ApiOk<AlvoOption[]>,
+        { status: 200 },
+      );
     }
 
     const produtoTipo = tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "PROJETO_ARTISTICO";
@@ -106,11 +207,12 @@ export async function GET(req: Request) {
       return serverError("Falha ao listar produtos educacionais.", { error });
     }
 
-    const mapped = (data ?? []).map((x: { id: number; titulo: string }) => ({
-      id: Number(x.id),
-      label: String(x.titulo),
-    }));
-    return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
+    const mapped: AlvoOption[] = (data ?? []).map((x: { id: number; titulo: string | null }) => {
+      const id = Number(x.id);
+      const titulo = typeof x.titulo === "string" && x.titulo.trim() ? x.titulo.trim() : `Servico ${id}`;
+      return { id, alvo_label: titulo, servico_nome: titulo };
+    });
+    return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<AlvoOption[]>, { status: 200 });
   } catch (e: unknown) {
     return serverError("Erro inesperado ao listar alvos.", { message: e instanceof Error ? e.message : String(e) });
   }

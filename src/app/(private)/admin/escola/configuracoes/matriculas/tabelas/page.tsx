@@ -24,7 +24,7 @@ type CoberturaRow = {
   matricula_tabelas?: { id: number; ano_referencia: number | null; ativo: boolean; titulo: string } | null;
 };
 
-type AlvoOption = { id: number; label: string };
+type AlvoOption = { id: number; alvo_label: string; servico_nome?: string | null };
 
 type ApiListResp<T> = { ok?: boolean; data?: T; message?: string };
 
@@ -33,21 +33,6 @@ type AlvosPorTipo = Record<AlvoTipo, AlvoOption[]>;
 type Counts = Record<AlvoTipo, number>;
 
 const ALVOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "PROJETO"];
-
-function labelAlvo(tipo: AlvoTipo, row: Record<string, unknown>): AlvoOption {
-  if (tipo === "TURMA") {
-    const turmaId = Number((row.turma_id ?? row.id) as number);
-    const nome = typeof row.nome === "string" && row.nome.trim() ? row.nome : `Turma ${turmaId}`;
-    return { id: turmaId, label: `${nome} (ID ${turmaId})` };
-  }
-
-  const id = Number(row.id);
-  const titulo =
-    (typeof row.titulo === "string" && row.titulo.trim()) ||
-    (typeof row.nome === "string" && row.nome.trim()) ||
-    `Alvo ${id}`;
-  return { id, label: `${titulo} (ID ${id})` };
-}
 
 function alvoCounts(links?: Array<{ alvo_tipo: AlvoTipo }>): Counts {
   const base: Counts = { TURMA: 0, CURSO_LIVRE: 0, PROJETO: 0 };
@@ -106,11 +91,15 @@ export default function Page() {
         const results = await Promise.all(
           ALVOS.map(async (tipo) => {
             const res = await fetch(`/api/matriculas/tabelas/alvos?tipo=${tipo}`);
-            const json = (await res.json()) as ApiListResp<Record<string, unknown>[]>;
+            const json = (await res.json()) as ApiListResp<AlvoOption[]>;
             if (!res.ok || !json.ok) {
               throw new Error(json.message || `Falha ao carregar alvos ${tipo}.`);
             }
-            const items = (json.data ?? []).map((row) => labelAlvo(tipo, row));
+            const items = (json.data ?? []).map((row) => ({
+              id: Number(row.id),
+              alvo_label: String(row.alvo_label ?? ""),
+              servico_nome: row.servico_nome ?? null,
+            }));
             return [tipo, items] as const;
           }),
         );
@@ -275,7 +264,14 @@ export default function Page() {
                     <div className="space-y-2">
                       {lista.map((alvo) => (
                         <div key={alvo.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                          <span>{alvo.label}</span>
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-900">
+                              {alvo.servico_nome?.trim() || "Servico nao definido"}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {alvo.alvo_label?.trim() || `Alvo ${alvo.id}`}
+                            </span>
+                          </div>
                           <Link
                             className="rounded-md border px-3 py-1 text-xs"
                             href={`/admin/escola/configuracoes/matriculas/tabelas/nova?alvo_tipo=${tipo}&alvo_id=${alvo.id}&ano=${ano}`}
