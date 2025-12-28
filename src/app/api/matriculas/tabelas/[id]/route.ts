@@ -14,12 +14,42 @@ type ApiErr = {
   details?: Record<string, unknown> | null;
 };
 
+type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
+type ServicoTipo = "CURSO_REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+type ProdutoTipo = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+
 type BodyPut = {
+  titulo?: string;
+  ano_referencia?: number | null;
+  ativo?: boolean;
+  produto_tipo?: ProdutoTipo;
+  servico_tipo?: ServicoTipo;
+  servico_id?: number | string;
+  unidade_execucao_ids?: number[] | null;
+  alvo_tipo?: AlvoTipo;
+  alvo_ids?: number[] | null;
+  turma_ids?: number[] | null;
+};
+
+type ConflitoTabela = {
+  id: number;
   titulo: string;
   ano_referencia: number | null;
   ativo: boolean;
-  alvo_tipo: "TURMA" | "CURSO_LIVRE" | "PROJETO";
-  alvo_ids: number[];
+};
+
+const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "PROJETO"];
+
+const SERVICO_TIPO_TO_PRODUTO_TIPO: Record<ServicoTipo, ProdutoTipo> = {
+  CURSO_REGULAR: "REGULAR",
+  CURSO_LIVRE: "CURSO_LIVRE",
+  PROJETO_ARTISTICO: "PROJETO_ARTISTICO",
+};
+
+const PRODUTO_TIPO_TO_SERVICO_TIPO: Record<ProdutoTipo, ServicoTipo> = {
+  REGULAR: "CURSO_REGULAR",
+  CURSO_LIVRE: "CURSO_LIVRE",
+  PROJETO_ARTISTICO: "PROJETO_ARTISTICO",
 };
 
 function jsonError(status: number, body: ApiErr) {
@@ -62,6 +92,295 @@ function safeDetails(err: unknown): Record<string, unknown> {
   return { error: err };
 }
 
+function normalizeNumberArray(values: unknown): number[] {
+  if (!Array.isArray(values)) return [];
+  return Array.from(new Set(values.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)));
+}
+
+function parseServicoTipo(value: unknown): ServicoTipo | null {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (!raw) return null;
+  if (raw === "CURSO_REGULAR" || raw === "CURSO_LIVRE" || raw === "PROJETO_ARTISTICO") {
+    return raw as ServicoTipo;
+  }
+  return null;
+}
+
+function parseProdutoTipo(value: unknown): ProdutoTipo | null {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (!raw) return null;
+  if (raw === "REGULAR" || raw === "CURSO_LIVRE" || raw === "PROJETO_ARTISTICO") {
+    return raw as ProdutoTipo;
+  }
+  return null;
+}
+
+async function fetchServicoTipo(admin: ReturnType<typeof createClient>, servicoId: number): Promise<ServicoTipo | null> {
+  const { data, error } = await admin
+    .from("escola_produtos_educacionais")
+    .select("tipo")
+    .eq("id", servicoId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingRelation(error)) return null;
+    throw error;
+  }
+
+  if (!data?.tipo) return null;
+  const tipoRaw = String(data.tipo).toUpperCase();
+  return parseServicoTipo(tipoRaw);
+}
+
+async function resolveUnidadesFromTurmas(
+  admin: ReturnType<typeof createClient>,
+  servicoId: number,
+  turmaIds: number[],
+) {
+  const { data, error } = await admin
+    .from("escola_unidades_execucao")
+    .select("unidade_execucao_id, origem_id")
+    .eq("servico_id", servicoId)
+    .eq("origem_tipo", "TURMA")
+    .in("origem_id", turmaIds);
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ unidade_execucao_id: number; origem_id: number }>;
+  const foundTurmas = new Set(rows.map((r) => Number(r.origem_id)));
+  const missingTurmas = turmaIds.filter((id) => !foundTurmas.has(id));
+  const unidadeExecucaoIds = normalizeNumberArray(rows.map((r) => r.unidade_execucao_id));
+
+  return { unidadeExecucaoIds, missingTurmas };
+}
+
+async function ensureUnidadesBelongToServico(
+  admin: ReturnType<typeof createClient>,
+  servicoId: number,
+  unidadeExecucaoIds: number[],
+) {
+  if (!unidadeExecucaoIds.length) return { ok: true as const, missing: [] as number[] };
+
+  const { data, error } = await admin
+    .from("escola_unidades_execucao")
+    .select("unidade_execucao_id")
+    .eq("servico_id", servicoId)
+    .in("unidade_execucao_id", unidadeExecucaoIds);
+
+  if (error) return { ok: false as const, error };
+
+  const found = new Set((data ?? []).map((r: any) => Number(r.unidade_execucao_id)));
+  const missing = unidadeExecucaoIds.filter((id) => !found.has(id));
+  return { ok: true as const, missing };
+}
+
+async function buscarConflitosUnidades(
+  admin: ReturnType<typeof createClient>,
+  servicoId: number,
+  unidadeExecucaoIds: number[],
+  anoRef: number | null,
+  ignoreTabelaId?: number,
+) {
+  if (anoRef === null) return [] as ConflitoTabela[];
+
+  const { data, error } = await admin
+    .from("matricula_tabelas")
+    .select("id,titulo,ano_referencia,ativo")
+    .eq("referencia_id", servicoId)
+    .eq("ano_referencia", anoRef)
+    .eq("ativo", true);
+
+  if (error) throw error;
+
+  const tabelas = (data ?? []) as ConflitoTabela[];
+  const filtradas = tabelas.filter((t) => t.id !== ignoreTabelaId);
+  if (filtradas.length === 0) return [];
+  if (unidadeExecucaoIds.length === 0) return filtradas;
+
+  const tabelaIds = filtradas.map((t) => t.id);
+  const { data: pivotRows, error: pivErr } = await admin
+    .from("matricula_tabelas_unidades_execucao")
+    .select("tabela_id, unidade_execucao_id")
+    .in("tabela_id", tabelaIds);
+
+  if (pivErr) throw pivErr;
+
+  const rows = (pivotRows ?? []) as Array<{ tabela_id: number; unidade_execucao_id: number }>;
+  const tabelasComPivot = new Set(rows.map((r) => Number(r.tabela_id)));
+  const tabelaMap = new Map(filtradas.map((t) => [t.id, t]));
+  const conflitos = new Map<number, ConflitoTabela>();
+
+  filtradas.forEach((t) => {
+    if (!tabelasComPivot.has(t.id)) conflitos.set(t.id, t);
+  });
+
+  const unidadeSet = new Set(unidadeExecucaoIds);
+  rows.forEach((r) => {
+    if (unidadeSet.has(Number(r.unidade_execucao_id))) {
+      const tabela = tabelaMap.get(Number(r.tabela_id));
+      if (tabela) conflitos.set(tabela.id, tabela);
+    }
+  });
+
+  return Array.from(conflitos.values());
+}
+
+async function syncUnidadesPivot(
+  admin: ReturnType<typeof createClient>,
+  tabelaId: number,
+  unidadeExecucaoIds: number[],
+) {
+  const { error: delErr } = await admin.from("matricula_tabelas_unidades_execucao").delete().eq("tabela_id", tabelaId);
+  if (delErr) return { ok: false as const, error: delErr };
+
+  if (unidadeExecucaoIds.length === 0) return { ok: true as const };
+
+  const rows = unidadeExecucaoIds.map((id) => ({ tabela_id: tabelaId, unidade_execucao_id: id }));
+  const { error: insErr } = await admin.from("matricula_tabelas_unidades_execucao").insert(rows);
+  if (insErr) return { ok: false as const, error: insErr };
+
+  return { ok: true as const };
+}
+
+async function deriveLegacyAlvosFromServico(
+  admin: ReturnType<typeof createClient>,
+  servicoTipo: ServicoTipo,
+  servicoId: number,
+  unidadeExecucaoIds: number[],
+) {
+  if (servicoTipo === "CURSO_LIVRE") {
+    return { alvoTipo: "CURSO_LIVRE" as const, alvoIds: [servicoId] };
+  }
+  if (servicoTipo === "PROJETO_ARTISTICO") {
+    return { alvoTipo: "PROJETO" as const, alvoIds: [servicoId] };
+  }
+
+  if (unidadeExecucaoIds.length > 0) {
+    const { data, error } = await admin
+      .from("escola_unidades_execucao")
+      .select("origem_id")
+      .eq("origem_tipo", "TURMA")
+      .in("unidade_execucao_id", unidadeExecucaoIds);
+
+    if (error) throw error;
+    const turmaIds = normalizeNumberArray((data ?? []).map((r: any) => r.origem_id));
+    return { alvoTipo: "TURMA" as const, alvoIds: turmaIds };
+  }
+
+  const { data, error } = await admin
+    .from("escola_unidades_execucao")
+    .select("origem_id")
+    .eq("servico_id", servicoId)
+    .eq("origem_tipo", "TURMA");
+
+  if (error) throw error;
+  const turmaIds = normalizeNumberArray((data ?? []).map((r: any) => r.origem_id));
+  return { alvoTipo: "TURMA" as const, alvoIds: turmaIds };
+}
+
+async function syncLegacyAlvos(admin: ReturnType<typeof createClient>, tabelaId: number, alvoTipo: AlvoTipo, alvoIds: number[]) {
+  const { error: delErr } = await admin.from("matricula_tabelas_alvos").delete().eq("tabela_id", tabelaId);
+  if (delErr) return { ok: false as const, error: delErr };
+
+  if (!alvoIds.length) return { ok: true as const };
+
+  const rows = alvoIds.map((id) => ({ tabela_id: tabelaId, alvo_tipo: alvoTipo, alvo_id: id }));
+  const { error: insErr } = await admin.from("matricula_tabelas_alvos").insert(rows);
+  if (insErr) return { ok: false as const, error: insErr };
+
+  return { ok: true as const };
+}
+
+async function normalizarAlvoIds(admin: ReturnType<typeof createClient>, alvoTipo: AlvoTipo, ids: number[]) {
+  if (alvoTipo !== "TURMA") return normalizeNumberArray(ids);
+  const resolved: number[] = [];
+  for (const id of ids) {
+    const real = await resolveTurmaIdReal(admin, id);
+    resolved.push(real);
+  }
+  return normalizeNumberArray(resolved);
+}
+
+async function resolveLegacyPayload(admin: ReturnType<typeof createClient>, alvoTipo: AlvoTipo, alvoIdsRaw: number[]) {
+  if (!ALVOS_VALIDOS.includes(alvoTipo)) {
+    return { ok: false as const, response: badRequest("alvo_tipo invalido.") };
+  }
+
+  const alvoIds = await normalizarAlvoIds(admin, alvoTipo, alvoIdsRaw);
+  if (!alvoIds.length) {
+    return { ok: false as const, response: badRequest("Selecione ao menos 1 alvo para vincular.") };
+  }
+
+  if (alvoTipo !== "TURMA") {
+    if (alvoIds.length !== 1) {
+      return {
+        ok: false as const,
+        response: badRequest("Informe apenas 1 alvo para este tipo.", { alvo_tipo: alvoTipo }),
+      };
+    }
+    const servicoTipo = alvoTipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "PROJETO_ARTISTICO";
+    return {
+      ok: true as const,
+      servicoId: alvoIds[0],
+      servicoTipo,
+      produtoTipo: SERVICO_TIPO_TO_PRODUTO_TIPO[servicoTipo],
+      unidadeExecucaoIds: [],
+      legacyAlvoTipo: alvoTipo,
+      legacyAlvoIds: alvoIds,
+    };
+  }
+
+  const { data, error } = await admin
+    .from("turmas")
+    .select("turma_id, produto_id")
+    .in("turma_id", alvoIds);
+
+  if (error) {
+    console.error("[matriculas/tabelas PUT] turmasErr", error);
+    if (isMissingRelation(error)) {
+      return { ok: false as const, response: conflict("Tabela turmas nao encontrada (migracao pendente).", { error }) };
+    }
+    return { ok: false as const, response: serverError("Falha ao validar produto das turmas.", { error }) };
+  }
+
+  const rows = (data ?? []) as Array<{ turma_id: number; produto_id: number | null }>;
+  const encontrados = new Set(rows.map((t) => Number(t.turma_id)));
+  const faltantes = alvoIds.filter((id) => !encontrados.has(id));
+  if (faltantes.length) {
+    return {
+      ok: false as const,
+      response: badRequest("Uma ou mais turmas nao foram encontradas.", { alvo_ids: faltantes }),
+    };
+  }
+
+  const produtoIds = new Set(rows.map((t) => Number(t.produto_id)).filter((id) => Number.isFinite(id) && id > 0));
+  if (produtoIds.size !== 1) {
+    return {
+      ok: false as const,
+      response: conflict("Alvos pertencem a produtos diferentes.", { produto_ids: Array.from(produtoIds) }),
+    };
+  }
+
+  const servicoId = Array.from(produtoIds)[0];
+  const { unidadeExecucaoIds, missingTurmas } = await resolveUnidadesFromTurmas(admin, servicoId, alvoIds);
+  if (missingTurmas.length) {
+    return {
+      ok: false as const,
+      response: conflict("Unidades de execucao nao encontradas para algumas turmas.", { turma_ids: missingTurmas }),
+    };
+  }
+
+  return {
+    ok: true as const,
+    servicoId,
+    servicoTipo: "CURSO_REGULAR",
+    produtoTipo: "REGULAR",
+    unidadeExecucaoIds,
+    legacyAlvoTipo: alvoTipo,
+    legacyAlvoIds: alvoIds,
+  };
+}
+
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const params = await ctx.params;
   console.log("[PUT /api/matriculas/tabelas/:id] start", { id: params.id, method: req.method });
@@ -90,119 +409,89 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
     const titulo = String(body.titulo ?? "").trim();
     if (!titulo) return badRequest("Titulo e obrigatorio.");
-    if (body.ano_referencia === null || Number.isNaN(Number(body.ano_referencia))) {
-      return badRequest("Ano de referencia e obrigatorio.");
-    }
-    if (!body.alvo_tipo) return badRequest("alvo_tipo e obrigatorio.");
-    if (!Array.isArray(body.alvo_ids) || body.alvo_ids.length === 0) {
-      return badRequest("Selecione ao menos 1 alvo para vincular.");
-    }
 
     const admin = getAdmin();
 
-    let alvoIds = body.alvo_ids.map((n) => Number(n)).filter(Boolean);
-    if (body.alvo_tipo === "TURMA") {
-      const normalized: number[] = [];
-      for (const turmaInput of alvoIds) {
-        normalized.push(await resolveTurmaIdReal(admin, turmaInput));
-      }
-      alvoIds = Array.from(new Set(normalized));
+    let servicoId = Number(body.servico_id ?? 0);
+    let servicoTipo = parseServicoTipo(body.servico_tipo);
+    let produtoTipo = parseProdutoTipo(body.produto_tipo);
+    let unidadeExecucaoIds = normalizeNumberArray(body.unidade_execucao_ids);
+    let legacyAlvoTipo: AlvoTipo | null = null;
+    let legacyAlvoIds: number[] = [];
+
+    if (!Number.isFinite(servicoId) || servicoId <= 0) {
+      const alvoTipo = (body.alvo_tipo ?? (body.turma_ids ? "TURMA" : null)) as AlvoTipo | null;
+      if (!alvoTipo) return badRequest("servico_id ou alvo_tipo obrigatorio.");
+
+      const alvoIdsRaw = body.alvo_ids?.length ? body.alvo_ids : body.turma_ids ?? [];
+      const legacy = await resolveLegacyPayload(admin, alvoTipo, alvoIdsRaw);
+      if (!legacy.ok) return legacy.response;
+
+      servicoId = legacy.servicoId;
+      servicoTipo = legacy.servicoTipo;
+      produtoTipo = legacy.produtoTipo;
+      unidadeExecucaoIds = legacy.unidadeExecucaoIds;
+      legacyAlvoTipo = legacy.legacyAlvoTipo;
+      legacyAlvoIds = legacy.legacyAlvoIds;
     } else {
-      alvoIds = Array.from(new Set(alvoIds));
-    }
-
-    if (!alvoIds.length) return badRequest("Selecione ao menos 1 alvo para vincular.");
-
-    let produtoId: number | null = null;
-    if (body.alvo_tipo === "TURMA") {
-      const { data: turmas, error: turmasErr } = await admin
-        .from("turmas")
-        .select("turma_id, produto_id")
-        .in("turma_id", alvoIds);
-
-      if (turmasErr) {
-        console.error("[matriculas/tabelas PUT] turmasErr", turmasErr);
-        if (isMissingRelation(turmasErr)) {
-          return conflict("Tabela turmas nao encontrada (migracao pendente).", { turmasErr });
-        }
-        return serverError("Falha ao validar produto das turmas.", { turmasErr });
-      }
-
-      const rows = (turmas ?? []) as Array<{ turma_id: number; produto_id: number | null }>;
-      const encontrados = new Set(rows.map((t) => Number(t.turma_id)));
-      const faltantes = alvoIds.filter((id) => !encontrados.has(id));
-      if (faltantes.length) {
-        return badRequest("Uma ou mais turmas nao foram encontradas.", { alvo_ids: faltantes });
-      }
-
-      for (const turma of rows) {
-        if (turma.produto_id === null || turma.produto_id === undefined) {
-          return conflict("Alvos pertencem a produtos diferentes.", { turma_id: turma.turma_id });
-        }
-        const atual = Number(turma.produto_id);
-        if (produtoId === null) {
-          produtoId = atual;
-        } else if (produtoId !== atual) {
-          return conflict("Alvos pertencem a produtos diferentes.", { produto_ids: [produtoId, atual] });
-        }
-      }
-    }
-
-    if (body.ativo) {
-      const { data: conflitos, error: confErr } = await admin
-        .from("matricula_tabelas_alvos")
-        .select("tabela_id")
-        .eq("alvo_tipo", body.alvo_tipo)
-        .in("alvo_id", alvoIds);
-
-      if (confErr) {
-        console.error("[matriculas/tabelas PUT] confErr", confErr);
-        if (isMissingRelation(confErr)) {
-          return conflict("Tabela de vinculos nao encontrada (migracao pendente).", { confErr });
-        }
-        return serverError("Falha ao validar conflitos.", { confErr });
-      }
-
-      const conflitoTabelaIds = Array.from(new Set((conflitos ?? []).map((c: any) => Number(c.tabela_id)))).filter(
-        (x) => x !== tabelaId,
-      );
-
-      if (conflitoTabelaIds.length) {
-        const { data: tabs, error: tabsErr } = await admin
-          .from("matricula_tabelas")
-          .select("id,titulo,ano_referencia,ativo")
-          .in("id", conflitoTabelaIds)
-          .eq("ano_referencia", body.ano_referencia)
-          .eq("ativo", true);
-
-        if (tabsErr) {
-          console.error("[matriculas/tabelas PUT] tabsErr", tabsErr);
-          if (isMissingRelation(tabsErr)) {
-            return conflict("Tabela matricula_tabelas nao encontrada (migracao pendente).", { tabsErr });
-          }
-          return serverError("Falha ao validar conflitos (tabelas).", { tabsErr });
-        }
-
-        if (tabs?.length) {
-          return conflict("Conflito: ja existe tabela ativa para um ou mais alvos neste ano. Desative a anterior antes.", {
-            alvos: alvoIds,
-            candidatas: tabs,
+      const tipoDb = await fetchServicoTipo(admin, servicoId);
+      if (tipoDb) {
+        if (servicoTipo && servicoTipo !== tipoDb) {
+          return badRequest("servico_tipo nao corresponde ao servico informado.", {
+            servicoId,
+            servicoTipo,
+            servicoTipoDb: tipoDb,
           });
         }
+        servicoTipo = tipoDb;
+        produtoTipo = SERVICO_TIPO_TO_PRODUTO_TIPO[tipoDb];
+      } else {
+        if (servicoTipo) {
+          produtoTipo = SERVICO_TIPO_TO_PRODUTO_TIPO[servicoTipo];
+        } else if (produtoTipo) {
+          servicoTipo = PRODUTO_TIPO_TO_SERVICO_TIPO[produtoTipo];
+        }
+      }
+
+      if (!servicoTipo || !produtoTipo) {
+        return badRequest("servico_tipo ou produto_tipo invalido.");
+      }
+
+      const unidadesCheck = await ensureUnidadesBelongToServico(admin, servicoId, unidadeExecucaoIds);
+      if (!unidadesCheck.ok) return serverError("Falha ao validar unidades de execucao.", { error: unidadesCheck.error });
+      if (unidadesCheck.missing.length) {
+        return badRequest("Unidades de execucao nao pertencem ao servico.", { unidade_execucao_ids: unidadesCheck.missing });
+      }
+    }
+
+    if (produtoTipo === "REGULAR" && (body.ano_referencia === null || !Number.isFinite(body.ano_referencia))) {
+      return badRequest("Ano de referencia e obrigatorio.");
+    }
+
+    const ativo = body.ativo ?? true;
+    const anoRef = body.ano_referencia ?? null;
+
+    if (ativo) {
+      let conflitos: ConflitoTabela[] = [];
+      try {
+        conflitos = await buscarConflitosUnidades(admin, servicoId, unidadeExecucaoIds, anoRef, tabelaId);
+      } catch (e: unknown) {
+        return serverError("Falha ao validar conflitos.", { message: e instanceof Error ? e.message : String(e) });
+      }
+      if (conflitos.length > 0) {
+        return conflict("Conflito: ja existe tabela ativa para o mesmo servico/ano/unidade.", { conflitos });
       }
     }
 
     const updatePayload: Record<string, unknown> = {
       titulo,
-      ano_referencia: body.ano_referencia,
-      ativo: !!body.ativo,
+      produto_tipo: produtoTipo,
+      ano_referencia: anoRef,
+      ativo: !!ativo,
+      referencia_tipo: "PRODUTO",
+      referencia_id: servicoId,
       updated_at: new Date().toISOString(),
     };
-
-    if (produtoId !== null) {
-      updatePayload.referencia_tipo = "PRODUTO";
-      updatePayload.referencia_id = produtoId;
-    }
 
     const { error: upErr } = await admin
       .from("matricula_tabelas")
@@ -217,28 +506,22 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       return serverError("Falha ao atualizar tabela.", { upErr });
     }
 
-    const { error: delErr } = await admin.from("matricula_tabelas_alvos").delete().eq("tabela_id", tabelaId);
-    if (delErr) {
-      console.error("[matriculas/tabelas PUT] delErr", delErr);
-      if (isMissingRelation(delErr)) {
-        return conflict("Tabela de vinculos nao encontrada (migracao pendente).", { delErr });
-      }
-      return serverError("Falha ao remover vinculos antigos.", { delErr });
+    const pivRes = await syncUnidadesPivot(admin, tabelaId, unidadeExecucaoIds);
+    if (!pivRes.ok) {
+      return serverError("Falha ao salvar unidades de execucao.", { pivErr: pivRes.error });
     }
 
-    const rows = alvoIds.map((alvoId) => ({
-      tabela_id: tabelaId,
-      alvo_tipo: body.alvo_tipo,
-      alvo_id: alvoId,
-    }));
+    if (!legacyAlvoTipo) {
+      const legacy = await deriveLegacyAlvosFromServico(admin, servicoTipo, servicoId, unidadeExecucaoIds);
+      legacyAlvoTipo = legacy.alvoTipo;
+      legacyAlvoIds = legacy.alvoIds;
+    }
 
-    const { error: insErr } = await admin.from("matricula_tabelas_alvos").insert(rows);
-    if (insErr) {
-      console.error("[matriculas/tabelas PUT] insErr", insErr);
-      if (isMissingRelation(insErr)) {
-        return conflict("Tabela de vinculos nao encontrada (migracao pendente).", { insErr });
+    if (legacyAlvoTipo) {
+      const legRes = await syncLegacyAlvos(admin, tabelaId, legacyAlvoTipo, legacyAlvoIds);
+      if (!legRes.ok) {
+        return serverError("Falha ao salvar vinculos legados.", { pivErr: legRes.error });
       }
-      return serverError("Falha ao salvar vinculos.", { insErr });
     }
 
     return NextResponse.json({ ok: true, data: { id: tabelaId } } satisfies ApiOk<{ id: number }>, { status: 200 });

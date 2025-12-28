@@ -12,7 +12,7 @@ export default function Page() {
             <div>
               <h1 className="text-xl font-semibold text-slate-800">Nova tabela de precos (Escola)</h1>
               <p className="text-sm text-slate-600">
-                Defina em quais alvos a tabela se aplica e cadastre o ano. Depois, crie os itens (MENSALIDADE/RECORRENTE).
+                Defina a categoria do servico, o servico e as unidades de execucao. Depois, crie os itens (MENSALIDADE/RECORRENTE).
               </p>
             </div>
           </div>
@@ -21,9 +21,9 @@ export default function Page() {
         <FinanceHelpCard
           subtitle="Entenda esta tela"
           items={[
-            "A tabela pode valer para cursos (regulares/livres) e projetos.",
+            "A tabela vale para um servico (curso regular/livre ou projeto) e pode ser limitada a unidades de execucao.",
             "Sem MENSALIDADE/RECORRENTE ativa, a matricula falha com 409.",
-            "Ano de referencia e obrigatorio para cobertura e precificacao.",
+            "Ano de referencia e obrigatorio para cursos regulares.",
           ]}
         />
 

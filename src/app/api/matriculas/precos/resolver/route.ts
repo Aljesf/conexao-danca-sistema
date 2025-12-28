@@ -12,6 +12,35 @@ type MatriculaTabela = {
   ativo: boolean;
 };
 
+type TierRow = {
+  id: number;
+  minimo_modalidades: number | null;
+  maximo_modalidades: number | null;
+  item_codigo: string;
+  tipo_item: string;
+  ativo: boolean;
+};
+
+type ItemRow = {
+  id: number;
+  codigo_item: string;
+  tipo_item: string;
+  descricao?: string | null;
+  valor_centavos: number;
+  ativo: boolean;
+  ordem: number;
+};
+
+type MatriculaRow = {
+  id: number;
+  servico_id: number | null;
+  vinculo_id: number | null;
+  status: string | null;
+};
+
+const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "PROJETO"];
+const REFERENCIA_TIPO = "PRODUTO";
+
 function badRequest(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null }, { status: 400 });
 }
@@ -38,30 +67,113 @@ function isSchemaMissing(err: unknown): boolean {
   return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
 }
 
-const ALVOS_VALIDOS: AlvoTipo[] = ["TURMA", "CURSO_LIVRE", "PROJETO"];
-
-async function buscarTabelaIdsPorAlvo(admin: ReturnType<typeof createClient>, alvoTipo: AlvoTipo, alvoId: number) {
-  const { data, error } = await admin
-    .from("matricula_tabelas_alvos")
-    .select("tabela_id")
-    .eq("alvo_tipo", alvoTipo)
-    .eq("alvo_id", alvoId);
-
-  if (!error) {
-    return { ids: (data ?? []).map((l) => Number((l as { tabela_id: number }).tabela_id)), error: null };
-  }
-
-  return { ids: [], error };
+function toPositiveNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-async function buscarTabelaIdsLegado(admin: ReturnType<typeof createClient>, alvoId: number) {
-  const { data, error } = await admin
-    .from("matricula_tabelas_turmas")
-    .select("tabela_id")
-    .eq("turma_id", alvoId);
+function normalizeNumberArray(values: unknown[]): number[] {
+  return Array.from(new Set(values.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)));
+}
 
-  if (error) return [];
-  return (data ?? []).map((l) => Number((l as { tabela_id: number }).tabela_id));
+async function listarMatriculas(
+  admin: ReturnType<typeof createClient>,
+  alunoId: number,
+  ano: number,
+): Promise<{ ok: true; rows: MatriculaRow[] } | { ok: false; response: NextResponse }> {
+  let data: unknown[] | null = null;
+  let error: PostgrestError | null = null;
+
+  ({ data, error } = await admin
+    .from("matriculas")
+    .select("id,servico_id,vinculo_id,status")
+    .eq("pessoa_id", alunoId)
+    .eq("ano_referencia", ano));
+
+  if (error && isSchemaMissing(error)) {
+    ({ data, error } = await admin
+      .from("matriculas")
+      .select("id,produto_id,vinculo_id,status")
+      .eq("pessoa_id", alunoId)
+      .eq("ano_referencia", ano));
+  }
+
+  if (error) {
+    if (isSchemaMissing(error)) {
+      return { ok: false, response: conflict("Nao foi possivel calcular modalidades (schema pendente).", { error }) };
+    }
+    return { ok: false, response: serverError("Falha ao buscar matriculas do aluno.", { error }) };
+  }
+
+  const rows: MatriculaRow[] = (data ?? []).map((row) => {
+    const record = row as Record<string, unknown>;
+    const servicoId = toPositiveNumber(record.servico_id ?? record.produto_id);
+    const vinculoId = toPositiveNumber(record.vinculo_id);
+    const statusRaw = record.status;
+    return {
+      id: toPositiveNumber(record.id) ?? 0,
+      servico_id: servicoId,
+      vinculo_id: vinculoId,
+      status: typeof statusRaw === "string" ? statusRaw : statusRaw ? String(statusRaw) : null,
+    };
+  });
+
+  return { ok: true, rows };
+}
+
+async function calcularQtdModalidades(
+  admin: ReturnType<typeof createClient>,
+  alunoId: number,
+  ano: number,
+  servicoId: number,
+  alvoTipo: AlvoTipo,
+): Promise<{ ok: true; qtdModalidades: number } | { ok: false; response: NextResponse }> {
+  if (alvoTipo === "PROJETO") return { ok: true, qtdModalidades: 1 };
+
+  const matsRes = await listarMatriculas(admin, alunoId, ano);
+  if (!matsRes.ok) return matsRes;
+
+  const ativas = matsRes.rows.filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
+  if (ativas.length === 0) return { ok: true, qtdModalidades: 1 };
+
+  const vinculosSemServico = Array.from(
+    new Set(
+      ativas
+        .filter((m) => !m.servico_id && m.vinculo_id)
+        .map((m) => Number(m.vinculo_id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  );
+
+  const mapaTurmas = new Map<number, number>();
+  if (vinculosSemServico.length) {
+    const { data, error } = await admin
+      .from("turmas")
+      .select("turma_id,produto_id")
+      .in("turma_id", vinculosSemServico);
+
+    if (error) {
+      if (isSchemaMissing(error)) {
+        return { ok: false, response: conflict("Nao foi possivel calcular modalidades (schema pendente).", { error }) };
+      }
+      return { ok: false, response: serverError("Falha ao resolver turmas do aluno.", { error }) };
+    }
+
+    (data ?? []).forEach((t) => {
+      const turmaId = toPositiveNumber((t as { turma_id?: number }).turma_id);
+      const produtoId = toPositiveNumber((t as { produto_id?: number | null }).produto_id);
+      if (turmaId && produtoId) mapaTurmas.set(turmaId, produtoId);
+    });
+  }
+
+  const resolveServicoId = (m: MatriculaRow) => {
+    if (m.servico_id) return m.servico_id;
+    if (m.vinculo_id) return mapaTurmas.get(m.vinculo_id) ?? null;
+    return null;
+  };
+
+  const alvoJaExiste = ativas.some((m) => resolveServicoId(m) === servicoId);
+  return { ok: true, qtdModalidades: alvoJaExiste ? ativas.length : ativas.length + 1 };
 }
 
 export async function GET(req: Request) {
@@ -73,7 +185,9 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const alunoId = Number(url.searchParams.get("aluno_id") || "");
-    const alvoTipoRaw = String(url.searchParams.get("alvo_tipo") || "TURMA");
+    const alvoTipoRaw = String(url.searchParams.get("alvo_tipo") || "TURMA")
+      .trim()
+      .toUpperCase();
     const alvoIdParam = url.searchParams.get("alvo_id");
     const turmaIdParam = url.searchParams.get("turma_id");
     const alvoInput = Number(alvoIdParam || turmaIdParam || "");
@@ -91,34 +205,70 @@ export async function GET(req: Request) {
     const admin = getAdmin();
     const alvoId = alvoInput;
 
-    const { ids: tabelaIds, error: linkErr } = await buscarTabelaIdsPorAlvo(admin, alvoTipo, alvoId);
-    if (linkErr) {
-      if (isSchemaMissing(linkErr)) {
-        return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { linkErr });
+    let servicoId: number | null = null;
+    let unidadeExecucaoId: number | null = null;
+    let turmaId: number | null = null;
+
+    if (alvoTipo === "TURMA") {
+      turmaId = alvoId;
+      const { data: turma, error: turmaErr } = await admin
+        .from("turmas")
+        .select("turma_id, produto_id")
+        .eq("turma_id", turmaId)
+        .maybeSingle();
+
+      if (turmaErr) {
+        if (isSchemaMissing(turmaErr)) {
+          return conflict("Tabela turmas nao encontrada (migracao pendente).", { turmaErr });
+        }
+        return serverError("Falha ao validar turma.", { turmaErr });
       }
-      return serverError("Falha ao buscar vinculos da tabela.", { linkErr });
+
+      if (!turma) return badRequest("Turma nao encontrada.", { turma_id: turmaId });
+
+      servicoId = toPositiveNumber((turma as { produto_id?: number | null }).produto_id);
+      if (!servicoId) return conflict("Turma sem servico vinculado.", { turma_id: turmaId });
+
+      const { data: ue, error: ueErr } = await admin
+        .from("escola_unidades_execucao")
+        .select("unidade_execucao_id")
+        .eq("servico_id", servicoId)
+        .eq("origem_tipo", "TURMA")
+        .eq("origem_id", turmaId)
+        .eq("ativo", true)
+        .maybeSingle();
+
+      if (ueErr) {
+        if (isSchemaMissing(ueErr)) {
+          return conflict("Tabela escola_unidades_execucao nao encontrada (migracao pendente).", { ueErr });
+        }
+        return serverError("Falha ao resolver unidade de execucao.", { ueErr });
+      }
+
+      if (!ue) {
+        return conflict("Turma sem unidade de execucao vinculada.", { turma_id: turmaId });
+      }
+
+      unidadeExecucaoId = toPositiveNumber((ue as { unidade_execucao_id?: number }).unidade_execucao_id);
+      if (!unidadeExecucaoId) {
+        return conflict("Unidade de execucao invalida para a turma.", { turma_id: turmaId });
+      }
+    } else {
+      servicoId = toPositiveNumber(alvoId);
     }
 
-    const tabelaIdsFinal = tabelaIds.length
-      ? tabelaIds
-      : alvoTipo === "TURMA"
-        ? await buscarTabelaIdsLegado(admin, alvoId)
-        : [];
-
-    if (!tabelaIdsFinal.length) {
-      return conflict("Nenhuma tabela vinculada encontrada para o alvo/ano selecionados.", {
-        alvo_tipo: alvoTipo,
-        alvo_id: alvoId,
-        ano,
-      });
+    if (!servicoId) {
+      return badRequest("servico_id invalido para o alvo informado.", { alvo_tipo: alvoTipo, alvo_id: alvoId });
     }
 
     const { data: tabelas, error: tabErr } = await admin
       .from("matricula_tabelas")
       .select("id,titulo,ano_referencia,ativo")
-      .in("id", tabelaIdsFinal)
+      .eq("referencia_tipo", REFERENCIA_TIPO)
+      .eq("referencia_id", servicoId)
+      .eq("ano_referencia", ano)
       .eq("ativo", true)
-      .eq("ano_referencia", ano);
+      .order("id", { ascending: false });
 
     if (tabErr) {
       if (isSchemaMissing(tabErr)) {
@@ -128,86 +278,52 @@ export async function GET(req: Request) {
     }
 
     if (!tabelas?.length) {
-      return conflict("Nenhuma tabela ativa encontrada para o alvo/ano selecionados.", {
-        alvo_tipo: alvoTipo,
-        alvo_id: alvoId,
+      return conflict("Nenhuma tabela ativa encontrada para o servico/ano selecionados.", {
+        servico_id: servicoId,
         ano,
-        tabela_ids: tabelaIdsFinal,
-      });
-    }
-
-    if (tabelas.length > 1) {
-      return conflict("Conflito: ha mais de uma tabela ativa para o mesmo alvo/ano. Desative as excedentes.", {
-        alvo_tipo: alvoTipo,
-        alvo_id: alvoId,
-        ano,
-        candidatas: tabelas,
       });
     }
 
     const tabela = tabelas[0] as MatriculaTabela;
 
-    let qtdModalidades = 1;
-    if (alvoTipo !== "PROJETO") {
-      const { data: mats, error: matsErr } = await admin
-        .from("matriculas")
-        .select("id,produto_id,vinculo_id,status")
-        .eq("pessoa_id", alunoId)
-        .eq("ano_referencia", ano);
+    const { data: pivotRows, error: pivotErr } = await admin
+      .from("matricula_tabelas_unidades_execucao")
+      .select("unidade_execucao_id")
+      .eq("tabela_id", tabela.id);
 
-      if (matsErr) {
-        console.error("[precos/resolver] matsErr", matsErr);
-        if (isSchemaMissing(matsErr)) {
-          return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { matsErr });
-        }
-        return serverError("Falha ao contar matriculas do aluno.", { matsErr });
+    if (pivotErr) {
+      if (isSchemaMissing(pivotErr)) {
+        return conflict("Pivot de unidades de execucao nao encontrado (migracao pendente).", { pivotErr });
       }
-
-      const ativas = (mats ?? []).filter((m) => String(m.status || "").toUpperCase() !== "CANCELADA");
-
-      const vinculosSemProduto = Array.from(
-        new Set(
-          ativas
-            .filter((m) => !m.produto_id && m.vinculo_id)
-            .map((m) => Number(m.vinculo_id))
-            .filter((id) => Number.isFinite(id) && id > 0),
-        ),
-      );
-
-      const mapaTurmas = new Map<number, number>();
-      if (vinculosSemProduto.length) {
-        const { data: turmas, error: turmasErr } = await admin
-          .from("turmas")
-          .select("turma_id,produto_id")
-          .in("turma_id", vinculosSemProduto);
-
-        if (turmasErr) {
-          if (isSchemaMissing(turmasErr)) {
-            return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { turmasErr });
-          }
-          return serverError("Falha ao resolver turmas do aluno.", { turmasErr });
-        }
-
-        (turmas ?? []).forEach((t) => {
-          const turmaId = Number((t as { turma_id: number }).turma_id);
-          const produtoId = Number((t as { produto_id: number | null }).produto_id);
-          if (Number.isFinite(turmaId) && Number.isFinite(produtoId)) {
-            mapaTurmas.set(turmaId, produtoId);
-          }
-        });
-      }
-
-      const resolveProdutoId = (m: { produto_id?: number | null; vinculo_id?: number | null }) => {
-        if (m.produto_id) return Number(m.produto_id);
-        if (m.vinculo_id) return mapaTurmas.get(Number(m.vinculo_id)) ?? null;
-        return null;
-      };
-
-      const alvoJaExiste = ativas.some((m) => resolveProdutoId(m) === alvoId);
-      qtdModalidades = alvoJaExiste ? ativas.length : ativas.length + 1;
+      return serverError("Falha ao validar unidades de execucao.", { pivotErr });
     }
 
-    const { data: tiers, error: tierErr } = await admin
+    const pivotIds = normalizeNumberArray((pivotRows ?? []).map((r) => (r as { unidade_execucao_id?: number }).unidade_execucao_id));
+    if (pivotIds.length > 0) {
+      if (!unidadeExecucaoId) {
+        return conflict("Tabela nao se aplica a unidade selecionada.", {
+          tabela_id: tabela.id,
+          unidade_execucao_id: null,
+        });
+      }
+      if (!pivotIds.includes(unidadeExecucaoId)) {
+        return conflict("Tabela nao se aplica a unidade selecionada.", {
+          tabela_id: tabela.id,
+          unidade_execucao_id: unidadeExecucaoId,
+        });
+      }
+    }
+
+    let qtdModalidades: number | null = null;
+    const qtdRes = await calcularQtdModalidades(admin, alunoId, ano, servicoId, alvoTipo);
+    if (qtdRes.ok) {
+      qtdModalidades = qtdRes.qtdModalidades;
+    } else {
+      console.error("[precos/resolver] qtdModalidades", qtdRes.response);
+    }
+
+    let tier: TierRow | null = null;
+    const { data: tiersData, error: tierErr } = await admin
       .from("matricula_tabelas_precificacao_tiers")
       .select("id,minimo_modalidades,maximo_modalidades,item_codigo,tipo_item,ativo")
       .eq("tabela_id", tabela.id)
@@ -215,47 +331,69 @@ export async function GET(req: Request) {
       .order("minimo_modalidades", { ascending: true });
 
     if (tierErr) {
-      if (isSchemaMissing(tierErr)) {
-        return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { tierErr });
+      if (!isSchemaMissing(tierErr)) {
+        return serverError("Falha ao buscar tiers de precificacao.", { tierErr });
       }
-      return serverError("Falha ao buscar tiers de precificacao.", { tierErr });
     }
 
-    const tier = (tiers ?? []).find((t) => {
-      const min = Number(t.minimo_modalidades);
-      const max = t.maximo_modalidades === null ? null : Number(t.maximo_modalidades);
-      return qtdModalidades >= min && (max === null || qtdModalidades <= max);
-    });
-
-    if (!tier) {
-      return conflict("Nao ha tier de precificacao configurado para esta tabela (por quantidade de modalidades).", {
-        tabela_id: tabela.id,
-        qtdModalidades,
-      });
+    const tiers = (tiersData ?? []) as TierRow[];
+    if (tiers.length > 0 && typeof qtdModalidades === "number") {
+      tier =
+        tiers.find((t) => {
+          const min = Number(t.minimo_modalidades);
+          const max = t.maximo_modalidades === null ? null : Number(t.maximo_modalidades);
+          return qtdModalidades >= min && (max === null || qtdModalidades <= max);
+        }) ?? null;
     }
 
-    const { data: itens, error: itensErr } = await admin
-      .from("matricula_tabela_itens")
-      .select("id,codigo_item,tipo_item,descricao,valor_centavos,ativo,ordem")
-      .eq("tabela_id", tabela.id)
-      .eq("ativo", true)
-      .eq("tipo_item", tier.tipo_item)
-      .eq("codigo_item", tier.item_codigo)
-      .limit(1);
+    let item: ItemRow | null = null;
+    if (tier) {
+      const { data: itens, error: itensErr } = await admin
+        .from("matricula_tabela_itens")
+        .select("id,codigo_item,tipo_item,descricao,valor_centavos,ativo,ordem")
+        .eq("tabela_id", tabela.id)
+        .eq("ativo", true)
+        .eq("tipo_item", tier.tipo_item)
+        .eq("codigo_item", tier.item_codigo)
+        .order("ordem", { ascending: true })
+        .limit(1);
 
-    if (itensErr) {
-      if (isSchemaMissing(itensErr)) {
-        return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { itensErr });
+      if (itensErr) {
+        if (isSchemaMissing(itensErr)) {
+          return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { itensErr });
+        }
+        return serverError("Falha ao buscar item da tabela.", { itensErr });
       }
-      return serverError("Falha ao buscar item da tabela.", { itensErr });
-    }
 
-    const item = itens?.[0];
-    if (!item) {
-      return conflict("Tier encontrado, mas o item configurado nao existe/esta inativo na tabela.", {
-        tabela_id: tabela.id,
-        item_codigo: tier.item_codigo,
-      });
+      item = (itens ?? [])[0] ?? null;
+      if (!item) {
+        return conflict("Tier encontrado, mas o item configurado nao existe/esta inativo na tabela.", {
+          tabela_id: tabela.id,
+          item_codigo: tier.item_codigo,
+        });
+      }
+    } else {
+      const { data: itens, error: itensErr } = await admin
+        .from("matricula_tabela_itens")
+        .select("id,codigo_item,tipo_item,descricao,valor_centavos,ativo,ordem")
+        .eq("tabela_id", tabela.id)
+        .eq("ativo", true)
+        .eq("tipo_item", "RECORRENTE")
+        .eq("codigo_item", "MENSALIDADE")
+        .order("ordem", { ascending: true })
+        .limit(1);
+
+      if (itensErr) {
+        if (isSchemaMissing(itensErr)) {
+          return conflict("Tabela de precos ainda nao esta pronta para resolver precos.", { itensErr });
+        }
+        return serverError("Falha ao buscar item recorrente.", { itensErr });
+      }
+
+      item = (itens ?? [])[0] ?? null;
+      if (!item) {
+        return conflict("Tabela sem item recorrente configurado (MENSALIDADE).", { tabela_id: tabela.id });
+      }
     }
 
     return NextResponse.json(
@@ -264,7 +402,7 @@ export async function GET(req: Request) {
         data: {
           tabela: { id: tabela.id, titulo: tabela.titulo, ano_referencia: tabela.ano_referencia },
           qtd_modalidades: qtdModalidades,
-          tier: { id: tier.id, item_codigo: tier.item_codigo, tipo_item: tier.tipo_item },
+          tier: tier ? { id: tier.id, item_codigo: tier.item_codigo, tipo_item: tier.tipo_item } : null,
           item_aplicado: item,
           alvo: { tipo: alvoTipo, id: alvoId },
         },
@@ -272,8 +410,6 @@ export async function GET(req: Request) {
       { status: 200 },
     );
   } catch (e: unknown) {
-    return serverError("Erro inesperado ao resolver preco por modalidades.", {
-      message: e instanceof Error ? e.message : String(e),
-    });
+    return serverError("Erro inesperado ao resolver preco.", { message: e instanceof Error ? e.message : String(e) });
   }
 }

@@ -61,8 +61,8 @@ type PrecoResolverResp = {
   ok: boolean;
   data?: {
     tabela: TabelaAplicavel;
-    qtd_modalidades: number;
-    tier: { id: number; item_codigo: string; tipo_item: string };
+    qtd_modalidades: number | null;
+    tier?: { id: number; item_codigo: string; tipo_item: string } | null;
     item_aplicado: ItemAplicado;
     alvo?: { tipo: string; id: number };
   };
@@ -248,30 +248,43 @@ export default function NovaMatriculaPage() {
 
     if (!aluno?.id || !turmaId || !anoReferencia) return;
 
+
     let ativo = true;
-    (async () => {
-      try {
-        setTabelaLoading(true);
-        const params = new URLSearchParams({
-          aluno_id: String(aluno.id),
-          alvo_tipo: "TURMA",
-          alvo_id: String(turmaId),
-          ano: String(anoReferencia),
-        });
-        const data = await fetchJSON<PrecoResolverResp>(`/api/matriculas/precos/resolver?${params.toString()}`);
-        if (!ativo) return;
-        setTabelaAplicavel(data.data?.tabela ?? null);
-        setItemAplicado(data.data?.item_aplicado ?? null);
-        setQtdModalidades(typeof data.data?.qtd_modalidades === "number" ? data.data.qtd_modalidades : null);
-      } catch (e: unknown) {
-        if (ativo) setTabelaErro(e instanceof Error ? e.message : "Falha ao resolver tabela aplicável.");
-      } finally {
-        if (ativo) setTabelaLoading(false);
-      }
-    })();
+    const controller = new AbortController();
+    const debounceId = window.setTimeout(() => {
+      (async () => {
+        try {
+          setTabelaLoading(true);
+          const params = new URLSearchParams({
+            aluno_id: String(aluno.id),
+            alvo_tipo: "TURMA",
+            alvo_id: String(turmaId),
+            ano: String(anoReferencia),
+          });
+          const data = await fetchJSON<PrecoResolverResp>("/api/matriculas/precos/resolver?" + params.toString(), {
+            signal: controller.signal,
+          });
+          if (!ativo) return;
+          setTabelaAplicavel(data.data?.tabela ?? null);
+          setItemAplicado(data.data?.item_aplicado ?? null);
+          setQtdModalidades(typeof data.data?.qtd_modalidades === "number" ? data.data.qtd_modalidades : null);
+        } catch (e) {
+          if (!ativo) return;
+          const name = e && typeof e === "object" && "name" in e ? String(e.name) : "";
+          if (name === "AbortError") return;
+          setTabelaErro(e instanceof Error ? e.message : "Falha ao resolver tabela aplicavel.");
+        } finally {
+          if (ativo) setTabelaLoading(false);
+        }
+      })();
+    }, 500);
     return () => {
       ativo = false;
+      controller.abort();
+      window.clearTimeout(debounceId);
     };
+
+
   }, [aluno?.id, turmaId, anoReferencia]);
 
   async function onSubmit() {

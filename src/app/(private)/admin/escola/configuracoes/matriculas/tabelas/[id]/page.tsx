@@ -4,14 +4,17 @@ import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import TabelaMatriculaEditForm from "./TabelaMatriculaEditForm";
 
+type ServicoTipo = "CURSO_REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+type ProdutoTipo = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
 type MatriculaTabela = {
   id: number;
-  produto_tipo: "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+  produto_tipo: ProdutoTipo;
   ano_referencia: number | null;
   titulo: string;
   ativo: boolean;
+  referencia_id: number | null;
 };
 
 type TabelaItem = {
@@ -30,6 +33,18 @@ type TabelaAlvo = {
   alvo_id: number;
 };
 
+const PRODUTO_TO_SERVICO: Record<ProdutoTipo, ServicoTipo> = {
+  REGULAR: "CURSO_REGULAR",
+  CURSO_LIVRE: "CURSO_LIVRE",
+  PROJETO_ARTISTICO: "PROJETO_ARTISTICO",
+};
+
+const SERVICO_LABEL: Record<ServicoTipo, string> = {
+  CURSO_REGULAR: "Curso regular",
+  CURSO_LIVRE: "Curso livre",
+  PROJETO_ARTISTICO: "Projeto artistico",
+};
+
 function parseReaisToCentavos(input: string): number | null {
   const normalized = input.replace(",", ".").trim();
   if (!normalized) return null;
@@ -40,6 +55,15 @@ function parseReaisToCentavos(input: string): number | null {
 
 function formatCentavos(value: number): string {
   return (value / 100).toFixed(2);
+}
+
+function isMissingRelation(err: unknown): boolean {
+  const e = err as { code?: string } | null;
+  return !!e && e.code === "42P01";
+}
+
+function normalizeNumberArray(values: unknown[]): number[] {
+  return Array.from(new Set(values.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)));
 }
 
 export default async function Page({ params }: { params: { id: string } }) {
@@ -53,7 +77,7 @@ export default async function Page({ params }: { params: { id: string } }) {
 
   const { data: tabela, error: tabelaErr } = await supabase
     .from("matricula_tabelas")
-    .select("id,produto_tipo,ano_referencia,titulo,ativo")
+    .select("id,produto_tipo,ano_referencia,titulo,ativo,referencia_id")
     .eq("id", tabelaId)
     .single();
 
@@ -77,12 +101,127 @@ export default async function Page({ params }: { params: { id: string } }) {
     supabase.from("matricula_tabelas_alvos").select("alvo_tipo,alvo_id").eq("tabela_id", tabelaId),
   ]);
 
+  let unidadesExecucaoIds: number[] = [];
+  let unidadesErrMsg: string | null = null;
+  const { data: unidadesData, error: unidadesErr } = await supabase
+    .from("matricula_tabelas_unidades_execucao")
+    .select("unidade_execucao_id")
+    .eq("tabela_id", tabelaId);
+
+  if (unidadesErr) {
+    if (!isMissingRelation(unidadesErr)) {
+      unidadesErrMsg = unidadesErr.message;
+    }
+  } else {
+    const rows = (unidadesData ?? []) as Array<{ unidade_execucao_id: number }>;
+    unidadesExecucaoIds = normalizeNumberArray(rows.map((r) => r.unidade_execucao_id));
+  }
+
   const listaItens = (itens ?? []) as TabelaItem[];
   const alvos = (alvosData ?? []) as TabelaAlvo[];
+  const tabelaInfo = tabela as MatriculaTabela;
+
+  const warnings: string[] = [];
+  const produtoTipo = tabelaInfo.produto_tipo as ProdutoTipo;
+  let servicoTipo = PRODUTO_TO_SERVICO[produtoTipo];
+  if (!servicoTipo) {
+    servicoTipo = "CURSO_REGULAR";
+    warnings.push("produto_tipo invalido; usando CURSO_REGULAR.");
+  }
+
+  let servicoId: number | null = Number(tabelaInfo.referencia_id ?? 0);
+  if (!Number.isFinite(servicoId) || servicoId <= 0) servicoId = null;
 
   const alvoTipos = Array.from(new Set(alvos.map((a) => a.alvo_tipo)));
   const alvoTipo = alvoTipos[0] ?? "TURMA";
-  const alvoIds = alvos.filter((a) => a.alvo_tipo === alvoTipo).map((a) => a.alvo_id);
+  const alvoIds = normalizeNumberArray(alvos.filter((a) => a.alvo_tipo === alvoTipo).map((a) => a.alvo_id));
+  const turmaIds = normalizeNumberArray(alvos.filter((a) => a.alvo_tipo === "TURMA").map((a) => a.alvo_id));
+
+  if (alvoTipos.length > 1) {
+    warnings.push("Atencao: esta tabela possui mais de um tipo de alvo legado.");
+  }
+  if (alvosErr) {
+    warnings.push(`Falha ao carregar alvos legados: ${alvosErr.message}`);
+  }
+
+  if (!servicoId && alvos.length > 0 && alvoTipos.length === 1) {
+    if (alvoTipo === "CURSO_LIVRE") {
+      servicoTipo = "CURSO_LIVRE";
+      servicoId = alvoIds[0] ?? null;
+    }
+    if (alvoTipo === "PROJETO") {
+      servicoTipo = "PROJETO_ARTISTICO";
+      servicoId = alvoIds[0] ?? null;
+    }
+    if ((alvoTipo === "CURSO_LIVRE" || alvoTipo === "PROJETO") && alvoIds.length > 1) {
+      warnings.push("Mais de um alvo legado foi encontrado; usando o primeiro para o servico.");
+    }
+  }
+
+  if (!servicoId && turmaIds.length > 0) {
+    const { data: turmas, error: turmasErr } = await supabase
+      .from("turmas")
+      .select("turma_id, produto_id")
+      .in("turma_id", turmaIds);
+
+    if (turmasErr) {
+      if (isMissingRelation(turmasErr)) {
+        warnings.push("Tabela turmas nao encontrada (migracao pendente).");
+      } else {
+        warnings.push(`Falha ao carregar turmas: ${turmasErr.message}`);
+      }
+    } else {
+      const rows = (turmas ?? []) as Array<{ turma_id: number; produto_id: number | null }>;
+      const encontrados = new Set(rows.map((t) => Number(t.turma_id)));
+      const faltantes = turmaIds.filter((id) => !encontrados.has(id));
+      if (faltantes.length) {
+        const preview = faltantes.slice(0, 5).join(", ");
+        warnings.push(`Turmas nao encontradas: ${preview}${faltantes.length > 5 ? "..." : ""}.`);
+      }
+
+      const produtoIds = new Set(
+        rows.map((t) => Number(t.produto_id)).filter((id) => Number.isFinite(id) && id > 0),
+      );
+      if (produtoIds.size === 1) {
+        servicoId = Array.from(produtoIds)[0];
+        servicoTipo = "CURSO_REGULAR";
+      } else if (produtoIds.size > 1) {
+        warnings.push("As turmas vinculadas pertencem a servicos diferentes.");
+      }
+    }
+  }
+
+  if (unidadesExecucaoIds.length === 0 && turmaIds.length > 0) {
+    let query = supabase
+      .from("escola_unidades_execucao")
+      .select("unidade_execucao_id, origem_id")
+      .eq("origem_tipo", "TURMA")
+      .in("origem_id", turmaIds);
+    if (servicoId) {
+      query = query.eq("servico_id", servicoId);
+    }
+
+    const { data: ueData, error: ueErr } = await query;
+    if (ueErr) {
+      if (isMissingRelation(ueErr)) {
+        warnings.push("Tabela escola_unidades_execucao nao encontrada (migracao pendente).");
+      } else {
+        warnings.push(`Falha ao carregar unidades de execucao: ${ueErr.message}`);
+      }
+    } else {
+      const rows = (ueData ?? []) as Array<{ unidade_execucao_id: number; origem_id: number }>;
+      unidadesExecucaoIds = normalizeNumberArray(rows.map((r) => r.unidade_execucao_id));
+      const foundTurmas = new Set(rows.map((r) => Number(r.origem_id)));
+      const missingTurmas = turmaIds.filter((id) => !foundTurmas.has(id));
+      if (missingTurmas.length) {
+        warnings.push("Algumas turmas nao possuem unidade de execucao vinculada.");
+      }
+    }
+  }
+
+  if (!servicoId && alvos.length > 0) {
+    warnings.push("Servico nao foi resolvido a partir dos dados atuais.");
+  }
 
   const hasMensalidadeAtiva = listaItens.some(
     (i) => i.ativo && i.codigo_item === "MENSALIDADE" && i.tipo_item === "RECORRENTE",
@@ -122,26 +261,38 @@ export default async function Page({ params }: { params: { id: string } }) {
     redirect(`/admin/escola/configuracoes/matriculas/tabelas/${tabelaId}`);
   }
 
-  const tabelaInfo = tabela as MatriculaTabela;
+  const servicoLabel = SERVICO_LABEL[servicoTipo] ?? servicoTipo;
 
   return (
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-xl font-semibold">Tabela #{tabelaInfo.id}</h1>
         <p className="text-sm text-muted-foreground">
-          {tabelaInfo.produto_tipo} - Ano: {tabelaInfo.ano_referencia ?? "-"}
+          Categoria: {servicoLabel} - Ano: {tabelaInfo.ano_referencia ?? "-"}
         </p>
-        {alvosErr ? (
-          <p className="text-sm text-red-700">Falha ao carregar alvos vinculados: {alvosErr.message}</p>
-        ) : alvos.length ? (
+        {servicoId ? (
           <p className="text-sm">
-            Aplica-se a: <b>{alvoTipo}</b> | Alvos: <b>{alvoIds.join(", ")}</b>
+            Servico: <b>#{servicoId}</b>
           </p>
         ) : (
-          <p className="text-sm text-muted-foreground">Nenhum alvo vinculado.</p>
+          <p className="text-sm text-muted-foreground">Servico nao definido.</p>
         )}
-        {alvoTipos.length > 1 ? (
-          <p className="text-xs text-amber-600">Atencao: esta tabela possui mais de um tipo de alvo vinculado.</p>
+        {unidadesExecucaoIds.length > 0 ? (
+          <p className="text-sm">
+            Unidades selecionadas: <b>{unidadesExecucaoIds.join(", ")}</b>
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">Aplica a todas as unidades de execucao.</p>
+        )}
+        {unidadesErrMsg ? (
+          <p className="text-sm text-red-700">Falha ao carregar unidades de execucao: {unidadesErrMsg}</p>
+        ) : null}
+        {warnings.length ? (
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
+            {warnings.map((w) => (
+              <div key={w}>{w}</div>
+            ))}
+          </div>
         ) : null}
       </div>
 
@@ -156,9 +307,9 @@ export default async function Page({ params }: { params: { id: string } }) {
         titulo={tabelaInfo.titulo}
         anoReferencia={tabelaInfo.ano_referencia}
         ativo={tabelaInfo.ativo}
-        produtoTipo={tabelaInfo.produto_tipo}
-        alvoTipo={alvoTipo}
-        alvosSelecionados={alvoIds}
+        servicoTipo={servicoTipo}
+        servicoId={servicoId}
+        unidadeExecucaoIds={unidadesExecucaoIds}
       />
 
       <div className="rounded-md border p-4 space-y-3">

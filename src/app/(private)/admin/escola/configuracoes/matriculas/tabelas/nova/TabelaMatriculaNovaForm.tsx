@@ -3,9 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
+type ServicoTipo = "CURSO_REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 
-type AlvoItem = {
+type ServicoItem = {
+  id: number;
+  label: string;
+};
+
+type UnidadeExecucaoItem = {
   id: number;
   label: string;
 };
@@ -31,36 +36,46 @@ function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
 
-function labelAlvo(tipo: AlvoTipo, row: Record<string, unknown>): AlvoItem {
-  if (tipo === "TURMA") {
-    const turmaId = Number((row.turma_id ?? row.id) as number);
-    const nome = typeof row.nome === "string" && row.nome.trim() ? row.nome : `Turma ${turmaId}`;
-    return { id: turmaId, label: `${nome} (ID ${turmaId})` };
-  }
-
-  const id = Number(row.id);
-  const titulo =
-    (typeof row.titulo === "string" && row.titulo.trim()) ||
-    (typeof row.nome === "string" && row.nome.trim()) ||
-    `Alvo ${id}`;
-  return { id, label: `${titulo} (ID ${id})` };
-}
 
 export default function TabelaMatriculaNovaForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const paramTipo = (searchParams.get("alvo_tipo") || "TURMA").toUpperCase() as AlvoTipo;
-  const paramId = Number(searchParams.get("alvo_id") || "");
+  const paramServicoTipoRaw = String(searchParams.get("servico_tipo") || "").toUpperCase();
+  const paramAlvoTipoRaw = String(searchParams.get("alvo_tipo") || "").toUpperCase();
+  const paramServicoIdRaw = Number(searchParams.get("servico_id") || "");
+  const paramAlvoIdRaw = Number(searchParams.get("alvo_id") || "");
   const paramAno = searchParams.get("ano");
 
-  const [alvoTipo, setAlvoTipo] = useState<AlvoTipo>(
-    ["TURMA", "CURSO_LIVRE", "PROJETO"].includes(paramTipo) ? paramTipo : "TURMA",
-  );
-  const [alvos, setAlvos] = useState<AlvoItem[]>([]);
-  const [alvosLoading, setAlvosLoading] = useState(false);
-  const [alvosErro, setAlvosErro] = useState<string | null>(null);
-  const [alvosSelecionados, setAlvosSelecionados] = useState<number[]>(paramId ? [paramId] : []);
+  const initialCategoria: ServicoTipo =
+    paramServicoTipoRaw === "CURSO_REGULAR" ||
+    paramServicoTipoRaw === "CURSO_LIVRE" ||
+    paramServicoTipoRaw === "PROJETO_ARTISTICO"
+      ? (paramServicoTipoRaw as ServicoTipo)
+      : paramAlvoTipoRaw === "CURSO_LIVRE"
+        ? "CURSO_LIVRE"
+        : paramAlvoTipoRaw === "PROJETO"
+          ? "PROJETO_ARTISTICO"
+          : "CURSO_REGULAR";
+
+  const initialServicoId =
+    Number.isFinite(paramServicoIdRaw) && paramServicoIdRaw > 0
+      ? paramServicoIdRaw
+      : paramAlvoTipoRaw !== "TURMA" && Number.isFinite(paramAlvoIdRaw) && paramAlvoIdRaw > 0
+        ? paramAlvoIdRaw
+        : null;
+
+  const [categoria, setCategoria] = useState<ServicoTipo>(initialCategoria);
+  const [servicos, setServicos] = useState<ServicoItem[]>([]);
+  const [servicosLoading, setServicosLoading] = useState(false);
+  const [servicosErro, setServicosErro] = useState<string | null>(null);
+  const [servicoId, setServicoId] = useState<number | null>(initialServicoId);
+
+  const [unidades, setUnidades] = useState<UnidadeExecucaoItem[]>([]);
+  const [unidadesLoading, setUnidadesLoading] = useState(false);
+  const [unidadesErro, setUnidadesErro] = useState<string | null>(null);
+  const [unidadesSelecionadas, setUnidadesSelecionadas] = useState<number[]>([]);
+  const [aplicarTodas, setAplicarTodas] = useState(false);
 
   const [titulo, setTitulo] = useState("");
   const [anoReferencia, setAnoReferencia] = useState<string>(paramAno ?? "");
@@ -83,12 +98,6 @@ export default function TabelaMatriculaNovaForm() {
   const [erro, setErro] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
-  const produtoTipo = useMemo(() => {
-    if (alvoTipo === "TURMA") return "REGULAR";
-    if (alvoTipo === "CURSO_LIVRE") return "CURSO_LIVRE";
-    return "PROJETO_ARTISTICO";
-  }, [alvoTipo]);
-
   const anoParsed = useMemo(() => {
     if (!anoReferencia.trim()) return null;
     const n = Number(anoReferencia);
@@ -98,8 +107,11 @@ export default function TabelaMatriculaNovaForm() {
 
   const validacao = useMemo(() => {
     if (!titulo.trim()) return "Informe o titulo da tabela.";
-    if (!anoParsed) return "Ano de referencia e obrigatorio.";
-    if (alvosSelecionados.length === 0) return "Selecione ao menos 1 alvo.";
+    if (categoria === "CURSO_REGULAR" && !anoParsed) return "Ano de referencia e obrigatorio.";
+    if (!servicoId) return "Selecione o servico.";
+    if (!aplicarTodas && unidades.length > 0 && unidadesSelecionadas.length === 0) {
+      return "Selecione ao menos 1 unidade de execucao.";
+    }
     if (itens.length === 0) return "Inclua pelo menos 1 item.";
     for (const item of itens) {
       if (!item.codigo.trim()) return "Todo item precisa de codigo (ex.: MENSALIDADE).";
@@ -107,39 +119,76 @@ export default function TabelaMatriculaNovaForm() {
       if (cents === null) return `Valor invalido para o item ${item.codigo}.`;
     }
     return null;
-  }, [titulo, anoParsed, alvosSelecionados, itens]);
+  }, [titulo, categoria, anoParsed, servicoId, aplicarTodas, unidades, unidadesSelecionadas, itens]);
 
   useEffect(() => {
     let ativoFlag = true;
     (async () => {
       try {
-        setAlvosErro(null);
-        setAlvosLoading(true);
-        const res = await fetch(`/api/matriculas/tabelas/alvos?tipo=${alvoTipo}`);
-        const json = (await res.json()) as { ok?: boolean; data?: Record<string, unknown>[]; message?: string };
+        setServicosErro(null);
+        setServicosLoading(true);
+        const res = await fetch(`/api/matriculas/tabelas/servicos?tipo=${categoria}`);
+        const json = (await res.json()) as { ok?: boolean; data?: ServicoItem[]; message?: string };
         if (!ativoFlag) return;
         if (!res.ok || !json.ok) {
-          throw new Error(json.message || "Falha ao carregar alvos.");
+          throw new Error(json.message || "Falha ao carregar servicos.");
         }
-        const items = (json.data ?? []).map((row) => labelAlvo(alvoTipo, row));
-        setAlvos(items);
+        const items = (json.data ?? []).map((row) => ({
+          id: Number(row.id),
+          label: String(row.label),
+        }));
+        setServicos(items);
+        if (!items.some((s) => s.id === servicoId)) {
+          setServicoId(null);
+        }
       } catch (e: unknown) {
-        if (ativoFlag) setAlvosErro(e instanceof Error ? e.message : "Falha ao carregar alvos.");
+        if (ativoFlag) setServicosErro(e instanceof Error ? e.message : "Falha ao carregar servicos.");
       } finally {
-        if (ativoFlag) setAlvosLoading(false);
+        if (ativoFlag) setServicosLoading(false);
       }
     })();
     return () => {
       ativoFlag = false;
     };
-  }, [alvoTipo]);
+  }, [categoria, servicoId]);
 
   useEffect(() => {
-    setAlvosSelecionados(paramId && alvoTipo === paramTipo ? [paramId] : []);
-  }, [alvoTipo, paramId, paramTipo]);
+    let ativoFlag = true;
+    (async () => {
+      if (!servicoId) {
+        setUnidades([]);
+        setUnidadesSelecionadas([]);
+        setUnidadesLoading(false);
+        return;
+      }
+      try {
+        setUnidadesErro(null);
+        setUnidadesLoading(true);
+        const res = await fetch(`/api/matriculas/tabelas/unidades-execucao?servico_id=${servicoId}`);
+        const json = (await res.json()) as { ok?: boolean; data?: UnidadeExecucaoItem[]; message?: string };
+        if (!ativoFlag) return;
+        if (!res.ok || !json.ok) {
+          throw new Error(json.message || "Falha ao carregar unidades de execucao.");
+        }
+        const items = (json.data ?? []).map((row) => ({
+          id: Number(row.id),
+          label: String(row.label),
+        }));
+        setUnidades(items);
+        setUnidadesSelecionadas((old) => old.filter((id) => items.some((u) => u.id === id)));
+      } catch (e: unknown) {
+        if (ativoFlag) setUnidadesErro(e instanceof Error ? e.message : "Falha ao carregar unidades de execucao.");
+      } finally {
+        if (ativoFlag) setUnidadesLoading(false);
+      }
+    })();
+    return () => {
+      ativoFlag = false;
+    };
+  }, [servicoId]);
 
-  function toggleAlvo(id: number) {
-    setAlvosSelecionados((old) => {
+  function toggleUnidade(id: number) {
+    setUnidadesSelecionadas((old) => {
       const set = new Set(old);
       if (set.has(id)) set.delete(id);
       else set.add(id);
@@ -194,11 +243,11 @@ export default function TabelaMatriculaNovaForm() {
         body: JSON.stringify({
           titulo: titulo.trim(),
           ano_referencia: anoParsed,
-          produto_tipo: produtoTipo,
           ativo,
           observacoes: observacoes || null,
-          alvo_tipo: alvoTipo,
-          alvo_ids: alvosSelecionados,
+          servico_tipo: categoria,
+          servico_id: servicoId,
+          unidade_execucao_ids: aplicarTodas ? [] : unidadesSelecionadas,
           itens: itemsPayload,
         }),
       });
@@ -239,42 +288,87 @@ export default function TabelaMatriculaNovaForm() {
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <div className="space-y-2 md:col-span-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Aplica-se a</label>
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Categoria do servico</label>
           <select
-            value={alvoTipo}
-            onChange={(e) => setAlvoTipo(e.target.value as AlvoTipo)}
+            value={categoria}
+            onChange={(e) => {
+              setCategoria(e.target.value as ServicoTipo);
+              setServicoId(null);
+              setUnidadesSelecionadas([]);
+            }}
             className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
           >
-            <option value="TURMA">Curso regular</option>
+            <option value="CURSO_REGULAR">Curso regular</option>
             <option value="CURSO_LIVRE">Curso livre</option>
-            <option value="PROJETO">Projeto artístico</option>
+            <option value="PROJETO_ARTISTICO">Projeto artistico</option>
           </select>
         </div>
 
         <div className="space-y-2 md:col-span-2">
-          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Alvos vinculados</label>
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Servico</label>
+          <select
+            value={servicoId ?? ""}
+            onChange={(e) => setServicoId(e.target.value ? Number(e.target.value) : null)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+          >
+            <option value="" disabled>
+              Selecione...
+            </option>
+            {servicos.map((servico) => (
+              <option key={servico.id} value={servico.id}>
+                {servico.label}
+              </option>
+            ))}
+          </select>
+          {servicosLoading ? <p className="text-xs text-slate-500">Carregando servicos...</p> : null}
+          {servicosErro ? <p className="text-xs text-rose-600">{servicosErro}</p> : null}
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={aplicarTodas}
+              onChange={(e) => {
+                setAplicarTodas(e.target.checked);
+                if (e.target.checked) setUnidadesSelecionadas([]);
+              }}
+            />
+            Aplicar a todas as unidades de execucao deste servico
+          </label>
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-400">Unidades de execucao</label>
           <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
-            {alvosLoading ? (
-              <div className="text-sm text-slate-500">Carregando alvos...</div>
-            ) : alvosErro ? (
-              <div className="text-sm text-rose-600">{alvosErro}</div>
-            ) : alvos.length === 0 ? (
-              <div className="text-sm text-slate-500">Nenhum alvo cadastrado.</div>
+            {!servicoId ? (
+              <div className="text-sm text-slate-500">Selecione um servico para listar unidades.</div>
+            ) : unidadesLoading ? (
+              <div className="text-sm text-slate-500">Carregando unidades...</div>
+            ) : unidadesErro ? (
+              <div className="text-sm text-rose-600">{unidadesErro}</div>
+            ) : unidades.length === 0 ? (
+              <div className="text-sm text-slate-500">Nenhuma unidade de execucao cadastrada.</div>
             ) : (
-              alvos.map((alvo) => (
-                <label key={alvo.id} className="flex items-start gap-2 text-sm text-slate-700">
+              unidades.map((unidade) => (
+                <label key={unidade.id} className="flex items-start gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
                     className="mt-1"
-                    checked={alvosSelecionados.includes(alvo.id)}
-                    onChange={() => toggleAlvo(alvo.id)}
+                    checked={unidadesSelecionadas.includes(unidade.id)}
+                    onChange={() => toggleUnidade(unidade.id)}
+                    disabled={aplicarTodas}
                   />
-                  <span>{alvo.label}</span>
+                  <span className={aplicarTodas ? "text-slate-400" : undefined}>{unidade.label}</span>
                 </label>
               ))
             )}
           </div>
-          <p className="text-xs text-slate-500">Selecione um ou mais alvos para reutilizar a tabela.</p>
+          <p className="text-xs text-slate-500">
+            {aplicarTodas
+              ? "Aplica a todas as unidades deste servico."
+              : "Selecione uma ou mais unidades de execucao para limitar a tabela."}
+          </p>
         </div>
 
         <div className="space-y-2 md:col-span-2">
