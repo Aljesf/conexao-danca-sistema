@@ -275,7 +275,8 @@ export async function GET(req: Request) {
       const servico = servicoIdResolved ? servicoMap.get(servicoIdResolved) : undefined;
       const ue = turmaId ? ueMap.get(turmaId) : undefined;
       const aluno = pessoasMap.get(toPositiveNumber(row.pessoa_id) ?? -1);
-      const responsavel = pessoasMap.get(toPositiveNumber(row.responsavel_financeiro_id) ?? -1);
+      const responsavelId = toPositiveNumber(row.responsavel_financeiro_id);
+      const responsavel = responsavelId ? pessoasMap.get(responsavelId) : undefined;
 
       const unidadeExecucaoLabel = ue
         ? formatUnidadeExecucaoLabel({
@@ -288,23 +289,24 @@ export async function GET(req: Request) {
           })
         : "-";
 
+      const servicoNome = servico?.titulo?.trim() ?? null;
       return {
-        matricula_id: row.id,
+        id: row.id,
         pessoa_id: row.pessoa_id,
         responsavel_id: row.responsavel_financeiro_id,
         aluno_nome: buildPessoaNome(aluno, row.pessoa_id),
-        responsavel_nome: buildPessoaNome(responsavel, row.responsavel_financeiro_id ?? null),
+        responsavel_nome: responsavelId ? buildPessoaNome(responsavel, responsavelId) : null,
         ano_referencia: row.ano_referencia,
         status: row.status,
         servico_id: servicoIdResolved,
-        servico_label: servico?.titulo?.trim() || (servicoIdResolved ? `Servico #${servicoIdResolved}` : "-"),
+        servico_nome: servicoNome ?? (servicoIdResolved ? `Servico #${servicoIdResolved}` : null),
         unidade_execucao_id: ue ? toPositiveNumber(ue.unidade_execucao_id) : null,
-        unidade_execucao_label: unidadeExecucaoLabel,
+        unidade_execucao_label: ue ? unidadeExecucaoLabel : null,
         created_at: row.created_at,
       };
     });
 
-    return okJson({ ok: true, data: mapped }, 200);
+    return okJson({ items: mapped }, 200);
   } catch (e: unknown) {
     return errJson("server_error", "Erro inesperado ao listar matriculas.", 500, {
       message: e instanceof Error ? e.message : String(e),

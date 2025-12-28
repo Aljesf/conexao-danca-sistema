@@ -129,3 +129,15 @@ Versão lógica: **v1.0 (Serviço + Unidade de Execução)**
 3. Avançar para:
    - Projeto Artístico (criação de unidades de execução específicas)
    - Vínculo de matrícula diretamente à `unidade_execucao_id`
+
+---
+
+## Atualizacoes recentes (2025-12-28)
+
+- Tier dinamico em preco: tabelas `financeiro_tier_grupos` e `financeiro_tiers` + vinculo em `escola_produtos_educacionais.tier_grupo_id`.
+- Resolver de precos com fallback MENSALIDADE/RECORRENTE permanece e agora aplica tier dinamico quando houver grupo ativo.
+- UI operacional: `/escola/matriculas` (lista) e `/escola/matriculas/[id]` (detalhe) com resolucao de servico e UE.
+- Labels de UE padronizadas via helper `formatUnidadeExecucaoLabel`.
+
+- Refatoracao UX: Lista operacional de matriculas (/escola/matriculas) agora exibe aluno, responsavel, servico, turma/UE (nome curto + tooltip), status e resumo por servico.
+
