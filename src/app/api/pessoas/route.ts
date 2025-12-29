@@ -12,10 +12,12 @@ function errorJson(status: number, payload: any) {
   return NextResponse.json(payload, { status });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const cookieStore = await getCookieStore();
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const url = new URL(req.url);
+    const search = (url.searchParams.get("search") ?? "").trim();
 
     const {
       data: { user },
@@ -23,6 +25,25 @@ export async function GET() {
     } = await supabase.auth.getUser();
     if (authError || !user) {
       return errorJson(401, { error: "Usuario nao autenticado." });
+    }
+
+    if (search) {
+      const like = `%${search}%`;
+      const { data, error } = await supabase
+        .from("pessoas")
+        .select("id,nome,email,telefone,cpf,ativo")
+        .or(
+          `nome.ilike.${like},nome_social.ilike.${like},cpf.ilike.${like},email.ilike.${like},telefone.ilike.${like}`,
+        )
+        .limit(20)
+        .order("nome", { ascending: true });
+
+      if (error) {
+        console.error("GET /api/pessoas search erro:", error);
+        return errorJson(500, { error: "Erro ao buscar pessoas." });
+      }
+
+      return NextResponse.json({ pessoas: data ?? [] });
     }
 
     const { data, error } = await supabase
