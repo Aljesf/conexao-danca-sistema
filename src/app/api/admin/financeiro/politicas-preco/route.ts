@@ -14,6 +14,19 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+async function resolvePoliticaPk(supabase: Awaited<ReturnType<typeof getSupabaseServerSSR>>) {
+  const { data, error } = await supabase
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "financeiro_politicas_preco");
+
+  if (error) return "id";
+  const columns = new Set((data ?? []).map((row) => String((row as { column_name?: string }).column_name)));
+  if (columns.has("politica_preco_id")) return "politica_preco_id";
+  return "id";
+}
+
 export async function GET(req: Request) {
   const supabase = await getSupabaseServerSSR();
   const url = new URL(req.url);
@@ -30,10 +43,8 @@ export async function GET(req: Request) {
     }
   }
 
-  let query = supabase
-    .from("financeiro_politicas_preco")
-    .select("id,nome,descricao,ativo,created_at,updated_at")
-    .order("id", { ascending: true });
+  const pk = await resolvePoliticaPk(supabase);
+  let query = supabase.from("financeiro_politicas_preco").select("*").order("created_at", { ascending: false });
 
   if (ativoFilter !== null) {
     query = query.eq("ativo", ativoFilter);
@@ -45,11 +56,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ politicas: (data ?? []) as PoliticaPrecoRow[] });
+  const politicas = (data ?? []).map((row) => {
+    const raw = row as Record<string, unknown>;
+    return { ...raw, id: raw[pk] } as PoliticaPrecoRow;
+  });
+
+  return NextResponse.json({ politicas });
 }
 
 export async function POST(req: Request) {
   const supabase = await getSupabaseServerSSR();
+  const pk = await resolvePoliticaPk(supabase);
 
   const body = (await req.json().catch(() => null)) as
     | { nome?: unknown; descricao?: unknown; ativo?: unknown }
@@ -73,12 +90,13 @@ export async function POST(req: Request) {
   const { data, error } = await supabase
     .from("financeiro_politicas_preco")
     .insert(payload)
-    .select("id,nome,descricao,ativo,created_at,updated_at")
+    .select("*")
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ politica: data }, { status: 201 });
+  const politica = data ? { ...(data as Record<string, unknown>), id: (data as Record<string, unknown>)[pk] } : null;
+  return NextResponse.json({ politica }, { status: 201 });
 }

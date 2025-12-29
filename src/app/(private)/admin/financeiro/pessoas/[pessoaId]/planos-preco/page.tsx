@@ -27,8 +27,11 @@ function toInt(v: string): number | null {
   return Math.trunc(n);
 }
 
-export default function AdminFinanceiroPessoaPlanosPrecoPage(props: { params: { pessoaId: string } }) {
-  const pessoaId = toInt(props.params.pessoaId);
+export default function AdminFinanceiroPessoaPlanosPrecoPage(
+  props: { params: Promise<{ pessoaId: string }> },
+) {
+  const { pessoaId: pessoaIdStr } = React.use(props.params);
+  const pessoaId = toInt(pessoaIdStr);
 
   const [planos, setPlanos] = React.useState<Plano[]>([]);
   const [vinculos, setVinculos] = React.useState<Vinculo[]>([]);
@@ -144,7 +147,7 @@ export default function AdminFinanceiroPessoaPlanosPrecoPage(props: { params: { 
         description="Vincule o aluno a um plano. O plano define quais itens/tabelas ele cobre via tiers."
         actions={
           <Link
-            href={`/pessoas/${props.params.pessoaId}`}
+            href={`/pessoas/${pessoaIdStr}`}
             className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
           >
             Voltar para a pessoa

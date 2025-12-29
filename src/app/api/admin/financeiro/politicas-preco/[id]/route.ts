@@ -7,6 +7,19 @@ function parseId(param: string): number | null {
   return n;
 }
 
+async function resolvePoliticaPk(supabase: Awaited<ReturnType<typeof getSupabaseServerSSR>>) {
+  const { data, error } = await supabase
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "financeiro_politicas_preco");
+
+  if (error) return "id";
+  const columns = new Set((data ?? []).map((row) => String((row as { column_name?: string }).column_name)));
+  if (columns.has("politica_preco_id")) return "politica_preco_id";
+  return "id";
+}
+
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await getSupabaseServerSSR();
   const { id } = await ctx.params;
@@ -16,6 +29,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     return NextResponse.json({ error: "ID invalido." }, { status: 400 });
   }
 
+  const pk = await resolvePoliticaPk(supabase);
   const body = (await req.json().catch(() => null)) as
     | { nome?: unknown; descricao?: unknown; ativo?: unknown }
     | null;
@@ -34,13 +48,14 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const { data, error } = await supabase
     .from("financeiro_politicas_preco")
     .update(patch)
-    .eq("id", politicaId)
-    .select("id,nome,descricao,ativo,created_at,updated_at")
+    .eq(pk, politicaId)
+    .select("*")
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ politica: data });
+  const politica = data ? { ...(data as Record<string, unknown>), id: (data as Record<string, unknown>)[pk] } : null;
+  return NextResponse.json({ politica });
 }
