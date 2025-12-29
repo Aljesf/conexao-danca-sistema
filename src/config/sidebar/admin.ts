@@ -67,6 +67,7 @@ export const adminSidebar: SidebarSection[] = [
     items: [
       { label: "Configuracao da escola", href: "/admin/config/escola" },
       { label: "Regras de valor", href: "/admin/config/escola/regras-valor" },
+      { label: "Planos de preco", href: "/admin/config/escola/regras-valor/planos" },
       { label: "Configuracao da loja", href: "/admin/config/loja" },
       { label: "Configuracao do Ballet Cafe", href: "/admin/config/cafe" },
     ],
