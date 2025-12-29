@@ -103,9 +103,9 @@ function formatAjusteLabel(tipo: AjusteTipo | null, valor: number | null): strin
   return formatReais(valor);
 }
 
-export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise<{ id: string }> }) {
-  const { id: idStr } = React.use(props.params);
-  const planoId = toInt(idStr);
+export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise<{ planoId: string }> }) {
+  const { planoId: planoIdStr } = React.use(props.params);
+  const planoId = toInt(planoIdStr);
 
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -177,10 +177,8 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
     setLoading(true);
     setErro(null);
     try {
-      const res = await fetch(
-        `/api/admin/escola/regras-valor/tiers?grupo_id=${grupoId}&politica_id=${planoId}`,
-        { method: "GET" },
-      );
+      const qs = grupoId ? `?grupo_id=${grupoId}` : "";
+      const res = await fetch(`/api/admin/escola/regras-valor/planos/${planoId}/tiers${qs}`, { method: "GET" });
       const json = (await res.json()) as { tiers?: Tier[]; error?: string };
       if (!res.ok) throw new Error(json.error || "Falha ao carregar tiers.");
       setTiers(json.tiers ?? []);
@@ -224,7 +222,7 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
     setSaving(true);
     setErro(null);
     try {
-      const res = await fetch("/api/admin/escola/regras-valor/tiers", {
+      const res = await fetch(`/api/admin/escola/regras-valor/planos/${planoId}/tiers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -232,7 +230,6 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
           ordem: ordemNum,
           tabela_id: tabelaNum,
           tabela_item_id: itemNum,
-          politica_id: planoId,
           ajuste_tipo: ajusteTipo,
           ajuste_valor_centavos: ajusteNum,
           ativo,

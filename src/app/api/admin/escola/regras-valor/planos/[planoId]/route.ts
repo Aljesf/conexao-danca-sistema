@@ -12,10 +12,10 @@ function mapPlano(row: Record<string, unknown>) {
   return { ...row, id: row[PK] };
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: Request, ctx: { params: Promise<{ planoId: string }> }) {
   const supabase = await getSupabaseServerSSR();
-  const { id } = await ctx.params;
-  const pid = toInt(id);
+  const { planoId } = await ctx.params;
+  const pid = toInt(planoId);
 
   if (!pid) {
     return NextResponse.json({ error: "ID invalido." }, { status: 400 });
