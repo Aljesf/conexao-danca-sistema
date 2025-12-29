@@ -81,7 +81,7 @@ export default function AdminConfigEscolaPlanosPrecoPage() {
     <div className="p-6 space-y-6">
       <PageHeader
         title="Planos de preco"
-        description="Crie planos de preco (politicas) e gerencie os tiers vinculados."
+        description="Crie planos de preco e gerencie os degraus vinculados."
         actions={
           <Link href="/admin/config/escola/regras-valor" className="inline-flex items-center rounded-md border px-3 py-2 text-sm">
             Voltar
@@ -152,7 +152,7 @@ export default function AdminConfigEscolaPlanosPrecoPage() {
                   <td className="py-2 pr-3">{p.ativo ? "Sim" : "Nao"}</td>
                   <td className="py-2 pr-3">
                     <Link className="underline" href={`/admin/config/escola/regras-valor/planos/${p.id}/tiers`}>
-                      Editar tiers
+                      Editar degraus
                     </Link>
                   </td>
                 </tr>

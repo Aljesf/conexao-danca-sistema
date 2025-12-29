@@ -169,10 +169,6 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
 
   const carregarTiers = React.useCallback(async () => {
     if (!planoId) return;
-    if (!grupoId) {
-      setTiers([]);
-      return;
-    }
 
     setLoading(true);
     setErro(null);
@@ -180,7 +176,7 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
       const qs = grupoId ? `?grupo_id=${grupoId}` : "";
       const res = await fetch(`/api/admin/escola/regras-valor/planos/${planoId}/tiers${qs}`, { method: "GET" });
       const json = (await res.json()) as { tiers?: Tier[]; error?: string };
-      if (!res.ok) throw new Error(json.error || "Falha ao carregar tiers.");
+      if (!res.ok) throw new Error(json.error || "Falha ao carregar degraus.");
       setTiers(json.tiers ?? []);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado.");
@@ -199,11 +195,11 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
     const ajusteNum = parseInteger(ajusteValor);
 
     if (!grupoNum) {
-      setErro("Selecione o grupo.");
+      setErro("Nenhum grupo cadastrado. Cadastre um grupo de tiers para continuar.");
       return;
     }
     if (!ordemNum) {
-      setErro("Informe a ordem do tier.");
+      setErro("Informe a ordem do degrau.");
       return;
     }
     if (!tabelaNum) {
@@ -237,7 +233,7 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
       });
 
       const json = (await res.json()) as { tier?: Tier; error?: string };
-      if (!res.ok) throw new Error(json.error || "Falha ao criar tier.");
+      if (!res.ok) throw new Error(json.error || "Falha ao criar degrau.");
 
       setOrdem("");
       setAjusteValor("");
@@ -294,6 +290,10 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
 
   const tabelaMap = React.useMemo(() => new Map(tabelas.map((t) => [t.id, t])), [tabelas]);
   const itemMap = React.useMemo(() => new Map(itens.map((i) => [i.id, i])), [itens]);
+  const grupoSelecionado = React.useMemo(
+    () => grupos.find((g) => String(g.tier_grupo_id) === grupoId) ?? null,
+    [grupos, grupoId],
+  );
 
   const selectedItemId = parsePositiveInt(itemId);
   const selectedItem = selectedItemId ? itemMap.get(selectedItemId) : undefined;
@@ -310,8 +310,8 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        title={`Tiers do plano ${planoId ? `#${planoId}` : ""}`}
-        description="Cadastre degraus por grupo, tabela e item para este plano."
+        title={`Degraus do plano ${planoId ? `#${planoId}` : ""}`}
+        description="Cadastre degraus por tabela e item para este plano."
         actions={
           <Link href="/admin/config/escola/regras-valor/planos" className="inline-flex items-center rounded-md border px-3 py-2 text-sm">
             Voltar
@@ -343,31 +343,17 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
         )}
       </SectionCard>
 
-      <SectionCard title="Grupo de tiers">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="grid gap-1">
-            <label className="text-sm font-medium">Grupo</label>
-            <select
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={grupoId}
-              onChange={(e) => setGrupoId(e.target.value)}
-              disabled={loading}
-            >
-              <option value="">Selecione</option>
-              {grupos.map((g) => (
-                <option key={g.tier_grupo_id} value={String(g.tier_grupo_id)}>
-                  {g.nome} {g.ativo ? "" : "(inativo)"}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="text-sm text-muted-foreground flex items-end">
-            {grupoId ? "Tiers listados para o grupo selecionado." : "Selecione um grupo para listar os tiers."}
-          </div>
+      <SectionCard title="Novo degrau" description="Informe escopo (tabela + item) e ajuste.">
+        <div className="text-xs text-muted-foreground">
+          {grupoSelecionado ? (
+            <>
+              Grupo aplicado: {grupoSelecionado.nome} {grupoSelecionado.ativo ? "" : "(inativo)"}
+            </>
+          ) : (
+            <>Nenhum grupo de tiers cadastrado. Cadastre um grupo antes de criar degraus.</>
+          )}
         </div>
-      </SectionCard>
 
-      <SectionCard title="Novo tier" description="Informe escopo (tabela + item) e ajuste.">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
           <div className="grid gap-1">
             <label className="text-sm font-medium">Ordem</label>
@@ -461,10 +447,10 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
         <ToolbarRow>
           <button
             className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-            disabled={saving || loading}
+            disabled={saving || loading || !grupoSelecionado}
             onClick={() => void criarTier()}
           >
-            {saving ? "Salvando..." : "Criar tier"}
+            {saving ? "Salvando..." : "Criar degrau"}
           </button>
           <button className="rounded-md border px-4 py-2 text-sm" disabled={loading} onClick={() => void carregarTiers()}>
             Recarregar
@@ -472,9 +458,12 @@ export default function AdminConfigEscolaPlanoTiersPage(props: { params: Promise
         </ToolbarRow>
       </SectionCard>
 
-      <SectionCard title="Tiers cadastrados" actions={<span>{loading ? "Carregando..." : `${tiers.length} tier(s)`}</span>}>
+      <SectionCard
+        title="Degraus cadastrados"
+        actions={<span>{loading ? "Carregando..." : `${tiers.length} degrau(s)`}</span>}
+      >
         {tiers.length === 0 ? (
-          <div className="text-sm text-muted-foreground">Nenhum tier cadastrado.</div>
+          <div className="text-sm text-muted-foreground">Nenhum degrau cadastrado.</div>
         ) : (
           <div className="overflow-auto">
             <table className="w-full text-sm">

@@ -102,8 +102,11 @@ function formatAjusteLabel(tipo: AjusteTipo | null, valor: number | null): strin
   return formatReais(valor);
 }
 
-export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: { grupoId: string } }) {
-  const grupoId = toInt(props.params.grupoId);
+export default function AdminConfigEscolaRegrasValorGrupoPage(
+  props: { params: Promise<{ grupoId: string }> },
+) {
+  const { grupoId: grupoIdStr } = React.use(props.params);
+  const grupoId = toInt(grupoIdStr);
 
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -148,11 +151,11 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
       setGrupo(g);
 
       const jsonTiers = (await resTiers.json()) as { tiers?: Tier[]; error?: string };
-      if (!resTiers.ok) throw new Error(jsonTiers.error || "Falha ao carregar tiers.");
+      if (!resTiers.ok) throw new Error(jsonTiers.error || "Falha ao carregar degraus.");
       setTiers(jsonTiers.tiers ?? []);
 
       const jsonPoliticas = (await resPoliticas.json()) as { politicas?: PoliticaPreco[]; error?: string };
-      if (!resPoliticas.ok) throw new Error(jsonPoliticas.error || "Falha ao carregar politicas.");
+      if (!resPoliticas.ok) throw new Error(jsonPoliticas.error || "Falha ao carregar planos.");
       setPoliticas(jsonPoliticas.politicas ?? []);
 
       const jsonTabelas = (await resTabelas.json()) as { tabelas?: MatriculaTabela[]; error?: string };
@@ -175,7 +178,7 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
     const ajusteNum = parseInteger(ajusteValor);
 
     if (!ordemNum) {
-      setErro("Informe a ordem do tier.");
+      setErro("Informe a ordem do degrau.");
       return;
     }
     if (!tabelaNum) {
@@ -187,7 +190,7 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
       return;
     }
     if (!politicaNum) {
-      setErro("Selecione a politica.");
+      setErro("Selecione o plano.");
       return;
     }
     if (ajusteNum === null) {
@@ -214,7 +217,7 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
       });
 
       const json = (await res.json()) as { tier?: Tier; error?: string };
-      if (!res.ok) throw new Error(json.error || "Falha ao criar tier.");
+      if (!res.ok) throw new Error(json.error || "Falha ao criar degrau.");
 
       setOrdem("");
       setAjusteValor("");
@@ -276,10 +279,10 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
       const politicaId = tier.politica_id ?? null;
       const politica = politicaId ? politicaMap.get(politicaId) : null;
       const label = politica
-        ? `${politica.nome}${politica.ativo ? "" : " (inativa)"}`
+        ? `${politica.nome}${politica.ativo ? "" : " (inativo)"}`
         : politicaId
-          ? `Politica #${politicaId}`
-          : "Sem politica";
+          ? `Plano #${politicaId}`
+          : "Sem plano";
       const key = politicaId ? String(politicaId) : "none";
       const group = grupos.get(key) ?? { politicaId, label, tiers: [] };
       group.tiers.push(tier);
@@ -305,7 +308,7 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
     <div className="p-6 space-y-6">
       <PageHeader
         title={`Regras de valor - Grupo ${grupoId ? `#${grupoId}` : ""}`}
-        description="Cadastre tiers por politica, tabela e item para aplicar ajustes controlados."
+        description="Cadastre degraus por plano de preco, tabela e item para aplicar ajustes controlados."
         actions={
           <Link href="/admin/config/escola/regras-valor" className="inline-flex items-center rounded-md border px-3 py-2 text-sm">
             Voltar
@@ -337,7 +340,7 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
         )}
       </SectionCard>
 
-      <SectionCard title="Novo tier" description="Informe escopo (tabela + item), politica e ajuste.">
+      <SectionCard title="Novo degrau" description="Informe escopo (tabela + item), plano e ajuste.">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
           <div className="grid gap-1">
             <label className="text-sm font-medium">Ordem</label>
@@ -386,7 +389,7 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
           </div>
 
           <div className="grid gap-1">
-            <label className="text-sm font-medium">Politica de preco</label>
+            <label className="text-sm font-medium">Plano de preco</label>
             <select
               className="w-full rounded-md border px-3 py-2 text-sm"
               value={politicaId}
@@ -395,7 +398,7 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
               <option value="">Selecione</option>
               {politicas.map((p) => (
                 <option key={p.id} value={String(p.id)}>
-                  {p.nome} {p.ativo ? "" : "(inativa)"}
+                  {p.nome} {p.ativo ? "" : "(inativo)"}
                 </option>
               ))}
             </select>
@@ -455,7 +458,7 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
             disabled={saving || loading}
             onClick={() => void criarTier()}
           >
-            {saving ? "Salvando..." : "Criar tier"}
+            {saving ? "Salvando..." : "Criar degrau"}
           </button>
           <button
             className="rounded-md border px-4 py-2 text-sm"
@@ -468,18 +471,18 @@ export default function AdminConfigEscolaRegrasValorGrupoPage(props: { params: {
       </SectionCard>
 
       <SectionCard
-        title="Tiers cadastrados por politica"
-        actions={<span>{loading ? "Carregando..." : `${tiers.length} tier(s)`}</span>}
+        title="Degraus por plano"
+        actions={<span>{loading ? "Carregando..." : `${tiers.length} degrau(s)`}</span>}
       >
         {groupedTiers.length === 0 ? (
-          <div className="text-sm text-muted-foreground">Nenhum tier cadastrado.</div>
+          <div className="text-sm text-muted-foreground">Nenhum degrau cadastrado.</div>
         ) : (
           <div className="space-y-4">
             {groupedTiers.map((grupo) => (
               <div key={grupo.politicaId ?? "none"} className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium text-slate-900">{grupo.label}</span>
-                  <span className="text-muted-foreground">{grupo.tiers.length} tier(s)</span>
+                  <span className="text-muted-foreground">{grupo.tiers.length} degrau(s)</span>
                 </div>
                 <div className="overflow-auto">
                   <table className="w-full text-sm">

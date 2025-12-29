@@ -209,8 +209,8 @@ export default function AdminFinanceiroPessoaPlanosPrecoPage(
           <div className="rounded-xl border p-3 text-sm">
             <div className="font-medium mb-2">Itens cobertos pelo plano</div>
             <ul className="list-disc pl-5 space-y-1">
-              {itens.map((x, i) => (
-                <li key={`${x.tabela_id}:${x.tabela_item_id}:${i}`}>
+              {itens.map((x) => (
+                <li key={`${x.tabela_id}:${x.tabela_item_id}`}>
                   Tabela #{x.tabela_id} - Item #{x.tabela_item_id}
                 </li>
               ))}

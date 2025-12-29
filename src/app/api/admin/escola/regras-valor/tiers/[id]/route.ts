@@ -33,14 +33,16 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     .from("financeiro_tiers")
     .update(patch)
     .eq("tier_id", tierId)
-    .select(
-      "tier_id,tier_grupo_id,politica_id,tabela_id,tabela_item_id,ajuste_tipo,ajuste_valor_centavos,ordem,valor_centavos,ativo,created_at",
-    )
+    .select("*")
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ tier: data });
+  const row = (data ?? {}) as Record<string, unknown>;
+  if (row.politica_id == null && row.politica_preco_id != null) {
+    row.politica_id = row.politica_preco_id;
+  }
+  return NextResponse.json({ tier: row });
 }

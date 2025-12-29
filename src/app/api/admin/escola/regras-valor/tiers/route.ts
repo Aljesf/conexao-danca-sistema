@@ -5,6 +5,7 @@ type TierRow = {
   tier_id: number;
   tier_grupo_id: number;
   politica_id: number | null;
+  politica_preco_id?: number | null;
   tabela_id: number | null;
   tabela_item_id: number | null;
   ajuste_tipo: string | null;
@@ -28,6 +29,25 @@ function parseAjusteTipo(value: unknown): "override" | "percentual" | "fixo" | n
   return null;
 }
 
+type ErrorLike = { code?: string; message?: string } | null;
+
+function isMissingColumn(err: ErrorLike) {
+  if (!err) return false;
+  if (err.code === "42703") return true;
+  return typeof err.message === "string" && err.message.includes("does not exist") && err.message.includes("column");
+}
+
+function mapPoliticaId(row: Record<string, unknown>, politicaCol: "politica_id" | "politica_preco_id") {
+  if (politicaCol === "politica_preco_id") {
+    return { ...row, politica_id: row.politica_preco_id ?? null };
+  }
+  return row;
+}
+
+function selectCols(politicaCol: "politica_id" | "politica_preco_id") {
+  return `tier_id,tier_grupo_id,${politicaCol},tabela_id,tabela_item_id,ajuste_tipo,ajuste_valor_centavos,ordem,valor_centavos,ativo,created_at`;
+}
+
 export async function GET(req: Request) {
   const supabase = await getSupabaseServerSSR();
   const url = new URL(req.url);
@@ -40,26 +60,35 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Parametro 'grupo_id' e obrigatorio." }, { status: 400 });
   }
 
-  let query = supabase
-    .from("financeiro_tiers")
-    .select(
-      "tier_id,tier_grupo_id,politica_id,tabela_id,tabela_item_id,ajuste_tipo,ajuste_valor_centavos,ordem,valor_centavos,ativo,created_at",
-    )
-    .eq("tier_grupo_id", grupoId)
-    .order("ordem", { ascending: true })
-    .order("tier_id", { ascending: true });
+  async function fetchTiers(politicaCol: "politica_id" | "politica_preco_id") {
+    let query = supabase
+      .from("financeiro_tiers")
+      .select(selectCols(politicaCol))
+      .eq("tier_grupo_id", grupoId)
+      .order("ordem", { ascending: true })
+      .order("tier_id", { ascending: true });
 
-  if (tabelaId) query = query.eq("tabela_id", tabelaId);
-  if (itemId) query = query.eq("tabela_item_id", itemId);
-  if (politicaId) query = query.eq("politica_id", politicaId);
+    if (tabelaId) query = query.eq("tabela_id", tabelaId);
+    if (itemId) query = query.eq("tabela_item_id", itemId);
+    if (politicaId) query = query.eq(politicaCol, politicaId);
 
-  const { data, error } = await query;
+    return query;
+  }
+
+  let politicaCol: "politica_id" | "politica_preco_id" = "politica_id";
+  let { data, error } = await fetchTiers(politicaCol);
+
+  if (error && isMissingColumn(error)) {
+    politicaCol = "politica_preco_id";
+    ({ data, error } = await fetchTiers(politicaCol));
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ tiers: (data ?? []) as TierRow[] });
+  const tiers = (data ?? []).map((row) => mapPoliticaId(row as Record<string, unknown>, politicaCol));
+  return NextResponse.json({ tiers: tiers as TierRow[] });
 }
 
 export async function POST(req: Request) {
@@ -100,7 +129,6 @@ export async function POST(req: Request) {
   const payload: Record<string, unknown> = {
     tier_grupo_id: grupoId,
     ordem,
-    politica_id: politicaId,
     tabela_id: tabelaId,
     tabela_item_id: tabelaItemId,
     ajuste_tipo: ajusteTipo,
@@ -114,17 +142,28 @@ export async function POST(req: Request) {
   }
   if (typeof body?.ativo === "boolean") payload.ativo = body.ativo;
 
-  const { data, error } = await supabase
+  let politicaCol: "politica_id" | "politica_preco_id" = "politica_id";
+  let insertPayload = { ...payload, politica_id: politicaId };
+  let { data, error } = await supabase
     .from("financeiro_tiers")
-    .insert(payload)
-    .select(
-      "tier_id,tier_grupo_id,politica_id,tabela_id,tabela_item_id,ajuste_tipo,ajuste_valor_centavos,ordem,valor_centavos,ativo,created_at",
-    )
+    .insert(insertPayload)
+    .select(selectCols(politicaCol))
     .single();
+
+  if (error && isMissingColumn(error)) {
+    politicaCol = "politica_preco_id";
+    insertPayload = { ...payload, politica_preco_id: politicaId };
+    ({ data, error } = await supabase
+      .from("financeiro_tiers")
+      .insert(insertPayload)
+      .select(selectCols(politicaCol))
+      .single());
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ tier: data }, { status: 201 });
+  const row = mapPoliticaId((data ?? {}) as Record<string, unknown>, politicaCol);
+  return NextResponse.json({ tier: row }, { status: 201 });
 }
