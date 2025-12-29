@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2025-12-28T16:59:44.049Z
+-- Snapshot do schema gerado em 2025-12-29T02:19:13.142Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -589,6 +589,30 @@ CREATE TABLE public."financeiro_analises_gpt" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."financeiro_politicas_preco"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_politicas_preco" (
+  "politica_preco_id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."financeiro_politicas_preco_padroes"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_politicas_preco_padroes" (
+  "id" bigint NOT NULL,
+  "tabela_id" bigint NOT NULL,
+  "tabela_item_id" bigint NOT NULL,
+  "politica_preco_id" bigint NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."financeiro_snapshots"
 -- --------------------------------------------------
 CREATE TABLE public."financeiro_snapshots" (
@@ -628,7 +652,12 @@ CREATE TABLE public."financeiro_tiers" (
   "ordem" integer NOT NULL,
   "valor_centavos" integer NOT NULL,
   "ativo" boolean NOT NULL DEFAULT true,
-  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "tabela_id" bigint,
+  "tabela_item_id" bigint,
+  "ajuste_tipo" text,
+  "ajuste_valor_centavos" integer,
+  "politica_preco_id" bigint
 );
 
 -- --------------------------------------------------
