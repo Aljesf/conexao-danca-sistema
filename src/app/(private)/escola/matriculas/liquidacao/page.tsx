@@ -16,6 +16,7 @@ type MatriculaResumo = {
   responsavel_financeiro_id: number;
   primeira_cobranca_status: string;
   primeira_cobranca_tipo: string | null;
+  primeira_cobranca_valor_centavos: number | null;
 };
 
 export default function Page() {
@@ -55,7 +56,9 @@ export default function Page() {
 
       const { data: m, error: mErr } = await supabase
         .from("matriculas")
-        .select("id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo")
+        .select(
+          "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos",
+        )
         .eq("id", idNum)
         .single();
 
@@ -66,6 +69,11 @@ export default function Page() {
       }
 
       setMatricula(m as MatriculaResumo);
+      const valorStr = typeof m.primeira_cobranca_valor_centavos === "number" ? String(m.primeira_cobranca_valor_centavos) : "";
+      setValorCentavos(valorStr);
+      if (!valorStr) {
+        setErro("Valor nao resolvido na matricula. Volte e gere a matricula novamente.");
+      }
 
       const { data: fp, error: fpErr } = await supabase
         .from("formas_pagamento")
@@ -89,11 +97,17 @@ export default function Page() {
   const precisaFormaPagamento = modo === "PAGAR_AGORA";
   const precisaMotivo = modo === "ADIAR_EXCECAO";
   const precisaValor = modo === "PAGAR_AGORA" || modo === "LANCAR_NO_CARTAO";
+  const valorResolvido = valorCentavos.trim() !== "";
 
   const onSalvar = async () => {
     if (!matricula) return;
 
     setErro(null);
+
+    if (!valorResolvido) {
+      setErro("Valor nao resolvido na matricula. Volte e gere a matricula novamente.");
+      return;
+    }
 
     if (precisaFormaPagamento && formaPagamentoId === "") {
       setErro("Selecione a forma de pagamento.");
@@ -124,7 +138,7 @@ export default function Page() {
           tipo_primeira_cobranca: tipoPrimeira,
           modo,
           forma_pagamento_id: formaPagamentoId === "" ? undefined : formaPagamentoId,
-          valor_centavos: precisaValor ? Number(valorCentavos) : undefined,
+          valor_centavos: precisaValor && valorResolvido ? Number(valorCentavos) : undefined,
           data_pagamento: dataPagamento,
           observacoes,
           motivo_excecao: motivoExcecao,
@@ -214,11 +228,10 @@ export default function Page() {
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-medium">Valor (centavos)</label>
                   <input
-                    className="border rounded-md p-2"
+                    className="border rounded-md p-2 bg-muted"
                     inputMode="numeric"
                     value={valorCentavos}
-                    onChange={(e) => setValorCentavos(e.target.value)}
-                    placeholder="ex.: 25000"
+                    readOnly
                   />
                 </div>
                 <div className="flex flex-col gap-2">
@@ -233,11 +246,10 @@ export default function Page() {
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">Valor a lançar no Cartão (centavos)</label>
               <input
-                className="border rounded-md p-2"
+                className="border rounded-md p-2 bg-muted"
                 inputMode="numeric"
                 value={valorCentavos}
-                onChange={(e) => setValorCentavos(e.target.value)}
-                placeholder="ex.: 18000"
+                readOnly
               />
               <p className="text-xs text-muted-foreground">Este lançamento não cria recebimento nem movimento de caixa.</p>
             </div>
@@ -266,7 +278,11 @@ export default function Page() {
           </div>
 
           <div className="pt-2 flex gap-2">
-            <button className="px-4 py-2 rounded-md bg-black text-white disabled:opacity-50" onClick={onSalvar} disabled={saving}>
+            <button
+              className="px-4 py-2 rounded-md bg-black text-white disabled:opacity-50"
+              onClick={onSalvar}
+              disabled={saving || !valorResolvido}
+            >
               {saving ? "Salvando..." : "Confirmar liquidação"}
             </button>
 

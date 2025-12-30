@@ -11,6 +11,7 @@ type Payload = {
 
   // pagamento no ato (quando PAGAR_AGORA)
   forma_pagamento_id?: number;
+  // valor passa a ser opcional: se nao vier, herda da matricula
   valor_centavos?: number;
   data_pagamento?: string; // YYYY-MM-DD
   observacoes?: string;
@@ -25,8 +26,19 @@ function asInt(n: unknown): number | null {
   return null;
 }
 
+function asDateStr(n: unknown): string | null {
+  if (typeof n !== "string") return null;
+  const s = n.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  return s;
+}
+
+function toTimestamptzNoonUtc(dateYYYYMMDD: string): string {
+  return `${dateYYYYMMDD}T12:00:00.000Z`;
+}
+
 export async function POST(req: Request) {
-  // Next.js 15: cookies() é async
+  // Next.js 15: cookies() is async
   const cookieStore = await cookies();
   const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
 
@@ -55,10 +67,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "modo_obrigatorio" }, { status: 400 });
   }
 
-  // 1) Carrega matricula
+  // 1) Carrega matricula (inclui valor herdado)
   const { data: matricula, error: errMat } = await supabase
     .from("matriculas")
-    .select("id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status")
+    .select("id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos")
     .eq("id", matriculaId)
     .single();
 
@@ -70,66 +82,86 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "matricula_ja_liquidada" }, { status: 409 });
   }
 
-  // 2) Execucao por modo
+  const valorPayload = asInt(body.valor_centavos);
+  const valorHerdado = asInt(matricula.primeira_cobranca_valor_centavos);
+  const valorFinal = valorPayload && valorPayload > 0 ? valorPayload : valorHerdado && valorHerdado > 0 ? valorHerdado : null;
+
   if (body.modo === "PAGAR_AGORA") {
     const formaPagamentoId = asInt(body.forma_pagamento_id);
-    const valor = asInt(body.valor_centavos);
-    const dataPg = typeof body.data_pagamento === "string" ? body.data_pagamento : null;
+    const dataPg = asDateStr(body.data_pagamento);
 
     if (!formaPagamentoId) {
       return NextResponse.json({ error: "forma_pagamento_id_obrigatorio" }, { status: 400 });
     }
-    if (!valor || valor <= 0) {
-      return NextResponse.json({ error: "valor_centavos_invalido" }, { status: 400 });
+    if (!valorFinal) {
+      return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
     }
     if (!dataPg) {
       return NextResponse.json({ error: "data_pagamento_obrigatoria" }, { status: 400 });
     }
 
-    // 2.1) Cria cobranca ja como PAGA (porque estamos registrando recebimento no ato)
+    const { data: forma, error: errForma } = await supabase
+      .from("formas_pagamento")
+      .select("id, codigo, nome")
+      .eq("id", formaPagamentoId)
+      .single();
+
+    if (errForma || !forma?.codigo) {
+      return NextResponse.json({ error: "forma_pagamento_invalida" }, { status: 400 });
+    }
+
     const { data: cobranca, error: errCobr } = await supabase
       .from("cobrancas")
       .insert({
         pessoa_id: matricula.responsavel_financeiro_id,
-        valor_centavos: valor,
+        descricao: "Entrada (pro-rata) - ato da matricula",
+        valor_centavos: valorFinal,
+        vencimento: dataPg,
         status: "PAGA",
-        descricao: "Entrada (pró-rata) — ato da matrícula",
+        data_pagamento: dataPg,
+        metodo_pagamento: forma.codigo,
+        observacoes: body.observacoes ?? null,
         origem_tipo: "MATRICULA",
         origem_id: matricula.id,
-        data_cobranca: dataPg,
-        data_vencimento: dataPg,
       })
-      .select("id")
+      .select("id, centro_custo_id")
       .single();
 
     if (errCobr || !cobranca) {
-      return NextResponse.json({ error: "falha_criar_cobranca", details: errCobr?.message }, { status: 500 });
+      return NextResponse.json(
+        { error: "falha_criar_cobranca", details: errCobr?.message ?? "erro_desconhecido" },
+        { status: 500 },
+      );
     }
 
-    // 2.2) Cria recebimento
     const { data: receb, error: errRec } = await supabase
       .from("recebimentos")
       .insert({
         cobranca_id: cobranca.id,
-        valor_centavos: valor,
-        forma_pagamento_id: formaPagamentoId,
-        data_recebimento: dataPg,
+        centro_custo_id: cobranca.centro_custo_id ?? null,
+        valor_centavos: valorFinal,
+        data_pagamento: toTimestamptzNoonUtc(dataPg),
+        metodo_pagamento: forma.codigo,
+        origem_sistema: "MATRICULA",
         observacoes: body.observacoes ?? null,
+        forma_pagamento_codigo: forma.codigo,
       })
       .select("id")
       .single();
 
     if (errRec || !receb) {
-      return NextResponse.json({ error: "falha_criar_recebimento", details: errRec?.message }, { status: 500 });
+      return NextResponse.json(
+        { error: "falha_criar_recebimento", details: errRec?.message ?? "erro_desconhecido" },
+        { status: 500 },
+      );
     }
 
-    // 2.3) Atualiza matricula marcando como PAGA
     const { error: errUpd } = await supabase
       .from("matriculas")
       .update({
         primeira_cobranca_tipo: body.tipo_primeira_cobranca,
         primeira_cobranca_status: "PAGA",
-        primeira_cobranca_valor_centavos: valor,
+        primeira_cobranca_valor_centavos: valorFinal,
         primeira_cobranca_cobranca_id: cobranca.id,
         primeira_cobranca_recebimento_id: receb.id,
         primeira_cobranca_forma_pagamento_id: formaPagamentoId,
@@ -150,12 +182,10 @@ export async function POST(req: Request) {
   }
 
   if (body.modo === "LANCAR_NO_CARTAO") {
-    const valor = asInt(body.valor_centavos);
-    if (!valor || valor <= 0) {
-      return NextResponse.json({ error: "valor_centavos_invalido" }, { status: 400 });
+    if (!valorFinal) {
+      return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
     }
 
-    // Descobre conta_conexao_id do responsavel (Cartao Conexao ALUNO)
     const { data: conta, error: errConta } = await supabase
       .from("credito_conexao_contas")
       .select("id")
@@ -174,15 +204,18 @@ export async function POST(req: Request) {
         conta_conexao_id: conta.id,
         origem_sistema: "MATRICULA",
         origem_id: matricula.id,
-        descricao: "Mensalidade cheia — matrícula",
-        valor_centavos: valor,
+        descricao: "Mensalidade cheia - matricula",
+        valor_centavos: valorFinal,
         status: "PENDENTE_FATURA",
       })
       .select("id")
       .single();
 
     if (errLanc || !lanc) {
-      return NextResponse.json({ error: "falha_criar_lancamento_cartao", details: errLanc?.message }, { status: 500 });
+      return NextResponse.json(
+        { error: "falha_criar_lancamento_cartao", details: errLanc?.message ?? "erro_desconhecido" },
+        { status: 500 },
+      );
     }
 
     const { error: errUpd } = await supabase
@@ -190,7 +223,7 @@ export async function POST(req: Request) {
       .update({
         primeira_cobranca_tipo: body.tipo_primeira_cobranca,
         primeira_cobranca_status: "LANCADA_CARTAO",
-        primeira_cobranca_valor_centavos: valor,
+        primeira_cobranca_valor_centavos: valorFinal,
         primeira_cobranca_data_pagamento: null,
       })
       .eq("id", matricula.id);

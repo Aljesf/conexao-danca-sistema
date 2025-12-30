@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import PessoaSearchBox, { PessoaSearchItem } from "@/components/PessoaSearchBox";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
@@ -137,6 +138,7 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 
 export default function NovaMatriculaPage() {
   const router = useRouter();
+  const supabase = useMemo(() => createClientComponentClient(), []);
   const isDev = process.env.NODE_ENV !== "production";
 
   const [aluno, setAluno] = useState<PessoaSearchItem | null>(null);
@@ -358,6 +360,28 @@ export default function NovaMatriculaPage() {
       if (!id) {
         throw new Error("Resposta invalida: matricula sem id.");
       }
+
+      if (!itemAplicado) {
+        throw new Error("Preco nao resolvido para definir a primeira cobranca.");
+      }
+
+      const primeiraCobrancaTipo =
+        itemAplicado.codigo_item === "MENSALIDADE" ? "MENSALIDADE_CHEIA_CARTAO" : "ENTRADA_PRORATA";
+      const primeiraCobrancaValorCentavos = itemAplicado.valor_centavos;
+
+      const { error: updErr } = await supabase
+        .from("matriculas")
+        .update({
+          primeira_cobranca_tipo: primeiraCobrancaTipo,
+          primeira_cobranca_status: "PENDENTE",
+          primeira_cobranca_valor_centavos: primeiraCobrancaValorCentavos,
+        })
+        .eq("id", id);
+
+      if (updErr) {
+        throw new Error("Falha ao atualizar matricula com a primeira cobranca.");
+      }
+
       router.push(`/escola/matriculas/liquidacao?matriculaId=${id}`);
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Falha ao criar matricula.");
