@@ -42,7 +42,7 @@ function errJson(code: ApiErrorCode, message: string, status: number, details?: 
   return okJson({ ok: false, error: code, message, details: details ?? null } satisfies ApiError, status);
 }
 
-export async function GET(_req: Request, ctx: { params: { id?: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }> }) {
   try {
     const cookieStore = await cookies();
     const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
@@ -51,9 +51,10 @@ export async function GET(_req: Request, ctx: { params: { id?: string } }) {
       return errJson("unauthorized", "Nao autenticado.", 401);
     }
 
-    const matriculaId = toPositiveNumber(ctx.params.id);
+    const params = await ctx.params;
+    const matriculaId = toPositiveNumber(params.id);
     if (!matriculaId) {
-      return errJson("bad_request", "ID de matricula invalido.", 400, { id: ctx.params.id });
+      return errJson("bad_request", "ID de matricula invalido.", 400, { id: params.id });
     }
 
     const admin = getSupabaseAdmin();
