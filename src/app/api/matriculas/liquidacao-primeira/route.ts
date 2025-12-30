@@ -37,6 +37,156 @@ function toTimestamptzNoonUtc(dateYYYYMMDD: string): string {
   return `${dateYYYYMMDD}T12:00:00.000Z`;
 }
 
+async function inserirMovimentoFinanceiroReceita(params: {
+  supabase: any;
+  centroCustoId: number | null;
+  valorCentavos: number;
+  dataYYYYMMDD: string;
+  origemTipo: string;
+  origemId: number;
+  descricao: string;
+}) {
+  const { supabase, centroCustoId, valorCentavos, dataYYYYMMDD, origemTipo, origemId, descricao } = params;
+
+  const payload: Record<string, unknown> = {
+    tipo: "RECEITA",
+    centro_custo_id: centroCustoId ?? null,
+    valor_centavos: valorCentavos,
+    data_movimento: toTimestamptzNoonUtc(dataYYYYMMDD),
+    origem: origemTipo,
+    origem_id: origemId,
+    descricao,
+  };
+
+  const { error } = await supabase.from("movimento_financeiro").insert(payload);
+  if (error) {
+    throw new Error(`falha_criar_movimento_financeiro: ${error.message}`);
+  }
+}
+
+function ymFromDate(dateYYYYMMDD: string): string {
+  return dateYYYYMMDD.slice(0, 7);
+}
+
+function buildDateFromYMD(year: number, month: number, day: number): string {
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${year}-${mm}-${dd}`;
+}
+
+async function ensureContaCreditoConexaoAluno(params: { supabase: any; pessoaTitularId: number }) {
+  const { supabase, pessoaTitularId } = params;
+
+  const { data: contaExistente } = await supabase
+    .from("credito_conexao_contas")
+    .select("id, dia_fechamento, dia_vencimento")
+    .eq("pessoa_titular_id", pessoaTitularId)
+    .eq("tipo_conta", "ALUNO")
+    .eq("ativo", true)
+    .maybeSingle();
+
+  if (contaExistente?.id) return contaExistente;
+
+  const { data: contaNova, error: errNova } = await supabase
+    .from("credito_conexao_contas")
+    .insert({
+      pessoa_titular_id: pessoaTitularId,
+      tipo_conta: "ALUNO",
+      descricao_exibicao: "Cartao Conexao ALUNO",
+      dia_fechamento: 10,
+      dia_vencimento: 12,
+      ativo: true,
+    })
+    .select("id, dia_fechamento, dia_vencimento")
+    .single();
+
+  if (errNova || !contaNova) {
+    throw new Error(`falha_criar_conta_credito_conexao: ${errNova?.message ?? "erro_desconhecido"}`);
+  }
+
+  return contaNova;
+}
+
+async function ensureFaturasAno(params: {
+  supabase: any;
+  contaConexaoId: number;
+  ano: number;
+  diaFechamento: number;
+  diaVencimento: number | null;
+}) {
+  const { supabase, contaConexaoId, ano, diaFechamento, diaVencimento } = params;
+
+  for (let m = 1; m <= 12; m++) {
+    const periodo = `${ano}-${String(m).padStart(2, "0")}`;
+
+    const { data: jaExiste } = await supabase
+      .from("credito_conexao_faturas")
+      .select("id")
+      .eq("conta_conexao_id", contaConexaoId)
+      .eq("periodo_referencia", periodo)
+      .maybeSingle();
+
+    if (jaExiste?.id) continue;
+
+    const dataFechamento = buildDateFromYMD(ano, m, diaFechamento);
+    const dataVenc = diaVencimento ? buildDateFromYMD(ano, m, diaVencimento) : null;
+
+    const { error } = await supabase.from("credito_conexao_faturas").insert({
+      conta_conexao_id: contaConexaoId,
+      periodo_referencia: periodo,
+      data_fechamento: dataFechamento,
+      data_vencimento: dataVenc,
+      valor_total_centavos: 0,
+      status: "ABERTA",
+    });
+
+    if (error) {
+      throw new Error(`falha_criar_fatura_credito_conexao: ${error.message}`);
+    }
+  }
+}
+
+async function vincularLancamentoNaFatura(params: {
+  supabase: any;
+  contaConexaoId: number;
+  periodoReferencia: string;
+  lancamentoId: number;
+  valorCentavos: number;
+}) {
+  const { supabase, contaConexaoId, periodoReferencia, lancamentoId, valorCentavos } = params;
+
+  const { data: fatura, error: errFat } = await supabase
+    .from("credito_conexao_faturas")
+    .select("id, valor_total_centavos")
+    .eq("conta_conexao_id", contaConexaoId)
+    .eq("periodo_referencia", periodoReferencia)
+    .single();
+
+  if (errFat || !fatura) {
+    throw new Error(`fatura_nao_encontrada_para_periodo: ${periodoReferencia}`);
+  }
+
+  const { error: errLink } = await supabase.from("credito_conexao_fatura_lancamentos").insert({
+    fatura_id: fatura.id,
+    lancamento_id: lancamentoId,
+  });
+
+  if (errLink) {
+    throw new Error(`falha_vincular_lancamento_fatura: ${errLink.message}`);
+  }
+
+  const novoTotal = (Number(fatura.valor_total_centavos) || 0) + valorCentavos;
+
+  const { error: errUpd } = await supabase
+    .from("credito_conexao_faturas")
+    .update({ valor_total_centavos: novoTotal })
+    .eq("id", fatura.id);
+
+  if (errUpd) {
+    throw new Error(`falha_atualizar_total_fatura: ${errUpd.message}`);
+  }
+}
+
 export async function POST(req: Request) {
   // Next.js 15: cookies() is async
   const cookieStore = await cookies();
@@ -70,7 +220,9 @@ export async function POST(req: Request) {
   // 1) Carrega matricula (inclui valor herdado)
   const { data: matricula, error: errMat } = await supabase
     .from("matriculas")
-    .select("id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos")
+    .select(
+      "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos, ano_referencia, data_inicio_vinculo",
+    )
     .eq("id", matriculaId)
     .single();
 
@@ -156,6 +308,16 @@ export async function POST(req: Request) {
       );
     }
 
+    await inserirMovimentoFinanceiroReceita({
+      supabase,
+      centroCustoId: cobranca.centro_custo_id ?? null,
+      valorCentavos: valorFinal,
+      dataYYYYMMDD: dataPg,
+      origemTipo: "RECEBIMENTO",
+      origemId: receb.id,
+      descricao: "Pagamento presencial - Entrada (pro-rata) matricula",
+    });
+
     const { error: errUpd } = await supabase
       .from("matriculas")
       .update({
@@ -186,17 +348,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
     }
 
-    const { data: conta, error: errConta } = await supabase
-      .from("credito_conexao_contas")
-      .select("id")
-      .eq("pessoa_titular_id", matricula.responsavel_financeiro_id)
-      .eq("tipo_conta", "ALUNO")
-      .eq("ativo", true)
-      .maybeSingle();
+    const conta = await ensureContaCreditoConexaoAluno({
+      supabase,
+      pessoaTitularId: matricula.responsavel_financeiro_id,
+    });
 
-    if (errConta || !conta) {
-      return NextResponse.json({ error: "conta_cartao_conexao_nao_encontrada" }, { status: 409 });
-    }
+    const anoRef = typeof matricula.ano_referencia === "number" ? matricula.ano_referencia : new Date().getFullYear();
+    await ensureFaturasAno({
+      supabase,
+      contaConexaoId: conta.id,
+      ano: anoRef,
+      diaFechamento: conta.dia_fechamento ?? 10,
+      diaVencimento: conta.dia_vencimento ?? 12,
+    });
 
     const { data: lanc, error: errLanc } = await supabase
       .from("credito_conexao_lancamentos")
@@ -217,6 +381,17 @@ export async function POST(req: Request) {
         { status: 500 },
       );
     }
+
+    const periodo =
+      typeof matricula.data_inicio_vinculo === "string" ? ymFromDate(matricula.data_inicio_vinculo) : `${anoRef}-01`;
+
+    await vincularLancamentoNaFatura({
+      supabase,
+      contaConexaoId: conta.id,
+      periodoReferencia: periodo,
+      lancamentoId: lanc.id,
+      valorCentavos: valorFinal,
+    });
 
     const { error: errUpd } = await supabase
       .from("matriculas")

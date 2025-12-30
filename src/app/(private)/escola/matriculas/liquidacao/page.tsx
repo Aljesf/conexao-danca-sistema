@@ -145,11 +145,15 @@ export default function Page() {
         }),
       });
 
-      const json = (await res.json()) as { ok?: boolean; error?: string };
+      const json = (await res.json()) as { ok?: boolean; error?: string; status?: string };
 
       if (!res.ok) {
         setErro(json?.error ?? "Falha ao liquidar a primeira cobrança.");
         return;
+      }
+
+      if (json?.status === "LANCADA_CARTAO") {
+        alert("Lancado no Cartao Conexao. Verifique a fatura do periodo.");
       }
 
       router.push(`/escola/matriculas/${matricula.id}`);
