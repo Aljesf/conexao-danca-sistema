@@ -358,7 +358,7 @@ export default function NovaMatriculaPage() {
       if (!id) {
         throw new Error("Resposta invalida: matricula sem id.");
       }
-      router.push(`/escola/matriculas/${id}`);
+      router.push(`/escola/matriculas/liquidacao?matriculaId=${id}`);
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Falha ao criar matricula.");
     } finally {

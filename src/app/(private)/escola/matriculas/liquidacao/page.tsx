@@ -1,0 +1,281 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+
+type FormaPagamento = {
+  id: number;
+  nome: string;
+  ativo: boolean;
+};
+
+type MatriculaResumo = {
+  id: number;
+  pessoa_id: number;
+  responsavel_financeiro_id: number;
+  primeira_cobranca_status: string;
+  primeira_cobranca_tipo: string | null;
+};
+
+export default function Page() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const supabase = useMemo(() => createClientComponentClient(), []);
+
+  const matriculaId = params.get("matriculaId");
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const [matricula, setMatricula] = useState<MatriculaResumo | null>(null);
+  const [formas, setFormas] = useState<FormaPagamento[]>([]);
+
+  // Campos do ato
+  const [tipoPrimeira, setTipoPrimeira] = useState<"ENTRADA_PRORATA" | "MENSALIDADE_CHEIA_CARTAO">("ENTRADA_PRORATA");
+  const [modo, setModo] = useState<"PAGAR_AGORA" | "LANCAR_NO_CARTAO" | "ADIAR_EXCECAO">("PAGAR_AGORA");
+  const [formaPagamentoId, setFormaPagamentoId] = useState<number | "">("");
+  const [valorCentavos, setValorCentavos] = useState<string>("");
+  const [dataPagamento, setDataPagamento] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [observacoes, setObservacoes] = useState<string>("");
+  const [motivoExcecao, setMotivoExcecao] = useState<string>("");
+
+  useEffect(() => {
+    const run = async () => {
+      setLoading(true);
+      setErro(null);
+
+      const idNum = matriculaId ? Number(matriculaId) : NaN;
+      if (!matriculaId || Number.isNaN(idNum)) {
+        setErro("matriculaId ausente ou inválido na URL.");
+        setLoading(false);
+        return;
+      }
+
+      const { data: m, error: mErr } = await supabase
+        .from("matriculas")
+        .select("id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo")
+        .eq("id", idNum)
+        .single();
+
+      if (mErr || !m) {
+        setErro("Não foi possível carregar a matrícula.");
+        setLoading(false);
+        return;
+      }
+
+      setMatricula(m as MatriculaResumo);
+
+      const { data: fp, error: fpErr } = await supabase
+        .from("formas_pagamento")
+        .select("id, nome, ativo")
+        .eq("ativo", true)
+        .order("nome", { ascending: true });
+
+      if (fpErr) {
+        setErro("Não foi possível carregar as formas de pagamento.");
+        setLoading(false);
+        return;
+      }
+
+      setFormas((fp ?? []) as FormaPagamento[]);
+      setLoading(false);
+    };
+
+    void run();
+  }, [matriculaId, supabase]);
+
+  const precisaFormaPagamento = modo === "PAGAR_AGORA";
+  const precisaMotivo = modo === "ADIAR_EXCECAO";
+  const precisaValor = modo === "PAGAR_AGORA" || modo === "LANCAR_NO_CARTAO";
+
+  const onSalvar = async () => {
+    if (!matricula) return;
+
+    setErro(null);
+
+    if (precisaFormaPagamento && formaPagamentoId === "") {
+      setErro("Selecione a forma de pagamento.");
+      return;
+    }
+
+    if (precisaValor) {
+      const v = Number(valorCentavos);
+      if (!Number.isFinite(v) || v <= 0) {
+        setErro("Informe o valor em centavos (inteiro > 0).");
+        return;
+      }
+    }
+
+    if (precisaMotivo && motivoExcecao.trim().length < 5) {
+      setErro("Informe um motivo objetivo para a exceção (mínimo 5 caracteres).");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const res = await fetch("/api/matriculas/liquidacao-primeira", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matricula_id: matricula.id,
+          tipo_primeira_cobranca: tipoPrimeira,
+          modo,
+          forma_pagamento_id: formaPagamentoId === "" ? undefined : formaPagamentoId,
+          valor_centavos: precisaValor ? Number(valorCentavos) : undefined,
+          data_pagamento: dataPagamento,
+          observacoes,
+          motivo_excecao: motivoExcecao,
+        }),
+      });
+
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+
+      if (!res.ok) {
+        setErro(json?.error ?? "Falha ao liquidar a primeira cobrança.");
+        return;
+      }
+
+      router.push(`/escola/matriculas/${matricula.id}`);
+    } catch {
+      setErro("Falha de rede ao liquidar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <h1 className="text-xl font-semibold">Liquidação da Matrícula</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Carregando...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-3xl">
+      <h1 className="text-xl font-semibold">Liquidação da Matrícula (Ato)</h1>
+
+      <p className="mt-2 text-sm text-muted-foreground">
+        Esta etapa é obrigatória para efetivar a matrícula. Selecione como será tratada a primeira cobrança.
+      </p>
+
+      {erro ? (
+        <div className="mt-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          {erro}
+        </div>
+      ) : null}
+
+      <div className="mt-6 space-y-4">
+        <div className="rounded-lg border p-4 space-y-3">
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">Tipo da primeira cobrança</label>
+            <select
+              className="border rounded-md p-2"
+              value={tipoPrimeira}
+              onChange={(e) => setTipoPrimeira(e.target.value as typeof tipoPrimeira)}
+            >
+              <option value="ENTRADA_PRORATA">Entrada / Pró-rata (fora do Cartão Conexão)</option>
+              <option value="MENSALIDADE_CHEIA_CARTAO">Mensalidade cheia (Cartão Conexão)</option>
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">Ação no ato</label>
+            <select className="border rounded-md p-2" value={modo} onChange={(e) => setModo(e.target.value as typeof modo)}>
+              <option value="PAGAR_AGORA">Pagar agora (gera recebimento)</option>
+              <option value="LANCAR_NO_CARTAO">Lançar no Cartão Conexão (sem recebimento)</option>
+              <option value="ADIAR_EXCECAO">Exceção: adiar primeiro pagamento (auditoria)</option>
+            </select>
+          </div>
+
+          {modo === "PAGAR_AGORA" ? (
+            <>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium">Forma de pagamento</label>
+                <select
+                  className="border rounded-md p-2"
+                  value={formaPagamentoId}
+                  onChange={(e) => setFormaPagamentoId(e.target.value === "" ? "" : Number(e.target.value))}
+                >
+                  <option value="">Selecione...</option>
+                  {formas.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">Valor (centavos)</label>
+                  <input
+                    className="border rounded-md p-2"
+                    inputMode="numeric"
+                    value={valorCentavos}
+                    onChange={(e) => setValorCentavos(e.target.value)}
+                    placeholder="ex.: 25000"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">Data do pagamento</label>
+                  <input className="border rounded-md p-2" type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} />
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {modo === "LANCAR_NO_CARTAO" ? (
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Valor a lançar no Cartão (centavos)</label>
+              <input
+                className="border rounded-md p-2"
+                inputMode="numeric"
+                value={valorCentavos}
+                onChange={(e) => setValorCentavos(e.target.value)}
+                placeholder="ex.: 18000"
+              />
+              <p className="text-xs text-muted-foreground">Este lançamento não cria recebimento nem movimento de caixa.</p>
+            </div>
+          ) : null}
+
+          {modo === "ADIAR_EXCECAO" ? (
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Motivo da exceção (obrigatório)</label>
+              <textarea
+                className="border rounded-md p-2 min-h-[80px]"
+                value={motivoExcecao}
+                onChange={(e) => setMotivoExcecao(e.target.value)}
+                placeholder="Ex.: Responsável pediu para pagar no vencimento por receber apenas dia 10."
+              />
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium">Observações (opcional)</label>
+            <textarea
+              className="border rounded-md p-2 min-h-[60px]"
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+              placeholder="Observação interna do ato."
+            />
+          </div>
+
+          <div className="pt-2 flex gap-2">
+            <button className="px-4 py-2 rounded-md bg-black text-white disabled:opacity-50" onClick={onSalvar} disabled={saving}>
+              {saving ? "Salvando..." : "Confirmar liquidação"}
+            </button>
+
+            <button className="px-4 py-2 rounded-md border" onClick={() => router.push(`/escola/matriculas/${matricula?.id ?? ""}`)} disabled={saving}>
+              Voltar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
