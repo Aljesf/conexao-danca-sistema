@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type LiquidacaoModo = "PAGAR_AGORA" | "LANCAR_NO_CARTAO" | "ADIAR_EXCECAO";
 
@@ -237,12 +238,14 @@ async function vincularLancamentoNaFatura(params: {
 export async function POST(req: Request) {
   // Next.js 15: cookies() is async
   const cookieStore = await cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+  const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
 
-  const { data: auth } = await supabase.auth.getUser();
+  const { data: auth } = await supabaseAuth.auth.getUser();
   if (!auth?.user) {
     return NextResponse.json({ error: "nao_autenticado" }, { status: 401 });
   }
+
+  const supabase = getSupabaseAdmin();
 
   let body: Payload;
   try {
@@ -281,20 +284,23 @@ export async function POST(req: Request) {
     executado: boolean;
     conta_conexao_id?: number;
     ano_ref?: number;
-    periodo_inicio?: string;
-    periodo_fim?: string;
+    data_inicio_vinculo?: string | null;
+    periodo_inicio?: string | null;
+    periodo_fim?: string | null;
     created_lancamentos: number;
     linked_faturas: number;
     erro?: string;
-    ano_referencia_input?: number | null;
-    data_inicio_vinculo_input?: string | null;
   } = {
     executado: false,
     created_lancamentos: 0,
     linked_faturas: 0,
-    ano_referencia_input: typeof matricula.ano_referencia === "number" ? matricula.ano_referencia : null,
-    data_inicio_vinculo_input: typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null,
+    data_inicio_vinculo: null,
+    periodo_inicio: null,
+    periodo_fim: null,
   };
+
+  debugCartao.data_inicio_vinculo =
+    typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null;
 
   if (matricula.primeira_cobranca_status === "PAGA" || matricula.primeira_cobranca_status === "LANCADA_CARTAO") {
     return NextResponse.json({ error: "matricula_ja_liquidada" }, { status: 409 });
@@ -405,7 +411,7 @@ export async function POST(req: Request) {
       debugCartao.executado = true;
 
       try {
-        const dataInicio = typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null;
+        const dataInicio = debugCartao.data_inicio_vinculo;
         const anoRef =
           typeof matricula.ano_referencia === "number"
             ? matricula.ano_referencia
@@ -479,11 +485,8 @@ export async function POST(req: Request) {
         }
       } catch (err) {
         debugCartao.erro = err instanceof Error ? err.message : "erro_desconhecido";
+        return NextResponse.json({ error: "falha_cartao_conexao", debugCartao }, { status: 500 });
       }
-    }
-
-    if (debugCartao.executado && debugCartao.erro) {
-      return NextResponse.json({ error: "falha_lancamento_cartao", debugCartao }, { status: 500 });
     }
 
     return NextResponse.json({

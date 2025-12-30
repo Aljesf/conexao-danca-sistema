@@ -145,11 +145,36 @@ export default function Page() {
         }),
       });
 
-      const json = (await res.json()) as { ok?: boolean; error?: string; status?: string };
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        status?: string;
+        debugCartao?: {
+          executado: boolean;
+          created_lancamentos: number;
+          linked_faturas: number;
+          periodo_inicio?: string | null;
+          periodo_fim?: string | null;
+          erro?: string;
+        };
+      };
 
       if (!res.ok) {
+        const erroDebug = json?.debugCartao?.erro;
+        if (erroDebug) {
+          setErro(`${json?.error ?? "Falha ao liquidar a primeira cobranca."} | ${erroDebug}`);
+          return;
+        }
         setErro(json?.error ?? "Falha ao liquidar a primeira cobrança.");
         return;
+      }
+
+      if (json?.debugCartao) {
+        const periodoInicio = json.debugCartao.periodo_inicio ?? "-";
+        const periodoFim = json.debugCartao.periodo_fim ?? "-";
+        alert(
+          `Cartao: executado=${json.debugCartao.executado} lancamentos=${json.debugCartao.created_lancamentos} vinculos=${json.debugCartao.linked_faturas} periodo=${periodoInicio}→${periodoFim}`,
+        );
       }
 
       if (json?.status === "LANCADA_CARTAO") {

@@ -6,7 +6,7 @@ import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 import type { Pessoa } from "@/types/pessoas";
 
 type RouteParams = {
-  params: { id: string };
+  params: Promise<{ id?: string }>;
 };
 
 // SELECT padrão da tabela pessoas
@@ -124,8 +124,9 @@ async function carregarPessoaComNomes(id: string) {
 }
 
 // GET /api/pessoas/[id] -> detalhes da pessoa
-export async function GET(_req: Request, { params }: RouteParams) {
+export async function GET(_req: Request, ctx: RouteParams) {
   try {
+    const params = await ctx.params;
     const id = params?.id;
     if (!id) {
       return NextResponse.json(
@@ -168,8 +169,9 @@ export async function GET(_req: Request, { params }: RouteParams) {
 }
 
 // PUT /api/pessoas/[id] -> atualizar dados da pessoa
-export async function PUT(req: Request, { params }: RouteParams) {
+export async function PUT(req: Request, ctx: RouteParams) {
   try {
+    const params = await ctx.params;
     const id = params?.id;
     if (!id) {
       return NextResponse.json(
