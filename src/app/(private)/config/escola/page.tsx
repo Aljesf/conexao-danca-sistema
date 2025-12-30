@@ -12,7 +12,8 @@ type CentroCusto = {
 export default function ConfigEscolaPage() {
   const supabase = useMemo(() => createClientComponentClient(), []);
 
-  const [centrosCusto, setCentrosCusto] = useState<CentroCusto[]>([]);
+  const [centrosPadrao, setCentrosPadrao] = useState<CentroCusto[]>([]);
+  const [centrosIntermediacao, setCentrosIntermediacao] = useState<CentroCusto[]>([]);
   const [centroPadraoEscolaId, setCentroPadraoEscolaId] = useState<number | "">("");
   const [centroIntermediacaoId, setCentroIntermediacaoId] = useState<number | "">("");
   const [loading, setLoading] = useState(true);
@@ -29,13 +30,25 @@ export default function ConfigEscolaPage() {
       setSucesso(null);
 
       try {
-        const { data: centros, error: centrosErr } = await supabase
+        const { data: centrosPadraoData, error: centrosPadraoErr } = await supabase
           .from("centros_custo")
           .select("id, nome")
           .eq("ativo", true)
+          .or("contextos_aplicaveis.cs.{ESCOLA},contextos_aplicaveis.cs.{ADMIN}")
           .order("nome", { ascending: true });
 
-        if (centrosErr) {
+        if (centrosPadraoErr) {
+          throw new Error("Falha ao carregar centros de custo.");
+        }
+
+        const { data: centrosInterData, error: centrosInterErr } = await supabase
+          .from("centros_custo")
+          .select("id, nome")
+          .eq("ativo", true)
+          .contains("contextos_aplicaveis", ["ADMIN"])
+          .order("nome", { ascending: true });
+
+        if (centrosInterErr) {
           throw new Error("Falha ao carregar centros de custo.");
         }
 
@@ -46,16 +59,17 @@ export default function ConfigEscolaPage() {
           .maybeSingle();
 
         if (configErr) {
-          throw new Error("Falha ao carregar configuracao financeira.");
+          if (!ativo) return;
+          setErro("Falha ao carregar configuracao financeira.");
+          return;
         }
 
         if (!ativo) return;
 
-        setCentrosCusto((centros ?? []) as CentroCusto[]);
-        const centroPadrao = config?.centro_custo_padrao_escola_id;
-        const centroInter = config?.centro_custo_intermediacao_financeira_id;
-        setCentroPadraoEscolaId(typeof centroPadrao === "number" ? centroPadrao : "");
-        setCentroIntermediacaoId(typeof centroInter === "number" ? centroInter : "");
+        setCentrosPadrao((centrosPadraoData ?? []) as CentroCusto[]);
+        setCentrosIntermediacao((centrosInterData ?? []) as CentroCusto[]);
+        setCentroPadraoEscolaId(config?.centro_custo_padrao_escola_id ?? "");
+        setCentroIntermediacaoId(config?.centro_custo_intermediacao_financeira_id ?? "");
       } catch (e) {
         if (!ativo) return;
         setErro(e instanceof Error ? e.message : "Falha ao carregar configuracao financeira.");
@@ -103,7 +117,7 @@ export default function ConfigEscolaPage() {
 
       <section className="rounded-lg border p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Configuracao financeira</h2>
+          <h2 className="text-lg font-semibold">Financeiro da escola (defaults)</h2>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Defina os centros de custo padrao usados nos lancamentos financeiros da escola.
@@ -129,7 +143,7 @@ export default function ConfigEscolaPage() {
               disabled={loading || saving}
             >
               <option value="">Selecione...</option>
-              {centrosCusto.map((centro) => (
+              {centrosPadrao.map((centro) => (
                 <option key={centro.id} value={centro.id}>
                   {centro.nome ?? `Centro #${centro.id}`}
                 </option>
@@ -146,7 +160,7 @@ export default function ConfigEscolaPage() {
               disabled={loading || saving}
             >
               <option value="">Selecione...</option>
-              {centrosCusto.map((centro) => (
+              {centrosIntermediacao.map((centro) => (
                 <option key={centro.id} value={centro.id}>
                   {centro.nome ?? `Centro #${centro.id}`}
                 </option>

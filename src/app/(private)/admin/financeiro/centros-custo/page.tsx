@@ -8,12 +8,22 @@ type CentroCusto = {
   codigo: string;
   nome: string;
   ativo: boolean;
+  contextos_aplicaveis: string[];
 };
+
+type CentroForm = {
+  codigo: string;
+  nome: string;
+  ativo: boolean;
+  contextos_aplicaveis: string[];
+};
+
+const CONTEXTOS = ["ADMIN", "ESCOLA", "LOJA", "CAFE"] as const;
 
 export default function CentrosCustoPage() {
   const [centros, setCentros] = useState<CentroCusto[]>([]);
   const [editing, setEditing] = useState<CentroCusto | null>(null);
-  const [form, setForm] = useState({ codigo: "", nome: "", ativo: true });
+  const [form, setForm] = useState<CentroForm>({ codigo: "", nome: "", ativo: true, contextos_aplicaveis: [] });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -24,9 +34,14 @@ export default function CentrosCustoPage() {
       setLoading(true);
       try {
         const resp = await fetch("/api/financeiro/centros-custo");
-        const json = await resp.json();
+        const json = (await resp.json()) as { ok: boolean; data?: CentroCusto[]; error?: string };
         if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao carregar centros de custo.");
-        setCentros(json.data ?? []);
+        const lista =
+          json.data?.map((item) => ({
+            ...item,
+            contextos_aplicaveis: Array.isArray(item.contextos_aplicaveis) ? item.contextos_aplicaveis : [],
+          })) ?? [];
+        setCentros(lista);
       } catch (err: unknown) {
         console.error(err);
         const message = err instanceof Error ? err.message : "Erro ao carregar centros de custo.";
@@ -40,7 +55,7 @@ export default function CentrosCustoPage() {
 
   function resetForm() {
     setEditing(null);
-    setForm({ codigo: "", nome: "", ativo: true });
+    setForm({ codigo: "", nome: "", ativo: true, contextos_aplicaveis: [] });
   }
 
   async function salvar(e: React.FormEvent) {
@@ -55,6 +70,7 @@ export default function CentrosCustoPage() {
         codigo: form.codigo.toUpperCase(),
         nome: form.nome.trim(),
         ativo: form.ativo,
+        contextos_aplicaveis: form.contextos_aplicaveis,
         ...(editing ? { id: editing.id } : {}),
       };
 
@@ -63,13 +79,30 @@ export default function CentrosCustoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = await resp.json();
+      const json = (await resp.json()) as { ok: boolean; data?: CentroCusto; error?: string };
       if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao salvar centro de custo.");
 
       if (editing) {
-        setCentros((prev) => prev.map((c) => (c.id === editing.id ? json.data : c)));
+        setCentros((prev) =>
+          prev.map((c) =>
+            c.id === editing.id
+              ? {
+                  ...json.data,
+                  contextos_aplicaveis: Array.isArray(json.data?.contextos_aplicaveis)
+                    ? json.data.contextos_aplicaveis
+                    : [],
+                }
+              : c,
+          ),
+        );
       } else {
-        setCentros((prev) => [json.data, ...prev]);
+        setCentros((prev) => [
+          {
+            ...json.data,
+            contextos_aplicaveis: Array.isArray(json.data?.contextos_aplicaveis) ? json.data.contextos_aplicaveis : [],
+          },
+          ...prev,
+        ]);
       }
       resetForm();
     } catch (err: unknown) {
@@ -88,9 +121,20 @@ export default function CentrosCustoPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: item.id, ativo: !item.ativo }),
       });
-      const json = await resp.json();
+      const json = (await resp.json()) as { ok: boolean; data?: CentroCusto; error?: string };
       if (!resp.ok || !json.ok) throw new Error(json.error || "Erro ao atualizar centro de custo.");
-      setCentros((prev) => prev.map((c) => (c.id === item.id ? json.data : c)));
+      setCentros((prev) =>
+        prev.map((c) =>
+          c.id === item.id
+            ? {
+                ...json.data,
+                contextos_aplicaveis: Array.isArray(json.data?.contextos_aplicaveis)
+                  ? json.data.contextos_aplicaveis
+                  : [],
+              }
+            : c,
+        ),
+      );
     } catch (err: unknown) {
       console.error(err);
       const message = err instanceof Error ? err.message : "Erro ao atualizar centro de custo.";
@@ -100,7 +144,20 @@ export default function CentrosCustoPage() {
 
   function editar(item: CentroCusto) {
     setEditing(item);
-    setForm({ codigo: item.codigo, nome: item.nome, ativo: item.ativo });
+    setForm({
+      codigo: item.codigo,
+      nome: item.nome,
+      ativo: item.ativo,
+      contextos_aplicaveis: Array.isArray(item.contextos_aplicaveis) ? item.contextos_aplicaveis : [],
+    });
+  }
+
+  function toggleContexto(contexto: string) {
+    setForm((prev) => {
+      const has = prev.contextos_aplicaveis.includes(contexto);
+      const next = has ? prev.contextos_aplicaveis.filter((c) => c !== contexto) : [...prev.contextos_aplicaveis, contexto];
+      return { ...prev, contextos_aplicaveis: next };
+    });
   }
 
   return (
@@ -157,6 +214,22 @@ export default function CentrosCustoPage() {
               />
               Ativo
             </label>
+            <div className="md:col-span-2">
+              <div className="text-sm text-slate-700">Contextos aplicaveis</div>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {CONTEXTOS.map((contexto) => (
+                  <label key={contexto} className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={form.contextos_aplicaveis.includes(contexto)}
+                      onChange={() => toggleContexto(contexto)}
+                      className="h-4 w-4"
+                    />
+                    {contexto}
+                  </label>
+                ))}
+              </div>
+            </div>
             <div className="flex gap-2 md:col-span-2">
               <button
                 type="submit"
@@ -193,6 +266,9 @@ export default function CentrosCustoPage() {
                         <div className="text-lg font-semibold text-slate-800">{c.nome}</div>
                         <div className="text-sm text-slate-600">{c.codigo}</div>
                         <div className="text-xs text-slate-500">Status: {c.ativo ? "Ativo" : "Inativo"}</div>
+                        <div className="text-xs text-slate-500">
+                          Contextos: {c.contextos_aplicaveis.length ? c.contextos_aplicaveis.join(", ") : "-"}
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <button
