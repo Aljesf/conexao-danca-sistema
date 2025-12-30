@@ -37,6 +37,37 @@ function toTimestamptzNoonUtc(dateYYYYMMDD: string): string {
   return `${dateYYYYMMDD}T12:00:00.000Z`;
 }
 
+async function getCentroCustoPadraoEscolaId(supabase: any): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("escola_config_financeira")
+    .select("centro_custo_padrao_escola_id")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`falha_ler_config_escola_financeira: ${error.message}`);
+  }
+
+  const id = data?.centro_custo_padrao_escola_id;
+  return typeof id === "number" ? id : null;
+}
+
+async function getCentroCustoFallbackPrimeiroAtivoId(supabase: any): Promise<number> {
+  const { data, error } = await supabase
+    .from("centros_custo")
+    .select("id")
+    .eq("ativo", true)
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.id) {
+    throw new Error(`falha_resolver_centro_custo_fallback: ${error?.message ?? "sem_centro_custo"}`);
+  }
+
+  return Number(data.id);
+}
+
 async function inserirMovimentoFinanceiroReceita(params: {
   supabase: any;
   centroCustoId: number | null;
@@ -48,14 +79,18 @@ async function inserirMovimentoFinanceiroReceita(params: {
 }) {
   const { supabase, centroCustoId, valorCentavos, dataYYYYMMDD, origemTipo, origemId, descricao } = params;
 
+  const centroPadrao = await getCentroCustoPadraoEscolaId(supabase);
+  const centroIdFinal = centroPadrao ?? centroCustoId ?? (await getCentroCustoFallbackPrimeiroAtivoId(supabase));
+
   const payload: Record<string, unknown> = {
     tipo: "RECEITA",
-    centro_custo_id: centroCustoId ?? null,
+    centro_custo_id: centroIdFinal,
     valor_centavos: valorCentavos,
     data_movimento: toTimestamptzNoonUtc(dataYYYYMMDD),
     origem: origemTipo,
     origem_id: origemId,
     descricao,
+    usuario_id: null,
   };
 
   const { error } = await supabase.from("movimento_financeiro").insert(payload);
