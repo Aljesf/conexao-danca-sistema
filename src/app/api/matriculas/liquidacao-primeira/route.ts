@@ -103,6 +103,18 @@ function ymFromDate(dateYYYYMMDD: string): string {
   return dateYYYYMMDD.slice(0, 7);
 }
 
+function yearFromDate(dateYYYYMMDD: string): number {
+  return Number(dateYYYYMMDD.slice(0, 4));
+}
+
+function monthFromDate(dateYYYYMMDD: string): number {
+  return Number(dateYYYYMMDD.slice(5, 7));
+}
+
+function buildPeriodo(ano: number, mes: number): string {
+  return `${ano}-${String(mes).padStart(2, "0")}`;
+}
+
 function buildDateFromYMD(year: number, month: number, day: number): string {
   const mm = String(month).padStart(2, "0");
   const dd = String(day).padStart(2, "0");
@@ -368,6 +380,70 @@ export async function POST(req: Request) {
 
     if (errUpd) {
       return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
+    }
+
+    if (body.tipo_primeira_cobranca === "ENTRADA_PRORATA") {
+      const dataInicio = typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null;
+      const anoRef =
+        typeof matricula.ano_referencia === "number"
+          ? matricula.ano_referencia
+          : dataInicio
+            ? yearFromDate(dataInicio)
+            : new Date().getFullYear();
+
+      const mesInicioVinculo = dataInicio ? monthFromDate(dataInicio) : 1;
+      const mesPrimeiraMensalidadeCheia = Math.min(12, mesInicioVinculo + 1);
+
+      const valorMensalidadeCheia = Number(matricula.primeira_cobranca_valor_centavos) || null;
+
+      if (!valorMensalidadeCheia || valorMensalidadeCheia <= 0) {
+        console.warn(
+          "[matriculas/liquidacao] valorMensalidadeCheia ausente para lancamento no cartao. Matricula:",
+          matricula.id,
+        );
+      } else {
+        const conta = await ensureContaCreditoConexaoAluno({
+          supabase,
+          pessoaTitularId: matricula.responsavel_financeiro_id,
+        });
+
+        await ensureFaturasAno({
+          supabase,
+          contaConexaoId: conta.id,
+          ano: anoRef,
+          diaFechamento: conta.dia_fechamento ?? 10,
+          diaVencimento: conta.dia_vencimento ?? 12,
+        });
+
+        for (let mes = mesPrimeiraMensalidadeCheia; mes <= 12; mes++) {
+          const periodo = buildPeriodo(anoRef, mes);
+
+          const { data: lanc, error: errLanc } = await supabase
+            .from("credito_conexao_lancamentos")
+            .insert({
+              conta_conexao_id: conta.id,
+              origem_sistema: "MATRICULA",
+              origem_id: matricula.id,
+              descricao: `Mensalidade ${periodo} - matricula`,
+              valor_centavos: valorMensalidadeCheia,
+              status: "PENDENTE_FATURA",
+            })
+            .select("id")
+            .single();
+
+          if (errLanc || !lanc) {
+            throw new Error(`falha_criar_lancamento_cartao: ${errLanc?.message ?? "erro"}`);
+          }
+
+          await vincularLancamentoNaFatura({
+            supabase,
+            contaConexaoId: conta.id,
+            periodoReferencia: periodo,
+            lancamentoId: lanc.id,
+            valorCentavos: valorMensalidadeCheia,
+          });
+        }
+      }
     }
 
     return NextResponse.json({
