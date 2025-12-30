@@ -277,6 +277,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "matricula_nao_encontrada" }, { status: 404 });
   }
 
+  const debugCartao: {
+    executado: boolean;
+    conta_conexao_id?: number;
+    ano_ref?: number;
+    periodo_inicio?: string;
+    periodo_fim?: string;
+    created_lancamentos: number;
+    linked_faturas: number;
+    erro?: string;
+    ano_referencia_input?: number | null;
+    data_inicio_vinculo_input?: string | null;
+  } = {
+    executado: false,
+    created_lancamentos: 0,
+    linked_faturas: 0,
+    ano_referencia_input: typeof matricula.ano_referencia === "number" ? matricula.ano_referencia : null,
+    data_inicio_vinculo_input: typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null,
+  };
+
   if (matricula.primeira_cobranca_status === "PAGA" || matricula.primeira_cobranca_status === "LANCADA_CARTAO") {
     return NextResponse.json({ error: "matricula_ja_liquidada" }, { status: 409 });
   }
@@ -383,67 +402,88 @@ export async function POST(req: Request) {
     }
 
     if (body.tipo_primeira_cobranca === "ENTRADA_PRORATA") {
-      const dataInicio = typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null;
-      const anoRef =
-        typeof matricula.ano_referencia === "number"
-          ? matricula.ano_referencia
-          : dataInicio
-            ? yearFromDate(dataInicio)
-            : new Date().getFullYear();
+      debugCartao.executado = true;
 
-      const mesInicioVinculo = dataInicio ? monthFromDate(dataInicio) : 1;
-      const mesPrimeiraMensalidadeCheia = Math.min(12, mesInicioVinculo + 1);
+      try {
+        const dataInicio = typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null;
+        const anoRef =
+          typeof matricula.ano_referencia === "number"
+            ? matricula.ano_referencia
+            : dataInicio
+              ? yearFromDate(dataInicio)
+              : new Date().getFullYear();
 
-      const valorMensalidadeCheia = Number(matricula.primeira_cobranca_valor_centavos) || null;
+        debugCartao.ano_ref = anoRef;
 
-      if (!valorMensalidadeCheia || valorMensalidadeCheia <= 0) {
-        console.warn(
-          "[matriculas/liquidacao] valorMensalidadeCheia ausente para lancamento no cartao. Matricula:",
-          matricula.id,
-        );
-      } else {
-        const conta = await ensureContaCreditoConexaoAluno({
-          supabase,
-          pessoaTitularId: matricula.responsavel_financeiro_id,
-        });
+        const mesInicioVinculo = dataInicio ? monthFromDate(dataInicio) : 1;
+        const mesPrimeiraMensalidadeCheia = Math.min(12, mesInicioVinculo + 1);
 
-        await ensureFaturasAno({
-          supabase,
-          contaConexaoId: conta.id,
-          ano: anoRef,
-          diaFechamento: conta.dia_fechamento ?? 10,
-          diaVencimento: conta.dia_vencimento ?? 12,
-        });
+        debugCartao.periodo_inicio = buildPeriodo(anoRef, mesPrimeiraMensalidadeCheia);
+        debugCartao.periodo_fim = buildPeriodo(anoRef, 12);
 
-        for (let mes = mesPrimeiraMensalidadeCheia; mes <= 12; mes++) {
-          const periodo = buildPeriodo(anoRef, mes);
+        const valorMensalidadeCheia = Number(matricula.primeira_cobranca_valor_centavos) || null;
 
-          const { data: lanc, error: errLanc } = await supabase
-            .from("credito_conexao_lancamentos")
-            .insert({
-              conta_conexao_id: conta.id,
-              origem_sistema: "MATRICULA",
-              origem_id: matricula.id,
-              descricao: `Mensalidade ${periodo} - matricula`,
-              valor_centavos: valorMensalidadeCheia,
-              status: "PENDENTE_FATURA",
-            })
-            .select("id")
-            .single();
+        if (!valorMensalidadeCheia || valorMensalidadeCheia <= 0) {
+          console.warn(
+            "[matriculas/liquidacao] valorMensalidadeCheia ausente para lancamento no cartao. Matricula:",
+            matricula.id,
+          );
+        } else {
+          const conta = await ensureContaCreditoConexaoAluno({
+            supabase,
+            pessoaTitularId: matricula.responsavel_financeiro_id,
+          });
 
-          if (errLanc || !lanc) {
-            throw new Error(`falha_criar_lancamento_cartao: ${errLanc?.message ?? "erro"}`);
-          }
+          debugCartao.conta_conexao_id = conta.id;
 
-          await vincularLancamentoNaFatura({
+          await ensureFaturasAno({
             supabase,
             contaConexaoId: conta.id,
-            periodoReferencia: periodo,
-            lancamentoId: lanc.id,
-            valorCentavos: valorMensalidadeCheia,
+            ano: anoRef,
+            diaFechamento: conta.dia_fechamento ?? 10,
+            diaVencimento: conta.dia_vencimento ?? 12,
           });
+
+          for (let mes = mesPrimeiraMensalidadeCheia; mes <= 12; mes++) {
+            const periodo = buildPeriodo(anoRef, mes);
+
+            const { data: lanc, error: errLanc } = await supabase
+              .from("credito_conexao_lancamentos")
+              .insert({
+                conta_conexao_id: conta.id,
+                origem_sistema: "MATRICULA",
+                origem_id: matricula.id,
+                descricao: `Mensalidade ${periodo} - matricula`,
+                valor_centavos: valorMensalidadeCheia,
+                status: "PENDENTE_FATURA",
+              })
+              .select("id")
+              .single();
+
+            if (errLanc || !lanc) {
+              throw new Error(`falha_criar_lancamento_cartao: ${errLanc?.message ?? "erro"}`);
+            }
+
+            debugCartao.created_lancamentos += 1;
+
+            await vincularLancamentoNaFatura({
+              supabase,
+              contaConexaoId: conta.id,
+              periodoReferencia: periodo,
+              lancamentoId: lanc.id,
+              valorCentavos: valorMensalidadeCheia,
+            });
+
+            debugCartao.linked_faturas += 1;
+          }
         }
+      } catch (err) {
+        debugCartao.erro = err instanceof Error ? err.message : "erro_desconhecido";
       }
+    }
+
+    if (debugCartao.executado && debugCartao.erro) {
+      return NextResponse.json({ error: "falha_lancamento_cartao", debugCartao }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -451,6 +491,7 @@ export async function POST(req: Request) {
       status: "PAGA",
       cobranca_id: cobranca.id,
       recebimento_id: receb.id,
+      debugCartao,
     });
   }
 
