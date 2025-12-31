@@ -126,8 +126,7 @@ async function carregarPessoaComNomes(id: string) {
 // GET /api/pessoas/[id] -> detalhes da pessoa
 export async function GET(_req: Request, ctx: RouteParams) {
   try {
-    const params = await ctx.params;
-    const id = params?.id;
+    const { id } = await ctx.params;
     if (!id) {
       return NextResponse.json(
         { error: "ID da pessoa não informado" },
@@ -171,8 +170,7 @@ export async function GET(_req: Request, ctx: RouteParams) {
 // PUT /api/pessoas/[id] -> atualizar dados da pessoa
 export async function PUT(req: Request, ctx: RouteParams) {
   try {
-    const params = await ctx.params;
-    const id = params?.id;
+    const { id } = await ctx.params;
     if (!id) {
       return NextResponse.json(
         { error: "ID da pessoa não informado" },

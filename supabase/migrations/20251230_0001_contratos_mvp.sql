@@ -68,7 +68,7 @@ create table if not exists public.contratos_emitidos_termos (
 );
 
 -- 5) Trigger simples de updated_at
-create or replace function public.set_updated_at()
+create or replace function public.contratos_set_updated_at()
 returns trigger language plpgsql as $$
 begin
   new.updated_at = now();
@@ -79,12 +79,12 @@ $$;
 drop trigger if exists trg_contratos_modelo_updated_at on public.contratos_modelo;
 create trigger trg_contratos_modelo_updated_at
 before update on public.contratos_modelo
-for each row execute function public.set_updated_at();
+for each row execute function public.contratos_set_updated_at();
 
 drop trigger if exists trg_contratos_emitidos_updated_at on public.contratos_emitidos;
 create trigger trg_contratos_emitidos_updated_at
 before update on public.contratos_emitidos
-for each row execute function public.set_updated_at();
+for each row execute function public.contratos_set_updated_at();
 
 commit;
 
