@@ -80,6 +80,11 @@ export default function AdminContratosModelosPage() {
       <p style={{ opacity: 0.8 }}>
         Aqui voce mantem templates (placeholders) para emissao futura. MVP: sem PDF e sem assinatura digital.
       </p>
+      <div style={{ marginTop: 8, opacity: 0.8 }}>
+        <a href="/admin/config/contratos" style={{ textDecoration: "none" }}>
+          Voltar ao hub de Contratos
+        </a>
+      </div>
 
       {erro ? (
         <div style={{ marginTop: 12, padding: 12, border: "1px solid #f00", borderRadius: 8 }}>{erro}</div>
