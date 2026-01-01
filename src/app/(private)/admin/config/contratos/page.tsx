@@ -46,6 +46,15 @@ export default function AdminConfigContratosHome() {
             <p className="text-sm text-slate-600">Lista de emitidos com status e referencia.</p>
           </SystemSectionCard>
         </Link>
+
+        <Link href="/admin/config/contratos/variaveis" className="block">
+          <SystemSectionCard
+            title="Variaveis de contrato"
+            description="Cadastre variaveis reutilizaveis para gerar placeholders."
+          >
+            <p className="text-sm text-slate-600">Use codigos padronizados e path tecnico.</p>
+          </SystemSectionCard>
+        </Link>
       </div>
     </SystemPage>
   );
