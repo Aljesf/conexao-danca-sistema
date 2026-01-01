@@ -1,4 +1,5 @@
 # Padrao de Layout e UI - Sistema Conexao Danca
+Versao: 1.2
 
 Documento oficial. Fonte unica de verdade visual do sistema. Baseado somente nas paginas reais listadas na especificacao.
 
@@ -11,6 +12,44 @@ Definir o layout base, hierarquia visual e organizacao de conteudo das paginas d
 - Formularios e tabelas sempre dentro de um card.
 - Feedback de erro/sucesso visivel e localizado no card relevante.
 - Layout responsivo com container central e grid para colunas.
+
+## 1.2.1) Busca Inteligente de Pessoa/Responsavel (v1.2)
+- Proibido botao Buscar.
+- Busca automatica com debounce entre 300 e 450ms.
+- Dropdown de resultados.
+- Teclado: setas para cima/baixo, Enter para selecionar, Esc para fechar.
+- "Nenhum resultado" deve exibir CTA "Criar nova pessoa".
+- Campos pesquisaveis: nome, CPF, telefone, e-mail.
+- Regra absoluta: layout de pagina != sidebar.
+
+## 1.2.2) Padrao Financeiro Oficial (v1.2) - UI/UX + Tipagem
+- Banco/API: valores monetarios persistidos como integer *_centavos.
+- UI: nunca exibir centavos brutos (ex: 12345).
+- UI: sempre exibir no formato BRL: "R$ 123,45".
+- Inputs de dinheiro:
+  - Aceitar "R$ 1.234,56", "1234,56" e "1234.56".
+  - Normalizar e salvar como centavos (integer).
+- Proibido: conversoes manuais em page.tsx (ex: /100 espalhado).
+- Obrigatorio: usar helpers unicos (formatBRLFromCentavos, parseBRLToCentavos).
+- Alinhamento visual:
+  - valores em tabelas alinhados a direita;
+  - zero exibido como "R$ 0,00";
+  - negativos como "- R$ ..." (ou badge), mas sempre legivel.
+
+## 1.2.3) Padrao de Datas Oficial (v1.2) - UI BR / API ISO
+- API e banco: ISO (YYYY-MM-DD) ou timestamptz.
+- UI: sempre dd/mm/aaaa.
+- Proibido: mostrar ISO em tela final para usuario.
+- Obrigatorio: helpers de data para formatar e parsear.
+
+## 1.2.4) Checklist obrigatorio para qualquer pagina nova
+- Card de titulo + subtitulo institucional.
+- (Opcional) Card "Entenda esta tela".
+- Conteudo sempre em cards.
+- Nao alterar sidebar.
+- Se houver dinheiro: usar helpers oficiais.
+- Se houver datas: usar helpers oficiais.
+- Se houver busca de pessoa: usar PessoaSmartSearch (sem botao).
 
 ## 3. Regra explicita: layout != sidebar
 - O layout de pagina e o conteudo visual interno nao sao a sidebar.
