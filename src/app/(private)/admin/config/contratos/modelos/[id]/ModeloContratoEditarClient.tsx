@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { PageHeaderCard } from "@/components/layout/PageHeaderCard";
-import { SectionCard } from "@/components/layout/SectionCard";
+import { SystemContextCard } from "@/components/system/SystemContextCard";
+import { SystemHelpCard } from "@/components/system/SystemHelpCard";
+import { SystemPage } from "@/components/system/SystemPage";
+import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -107,33 +108,41 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
 
   if (!Number.isFinite(idNum)) {
     return (
-      <PageContainer>
-        <PageHeaderCard title="Editar modelo de contrato" subtitle="Padronize template e schema (DB/CALC/MANUAL)." />
-        <SectionCard title="Dados gerais">
-          <p className="text-sm text-muted-foreground">ID invalido.</p>
-        </SectionCard>
-      </PageContainer>
+      <SystemPage>
+        <SystemContextCard title="Editar modelo de contrato" subtitle="Padronize template e schema (DB/CALC/MANUAL)." />
+        <SystemSectionCard title="Dados gerais">
+          <p className="text-sm text-slate-600">ID invalido.</p>
+        </SystemSectionCard>
+      </SystemPage>
     );
   }
 
   return (
-    <PageContainer>
-      <PageHeaderCard
+    <SystemPage>
+      <SystemContextCard
         title="Editar modelo de contrato"
         subtitle="Padronize template e schema (DB/CALC/MANUAL) para emissao."
       >
         <div className="flex flex-wrap gap-3 text-sm">
-          <Link className="underline text-muted-foreground" href="/admin/config/contratos/modelos">
+          <Link className="underline text-slate-600" href="/admin/config/contratos/modelos">
             Voltar para modelos
           </Link>
-          <Link className="underline text-muted-foreground" href="/admin/config/contratos">
+          <Link className="underline text-slate-600" href="/admin/config/contratos">
             Voltar ao hub
           </Link>
         </div>
-        {loading ? <p className="text-xs text-muted-foreground">Carregando...</p> : null}
-      </PageHeaderCard>
+        {loading ? <p className="text-xs text-slate-500">Carregando...</p> : null}
+      </SystemContextCard>
 
-      <SectionCard
+      <SystemHelpCard
+        items={[
+          "Edite dados gerais, texto e schema em blocos separados.",
+          "Use placeholders em CAIXA ALTA para variaveis do contrato.",
+          "Salve sempre que ajustar o schema ou o texto.",
+        ]}
+      />
+
+      <SystemSectionCard
         title="Dados gerais"
         description={`ID: ${modelo?.id ?? "-"} | Versao: ${modelo?.versao ?? "-"}`}
       >
@@ -167,25 +176,30 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
             </label>
           </div>
         </div>
-      </SectionCard>
+      </SystemSectionCard>
 
-      <SectionCard title="Texto do modelo (Markdown)">
+      <SystemSectionCard title="Texto do modelo (Markdown)">
         <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={12} />
-      </SectionCard>
+      </SystemSectionCard>
 
-      <SectionCard
+      <SystemSectionCard
         title="Schema de placeholders (JSON)"
         description="Use DB (path), CALC (snapshot) e MANUAL (digitado)."
+        footer={
+          <>
+            <Link className="text-sm underline text-slate-600" href="/admin/config/contratos">
+              Voltar
+            </Link>
+            <Button onClick={() => void salvar()} disabled={saving || !titulo.trim() || !texto.trim()}>
+              {saving ? "Salvando..." : "Salvar"}
+            </Button>
+          </>
+        }
       >
-        <div>
-          <p className="text-xs text-muted-foreground">
-            Ex.: ALUNO_NOME, VALOR_TOTAL_CONTRATADO, OBS_ADICIONAIS.
-          </p>
-          <div className="mt-2">
-            <Textarea value={schemaJson} onChange={(e) => setSchemaJson(e.target.value)} rows={12} />
-          </div>
+        <p className="text-xs text-slate-600">Ex.: ALUNO_NOME, VALOR_TOTAL_CONTRATADO, OBS_ADICIONAIS.</p>
+        <div className="mt-2">
+          <Textarea value={schemaJson} onChange={(e) => setSchemaJson(e.target.value)} rows={12} />
         </div>
-
         {erro ? (
           <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
         ) : null}
@@ -194,16 +208,7 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
             {okMsg}
           </div>
         ) : null}
-
-        <div className="flex justify-between">
-          <Link className="text-sm underline text-muted-foreground" href="/admin/config/contratos">
-            Voltar ao hub
-          </Link>
-          <Button onClick={() => void salvar()} disabled={saving || !titulo.trim() || !texto.trim()}>
-            {saving ? "Salvando..." : "Salvar"}
-          </Button>
-        </div>
-      </SectionCard>
-    </PageContainer>
+      </SystemSectionCard>
+    </SystemPage>
   );
 }

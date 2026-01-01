@@ -1,43 +1,52 @@
 "use client";
 
 import Link from "next/link";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { PageHeaderCard } from "@/components/layout/PageHeaderCard";
-import { SectionCard } from "@/components/layout/SectionCard";
+import { SystemContextCard } from "@/components/system/SystemContextCard";
+import { SystemHelpCard } from "@/components/system/SystemHelpCard";
+import { SystemPage } from "@/components/system/SystemPage";
+import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 
 export default function AdminConfigContratosHome() {
   return (
-    <PageContainer>
-      <PageHeaderCard
+    <SystemPage>
+      <SystemContextCard
         title="Configuracao - Contratos"
         subtitle="Central do modulo de contratos: modelos, emissao e acompanhamento."
       />
 
+      <SystemHelpCard
+        items={[
+          "Crie e edite modelos com placeholders.",
+          "Emita contratos a partir de matriculas existentes.",
+          "Acompanhe contratos emitidos e seus status.",
+        ]}
+      />
+
       <div className="grid gap-4">
         <Link href="/admin/config/contratos/modelos" className="block">
-          <SectionCard
-            title="Modelos de Contrato"
+          <SystemSectionCard
+            title="Modelos de contrato"
             description="Crie e edite templates com placeholders (DB/CALC/MANUAL)."
           >
-            <p className="text-sm text-muted-foreground">Gerencie versao, tipo, texto e schema do modelo.</p>
-          </SectionCard>
+            <p className="text-sm text-slate-600">Gerencie versao, tipo, texto e schema do modelo.</p>
+          </SystemSectionCard>
         </Link>
 
         <Link href="/admin/config/contratos/emitir" className="block">
-          <SectionCard
-            title="Emitir Contrato"
+          <SystemSectionCard
+            title="Emitir contrato"
             description="Busque aluno ou responsavel, selecione matricula e emita o contrato."
           >
-            <p className="text-sm text-muted-foreground">Emissao guiada com snapshot e variaveis manuais.</p>
-          </SectionCard>
+            <p className="text-sm text-slate-600">Emissao guiada com snapshot e variaveis manuais.</p>
+          </SystemSectionCard>
         </Link>
 
         <Link href="/admin/config/contratos/emitidos" className="block">
-          <SectionCard title="Contratos Emitidos" description="Visualize contratos emitidos (MVP).">
-            <p className="text-sm text-muted-foreground">Lista de emitidos com status e referencia.</p>
-          </SectionCard>
+          <SystemSectionCard title="Contratos emitidos" description="Visualize contratos emitidos (MVP).">
+            <p className="text-sm text-slate-600">Lista de emitidos com status e referencia.</p>
+          </SystemSectionCard>
         </Link>
       </div>
-    </PageContainer>
+    </SystemPage>
   );
 }

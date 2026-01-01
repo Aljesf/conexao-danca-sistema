@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { PageHeaderCard } from "@/components/layout/PageHeaderCard";
-import { SectionCard } from "@/components/layout/SectionCard";
+import { SystemContextCard } from "@/components/system/SystemContextCard";
+import { SystemHelpCard } from "@/components/system/SystemHelpCard";
+import { SystemPage } from "@/components/system/SystemPage";
+import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -82,22 +83,38 @@ export default function AdminContratosModelosPage() {
   }, []);
 
   return (
-    <PageContainer>
-      <PageHeaderCard
+    <SystemPage>
+      <SystemContextCard
         title="Contratos - Modelos"
         subtitle="Templates e placeholders para emissao futura (MVP sem PDF e sem assinatura digital)."
       >
-        <Link className="text-sm underline opacity-80" href="/admin/config/contratos">
+        <Link className="text-sm underline text-slate-600" href="/admin/config/contratos">
           Voltar ao hub de Contratos
         </Link>
-      </PageHeaderCard>
+      </SystemContextCard>
 
-      <SectionCard title="Novo modelo" description="Crie o template inicial e depois edite schema e texto no detalhe.">
+      <SystemHelpCard
+        items={[
+          "Crie um modelo inicial e use a tela de detalhe para ajustar texto e schema.",
+          "Use placeholders em CAIXA ALTA para variaveis de contrato.",
+          "Modelos ativos ficam disponiveis para emissao.",
+        ]}
+      />
+
+      <SystemSectionCard
+        title="Novo modelo"
+        description="Crie o template inicial e depois edite schema e texto no detalhe."
+        footer={
+          <Button onClick={() => void criarModelo()} disabled={saving || !novoTitulo.trim() || !novoTexto.trim()}>
+            {saving ? "Salvando..." : "Criar modelo"}
+          </Button>
+        }
+      >
         {erro ? (
           <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
         ) : null}
 
-        <form className="grid grid-cols-1 gap-3 md:grid-cols-3" onSubmit={(e) => e.preventDefault()}>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div>
             <label className="text-sm font-medium">Tipo</label>
             <select
@@ -134,20 +151,21 @@ export default function AdminContratosModelosPage() {
               />
             </div>
           </div>
+        </div>
+      </SystemSectionCard>
 
-          <div className="md:col-span-3 flex justify-end">
-            <Button onClick={() => void criarModelo()} disabled={saving || !novoTitulo.trim() || !novoTexto.trim()}>
-              {saving ? "Salvando..." : "Criar modelo"}
-            </Button>
-          </div>
-        </form>
-      </SectionCard>
+      <SystemSectionCard
+        title="Modelos cadastrados"
+        description="Use Editar para ajustar texto e schema no padrao do sistema."
+      >
+        {erro ? (
+          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
+        ) : null}
 
-      <SectionCard title="Modelos cadastrados" description="Use Editar para ajustar texto e schema no padrao do sistema.">
         {loading ? (
-          <p className="text-sm text-muted-foreground">Carregando...</p>
+          <p className="text-sm text-slate-600">Carregando...</p>
         ) : itens.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum modelo cadastrado.</p>
+          <p className="text-sm text-slate-600">Nenhum modelo cadastrado.</p>
         ) : (
           <div className="grid gap-3">
             {itens.map((m) => (
@@ -156,7 +174,7 @@ export default function AdminContratosModelosPage() {
                   <div className="text-sm font-semibold">
                     [{m.tipo_contrato}] {m.titulo} <span className="opacity-70">({m.versao})</span>
                   </div>
-                  <div className="text-xs text-muted-foreground">ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"}</div>
+                  <div className="text-xs text-slate-600">ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"}</div>
                   <div>
                     <Link className="text-sm underline" href={`/admin/config/contratos/modelos/${m.id}`}>
                       Editar
@@ -164,14 +182,14 @@ export default function AdminContratosModelosPage() {
                   </div>
                 </div>
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-sm text-muted-foreground">Ver texto</summary>
+                  <summary className="cursor-pointer text-sm text-slate-600">Ver texto</summary>
                   <pre className="mt-2 whitespace-pre-wrap text-sm">{m.texto_modelo_md}</pre>
                 </details>
               </div>
             ))}
           </div>
         )}
-      </SectionCard>
-    </PageContainer>
+      </SystemSectionCard>
+    </SystemPage>
   );
 }

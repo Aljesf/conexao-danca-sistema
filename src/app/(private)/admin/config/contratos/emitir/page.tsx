@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { PageHeaderCard } from "@/components/layout/PageHeaderCard";
-import { SectionCard } from "@/components/layout/SectionCard";
+import { SystemContextCard } from "@/components/system/SystemContextCard";
+import { SystemHelpCard } from "@/components/system/SystemHelpCard";
+import { SystemPage } from "@/components/system/SystemPage";
+import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -140,35 +141,47 @@ export default function AdminContratosEmitirPage() {
   }, []);
 
   return (
-    <PageContainer>
-      <PageHeaderCard
+    <SystemPage>
+      <SystemContextCard
         title="Emitir contrato"
         subtitle="Busque a matricula pelo nome do aluno ou do responsavel, selecione o modelo e emita."
       >
-        <Link className="text-sm underline text-muted-foreground" href="/admin/config/contratos">
+        <Link className="text-sm underline text-slate-600" href="/admin/config/contratos">
           Voltar ao hub de Contratos
         </Link>
-      </PageHeaderCard>
+      </SystemContextCard>
 
-      <SectionCard
+      <SystemHelpCard
+        items={[
+          "Busque a matricula e selecione o modelo ativo.",
+          "Preencha snapshot e variaveis manuais antes de emitir.",
+          "A emissao gera um contrato com status PENDENTE.",
+        ]}
+      />
+
+      <SystemSectionCard
         title="Selecionar matricula"
         description="Digite nome, CPF, telefone ou email do aluno ou responsavel."
-      >
-        <div className="flex flex-wrap gap-2">
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Digite nome, CPF, telefone ou e-mail (aluno ou responsavel)..."
-            className="min-w-[280px] flex-1"
-          />
+        footer={
           <Button onClick={() => void buscar()} disabled={buscaLoading || q.trim().length < 2}>
             {buscaLoading ? "Buscando..." : "Buscar"}
           </Button>
-        </div>
+        }
+      >
+        {erro ? (
+          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
+        ) : null}
 
-        <div className="mt-3">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Digite nome, CPF, telefone ou e-mail (aluno ou responsavel)..."
+          className="min-w-[280px]"
+        />
+
+        <div>
           {matriculas.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Nenhum resultado ainda.</div>
+            <div className="text-sm text-slate-600">Nenhum resultado ainda.</div>
           ) : (
             <div className="grid gap-3">
               {matriculas.map((m) => (
@@ -182,7 +195,7 @@ export default function AdminContratosEmitirPage() {
                   />
                   <div>
                     <div className="text-sm font-medium">{m.label}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
+                    <div className="mt-1 text-xs text-slate-600">
                       Tipo: {m.tipo_matricula ?? "-"} | Ano: {m.ano_referencia ?? "-"} | Status: {m.status ?? "-"}
                     </div>
                   </div>
@@ -191,13 +204,13 @@ export default function AdminContratosEmitirPage() {
             </div>
           )}
         </div>
-      </SectionCard>
+      </SystemSectionCard>
 
-      <SectionCard title="Selecionar modelo de contrato" description="Use apenas modelos ativos.">
+      <SystemSectionCard title="Selecionar modelo de contrato" description="Use apenas modelos ativos.">
         {modelosLoading ? (
-          <p className="text-sm text-muted-foreground">Carregando modelos...</p>
+          <p className="text-sm text-slate-600">Carregando modelos...</p>
         ) : modelosAtivos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhum modelo ativo encontrado.</p>
+          <p className="text-sm text-slate-600">Nenhum modelo ativo encontrado.</p>
         ) : (
           <select
             value={modeloId ?? ""}
@@ -212,9 +225,9 @@ export default function AdminContratosEmitirPage() {
             ))}
           </select>
         )}
-      </SectionCard>
+      </SystemSectionCard>
 
-      <SectionCard
+      <SystemSectionCard
         title="Snapshot contratual"
         description="Informe o valor total contratado em centavos. Depois iremos ligar ao motor de precificacao."
       >
@@ -226,11 +239,16 @@ export default function AdminContratosEmitirPage() {
             placeholder="Ex.: 120000"
           />
         </div>
-      </SectionCard>
+      </SystemSectionCard>
 
-      <SectionCard
+      <SystemSectionCard
         title="Variaveis manuais"
         description="Coloque campos como OBS_ADICIONAIS, clausulas especificas e observacoes negociadas."
+        footer={
+          <Button onClick={() => void emitir()} disabled={!matriculaSel || !modeloId}>
+            Emitir contrato
+          </Button>
+        }
       >
         {erro ? (
           <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
@@ -241,12 +259,7 @@ export default function AdminContratosEmitirPage() {
           </div>
         ) : null}
         <Textarea value={variaveisManuaisJson} onChange={(e) => setVariaveisManuaisJson(e.target.value)} rows={10} />
-        <div className="flex justify-end">
-          <Button onClick={() => void emitir()} disabled={!matriculaSel || !modeloId}>
-            Emitir contrato
-          </Button>
-        </div>
-      </SectionCard>
-    </PageContainer>
+      </SystemSectionCard>
+    </SystemPage>
   );
 }
