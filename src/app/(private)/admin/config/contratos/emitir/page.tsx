@@ -1,7 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 type Modelo = {
   id: number;
@@ -38,7 +42,7 @@ export default function AdminContratosEmitirPage() {
 
   const [valorTotalCentavos, setValorTotalCentavos] = useState<string>("");
   const [variaveisManuaisJson, setVariaveisManuaisJson] = useState<string>(
-    JSON.stringify({ OBS_ADICIONAIS: "" }, null, 2),
+    JSON.stringify({ OBS_ADICIONAIS: "" }, null, 2)
   );
 
   const modelosAtivos = useMemo(() => modelos.filter((m) => m.ativo), [modelos]);
@@ -134,124 +138,143 @@ export default function AdminContratosEmitirPage() {
   }, []);
 
   return (
-    <div style={{ padding: 16, maxWidth: 1100 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Emitir Contrato</h1>
-      <p style={{ opacity: 0.8 }}>
-        Busque a matricula pelo nome do aluno ou do responsavel, selecione o modelo e emita.
-      </p>
+    <div className="p-6 max-w-5xl">
+      <div className="mb-4">
+        <h1 className="text-xl font-semibold">Emitir Contrato</h1>
+        <p className="text-sm opacity-80">
+          Busque a matricula pelo nome do aluno ou do responsavel, selecione o modelo e emita.
+        </p>
+        <div className="mt-2">
+          <Link className="text-sm underline opacity-80" href="/admin/config/contratos">
+            Voltar ao hub de Contratos
+          </Link>
+        </div>
+      </div>
 
       {erro ? (
-        <div style={{ marginTop: 12, padding: 12, border: "1px solid #f00", borderRadius: 8 }}>{erro}</div>
+        <Card className="border-red-300">
+          <CardContent className="text-sm text-red-700">{erro}</CardContent>
+        </Card>
       ) : null}
 
       {okMsg ? (
-        <div style={{ marginTop: 12, padding: 12, border: "1px solid #0a0", borderRadius: 8 }}>{okMsg}</div>
+        <Card className="border-green-300 mt-3">
+          <CardContent className="text-sm text-green-700">{okMsg}</CardContent>
+        </Card>
       ) : null}
 
-      <div style={{ marginTop: 16, padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700 }}>1) Buscar matricula</h2>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>1) Buscar matricula</CardTitle>
+          <CardDescription>Digite nome, CPF, telefone ou email do aluno ou responsavel.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2 flex-wrap">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Digite nome, CPF, telefone ou e-mail (aluno ou responsavel)..."
+              className="min-w-[280px] flex-1"
+            />
+            <Button onClick={() => void buscar()} disabled={buscaLoading || q.trim().length < 2}>
+              {buscaLoading ? "Buscando..." : "Buscar"}
+            </Button>
+          </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Digite nome, CPF, telefone ou e-mail (aluno ou responsavel)..."
-            style={{ minWidth: 420, flex: 1 }}
-          />
-          <button onClick={() => void buscar()} disabled={buscaLoading || q.trim().length < 2}>
-            {buscaLoading ? "Buscando..." : "Buscar"}
-          </button>
-        </div>
-
-        <div style={{ marginTop: 10 }}>
-          {matriculas.length === 0 ? (
-            <div style={{ opacity: 0.75 }}>Nenhum resultado ainda.</div>
-          ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              {matriculas.map((m) => (
-                <label key={m.matricula_id} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <input
-                    type="radio"
-                    name="matricula"
-                    checked={matriculaSel?.matricula_id === m.matricula_id}
-                    onChange={() => setMatriculaSel(m)}
-                    style={{ marginTop: 4 }}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{m.label}</div>
-                    <div style={{ opacity: 0.75 }}>
-                      Tipo: {m.tipo_matricula ?? "-"} | Ano: {m.ano_referencia ?? "-"} | Status: {m.status ?? "-"}
+          <div className="mt-3">
+            {matriculas.length === 0 ? (
+              <div className="text-sm opacity-75">Nenhum resultado ainda.</div>
+            ) : (
+              <div className="grid gap-3">
+                {matriculas.map((m) => (
+                  <label key={m.matricula_id} className="flex gap-3 items-start rounded-lg border p-3">
+                    <input
+                      type="radio"
+                      name="matricula"
+                      checked={matriculaSel?.matricula_id === m.matricula_id}
+                      onChange={() => setMatriculaSel(m)}
+                      className="mt-1"
+                    />
+                    <div>
+                      <div className="font-medium text-sm">{m.label}</div>
+                      <div className="text-xs opacity-75 mt-1">
+                        Tipo: {m.tipo_matricula ?? "-"} | Ano: {m.ano_referencia ?? "-"} | Status: {m.status ?? "-"}
+                      </div>
                     </div>
-                  </div>
-                </label>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>2) Selecionar modelo</CardTitle>
+          <CardDescription>Use apenas modelos ativos.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {modelosLoading ? (
+            <p className="text-sm opacity-80">Carregando modelos...</p>
+          ) : modelosAtivos.length === 0 ? (
+            <p className="text-sm opacity-80">Nenhum modelo ativo encontrado.</p>
+          ) : (
+            <select
+              value={modeloId ?? ""}
+              onChange={(e) => setModeloId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+            >
+              <option value="">Selecione...</option>
+              {modelosAtivos.map((m) => (
+                <option key={m.id} value={m.id}>
+                  [{m.tipo_contrato}] {m.titulo} (ID: {m.id})
+                </option>
               ))}
-            </div>
+            </select>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700 }}>2) Selecionar modelo</h2>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>3) Snapshot contratual (MVP)</CardTitle>
+          <CardDescription>
+            Informe o valor total contratado em centavos. Depois iremos ligar ao motor de precificacao.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <label className="text-sm font-medium">Valor total contratado (centavos)</label>
+          <div className="mt-1 max-w-xs">
+            <Input
+              value={valorTotalCentavos}
+              onChange={(e) => setValorTotalCentavos(e.target.value)}
+              placeholder="Ex.: 120000"
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-        {modelosLoading ? (
-          <p>Carregando modelos...</p>
-        ) : modelosAtivos.length === 0 ? (
-          <p>Nenhum modelo ativo encontrado.</p>
-        ) : (
-          <select
-            value={modeloId ?? ""}
-            onChange={(e) => setModeloId(e.target.value ? Number(e.target.value) : null)}
-            style={{ marginTop: 8, minWidth: 520 }}
-          >
-            <option value="">Selecione...</option>
-            {modelosAtivos.map((m) => (
-              <option key={m.id} value={m.id}>
-                [{m.tipo_contrato}] {m.titulo} (ID: {m.id})
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-
-      <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700 }}>3) Snapshot contratual (MVP)</h2>
-        <p style={{ opacity: 0.75, marginTop: 6 }}>
-          Por enquanto, informe apenas o valor total contratado (em centavos). Depois vamos ligar isso ao motor de precificacao.
-        </p>
-
-        <label style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, maxWidth: 360 }}>
-          <span>Valor total contratado (centavos)</span>
-          <input
-            value={valorTotalCentavos}
-            onChange={(e) => setValorTotalCentavos(e.target.value)}
-            placeholder="Ex.: 120000"
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>4) Variaveis manuais (JSON)</CardTitle>
+          <CardDescription>
+            Coloque campos como OBS_ADICIONAIS, clausulas especificas, observacoes negociadas, etc.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={variaveisManuaisJson}
+            onChange={(e) => setVariaveisManuaisJson(e.target.value)}
+            rows={10}
           />
-        </label>
-      </div>
-
-      <div style={{ marginTop: 12, padding: 12, border: "1px solid #ddd", borderRadius: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700 }}>4) Variaveis manuais (JSON)</h2>
-        <p style={{ opacity: 0.75, marginTop: 6 }}>
-          Dica: coloque aqui campos como OBS_ADICIONAIS, clausulas especificas, observacoes negociadas, etc.
-        </p>
-
-        <textarea
-          value={variaveisManuaisJson}
-          onChange={(e) => setVariaveisManuaisJson(e.target.value)}
-          rows={10}
-          style={{ width: "100%", marginTop: 8 }}
-        />
-      </div>
-
-      <button onClick={() => void emitir()} style={{ marginTop: 14 }} disabled={!matriculaSel || !modeloId}>
-        Emitir contrato
-      </button>
-
-      <div style={{ marginTop: 18, opacity: 0.8 }}>
-        <Link href="/admin/config/contratos" style={{ textDecoration: "none" }}>
-          Voltar ao hub de Contratos
-        </Link>
-      </div>
+        </CardContent>
+        <CardFooter className="justify-end">
+          <Button onClick={() => void emitir()} disabled={!matriculaSel || !modeloId}>
+            Emitir contrato
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

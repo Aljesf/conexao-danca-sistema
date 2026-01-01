@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Emitido = {
   id: number;
@@ -38,37 +39,42 @@ export default function AdminContratosEmitidosPage() {
   }, [carregar]);
 
   return (
-    <div style={{ padding: 16, maxWidth: 1100 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Contratos Emitidos</h1>
-      <div style={{ marginTop: 8, opacity: 0.8 }}>
-        <Link href="/admin/config/contratos" style={{ textDecoration: "none" }}>
-          Voltar ao hub de Contratos
-        </Link>
+    <div className="p-6 max-w-5xl">
+      <div className="mb-4">
+        <h1 className="text-xl font-semibold">Contratos Emitidos</h1>
+        <p className="text-sm opacity-80">Lista simples dos contratos emitidos (MVP).</p>
+        <div className="mt-2">
+          <Link className="text-sm underline opacity-80" href="/admin/config/contratos">
+            Voltar ao hub de Contratos
+          </Link>
+        </div>
       </div>
 
       {erro ? (
-        <div style={{ marginTop: 12, padding: 12, border: "1px solid #f00", borderRadius: 8 }}>{erro}</div>
+        <Card className="border-red-300">
+          <CardContent className="text-sm text-red-700">{erro}</CardContent>
+        </Card>
       ) : null}
 
       {loading ? (
-        <p style={{ marginTop: 12 }}>Carregando...</p>
+        <p className="text-sm opacity-80 mt-3">Carregando...</p>
       ) : itens.length === 0 ? (
-        <p style={{ marginTop: 12 }}>Nenhum contrato emitido ainda.</p>
+        <p className="text-sm opacity-80 mt-3">Nenhum contrato emitido ainda.</p>
       ) : (
-        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+        <div className="grid gap-3">
           {itens.map((c) => (
-            <div key={c.id} style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
-              <div style={{ fontWeight: 700 }}>Contrato #{c.id}</div>
-              <div style={{ opacity: 0.75, marginTop: 6 }}>
-                Matricula: {c.matricula_id} | Modelo: {c.contrato_modelo_id} | Status: {c.status_assinatura}
-              </div>
-              <div style={{ opacity: 0.75, marginTop: 6 }}>
-                Criado: {new Date(c.created_at).toLocaleString("pt-BR")}
-              </div>
-              <div style={{ opacity: 0.75, marginTop: 6 }}>
-                PDF: {c.pdf_url ? "Disponivel" : "-"}
-              </div>
-            </div>
+            <Card key={c.id}>
+              <CardHeader>
+                <CardTitle>Contrato #{c.id}</CardTitle>
+                <CardDescription>
+                  Matricula: {c.matricula_id} | Modelo: {c.contrato_modelo_id} | Status: {c.status_assinatura}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm opacity-80">Criado: {new Date(c.created_at).toLocaleString("pt-BR")}</div>
+                <div className="text-sm opacity-80 mt-1">PDF: {c.pdf_url ? "Disponivel" : "-"}</div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

@@ -1,44 +1,45 @@
 "use client";
 
 import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function AdminConfigContratosHome() {
   return (
-    <div style={{ padding: 16, maxWidth: 1100 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Configuracao - Contratos</h1>
-      <p style={{ opacity: 0.8 }}>
-        Central do modulo de contratos: modelos, emissao e acompanhamento.
-      </p>
+    <div className="p-6 max-w-5xl">
+      <div className="mb-4">
+        <h1 className="text-xl font-semibold">Configuracao - Contratos</h1>
+        <p className="text-sm opacity-80">Central do modulo: modelos, emissao e acompanhamento.</p>
+      </div>
 
-      <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-        <Link
-          href="/admin/config/contratos/modelos"
-          style={{ border: "1px solid #ddd", borderRadius: 12, padding: 14, textDecoration: "none" }}
-        >
-          <div style={{ fontWeight: 700 }}>Modelos de Contrato</div>
-          <div style={{ opacity: 0.75, marginTop: 6 }}>
-            Crie e edite templates com placeholders (DB/CALC/MANUAL).
-          </div>
+      <div className="grid gap-4">
+        <Link href="/admin/config/contratos/modelos" className="no-underline">
+          <Card>
+            <CardHeader>
+              <CardTitle>Modelos de Contrato</CardTitle>
+              <CardDescription>Crie e edite templates com placeholders (DB/CALC/MANUAL).</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm opacity-80">Gerencie versao, tipo, texto e schema do modelo.</CardContent>
+          </Card>
         </Link>
 
-        <Link
-          href="/admin/config/contratos/emitir"
-          style={{ border: "1px solid #ddd", borderRadius: 12, padding: 14, textDecoration: "none" }}
-        >
-          <div style={{ fontWeight: 700 }}>Emitir Contrato</div>
-          <div style={{ opacity: 0.75, marginTop: 6 }}>
-            Busque aluno/responsavel, selecione a matricula e emita o contrato.
-          </div>
+        <Link href="/admin/config/contratos/emitir" className="no-underline">
+          <Card>
+            <CardHeader>
+              <CardTitle>Emitir Contrato</CardTitle>
+              <CardDescription>Busque aluno/responsavel, selecione matricula e emita o contrato.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm opacity-80">Emissao guiada com snapshot e variaveis manuais.</CardContent>
+          </Card>
         </Link>
 
-        <Link
-          href="/admin/config/contratos/emitidos"
-          style={{ border: "1px solid #ddd", borderRadius: 12, padding: 14, textDecoration: "none" }}
-        >
-          <div style={{ fontWeight: 700 }}>Contratos Emitidos</div>
-          <div style={{ opacity: 0.75, marginTop: 6 }}>
-            Visualize os contratos ja emitidos (MVP: lista simples).
-          </div>
+        <Link href="/admin/config/contratos/emitidos" className="no-underline">
+          <Card>
+            <CardHeader>
+              <CardTitle>Contratos Emitidos</CardTitle>
+              <CardDescription>Visualize contratos emitidos (MVP).</CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm opacity-80">Lista de emitidos com status e referencia.</CardContent>
+          </Card>
         </Link>
       </div>
     </div>
