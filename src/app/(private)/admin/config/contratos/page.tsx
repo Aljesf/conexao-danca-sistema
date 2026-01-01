@@ -30,6 +30,16 @@ export default function AdminConfigContratosHome() {
             Busque aluno/responsavel, selecione a matricula e emita o contrato.
           </div>
         </Link>
+
+        <Link
+          href="/admin/config/contratos/emitidos"
+          style={{ border: "1px solid #ddd", borderRadius: 12, padding: 14, textDecoration: "none" }}
+        >
+          <div style={{ fontWeight: 700 }}>Contratos Emitidos</div>
+          <div style={{ opacity: 0.75, marginTop: 6 }}>
+            Visualize os contratos ja emitidos (MVP: lista simples).
+          </div>
+        </Link>
       </div>
     </div>
   );
