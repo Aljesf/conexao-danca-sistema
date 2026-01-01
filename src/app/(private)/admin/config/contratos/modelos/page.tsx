@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeaderCard } from "@/components/layout/PageHeaderCard";
+import { SectionCard } from "@/components/layout/SectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,59 +82,48 @@ export default function AdminContratosModelosPage() {
   }, []);
 
   return (
-    <div className="p-6 max-w-5xl">
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold">Contratos - Modelos</h1>
-        <p className="text-sm opacity-80">
-          Templates e placeholders para emissao futura (MVP sem PDF e sem assinatura digital).
-        </p>
-        <div className="mt-2">
-          <Link className="text-sm underline opacity-80" href="/admin/config/contratos">
-            Voltar ao hub de Contratos
-          </Link>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeaderCard
+        title="Contratos - Modelos"
+        subtitle="Templates e placeholders para emissao futura (MVP sem PDF e sem assinatura digital)."
+      >
+        <Link className="text-sm underline opacity-80" href="/admin/config/contratos">
+          Voltar ao hub de Contratos
+        </Link>
+      </PageHeaderCard>
 
-      {erro ? (
-        <Card className="border-red-300">
-          <CardContent className="text-sm text-red-700">{erro}</CardContent>
-        </Card>
-      ) : null}
+      <SectionCard title="Novo modelo" description="Crie o template inicial e depois edite schema e texto no detalhe.">
+        {erro ? (
+          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
+        ) : null}
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Novo modelo</CardTitle>
-          <CardDescription>Crie o template inicial e depois edite schema e texto no detalhe.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="text-sm font-medium">Tipo</label>
-              <select
-                className="w-full rounded-lg border px-3 py-2 text-sm mt-1"
-                value={novoTipo}
-                onChange={(e) => setNovoTipo(e.target.value)}
-              >
-                {tipos.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium">Titulo</label>
-              <div className="mt-1">
-                <Input
-                  value={novoTitulo}
-                  onChange={(e) => setNovoTitulo(e.target.value)}
-                  placeholder="Ex.: Contrato Regular 2026 (v1.0)"
-                />
-              </div>
+        <form className="grid grid-cols-1 gap-3 md:grid-cols-3" onSubmit={(e) => e.preventDefault()}>
+          <div>
+            <label className="text-sm font-medium">Tipo</label>
+            <select
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              value={novoTipo}
+              onChange={(e) => setNovoTipo(e.target.value)}
+            >
+              {tipos.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="md:col-span-2">
+            <label className="text-sm font-medium">Titulo</label>
+            <div className="mt-1">
+              <Input
+                value={novoTitulo}
+                onChange={(e) => setNovoTitulo(e.target.value)}
+                placeholder="Ex.: Contrato Regular 2026 (v1.0)"
+              />
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="md:col-span-3">
             <label className="text-sm font-medium">Texto do modelo (Markdown)</label>
             <div className="mt-1">
               <Textarea
@@ -143,49 +134,44 @@ export default function AdminContratosModelosPage() {
               />
             </div>
           </div>
-        </CardContent>
-        <CardFooter className="justify-end">
-          <Button onClick={() => void criarModelo()} disabled={saving || !novoTitulo.trim() || !novoTexto.trim()}>
-            {saving ? "Salvando..." : "Criar modelo"}
-          </Button>
-        </CardFooter>
-      </Card>
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Modelos cadastrados</CardTitle>
-          <CardDescription>Use Editar para ajustar texto e schema no padrao do sistema.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p className="text-sm opacity-80">Carregando...</p>
-          ) : itens.length === 0 ? (
-            <p className="text-sm opacity-80">Nenhum modelo cadastrado.</p>
-          ) : (
-            <div className="grid gap-3">
-              {itens.map((m) => (
-                <Card key={m.id} className="bg-white/40">
-                  <CardHeader>
-                    <CardTitle>
-                      [{m.tipo_contrato}] {m.titulo} <span className="opacity-70">({m.versao})</span>
-                    </CardTitle>
-                    <CardDescription>ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
+          <div className="md:col-span-3 flex justify-end">
+            <Button onClick={() => void criarModelo()} disabled={saving || !novoTitulo.trim() || !novoTexto.trim()}>
+              {saving ? "Salvando..." : "Criar modelo"}
+            </Button>
+          </div>
+        </form>
+      </SectionCard>
+
+      <SectionCard title="Modelos cadastrados" description="Use Editar para ajustar texto e schema no padrao do sistema.">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Carregando...</p>
+        ) : itens.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum modelo cadastrado.</p>
+        ) : (
+          <div className="grid gap-3">
+            {itens.map((m) => (
+              <div key={m.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
+                <div className="flex flex-col gap-1">
+                  <div className="text-sm font-semibold">
+                    [{m.tipo_contrato}] {m.titulo} <span className="opacity-70">({m.versao})</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"}</div>
+                  <div>
                     <Link className="text-sm underline" href={`/admin/config/contratos/modelos/${m.id}`}>
                       Editar
                     </Link>
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-sm opacity-80">Ver texto</summary>
-                      <pre className="whitespace-pre-wrap mt-2 text-sm">{m.texto_modelo_md}</pre>
-                    </details>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                  </div>
+                </div>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-sm text-muted-foreground">Ver texto</summary>
+                  <pre className="mt-2 whitespace-pre-wrap text-sm">{m.texto_modelo_md}</pre>
+                </details>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </PageContainer>
   );
 }

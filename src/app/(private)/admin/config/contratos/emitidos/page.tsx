@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeaderCard } from "@/components/layout/PageHeaderCard";
+import { SectionCard } from "@/components/layout/SectionCard";
 
 type Emitido = {
   id: number;
@@ -39,45 +41,39 @@ export default function AdminContratosEmitidosPage() {
   }, [carregar]);
 
   return (
-    <div className="p-6 max-w-5xl">
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold">Contratos Emitidos</h1>
-        <p className="text-sm opacity-80">Lista simples dos contratos emitidos (MVP).</p>
-        <div className="mt-2">
-          <Link className="text-sm underline opacity-80" href="/admin/config/contratos">
-            Voltar ao hub de Contratos
-          </Link>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeaderCard title="Contratos emitidos" subtitle="Lista simples dos contratos emitidos (MVP).">
+        <Link className="text-sm underline text-muted-foreground" href="/admin/config/contratos">
+          Voltar ao hub de Contratos
+        </Link>
+      </PageHeaderCard>
 
-      {erro ? (
-        <Card className="border-red-300">
-          <CardContent className="text-sm text-red-700">{erro}</CardContent>
-        </Card>
-      ) : null}
+      <SectionCard title="Lista de contratos emitidos">
+        {erro ? (
+          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
+        ) : null}
 
-      {loading ? (
-        <p className="text-sm opacity-80 mt-3">Carregando...</p>
-      ) : itens.length === 0 ? (
-        <p className="text-sm opacity-80 mt-3">Nenhum contrato emitido ainda.</p>
-      ) : (
-        <div className="grid gap-3">
-          {itens.map((c) => (
-            <Card key={c.id}>
-              <CardHeader>
-                <CardTitle>Contrato #{c.id}</CardTitle>
-                <CardDescription>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Carregando...</p>
+        ) : itens.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum contrato emitido ainda.</p>
+        ) : (
+          <div className="grid gap-3">
+            {itens.map((c) => (
+              <div key={c.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
+                <div className="text-sm font-semibold">Contrato #{c.id}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
                   Matricula: {c.matricula_id} | Modelo: {c.contrato_modelo_id} | Status: {c.status_assinatura}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm opacity-80">Criado: {new Date(c.created_at).toLocaleString("pt-BR")}</div>
-                <div className="text-sm opacity-80 mt-1">PDF: {c.pdf_url ? "Disponivel" : "-"}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
+                </div>
+                <div className="mt-2 text-sm text-muted-foreground">
+                  Criado: {new Date(c.created_at).toLocaleString("pt-BR")}
+                </div>
+                <div className="mt-1 text-sm text-muted-foreground">PDF: {c.pdf_url ? "Disponivel" : "-"}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </PageContainer>
   );
 }

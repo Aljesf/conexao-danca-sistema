@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { PageHeaderCard } from "@/components/layout/PageHeaderCard";
+import { SectionCard } from "@/components/layout/SectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -138,143 +140,113 @@ export default function AdminContratosEmitirPage() {
   }, []);
 
   return (
-    <div className="p-6 max-w-5xl">
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold">Emitir Contrato</h1>
-        <p className="text-sm opacity-80">
-          Busque a matricula pelo nome do aluno ou do responsavel, selecione o modelo e emita.
-        </p>
-        <div className="mt-2">
-          <Link className="text-sm underline opacity-80" href="/admin/config/contratos">
-            Voltar ao hub de Contratos
-          </Link>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeaderCard
+        title="Emitir contrato"
+        subtitle="Busque a matricula pelo nome do aluno ou do responsavel, selecione o modelo e emita."
+      >
+        <Link className="text-sm underline text-muted-foreground" href="/admin/config/contratos">
+          Voltar ao hub de Contratos
+        </Link>
+      </PageHeaderCard>
 
-      {erro ? (
-        <Card className="border-red-300">
-          <CardContent className="text-sm text-red-700">{erro}</CardContent>
-        </Card>
-      ) : null}
-
-      {okMsg ? (
-        <Card className="border-green-300 mt-3">
-          <CardContent className="text-sm text-green-700">{okMsg}</CardContent>
-        </Card>
-      ) : null}
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>1) Buscar matricula</CardTitle>
-          <CardDescription>Digite nome, CPF, telefone ou email do aluno ou responsavel.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2 flex-wrap">
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Digite nome, CPF, telefone ou e-mail (aluno ou responsavel)..."
-              className="min-w-[280px] flex-1"
-            />
-            <Button onClick={() => void buscar()} disabled={buscaLoading || q.trim().length < 2}>
-              {buscaLoading ? "Buscando..." : "Buscar"}
-            </Button>
-          </div>
-
-          <div className="mt-3">
-            {matriculas.length === 0 ? (
-              <div className="text-sm opacity-75">Nenhum resultado ainda.</div>
-            ) : (
-              <div className="grid gap-3">
-                {matriculas.map((m) => (
-                  <label key={m.matricula_id} className="flex gap-3 items-start rounded-lg border p-3">
-                    <input
-                      type="radio"
-                      name="matricula"
-                      checked={matriculaSel?.matricula_id === m.matricula_id}
-                      onChange={() => setMatriculaSel(m)}
-                      className="mt-1"
-                    />
-                    <div>
-                      <div className="font-medium text-sm">{m.label}</div>
-                      <div className="text-xs opacity-75 mt-1">
-                        Tipo: {m.tipo_matricula ?? "-"} | Ano: {m.ano_referencia ?? "-"} | Status: {m.status ?? "-"}
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>2) Selecionar modelo</CardTitle>
-          <CardDescription>Use apenas modelos ativos.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {modelosLoading ? (
-            <p className="text-sm opacity-80">Carregando modelos...</p>
-          ) : modelosAtivos.length === 0 ? (
-            <p className="text-sm opacity-80">Nenhum modelo ativo encontrado.</p>
-          ) : (
-            <select
-              value={modeloId ?? ""}
-              onChange={(e) => setModeloId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full rounded-lg border px-3 py-2 text-sm"
-            >
-              <option value="">Selecione...</option>
-              {modelosAtivos.map((m) => (
-                <option key={m.id} value={m.id}>
-                  [{m.tipo_contrato}] {m.titulo} (ID: {m.id})
-                </option>
-              ))}
-            </select>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>3) Snapshot contratual (MVP)</CardTitle>
-          <CardDescription>
-            Informe o valor total contratado em centavos. Depois iremos ligar ao motor de precificacao.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <label className="text-sm font-medium">Valor total contratado (centavos)</label>
-          <div className="mt-1 max-w-xs">
-            <Input
-              value={valorTotalCentavos}
-              onChange={(e) => setValorTotalCentavos(e.target.value)}
-              placeholder="Ex.: 120000"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>4) Variaveis manuais (JSON)</CardTitle>
-          <CardDescription>
-            Coloque campos como OBS_ADICIONAIS, clausulas especificas, observacoes negociadas, etc.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={variaveisManuaisJson}
-            onChange={(e) => setVariaveisManuaisJson(e.target.value)}
-            rows={10}
+      <SectionCard
+        title="Selecionar matricula"
+        description="Digite nome, CPF, telefone ou email do aluno ou responsavel."
+      >
+        <div className="flex flex-wrap gap-2">
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Digite nome, CPF, telefone ou e-mail (aluno ou responsavel)..."
+            className="min-w-[280px] flex-1"
           />
-        </CardContent>
-        <CardFooter className="justify-end">
+          <Button onClick={() => void buscar()} disabled={buscaLoading || q.trim().length < 2}>
+            {buscaLoading ? "Buscando..." : "Buscar"}
+          </Button>
+        </div>
+
+        <div className="mt-3">
+          {matriculas.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Nenhum resultado ainda.</div>
+          ) : (
+            <div className="grid gap-3">
+              {matriculas.map((m) => (
+                <label key={m.matricula_id} className="flex items-start gap-3 rounded-lg border p-3">
+                  <input
+                    type="radio"
+                    name="matricula"
+                    checked={matriculaSel?.matricula_id === m.matricula_id}
+                    onChange={() => setMatriculaSel(m)}
+                    className="mt-1"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">{m.label}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Tipo: {m.tipo_matricula ?? "-"} | Ano: {m.ano_referencia ?? "-"} | Status: {m.status ?? "-"}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Selecionar modelo de contrato" description="Use apenas modelos ativos.">
+        {modelosLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando modelos...</p>
+        ) : modelosAtivos.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhum modelo ativo encontrado.</p>
+        ) : (
+          <select
+            value={modeloId ?? ""}
+            onChange={(e) => setModeloId(e.target.value ? Number(e.target.value) : null)}
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+          >
+            <option value="">Selecione...</option>
+            {modelosAtivos.map((m) => (
+              <option key={m.id} value={m.id}>
+                [{m.tipo_contrato}] {m.titulo} (ID: {m.id})
+              </option>
+            ))}
+          </select>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Snapshot contratual"
+        description="Informe o valor total contratado em centavos. Depois iremos ligar ao motor de precificacao."
+      >
+        <label className="text-sm font-medium">Valor total contratado (centavos)</label>
+        <div className="mt-1 max-w-xs">
+          <Input
+            value={valorTotalCentavos}
+            onChange={(e) => setValorTotalCentavos(e.target.value)}
+            placeholder="Ex.: 120000"
+          />
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Variaveis manuais"
+        description="Coloque campos como OBS_ADICIONAIS, clausulas especificas e observacoes negociadas."
+      >
+        {erro ? (
+          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
+        ) : null}
+        {okMsg ? (
+          <div className="rounded-md border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {okMsg}
+          </div>
+        ) : null}
+        <Textarea value={variaveisManuaisJson} onChange={(e) => setVariaveisManuaisJson(e.target.value)} rows={10} />
+        <div className="flex justify-end">
           <Button onClick={() => void emitir()} disabled={!matriculaSel || !modeloId}>
             Emitir contrato
           </Button>
-        </CardFooter>
-      </Card>
-    </div>
+        </div>
+      </SectionCard>
+    </PageContainer>
   );
 }

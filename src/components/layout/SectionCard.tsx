@@ -1,26 +1,21 @@
 import type { ReactNode } from "react";
 
 type SectionCardProps = {
-  title?: string;
+  title: string;
   description?: string;
-  actions?: ReactNode;
   children: ReactNode;
-  className?: string;
 };
 
-export default function SectionCard({ title, description, actions, children, className }: SectionCardProps) {
+export function SectionCard({ title, description, children }: SectionCardProps) {
   return (
-    <section className={`rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm ${className ?? ""}`.trim()}>
-      {title || description || actions ? (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            {title ? <h2 className="text-sm font-semibold text-slate-900">{title}</h2> : null}
-            {description ? <p className="text-xs text-slate-500">{description}</p> : null}
-          </div>
-          {actions ? <div className="text-xs text-slate-500">{actions}</div> : null}
-        </div>
-      ) : null}
+    <div className="flex flex-col gap-4 rounded-xl border bg-white p-6 shadow-sm">
+      <div>
+        <h2 className="text-lg font-semibold">{title}</h2>
+        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+      </div>
       {children}
-    </section>
+    </div>
   );
 }
+
+export default SectionCard;
