@@ -144,6 +144,7 @@ export default function AdminContratosModelosPage() {
                     <div style={{ opacity: 0.75, marginTop: 4 }}>
                       ID: {m.id} • Ativo: {m.ativo ? "Sim" : "Nao"}
                     </div>
+                    <a href={`/admin/config/contratos/modelos/${m.id}`}>Editar</a>
                   </div>
                 </div>
 
