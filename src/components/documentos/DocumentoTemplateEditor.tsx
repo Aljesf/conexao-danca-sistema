@@ -9,7 +9,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import Image from "@tiptap/extension-image";
 import { Button } from "@/components/ui/button";
 
-type ContratoVariavel = {
+type DocumentoVariavel = {
   id: number;
   codigo: string;
   descricao: string;
@@ -25,8 +25,8 @@ type Props = {
   onChangeHtml: (html: string) => void;
 };
 
-export function ContratoTemplateEditor(props: Props) {
-  const [vars, setVars] = useState<ContratoVariavel[]>([]);
+export function DocumentoTemplateEditor(props: Props) {
+  const [vars, setVars] = useState<DocumentoVariavel[]>([]);
   const [varsLoading, setVarsLoading] = useState(false);
   const [selectedVar, setSelectedVar] = useState<string>("");
 

@@ -19,7 +19,7 @@ type Origem =
   | "MANUAL";
 type Tipo = "TEXTO" | "MONETARIO" | "DATA";
 
-type Variavel = {
+type DocumentoVariavel = {
   id: number;
   codigo: string;
   descricao: string;
@@ -61,12 +61,12 @@ const ORIGENS: Origem[] = [
 ];
 const TIPOS: Tipo[] = ["TEXTO", "MONETARIO", "DATA"];
 
-export default function AdminContratosVariaveisPage() {
+export default function AdminDocumentosVariaveisPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
-  const [itens, setItens] = useState<Variavel[]>([]);
+  const [itens, setItens] = useState<DocumentoVariavel[]>([]);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [codigo, setCodigo] = useState("");
@@ -90,8 +90,8 @@ export default function AdminContratosVariaveisPage() {
     setLoading(true);
     setErro(null);
     try {
-      const res = await fetch("/api/contratos/variaveis");
-      const json = (await res.json()) as { data?: Variavel[]; error?: string };
+      const res = await fetch("/api/documentos/variaveis");
+      const json = (await res.json()) as { data?: DocumentoVariavel[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar variaveis.");
       setItens(json.data ?? []);
     } catch (e) {
@@ -112,7 +112,7 @@ export default function AdminContratosVariaveisPage() {
     setAtivo(true);
   };
 
-  const editar = (item: Variavel) => {
+  const editar = (item: DocumentoVariavel) => {
     setEditingId(item.id);
     setCodigo(item.codigo);
     setDescricao(item.descricao);
@@ -154,7 +154,7 @@ export default function AdminContratosVariaveisPage() {
     };
 
     try {
-      const res = await fetch("/api/contratos/variaveis", {
+      const res = await fetch("/api/documentos/variaveis", {
         method: editingId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -175,7 +175,7 @@ export default function AdminContratosVariaveisPage() {
     setErro(null);
     setOkMsg(null);
     try {
-      const res = await fetch("/api/contratos/variaveis", {
+      const res = await fetch("/api/documentos/variaveis", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
@@ -195,11 +195,11 @@ export default function AdminContratosVariaveisPage() {
   return (
     <SystemPage>
       <SystemContextCard
-        title="Contratos - Variaveis"
+        title="Documentos - Variaveis"
         subtitle="Cadastre variaveis reutilizaveis para gerar placeholders automaticamente."
       >
-        <Link className="text-sm underline text-slate-600" href="/admin/config/contratos">
-          Voltar ao hub de Contratos
+        <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
+          Voltar ao hub de Documentos
         </Link>
       </SystemContextCard>
 

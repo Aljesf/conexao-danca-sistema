@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-type Modelo = {
+type DocumentoModelo = {
   id: number;
   tipo_contrato: string;
   titulo: string;
@@ -30,8 +30,8 @@ type MatriculaBuscaItem = {
   status: string | null;
 };
 
-export default function AdminContratosEmitirPage() {
-  const [modelos, setModelos] = useState<Modelo[]>([]);
+export default function AdminDocumentosEmitirPage() {
+  const [modelos, setModelos] = useState<DocumentoModelo[]>([]);
   const [modelosLoading, setModelosLoading] = useState(true);
 
   const [q, setQ] = useState("");
@@ -53,8 +53,8 @@ export default function AdminContratosEmitirPage() {
   async function carregarModelos() {
     setModelosLoading(true);
     try {
-      const res = await fetch("/api/contratos/modelos");
-      const json = (await res.json()) as { data?: Modelo[]; error?: string };
+      const res = await fetch("/api/documentos/modelos");
+      const json = (await res.json()) as { data?: DocumentoModelo[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar modelos.");
       setModelos(json.data ?? []);
     } finally {
@@ -68,7 +68,7 @@ export default function AdminContratosEmitirPage() {
     setOkMsg(null);
     setMatriculaSel(null);
     try {
-      const res = await fetch(`/api/contratos/buscar-matriculas?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/documentos/buscar-matriculas?q=${encodeURIComponent(q)}`);
       const json = (await res.json()) as { data?: MatriculaBuscaItem[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao buscar matriculas.");
       setMatriculas(json.data ?? []);
@@ -113,7 +113,7 @@ export default function AdminContratosEmitirPage() {
       snapshot_financeiro.valor_total_contratado_centavos = n;
     }
 
-    const res = await fetch("/api/contratos/emitir", {
+    const res = await fetch("/api/documentos/emitir", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -133,7 +133,7 @@ export default function AdminContratosEmitirPage() {
       return;
     }
 
-    setOkMsg(`Contrato emitido com sucesso. ID: ${json.data?.id ?? "?"}`);
+    setOkMsg(`Documento emitido com sucesso. ID: ${json.data?.id ?? "?"}`);
   }
 
   useEffect(() => {
@@ -143,11 +143,11 @@ export default function AdminContratosEmitirPage() {
   return (
     <SystemPage>
       <SystemContextCard
-        title="Emitir contrato"
+        title="Emitir documento"
         subtitle="Busque a matricula pelo nome do aluno ou do responsavel, selecione o modelo e emita."
       >
-        <Link className="text-sm underline text-slate-600" href="/admin/config/contratos">
-          Voltar ao hub de Contratos
+        <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
+          Voltar ao hub de Documentos
         </Link>
       </SystemContextCard>
 
@@ -155,7 +155,7 @@ export default function AdminContratosEmitirPage() {
         items={[
           "Busque a matricula e selecione o modelo ativo.",
           "Preencha snapshot e variaveis manuais antes de emitir.",
-          "A emissao gera um contrato com status PENDENTE.",
+          "A emissao gera um documento com status PENDENTE.",
         ]}
       />
 
@@ -206,7 +206,7 @@ export default function AdminContratosEmitirPage() {
         </div>
       </SystemSectionCard>
 
-      <SystemSectionCard title="Selecionar modelo de contrato" description="Use apenas modelos ativos.">
+      <SystemSectionCard title="Selecionar modelo de documento" description="Use apenas modelos ativos.">
         {modelosLoading ? (
           <p className="text-sm text-slate-600">Carregando modelos...</p>
         ) : modelosAtivos.length === 0 ? (
@@ -246,7 +246,7 @@ export default function AdminContratosEmitirPage() {
         description="Coloque campos como OBS_ADICIONAIS, clausulas especificas e observacoes negociadas."
         footer={
           <Button onClick={() => void emitir()} disabled={!matriculaSel || !modeloId}>
-            Emitir contrato
+            Emitir documento
           </Button>
         }
       >

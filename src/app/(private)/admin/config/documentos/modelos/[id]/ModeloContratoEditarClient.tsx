@@ -9,10 +9,10 @@ import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ContratoTemplateEditor } from "@/components/contratos/ContratoTemplateEditor";
-import { safeParseSchema, type PlaceholderSchemaItem } from "@/lib/contratos/placeholders";
+import { DocumentoTemplateEditor } from "@/components/documentos/DocumentoTemplateEditor";
+import { safeParseSchema, type PlaceholderSchemaItem } from "@/lib/documentos/placeholders";
 
-type ContratoModelo = {
+type DocumentoModelo = {
   id: number;
   tipo_contrato: string;
   titulo: string;
@@ -33,7 +33,7 @@ type Origem =
   | "MANUAL";
 type Tipo = "TEXTO" | "MONETARIO" | "DATA";
 
-type ContratoVariavel = {
+type DocumentoVariavel = {
   id: number;
   codigo: string;
   descricao: string;
@@ -44,7 +44,7 @@ type ContratoVariavel = {
   ativo: boolean;
 };
 
-function buildSchemaItem(variavel: ContratoVariavel): PlaceholderSchemaItem {
+function buildSchemaItem(variavel: DocumentoVariavel): PlaceholderSchemaItem {
   const key = variavel.codigo.trim().toUpperCase();
   const label = variavel.descricao;
 
@@ -87,7 +87,7 @@ function buildSchemaItem(variavel: ContratoVariavel): PlaceholderSchemaItem {
   };
 }
 
-export default function ModeloContratoEditarClient(props: { id: string }) {
+export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const idNum = Number(props.id);
 
   const [loading, setLoading] = useState(true);
@@ -95,12 +95,12 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
   const [erro, setErro] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
-  const [modelo, setModelo] = useState<ContratoModelo | null>(null);
+  const [modelo, setModelo] = useState<DocumentoModelo | null>(null);
   const [schemaAtual, setSchemaAtual] = useState<PlaceholderSchemaItem[]>([]);
   const [schemaExtras, setSchemaExtras] = useState<PlaceholderSchemaItem[]>([]);
   const [schemaInit, setSchemaInit] = useState(false);
 
-  const [variaveis, setVariaveis] = useState<ContratoVariavel[]>([]);
+  const [variaveis, setVariaveis] = useState<DocumentoVariavel[]>([]);
   const [variaveisLoading, setVariaveisLoading] = useState(true);
   const [variaveisErro, setVariaveisErro] = useState<string | null>(null);
   const [variaveisSelecionadas, setVariaveisSelecionadas] = useState<string[]>([]);
@@ -118,11 +118,11 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
     setOkMsg(null);
 
     try {
-      const res = await fetch(`/api/contratos/modelos/${idNum}`, { method: "GET" });
-      const json = (await res.json()) as { data?: ContratoModelo; error?: string };
+      const res = await fetch(`/api/documentos/modelos/${idNum}`, { method: "GET" });
+      const json = (await res.json()) as { data?: DocumentoModelo; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar modelo.");
 
-      const m = json.data as ContratoModelo;
+      const m = json.data as DocumentoModelo;
       setModelo(m);
 
       setTitulo(m.titulo ?? "");
@@ -141,8 +141,8 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
     setVariaveisLoading(true);
     setVariaveisErro(null);
     try {
-      const res = await fetch("/api/contratos/variaveis");
-      const json = (await res.json()) as { data?: ContratoVariavel[]; error?: string };
+      const res = await fetch("/api/documentos/variaveis");
+      const json = (await res.json()) as { data?: DocumentoVariavel[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar variaveis.");
       setVariaveis(json.data ?? []);
     } catch (e) {
@@ -179,7 +179,7 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
   const schemaFinal = useMemo(() => {
     const items = variaveisSelecionadas
       .map((codigo) => variaveisMap.get(codigo))
-      .filter((v): v is ContratoVariavel => Boolean(v))
+      .filter((v): v is DocumentoVariavel => Boolean(v))
       .map((v) => buildSchemaItem(v));
     const extras = schemaExtras.filter((item) => !selecionadasSet.has(item.key));
     return [...items, ...extras];
@@ -193,7 +193,7 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
     setOkMsg(null);
 
     try {
-      const res = await fetch(`/api/contratos/modelos/${idNum}`, {
+      const res = await fetch(`/api/documentos/modelos/${idNum}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -205,7 +205,7 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
         }),
       });
 
-      const json = (await res.json()) as { data?: ContratoModelo; error?: string };
+      const json = (await res.json()) as { data?: DocumentoModelo; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao salvar.");
 
       setModelo(json.data ?? null);
@@ -244,7 +244,10 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
   if (!Number.isFinite(idNum)) {
     return (
       <SystemPage>
-        <SystemContextCard title="Editar modelo de contrato" subtitle="Padronize template e schema (DB/CALC/MANUAL)." />
+        <SystemContextCard
+          title="Editar modelo de documento"
+          subtitle="Padronize template e schema (DB/CALC/MANUAL)."
+        />
         <SystemSectionCard title="Dados gerais">
           <p className="text-sm text-slate-600">ID invalido.</p>
         </SystemSectionCard>
@@ -255,14 +258,14 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
   return (
     <SystemPage>
       <SystemContextCard
-        title="Editar modelo de contrato"
+        title="Editar modelo de documento"
         subtitle="Padronize template e schema (DB/CALC/MANUAL) para emissao."
       >
         <div className="flex flex-wrap gap-3 text-sm">
-          <Link className="text-slate-600 underline" href="/admin/config/contratos/modelos">
+          <Link className="text-slate-600 underline" href="/admin/config/documentos/modelos">
             Voltar para modelos
           </Link>
-          <Link className="text-slate-600 underline" href="/admin/config/contratos">
+          <Link className="text-slate-600 underline" href="/admin/config/documentos">
             Voltar ao hub
           </Link>
         </div>
@@ -368,7 +371,7 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
       </SystemSectionCard>
 
       <SystemSectionCard title="Texto do modelo (editor)">
-        <ContratoTemplateEditor initialHtml={texto} onChangeHtml={setTexto} />
+        <DocumentoTemplateEditor initialHtml={texto} onChangeHtml={setTexto} />
       </SystemSectionCard>
 
       <SystemSectionCard
@@ -376,7 +379,7 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
         description="Gerado automaticamente a partir das variaveis selecionadas."
         footer={
           <>
-            <Link className="text-sm text-slate-600 underline" href="/admin/config/contratos">
+            <Link className="text-sm text-slate-600 underline" href="/admin/config/documentos">
               Voltar
             </Link>
             <Button onClick={() => void salvar()} disabled={saving || !titulo.trim() || !texto.trim()}>

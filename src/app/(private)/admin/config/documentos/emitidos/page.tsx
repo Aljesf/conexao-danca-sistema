@@ -7,7 +7,7 @@ import { SystemHelpCard } from "@/components/system/SystemHelpCard";
 import { SystemPage } from "@/components/system/SystemPage";
 import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 
-type Emitido = {
+type DocumentoEmitido = {
   id: number;
   matricula_id: number;
   contrato_modelo_id: number;
@@ -17,17 +17,17 @@ type Emitido = {
   pdf_url: string | null;
 };
 
-export default function AdminContratosEmitidosPage() {
+export default function AdminDocumentosEmitidosPage() {
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [itens, setItens] = useState<Emitido[]>([]);
+  const [itens, setItens] = useState<DocumentoEmitido[]>([]);
 
   const carregar = useCallback(async () => {
     setLoading(true);
     setErro(null);
     try {
-      const res = await fetch("/api/contratos/emitidos");
-      const json = (await res.json()) as { data?: Emitido[]; error?: string };
+      const res = await fetch("/api/documentos/emitidos");
+      const json = (await res.json()) as { data?: DocumentoEmitido[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar emitidos.");
       setItens(json.data ?? []);
     } catch (e) {
@@ -43,21 +43,21 @@ export default function AdminContratosEmitidosPage() {
 
   return (
     <SystemPage>
-      <SystemContextCard title="Contratos emitidos" subtitle="Lista simples dos contratos emitidos (MVP).">
-        <Link className="text-sm underline text-slate-600" href="/admin/config/contratos">
-          Voltar ao hub de Contratos
+      <SystemContextCard title="Documentos emitidos" subtitle="Lista simples dos documentos emitidos (MVP).">
+        <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
+          Voltar ao hub de Documentos
         </Link>
       </SystemContextCard>
 
       <SystemHelpCard
         items={[
-          "A lista mostra os ultimos contratos emitidos.",
+          "A lista mostra os ultimos documentos emitidos.",
           "Status indica o andamento de assinatura.",
           "PDF aparece quando estiver disponivel.",
         ]}
       />
 
-      <SystemSectionCard title="Lista de contratos emitidos">
+      <SystemSectionCard title="Lista de documentos emitidos">
         {erro ? (
           <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
         ) : null}
@@ -65,12 +65,12 @@ export default function AdminContratosEmitidosPage() {
         {loading ? (
           <p className="text-sm text-slate-600">Carregando...</p>
         ) : itens.length === 0 ? (
-          <p className="text-sm text-slate-600">Nenhum contrato emitido ainda.</p>
+          <p className="text-sm text-slate-600">Nenhum documento emitido ainda.</p>
         ) : (
           <div className="grid gap-3">
             {itens.map((c) => (
               <div key={c.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
-                <div className="text-sm font-semibold">Contrato #{c.id}</div>
+                <div className="text-sm font-semibold">Documento #{c.id}</div>
                 <div className="mt-1 text-xs text-slate-600">
                   Matricula: {c.matricula_id} | Modelo: {c.contrato_modelo_id} | Status: {c.status_assinatura}
                 </div>

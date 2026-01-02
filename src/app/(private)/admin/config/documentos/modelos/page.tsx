@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-type ContratoModelo = {
+type DocumentoModelo = {
   id: number;
   tipo_contrato: string;
   titulo: string;
@@ -23,9 +23,9 @@ type ContratoModelo = {
   updated_at: string;
 };
 
-export default function AdminContratosModelosPage() {
+export default function AdminDocumentosModelosPage() {
   const [loading, setLoading] = useState(true);
-  const [itens, setItens] = useState<ContratoModelo[]>([]);
+  const [itens, setItens] = useState<DocumentoModelo[]>([]);
   const [erro, setErro] = useState<string | null>(null);
 
   const [novoTipo, setNovoTipo] = useState("REGULAR");
@@ -39,8 +39,8 @@ export default function AdminContratosModelosPage() {
     setLoading(true);
     setErro(null);
     try {
-      const res = await fetch("/api/contratos/modelos", { method: "GET" });
-      const json = (await res.json()) as { data?: ContratoModelo[]; error?: string };
+      const res = await fetch("/api/documentos/modelos", { method: "GET" });
+      const json = (await res.json()) as { data?: DocumentoModelo[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar modelos.");
       setItens(json.data ?? []);
     } catch (e) {
@@ -54,7 +54,7 @@ export default function AdminContratosModelosPage() {
     setSaving(true);
     setErro(null);
     try {
-      const res = await fetch("/api/contratos/modelos", {
+      const res = await fetch("/api/documentos/modelos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -66,7 +66,7 @@ export default function AdminContratosModelosPage() {
           observacoes: null,
         }),
       });
-      const json = (await res.json()) as { data?: ContratoModelo; error?: string };
+      const json = (await res.json()) as { data?: DocumentoModelo; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao criar modelo.");
       setNovoTitulo("");
       setNovoTexto("");
@@ -85,18 +85,18 @@ export default function AdminContratosModelosPage() {
   return (
     <SystemPage>
       <SystemContextCard
-        title="Contratos - Modelos"
+        title="Documentos - Modelos"
         subtitle="Templates e placeholders para emissao futura (MVP sem PDF e sem assinatura digital)."
       >
-        <Link className="text-sm underline text-slate-600" href="/admin/config/contratos">
-          Voltar ao hub de Contratos
+        <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
+          Voltar ao hub de Documentos
         </Link>
       </SystemContextCard>
 
       <SystemHelpCard
         items={[
           "Crie um modelo inicial e use a tela de detalhe para ajustar texto e schema.",
-          "Use placeholders em CAIXA ALTA para variaveis de contrato.",
+          "Use placeholders em CAIXA ALTA para variaveis de documento.",
           "Modelos ativos ficam disponiveis para emissao.",
         ]}
       />
@@ -135,7 +135,7 @@ export default function AdminContratosModelosPage() {
               <Input
                 value={novoTitulo}
                 onChange={(e) => setNovoTitulo(e.target.value)}
-                placeholder="Ex.: Contrato Regular 2026 (v1.0)"
+                placeholder="Ex.: Documento Regular 2026 (v1.0)"
               />
             </div>
           </div>
@@ -176,7 +176,7 @@ export default function AdminContratosModelosPage() {
                   </div>
                   <div className="text-xs text-slate-600">ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"}</div>
                   <div>
-                    <Link className="text-sm underline" href={`/admin/config/contratos/modelos/${m.id}`}>
+                    <Link className="text-sm underline" href={`/admin/config/documentos/modelos/${m.id}`}>
                       Editar
                     </Link>
                   </div>
