@@ -1,30 +1,31 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 
-type ConjuntoUpdate = {
+type GrupoUpdate = {
   codigo?: string;
   nome?: string;
   descricao?: string | null;
-  ativo?: boolean;
+  obrigatorio?: boolean;
+  ordem?: number;
 };
 
 function normCodigo(input: string): string {
   return input.trim().toUpperCase().replace(/\s+/g, "_");
 }
 
-export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { id } = await ctx.params;
-  const conjuntoId = Number(id);
+export async function GET(_: Request, ctx: { params: Promise<{ grupoId: string }> }) {
+  const { grupoId } = await ctx.params;
+  const id = Number(grupoId);
 
-  if (!Number.isFinite(conjuntoId)) {
+  if (!Number.isFinite(id)) {
     return NextResponse.json({ ok: false, message: "ID invalido." }, { status: 400 });
   }
 
   const supabase = await getSupabaseServerSSR();
   const { data, error } = await supabase
-    .from("documentos_conjuntos")
+    .from("documentos_grupos")
     .select("*")
-    .eq("id", conjuntoId)
+    .eq("id", id)
     .single();
 
   if (error) {
@@ -34,27 +35,31 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { id } = await ctx.params;
-  const conjuntoId = Number(id);
+export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string }> }) {
+  const { grupoId } = await ctx.params;
+  const id = Number(grupoId);
 
-  if (!Number.isFinite(conjuntoId)) {
+  if (!Number.isFinite(id)) {
     return NextResponse.json({ ok: false, message: "ID invalido." }, { status: 400 });
   }
 
-  const body = (await req.json()) as ConjuntoUpdate;
+  const body = (await req.json()) as GrupoUpdate;
   const patch: Record<string, unknown> = {};
 
   if (typeof body.codigo === "string") patch.codigo = normCodigo(body.codigo);
   if (typeof body.nome === "string") patch.nome = body.nome.trim();
   if (typeof body.descricao === "string" || body.descricao === null) patch.descricao = body.descricao;
-  if (typeof body.ativo === "boolean") patch.ativo = body.ativo;
+  if (typeof body.obrigatorio === "boolean") patch.obrigatorio = body.obrigatorio;
+  if (typeof body.ordem !== "undefined") {
+    const n = Number(body.ordem);
+    if (Number.isFinite(n)) patch.ordem = n;
+  }
 
   const supabase = await getSupabaseServerSSR();
   const { data, error } = await supabase
-    .from("documentos_conjuntos")
+    .from("documentos_grupos")
     .update(patch)
-    .eq("id", conjuntoId)
+    .eq("id", id)
     .select("*")
     .single();
 
