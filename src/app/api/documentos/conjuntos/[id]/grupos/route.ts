@@ -7,11 +7,14 @@ type GrupoCreate = {
   descricao?: string | null;
   obrigatorio?: boolean;
   ordem?: number;
+  papel?: "PRINCIPAL" | "OBRIGATORIO" | "OPCIONAL" | "ADICIONAL";
 };
 
 function normCodigo(input: string): string {
   return input.trim().toUpperCase().replace(/\s+/g, "_");
 }
+
+const PAPEIS_VALIDOS = ["PRINCIPAL", "OBRIGATORIO", "OPCIONAL", "ADICIONAL"] as const;
 
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -49,13 +52,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ ok: false, message: "Campos obrigatorios: codigo, nome." }, { status: 400 });
   }
 
+  if (body.papel && !PAPEIS_VALIDOS.includes(body.papel)) {
+    return NextResponse.json({ ok: false, message: "Papel invalido." }, { status: 400 });
+  }
+
+  const obrigatorio = typeof body.obrigatorio === "boolean" ? body.obrigatorio : false;
+  const papel = body.papel ?? (obrigatorio ? "OBRIGATORIO" : "OPCIONAL");
+
   const payload = {
     conjunto_id: conjuntoId,
     codigo: normCodigo(body.codigo),
     nome: body.nome.trim(),
     descricao: body.descricao ?? null,
-    obrigatorio: typeof body.obrigatorio === "boolean" ? body.obrigatorio : false,
+    obrigatorio,
     ordem: Number.isFinite(Number(body.ordem)) ? Number(body.ordem) : 1,
+    papel,
   };
 
   const supabase = await getSupabaseServerSSR();

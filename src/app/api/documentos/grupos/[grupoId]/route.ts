@@ -7,11 +7,14 @@ type GrupoUpdate = {
   descricao?: string | null;
   obrigatorio?: boolean;
   ordem?: number;
+  papel?: "PRINCIPAL" | "OBRIGATORIO" | "OPCIONAL" | "ADICIONAL";
 };
 
 function normCodigo(input: string): string {
   return input.trim().toUpperCase().replace(/\s+/g, "_");
 }
+
+const PAPEIS_VALIDOS = ["PRINCIPAL", "OBRIGATORIO", "OPCIONAL", "ADICIONAL"] as const;
 
 export async function GET(_: Request, ctx: { params: Promise<{ grupoId: string }> }) {
   const { grupoId } = await ctx.params;
@@ -53,6 +56,12 @@ export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string
   if (typeof body.ordem !== "undefined") {
     const n = Number(body.ordem);
     if (Number.isFinite(n)) patch.ordem = n;
+  }
+  if (typeof body.papel === "string") {
+    if (!PAPEIS_VALIDOS.includes(body.papel)) {
+      return NextResponse.json({ ok: false, message: "Papel invalido." }, { status: 400 });
+    }
+    patch.papel = body.papel;
   }
 
   const supabase = await getSupabaseServerSSR();
