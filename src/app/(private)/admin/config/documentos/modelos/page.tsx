@@ -13,6 +13,7 @@ import { EditorRico, type VariavelDoc } from "@/components/documentos/EditorRico
 import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
 type TipoDocOpt = { id: number; label: string };
+type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
 
 async function fetchVariaveisAtivas(): Promise<VariavelDoc[]> {
   const res = await fetch("/api/documentos/variaveis?ativo=1", { cache: "no-store" });
@@ -44,6 +45,9 @@ export default function AdminDocumentosModelosPage() {
   const [novoHtml, setNovoHtml] = useState("<p></p>");
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
+  const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
+  const [conjuntoId, setConjuntoId] = useState<number | "">("");
+  const [conjuntoGrupoId, setConjuntoGrupoId] = useState<number | "">("");
   const [saving, setSaving] = useState(false);
   const [variaveis, setVariaveis] = useState<VariavelDoc[]>([]);
   const [variaveisLoading, setVariaveisLoading] = useState(false);
@@ -103,6 +107,38 @@ export default function AdminDocumentosModelosPage() {
     }
   }
 
+  async function carregarConjuntosComGrupos() {
+    try {
+      const res = await fetch("/api/documentos/conjuntos?include=grupos", { cache: "no-store" });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: Array<{
+          id?: number;
+          nome?: string;
+          codigo?: string;
+          grupos?: Array<{ id?: number; nome?: string; codigo?: string }>;
+        }>;
+        message?: string;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar conjuntos.");
+      const list = (json.data ?? [])
+        .map((c) => ({
+          id: Number(c.id),
+          label: `${String(c.nome ?? "").trim()} (${String(c.codigo ?? "").trim()})`,
+          grupos: (c.grupos ?? [])
+            .map((g) => ({
+              id: Number(g.id),
+              label: `${String(g.nome ?? "").trim()} (${String(g.codigo ?? "").trim()})`,
+            }))
+            .filter((g) => Number.isFinite(g.id) && g.id > 0),
+        }))
+        .filter((c) => Number.isFinite(c.id) && c.id > 0);
+      setConjuntos(list);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar conjuntos.");
+    }
+  }
+
   async function criarModelo() {
     setSaving(true);
     setErro(null);
@@ -116,6 +152,7 @@ export default function AdminDocumentosModelosPage() {
         titulo: novoTitulo.trim(),
         formato: novoFormato,
         tipo_documento_id: Number(tipoDocumentoId),
+        conjunto_grupo_id: conjuntoGrupoId ? Number(conjuntoGrupoId) : null,
         ativo: true,
         placeholders_schema_json: [],
         observacoes: null,
@@ -156,6 +193,7 @@ export default function AdminDocumentosModelosPage() {
     void carregar();
     void recarregarVariaveis();
     void carregarTiposDoc();
+    void carregarConjuntosComGrupos();
   }, []);
 
   return (
@@ -217,6 +255,43 @@ export default function AdminDocumentosModelosPage() {
               {tiposDoc.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Conjunto</label>
+            <select
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              value={conjuntoId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setConjuntoId(next);
+                setConjuntoGrupoId("");
+              }}
+            >
+              <option value="">(Opcional) Selecione...</option>
+              {conjuntos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Grupo</label>
+            <select
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              value={conjuntoGrupoId}
+              onChange={(e) => setConjuntoGrupoId(e.target.value ? Number(e.target.value) : "")}
+              disabled={!conjuntoId}
+            >
+              <option value="">{conjuntoId ? "Selecione..." : "Selecione um conjunto primeiro"}</option>
+              {(conjuntos.find((c) => c.id === conjuntoId)?.grupos || []).map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.label}
                 </option>
               ))}
             </select>

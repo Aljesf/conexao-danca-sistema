@@ -19,6 +19,8 @@ type DocumentoModelo = {
   titulo: string;
   versao: string;
   ativo: boolean;
+  tipo_documento_id?: number | null;
+  conjunto_grupo_id?: number | null;
   formato?: DocumentoModeloFormato | null;
   texto_modelo_md: string | null;
   conteudo_html?: string | null;
@@ -47,48 +49,8 @@ type DocumentoVariavel = {
   ativo: boolean;
 };
 
-function buildSchemaItem(variavel: DocumentoVariavel): PlaceholderSchemaItem {
-  const key = variavel.codigo.trim().toUpperCase();
-  const label = variavel.descricao;
-
-  if (variavel.origem === "MANUAL") {
-    return { key, label, source: "MANUAL" };
-  }
-
-  if (variavel.origem === "FINANCEIRO") {
-    const useMoeda = variavel.tipo === "MONETARIO" || variavel.formato === "BRL";
-    const fromKey = variavel.path_origem?.trim() || key;
-    return {
-      key,
-      label,
-      source: "CALC",
-      calc: {
-        type: useMoeda ? "FORMAT_MOEDA" : "SNAPSHOT",
-        fromKey,
-      },
-    };
-  }
-
-  const base =
-    variavel.origem === "ALUNO"
-      ? "aluno"
-      : variavel.origem === "RESPONSAVEL_FINANCEIRO"
-        ? "responsavel"
-        : variavel.origem === "TURMA"
-          ? "turma"
-          : variavel.origem === "ESCOLA"
-            ? "escola"
-            : "matricula";
-  const rawPath = variavel.path_origem?.trim();
-  const path = rawPath ? (rawPath.includes(".") ? rawPath : `${base}.${rawPath}`) : base;
-
-  return {
-    key,
-    label,
-    source: "DB",
-    db: { path },
-  };
-}
+type TipoDocOpt = { id: number; label: string };
+type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
 
 export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const idNum = Number(props.id);
@@ -100,13 +62,9 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
 
   const [modelo, setModelo] = useState<DocumentoModelo | null>(null);
   const [schemaAtual, setSchemaAtual] = useState<PlaceholderSchemaItem[]>([]);
-  const [schemaExtras, setSchemaExtras] = useState<PlaceholderSchemaItem[]>([]);
-  const [schemaInit, setSchemaInit] = useState(false);
 
   const [variaveis, setVariaveis] = useState<DocumentoVariavel[]>([]);
-  const [variaveisLoading, setVariaveisLoading] = useState(true);
   const [variaveisErro, setVariaveisErro] = useState<string | null>(null);
-  const [variaveisSelecionadas, setVariaveisSelecionadas] = useState<string[]>([]);
 
   const [titulo, setTitulo] = useState("");
   const [tipo, setTipo] = useState("REGULAR");
@@ -114,6 +72,13 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const [formato, setFormato] = useState<DocumentoModeloFormato>("MARKDOWN");
   const [conteudoHtml, setConteudoHtml] = useState("");
   const [textoMarkdown, setTextoMarkdown] = useState("");
+
+  const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
+  const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
+
+  const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
+  const [conjuntoId, setConjuntoId] = useState<number | "">("");
+  const [conjuntoGrupoId, setConjuntoGrupoId] = useState<number | "">("");
 
   const editorRef = useRef<EditorRicoHandle | null>(null);
 
@@ -133,6 +98,9 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setTitulo(m.titulo ?? "");
       setTipo(m.tipo_contrato ?? "REGULAR");
       setAtivo(Boolean(m.ativo));
+      setTipoDocumentoId(m.tipo_documento_id ?? "");
+      setConjuntoGrupoId(m.conjunto_grupo_id ?? "");
+      setConjuntoId("");
       const formatoInicial: DocumentoModeloFormato = m.formato === "RICH_HTML" ? "RICH_HTML" : "MARKDOWN";
       setFormato(formatoInicial);
       const conteudoHtmlInicial = m.conteudo_html ?? m.texto_modelo_md ?? "";
@@ -148,7 +116,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   }, [idNum]);
 
   const carregarVariaveis = useCallback(async () => {
-    setVariaveisLoading(true);
     setVariaveisErro(null);
     try {
       const res = await fetch("/api/documentos/variaveis");
@@ -157,8 +124,59 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setVariaveis(json.data ?? []);
     } catch (e) {
       setVariaveisErro(e instanceof Error ? e.message : "Erro ao carregar variaveis.");
-    } finally {
-      setVariaveisLoading(false);
+    }
+  }, []);
+
+  const carregarTiposDoc = useCallback(async () => {
+    try {
+      const res = await fetch("/api/documentos/tipos?ativo=1", { cache: "no-store" });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: Array<{ tipo_documento_id?: number; nome?: string; codigo?: string }>;
+        message?: string;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar tipos.");
+      const list = (json.data ?? [])
+        .map((t) => ({
+          id: Number(t.tipo_documento_id),
+          label: `${String(t.nome ?? "").trim()} (${String(t.codigo ?? "").trim()})`,
+        }))
+        .filter((t) => Number.isFinite(t.id) && t.id > 0);
+      setTiposDoc(list);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar tipos.");
+    }
+  }, []);
+
+  const carregarConjuntosComGrupos = useCallback(async () => {
+    try {
+      const res = await fetch("/api/documentos/conjuntos?include=grupos", { cache: "no-store" });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: Array<{
+          id?: number;
+          nome?: string;
+          codigo?: string;
+          grupos?: Array<{ id?: number; nome?: string; codigo?: string }>;
+        }>;
+        message?: string;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar conjuntos.");
+      const list = (json.data ?? [])
+        .map((c) => ({
+          id: Number(c.id),
+          label: `${String(c.nome ?? "").trim()} (${String(c.codigo ?? "").trim()})`,
+          grupos: (c.grupos ?? [])
+            .map((g) => ({
+              id: Number(g.id),
+              label: `${String(g.nome ?? "").trim()} (${String(g.codigo ?? "").trim()})`,
+            }))
+            .filter((g) => Number.isFinite(g.id) && g.id > 0),
+        }))
+        .filter((c) => Number.isFinite(c.id) && c.id > 0);
+      setConjuntos(list);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar conjuntos.");
     }
   }, []);
 
@@ -166,17 +184,15 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     if (!Number.isFinite(idNum)) return;
     void carregar();
     void carregarVariaveis();
-  }, [carregar, carregarVariaveis, idNum]);
+    void carregarTiposDoc();
+    void carregarConjuntosComGrupos();
+  }, [carregar, carregarConjuntosComGrupos, carregarTiposDoc, carregarVariaveis, idNum]);
 
   useEffect(() => {
-    if (schemaInit || variaveisLoading) return;
-    const knownCodes = new Set(variaveis.map((v) => v.codigo));
-    const selecionadas = schemaAtual.filter((item) => knownCodes.has(item.key)).map((item) => item.key);
-    const extras = schemaAtual.filter((item) => !knownCodes.has(item.key));
-    setVariaveisSelecionadas(selecionadas);
-    setSchemaExtras(extras);
-    setSchemaInit(true);
-  }, [schemaAtual, schemaInit, variaveis, variaveisLoading]);
+    if (!conjuntoGrupoId || conjuntos.length === 0) return;
+    const conjunto = conjuntos.find((c) => c.grupos.some((g) => g.id === conjuntoGrupoId));
+    if (conjunto) setConjuntoId(conjunto.id);
+  }, [conjuntos, conjuntoGrupoId]);
 
   const variaveisAtivas = useMemo(() => variaveis.filter((v) => v.ativo), [variaveis]);
   const variaveisEditor = useMemo<VariavelDoc[]>(
@@ -187,23 +203,8 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       })),
     [variaveisAtivas],
   );
-  const variaveisMap = useMemo(() => new Map(variaveis.map((v) => [v.codigo, v])), [variaveis]);
-  const selecionadasSet = useMemo(() => new Set(variaveisSelecionadas), [variaveisSelecionadas]);
-  const selecionadasInativas = useMemo(() => {
-    const ativasSet = new Set(variaveisAtivas.map((v) => v.codigo));
-    return variaveisSelecionadas.filter((codigo) => !ativasSet.has(codigo));
-  }, [variaveisAtivas, variaveisSelecionadas]);
-
-  const schemaFinal = useMemo(() => {
-    const items = variaveisSelecionadas
-      .map((codigo) => variaveisMap.get(codigo))
-      .filter((v): v is DocumentoVariavel => Boolean(v))
-      .map((v) => buildSchemaItem(v));
-    const extras = schemaExtras.filter((item) => !selecionadasSet.has(item.key));
-    return [...items, ...extras];
-  }, [schemaExtras, selecionadasSet, variaveisMap, variaveisSelecionadas]);
-
-  const schemaPreview = useMemo(() => JSON.stringify(schemaFinal, null, 2), [schemaFinal]);
+  const schemaFinal = schemaAtual;
+  const schemaPreview = useMemo(() => JSON.stringify(schemaAtual, null, 2), [schemaAtual]);
   const conteudoOk =
     formato === "RICH_HTML"
       ? conteudoHtml.replace(/<[^>]+>/g, "").trim().length > 0
@@ -215,6 +216,10 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     setOkMsg(null);
 
     try {
+      if (!tipoDocumentoId) {
+        throw new Error("Selecione o tipo de documento.");
+      }
+
       const res = await fetch(`/api/documentos/modelos/${idNum}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -223,6 +228,8 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           tipo_contrato: tipo,
           ativo,
           formato,
+          tipo_documento_id: tipoDocumentoId,
+          conjunto_grupo_id: conjuntoGrupoId || null,
           ...(formato === "RICH_HTML" ? { conteudo_html: conteudoHtml } : { texto_modelo_md: textoMarkdown }),
           placeholders_schema_json: schemaFinal,
         }),
@@ -239,35 +246,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setSaving(false);
     }
   }
-
-  const toggleVariavel = (codigo: string) => {
-    setVariaveisSelecionadas((prev) =>
-      prev.includes(codigo) ? prev.filter((c) => c !== codigo) : [...prev, codigo],
-    );
-  };
-
-  const inserirNoTexto = () => {
-    setErro(null);
-    setOkMsg(null);
-    if (variaveisSelecionadas.length === 0) {
-      setErro("Selecione ao menos uma variavel para inserir.");
-      return;
-    }
-
-    const placeholders = variaveisSelecionadas.map((codigo) => `{{${codigo}}}`);
-    if (formato === "RICH_HTML") {
-      const textoInserir = placeholders.join(" ");
-      if (editorRef.current) {
-        editorRef.current.insertText(textoInserir);
-        return;
-      }
-      setConteudoHtml((prev) => (prev ? `${prev} ${textoInserir}` : textoInserir));
-      return;
-    }
-
-    const textoInserir = placeholders.join("\n");
-    setTextoMarkdown((prev) => (prev.trim() ? `${prev}\n${textoInserir}` : textoInserir));
-  };
 
   if (!Number.isFinite(idNum)) {
     return (
@@ -303,7 +281,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       <SystemHelpCard
         items={[
           "Edite dados gerais e texto do modelo.",
-          "Selecione variaveis para gerar placeholders automaticamente.",
           "Use o editor para inserir variaveis no cursor.",
         ]}
       />
@@ -312,12 +289,28 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
         title="Dados gerais"
         description={`ID: ${modelo?.id ?? "-"} | Versao: ${modelo?.versao ?? "-"}`}
       >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
             <label className="text-sm font-medium">Titulo</label>
             <div className="mt-1">
               <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} />
             </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Tipo de documento</label>
+            <select
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              value={tipoDocumentoId}
+              onChange={(e) => setTipoDocumentoId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">Selecione...</option>
+              {tiposDoc.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -332,8 +325,47 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
                 <option value="MARKDOWN">Markdown (legado)</option>
               </select>
             </div>
+          </div>
 
-            <label className="mt-3 flex items-center gap-2 text-sm">
+          <div>
+            <label className="text-sm font-medium">Conjunto</label>
+            <select
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              value={conjuntoId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setConjuntoId(next);
+                setConjuntoGrupoId("");
+              }}
+            >
+              <option value="">(Opcional) Selecione...</option>
+              {conjuntos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Grupo</label>
+            <select
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              value={conjuntoGrupoId}
+              onChange={(e) => setConjuntoGrupoId(e.target.value ? Number(e.target.value) : "")}
+              disabled={!conjuntoId}
+            >
+              <option value="">{conjuntoId ? "Selecione..." : "Selecione um conjunto primeiro"}</option>
+              {(conjuntos.find((c) => c.id === conjuntoId)?.grupos || []).map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
               Ativo
             </label>
@@ -341,61 +373,8 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
         </div>
       </SystemSectionCard>
 
-      <SystemSectionCard
-        title="Variaveis disponiveis"
-        description="Selecione variaveis ativas para compor o schema automaticamente."
-        footer={
-          <Button variant="secondary" onClick={inserirNoTexto} disabled={variaveisSelecionadas.length === 0}>
-            Inserir no texto
-          </Button>
-        }
-      >
-        {variaveisErro ? (
-          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {variaveisErro}
-          </div>
-        ) : null}
-
-        {variaveisLoading ? (
-          <p className="text-sm text-slate-600">Carregando variaveis...</p>
-        ) : variaveisAtivas.length === 0 ? (
-          <p className="text-sm text-slate-600">Nenhuma variavel ativa encontrada.</p>
-        ) : (
-          <div className="grid gap-3">
-            {variaveisAtivas.map((v) => (
-              <label key={v.id} className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
-                <input
-                  type="checkbox"
-                  checked={selecionadasSet.has(v.codigo)}
-                  onChange={() => toggleVariavel(v.codigo)}
-                  className="mt-1"
-                />
-                <div>
-                  <div className="text-sm font-medium">{v.codigo}</div>
-                  <div className="mt-1 text-xs text-slate-600">
-                    {v.descricao} | Origem: {v.origem} | Tipo: {v.tipo}
-                  </div>
-                  {v.path_origem ? <div className="text-xs text-slate-500">Path: {v.path_origem}</div> : null}
-                </div>
-              </label>
-            ))}
-          </div>
-        )}
-
-        {schemaExtras.length > 0 ? (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-            Existem placeholders no modelo que nao estao cadastrados nas variaveis.
-          </div>
-        ) : null}
-
-        {selecionadasInativas.length > 0 ? (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700">
-            Ha variaveis inativas vinculadas ao modelo: {selecionadasInativas.join(", ")}.
-          </div>
-        ) : null}
-      </SystemSectionCard>
-
       <SystemSectionCard title="Texto do modelo">
+        {variaveisErro ? <p className="mb-2 text-sm text-red-600">{variaveisErro}</p> : null}
         {formato === "RICH_HTML" ? (
           <EditorRico
             ref={editorRef}
@@ -415,7 +394,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
 
       <SystemSectionCard
         title="Schema de placeholders (JSON)"
-        description="Gerado automaticamente a partir das variaveis selecionadas."
+        description="Persistido junto ao modelo para integracao."
         footer={
           <>
             <Link className="text-sm text-slate-600 underline" href="/admin/config/documentos">
