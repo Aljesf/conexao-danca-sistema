@@ -31,6 +31,7 @@ export async function POST(req: Request) {
   const body = (await req.json()) as DocumentoModeloCreatePayload;
 
   const formato = normalizeFormato(body.formato);
+  const tipoDocumentoId = Number(body.tipo_documento_id);
   const textoMarkdown = asText(body.texto_modelo_md);
   const conteudoHtmlRaw = asText(body.conteudo_html);
   const conteudoHtml = formato === "RICH_HTML" ? (conteudoHtmlRaw.trim() ? conteudoHtmlRaw : textoMarkdown) : "";
@@ -38,6 +39,13 @@ export async function POST(req: Request) {
   if (!body?.tipo_contrato || !body?.titulo) {
     return NextResponse.json(
       { error: "Campos obrigatorios: tipo_contrato, titulo." },
+      { status: 400 },
+    );
+  }
+
+  if (!Number.isFinite(tipoDocumentoId) || tipoDocumentoId <= 0) {
+    return NextResponse.json(
+      { error: "Tipo de documento e obrigatorio." },
       { status: 400 },
     );
   }
@@ -61,6 +69,7 @@ export async function POST(req: Request) {
     titulo: body.titulo,
     versao: body.versao ?? "v1.0",
     ativo: body.ativo ?? true,
+    tipo_documento_id: tipoDocumentoId,
     formato,
     texto_modelo_md: formato === "RICH_HTML" ? conteudoHtml : textoMarkdown,
     conteudo_html: formato === "RICH_HTML" ? conteudoHtml : null,

@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { EditorRico, type VariavelDoc } from "@/components/documentos/EditorRico";
 import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
+type TipoDocOpt = { id: number; label: string };
+
 async function fetchVariaveisAtivas(): Promise<VariavelDoc[]> {
   const res = await fetch("/api/documentos/variaveis?ativo=1", { cache: "no-store" });
   const json = (await res.json()) as {
@@ -41,6 +43,8 @@ export default function AdminDocumentosModelosPage() {
   const [novoFormato, setNovoFormato] = useState<DocumentoModeloFormato>("RICH_HTML");
   const [novoTextoMarkdown, setNovoTextoMarkdown] = useState("");
   const [novoHtml, setNovoHtml] = useState("<p></p>");
+  const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
+  const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
   const [saving, setSaving] = useState(false);
   const [variaveis, setVariaveis] = useState<VariavelDoc[]>([]);
   const [variaveisLoading, setVariaveisLoading] = useState(false);
@@ -80,29 +84,56 @@ export default function AdminDocumentosModelosPage() {
     }
   }
 
+  async function carregarTiposDoc() {
+    try {
+      const res = await fetch("/api/documentos/tipos?ativo=1", { cache: "no-store" });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: Array<{ tipo_documento_id?: number; nome?: string; codigo?: string }>;
+        message?: string;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar tipos.");
+      const list = (json.data ?? [])
+        .map((t) => ({
+          id: Number(t.tipo_documento_id),
+          label: `${String(t.nome ?? "").trim()} (${String(t.codigo ?? "").trim()})`,
+        }))
+        .filter((t) => Number.isFinite(t.id) && t.id > 0);
+      setTiposDoc(list);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar tipos.");
+    }
+  }
+
   async function criarModelo() {
     setSaving(true);
     setErro(null);
     try {
+      if (!tipoDocumentoId) {
+        throw new Error("Selecione o tipo de documento.");
+      }
+
+      const payloadBase = {
+        tipo_contrato: novoTipo,
+        titulo: novoTitulo.trim(),
+        formato: novoFormato,
+        tipo_documento_id: Number(tipoDocumentoId),
+        ativo: true,
+        placeholders_schema_json: [],
+        observacoes: null,
+      };
+
       const payload =
         novoFormato === "RICH_HTML"
           ? {
-              tipo_contrato: novoTipo,
-              titulo: novoTitulo.trim(),
+              ...payloadBase,
               formato: "RICH_HTML",
               conteudo_html: novoHtml,
-              ativo: true,
-              placeholders_schema_json: [],
-              observacoes: null,
             }
           : {
-              tipo_contrato: novoTipo,
-              titulo: novoTitulo.trim(),
+              ...payloadBase,
               formato: "MARKDOWN",
               texto_modelo_md: novoTextoMarkdown,
-              ativo: true,
-              placeholders_schema_json: [],
-              observacoes: null,
             };
 
       const res = await fetch("/api/documentos/modelos", {
@@ -126,6 +157,7 @@ export default function AdminDocumentosModelosPage() {
   useEffect(() => {
     void carregar();
     void recarregarVariaveis();
+    void carregarTiposDoc();
   }, []);
 
   return (
@@ -151,7 +183,10 @@ export default function AdminDocumentosModelosPage() {
         title="Novo modelo"
         description="Crie o template inicial e depois edite schema e texto no detalhe."
         footer={
-          <Button onClick={() => void criarModelo()} disabled={saving || !novoTitulo.trim() || !conteudoOk}>
+          <Button
+            onClick={() => void criarModelo()}
+            disabled={saving || !novoTitulo.trim() || !conteudoOk || !tipoDocumentoId}
+          >
             {saving ? "Salvando..." : "Criar modelo"}
           </Button>
         }
@@ -185,6 +220,22 @@ export default function AdminDocumentosModelosPage() {
             >
               <option value="RICH_HTML">Editor rico (HTML)</option>
               <option value="MARKDOWN">Markdown (legado)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Tipo de documento</label>
+            <select
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              value={tipoDocumentoId}
+              onChange={(e) => setTipoDocumentoId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">Selecione...</option>
+              {tiposDoc.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
             </select>
           </div>
 

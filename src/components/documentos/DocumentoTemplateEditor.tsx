@@ -30,6 +30,8 @@ export function DocumentoTemplateEditor(props: Props) {
   const [selectedVar, setSelectedVar] = useState<string>("");
 
   const editor = useEditor({
+    // CORRECAO SSR (Next.js): evita hydration mismatch
+    immediatelyRender: false,
     extensions: [
       StarterKit,
       Link.configure({ openOnClick: false }),
