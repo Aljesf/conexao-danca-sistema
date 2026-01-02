@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
 import Image from "@tiptap/extension-image";
@@ -33,7 +32,6 @@ export function DocumentoTemplateEditor(props: Props) {
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Underline,
       Link.configure({ openOnClick: false }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Image,

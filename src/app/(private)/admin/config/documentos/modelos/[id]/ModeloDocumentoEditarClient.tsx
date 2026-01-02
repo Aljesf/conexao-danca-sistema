@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DocumentoTemplateEditor } from "@/components/documentos/DocumentoTemplateEditor";
 import { safeParseSchema, type PlaceholderSchemaItem } from "@/lib/documentos/placeholders";
+import type { DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
 type DocumentoModelo = {
   id: number;
@@ -18,7 +19,9 @@ type DocumentoModelo = {
   titulo: string;
   versao: string;
   ativo: boolean;
-  texto_modelo_md: string;
+  formato?: DocumentoModeloFormato | null;
+  texto_modelo_md: string | null;
+  conteudo_html?: string | null;
   placeholders_schema_json: unknown;
   observacoes: string | null;
 };
@@ -108,7 +111,8 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const [titulo, setTitulo] = useState("");
   const [tipo, setTipo] = useState("REGULAR");
   const [ativo, setAtivo] = useState(true);
-  const [texto, setTexto] = useState("");
+  const [formato, setFormato] = useState<DocumentoModeloFormato>("MARKDOWN");
+  const [conteudo, setConteudo] = useState("");
 
   const tipos = useMemo(() => ["REGULAR", "CURSO_LIVRE", "PROJETO_ARTISTICO"], []);
 
@@ -128,7 +132,13 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setTitulo(m.titulo ?? "");
       setTipo(m.tipo_contrato ?? "REGULAR");
       setAtivo(Boolean(m.ativo));
-      setTexto(m.texto_modelo_md ?? "");
+      const formatoInicial: DocumentoModeloFormato = m.formato === "RICH_HTML" ? "RICH_HTML" : "MARKDOWN";
+      setFormato(formatoInicial);
+      const conteudoInicial =
+        formatoInicial === "RICH_HTML"
+          ? (m.conteudo_html ?? m.texto_modelo_md ?? "")
+          : (m.texto_modelo_md ?? "");
+      setConteudo(conteudoInicial);
       setSchemaAtual(safeParseSchema(m.placeholders_schema_json));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar.");
@@ -186,6 +196,10 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   }, [schemaExtras, selecionadasSet, variaveisMap, variaveisSelecionadas]);
 
   const schemaPreview = useMemo(() => JSON.stringify(schemaFinal, null, 2), [schemaFinal]);
+  const conteudoOk =
+    formato === "RICH_HTML"
+      ? conteudo.replace(/<[^>]+>/g, "").trim().length > 0
+      : conteudo.trim().length > 0;
 
   async function salvar() {
     setSaving(true);
@@ -200,7 +214,8 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           titulo: titulo.trim(),
           tipo_contrato: tipo,
           ativo,
-          texto_modelo_md: texto,
+          formato,
+          ...(formato === "RICH_HTML" ? { conteudo_html: conteudo } : { texto_modelo_md: conteudo }),
           placeholders_schema_json: schemaFinal,
         }),
       });
@@ -230,15 +245,22 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     }
 
     const placeholders = variaveisSelecionadas.map((codigo) => `{{${codigo}}}`);
-    const novos = placeholders.filter((p) => !texto.includes(p));
+    const novos = placeholders.filter((p) => !conteudo.includes(p));
     if (novos.length === 0) {
       setOkMsg("Todos os placeholders ja estao no texto.");
       return;
     }
 
-    const suffix = novos.map((item) => `<p>${item}</p>`).join("");
-    const novoTexto = texto.trim() ? `${texto}${suffix}` : suffix;
-    setTexto(novoTexto);
+    const suffix =
+      formato === "RICH_HTML"
+        ? novos.map((item) => `<p>${item}</p>`).join("")
+        : novos.join("\n");
+    const novoConteudo = conteudo.trim()
+      ? formato === "RICH_HTML"
+        ? `${conteudo}${suffix}`
+        : `${conteudo}\n${suffix}`
+      : suffix;
+    setConteudo(novoConteudo);
   };
 
   if (!Number.isFinite(idNum)) {
@@ -308,6 +330,18 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
               </select>
             </div>
 
+            <label className="mt-3 text-sm font-medium">Formato</label>
+            <div className="mt-1">
+              <select
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                value={formato}
+                onChange={(e) => setFormato(e.target.value as DocumentoModeloFormato)}
+              >
+                <option value="RICH_HTML">Editor rico (HTML)</option>
+                <option value="MARKDOWN">Markdown (legado)</option>
+              </select>
+            </div>
+
             <label className="mt-3 flex items-center gap-2 text-sm">
               <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
               Ativo
@@ -370,8 +404,17 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
         ) : null}
       </SystemSectionCard>
 
-      <SystemSectionCard title="Texto do modelo (editor)">
-        <DocumentoTemplateEditor initialHtml={texto} onChangeHtml={setTexto} />
+      <SystemSectionCard title="Texto do modelo">
+        {formato === "RICH_HTML" ? (
+          <DocumentoTemplateEditor initialHtml={conteudo} onChangeHtml={setConteudo} />
+        ) : (
+          <Textarea
+            value={conteudo}
+            onChange={(e) => setConteudo(e.target.value)}
+            rows={12}
+            placeholder="Cole aqui o texto do modelo com placeholders, ex.: {{ALUNO_NOME}}"
+          />
+        )}
       </SystemSectionCard>
 
       <SystemSectionCard
@@ -382,7 +425,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
             <Link className="text-sm text-slate-600 underline" href="/admin/config/documentos">
               Voltar
             </Link>
-            <Button onClick={() => void salvar()} disabled={saving || !titulo.trim() || !texto.trim()}>
+            <Button onClick={() => void salvar()} disabled={saving || !titulo.trim() || !conteudoOk}>
               {saving ? "Salvando..." : "Salvar"}
             </Button>
           </>

@@ -9,38 +9,55 @@ import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { EditorRico, type VariavelDoc } from "@/components/documentos/EditorRico";
+import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
-type DocumentoModelo = {
-  id: number;
-  tipo_contrato: string;
-  titulo: string;
-  versao: string;
-  ativo: boolean;
-  texto_modelo_md: string;
-  placeholders_schema_json: unknown;
-  observacoes: string | null;
-  created_at: string;
-  updated_at: string;
-};
+async function fetchVariaveisAtivas(): Promise<VariavelDoc[]> {
+  const res = await fetch("/api/documentos/variaveis?ativo=1", { cache: "no-store" });
+  const json = (await res.json()) as {
+    data?: Array<{ codigo?: string; descricao?: string }>;
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(json.error ?? "Falha ao carregar variaveis.");
+  }
+
+  return (json.data ?? [])
+    .map((v) => ({
+      code: String(v.codigo ?? "").trim(),
+      label: String(v.descricao ?? v.codigo ?? "").trim(),
+    }))
+    .filter((v) => v.code.length > 0);
+}
 
 export default function AdminDocumentosModelosPage() {
   const [loading, setLoading] = useState(true);
-  const [itens, setItens] = useState<DocumentoModelo[]>([]);
+  const [itens, setItens] = useState<DocumentoModeloDTO[]>([]);
   const [erro, setErro] = useState<string | null>(null);
 
   const [novoTipo, setNovoTipo] = useState("REGULAR");
   const [novoTitulo, setNovoTitulo] = useState("");
-  const [novoTexto, setNovoTexto] = useState("");
+  const [novoFormato, setNovoFormato] = useState<DocumentoModeloFormato>("RICH_HTML");
+  const [novoTextoMarkdown, setNovoTextoMarkdown] = useState("");
+  const [novoHtml, setNovoHtml] = useState("<p></p>");
   const [saving, setSaving] = useState(false);
+  const [variaveis, setVariaveis] = useState<VariavelDoc[]>([]);
+  const [variaveisLoading, setVariaveisLoading] = useState(false);
+  const [variaveisErro, setVariaveisErro] = useState<string | null>(null);
 
   const tipos = useMemo(() => ["REGULAR", "CURSO_LIVRE", "PROJETO_ARTISTICO"], []);
+  const conteudoOk =
+    novoFormato === "RICH_HTML"
+      ? novoHtml.replace(/<[^>]+>/g, "").trim().length > 0
+      : novoTextoMarkdown.trim().length > 0;
 
   async function carregar() {
     setLoading(true);
     setErro(null);
     try {
       const res = await fetch("/api/documentos/modelos", { method: "GET" });
-      const json = (await res.json()) as { data?: DocumentoModelo[]; error?: string };
+      const json = (await res.json()) as { data?: DocumentoModeloDTO[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao carregar modelos.");
       setItens(json.data ?? []);
     } catch (e) {
@@ -50,26 +67,54 @@ export default function AdminDocumentosModelosPage() {
     }
   }
 
+  async function recarregarVariaveis() {
+    setVariaveisErro(null);
+    setVariaveisLoading(true);
+    try {
+      const list = await fetchVariaveisAtivas();
+      setVariaveis(list);
+    } catch (e) {
+      setVariaveisErro(e instanceof Error ? e.message : "Erro ao carregar variaveis.");
+    } finally {
+      setVariaveisLoading(false);
+    }
+  }
+
   async function criarModelo() {
     setSaving(true);
     setErro(null);
     try {
+      const payload =
+        novoFormato === "RICH_HTML"
+          ? {
+              tipo_contrato: novoTipo,
+              titulo: novoTitulo.trim(),
+              formato: "RICH_HTML",
+              conteudo_html: novoHtml,
+              ativo: true,
+              placeholders_schema_json: [],
+              observacoes: null,
+            }
+          : {
+              tipo_contrato: novoTipo,
+              titulo: novoTitulo.trim(),
+              formato: "MARKDOWN",
+              texto_modelo_md: novoTextoMarkdown,
+              ativo: true,
+              placeholders_schema_json: [],
+              observacoes: null,
+            };
+
       const res = await fetch("/api/documentos/modelos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo_contrato: novoTipo,
-          titulo: novoTitulo.trim(),
-          texto_modelo_md: novoTexto,
-          ativo: true,
-          placeholders_schema_json: [],
-          observacoes: null,
-        }),
+        body: JSON.stringify(payload),
       });
-      const json = (await res.json()) as { data?: DocumentoModelo; error?: string };
+      const json = (await res.json()) as { data?: DocumentoModeloDTO; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao criar modelo.");
       setNovoTitulo("");
-      setNovoTexto("");
+      setNovoTextoMarkdown("");
+      setNovoHtml("<p></p>");
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao criar modelo.");
@@ -80,6 +125,7 @@ export default function AdminDocumentosModelosPage() {
 
   useEffect(() => {
     void carregar();
+    void recarregarVariaveis();
   }, []);
 
   return (
@@ -105,7 +151,7 @@ export default function AdminDocumentosModelosPage() {
         title="Novo modelo"
         description="Crie o template inicial e depois edite schema e texto no detalhe."
         footer={
-          <Button onClick={() => void criarModelo()} disabled={saving || !novoTitulo.trim() || !novoTexto.trim()}>
+          <Button onClick={() => void criarModelo()} disabled={saving || !novoTitulo.trim() || !conteudoOk}>
             {saving ? "Salvando..." : "Criar modelo"}
           </Button>
         }
@@ -129,7 +175,20 @@ export default function AdminDocumentosModelosPage() {
               ))}
             </select>
           </div>
-          <div className="md:col-span-2">
+
+          <div>
+            <label className="text-sm font-medium">Formato</label>
+            <select
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              value={novoFormato}
+              onChange={(e) => setNovoFormato(e.target.value as DocumentoModeloFormato)}
+            >
+              <option value="RICH_HTML">Editor rico (HTML)</option>
+              <option value="MARKDOWN">Markdown (legado)</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-3">
             <label className="text-sm font-medium">Titulo</label>
             <div className="mt-1">
               <Input
@@ -141,14 +200,34 @@ export default function AdminDocumentosModelosPage() {
           </div>
 
           <div className="md:col-span-3">
-            <label className="text-sm font-medium">Texto do modelo (Markdown)</label>
+            <label className="text-sm font-medium">Texto do modelo</label>
             <div className="mt-1">
-              <Textarea
-                value={novoTexto}
-                onChange={(e) => setNovoTexto(e.target.value)}
-                rows={10}
-                placeholder="Cole aqui o texto do modelo com placeholders, ex.: {{ALUNO_NOME}}"
-              />
+              {novoFormato === "RICH_HTML" ? (
+                <>
+                  {variaveisErro ? <p className="mb-2 text-sm text-red-600">{variaveisErro}</p> : null}
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs text-slate-500">
+                      Variaveis sao herdadas do cadastro do sistema. Apenas variaveis ativas aparecem aqui.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void recarregarVariaveis()}
+                      className="rounded-md border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      disabled={variaveisLoading}
+                    >
+                      {variaveisLoading ? "Recarregando..." : "Recarregar variaveis"}
+                    </button>
+                  </div>
+                  <EditorRico valueHtml={novoHtml} onChangeHtml={setNovoHtml} variaveis={variaveis} />
+                </>
+              ) : (
+                <Textarea
+                  value={novoTextoMarkdown}
+                  onChange={(e) => setNovoTextoMarkdown(e.target.value)}
+                  rows={10}
+                  placeholder="Cole aqui o texto do modelo com placeholders, ex.: {{ALUNO_NOME}}"
+                />
+              )}
             </div>
           </div>
         </div>
@@ -168,25 +247,35 @@ export default function AdminDocumentosModelosPage() {
           <p className="text-sm text-slate-600">Nenhum modelo cadastrado.</p>
         ) : (
           <div className="grid gap-3">
-            {itens.map((m) => (
-              <div key={m.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
-                <div className="flex flex-col gap-1">
-                  <div className="text-sm font-semibold">
-                    [{m.tipo_contrato}] {m.titulo} <span className="opacity-70">({m.versao})</span>
+            {itens.map((m) => {
+              const formato = m.formato ?? "MARKDOWN";
+              const preview =
+                formato === "RICH_HTML"
+                  ? (m.conteudo_html ?? m.texto_modelo_md ?? "")
+                  : (m.texto_modelo_md ?? "");
+
+              return (
+                <div key={m.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
+                  <div className="flex flex-col gap-1">
+                    <div className="text-sm font-semibold">
+                      [{m.tipo_contrato}] {m.titulo} <span className="opacity-70">({m.versao})</span>
+                    </div>
+                    <div className="text-xs text-slate-600">
+                      ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"} | Formato: {formato}
+                    </div>
+                    <div>
+                      <Link className="text-sm underline" href={`/admin/config/documentos/modelos/${m.id}`}>
+                        Editar
+                      </Link>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-600">ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"}</div>
-                  <div>
-                    <Link className="text-sm underline" href={`/admin/config/documentos/modelos/${m.id}`}>
-                      Editar
-                    </Link>
-                  </div>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-sm text-slate-600">Ver texto</summary>
+                    <pre className="mt-2 whitespace-pre-wrap text-sm">{preview}</pre>
+                  </details>
                 </div>
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-sm text-slate-600">Ver texto</summary>
-                  <pre className="mt-2 whitespace-pre-wrap text-sm">{m.texto_modelo_md}</pre>
-                </details>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </SystemSectionCard>

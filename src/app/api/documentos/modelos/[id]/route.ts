@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import type { DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
 type DocumentoModeloUpdatePayload = {
   tipo_contrato?: string;
@@ -7,9 +8,19 @@ type DocumentoModeloUpdatePayload = {
   versao?: string;
   ativo?: boolean;
   texto_modelo_md?: string;
+  conteudo_html?: string;
+  formato?: DocumentoModeloFormato;
   placeholders_schema_json?: unknown;
   observacoes?: string | null;
 };
+
+function normalizeFormato(input: unknown): DocumentoModeloFormato {
+  return input === "RICH_HTML" ? "RICH_HTML" : "MARKDOWN";
+}
+
+function asText(input: unknown): string | null {
+  return typeof input === "string" ? input : null;
+}
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -45,16 +56,47 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   }
 
   const body = (await req.json()) as DocumentoModeloUpdatePayload;
+  const textoMarkdown = asText(body.texto_modelo_md);
+  const conteudoHtmlRaw = asText(body.conteudo_html);
+  const formatoBody =
+    typeof body.formato !== "undefined" ? normalizeFormato(body.formato) : undefined;
+  const wantsHtml = formatoBody === "RICH_HTML" || (formatoBody === undefined && conteudoHtmlRaw !== null);
+  const wantsMarkdown = formatoBody === "MARKDOWN";
 
   const updatePayload: Record<string, unknown> = {};
   if (typeof body.tipo_contrato === "string") updatePayload.tipo_contrato = body.tipo_contrato;
   if (typeof body.titulo === "string") updatePayload.titulo = body.titulo;
   if (typeof body.versao === "string") updatePayload.versao = body.versao;
   if (typeof body.ativo === "boolean") updatePayload.ativo = body.ativo;
-  if (typeof body.texto_modelo_md === "string") updatePayload.texto_modelo_md = body.texto_modelo_md;
   if (typeof body.observacoes === "string" || body.observacoes === null) updatePayload.observacoes = body.observacoes;
   if (typeof body.placeholders_schema_json !== "undefined") {
     updatePayload.placeholders_schema_json = body.placeholders_schema_json;
+  }
+  if (typeof formatoBody !== "undefined") updatePayload.formato = formatoBody;
+
+  if (wantsMarkdown) {
+    if (!textoMarkdown || !textoMarkdown.trim()) {
+      return NextResponse.json(
+        { error: "Texto (Markdown) obrigatorio para formato MARKDOWN." },
+        { status: 400 },
+      );
+    }
+    updatePayload.texto_modelo_md = textoMarkdown;
+    updatePayload.conteudo_html = null;
+  } else if (wantsHtml) {
+    const html = conteudoHtmlRaw && conteudoHtmlRaw.trim() ? conteudoHtmlRaw : textoMarkdown ?? "";
+    if (!html.trim()) {
+      return NextResponse.json(
+        { error: "Conteudo (HTML) obrigatorio para formato RICH_HTML." },
+        { status: 400 },
+      );
+    }
+    updatePayload.formato = "RICH_HTML";
+    updatePayload.conteudo_html = html;
+    updatePayload.texto_modelo_md = textoMarkdown ?? html;
+  } else {
+    if (textoMarkdown !== null) updatePayload.texto_modelo_md = textoMarkdown;
+    if (conteudoHtmlRaw !== null) updatePayload.conteudo_html = conteudoHtmlRaw;
   }
 
   const { data, error } = await supabase

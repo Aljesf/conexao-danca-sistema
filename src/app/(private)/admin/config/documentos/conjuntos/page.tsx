@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SystemPage } from "@/components/system/SystemPage";
 import { SystemContextCard } from "@/components/system/SystemContextCard";
 import { SystemHelpCard } from "@/components/system/SystemHelpCard";
@@ -54,6 +54,20 @@ function buildGrupoDraft(): GrupoDraft {
   };
 }
 
+async function fetchConjuntos(): Promise<Conjunto[]> {
+  const res = await fetch("/api/documentos/conjuntos", { cache: "no-store" });
+  const json = (await res.json()) as { ok?: boolean; data?: Conjunto[]; message?: string };
+  if (!res.ok || !json.ok) throw new Error(json.message ?? "Erro ao carregar conjuntos.");
+  return json.data ?? [];
+}
+
+async function fetchGrupos(conjuntoId: number): Promise<Grupo[]> {
+  const res = await fetch(`/api/documentos/conjuntos/${conjuntoId}/grupos`, { cache: "no-store" });
+  const json = (await res.json()) as { ok?: boolean; data?: Grupo[]; message?: string };
+  if (!res.ok || !json.ok) throw new Error(json.message ?? "Erro ao carregar grupos.");
+  return json.data ?? [];
+}
+
 export default function DocumentosConjuntosUnificadoPage() {
   const helpItems = useMemo(
     () => [
@@ -65,67 +79,27 @@ export default function DocumentosConjuntosUnificadoPage() {
     []
   );
 
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
+  const [loadingConjuntos, setLoadingConjuntos] = useState(false);
+  const [erroConjuntos, setErroConjuntos] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
   const [conjuntos, setConjuntos] = useState<Conjunto[]>([]);
-  const [gruposByConjunto, setGruposByConjunto] = useState<Record<number, Grupo[]>>({});
+  const [conjuntoSelecionadoId, setConjuntoSelecionadoId] = useState<number | null>(null);
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  const [loadingGrupos, setLoadingGrupos] = useState(false);
+  const [erroGrupos, setErroGrupos] = useState<string | null>(null);
 
   const [cCodigo, setCCodigo] = useState("");
   const [cNome, setCNome] = useState("");
   const [cDesc, setCDesc] = useState("");
   const [cSaving, setCSaving] = useState(false);
 
-  const [gDraft, setGDraft] = useState<Record<number, GrupoDraft>>({});
-  const [gSaving, setGSaving] = useState<Record<number, boolean>>({});
+  const [gDraft, setGDraft] = useState<GrupoDraft>(buildGrupoDraft());
+  const [gSaving, setGSaving] = useState(false);
 
-  const fetchConjuntos = useCallback(async (): Promise<Conjunto[]> => {
-    const res = await fetch("/api/documentos/conjuntos");
-    const json = (await res.json()) as { ok?: boolean; data?: Conjunto[]; message?: string };
-    if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao carregar conjuntos.");
-    return json.data ?? [];
-  }, []);
-
-  const fetchGrupos = useCallback(async (conjuntoId: number): Promise<Grupo[]> => {
-    const res = await fetch(`/api/documentos/conjuntos/${conjuntoId}/grupos`);
-    const json = (await res.json()) as { ok?: boolean; data?: Grupo[]; message?: string };
-    if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao carregar grupos.");
-    return json.data ?? [];
-  }, []);
-
-  const carregarTudo = useCallback(async () => {
-    setLoading(true);
-    setErro(null);
-    setOkMsg(null);
-
-    try {
-      const cs = await fetchConjuntos();
-      setConjuntos(cs);
-
-      const map: Record<number, Grupo[]> = {};
-      await Promise.all(
-        cs.map(async (c) => {
-          map[c.id] = await fetchGrupos(c.id);
-        })
-      );
-      setGruposByConjunto(map);
-
-      const draft: Record<number, GrupoDraft> = {};
-      for (const c of cs) {
-        draft[c.id] = gDraft[c.id] ?? buildGrupoDraft();
-      }
-      setGDraft(draft);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao carregar.");
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchConjuntos, fetchGrupos, gDraft]);
-
-  const criarConjunto = useCallback(async () => {
+  const criarConjunto = async () => {
     setCSaving(true);
-    setErro(null);
+    setErroConjuntos(null);
     setOkMsg(null);
     try {
       const res = await fetch("/api/documentos/conjuntos", {
@@ -144,59 +118,114 @@ export default function DocumentosConjuntosUnificadoPage() {
       setCNome("");
       setCDesc("");
       setOkMsg("Conjunto criado com sucesso.");
-      await carregarTudo();
+      const cs = await fetchConjuntos();
+      setConjuntos(cs);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao criar conjunto.");
+      setErroConjuntos(e instanceof Error ? e.message : "Erro ao criar conjunto.");
     } finally {
       setCSaving(false);
     }
-  }, [cCodigo, cDesc, cNome, carregarTudo]);
+  };
 
-  const criarGrupo = useCallback(
-    async (conjuntoId: number) => {
-      setGSaving((p) => ({ ...p, [conjuntoId]: true }));
-      setErro(null);
-      setOkMsg(null);
+  const criarGrupo = async () => {
+    const conjuntoId = conjuntoSelecionadoId;
+    if (!conjuntoId) {
+      setErroConjuntos("Selecione um conjunto para criar grupo.");
+      return;
+    }
 
-      try {
-        const d = gDraft[conjuntoId] ?? buildGrupoDraft();
-        const ordemNum = Number(d.ordem);
+    setGSaving(true);
+    setErroConjuntos(null);
+    setOkMsg(null);
 
-        const res = await fetch(`/api/documentos/conjuntos/${conjuntoId}/grupos`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            codigo: normCodigo(d.codigo),
-            nome: d.nome,
-            descricao: d.descricao.trim() ? d.descricao.trim() : null,
-            obrigatorio: d.obrigatorio,
-            ordem: Number.isFinite(ordemNum) ? ordemNum : 1,
-            papel: d.papel ?? (d.obrigatorio ? "OBRIGATORIO" : "OPCIONAL"),
-          }),
-        });
+    try {
+      const ordemNum = Number(gDraft.ordem);
+      const res = await fetch(`/api/documentos/conjuntos/${conjuntoId}/grupos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codigo: normCodigo(gDraft.codigo),
+          nome: gDraft.nome,
+          descricao: gDraft.descricao.trim() ? gDraft.descricao.trim() : null,
+          obrigatorio: gDraft.obrigatorio,
+          ordem: Number.isFinite(ordemNum) ? ordemNum : 1,
+          papel: gDraft.papel ?? (gDraft.obrigatorio ? "OBRIGATORIO" : "OPCIONAL"),
+        }),
+      });
 
-        const json = (await res.json()) as { ok?: boolean; message?: string };
-        if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao criar grupo.");
+      const json = (await res.json()) as { ok?: boolean; message?: string };
+      if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao criar grupo.");
 
-        setGDraft((p) => ({
-          ...p,
-          [conjuntoId]: buildGrupoDraft(),
-        }));
+      setGDraft(buildGrupoDraft());
+      setOkMsg("Grupo criado com sucesso.");
 
-        setOkMsg("Grupo criado com sucesso.");
-        await carregarTudo();
-      } catch (e) {
-        setErro(e instanceof Error ? e.message : "Erro ao criar grupo.");
-      } finally {
-        setGSaving((p) => ({ ...p, [conjuntoId]: false }));
-      }
-    },
-    [carregarTudo, gDraft]
-  );
+      const data = await fetchGrupos(conjuntoId);
+      setGrupos(data);
+    } catch (e) {
+      setErroConjuntos(e instanceof Error ? e.message : "Erro ao criar grupo.");
+    } finally {
+      setGSaving(false);
+    }
+  };
 
   useEffect(() => {
-    void carregarTudo();
-  }, [carregarTudo]);
+    let ativo = true;
+
+    async function carregarConjuntos() {
+      setLoadingConjuntos(true);
+      setErroConjuntos(null);
+
+      try {
+        const data = await fetchConjuntos();
+        if (ativo) setConjuntos(data);
+      } catch (e) {
+        if (ativo) setErroConjuntos(e instanceof Error ? e.message : "Erro inesperado");
+      } finally {
+        if (ativo) setLoadingConjuntos(false);
+      }
+    }
+
+    carregarConjuntos();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setGDraft(buildGrupoDraft());
+  }, [conjuntoSelecionadoId]);
+
+  useEffect(() => {
+    if (!conjuntoSelecionadoId) {
+      setGrupos([]);
+      setErroGrupos(null);
+      return;
+    }
+
+    let ativo = true;
+    setGrupos([]);
+
+    async function carregarGrupos() {
+      setLoadingGrupos(true);
+      setErroGrupos(null);
+
+      try {
+        const data = await fetchGrupos(conjuntoSelecionadoId);
+        if (ativo) setGrupos(data);
+      } catch (e) {
+        if (ativo) setErroGrupos(e instanceof Error ? e.message : "Erro ao carregar grupos.");
+      } finally {
+        if (ativo) setLoadingGrupos(false);
+      }
+    }
+
+    carregarGrupos();
+
+    return () => {
+      ativo = false;
+    };
+  }, [conjuntoSelecionadoId]);
 
   return (
     <SystemPage>
@@ -213,9 +242,9 @@ export default function DocumentosConjuntosUnificadoPage() {
 
       <SystemHelpCard items={helpItems} />
 
-      {erro ? (
+      {erroConjuntos ? (
         <SystemSectionCard title="Erro" description="Corrija antes de continuar.">
-          <div className="text-sm text-red-700">{erro}</div>
+          <div className="text-sm text-red-700">{erroConjuntos}</div>
         </SystemSectionCard>
       ) : null}
 
@@ -253,16 +282,14 @@ export default function DocumentosConjuntosUnificadoPage() {
         title="Conjuntos cadastrados"
         description="Cada card e um Conjunto. Dentro dele, voce cria e organiza os Grupos."
       >
-        {loading ? (
+        {loadingConjuntos ? (
           <div className="text-sm text-slate-600">Carregando...</div>
         ) : conjuntos.length === 0 ? (
           <div className="text-sm text-slate-600">Nenhum conjunto cadastrado.</div>
         ) : (
           <div className="grid gap-6">
             {conjuntos.map((c) => {
-              const grupos = gruposByConjunto[c.id] ?? [];
-              const d = gDraft[c.id] ?? buildGrupoDraft();
-              const savingThis = Boolean(gSaving[c.id]);
+              const isSelected = conjuntoSelecionadoId === c.id;
 
               return (
                 <div key={c.id} className="border border-slate-200 rounded-xl bg-white shadow-sm">
@@ -274,155 +301,141 @@ export default function DocumentosConjuntosUnificadoPage() {
                       </div>
                       {c.descricao ? <div className="text-sm text-slate-600 mt-2">{c.descricao}</div> : null}
                     </div>
-                    <div className="text-sm text-slate-600">
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
                       <Link className="underline" href={`/admin/config/documentos/conjuntos/${c.id}`}>
                         Abrir detalhe (opcional)
                       </Link>
+                      <Button
+                        variant={isSelected ? "secondary" : "ghost"}
+                        onClick={() => setConjuntoSelecionadoId(isSelected ? null : c.id)}
+                      >
+                        {isSelected ? "Selecionado" : "Selecionar"}
+                      </Button>
                     </div>
                   </div>
 
                   <div className="p-5">
-                    <div className="text-sm font-semibold mb-2">Grupos</div>
-
-                    {grupos.length === 0 ? (
-                      <div className="text-sm text-slate-600 mb-4">Nenhum grupo cadastrado.</div>
+                    {!isSelected ? (
+                      <div className="text-sm text-slate-500">
+                        Selecione este conjunto para carregar os grupos.
+                      </div>
                     ) : (
-                      <div className="grid gap-2 mb-4">
-                        {grupos.map((g) => {
-                          const papel = g.papel ?? (g.obrigatorio ? "OBRIGATORIO" : "OPCIONAL");
-                          return (
-                            <div key={g.id} className="border border-slate-200 rounded-lg p-3 flex items-start justify-between gap-4">
-                              <div>
-                                <div className="font-medium">
-                                  {g.ordem}. {g.nome}
-                                </div>
-                                <div className="text-xs text-slate-600 mt-1">
-                                  Codigo: {g.codigo} | Papel: {papel} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"} | ID: {g.id}
-                                </div>
-                                {g.descricao ? <div className="text-sm text-slate-600 mt-2">{g.descricao}</div> : null}
-                              </div>
+                      <>
+                        <div className="text-sm font-semibold mb-2">Grupos</div>
+                        {erroGrupos ? <div className="text-sm text-red-700 mb-2">{erroGrupos}</div> : null}
 
-                              <div className="flex items-center gap-3">
-                                <Link className="text-sm underline text-slate-600" href={`/admin/config/documentos/grupos/${g.id}`}>
-                                  Vincular modelos
-                                </Link>
-                              </div>
+                        {loadingGrupos ? (
+                          <div className="text-sm text-slate-600 mb-4">Carregando grupos...</div>
+                        ) : grupos.length === 0 ? (
+                          <div className="text-sm text-slate-600 mb-4">Nenhum grupo cadastrado.</div>
+                        ) : (
+                          <div className="grid gap-2 mb-4">
+                            {grupos.map((g) => {
+                              const papel = g.papel ?? (g.obrigatorio ? "OBRIGATORIO" : "OPCIONAL");
+                              return (
+                                <div key={g.id} className="border border-slate-200 rounded-lg p-3 flex items-start justify-between gap-4">
+                                  <div>
+                                    <div className="font-medium">
+                                      {g.ordem}. {g.nome}
+                                    </div>
+                                    <div className="text-xs text-slate-600 mt-1">
+                                      Codigo: {g.codigo} | Papel: {papel} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"} | ID: {g.id}
+                                    </div>
+                                    {g.descricao ? <div className="text-sm text-slate-600 mt-2">{g.descricao}</div> : null}
+                                  </div>
+
+                                  <div className="flex items-center gap-3">
+                                    <Link className="text-sm underline text-slate-600" href={`/admin/config/documentos/grupos/${g.id}`}>
+                                      Vincular modelos
+                                    </Link>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        <div className="border-t border-slate-200 pt-4">
+                          <div className="text-sm font-semibold mb-2">Adicionar grupo</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-sm font-medium">Codigo</label>
+                              <Input
+                                value={gDraft.codigo}
+                                onChange={(e) => setGDraft((p) => ({ ...p, codigo: e.target.value }))}
+                                placeholder="Ex.: DOCUMENTO_PRINCIPAL"
+                              />
                             </div>
-                          );
-                        })}
-                      </div>
+                            <div>
+                              <label className="text-sm font-medium">Nome</label>
+                              <Input
+                                value={gDraft.nome}
+                                onChange={(e) => setGDraft((p) => ({ ...p, nome: e.target.value }))}
+                                placeholder="Ex.: Documento principal"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <label className="text-sm font-medium">Descricao</label>
+                              <Input
+                                value={gDraft.descricao}
+                                onChange={(e) => setGDraft((p) => ({ ...p, descricao: e.target.value }))}
+                                placeholder="Opcional (uso interno)."
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={gDraft.obrigatorio}
+                                onChange={(e) =>
+                                  setGDraft((p) => ({
+                                    ...p,
+                                    obrigatorio: e.target.checked,
+                                    papel:
+                                      p.papel === "OBRIGATORIO" || p.papel === "OPCIONAL"
+                                        ? e.target.checked
+                                          ? "OBRIGATORIO"
+                                          : "OPCIONAL"
+                                        : p.papel,
+                                  }))
+                                }
+                              />
+                              <span className="text-sm">Obrigatorio</span>
+                            </div>
+
+                            <div>
+                              <label className="text-sm font-medium">Ordem</label>
+                              <Input
+                                value={gDraft.ordem}
+                                onChange={(e) => setGDraft((p) => ({ ...p, ordem: e.target.value }))}
+                                placeholder="Ex.: 1"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-sm font-medium">Papel do grupo</label>
+                              <select
+                                className="w-full rounded-lg border px-3 py-2 text-sm"
+                                value={gDraft.papel}
+                                onChange={(e) => setGDraft((p) => ({ ...p, papel: e.target.value as GrupoPapel }))}
+                              >
+                                <option value="PRINCIPAL">PRINCIPAL</option>
+                                <option value="OBRIGATORIO">OBRIGATORIO</option>
+                                <option value="OPCIONAL">OPCIONAL</option>
+                                <option value="ADICIONAL">ADICIONAL</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="pt-4 flex justify-end">
+                            <Button onClick={() => void criarGrupo()} disabled={gSaving || !gDraft.codigo.trim() || !gDraft.nome.trim()}>
+                              {gSaving ? "Salvando..." : "Adicionar grupo"}
+                            </Button>
+                          </div>
+                        </div>
+                      </>
                     )}
-
-                    <div className="border-t border-slate-200 pt-4">
-                      <div className="text-sm font-semibold mb-2">Adicionar grupo</div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-sm font-medium">Codigo</label>
-                          <Input
-                            value={d.codigo}
-                            onChange={(e) =>
-                              setGDraft((p) => ({
-                                ...p,
-                                [c.id]: { ...d, codigo: e.target.value },
-                              }))
-                            }
-                            placeholder="Ex.: DOCUMENTO_PRINCIPAL"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium">Nome</label>
-                          <Input
-                            value={d.nome}
-                            onChange={(e) =>
-                              setGDraft((p) => ({
-                                ...p,
-                                [c.id]: { ...d, nome: e.target.value },
-                              }))
-                            }
-                            placeholder="Ex.: Documento principal"
-                          />
-                        </div>
-
-                        <div className="md:col-span-2">
-                          <label className="text-sm font-medium">Descricao</label>
-                          <Input
-                            value={d.descricao}
-                            onChange={(e) =>
-                              setGDraft((p) => ({
-                                ...p,
-                                [c.id]: { ...d, descricao: e.target.value },
-                              }))
-                            }
-                            placeholder="Opcional (uso interno)."
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={d.obrigatorio}
-                            onChange={(e) =>
-                              setGDraft((p) => ({
-                                ...p,
-                                [c.id]: {
-                                  ...d,
-                                  obrigatorio: e.target.checked,
-                                  papel:
-                                    d.papel === "OBRIGATORIO" || d.papel === "OPCIONAL"
-                                      ? e.target.checked
-                                        ? "OBRIGATORIO"
-                                        : "OPCIONAL"
-                                      : d.papel,
-                                },
-                              }))
-                            }
-                          />
-                          <span className="text-sm">Obrigatorio</span>
-                        </div>
-
-                        <div>
-                          <label className="text-sm font-medium">Ordem</label>
-                          <Input
-                            value={d.ordem}
-                            onChange={(e) =>
-                              setGDraft((p) => ({
-                                ...p,
-                                [c.id]: { ...d, ordem: e.target.value },
-                              }))
-                            }
-                            placeholder="Ex.: 1"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-sm font-medium">Papel do grupo</label>
-                          <select
-                            className="w-full rounded-lg border px-3 py-2 text-sm"
-                            value={d.papel}
-                            onChange={(e) =>
-                              setGDraft((p) => ({
-                                ...p,
-                                [c.id]: { ...d, papel: e.target.value as GrupoPapel },
-                              }))
-                            }
-                          >
-                            <option value="PRINCIPAL">PRINCIPAL</option>
-                            <option value="OBRIGATORIO">OBRIGATORIO</option>
-                            <option value="OPCIONAL">OPCIONAL</option>
-                            <option value="ADICIONAL">ADICIONAL</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="pt-4 flex justify-end">
-                        <Button
-                          onClick={() => void criarGrupo(c.id)}
-                          disabled={savingThis || !d.codigo.trim() || !d.nome.trim()}
-                        >
-                          {savingThis ? "Salvando..." : "Adicionar grupo"}
-                        </Button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               );

@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import type { DocumentoModeloCreatePayload, DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
-type DocumentoModeloPayload = {
-  tipo_contrato: string;
-  titulo: string;
-  versao?: string;
-  ativo?: boolean;
-  texto_modelo_md: string;
-  placeholders_schema_json?: unknown;
-  observacoes?: string | null;
-};
+function normalizeFormato(input: unknown): DocumentoModeloFormato {
+  return input === "RICH_HTML" ? "RICH_HTML" : "MARKDOWN";
+}
+
+function asText(input: unknown): string {
+  return typeof input === "string" ? input : "";
+}
 
 export async function GET() {
   const supabase = await getSupabaseServerSSR();
@@ -29,11 +28,30 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const supabase = await getSupabaseServerSSR();
-  const body = (await req.json()) as DocumentoModeloPayload;
+  const body = (await req.json()) as DocumentoModeloCreatePayload;
 
-  if (!body?.tipo_contrato || !body?.titulo || !body?.texto_modelo_md) {
+  const formato = normalizeFormato(body.formato);
+  const textoMarkdown = asText(body.texto_modelo_md);
+  const conteudoHtmlRaw = asText(body.conteudo_html);
+  const conteudoHtml = formato === "RICH_HTML" ? (conteudoHtmlRaw.trim() ? conteudoHtmlRaw : textoMarkdown) : "";
+
+  if (!body?.tipo_contrato || !body?.titulo) {
     return NextResponse.json(
-      { error: "Campos obrigatorios: tipo_contrato, titulo, texto_modelo_md." },
+      { error: "Campos obrigatorios: tipo_contrato, titulo." },
+      { status: 400 },
+    );
+  }
+
+  if (formato === "MARKDOWN" && !textoMarkdown.trim()) {
+    return NextResponse.json(
+      { error: "Texto (Markdown) obrigatorio para formato MARKDOWN." },
+      { status: 400 },
+    );
+  }
+
+  if (formato === "RICH_HTML" && !conteudoHtml.trim()) {
+    return NextResponse.json(
+      { error: "Conteudo (HTML) obrigatorio para formato RICH_HTML." },
       { status: 400 },
     );
   }
@@ -43,7 +61,9 @@ export async function POST(req: Request) {
     titulo: body.titulo,
     versao: body.versao ?? "v1.0",
     ativo: body.ativo ?? true,
-    texto_modelo_md: body.texto_modelo_md,
+    formato,
+    texto_modelo_md: formato === "RICH_HTML" ? conteudoHtml : textoMarkdown,
+    conteudo_html: formato === "RICH_HTML" ? conteudoHtml : null,
     placeholders_schema_json: body.placeholders_schema_json ?? [],
     observacoes: body.observacoes ?? null,
   };

@@ -30,6 +30,16 @@ function renderTemplate(template: string, vars: Record<string, unknown>): string
   });
 }
 
+function resolveModeloTemplate(modelo: Record<string, unknown>): string {
+  const formato = String(modelo.formato ?? "MARKDOWN");
+  if (formato === "RICH_HTML") {
+    const html = modelo.conteudo_html;
+    if (typeof html === "string" && html.trim()) return html;
+  }
+  const texto = modelo.texto_modelo_md;
+  return typeof texto === "string" ? texto : "";
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const matriculaId = Number(id);
@@ -167,7 +177,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const vars: Record<string, unknown> = { ...manuais };
 
-    const conteudo = renderTemplate(String((modelo as Record<string, unknown>).texto_modelo_md ?? ""), vars);
+    const template = resolveModeloTemplate(modelo as Record<string, unknown>);
+    const conteudo = renderTemplate(template, vars);
     const hash = crypto.createHash("sha256").update(conteudo, "utf8").digest("hex");
 
     const baseInsert: Record<string, unknown> = {

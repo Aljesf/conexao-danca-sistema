@@ -55,14 +55,23 @@ function validateFormato(tipo: Tipo, formato: string | null): string | null {
   return null;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = await getSupabaseServerSSR();
+  const url = new URL(req.url);
+  const ativoParam = url.searchParams.get("ativo");
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("documentos_variaveis")
     .select("*")
     .order("ativo", { ascending: false })
     .order("codigo", { ascending: true });
+
+  if (ativoParam !== null) {
+    const onlyActive = ativoParam !== "0" && ativoParam.toLowerCase() !== "false";
+    query = query.eq("ativo", onlyActive);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

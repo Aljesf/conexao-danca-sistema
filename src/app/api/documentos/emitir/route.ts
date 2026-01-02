@@ -109,6 +109,16 @@ function buildVariablesFromSchema(args: {
   return { vars, missingRequired };
 }
 
+function resolveModeloTemplate(modelo: Record<string, unknown>): string {
+  const formato = String(modelo.formato ?? "MARKDOWN");
+  if (formato === "RICH_HTML") {
+    const html = modelo.conteudo_html;
+    if (typeof html === "string" && html.trim()) return html;
+  }
+  const texto = modelo.texto_modelo_md;
+  return typeof texto === "string" ? texto : "";
+}
+
 export async function POST(req: Request) {
   const supabase = await getSupabaseServerSSR();
   const body = (await req.json()) as EmitirDocumentoPayload;
@@ -205,7 +215,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const template = String((modelo as Record<string, unknown>).texto_modelo_md ?? "");
+  const template = resolveModeloTemplate(modelo as Record<string, unknown>);
   const conteudo = renderTemplate(template, vars);
   const hash = crypto.createHash("sha256").update(conteudo, "utf8").digest("hex");
 
