@@ -1,13 +1,87 @@
-# estado-atual-do-projeto.md
+﻿# estado-atual-do-projeto.md
 
 ## Módulo atual
-Matrículas — Tabelas de Preços e Precificação (Serviço + Unidade de Execução)
+Documentos — Motor institucional (Modelos, Variáveis, Operações, Conjuntos, Grupos)
 
 ---
 
-## SQL concluído
+## SQL concluído (Documentos)
 
-- Criação do conceito canônico **Unidade de Execução**:
+- Domínio Documentos consolidado (renomeado de Contratos → Documentos):
+  - tabelas documentos_* (modelos, emitidos, variáveis) já existem no banco conforme migração aplicada.
+- Motor de Conjuntos e Grupos criado:
+  - public.documentos_conjuntos
+    - codigo único
+    - ativo
+    - timestamps
+  - public.documentos_grupos
+    - FK conjunto_id → documentos_conjuntos(id) (on delete cascade)
+    - codigo único por conjunto
+    - obrigatorio
+    - ordem
+  - public.documentos_grupos_modelos
+    - pivot grupo_id ↔ documento_modelo_id
+    - PK composta
+    - FK modelo com on delete restrict
+
+---
+
+## APIs concluídas (Documentos)
+
+- (pendente) APIs de Conjuntos/Grupos/Modelos vinculados
+- (pendente) APIs de seleção por Operação e emissão em Conjunto
+
+---
+
+## Páginas/componentes concluídos (Documentos)
+
+- Sidebar Admin: menu “Documentos” com:
+  - Novo documento
+  - Modelos
+  - Variáveis
+  - Documentos emitidos
+  - Tipos de documento
+- Editor rico (modelo) e gestão de variáveis já disponíveis no módulo Documentos
+- (pendente) UI de Conjuntos/Grupos e vínculo com modelos
+
+---
+
+## Documentação concluída (Documentos)
+
+Canônicos (pai/filhos):
+- docs/documentos/documentos-visao-geral.md
+- docs/documentos/documentos-tipo-contrato.md
+- docs/documentos/documentos-operacoes.md
+- docs/documentos/documentos-conjuntos.md
+- docs/documentos/documentos-variaveis.md
+
+---
+
+## Pendências
+
+- Implementar APIs do motor:
+  - CRUD Conjuntos
+  - CRUD Grupos
+  - Vínculo Grupo ↔ Modelos
+- Implementar UI Admin:
+  - cadastro/edição de Conjuntos
+  - cadastro/edição de Grupos dentro do Conjunto
+  - seleção de modelos por Grupo
+- (futuro) Tipos de documento no banco e seleção automática por Operação
+
+---
+
+## Próximas ações
+
+1) APIs do motor Documentos (Conjuntos/Grupos/Modelos)
+2) UI Admin para Conjuntos/Grupos
+3) Seed inicial de Conjuntos e Grupos (Matrícula Regular, Bolsa, Venda Loja, Prestação Serviço)
+4) Depois: PDF e assinatura
+
+---
+## SQL conclu├¡do
+
+- Cria├º├úo do conceito can├┤nico **Unidade de Execu├º├úo**:
   - Tabela `escola_unidades_execucao`
   - Campos principais:
     - `unidade_execucao_id`
@@ -17,119 +91,119 @@ Matrículas — Tabelas de Preços e Precificação (Serviço + Unidade de Execu
     - `origem_tipo` (TURMA, GRUPO, ELENCO, COREOGRAFIA, etc.)
     - `origem_id`
     - `ativo`
-- Backfill automático:
-  - Todas as `turmas` existentes foram convertidas em **Unidades de Execução**
+- Backfill autom├ítico:
+  - Todas as `turmas` existentes foram convertidas em **Unidades de Execu├º├úo**
   - `origem_tipo = 'TURMA'`
   - `origem_id = turmas.turma_id`
-- Criação do pivot:
+- Cria├º├úo do pivot:
   - `matricula_tabelas_unidades_execucao`
-  - Relaciona **0..N unidades de execução** por tabela de preços
-  - Regra: pivot vazio = tabela válida para **todas** as unidades do serviço
+  - Relaciona **0..N unidades de execu├º├úo** por tabela de pre├ºos
+  - Regra: pivot vazio = tabela v├ílida para **todas** as unidades do servi├ºo
 
 ---
 
-## APIs concluídas
+## APIs conclu├¡das
 
-### Serviços e Unidades de Execução
+### Servi├ºos e Unidades de Execu├º├úo
 - `GET /api/matriculas/tabelas/servicos`
-  - Lista serviços por categoria:
+  - Lista servi├ºos por categoria:
     - CURSO_REGULAR
     - CURSO_LIVRE
     - PROJETO_ARTISTICO
 - `GET /api/matriculas/tabelas/unidades-execucao?servico_id=`
-  - Lista unidades de execução do serviço
+  - Lista unidades de execu├º├úo do servi├ºo
   - Label padronizado:
-    - `<Denominação>: <Nome> [UE: <id>]`
+    - `<Denomina├º├úo>: <Nome> [UE: <id>]`
 
-### Tabelas de Preços
+### Tabelas de Pre├ºos
 - `POST /api/matriculas/tabelas`
 - `PUT /api/matriculas/tabelas/[id]`
   - Novo modelo aceito:
     - `servico_tipo`
     - `servico_id`
     - `unidade_execucao_ids[]`
-  - Compatibilidade temporária mantida com:
+  - Compatibilidade tempor├íria mantida com:
     - `alvo_tipo`
     - `alvo_ids`
 - Salvamento correto:
-  - Referência canônica no serviço
-  - Escopo por unidade de execução via pivot
+  - Refer├¬ncia can├┤nica no servi├ºo
+  - Escopo por unidade de execu├º├úo via pivot
 
-### Precificação
+### Precifica├º├úo
 - `GET /api/matriculas/precos/resolver`
-  - Alinhado ao modelo **Serviço + Unidade de Execução**
+  - Alinhado ao modelo **Servi├ºo + Unidade de Execu├º├úo**
   - Fluxo:
     1. Resolve `servico_id`
     2. Resolve `unidade_execucao_id`
-    3. Busca tabela ativa por serviço + ano
+    3. Busca tabela ativa por servi├ºo + ano
     4. Valida escopo pelo pivot
     5. Tenta aplicar tier (quando existir)
-    6. **Fallback para MENSALIDADE/RECORRENTE** quando não há tier
+    6. **Fallback para MENSALIDADE/RECORRENTE** quando n├úo h├í tier
   - Retornos:
-    - `200` quando precificação válida
-    - `409` quando não há cobertura financeira (regra de negócio)
+    - `200` quando precifica├º├úo v├ílida
+    - `409` quando n├úo h├í cobertura financeira (regra de neg├│cio)
 
 ---
 
-## Páginas / componentes concluídos
+## P├íginas / componentes conclu├¡dos
 
-### Administração — Tabelas de Preços
-- Nova tabela de preços:
-  - Fluxo: **Categoria do serviço → Serviço → Unidades de Execução**
-  - Opção:
-    - “Aplicar a todas as unidades de execução deste serviço”
+### Administra├º├úo ÔÇö Tabelas de Pre├ºos
+- Nova tabela de pre├ºos:
+  - Fluxo: **Categoria do servi├ºo ÔåÆ Servi├ºo ÔåÆ Unidades de Execu├º├úo**
+  - Op├º├úo:
+    - ÔÇ£Aplicar a todas as unidades de execu├º├úo deste servi├ºoÔÇØ
 - Editar tabela:
   - Carregamento correto de:
     - categoria
-    - serviço
+    - servi├ºo
     - unidades selecionadas
   - Feedback visual de sucesso/erro
 - Admin Matriculas: refatoradas telas de Planos de Pagamento (detalhe), Tabelas de Precos (lista) e Tabela de Precos (detalhe) para o padrao PageHeader/SectionCard/ToolbarRow.
 
-### Escola — Nova Matrícula
-- Matrícula funcionando ponta a ponta:
-  - Seleção de aluno e responsável
-  - Seleção de curso (serviço)
-  - Seleção de turma (unidade de execução)
-  - Ano de referência validado
+### Escola ÔÇö Nova Matr├¡cula
+- Matr├¡cula funcionando ponta a ponta:
+  - Sele├º├úo de aluno e respons├ível
+  - Sele├º├úo de curso (servi├ºo)
+  - Sele├º├úo de turma (unidade de execu├º├úo)
+  - Ano de refer├¬ncia validado
 - Resumo final exibindo:
   - Tabela aplicada
   - Mensalidade aplicada
   - Plano de pagamento
-- Debounce implementado no resolver para evitar múltiplas chamadas simultâneas
+- Debounce implementado no resolver para evitar m├║ltiplas chamadas simult├óneas
 
 ---
 
-## Pendências
+## Pend├¬ncias
 
 - Ajuste pontual em `/api/pessoas/[id]`:
   - Adequar uso de `await ctx.params` (Next.js 15)
 - Refinamentos de UX:
-  - Reduzir logs visuais de 409 intermediários no console
-  - Ajustar textos de ajuda na matrícula nova
+  - Reduzir logs visuais de 409 intermedi├írios no console
+  - Ajustar textos de ajuda na matr├¡cula nova
 
 ---
 
 ## Bloqueios
-Nenhum bloqueio técnico ativo no módulo de Matrículas.
+Nenhum bloqueio t├®cnico ativo no m├│dulo de Matr├¡culas.
 
 ---
 
-## Versão do sistema
-Sistema Conexão Dança — Matrículas  
-Versão lógica: **v1.0 (Serviço + Unidade de Execução)**
+## Vers├úo do sistema
+Sistema Conex├úo Dan├ºa ÔÇö Matr├¡culas  
+Vers├úo l├│gica: **v1.0 (Servi├ºo + Unidade de Execu├º├úo)**
 
 ---
 
-## Próximas ações
+## Pr├│ximas a├º├Áes
 
-1. Planejar regra avançada de **pacote / múltiplas modalidades (tier dinâmico)**
-   - Contagem de matrículas ativas por aluno
-   - Reprecificação prospectiva
-2. Refinar UX da Matrícula Nova
-3. Avançar para:
-   - Projeto Artístico (criação de unidades de execução específicas)
-   - Vínculo de matrícula diretamente à `unidade_execucao_id`
+1. Planejar regra avan├ºada de **pacote / m├║ltiplas modalidades (tier din├ómico)**
+   - Contagem de matr├¡culas ativas por aluno
+   - Reprecifica├º├úo prospectiva
+2. Refinar UX da Matr├¡cula Nova
+3. Avan├ºar para:
+   - Projeto Art├¡stico (cria├º├úo de unidades de execu├º├úo espec├¡ficas)
+   - V├¡nculo de matr├¡cula diretamente ├á `unidade_execucao_id`
 
 ---
 
@@ -146,4 +220,3 @@ Versão lógica: **v1.0 (Serviço + Unidade de Execução)**
 - Criado padrao-base de paginas operacionais (PageHeader/SectionCard/ToolbarRow) e aplicado em /escola/matriculas.
 
 - Pessoas: adicionada aba "Dados escolares" (matriculas/vinculos) em /pessoas/[id] e bloco de vinculos em /pessoas/[id]/curriculo.
-
