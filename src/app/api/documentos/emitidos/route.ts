@@ -5,7 +5,7 @@ export async function GET() {
   const supabase = await getSupabaseServerSSR();
 
   const { data, error } = await supabase
-    .from("contratos_emitidos")
+    .from("documentos_emitidos")
     .select("id, matricula_id, contrato_modelo_id, status_assinatura, created_at, updated_at, pdf_url")
     .order("id", { ascending: false })
     .limit(50);

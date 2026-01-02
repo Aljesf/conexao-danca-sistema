@@ -9,10 +9,10 @@ type Origem =
   | "ESCOLA"
   | "FINANCEIRO"
   | "MANUAL";
+
 type Tipo = "TEXTO" | "MONETARIO" | "DATA";
 
-type VariavelPayload = {
-  id?: number;
+type VariavelUpdatePayload = {
   codigo?: string;
   descricao?: string;
   origem?: Origem;
@@ -31,6 +31,7 @@ const ORIGENS: Origem[] = [
   "FINANCEIRO",
   "MANUAL",
 ];
+
 const TIPOS: Tipo[] = ["TEXTO", "MONETARIO", "DATA"];
 const FORMATOS_MONETARIO = ["BRL"];
 const FORMATOS_DATA = ["DATA_CURTA"];
@@ -55,77 +56,43 @@ function validateFormato(tipo: Tipo, formato: string | null): string | null {
   return null;
 }
 
-export async function GET() {
-  const supabase = await getSupabaseServerSSR();
+function parseId(raw: string): number | null {
+  const id = Number(raw);
+  if (!Number.isFinite(id)) return null;
+  return id;
+}
 
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const variavelId = parseId(id);
+
+  if (!variavelId) {
+    return NextResponse.json({ error: "ID invalido." }, { status: 400 });
+  }
+
+  const supabase = await getSupabaseServerSSR();
   const { data, error } = await supabase
     .from("documentos_variaveis")
     .select("*")
-    .order("ativo", { ascending: false })
-    .order("codigo", { ascending: true });
+    .eq("id", variavelId)
+    .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 404 });
   }
 
   return NextResponse.json({ data }, { status: 200 });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
-  const body = (await req.json()) as VariavelPayload;
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const variavelId = parseId(id);
 
-  if (!body?.codigo || !body?.descricao || !isOrigem(body.origem) || !isTipo(body.tipo)) {
-    return NextResponse.json(
-      { error: "Campos obrigatorios: codigo, descricao, origem, tipo." },
-      { status: 400 },
-    );
-  }
-
-  const codigo = normalizeCodigo(body.codigo);
-  if (!/^[A-Z0-9_]+$/.test(codigo)) {
-    return NextResponse.json({ error: "Codigo invalido. Use A-Z, 0-9 e _." }, { status: 400 });
-  }
-
-  const pathOrigem = body.origem === "MANUAL" ? null : body.path_origem?.trim() || null;
-  if (body.origem !== "MANUAL" && !pathOrigem) {
-    return NextResponse.json({ error: "Path tecnico obrigatorio para origem nao MANUAL." }, { status: 400 });
-  }
-
-  const formato = validateFormato(body.tipo, body.formato ?? null);
-
-  const insertPayload = {
-    codigo,
-    descricao: body.descricao.trim(),
-    origem: body.origem,
-    tipo: body.tipo,
-    path_origem: pathOrigem,
-    formato,
-    ativo: typeof body.ativo === "boolean" ? body.ativo : true,
-  };
-
-  const { data, error } = await supabase
-    .from("documentos_variaveis")
-    .insert(insertPayload)
-    .select("*")
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ data }, { status: 201 });
-}
-
-export async function PUT(req: Request) {
-  const supabase = await getSupabaseServerSSR();
-  const body = (await req.json()) as VariavelPayload;
-
-  const id = typeof body.id === "number" ? body.id : Number(body.id);
-  if (!Number.isFinite(id)) {
+  if (!variavelId) {
     return NextResponse.json({ error: "ID invalido." }, { status: 400 });
   }
 
+  const body = (await req.json()) as VariavelUpdatePayload;
   const updatePayload: Record<string, unknown> = {};
 
   if (typeof body.codigo === "string" && body.codigo.trim()) {
@@ -153,10 +120,11 @@ export async function PUT(req: Request) {
     updatePayload.formato = validateFormato(tipoAtual as Tipo, body.formato ?? null);
   }
 
+  const supabase = await getSupabaseServerSSR();
   const { data, error } = await supabase
     .from("documentos_variaveis")
     .update(updatePayload)
-    .eq("id", id)
+    .eq("id", variavelId)
     .select("*")
     .single();
 
@@ -167,16 +135,19 @@ export async function PUT(req: Request) {
   return NextResponse.json({ data }, { status: 200 });
 }
 
-export async function DELETE(req: Request) {
-  const supabase = await getSupabaseServerSSR();
-  const body = (await req.json()) as { id?: number };
-  const id = typeof body?.id === "number" ? body.id : Number(body?.id);
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const variavelId = parseId(id);
 
-  if (!Number.isFinite(id)) {
+  if (!variavelId) {
     return NextResponse.json({ error: "ID invalido." }, { status: 400 });
   }
 
-  const { error } = await supabase.from("documentos_variaveis").update({ ativo: false }).eq("id", id);
+  const supabase = await getSupabaseServerSSR();
+  const { error } = await supabase
+    .from("documentos_variaveis")
+    .update({ ativo: false })
+    .eq("id", variavelId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -28,6 +28,7 @@ type BodyNovo = {
   escola_tabela_preco_curso_id?: number | null;
   plano_pagamento_id?: number | null;
   forma_liquidacao_padrao?: string | null;
+  documento_modelo_id?: number | null;
   contrato_modelo_id?: number | null;
   observacoes?: string | null;
 };
@@ -87,7 +88,7 @@ export async function POST(req: Request) {
   const planoPagamentoId = body.plano_pagamento_id ?? null;
 
   const formaLiquidacaoPadrao = body.forma_liquidacao_padrao ?? null;
-  const contratoModeloId = body.contrato_modelo_id ?? null;
+  const documentoModeloId = body.documento_modelo_id ?? body.contrato_modelo_id ?? null;
 
   if (tipoMatricula === "REGULAR" && (anoRef === null || typeof anoRef !== "number")) {
     return badRequest("ano_referencia e obrigatorio para tipo_matricula = REGULAR.");
@@ -252,7 +253,7 @@ export async function POST(req: Request) {
     escola_tabela_preco_curso_id: escolaTabelaPrecoCursoId,
     plano_pagamento_id: planoPagamentoId,
     forma_liquidacao_padrao: formaLiquidacaoPadrao ?? plano?.forma_liquidacao_padrao ?? null,
-    contrato_modelo_id: contratoModeloId,
+    documento_modelo_id: documentoModeloId,
     observacoes: body.observacoes ?? null,
     status: "ATIVA",
     created_by: user.id,
@@ -267,7 +268,7 @@ export async function POST(req: Request) {
     .from("matriculas")
     .insert(insertPayload)
     .select(
-      "id, pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id, ano_referencia, data_matricula, data_inicio_vinculo, escola_tabela_preco_curso_id, plano_pagamento_id, forma_liquidacao_padrao, contrato_modelo_id, status",
+      "id, pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id, ano_referencia, data_matricula, data_inicio_vinculo, escola_tabela_preco_curso_id, plano_pagamento_id, forma_liquidacao_padrao, documento_modelo_id, status",
     )
     .single();
 

@@ -68,6 +68,41 @@ end $$;
 
 do $$
 begin
+  if to_regclass('public.documentos_modelo') is not null then
+    if to_regclass('public.idx_contratos_modelo_tipo_ativo') is not null
+      and to_regclass('public.idx_documentos_modelo_tipo_ativo') is null then
+      alter index public.idx_contratos_modelo_tipo_ativo rename to idx_documentos_modelo_tipo_ativo;
+    end if;
+  end if;
+
+  if to_regclass('public.documentos_emitidos') is not null then
+    if to_regclass('public.idx_contratos_emitidos_matricula') is not null
+      and to_regclass('public.idx_documentos_emitidos_matricula') is null then
+      alter index public.idx_contratos_emitidos_matricula rename to idx_documentos_emitidos_matricula;
+    end if;
+
+    if to_regclass('public.idx_contratos_emitidos_status') is not null
+      and to_regclass('public.idx_documentos_emitidos_status') is null then
+      alter index public.idx_contratos_emitidos_status rename to idx_documentos_emitidos_status;
+    end if;
+
+    if exists (
+      select 1
+      from pg_constraint
+      where conname = 'contratos_emitidos_matricula_fk'
+    ) and not exists (
+      select 1
+      from pg_constraint
+      where conname = 'documentos_emitidos_matricula_fk'
+    ) then
+      alter table public.documentos_emitidos
+        rename constraint contratos_emitidos_matricula_fk to documentos_emitidos_matricula_fk;
+    end if;
+  end if;
+end $$;
+
+do $$
+begin
   if to_regclass('public.matriculas') is not null then
     if exists (
       select 1
@@ -115,6 +150,32 @@ begin
         and column_name = 'documento_pdf_url'
     ) then
       alter table public.matriculas rename column contrato_pdf_url to documento_pdf_url;
+    end if;
+
+    if exists (
+      select 1
+      from pg_constraint
+      where conname = 'matriculas_contrato_modelo_id_fkey'
+    ) and not exists (
+      select 1
+      from pg_constraint
+      where conname = 'matriculas_documento_modelo_id_fkey'
+    ) then
+      alter table public.matriculas
+        rename constraint matriculas_contrato_modelo_id_fkey to matriculas_documento_modelo_id_fkey;
+    end if;
+
+    if exists (
+      select 1
+      from pg_constraint
+      where conname = 'matriculas_contrato_emitido_id_fkey'
+    ) and not exists (
+      select 1
+      from pg_constraint
+      where conname = 'matriculas_documento_emitido_id_fkey'
+    ) then
+      alter table public.matriculas
+        rename constraint matriculas_contrato_emitido_id_fkey to matriculas_documento_emitido_id_fkey;
     end if;
   end if;
 end $$;

@@ -58,8 +58,8 @@ export function DocumentoTemplateEditor(props: Props) {
     const carregarVariaveis = async () => {
       setVarsLoading(true);
       try {
-        const res = await fetch("/api/contratos/variaveis");
-        const json = (await res.json()) as { data?: ContratoVariavel[] };
+        const res = await fetch("/api/documentos/variaveis");
+        const json = (await res.json()) as { data?: DocumentoVariavel[] };
         if (active) {
           setVars((json.data ?? []).filter((v) => v.ativo));
         }
