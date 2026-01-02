@@ -24,6 +24,22 @@ type Grupo = {
   papel?: GrupoPapel | null;
 };
 
+type Modelo = {
+  id: number;
+  titulo: string;
+  formato?: string | null;
+  ativo?: boolean | null;
+  tipo_documento_id?: number | null;
+};
+
+type GrupoModeloLink = {
+  grupo_modelo_id: number;
+  ordem: number;
+  ativo: boolean;
+  modelo_id: number;
+  documentos_modelo?: Modelo | null;
+};
+
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
 
 async function apiGet<T>(url: string): Promise<T> {
@@ -37,6 +53,8 @@ export default function AdminDocumentosConjuntosPage() {
   const [loading, setLoading] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
   const [conjuntos, setConjuntos] = React.useState<Conjunto[]>([]);
+  const [modelosDisponiveis, setModelosDisponiveis] = React.useState<Modelo[]>([]);
+  const [modelosDisponiveisLoading, setModelosDisponiveisLoading] = React.useState(false);
 
   const [cCodigo, setCCodigo] = React.useState("");
   const [cNome, setCNome] = React.useState("");
@@ -48,6 +66,14 @@ export default function AdminDocumentosConjuntosPage() {
   const [gDescricao, setGDescricao] = React.useState("");
   const [gOrdem, setGOrdem] = React.useState<number>(1);
   const [gObrigatorio, setGObrigatorio] = React.useState(false);
+
+  const [modelosByGrupo, setModelosByGrupo] = React.useState<Record<number, GrupoModeloLink[]>>({});
+  const [modelosLoadingByGrupo, setModelosLoadingByGrupo] = React.useState<Record<number, boolean>>({});
+  const [modelosErroByGrupo, setModelosErroByGrupo] = React.useState<Record<number, string | null>>({});
+  const [showModelosByGrupo, setShowModelosByGrupo] = React.useState<Record<number, boolean>>({});
+  const [selectedModeloByGrupo, setSelectedModeloByGrupo] = React.useState<Record<number, number | "">>({});
+  const [ordemByGrupo, setOrdemByGrupo] = React.useState<Record<number, number>>({});
+  const [linkingByGrupo, setLinkingByGrupo] = React.useState<Record<number, boolean>>({});
 
   async function carregarTudo() {
     setErro(null);
@@ -62,8 +88,71 @@ export default function AdminDocumentosConjuntosPage() {
     }
   }
 
+  async function carregarModelosDisponiveis() {
+    setModelosDisponiveisLoading(true);
+    try {
+      const res = await fetch("/api/documentos/modelos", { cache: "no-store" });
+      const json = (await res.json()) as { data?: Modelo[]; error?: string };
+      if (!res.ok) throw new Error(json.error || "Falha ao carregar modelos.");
+      setModelosDisponiveis(json.data ?? []);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro inesperado.");
+    } finally {
+      setModelosDisponiveisLoading(false);
+    }
+  }
+
+  async function carregarModelosGrupo(grupoId: number) {
+    setModelosErroByGrupo((prev) => ({ ...prev, [grupoId]: null }));
+    setModelosLoadingByGrupo((prev) => ({ ...prev, [grupoId]: true }));
+    try {
+      const data = await apiGet<GrupoModeloLink[]>(
+        `/api/documentos/conjuntos/grupos/${grupoId}/modelos`,
+      );
+      setModelosByGrupo((prev) => ({ ...prev, [grupoId]: data ?? [] }));
+    } catch (e) {
+      setModelosErroByGrupo((prev) => ({
+        ...prev,
+        [grupoId]: e instanceof Error ? e.message : "Erro ao carregar modelos.",
+      }));
+    } finally {
+      setModelosLoadingByGrupo((prev) => ({ ...prev, [grupoId]: false }));
+    }
+  }
+
+  async function vincularModelo(grupoId: number) {
+    const modeloId = selectedModeloByGrupo[grupoId];
+    const ordem = ordemByGrupo[grupoId] ?? 1;
+
+    if (!modeloId) {
+      setModelosErroByGrupo((prev) => ({ ...prev, [grupoId]: "Selecione um modelo." }));
+      return;
+    }
+
+    setLinkingByGrupo((prev) => ({ ...prev, [grupoId]: true }));
+    setModelosErroByGrupo((prev) => ({ ...prev, [grupoId]: null }));
+    try {
+      const res = await fetch(`/api/documentos/conjuntos/grupos/${grupoId}/modelos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelo_id: modeloId, ordem }),
+      });
+      const json = (await res.json()) as ApiResp<unknown>;
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao vincular modelo.");
+      await carregarModelosGrupo(grupoId);
+    } catch (e) {
+      setModelosErroByGrupo((prev) => ({
+        ...prev,
+        [grupoId]: e instanceof Error ? e.message : "Erro ao vincular modelo.",
+      }));
+    } finally {
+      setLinkingByGrupo((prev) => ({ ...prev, [grupoId]: false }));
+    }
+  }
+
   React.useEffect(() => {
     void carregarTudo();
+    void carregarModelosDisponiveis();
   }, []);
 
   async function criarConjunto() {
@@ -343,6 +432,107 @@ export default function AdminDocumentosConjuntosPage() {
                               </p>
                               {g.descricao ? <p className="mt-1 text-xs text-slate-500">{g.descricao}</p> : null}
                             </div>
+                          </div>
+
+                          <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold">Modelos do grupo</p>
+                              <button
+                                className="rounded-md border bg-white px-2 py-1 text-xs hover:bg-slate-50"
+                                type="button"
+                                onClick={() => {
+                                  setShowModelosByGrupo((prev) => {
+                                    const next = !prev[g.id];
+                                    return { ...prev, [g.id]: next };
+                                  });
+                                  if (!showModelosByGrupo[g.id]) {
+                                    void carregarModelosGrupo(g.id);
+                                  }
+                                }}
+                              >
+                                {showModelosByGrupo[g.id] ? "Ocultar modelos" : "Ver modelos"}
+                              </button>
+                            </div>
+
+                            {showModelosByGrupo[g.id] ? (
+                              <div className="mt-2 space-y-2">
+                                {modelosErroByGrupo[g.id] ? (
+                                  <p className="text-xs text-red-600">{modelosErroByGrupo[g.id]}</p>
+                                ) : null}
+                                {modelosLoadingByGrupo[g.id] ? (
+                                  <p className="text-xs text-slate-500">Carregando modelos...</p>
+                                ) : null}
+
+                                {!modelosLoadingByGrupo[g.id] &&
+                                (!modelosByGrupo[g.id] || modelosByGrupo[g.id].length === 0) ? (
+                                  <p className="text-xs text-slate-500">Nenhum modelo vinculado.</p>
+                                ) : (
+                                  <div className="grid gap-2">
+                                    {(modelosByGrupo[g.id] || []).map((m) => (
+                                      <div
+                                        key={m.grupo_modelo_id}
+                                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                                      >
+                                        {m.documentos_modelo?.titulo || `Modelo #${m.modelo_id}`}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                <div className="mt-2 grid gap-2 md:grid-cols-6">
+                                  <div className="md:col-span-4">
+                                    <label className="text-xs font-medium">Vincular modelo</label>
+                                    <select
+                                      className="mt-1 w-full rounded-md border p-2 text-xs"
+                                      value={selectedModeloByGrupo[g.id] ?? ""}
+                                      onChange={(e) =>
+                                        setSelectedModeloByGrupo((prev) => ({
+                                          ...prev,
+                                          [g.id]: e.target.value ? Number(e.target.value) : "",
+                                        }))
+                                      }
+                                      disabled={modelosDisponiveisLoading}
+                                    >
+                                      <option value="">
+                                        {modelosDisponiveisLoading ? "Carregando..." : "Selecione..."}
+                                      </option>
+                                      {modelosDisponiveis.map((m) => (
+                                        <option key={m.id} value={m.id}>
+                                          {m.titulo} (#{m.id})
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <div className="md:col-span-1">
+                                    <label className="text-xs font-medium">Ordem</label>
+                                    <input
+                                      className="mt-1 w-full rounded-md border p-2 text-xs"
+                                      type="number"
+                                      min={1}
+                                      value={ordemByGrupo[g.id] ?? 1}
+                                      onChange={(e) =>
+                                        setOrdemByGrupo((prev) => ({
+                                          ...prev,
+                                          [g.id]: Number(e.target.value) || 1,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+
+                                  <div className="md:col-span-1 flex items-end">
+                                    <button
+                                      className="w-full rounded-md bg-slate-800 px-2 py-2 text-xs font-medium text-white disabled:opacity-60"
+                                      type="button"
+                                      onClick={() => vincularModelo(g.id)}
+                                      disabled={linkingByGrupo[g.id]}
+                                    >
+                                      {linkingByGrupo[g.id] ? "Vinculando..." : "Vincular"}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       ))}
