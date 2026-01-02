@@ -9,6 +9,7 @@ import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ContratoTemplateEditor } from "@/components/contratos/ContratoTemplateEditor";
 import { safeParseSchema, type PlaceholderSchemaItem } from "@/lib/contratos/placeholders";
 
 type ContratoModelo = {
@@ -22,7 +23,14 @@ type ContratoModelo = {
   observacoes: string | null;
 };
 
-type Origem = "PESSOA" | "RESPONSAVEL" | "MATRICULA" | "FINANCEIRO" | "MANUAL";
+type Origem =
+  | "ALUNO"
+  | "RESPONSAVEL_FINANCEIRO"
+  | "MATRICULA"
+  | "TURMA"
+  | "ESCOLA"
+  | "FINANCEIRO"
+  | "MANUAL";
 type Tipo = "TEXTO" | "MONETARIO" | "DATA";
 
 type ContratoVariavel = {
@@ -59,8 +67,17 @@ function buildSchemaItem(variavel: ContratoVariavel): PlaceholderSchemaItem {
   }
 
   const base =
-    variavel.origem === "PESSOA" ? "aluno" : variavel.origem === "RESPONSAVEL" ? "responsavel" : "matricula";
-  const path = variavel.path_origem?.trim() ? `${base}.${variavel.path_origem.trim()}` : base;
+    variavel.origem === "ALUNO"
+      ? "aluno"
+      : variavel.origem === "RESPONSAVEL_FINANCEIRO"
+        ? "responsavel"
+        : variavel.origem === "TURMA"
+          ? "turma"
+          : variavel.origem === "ESCOLA"
+            ? "escola"
+            : "matricula";
+  const rawPath = variavel.path_origem?.trim();
+  const path = rawPath ? (rawPath.includes(".") ? rawPath : `${base}.${rawPath}`) : base;
 
   return {
     key,
@@ -219,8 +236,8 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
       return;
     }
 
-    const suffix = novos.join("\n");
-    const novoTexto = texto.trim() ? `${texto.trim()}\n\n${suffix}` : suffix;
+    const suffix = novos.map((item) => `<p>${item}</p>`).join("");
+    const novoTexto = texto.trim() ? `${texto}${suffix}` : suffix;
     setTexto(novoTexto);
   };
 
@@ -256,7 +273,7 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
         items={[
           "Edite dados gerais e texto do modelo.",
           "Selecione variaveis para gerar placeholders automaticamente.",
-          "Use o botao para inserir placeholders no texto.",
+          "Use o editor para inserir variaveis no cursor.",
         ]}
       />
 
@@ -350,8 +367,8 @@ export default function ModeloContratoEditarClient(props: { id: string }) {
         ) : null}
       </SystemSectionCard>
 
-      <SystemSectionCard title="Texto do modelo (Markdown)">
-        <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={12} />
+      <SystemSectionCard title="Texto do modelo (editor)">
+        <ContratoTemplateEditor initialHtml={texto} onChangeHtml={setTexto} />
       </SystemSectionCard>
 
       <SystemSectionCard

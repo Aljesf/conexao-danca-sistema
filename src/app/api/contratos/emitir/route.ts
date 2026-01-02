@@ -26,6 +26,14 @@ function renderTemplate(template: string, vars: Record<string, unknown>): string
   });
 }
 
+function readSnapshotValue(snapshot: Record<string, unknown>, fromKey: string): unknown {
+  if (!fromKey) return undefined;
+  if (fromKey.includes(".")) {
+    return getByPath({ snapshot_financeiro: snapshot }, fromKey);
+  }
+  return snapshot[fromKey];
+}
+
 function buildCalcValue(item: PlaceholderSchemaItem, snapshot: Record<string, unknown>): string | undefined {
   if (!item.calc) return undefined;
 
@@ -35,7 +43,7 @@ function buildCalcValue(item: PlaceholderSchemaItem, snapshot: Record<string, un
 
   if (item.calc.type === "SNAPSHOT") {
     const fromKey = (item.calc.fromKey ?? "").trim();
-    const raw = fromKey ? snapshot[fromKey] : undefined;
+    const raw = fromKey ? readSnapshotValue(snapshot, fromKey) : undefined;
     if (typeof raw === "string") return raw;
     if (typeof raw === "number") return String(raw);
     return item.defaultValue;
@@ -43,7 +51,7 @@ function buildCalcValue(item: PlaceholderSchemaItem, snapshot: Record<string, un
 
   if (item.calc.type === "FORMAT_MOEDA") {
     const fromKey = (item.calc.fromKey ?? "").trim();
-    const raw = fromKey ? snapshot[fromKey] : undefined;
+    const raw = fromKey ? readSnapshotValue(snapshot, fromKey) : undefined;
     if (typeof raw === "number") return formatCentavosBRL(raw);
     return item.defaultValue;
   }
@@ -146,10 +154,27 @@ export async function POST(req: Request) {
     .eq("id", respFinId)
     .single();
 
+  const vinculoIdRaw = (matricula as Record<string, unknown>).vinculo_id;
+  const vinculoId = typeof vinculoIdRaw === "number" ? vinculoIdRaw : Number(vinculoIdRaw);
+  let turma: Record<string, unknown> | null = null;
+
+  if (Number.isFinite(vinculoId)) {
+    const { data: turmaData, error: turmaErr } = await supabase
+      .from("turmas")
+      .select("*")
+      .eq("turma_id", vinculoId)
+      .maybeSingle();
+
+    if (!turmaErr && turmaData) {
+      turma = turmaData as Record<string, unknown>;
+    }
+  }
+
   const ctxDb: Record<string, unknown> = {
     matricula,
     aluno,
     responsavel,
+    turma,
   };
 
   const snapshot = (body.snapshot_financeiro ?? {}) as Record<string, unknown>;

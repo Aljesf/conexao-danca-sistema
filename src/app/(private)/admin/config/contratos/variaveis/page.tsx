@@ -9,7 +9,14 @@ import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type Origem = "PESSOA" | "RESPONSAVEL" | "MATRICULA" | "FINANCEIRO" | "MANUAL";
+type Origem =
+  | "ALUNO"
+  | "RESPONSAVEL_FINANCEIRO"
+  | "MATRICULA"
+  | "TURMA"
+  | "ESCOLA"
+  | "FINANCEIRO"
+  | "MANUAL";
 type Tipo = "TEXTO" | "MONETARIO" | "DATA";
 
 type Variavel = {
@@ -23,7 +30,35 @@ type Variavel = {
   ativo: boolean;
 };
 
-const ORIGENS: Origem[] = ["PESSOA", "RESPONSAVEL", "MATRICULA", "FINANCEIRO", "MANUAL"];
+const ORIGEM_LABELS: Record<Origem, string> = {
+  ALUNO: "Aluno (dados da pessoa)",
+  RESPONSAVEL_FINANCEIRO: "Responsavel financeiro",
+  MATRICULA: "Matricula",
+  TURMA: "Turma / Curso",
+  ESCOLA: "Escola / Instituicao",
+  FINANCEIRO: "Snapshot financeiro",
+  MANUAL: "Digitado manualmente",
+};
+
+const ORIGEM_HINTS: Record<Origem, string> = {
+  ALUNO: "ex: aluno.nome | aluno.cpf",
+  RESPONSAVEL_FINANCEIRO: "ex: responsavel.nome | responsavel.cpf",
+  MATRICULA: "ex: matricula.ano_referencia | matricula.data_matricula",
+  TURMA: "ex: turma.nome | turma.curso | turma.ano_referencia",
+  ESCOLA: "ex: escola.nome | escola.cnpj",
+  FINANCEIRO: "ex: snapshot_financeiro.valor_total_contratado_centavos",
+  MANUAL: "Nao precisa de path; sera preenchido na emissao.",
+};
+
+const ORIGENS: Origem[] = [
+  "ALUNO",
+  "RESPONSAVEL_FINANCEIRO",
+  "MATRICULA",
+  "TURMA",
+  "ESCOLA",
+  "FINANCEIRO",
+  "MANUAL",
+];
 const TIPOS: Tipo[] = ["TEXTO", "MONETARIO", "DATA"];
 
 export default function AdminContratosVariaveisPage() {
@@ -36,13 +71,14 @@ export default function AdminContratosVariaveisPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [codigo, setCodigo] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [origem, setOrigem] = useState<Origem>("PESSOA");
+  const [origem, setOrigem] = useState<Origem>("ALUNO");
   const [tipo, setTipo] = useState<Tipo>("TEXTO");
   const [pathOrigem, setPathOrigem] = useState("");
   const [formato, setFormato] = useState("");
   const [ativo, setAtivo] = useState(true);
 
   const precisaPath = origem !== "MANUAL";
+  const origemHint = ORIGEM_HINTS[origem];
 
   const opcoesFormato = useMemo(() => {
     if (tipo === "MONETARIO") return ["BRL"];
@@ -69,7 +105,7 @@ export default function AdminContratosVariaveisPage() {
     setEditingId(null);
     setCodigo("");
     setDescricao("");
-    setOrigem("PESSOA");
+    setOrigem("ALUNO");
     setTipo("TEXTO");
     setPathOrigem("");
     setFormato("");
@@ -214,7 +250,7 @@ export default function AdminContratosVariaveisPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Origem</label>
+            <label className="text-sm font-medium">De onde vem o valor?</label>
             <select
               className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
               value={origem}
@@ -222,7 +258,7 @@ export default function AdminContratosVariaveisPage() {
             >
               {ORIGENS.map((o) => (
                 <option key={o} value={o}>
-                  {o}
+                  {ORIGEM_LABELS[o]}
                 </option>
               ))}
             </select>
@@ -262,14 +298,17 @@ export default function AdminContratosVariaveisPage() {
 
           {precisaPath ? (
             <div className="md:col-span-3">
-              <label className="text-sm font-medium">Path tecnico</label>
+              <label className="text-sm font-medium">Campo (path) dentro do contexto</label>
               <div className="mt-1">
-                <Input
-                  value={pathOrigem}
-                  onChange={(e) => setPathOrigem(e.target.value)}
-                  placeholder="ex: nome | ano_referencia | valor_total_contratado_centavos"
-                />
+                <Input value={pathOrigem} onChange={(e) => setPathOrigem(e.target.value)} placeholder="ex: aluno.nome" />
               </div>
+              <p className="mt-1 text-xs text-slate-500">{origemHint}</p>
+            </div>
+          ) : null}
+
+          {!precisaPath ? (
+            <div className="md:col-span-3">
+              <p className="text-xs text-slate-500">{origemHint}</p>
             </div>
           ) : null}
 
@@ -295,7 +334,8 @@ export default function AdminContratosVariaveisPage() {
                       {item.codigo} <span className="text-xs text-slate-600">({item.tipo})</span>
                     </div>
                     <div className="mt-1 text-xs text-slate-600">
-                      {item.descricao} | Origem: {item.origem} | Ativo: {item.ativo ? "Sim" : "Nao"}
+                      {item.descricao} | Origem: {ORIGEM_LABELS[item.origem] ?? item.origem} | Ativo:{" "}
+                      {item.ativo ? "Sim" : "Nao"}
                     </div>
                     {item.path_origem ? (
                       <div className="mt-1 text-xs text-slate-500">Path: {item.path_origem}</div>

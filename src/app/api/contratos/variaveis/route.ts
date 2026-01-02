@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 
-type Origem = "PESSOA" | "RESPONSAVEL" | "MATRICULA" | "FINANCEIRO" | "MANUAL";
+type Origem =
+  | "ALUNO"
+  | "RESPONSAVEL_FINANCEIRO"
+  | "MATRICULA"
+  | "TURMA"
+  | "ESCOLA"
+  | "FINANCEIRO"
+  | "MANUAL";
 type Tipo = "TEXTO" | "MONETARIO" | "DATA";
 
 type VariavelPayload = {
@@ -15,7 +22,15 @@ type VariavelPayload = {
   ativo?: boolean;
 };
 
-const ORIGENS: Origem[] = ["PESSOA", "RESPONSAVEL", "MATRICULA", "FINANCEIRO", "MANUAL"];
+const ORIGENS: Origem[] = [
+  "ALUNO",
+  "RESPONSAVEL_FINANCEIRO",
+  "MATRICULA",
+  "TURMA",
+  "ESCOLA",
+  "FINANCEIRO",
+  "MANUAL",
+];
 const TIPOS: Tipo[] = ["TEXTO", "MONETARIO", "DATA"];
 const FORMATOS_MONETARIO = ["BRL"];
 const FORMATOS_DATA = ["DATA_CURTA"];
