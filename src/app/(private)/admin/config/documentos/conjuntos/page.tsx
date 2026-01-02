@@ -34,10 +34,10 @@ function normCodigo(s: string): string {
 export default function DocumentosConjuntosUnificadoPage() {
   const helpItems = useMemo(
     () => [
-      "Esta tela gerencia a estrutura: Conjuntos → Grupos → (vínculo com Modelos).",
-      "Conjunto = bloco institucional (ex.: Matrícula Regular, Bolsa Movimento).",
-      "Grupo = seção interna (Documento principal, Termos obrigatórios, etc.).",
-      "Para vincular modelos, use o botão 'Vincular modelos' em cada grupo.",
+      "Esta tela gerencia a estrutura: Conjuntos -> Grupos -> (vinculo com Modelos).",
+      "Conjunto = bloco institucional (ex.: Matricula Regular, Bolsa Movimento).",
+      "Grupo = secao interna (Documento principal, Termos obrigatorios, etc.).",
+      "Para vincular modelos, use o botao 'Vincular modelos' em cada grupo.",
     ],
     []
   );
@@ -111,7 +111,7 @@ export default function DocumentosConjuntosUnificadoPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          codigo: cCodigo,
+          codigo: normCodigo(cCodigo),
           nome: cNome,
           descricao: cDesc.trim() ? cDesc.trim() : null,
           ativo: true,
@@ -144,7 +144,7 @@ export default function DocumentosConjuntosUnificadoPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          codigo: d.codigo,
+          codigo: normCodigo(d.codigo),
           nome: d.nome,
           descricao: d.descricao.trim() ? d.descricao.trim() : null,
           obrigatorio: d.obrigatorio,
@@ -177,7 +177,7 @@ export default function DocumentosConjuntosUnificadoPage() {
   return (
     <SystemPage>
       <SystemContextCard
-        title="Documentos — Conjuntos e Grupos"
+        title="Documentos - Conjuntos e Grupos"
         subtitle="Gerencie a estrutura institucional: Conjuntos (blocos) e seus Grupos internos."
       >
         <div className="mt-2 flex gap-4">
@@ -196,24 +196,24 @@ export default function DocumentosConjuntosUnificadoPage() {
       ) : null}
 
       {okMsg ? (
-        <SystemSectionCard title="Sucesso" description="Operação concluída.">
+        <SystemSectionCard title="Sucesso" description="Operacao concluida.">
           <div className="text-sm text-green-700">{okMsg}</div>
         </SystemSectionCard>
       ) : null}
 
-      <SystemSectionCard title="Criar conjunto" description="Crie um conjunto institucional (ex.: Matrícula Regular).">
+      <SystemSectionCard title="Criar conjunto" description="Crie um conjunto institucional (ex.: Matricula Regular).">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="text-sm font-medium">Código</label>
+            <label className="text-sm font-medium">Codigo</label>
             <Input value={cCodigo} onChange={(e) => setCCodigo(e.target.value)} placeholder="Ex.: MATRICULA_REGULAR" />
-            <p className="text-xs text-slate-500 mt-1">Caixa alta. Espaços viram underscore automaticamente.</p>
+            <p className="text-xs text-slate-500 mt-1">Caixa alta. Espacos viram underscore automaticamente.</p>
           </div>
           <div>
             <label className="text-sm font-medium">Nome</label>
-            <Input value={cNome} onChange={(e) => setCNome(e.target.value)} placeholder="Ex.: Matrícula Regular" />
+            <Input value={cNome} onChange={(e) => setCNome(e.target.value)} placeholder="Ex.: Matricula Regular" />
           </div>
           <div className="md:col-span-2">
-            <label className="text-sm font-medium">Descrição</label>
+            <label className="text-sm font-medium">Descricao</label>
             <Input value={cDesc} onChange={(e) => setCDesc(e.target.value)} placeholder="Opcional (uso interno)." />
           </div>
         </div>
@@ -227,7 +227,7 @@ export default function DocumentosConjuntosUnificadoPage() {
 
       <SystemSectionCard
         title="Conjuntos cadastrados"
-        description="Cada card é um Conjunto. Dentro dele, você cria e organiza os Grupos."
+        description="Cada card e um Conjunto. Dentro dele, voce cria e organiza os Grupos."
       >
         {loading ? (
           <div className="text-sm text-slate-600">Carregando...</div>
@@ -246,7 +246,7 @@ export default function DocumentosConjuntosUnificadoPage() {
                     <div>
                       <div className="text-base font-semibold">{c.nome}</div>
                       <div className="text-xs text-slate-600 mt-1">
-                        Código: {c.codigo} • Ativo: {c.ativo ? "Sim" : "Não"} • ID: {c.id}
+                        Codigo: {c.codigo} • Ativo: {c.ativo ? "Sim" : "Nao"} • ID: {c.id}
                       </div>
                       {c.descricao ? <div className="text-sm text-slate-600 mt-2">{c.descricao}</div> : null}
                     </div>
@@ -271,7 +271,7 @@ export default function DocumentosConjuntosUnificadoPage() {
                                 {g.ordem}. {g.nome}
                               </div>
                               <div className="text-xs text-slate-600 mt-1">
-                                Código: {g.codigo} • Obrigatório: {g.obrigatorio ? "Sim" : "Não"} • ID: {g.id}
+                                Codigo: {g.codigo} • Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"} • ID: {g.id}
                               </div>
                               {g.descricao ? <div className="text-sm text-slate-600 mt-2">{g.descricao}</div> : null}
                             </div>
@@ -290,7 +290,7 @@ export default function DocumentosConjuntosUnificadoPage() {
                       <div className="text-sm font-semibold mb-2">Adicionar grupo</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
-                          <label className="text-sm font-medium">Código</label>
+                          <label className="text-sm font-medium">Codigo</label>
                           <Input
                             value={d.codigo}
                             onChange={(e) =>
@@ -317,7 +317,7 @@ export default function DocumentosConjuntosUnificadoPage() {
                         </div>
 
                         <div className="md:col-span-2">
-                          <label className="text-sm font-medium">Descrição</label>
+                          <label className="text-sm font-medium">Descricao</label>
                           <Input
                             value={d.descricao}
                             onChange={(e) =>
@@ -341,7 +341,7 @@ export default function DocumentosConjuntosUnificadoPage() {
                               }))
                             }
                           />
-                          <span className="text-sm">Obrigatório</span>
+                          <span className="text-sm">Obrigatorio</span>
                         </div>
 
                         <div>
