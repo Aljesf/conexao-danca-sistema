@@ -4,7 +4,7 @@ import React from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
-
+import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
@@ -30,6 +30,11 @@ import {
 } from "lucide-react";
 
 export type VariavelDoc = { code: string; label: string };
+
+export type EditorRicoHandle = {
+  insertPlaceholder: (code: string) => void;
+  insertText: (text: string) => void;
+};
 
 type Props = {
   valueHtml: string;
@@ -79,11 +84,15 @@ const FONTES = [
 
 const TAMANHOS = ["10px", "12px", "14px", "16px", "18px", "20px", "24px", "28px", "32px"];
 
-export function EditorRico({ valueHtml, onChangeHtml, variaveis }: Props) {
+export const EditorRico = React.forwardRef<EditorRicoHandle, Props>(function EditorRico(
+  { valueHtml, onChangeHtml, variaveis }: Props,
+  ref,
+) {
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       StarterKit,
+      Underline,
       TextStyle,
       Color,
       Highlight,
@@ -113,6 +122,21 @@ export function EditorRico({ valueHtml, onChangeHtml, variaveis }: Props) {
       editor.commands.setContent(valueHtml, false);
     }
   }, [valueHtml, editor]);
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      insertPlaceholder(code: string) {
+        if (!editor) return;
+        editor.chain().focus().insertContent(`{{${code}}}`).run();
+      },
+      insertText(text: string) {
+        if (!editor) return;
+        editor.chain().focus().insertContent(text).run();
+      },
+    }),
+    [editor],
+  );
 
   if (!editor) return null;
 
@@ -256,4 +280,4 @@ export function EditorRico({ valueHtml, onChangeHtml, variaveis }: Props) {
       </p>
     </div>
   );
-}
+});

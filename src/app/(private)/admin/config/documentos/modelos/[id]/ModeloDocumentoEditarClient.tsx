@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { SystemContextCard } from "@/components/system/SystemContextCard";
 import { SystemHelpCard } from "@/components/system/SystemHelpCard";
@@ -9,7 +9,7 @@ import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { DocumentoTemplateEditor } from "@/components/documentos/DocumentoTemplateEditor";
+import { EditorRico, type EditorRicoHandle, type VariavelDoc } from "@/components/documentos/EditorRico";
 import { safeParseSchema, type PlaceholderSchemaItem } from "@/lib/documentos/placeholders";
 import type { DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
@@ -112,9 +112,10 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const [tipo, setTipo] = useState("REGULAR");
   const [ativo, setAtivo] = useState(true);
   const [formato, setFormato] = useState<DocumentoModeloFormato>("MARKDOWN");
-  const [conteudo, setConteudo] = useState("");
+  const [conteudoHtml, setConteudoHtml] = useState("");
+  const [textoMarkdown, setTextoMarkdown] = useState("");
 
-  const tipos = useMemo(() => ["REGULAR", "CURSO_LIVRE", "PROJETO_ARTISTICO"], []);
+  const editorRef = useRef<EditorRicoHandle | null>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -134,11 +135,10 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setAtivo(Boolean(m.ativo));
       const formatoInicial: DocumentoModeloFormato = m.formato === "RICH_HTML" ? "RICH_HTML" : "MARKDOWN";
       setFormato(formatoInicial);
-      const conteudoInicial =
-        formatoInicial === "RICH_HTML"
-          ? (m.conteudo_html ?? m.texto_modelo_md ?? "")
-          : (m.texto_modelo_md ?? "");
-      setConteudo(conteudoInicial);
+      const conteudoHtmlInicial = m.conteudo_html ?? m.texto_modelo_md ?? "";
+      const textoMarkdownInicial = m.texto_modelo_md ?? m.conteudo_html ?? "";
+      setConteudoHtml(conteudoHtmlInicial);
+      setTextoMarkdown(textoMarkdownInicial);
       setSchemaAtual(safeParseSchema(m.placeholders_schema_json));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar.");
@@ -179,6 +179,14 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   }, [schemaAtual, schemaInit, variaveis, variaveisLoading]);
 
   const variaveisAtivas = useMemo(() => variaveis.filter((v) => v.ativo), [variaveis]);
+  const variaveisEditor = useMemo<VariavelDoc[]>(
+    () =>
+      variaveisAtivas.map((v) => ({
+        code: v.codigo,
+        label: v.descricao || v.codigo,
+      })),
+    [variaveisAtivas],
+  );
   const variaveisMap = useMemo(() => new Map(variaveis.map((v) => [v.codigo, v])), [variaveis]);
   const selecionadasSet = useMemo(() => new Set(variaveisSelecionadas), [variaveisSelecionadas]);
   const selecionadasInativas = useMemo(() => {
@@ -198,8 +206,8 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const schemaPreview = useMemo(() => JSON.stringify(schemaFinal, null, 2), [schemaFinal]);
   const conteudoOk =
     formato === "RICH_HTML"
-      ? conteudo.replace(/<[^>]+>/g, "").trim().length > 0
-      : conteudo.trim().length > 0;
+      ? conteudoHtml.replace(/<[^>]+>/g, "").trim().length > 0
+      : textoMarkdown.trim().length > 0;
 
   async function salvar() {
     setSaving(true);
@@ -215,7 +223,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           tipo_contrato: tipo,
           ativo,
           formato,
-          ...(formato === "RICH_HTML" ? { conteudo_html: conteudo } : { texto_modelo_md: conteudo }),
+          ...(formato === "RICH_HTML" ? { conteudo_html: conteudoHtml } : { texto_modelo_md: textoMarkdown }),
           placeholders_schema_json: schemaFinal,
         }),
       });
@@ -239,28 +247,26 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   };
 
   const inserirNoTexto = () => {
+    setErro(null);
+    setOkMsg(null);
     if (variaveisSelecionadas.length === 0) {
       setErro("Selecione ao menos uma variavel para inserir.");
       return;
     }
 
     const placeholders = variaveisSelecionadas.map((codigo) => `{{${codigo}}}`);
-    const novos = placeholders.filter((p) => !conteudo.includes(p));
-    if (novos.length === 0) {
-      setOkMsg("Todos os placeholders ja estao no texto.");
+    if (formato === "RICH_HTML") {
+      const textoInserir = placeholders.join(" ");
+      if (editorRef.current) {
+        editorRef.current.insertText(textoInserir);
+        return;
+      }
+      setConteudoHtml((prev) => (prev ? `${prev} ${textoInserir}` : textoInserir));
       return;
     }
 
-    const suffix =
-      formato === "RICH_HTML"
-        ? novos.map((item) => `<p>${item}</p>`).join("")
-        : novos.join("\n");
-    const novoConteudo = conteudo.trim()
-      ? formato === "RICH_HTML"
-        ? `${conteudo}${suffix}`
-        : `${conteudo}\n${suffix}`
-      : suffix;
-    setConteudo(novoConteudo);
+    const textoInserir = placeholders.join("\n");
+    setTextoMarkdown((prev) => (prev.trim() ? `${prev}\n${textoInserir}` : textoInserir));
   };
 
   if (!Number.isFinite(idNum)) {
@@ -315,22 +321,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Tipo</label>
-            <div className="mt-1">
-              <select
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value)}
-              >
-                {tipos.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <label className="mt-3 text-sm font-medium">Formato</label>
+            <label className="text-sm font-medium">Formato</label>
             <div className="mt-1">
               <select
                 className="w-full rounded-lg border px-3 py-2 text-sm"
@@ -406,11 +397,16 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
 
       <SystemSectionCard title="Texto do modelo">
         {formato === "RICH_HTML" ? (
-          <DocumentoTemplateEditor initialHtml={conteudo} onChangeHtml={setConteudo} />
+          <EditorRico
+            ref={editorRef}
+            valueHtml={conteudoHtml}
+            onChangeHtml={setConteudoHtml}
+            variaveis={variaveisEditor}
+          />
         ) : (
           <Textarea
-            value={conteudo}
-            onChange={(e) => setConteudo(e.target.value)}
+            value={textoMarkdown}
+            onChange={(e) => setTextoMarkdown(e.target.value)}
             rows={12}
             placeholder="Cole aqui o texto do modelo com placeholders, ex.: {{ALUNO_NOME}}"
           />

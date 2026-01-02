@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SystemContextCard } from "@/components/system/SystemContextCard";
 import { SystemHelpCard } from "@/components/system/SystemHelpCard";
@@ -38,7 +38,6 @@ export default function AdminDocumentosModelosPage() {
   const [itens, setItens] = useState<DocumentoModeloDTO[]>([]);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [novoTipo, setNovoTipo] = useState("REGULAR");
   const [novoTitulo, setNovoTitulo] = useState("");
   const [novoFormato, setNovoFormato] = useState<DocumentoModeloFormato>("RICH_HTML");
   const [novoTextoMarkdown, setNovoTextoMarkdown] = useState("");
@@ -50,7 +49,6 @@ export default function AdminDocumentosModelosPage() {
   const [variaveisLoading, setVariaveisLoading] = useState(false);
   const [variaveisErro, setVariaveisErro] = useState<string | null>(null);
 
-  const tipos = useMemo(() => ["REGULAR", "CURSO_LIVRE", "PROJETO_ARTISTICO"], []);
   const conteudoOk =
     novoFormato === "RICH_HTML"
       ? novoHtml.replace(/<[^>]+>/g, "").trim().length > 0
@@ -114,7 +112,7 @@ export default function AdminDocumentosModelosPage() {
       }
 
       const payloadBase = {
-        tipo_contrato: novoTipo,
+        tipo_contrato: "REGULAR",
         titulo: novoTitulo.trim(),
         formato: novoFormato,
         tipo_documento_id: Number(tipoDocumentoId),
@@ -196,21 +194,6 @@ export default function AdminDocumentosModelosPage() {
         ) : null}
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <label className="text-sm font-medium">Tipo</label>
-            <select
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              value={novoTipo}
-              onChange={(e) => setNovoTipo(e.target.value)}
-            >
-              {tipos.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div>
             <label className="text-sm font-medium">Formato</label>
             <select
