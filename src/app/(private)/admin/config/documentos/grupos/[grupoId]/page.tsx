@@ -20,7 +20,6 @@ type Grupo = {
 
 type Modelo = {
   id: number;
-  tipo_contrato?: string;
   tipo_documento?: string | null;
   titulo: string;
   versao: string;
@@ -169,7 +168,7 @@ export default function DocumentosGrupoModelosPage(props: { params: { grupoId: s
         ) : (
           <div className="grid gap-2">
             {modelos.map((m) => {
-              const labelTipo = m.tipo_documento ?? m.tipo_contrato ?? "—";
+              const labelTipo = m.tipo_documento ?? "-";
               const checked = selecionados.has(m.id);
               return (
                 <label key={m.id} className="flex items-start gap-3 border border-slate-200 rounded-xl p-3 bg-white">

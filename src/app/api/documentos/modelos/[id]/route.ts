@@ -3,7 +3,6 @@ import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 import type { DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
 type DocumentoModeloUpdatePayload = {
-  tipo_contrato?: string;
   titulo?: string;
   versao?: string;
   ativo?: boolean;
@@ -86,7 +85,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   }
 
   const updatePayload: Record<string, unknown> = {};
-  if (typeof body.tipo_contrato === "string") updatePayload.tipo_contrato = body.tipo_contrato;
   if (typeof body.titulo === "string") updatePayload.titulo = body.titulo;
   if (typeof body.versao === "string") updatePayload.versao = body.versao;
   if (typeof body.ativo === "boolean") updatePayload.ativo = body.ativo;

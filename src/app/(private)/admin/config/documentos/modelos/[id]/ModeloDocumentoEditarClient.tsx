@@ -15,7 +15,6 @@ import type { DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
 type DocumentoModelo = {
   id: number;
-  tipo_contrato: string;
   titulo: string;
   versao: string;
   ativo: boolean;
@@ -67,7 +66,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const [variaveisErro, setVariaveisErro] = useState<string | null>(null);
 
   const [titulo, setTitulo] = useState("");
-  const [tipo, setTipo] = useState("REGULAR");
   const [ativo, setAtivo] = useState(true);
   const [formato, setFormato] = useState<DocumentoModeloFormato>("MARKDOWN");
   const [conteudoHtml, setConteudoHtml] = useState("");
@@ -96,7 +94,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setModelo(m);
 
       setTitulo(m.titulo ?? "");
-      setTipo(m.tipo_contrato ?? "REGULAR");
       setAtivo(Boolean(m.ativo));
       setTipoDocumentoId(m.tipo_documento_id ?? "");
       setConjuntoGrupoId(m.conjunto_grupo_id ?? "");
@@ -225,7 +222,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           titulo: titulo.trim(),
-          tipo_contrato: tipo,
           ativo,
           formato,
           tipo_documento_id: tipoDocumentoId,

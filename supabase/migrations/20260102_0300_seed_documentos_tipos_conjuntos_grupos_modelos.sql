@@ -141,10 +141,9 @@ set descricao = excluded.descricao,
 -- Supabase aceitará colunas extras apenas se existirem; por isso não usamos coluna tipo_documento no insert.
 
 -- Minuta: Matrícula 2026
-insert into public.documentos_modelo (tipo_contrato, titulo, versao, ativo, texto_modelo_md, placeholders_schema_json, observacoes)
+insert into public.documentos_modelo (titulo, versao, ativo, texto_modelo_md, placeholders_schema_json, observacoes)
 values
 (
-  'REGULAR',
   'Minuta — Contrato Matrícula 2026',
   'v0.1',
   true,
@@ -165,10 +164,9 @@ values
 on conflict do nothing;
 
 -- Minuta: Matrícula 2024 (desconto inauguracao + perda de direito)
-insert into public.documentos_modelo (tipo_contrato, titulo, versao, ativo, texto_modelo_md, placeholders_schema_json, observacoes)
+insert into public.documentos_modelo (titulo, versao, ativo, texto_modelo_md, placeholders_schema_json, observacoes)
 values
 (
-  'REGULAR',
   'Minuta — Contrato Matrícula 2024 (Condição Especial)',
   'v0.1',
   true,
@@ -189,10 +187,9 @@ values
 on conflict do nothing;
 
 -- Minuta: Bolsa artística (Movimento Conexão Dança)
-insert into public.documentos_modelo (tipo_contrato, titulo, versao, ativo, texto_modelo_md, placeholders_schema_json, observacoes)
+insert into public.documentos_modelo (titulo, versao, ativo, texto_modelo_md, placeholders_schema_json, observacoes)
 values
 (
-  'PROJETO_ARTISTICO',
   'Minuta — Termo de Bolsa Artística (Movimento Conexão Dança)',
   'v0.1',
   true,

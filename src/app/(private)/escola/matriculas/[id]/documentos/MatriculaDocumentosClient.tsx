@@ -25,7 +25,6 @@ type Modelo = {
   versao: string;
   ativo: boolean;
   tipo_documento?: string | null;
-  tipo_contrato?: string;
 };
 
 type MatriculaConjuntoResponse = {

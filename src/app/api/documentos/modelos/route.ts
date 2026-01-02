@@ -16,7 +16,6 @@ export async function GET() {
   const { data, error } = await supabase
     .from("documentos_modelo")
     .select("*")
-    .order("tipo_contrato", { ascending: true })
     .order("titulo", { ascending: true });
 
   if (error) {
@@ -41,9 +40,9 @@ export async function POST(req: Request) {
   const conteudoHtmlRaw = asText(body.conteudo_html);
   const conteudoHtml = formato === "RICH_HTML" ? (conteudoHtmlRaw.trim() ? conteudoHtmlRaw : textoMarkdown) : "";
 
-  if (!body?.tipo_contrato || !body?.titulo) {
+  if (!body?.titulo) {
     return NextResponse.json(
-      { error: "Campos obrigatorios: tipo_contrato, titulo." },
+      { error: "Campo obrigatorio: titulo." },
       { status: 400 },
     );
   }
@@ -77,7 +76,6 @@ export async function POST(req: Request) {
   }
 
   const insertPayload = {
-    tipo_contrato: body.tipo_contrato,
     titulo: body.titulo,
     versao: body.versao ?? "v1.0",
     ativo: body.ativo ?? true,

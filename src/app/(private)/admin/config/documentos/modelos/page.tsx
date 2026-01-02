@@ -148,7 +148,6 @@ export default function AdminDocumentosModelosPage() {
       }
 
       const payloadBase = {
-        tipo_contrato: "REGULAR",
         titulo: novoTitulo.trim(),
         formato: novoFormato,
         tipo_documento_id: Number(tipoDocumentoId),
@@ -367,7 +366,7 @@ export default function AdminDocumentosModelosPage() {
                 <div key={m.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
                   <div className="flex flex-col gap-1">
                     <div className="text-sm font-semibold">
-                      [{m.tipo_contrato}] {m.titulo} <span className="opacity-70">({m.versao})</span>
+                      {m.titulo} <span className="opacity-70">({m.versao})</span>
                     </div>
                     <div className="text-xs text-slate-600">
                       ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"} | Formato: {formato}

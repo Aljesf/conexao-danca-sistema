@@ -12,7 +12,6 @@ import { Textarea } from "@/components/ui/textarea";
 
 type DocumentoModelo = {
   id: number;
-  tipo_contrato: string;
   titulo: string;
   versao: string;
   ativo: boolean;
@@ -220,7 +219,7 @@ export default function AdminDocumentosEmitirPage() {
             <option value="">Selecione...</option>
             {modelosAtivos.map((m) => (
               <option key={m.id} value={m.id}>
-                [{m.tipo_contrato}] {m.titulo} (ID: {m.id})
+                {m.titulo} (ID: {m.id})
               </option>
             ))}
           </select>

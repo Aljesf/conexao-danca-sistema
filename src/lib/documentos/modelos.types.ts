@@ -2,7 +2,6 @@ export type DocumentoModeloFormato = "MARKDOWN" | "RICH_HTML";
 
 export type DocumentoModeloDTO = {
   id: number;
-  tipo_contrato: string;
   titulo: string;
   versao: string;
   ativo: boolean;
@@ -18,7 +17,6 @@ export type DocumentoModeloDTO = {
 };
 
 export type DocumentoModeloCreatePayload = {
-  tipo_contrato: string;
   titulo: string;
   tipo_documento_id?: number;
   conjunto_grupo_id?: number | null;
