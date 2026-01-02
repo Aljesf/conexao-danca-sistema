@@ -1,13 +1,6 @@
-"use client";
+﻿"use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { SystemPage } from "@/components/system/SystemPage";
-import { SystemContextCard } from "@/components/system/SystemContextCard";
-import { SystemHelpCard } from "@/components/system/SystemHelpCard";
-import { SystemSectionCard } from "@/components/system/SystemSectionCard";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import React from "react";
 
 type Conjunto = {
   id: number;
@@ -15,6 +8,7 @@ type Conjunto = {
   nome: string;
   descricao: string | null;
   ativo: boolean;
+  grupos?: Grupo[];
 };
 
 type GrupoPapel = "PRINCIPAL" | "OBRIGATORIO" | "OPCIONAL" | "ADICIONAL";
@@ -25,424 +19,342 @@ type Grupo = {
   codigo: string;
   nome: string;
   descricao: string | null;
-  obrigatorio: boolean;
   ordem: number;
-  papel: GrupoPapel | null;
-};
-
-type GrupoDraft = {
-  codigo: string;
-  nome: string;
-  descricao: string;
   obrigatorio: boolean;
-  ordem: string;
-  papel: GrupoPapel;
+  papel?: GrupoPapel | null;
 };
 
-function normCodigo(s: string): string {
-  return s.trim().toUpperCase().replace(/\s+/g, "_");
+type ApiResp<T> = { ok: boolean; data?: T; message?: string };
+
+async function apiGet<T>(url: string): Promise<T> {
+  const res = await fetch(url, { cache: "no-store" });
+  const json = (await res.json()) as ApiResp<T>;
+  if (!res.ok || !json.ok) throw new Error(json.message || "Falha na requisicao.");
+  return json.data as T;
 }
 
-function buildGrupoDraft(): GrupoDraft {
-  return {
-    codigo: "",
-    nome: "",
-    descricao: "",
-    obrigatorio: false,
-    ordem: "1",
-    papel: "OPCIONAL",
-  };
-}
+export default function AdminDocumentosConjuntosPage() {
+  const [loading, setLoading] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+  const [conjuntos, setConjuntos] = React.useState<Conjunto[]>([]);
 
-async function fetchConjuntos(): Promise<Conjunto[]> {
-  const res = await fetch("/api/documentos/conjuntos", { cache: "no-store" });
-  const json = (await res.json()) as { ok?: boolean; data?: Conjunto[]; message?: string };
-  if (!res.ok || !json.ok) throw new Error(json.message ?? "Erro ao carregar conjuntos.");
-  return json.data ?? [];
-}
+  const [cCodigo, setCCodigo] = React.useState("");
+  const [cNome, setCNome] = React.useState("");
+  const [cDescricao, setCDescricao] = React.useState("");
 
-async function fetchGrupos(conjuntoId: number): Promise<Grupo[]> {
-  const res = await fetch(`/api/documentos/conjuntos/${conjuntoId}/grupos`, { cache: "no-store" });
-  const json = (await res.json()) as { ok?: boolean; data?: Grupo[]; message?: string };
-  if (!res.ok || !json.ok) throw new Error(json.message ?? "Erro ao carregar grupos.");
-  return json.data ?? [];
-}
+  const [grupoFormOpenId, setGrupoFormOpenId] = React.useState<number | null>(null);
+  const [gCodigo, setGCodigo] = React.useState("");
+  const [gNome, setGNome] = React.useState("");
+  const [gDescricao, setGDescricao] = React.useState("");
+  const [gOrdem, setGOrdem] = React.useState<number>(1);
+  const [gObrigatorio, setGObrigatorio] = React.useState(false);
 
-export default function DocumentosConjuntosUnificadoPage() {
-  const helpItems = useMemo(
-    () => [
-      "Esta tela gerencia a estrutura: Conjuntos -> Grupos -> (vinculo com Modelos).",
-      "Conjunto = bloco institucional (ex.: Matricula Regular, Bolsa Movimento).",
-      "Grupo = secao interna (Documento principal, Termos obrigatorios, etc.).",
-      "Para vincular modelos, use o botao 'Vincular modelos' em cada grupo.",
-    ],
-    []
-  );
-
-  const [loadingConjuntos, setLoadingConjuntos] = useState(false);
-  const [erroConjuntos, setErroConjuntos] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
-
-  const [conjuntos, setConjuntos] = useState<Conjunto[]>([]);
-  const [conjuntoSelecionadoId, setConjuntoSelecionadoId] = useState<number | null>(null);
-  const [grupos, setGrupos] = useState<Grupo[]>([]);
-  const [loadingGrupos, setLoadingGrupos] = useState(false);
-  const [erroGrupos, setErroGrupos] = useState<string | null>(null);
-
-  const [cCodigo, setCCodigo] = useState("");
-  const [cNome, setCNome] = useState("");
-  const [cDesc, setCDesc] = useState("");
-  const [cSaving, setCSaving] = useState(false);
-
-  const [gDraft, setGDraft] = useState<GrupoDraft>(buildGrupoDraft());
-  const [gSaving, setGSaving] = useState(false);
-
-  const criarConjunto = async () => {
-    setCSaving(true);
-    setErroConjuntos(null);
-    setOkMsg(null);
+  async function carregarTudo() {
+    setErro(null);
+    setLoading(true);
     try {
+      const data = await apiGet<Conjunto[]>("/api/documentos/conjuntos?include=grupos");
+      setConjuntos(data || []);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro inesperado.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  React.useEffect(() => {
+    void carregarTudo();
+  }, []);
+
+  async function criarConjunto() {
+    setErro(null);
+    setLoading(true);
+    try {
+      const payload = {
+        codigo: cCodigo.trim(),
+        nome: cNome.trim(),
+        descricao: cDescricao.trim() || null,
+        ativo: true,
+      };
+
       const res = await fetch("/api/documentos/conjuntos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          codigo: normCodigo(cCodigo),
-          nome: cNome,
-          descricao: cDesc.trim() ? cDesc.trim() : null,
-          ativo: true,
-        }),
+        body: JSON.stringify(payload),
       });
-      const json = (await res.json()) as { ok?: boolean; message?: string };
-      if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao criar conjunto.");
+      const json = (await res.json()) as ApiResp<unknown>;
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao criar conjunto.");
+
       setCCodigo("");
       setCNome("");
-      setCDesc("");
-      setOkMsg("Conjunto criado com sucesso.");
-      const cs = await fetchConjuntos();
-      setConjuntos(cs);
+      setCDescricao("");
+      await carregarTudo();
     } catch (e) {
-      setErroConjuntos(e instanceof Error ? e.message : "Erro ao criar conjunto.");
+      setErro(e instanceof Error ? e.message : "Erro inesperado.");
     } finally {
-      setCSaving(false);
+      setLoading(false);
     }
-  };
+  }
 
-  const criarGrupo = async () => {
-    const conjuntoId = conjuntoSelecionadoId;
-    if (!conjuntoId) {
-      setErroConjuntos("Selecione um conjunto para criar grupo.");
-      return;
-    }
-
-    setGSaving(true);
-    setErroConjuntos(null);
-    setOkMsg(null);
-
+  async function criarGrupo(conjuntoId: number) {
+    setErro(null);
+    setLoading(true);
     try {
-      const ordemNum = Number(gDraft.ordem);
+      const payload = {
+        conjunto_id: conjuntoId,
+        codigo: gCodigo.trim(),
+        nome: gNome.trim(),
+        descricao: gDescricao.trim() || null,
+        ordem: Number(gOrdem) || 1,
+        obrigatorio: Boolean(gObrigatorio),
+      };
+
       const res = await fetch(`/api/documentos/conjuntos/${conjuntoId}/grupos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          codigo: normCodigo(gDraft.codigo),
-          nome: gDraft.nome,
-          descricao: gDraft.descricao.trim() ? gDraft.descricao.trim() : null,
-          obrigatorio: gDraft.obrigatorio,
-          ordem: Number.isFinite(ordemNum) ? ordemNum : 1,
-          papel: gDraft.papel ?? (gDraft.obrigatorio ? "OBRIGATORIO" : "OPCIONAL"),
-        }),
+        body: JSON.stringify(payload),
       });
+      const json = (await res.json()) as ApiResp<unknown>;
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao criar grupo.");
 
-      const json = (await res.json()) as { ok?: boolean; message?: string };
-      if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao criar grupo.");
+      setGrupoFormOpenId(null);
+      setGCodigo("");
+      setGNome("");
+      setGDescricao("");
+      setGOrdem(1);
+      setGObrigatorio(false);
 
-      setGDraft(buildGrupoDraft());
-      setOkMsg("Grupo criado com sucesso.");
-
-      const data = await fetchGrupos(conjuntoId);
-      setGrupos(data);
+      await carregarTudo();
     } catch (e) {
-      setErroConjuntos(e instanceof Error ? e.message : "Erro ao criar grupo.");
+      setErro(e instanceof Error ? e.message : "Erro inesperado.");
     } finally {
-      setGSaving(false);
+      setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    let ativo = true;
-
-    async function carregarConjuntos() {
-      setLoadingConjuntos(true);
-      setErroConjuntos(null);
-
-      try {
-        const data = await fetchConjuntos();
-        if (ativo) setConjuntos(data);
-      } catch (e) {
-        if (ativo) setErroConjuntos(e instanceof Error ? e.message : "Erro inesperado");
-      } finally {
-        if (ativo) setLoadingConjuntos(false);
-      }
-    }
-
-    carregarConjuntos();
-
-    return () => {
-      ativo = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    setGDraft(buildGrupoDraft());
-  }, [conjuntoSelecionadoId]);
-
-  useEffect(() => {
-    if (!conjuntoSelecionadoId) {
-      setGrupos([]);
-      setErroGrupos(null);
-      return;
-    }
-
-    let ativo = true;
-    setGrupos([]);
-
-    async function carregarGrupos() {
-      setLoadingGrupos(true);
-      setErroGrupos(null);
-
-      try {
-        const data = await fetchGrupos(conjuntoSelecionadoId);
-        if (ativo) setGrupos(data);
-      } catch (e) {
-        if (ativo) setErroGrupos(e instanceof Error ? e.message : "Erro ao carregar grupos.");
-      } finally {
-        if (ativo) setLoadingGrupos(false);
-      }
-    }
-
-    carregarGrupos();
-
-    return () => {
-      ativo = false;
-    };
-  }, [conjuntoSelecionadoId]);
+  }
 
   return (
-    <SystemPage>
-      <SystemContextCard
-        title="Documentos - Conjuntos e Grupos"
-        subtitle="Gerencie a estrutura institucional: Conjuntos (blocos) e seus Grupos internos."
-      >
-        <div className="mt-2 flex gap-4">
-          <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-            Voltar ao hub de Documentos
-          </Link>
-        </div>
-      </SystemContextCard>
-
-      <SystemHelpCard items={helpItems} />
-
-      {erroConjuntos ? (
-        <SystemSectionCard title="Erro" description="Corrija antes de continuar.">
-          <div className="text-sm text-red-700">{erroConjuntos}</div>
-        </SystemSectionCard>
-      ) : null}
-
-      {okMsg ? (
-        <SystemSectionCard title="Sucesso" description="Operacao concluida.">
-          <div className="text-sm text-green-700">{okMsg}</div>
-        </SystemSectionCard>
-      ) : null}
-
-      <SystemSectionCard title="Criar conjunto" description="Crie um conjunto institucional (ex.: Matricula Regular).">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-sm font-medium">Codigo</label>
-            <Input value={cCodigo} onChange={(e) => setCCodigo(e.target.value)} placeholder="Ex.: MATRICULA_REGULAR" />
-            <p className="text-xs text-slate-500 mt-1">Caixa alta. Espacos viram underscore automaticamente.</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium">Nome</label>
-            <Input value={cNome} onChange={(e) => setCNome(e.target.value)} placeholder="Ex.: Matricula Regular" />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium">Descricao</label>
-            <Input value={cDesc} onChange={(e) => setCDesc(e.target.value)} placeholder="Opcional (uso interno)." />
-          </div>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold">Documentos - Conjuntos e Grupos</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Gerencie Conjuntos (blocos) e seus Grupos internos. Tudo em uma unica tela.
+          </p>
         </div>
 
-        <div className="pt-4 border-t border-slate-200 flex justify-end">
-          <Button onClick={() => void criarConjunto()} disabled={cSaving || !cCodigo.trim() || !cNome.trim()}>
-            {cSaving ? "Salvando..." : "Criar conjunto"}
-          </Button>
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold">Criar conjunto</h2>
+          <p className="mt-1 text-sm text-slate-600">Crie um conjunto institucional (ex.: Matricula Regular).</p>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">Codigo</label>
+              <input
+                className="mt-1 w-full rounded-md border p-2 text-sm"
+                placeholder="Ex.: MATRICULA_REGULAR"
+                value={cCodigo}
+                onChange={(e) => setCCodigo(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Caixa alta. Espacos viram underscore automaticamente (se voce ja trata isso no backend).
+              </p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Nome</label>
+              <input
+                className="mt-1 w-full rounded-md border p-2 text-sm"
+                placeholder="Ex.: Matricula Regular"
+                value={cNome}
+                onChange={(e) => setCNome(e.target.value)}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium">Descricao</label>
+              <input
+                className="mt-1 w-full rounded-md border p-2 text-sm"
+                placeholder="Opcional (uso interno)."
+                value={cDescricao}
+                onChange={(e) => setCDescricao(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end">
+            <button
+              className="rounded-md bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              onClick={criarConjunto}
+              disabled={loading || !cCodigo.trim() || !cNome.trim()}
+            >
+              Criar conjunto
+            </button>
+          </div>
         </div>
-      </SystemSectionCard>
 
-      <SystemSectionCard
-        title="Conjuntos cadastrados"
-        description="Cada card e um Conjunto. Dentro dele, voce cria e organiza os Grupos."
-      >
-        {loadingConjuntos ? (
-          <div className="text-sm text-slate-600">Carregando...</div>
-        ) : conjuntos.length === 0 ? (
-          <div className="text-sm text-slate-600">Nenhum conjunto cadastrado.</div>
-        ) : (
-          <div className="grid gap-6">
-            {conjuntos.map((c) => {
-              const isSelected = conjuntoSelecionadoId === c.id;
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Conjuntos cadastrados</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Cada card e um Conjunto. Dentro dele, voce cria e organiza os Grupos.
+              </p>
+            </div>
 
-              return (
-                <div key={c.id} className="border border-slate-200 rounded-xl bg-white shadow-sm">
-                  <div className="p-5 border-b border-slate-200 flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-base font-semibold">{c.nome}</div>
-                      <div className="text-xs text-slate-600 mt-1">
-                        Codigo: {c.codigo} | Ativo: {c.ativo ? "Sim" : "Nao"} | ID: {c.id}
-                      </div>
-                      {c.descricao ? <div className="text-sm text-slate-600 mt-2">{c.descricao}</div> : null}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <Link className="underline" href={`/admin/config/documentos/conjuntos/${c.id}`}>
-                        Abrir detalhe (opcional)
-                      </Link>
-                      <Button
-                        variant={isSelected ? "secondary" : "ghost"}
-                        onClick={() => setConjuntoSelecionadoId(isSelected ? null : c.id)}
-                      >
-                        {isSelected ? "Selecionado" : "Selecionar"}
-                      </Button>
-                    </div>
+            <button
+              className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+              onClick={carregarTudo}
+              disabled={loading}
+            >
+              {loading ? "Recarregando..." : "Recarregar"}
+            </button>
+          </div>
+
+          {erro ? <p className="mt-3 text-sm text-red-600">{erro}</p> : null}
+          {!erro && loading && conjuntos.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-500">Carregando...</p>
+          ) : null}
+
+          <div className="mt-4 space-y-4">
+            {conjuntos.map((c) => (
+              <div key={c.id} id={`conjunto-${c.id}`} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-base font-semibold">{c.nome}</p>
+                    <p className="text-sm text-slate-600">Codigo: {c.codigo}</p>
+                    {c.descricao ? <p className="text-sm text-slate-500">{c.descricao}</p> : null}
                   </div>
 
-                  <div className="p-5">
-                    {!isSelected ? (
-                      <div className="text-sm text-slate-500">
-                        Selecione este conjunto para carregar os grupos.
-                      </div>
-                    ) : (
-                      <>
-                        <div className="text-sm font-semibold mb-2">Grupos</div>
-                        {erroGrupos ? <div className="text-sm text-red-700 mb-2">{erroGrupos}</div> : null}
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+                      type="button"
+                      onClick={() => {
+                        setGrupoFormOpenId((prev) => (prev === c.id ? null : c.id));
+                        setGOrdem((c.grupos?.length || 0) + 1);
+                      }}
+                    >
+                      + Novo grupo
+                    </button>
 
-                        {loadingGrupos ? (
-                          <div className="text-sm text-slate-600 mb-4">Carregando grupos...</div>
-                        ) : grupos.length === 0 ? (
-                          <div className="text-sm text-slate-600 mb-4">Nenhum grupo cadastrado.</div>
-                        ) : (
-                          <div className="grid gap-2 mb-4">
-                            {grupos.map((g) => {
-                              const papel = g.papel ?? (g.obrigatorio ? "OBRIGATORIO" : "OPCIONAL");
-                              return (
-                                <div key={g.id} className="border border-slate-200 rounded-lg p-3 flex items-start justify-between gap-4">
-                                  <div>
-                                    <div className="font-medium">
-                                      {g.ordem}. {g.nome}
-                                    </div>
-                                    <div className="text-xs text-slate-600 mt-1">
-                                      Codigo: {g.codigo} | Papel: {papel} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"} | ID: {g.id}
-                                    </div>
-                                    {g.descricao ? <div className="text-sm text-slate-600 mt-2">{g.descricao}</div> : null}
-                                  </div>
-
-                                  <div className="flex items-center gap-3">
-                                    <Link className="text-sm underline text-slate-600" href={`/admin/config/documentos/grupos/${g.id}`}>
-                                      Vincular modelos
-                                    </Link>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        <div className="border-t border-slate-200 pt-4">
-                          <div className="text-sm font-semibold mb-2">Adicionar grupo</div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                              <label className="text-sm font-medium">Codigo</label>
-                              <Input
-                                value={gDraft.codigo}
-                                onChange={(e) => setGDraft((p) => ({ ...p, codigo: e.target.value }))}
-                                placeholder="Ex.: DOCUMENTO_PRINCIPAL"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium">Nome</label>
-                              <Input
-                                value={gDraft.nome}
-                                onChange={(e) => setGDraft((p) => ({ ...p, nome: e.target.value }))}
-                                placeholder="Ex.: Documento principal"
-                              />
-                            </div>
-
-                            <div className="md:col-span-2">
-                              <label className="text-sm font-medium">Descricao</label>
-                              <Input
-                                value={gDraft.descricao}
-                                onChange={(e) => setGDraft((p) => ({ ...p, descricao: e.target.value }))}
-                                placeholder="Opcional (uso interno)."
-                              />
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={gDraft.obrigatorio}
-                                onChange={(e) =>
-                                  setGDraft((p) => ({
-                                    ...p,
-                                    obrigatorio: e.target.checked,
-                                    papel:
-                                      p.papel === "OBRIGATORIO" || p.papel === "OPCIONAL"
-                                        ? e.target.checked
-                                          ? "OBRIGATORIO"
-                                          : "OPCIONAL"
-                                        : p.papel,
-                                  }))
-                                }
-                              />
-                              <span className="text-sm">Obrigatorio</span>
-                            </div>
-
-                            <div>
-                              <label className="text-sm font-medium">Ordem</label>
-                              <Input
-                                value={gDraft.ordem}
-                                onChange={(e) => setGDraft((p) => ({ ...p, ordem: e.target.value }))}
-                                placeholder="Ex.: 1"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="text-sm font-medium">Papel do grupo</label>
-                              <select
-                                className="w-full rounded-lg border px-3 py-2 text-sm"
-                                value={gDraft.papel}
-                                onChange={(e) => setGDraft((p) => ({ ...p, papel: e.target.value as GrupoPapel }))}
-                              >
-                                <option value="PRINCIPAL">PRINCIPAL</option>
-                                <option value="OBRIGATORIO">OBRIGATORIO</option>
-                                <option value="OPCIONAL">OPCIONAL</option>
-                                <option value="ADICIONAL">ADICIONAL</option>
-                              </select>
-                            </div>
-                          </div>
-
-                          <div className="pt-4 flex justify-end">
-                            <Button onClick={() => void criarGrupo()} disabled={gSaving || !gDraft.codigo.trim() || !gDraft.nome.trim()}>
-                              {gSaving ? "Salvando..." : "Adicionar grupo"}
-                            </Button>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                    <a
+                      className="rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+                      href={`/admin/config/documentos/conjuntos/${c.id}`}
+                      title="Link legado (redireciona para esta pagina)"
+                    >
+                      Abrir
+                    </a>
                   </div>
                 </div>
-              );
-            })}
+
+                {grupoFormOpenId === c.id ? (
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold">Cadastrar grupo</p>
+                    <p className="mt-1 text-xs text-slate-600">Crie um grupo dentro deste conjunto.</p>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className="text-sm font-medium">Codigo</label>
+                        <input
+                          className="mt-1 w-full rounded-md border p-2 text-sm"
+                          placeholder="Ex.: DOCUMENTO_PRINCIPAL"
+                          value={gCodigo}
+                          onChange={(e) => setGCodigo(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium">Nome</label>
+                        <input
+                          className="mt-1 w-full rounded-md border p-2 text-sm"
+                          placeholder="Ex.: Documento principal"
+                          value={gNome}
+                          onChange={(e) => setGNome(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="text-sm font-medium">Descricao</label>
+                        <input
+                          className="mt-1 w-full rounded-md border p-2 text-sm"
+                          placeholder="Opcional (uso interno)."
+                          value={gDescricao}
+                          onChange={(e) => setGDescricao(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={gObrigatorio}
+                            onChange={(e) => setGObrigatorio(e.target.checked)}
+                          />
+                          Obrigatorio
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium">Ordem</label>
+                        <input
+                          className="mt-1 w-full rounded-md border p-2 text-sm"
+                          type="number"
+                          value={gOrdem}
+                          onChange={(e) => setGOrdem(Number(e.target.value))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button
+                        className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                        onClick={() => setGrupoFormOpenId(null)}
+                        type="button"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                        onClick={() => criarGrupo(c.id)}
+                        disabled={loading || !gCodigo.trim() || !gNome.trim()}
+                        type="button"
+                      >
+                        Criar grupo
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-4">
+                  <p className="text-sm font-semibold">Grupos</p>
+                  {!c.grupos || c.grupos.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-500">Nenhum grupo cadastrado.</p>
+                  ) : (
+                    <div className="mt-2 grid gap-2">
+                      {c.grupos.map((g) => (
+                        <div key={g.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold">{g.nome}</p>
+                              <p className="text-xs text-slate-600">{g.codigo}</p>
+                              <p className="text-xs text-slate-500">
+                                Ordem: {g.ordem} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"}
+                                {g.papel ? ` | Papel: ${g.papel}` : ""}
+                              </p>
+                              {g.descricao ? <p className="mt-1 text-xs text-slate-500">{g.descricao}</p> : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        )}
-      </SystemSectionCard>
-    </SystemPage>
+        </div>
+      </div>
+    </div>
   );
 }
+

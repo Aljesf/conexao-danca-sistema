@@ -1,4 +1,4 @@
-﻿# estado-atual-do-projeto.md
+﻿﻿# estado-atual-do-projeto.md
 
 ## Módulo atual
 Documentos — Motor institucional (Modelos, Variáveis, Operações, Conjuntos, Grupos)
@@ -28,6 +28,7 @@ Documentos — Motor institucional (Modelos, Variáveis, Operações, Conjuntos,
 
 ## APIs concluídas (Documentos)
 
+- GET /api/documentos/conjuntos?include=grupos (lista conjuntos com grupos)
 - (pendente) APIs de Conjuntos/Grupos/Modelos vinculados
 - (pendente) APIs de seleção por Operação e emissão em Conjunto
 
@@ -43,6 +44,9 @@ Documentos — Motor institucional (Modelos, Variáveis, Operações, Conjuntos,
   - Tipos de documento
 - Editor rico (modelo) e gestão de variáveis já disponíveis no módulo Documentos
 - (pendente) UI de Conjuntos/Grupos e vínculo com modelos
+
+- UI unica de Conjuntos + Grupos em /admin/config/documentos/conjuntos
+- Redirect legado: /admin/config/documentos/conjuntos/[id] -> #conjunto-<id>
 
 ---
 
