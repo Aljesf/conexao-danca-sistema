@@ -1,5 +1,9 @@
 begin;
 
+-- Blindagem: se rodar seed em ambiente onde a coluna legada exista, derruba antes
+alter table public.documentos_modelo
+  drop column if exists tipo_contrato;
+
 ------------------------------------------------------------
 -- 1) Tipos de documento (catálogo)
 ------------------------------------------------------------
