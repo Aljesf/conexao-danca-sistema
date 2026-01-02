@@ -47,6 +47,7 @@ export const adminSidebar: SidebarSection[] = [
       { label: "Novo documento", href: "/admin/config/documentos" },
       { label: "Modelos", href: "/admin/config/documentos/modelos" },
       { label: "Variaveis", href: "/admin/config/documentos/variaveis" },
+      { label: "Conjuntos", href: "/admin/config/documentos/conjuntos" },
       { label: "Documentos emitidos", href: "/admin/config/documentos/emitidos" },
       { label: "Tipos de documento", href: "/admin/config/documentos/tipos" },
     ],
@@ -118,3 +119,4 @@ export const adminSidebar: SidebarSection[] = [
     items: [{ label: "Painel de IA (GPT interno)", href: "/admin/ia" }],
   },
 ];
+
