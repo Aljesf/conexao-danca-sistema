@@ -14,6 +14,7 @@ import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documento
 
 type TipoDocOpt = { id: number; label: string };
 type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
+const VARIAVEIS_VAZIAS: VariavelDoc[] = [];
 
 async function fetchVariaveisAtivas(): Promise<VariavelDoc[]> {
   const res = await fetch("/api/documentos/variaveis?ativo=1", { cache: "no-store" });
@@ -43,6 +44,7 @@ export default function AdminDocumentosModelosPage() {
   const [novoFormato, setNovoFormato] = useState<DocumentoModeloFormato>("RICH_HTML");
   const [novoTextoMarkdown, setNovoTextoMarkdown] = useState("");
   const [novoHtml, setNovoHtml] = useState("<p></p>");
+  const [cabecalhoHtml, setCabecalhoHtml] = useState("<p></p>");
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
   const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
@@ -174,6 +176,7 @@ export default function AdminDocumentosModelosPage() {
         ...payload,
         conjunto_grupo_id: conjuntoGrupoId ? conjuntoGrupoId : null,
         ordem: vinculoOrdem,
+        cabecalho_html: cabecalhoHtml,
       };
 
       const res = await fetch("/api/documentos/modelos", {
@@ -186,6 +189,7 @@ export default function AdminDocumentosModelosPage() {
       setNovoTitulo("");
       setNovoTextoMarkdown("");
       setNovoHtml("<p></p>");
+      setCabecalhoHtml("<p></p>");
       setConjuntoId("");
       setConjuntoGrupoId("");
       setVinculoOrdem(1);
@@ -361,6 +365,16 @@ export default function AdminDocumentosModelosPage() {
                   placeholder="Cole aqui o texto do modelo com placeholders, ex.: {{ALUNO_NOME}}"
                 />
               )}
+            </div>
+          </div>
+
+          <div className="md:col-span-3">
+            <label className="text-sm font-medium">Cabecalho do documento (opcional)</label>
+            <p className="mt-1 text-xs text-slate-500">
+              Pode conter logo e dados da escola. Repetido na impressao/PDF.
+            </p>
+            <div className="mt-2">
+              <EditorRico valueHtml={cabecalhoHtml} onChangeHtml={setCabecalhoHtml} variaveis={VARIAVEIS_VAZIAS} />
             </div>
           </div>
         </div>

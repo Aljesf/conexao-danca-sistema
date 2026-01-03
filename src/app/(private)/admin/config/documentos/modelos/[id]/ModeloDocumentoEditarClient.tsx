@@ -22,6 +22,8 @@ type DocumentoModelo = {
   formato?: DocumentoModeloFormato | null;
   texto_modelo_md: string | null;
   conteudo_html?: string | null;
+  cabecalho_html?: string | null;
+  rodape_html?: string | null;
   placeholders_schema_json: unknown;
   observacoes: string | null;
   vinculos?: VinculoModelo[];
@@ -60,6 +62,8 @@ type VinculoModelo = {
   conjunto_nome?: string | null;
 };
 
+const VARIAVEIS_VAZIAS: VariavelDoc[] = [];
+
 export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const idNum = Number(props.id);
 
@@ -79,6 +83,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const [formato, setFormato] = useState<DocumentoModeloFormato>("MARKDOWN");
   const [conteudoHtml, setConteudoHtml] = useState("");
   const [textoMarkdown, setTextoMarkdown] = useState("");
+  const [cabecalhoHtml, setCabecalhoHtml] = useState("<p></p>");
 
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
@@ -126,6 +131,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       const textoMarkdownInicial = m.texto_modelo_md ?? m.conteudo_html ?? "";
       setConteudoHtml(conteudoHtmlInicial);
       setTextoMarkdown(textoMarkdownInicial);
+      setCabecalhoHtml(m.cabecalho_html ?? "<p></p>");
       setSchemaAtual(safeParseSchema(m.placeholders_schema_json));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar.");
@@ -249,6 +255,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           tipo_documento_id: tipoDocumentoId,
           conjunto_grupo_id: conjuntoGrupoId || null,
           ordem: vinculoOrdem,
+          cabecalho_html: cabecalhoHtml,
           ...(formato === "RICH_HTML" ? { conteudo_html: conteudoHtml } : { texto_modelo_md: textoMarkdown }),
           placeholders_schema_json: schemaFinal,
         }),
@@ -418,6 +425,15 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
               Ativo
             </label>
           </div>
+        </div>
+      </SystemSectionCard>
+
+      <SystemSectionCard title="Cabecalho do documento">
+        <p className="text-xs text-slate-500">
+          Este cabecalho pode conter logo e dados da escola. Sera repetido na impressao/PDF.
+        </p>
+        <div className="mt-3">
+          <EditorRico valueHtml={cabecalhoHtml} onChangeHtml={setCabecalhoHtml} variaveis={VARIAVEIS_VAZIAS} />
         </div>
       </SystemSectionCard>
 

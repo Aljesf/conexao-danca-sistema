@@ -167,7 +167,7 @@ export async function POST(req: Request) {
 
   const { data: modelo, error: modeloErr } = await supabase
     .from("documentos_modelo")
-    .select("id,formato,conteudo_html,texto_modelo_md")
+    .select("id,formato,conteudo_html,texto_modelo_md,cabecalho_html,rodape_html")
     .eq("id", documentoModeloId)
     .single();
 
@@ -263,6 +263,8 @@ export async function POST(req: Request) {
     conteudo_renderizado_md: conteudoResolvido,
     conteudo_template_html: template,
     conteudo_resolvido_html: conteudoResolvido,
+    cabecalho_html: (modelo as Record<string, unknown>).cabecalho_html ?? null,
+    rodape_html: (modelo as Record<string, unknown>).rodape_html ?? null,
     contexto_json: contexto,
     variaveis_utilizadas_json: variaveisUtilizadas,
     snapshot_financeiro_json: snapshot,

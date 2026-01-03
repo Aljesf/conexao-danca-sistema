@@ -11,6 +11,8 @@ type DocumentoModeloUpdatePayload = {
   ordem?: number | null;
   texto_modelo_md?: string;
   conteudo_html?: string;
+  cabecalho_html?: string | null;
+  rodape_html?: string | null;
   formato?: DocumentoModeloFormato;
   placeholders_schema_json?: unknown;
   observacoes?: string | null;
@@ -37,7 +39,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { data, error } = await supabase
     .from("documentos_modelo")
     .select(
-      "id,titulo,versao,ativo,tipo_documento_id,formato,texto_modelo_md,conteudo_html,placeholders_schema_json,observacoes,created_at,updated_at",
+      "id,titulo,versao,ativo,tipo_documento_id,formato,texto_modelo_md,conteudo_html,cabecalho_html,rodape_html,placeholders_schema_json,observacoes,created_at,updated_at",
     )
     .eq("id", modeloId)
     .single();
@@ -103,6 +105,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     typeof body.formato !== "undefined" ? normalizeFormato(body.formato) : undefined;
   const wantsHtml = formatoBody === "RICH_HTML" || (formatoBody === undefined && conteudoHtmlRaw !== null);
   const wantsMarkdown = formatoBody === "MARKDOWN";
+  const cabecalhoHtml =
+    typeof body.cabecalho_html === "string" || body.cabecalho_html === null ? body.cabecalho_html : undefined;
+  const rodapeHtml =
+    typeof body.rodape_html === "string" || body.rodape_html === null ? body.rodape_html : undefined;
 
   if (!Number.isFinite(tipoDocumentoId) || tipoDocumentoId <= 0) {
     return NextResponse.json(
@@ -136,6 +142,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     updatePayload.placeholders_schema_json = body.placeholders_schema_json;
   }
   if (typeof formatoBody !== "undefined") updatePayload.formato = formatoBody;
+  if (typeof cabecalhoHtml !== "undefined") updatePayload.cabecalho_html = cabecalhoHtml;
+  if (typeof rodapeHtml !== "undefined") updatePayload.rodape_html = rodapeHtml;
 
   if (wantsMarkdown) {
     if (!textoMarkdown || !textoMarkdown.trim()) {

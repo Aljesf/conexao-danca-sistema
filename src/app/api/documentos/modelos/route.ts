@@ -16,7 +16,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("documentos_modelo")
     .select(
-      "id,titulo,versao,ativo,tipo_documento_id,formato,texto_modelo_md,conteudo_html,placeholders_schema_json,observacoes,created_at,updated_at",
+      "id,titulo,versao,ativo,tipo_documento_id,formato,texto_modelo_md,conteudo_html,cabecalho_html,rodape_html,placeholders_schema_json,observacoes,created_at,updated_at",
     )
     .order("titulo", { ascending: true });
 
@@ -43,6 +43,8 @@ export async function POST(req: Request) {
     ordemRaw === null || ordemRaw === undefined || ordemRaw === "" ? 1 : Number(ordemRaw);
   const textoMarkdown = asText(body.texto_modelo_md);
   const conteudoHtmlRaw = asText(body.conteudo_html);
+  const cabecalhoHtml = asText(body.cabecalho_html);
+  const rodapeHtml = asText(body.rodape_html);
   const conteudoHtml = formato === "RICH_HTML" ? (conteudoHtmlRaw.trim() ? conteudoHtmlRaw : textoMarkdown) : "";
 
   if (!body?.titulo) {
@@ -96,6 +98,8 @@ export async function POST(req: Request) {
     formato,
     texto_modelo_md: formato === "RICH_HTML" ? conteudoHtml : textoMarkdown,
     conteudo_html: formato === "RICH_HTML" ? conteudoHtml : null,
+    cabecalho_html: cabecalhoHtml.trim() ? cabecalhoHtml : null,
+    rodape_html: rodapeHtml.trim() ? rodapeHtml : null,
     placeholders_schema_json: body.placeholders_schema_json ?? [],
     observacoes: body.observacoes ?? null,
   };

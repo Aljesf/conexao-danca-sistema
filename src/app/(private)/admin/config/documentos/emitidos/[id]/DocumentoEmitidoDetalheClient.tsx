@@ -14,6 +14,8 @@ type DocEmitido = {
   conteudo_renderizado_md?: string | null;
   conteudo_resolvido_html?: string | null;
   conteudo_template_html?: string | null;
+  cabecalho_html?: string | null;
+  rodape_html?: string | null;
   editado_manual?: boolean;
   created_at?: string;
   updated_at?: string | null;
@@ -228,6 +230,10 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
                   <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
                     <div
+                      id="print-header"
+                      dangerouslySetInnerHTML={{ __html: doc.cabecalho_html || "" }}
+                    />
+                    <div
                       id="print-area"
                       className="prose max-w-none"
                       // Conteudo emitido e gerado internamente.
@@ -253,18 +259,30 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             visibility: hidden !important;
           }
 
+          #print-header,
+          #print-header *,
           #print-area,
           #print-area * {
             visibility: visible !important;
           }
 
+          #print-header {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            right: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
           #print-area {
             position: absolute !important;
             left: 0 !important;
+            right: 0 !important;
             top: 0 !important;
+            margin-top: 35mm !important;
             width: 100% !important;
             padding: 0 !important;
-            margin: 0 !important;
           }
 
           .rounded-lg,

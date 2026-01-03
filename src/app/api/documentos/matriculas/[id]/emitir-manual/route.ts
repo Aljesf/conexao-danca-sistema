@@ -338,7 +338,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const { data: modelo, error: modErr } = await supabase
       .from("documentos_modelo")
-      .select("id,formato,conteudo_html,texto_modelo_md")
+      .select("id,formato,conteudo_html,texto_modelo_md,cabecalho_html,rodape_html")
       .eq("id", item.documento_modelo_id)
       .single();
 
@@ -363,6 +363,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       conteudo_renderizado_md: conteudoResolvido,
       conteudo_template_html: template,
       conteudo_resolvido_html: conteudoResolvido,
+      cabecalho_html: (modelo as Record<string, unknown>).cabecalho_html ?? null,
+      rodape_html: (modelo as Record<string, unknown>).rodape_html ?? null,
       contexto_json: contexto,
       variaveis_utilizadas_json: variaveisUtilizadas,
       snapshot_financeiro_json: snapshot,

@@ -9,6 +9,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import FontFamily from "@tiptap/extension-font-family";
+import Image from "@tiptap/extension-image";
 
 import { FontSize } from "@/components/documentos/tiptap/FontSize";
 
@@ -27,6 +28,7 @@ import {
   AlignJustify,
   Highlighter,
   Type,
+  Image as ImageIcon,
 } from "lucide-react";
 
 export type VariavelDoc = { code: string; label: string };
@@ -98,6 +100,10 @@ export const EditorRico = React.forwardRef<EditorRicoHandle, Props>(function Edi
       Highlight,
       FontFamily.configure({ types: ["textStyle"] }),
       FontSize,
+      Image.configure({
+        inline: false,
+        allowBase64: false,
+      }),
       TextAlign.configure({
         types: ["heading", "paragraph"],
         alignments: ["left", "center", "right", "justify"],
@@ -239,6 +245,19 @@ export const EditorRico = React.forwardRef<EditorRicoHandle, Props>(function Edi
         </ToolbarButton>
         <ToolbarButton title="Lista numerada" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}>
           <ListOrdered size={16} />
+        </ToolbarButton>
+
+        <span className="mx-1 h-6 w-px bg-slate-200" />
+
+        <ToolbarButton
+          title="Inserir imagem (URL)"
+          onClick={() => {
+            const url = window.prompt("Cole a URL da imagem (logo, etc.):");
+            if (!url) return;
+            editor.chain().focus().setImage({ src: url }).run();
+          }}
+        >
+          <ImageIcon size={16} />
         </ToolbarButton>
 
         <span className="mx-1 h-6 w-px bg-slate-200" />

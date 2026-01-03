@@ -9,6 +9,8 @@ export type DocumentoModeloDTO = {
   formato: DocumentoModeloFormato | null;
   texto_modelo_md: string | null;
   conteudo_html: string | null;
+  cabecalho_html?: string | null;
+  rodape_html?: string | null;
   placeholders_schema_json: unknown;
   observacoes: string | null;
   created_at?: string;
@@ -25,6 +27,8 @@ export type DocumentoModeloCreatePayload = {
   formato?: DocumentoModeloFormato;
   texto_modelo_md?: string;
   conteudo_html?: string;
+  cabecalho_html?: string | null;
+  rodape_html?: string | null;
   placeholders_schema_json?: unknown;
   observacoes?: string | null;
 };
