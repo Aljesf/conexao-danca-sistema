@@ -12,6 +12,7 @@ import FontFamily from "@tiptap/extension-font-family";
 import Image from "@tiptap/extension-image";
 
 import { FontSize } from "@/components/documentos/tiptap/FontSize";
+import { ImagemPickerModal } from "@/components/documentos/ImagemPickerModal";
 
 import {
   Bold,
@@ -103,6 +104,7 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
     },
     ref,
   ) {
+    const [pickerOpen, setPickerOpen] = React.useState(false);
     const editor = useEditor({
       immediatelyRender: false,
       extensions: [
@@ -271,21 +273,14 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
             <Redo2 size={16} />
           </ToolbarButton>
 
-          {enableImages ? (
-            <>
-              <span className="mx-1 h-6 w-px bg-slate-200" />
-              <ToolbarButton
-                title="Inserir imagem (URL)"
-                onClick={() => {
-                  const url = window.prompt("Cole a URL da imagem:");
-                  if (!url) return;
-                  editor.chain().focus().setImage({ src: url }).run();
-                }}
-              >
-                <ImageIcon size={16} />
-              </ToolbarButton>
-            </>
-          ) : null}
+        {enableImages ? (
+          <>
+            <span className="mx-1 h-6 w-px bg-slate-200" />
+            <ToolbarButton title="Inserir imagem" onClick={() => setPickerOpen(true)}>
+              <ImageIcon size={16} />
+            </ToolbarButton>
+          </>
+        ) : null}
 
           {enableVariables ? (
             <>
@@ -314,6 +309,16 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
         </div>
 
         <EditorContent editor={editor} />
+
+        {enableImages ? (
+          <ImagemPickerModal
+            open={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            onSelect={(url) => {
+              editor.chain().focus().setImage({ src: url }).run();
+            }}
+          />
+        ) : null}
       </div>
     );
   },

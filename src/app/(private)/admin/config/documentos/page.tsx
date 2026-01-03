@@ -55,6 +55,15 @@ export default function AdminConfigDocumentosHome() {
             <p className="text-sm text-slate-600">Use codigos padronizados e path tecnico.</p>
           </SystemSectionCard>
         </Link>
+
+        <Link href="/admin/config/documentos/imagens" className="block">
+          <SystemSectionCard
+            title="Banco de imagens"
+            description="Gerencie imagens publicas para usar em cabecalhos e modelos."
+          >
+            <p className="text-sm text-slate-600">Upload de logos e imagens institucionais.</p>
+          </SystemSectionCard>
+        </Link>
       </div>
     </SystemPage>
   );
