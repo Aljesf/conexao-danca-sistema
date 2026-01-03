@@ -10,10 +10,11 @@ import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 type DocumentoEmitido = {
   id: number;
   matricula_id: number;
-  contrato_modelo_id: number;
-  status_assinatura: string;
+  contrato_modelo_id?: number | null;
+  documento_modelo_id?: number | null;
+  status_assinatura?: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string | null;
   pdf_url: string | null;
 };
 
@@ -70,9 +71,18 @@ export default function AdminDocumentosEmitidosPage() {
           <div className="grid gap-3">
             {itens.map((c) => (
               <div key={c.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
-                <div className="text-sm font-semibold">Documento #{c.id}</div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold">Documento #{c.id}</div>
+                  <Link
+                    className="text-xs font-medium uppercase tracking-wide text-slate-600 hover:underline"
+                    href={`/admin/config/documentos/emitidos/${c.id}`}
+                  >
+                    Ver detalhe
+                  </Link>
+                </div>
                 <div className="mt-1 text-xs text-slate-600">
-                  Matricula: {c.matricula_id} | Modelo: {c.contrato_modelo_id} | Status: {c.status_assinatura}
+                  Matricula: {c.matricula_id} | Modelo:{" "}
+                  {c.documento_modelo_id ?? c.contrato_modelo_id ?? "-"} | Status: {c.status_assinatura ?? "-"}
                 </div>
                 <div className="mt-2 text-sm text-slate-600">Criado: {new Date(c.created_at).toLocaleString("pt-BR")}</div>
                 <div className="mt-1 text-sm text-slate-600">PDF: {c.pdf_url ? "Disponivel" : "-"}</div>

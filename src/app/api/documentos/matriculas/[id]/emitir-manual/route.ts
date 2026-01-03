@@ -186,6 +186,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       matricula_id: matriculaId,
       status_assinatura: "PENDENTE",
       conteudo_renderizado_md: conteudo,
+      conteudo_html: conteudo,
       variaveis_utilizadas_json: vars,
       snapshot_financeiro_json: snapshot,
       hash_conteudo: hash,

@@ -224,6 +224,7 @@ export async function POST(req: Request) {
     contrato_modelo_id: documentoModeloId,
     status_assinatura: "PENDENTE",
     conteudo_renderizado_md: conteudo,
+    conteudo_html: conteudo,
     variaveis_utilizadas_json: vars,
     snapshot_financeiro_json: snapshot,
     hash_conteudo: hash,
