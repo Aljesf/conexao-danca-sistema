@@ -25,6 +25,8 @@ type VariavelPayload = {
   join_path?: unknown;
   target_table?: string | null;
   target_column?: string | null;
+  display_label?: string | null;
+  path_labels?: unknown;
 };
 
 type JoinEdge = {
@@ -143,6 +145,9 @@ export async function POST(req: Request) {
   const pathOrigem = body.origem === "MANUAL" ? null : body.path_origem?.trim() || null;
 
   const formato = validateFormato(body.tipo, body.formato ?? null);
+  const displayLabelRaw = typeof body.display_label === "string" ? body.display_label.trim() : "";
+  const displayLabel = displayLabelRaw ? displayLabelRaw : null;
+  const pathLabels = typeof body.path_labels === "undefined" ? null : body.path_labels ?? null;
   const rootTable = String(body.root_table || "").trim();
   const rootPkColumn = String(body.root_pk_column || "id").trim();
   const targetTable = String(body.target_table || "").trim();
@@ -180,6 +185,8 @@ export async function POST(req: Request) {
     join_path: body.origem === "MANUAL" ? null : joinPathParsed.value,
     target_table: body.origem === "MANUAL" ? null : targetTable,
     target_column: body.origem === "MANUAL" ? null : targetColumn,
+    display_label: displayLabel,
+    path_labels: body.origem === "MANUAL" ? null : pathLabels,
   };
 
   const { data, error } = await supabase
@@ -227,6 +234,7 @@ export async function PUT(req: Request) {
     updatePayload.join_path = null;
     updatePayload.target_table = null;
     updatePayload.target_column = null;
+    updatePayload.path_labels = null;
   } else if (typeof body.path_origem === "string") {
     updatePayload.path_origem = body.path_origem.trim() || null;
   }
@@ -234,6 +242,15 @@ export async function PUT(req: Request) {
   const tipoAtual = (updatePayload.tipo as Tipo | undefined) ?? body.tipo;
   if (tipoAtual && typeof tipoAtual === "string") {
     updatePayload.formato = validateFormato(tipoAtual as Tipo, body.formato ?? null);
+  }
+
+  if (typeof body.display_label !== "undefined") {
+    const raw = typeof body.display_label === "string" ? body.display_label.trim() : "";
+    updatePayload.display_label = raw ? raw : null;
+  }
+
+  if (typeof body.path_labels !== "undefined" && origemAtual !== "MANUAL") {
+    updatePayload.path_labels = body.path_labels ?? null;
   }
 
   const rootTable = typeof body.root_table === "string" ? body.root_table.trim() : "";

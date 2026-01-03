@@ -33,6 +33,8 @@ type DocumentoVariavel = {
   join_path: JoinEdge[] | null;
   target_table: string | null;
   target_column: string | null;
+  display_label: string | null;
+  path_labels: PathLabels | null;
 };
 
 type JoinEdge = {
@@ -65,6 +67,14 @@ type SchemaColumn = {
   is_nullable: string;
 };
 
+type PathLabels = {
+  root_label?: string;
+  hop1_label?: string;
+  hop2_label?: string;
+  hop3_label?: string;
+  target_label?: string;
+};
+
 const ORIGEM_LABELS: Record<Origem, string> = {
   ALUNO: "Aluno (dados da pessoa)",
   RESPONSAVEL_FINANCEIRO: "Responsavel financeiro",
@@ -88,6 +98,44 @@ const ORIGEM_HINTS: Record<Origem, string> = {
 const TIPOS: Tipo[] = ["TEXTO", "MONETARIO", "DATA"];
 const MAX_HOPS = 3;
 
+const getNextTable = (edge: { direction?: "IN" | "OUT"; from_table: string; to_table: string }) =>
+  edge.direction === "IN" ? edge.from_table : edge.to_table;
+
+const getNextColumn = (edge: { direction?: "IN" | "OUT"; from_column: string; to_column: string }) =>
+  edge.direction === "IN" ? edge.from_column : edge.to_column;
+
+const humanizeLabel = (value: string) =>
+  value
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1).toLowerCase() : ""))
+    .join(" ");
+
+const getRootLabel = (root: SchemaRoot | undefined, fallbackKey: string) => {
+  const labelRaw = root?.label ?? fallbackKey;
+  if (!labelRaw) return "";
+  const trimmed = labelRaw.split("(")[0].trim();
+  if (!trimmed) return "";
+  if (fallbackKey && trimmed.toLowerCase() === fallbackKey.toLowerCase()) {
+    return humanizeLabel(trimmed);
+  }
+  return trimmed;
+};
+
+const normalizePathLabels = (raw: unknown): PathLabels => {
+  if (!raw || typeof raw !== "object") return {};
+  const rec = raw as Record<string, unknown>;
+  return {
+    root_label: typeof rec.root_label === "string" ? rec.root_label : undefined,
+    hop1_label: typeof rec.hop1_label === "string" ? rec.hop1_label : undefined,
+    hop2_label: typeof rec.hop2_label === "string" ? rec.hop2_label : undefined,
+    hop3_label: typeof rec.hop3_label === "string" ? rec.hop3_label : undefined,
+    target_label: typeof rec.target_label === "string" ? rec.target_label : undefined,
+  };
+};
+
 export default function AdminDocumentosVariaveisPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -103,6 +151,8 @@ export default function AdminDocumentosVariaveisPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [codigo, setCodigo] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [displayLabel, setDisplayLabel] = useState("");
+  const [displayLabelTouched, setDisplayLabelTouched] = useState(false);
   const [origem, setOrigem] = useState<Origem>("MATRICULA");
   const [origemJoin, setOrigemJoin] = useState<Origem>("MATRICULA");
   const [tipo, setTipo] = useState<Tipo>("TEXTO");
@@ -111,6 +161,7 @@ export default function AdminDocumentosVariaveisPage() {
   const [rootTable, setRootTable] = useState("matriculas");
   const [rootPkColumn, setRootPkColumn] = useState("id");
   const [joinPath, setJoinPath] = useState<JoinEdge[]>([]);
+  const [hopLabels, setHopLabels] = useState<string[]>(["", "", ""]);
   const [targetColumn, setTargetColumn] = useState("");
 
   const precisaJoin = origem !== "MANUAL";
@@ -122,8 +173,15 @@ export default function AdminDocumentosVariaveisPage() {
     return [];
   }, [tipo]);
 
-  const getNextTable = (edge: SchemaAdj | JoinEdge) =>
-    edge.direction === "IN" ? edge.from_table : edge.to_table;
+  const rootLabel = useMemo(() => {
+    const selected = roots.find((r) => r.key === rootTable);
+    return getRootLabel(selected, rootTable);
+  }, [roots, rootTable]);
+
+  const getDefaultHopLabel = (edge: SchemaAdj | JoinEdge) => {
+    const nextTable = getNextTable(edge);
+    return nextTable ? humanizeLabel(nextTable) : "";
+  };
 
   const tablesPath = useMemo(() => {
     const tables = [rootTable];
@@ -132,11 +190,6 @@ export default function AdminDocumentosVariaveisPage() {
     }
     return tables;
   }, [rootTable, joinPath]);
-
-  const breadcrumb = useMemo(
-    () => tablesPath.filter((p) => p && p.trim().length > 0),
-    [tablesPath],
-  );
 
   const targetTable = tablesPath[tablesPath.length - 1] || rootTable;
 
@@ -149,6 +202,34 @@ export default function AdminDocumentosVariaveisPage() {
     () => [tablesPath[0] ?? "", tablesPath[1] ?? "", tablesPath[2] ?? ""],
     [tablesPath],
   );
+
+  const humanPathLabel = useMemo(() => {
+    if (!precisaJoin) return "";
+    const parts: string[] = [];
+    if (rootLabel) parts.push(rootLabel);
+    joinPath.forEach((edge, index) => {
+      const override = hopLabels[index]?.trim() ?? "";
+      const label = override || getDefaultHopLabel(edge);
+      if (label) parts.push(label);
+    });
+    if (targetColumn) parts.push(targetColumn);
+    return parts.join(" -> ");
+  }, [precisaJoin, rootLabel, joinPath, hopLabels, targetColumn]);
+
+  const technicalPathLabel = useMemo(() => {
+    if (!precisaJoin) return "";
+    const parts: string[] = [];
+    if (rootTable && rootPkColumn) parts.push(`${rootTable}.${rootPkColumn}`);
+    joinPath.forEach((edge) => {
+      const nextTable = getNextTable(edge);
+      const nextColumn = getNextColumn(edge);
+      if (nextTable && nextColumn) parts.push(`${nextTable}.${nextColumn}`);
+    });
+    if (targetTable && targetColumn) parts.push(`${targetTable}.${targetColumn}`);
+    return parts.join(" -> ");
+  }, [precisaJoin, rootTable, rootPkColumn, joinPath, targetTable, targetColumn]);
+
+  const displayLabelValue = displayLabelTouched ? displayLabel : humanPathLabel;
 
   const isJoinEdge = (edge: unknown): edge is JoinEdge => {
     if (!edge || typeof edge !== "object") return false;
@@ -225,6 +306,7 @@ export default function AdminDocumentosVariaveisPage() {
     setRootTable(nextTable);
     setRootPkColumn(selected?.pk ?? "id");
     setJoinPath([]);
+    setHopLabels(["", "", ""]);
     setTargetColumn("");
   };
 
@@ -233,6 +315,11 @@ export default function AdminDocumentosVariaveisPage() {
     if (!table) return;
     if (!value) {
       setJoinPath((prev) => prev.slice(0, index));
+      setHopLabels((prev) => {
+        const next = prev.slice(0, index);
+        while (next.length < MAX_HOPS) next.push("");
+        return next;
+      });
       setTargetColumn("");
       return;
     }
@@ -244,7 +331,31 @@ export default function AdminDocumentosVariaveisPage() {
       next[index] = selected;
       return next;
     });
+    setHopLabels((prev) => {
+      const next = prev.slice(0, index);
+      next[index] = getDefaultHopLabel(selected);
+      while (next.length < MAX_HOPS) next.push("");
+      return next;
+    });
     setTargetColumn("");
+  };
+
+  const handleHopLabelChange = (index: number, value: string) => {
+    setHopLabels((prev) => {
+      const next = prev.slice(0);
+      next[index] = value;
+      return next;
+    });
+  };
+
+  const handleDisplayLabelChange = (value: string) => {
+    if (!value.trim()) {
+      setDisplayLabel("");
+      setDisplayLabelTouched(false);
+      return;
+    }
+    setDisplayLabel(value);
+    setDisplayLabelTouched(true);
   };
 
   const carregar = useCallback(async () => {
@@ -266,6 +377,8 @@ export default function AdminDocumentosVariaveisPage() {
     setEditingId(null);
     setCodigo("");
     setDescricao("");
+    setDisplayLabel("");
+    setDisplayLabelTouched(false);
     setOrigem("MATRICULA");
     setOrigemJoin("MATRICULA");
     setTipo("TEXTO");
@@ -275,6 +388,7 @@ export default function AdminDocumentosVariaveisPage() {
     setRootTable(defaultRoot?.key ?? "matriculas");
     setRootPkColumn(defaultRoot?.pk ?? "id");
     setJoinPath([]);
+    setHopLabels(["", "", ""]);
     setTargetColumn("");
   };
 
@@ -282,6 +396,9 @@ export default function AdminDocumentosVariaveisPage() {
     setEditingId(item.id);
     setCodigo(item.codigo);
     setDescricao(item.descricao);
+    const display = item.display_label ?? "";
+    setDisplayLabel(display);
+    setDisplayLabelTouched(Boolean(display));
     setOrigem(item.origem);
     if (item.origem !== "MANUAL") setOrigemJoin(item.origem);
     setTipo(item.tipo);
@@ -293,6 +410,12 @@ export default function AdminDocumentosVariaveisPage() {
       ? item.join_path.filter(isJoinEdge)
       : [];
     setJoinPath(safeJoin);
+    const labels = normalizePathLabels(item.path_labels);
+    setHopLabels([
+      labels.hop1_label ?? "",
+      labels.hop2_label ?? "",
+      labels.hop3_label ?? "",
+    ]);
     setTargetColumn(item.target_column ?? "");
     setOkMsg(null);
     setErro(null);
@@ -321,6 +444,26 @@ export default function AdminDocumentosVariaveisPage() {
       return;
     }
 
+    const resolveHopLabel = (edge: JoinEdge | undefined, override: string | undefined) => {
+      if (!edge) return null;
+      const trimmed = (override ?? "").trim();
+      if (trimmed) return trimmed;
+      const nextTable = getNextTable(edge);
+      return nextTable ? humanizeLabel(nextTable) : null;
+    };
+
+    const pathLabels = precisaJoin
+      ? {
+          root_label: rootLabel || (rootTable ? humanizeLabel(rootTable) : null),
+          hop1_label: resolveHopLabel(joinPath[0], hopLabels[0]),
+          hop2_label: resolveHopLabel(joinPath[1], hopLabels[1]),
+          hop3_label: resolveHopLabel(joinPath[2], hopLabels[2]),
+          target_label: targetColumn ? targetColumn.trim() : null,
+        }
+      : null;
+
+    const displayLabelPayload = displayLabelTouched ? displayLabel.trim() : "";
+
     const payload = {
       id: editingId ?? undefined,
       codigo: codigo.trim(),
@@ -334,6 +477,8 @@ export default function AdminDocumentosVariaveisPage() {
       join_path: precisaJoin ? joinPath : null,
       target_table: precisaJoin ? targetTable.trim() : null,
       target_column: precisaJoin ? targetColumn.trim() : null,
+      display_label: displayLabelPayload || null,
+      path_labels: pathLabels,
     };
 
     try {
@@ -463,8 +608,18 @@ export default function AdminDocumentosVariaveisPage() {
             </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium">Origem do valor</label>
+          <div className="md:col-span-3">
+            <label className="text-sm font-medium">De onde vem o valor?</label>
+            <div className="mt-1">
+              <Input
+                value={displayLabelValue}
+                onChange={(e) => handleDisplayLabelChange(e.target.value)}
+                placeholder="Nome humano da variavel (origem construida)"
+              />
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Nome humano da variavel. Se vazio, usa o caminho humano do wizard.
+            </p>
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="checkbox"
@@ -480,13 +635,9 @@ export default function AdminDocumentosVariaveisPage() {
               />
               <span className="text-sm">Variavel manual (preenchida na emissao)</span>
             </div>
-            {origem !== "MANUAL" ? (
-              <p className="mt-1 text-xs text-slate-500">
-                Modo join ativo: {ORIGEM_LABELS[origem] ?? origem}
-              </p>
-            ) : (
+            {origem === "MANUAL" ? (
               <p className="mt-1 text-xs text-slate-500">{origemHint}</p>
-            )}
+            ) : null}
           </div>
 
           <div>
@@ -557,6 +708,7 @@ export default function AdminDocumentosVariaveisPage() {
                     const selectedEdge = joinPath[index];
                     const selectedValue = selectedEdge ? edgeKey(selectedEdge) : "";
                     const disabled = index > 0 && !joinPath[index - 1];
+                    const defaultHopLabel = selectedEdge ? getDefaultHopLabel(selectedEdge) : "";
 
                     return (
                       <div key={`hop-${index}`}>
@@ -575,14 +727,23 @@ export default function AdminDocumentosVariaveisPage() {
                             </option>
                           ))}
                         </select>
+                        <label className="mt-2 block text-xs text-slate-500">Nome do hop (opcional)</label>
+                        <Input
+                          className="mt-1"
+                          value={hopLabels[index] ?? ""}
+                          onChange={(e) => handleHopLabelChange(index, e.target.value)}
+                          placeholder={defaultHopLabel || "Nome do hop"}
+                          disabled={!selectedEdge || disabled}
+                        />
                       </div>
                     );
                   })}
                 </div>
 
-                <p className="mt-2 text-xs text-slate-500">
-                  Caminho: {breadcrumb.length ? breadcrumb.join(" -> ") : "(nenhum)"}
-                </p>
+                <div className="mt-2 space-y-1 text-xs text-slate-500">
+                  <div>Caminho humano: {humanPathLabel || "(nenhum)"}</div>
+                  <div>Caminho tecnico: {technicalPathLabel || "(nenhum)"}</div>
+                </div>
               </div>
 
               <div>
