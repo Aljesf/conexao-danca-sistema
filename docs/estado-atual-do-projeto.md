@@ -1,4 +1,4 @@
-﻿﻿# estado-atual-do-projeto.md
+# estado-atual-do-projeto.md
 
 ## Módulo atual
 Documentos — Motor institucional (Modelos, Variáveis, Operações, Conjuntos, Grupos)
@@ -18,6 +18,8 @@ Documentos — Motor institucional (Modelos, Variáveis, Operações, Conjuntos,
     - FK conjunto_id → documentos_conjuntos(id) (on delete cascade)
     - codigo único por conjunto
     - obrigatorio
+    - papel (PRINCIPAL/OBRIGATORIO/OPCIONAL/ADICIONAL)
+    - regra: 1 PRINCIPAL por conjunto
     - ordem
   - public.documentos_grupos_modelos
     - pivot grupo_id ↔ documento_modelo_id
@@ -46,6 +48,8 @@ Documentos — Motor institucional (Modelos, Variáveis, Operações, Conjuntos,
 - (pendente) UI de Conjuntos/Grupos e vínculo com modelos
 
 - UI unica de Conjuntos + Grupos em /admin/config/documentos/conjuntos
+- Governanca de grupos por papel (PRINCIPAL/OBRIGATORIO/OPCIONAL/ADICIONAL)
+- Regra de emissao: matricula exige 1 grupo PRINCIPAL
 - Redirect legado: /admin/config/documentos/conjuntos/[id] -> #conjunto-<id>
 
 ---

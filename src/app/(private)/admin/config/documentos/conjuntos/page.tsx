@@ -66,6 +66,7 @@ export default function AdminDocumentosConjuntosPage() {
   const [gDescricao, setGDescricao] = React.useState("");
   const [gOrdem, setGOrdem] = React.useState<number>(1);
   const [gObrigatorio, setGObrigatorio] = React.useState(false);
+  const [gPapel, setGPapel] = React.useState<GrupoPapel>("OPCIONAL");
 
   const [modelosByGrupo, setModelosByGrupo] = React.useState<Record<number, GrupoModeloLink[]>>({});
   const [modelosLoadingByGrupo, setModelosLoadingByGrupo] = React.useState<Record<number, boolean>>({});
@@ -189,13 +190,26 @@ export default function AdminDocumentosConjuntosPage() {
     setErro(null);
     setLoading(true);
     try {
+      const conjuntoAtual = conjuntos.find((c) => c.id === conjuntoId);
+      const principalExiste = (conjuntoAtual?.grupos ?? []).some(
+        (g) => (g.papel ?? "").toUpperCase() === "PRINCIPAL",
+      );
+      if (gPapel === "PRINCIPAL" && principalExiste) {
+        setErro("Ja existe um grupo PRINCIPAL neste conjunto.");
+        return;
+      }
+
+      const obrigatorio =
+        gPapel === "PRINCIPAL" || gPapel === "OBRIGATORIO" ? true : Boolean(gObrigatorio);
+
       const payload = {
         conjunto_id: conjuntoId,
         codigo: gCodigo.trim(),
         nome: gNome.trim(),
         descricao: gDescricao.trim() || null,
         ordem: Number(gOrdem) || 1,
-        obrigatorio: Boolean(gObrigatorio),
+        obrigatorio,
+        papel: gPapel,
       };
 
       const res = await fetch(`/api/documentos/conjuntos/${conjuntoId}/grupos`, {
@@ -212,6 +226,7 @@ export default function AdminDocumentosConjuntosPage() {
       setGDescricao("");
       setGOrdem(1);
       setGObrigatorio(false);
+      setGPapel("OPCIONAL");
 
       await carregarTudo();
     } catch (e) {
@@ -341,7 +356,7 @@ export default function AdminDocumentosConjuntosPage() {
                     <p className="text-sm font-semibold">Cadastrar grupo</p>
                     <p className="mt-1 text-xs text-slate-600">Crie um grupo dentro deste conjunto.</p>
 
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div>
                         <label className="text-sm font-medium">Codigo</label>
                         <input
@@ -372,12 +387,45 @@ export default function AdminDocumentosConjuntosPage() {
                         />
                       </div>
 
+                      <div>
+                        <label className="text-sm font-medium">Papel</label>
+                        <select
+                          className="mt-1 w-full rounded-md border p-2 text-sm"
+                          value={gPapel}
+                          onChange={(e) => {
+                            const next = e.target.value as GrupoPapel;
+                            setGPapel(next);
+                            if (next === "PRINCIPAL" || next === "OBRIGATORIO") {
+                              setGObrigatorio(true);
+                            }
+                            if (next === "OPCIONAL" || next === "ADICIONAL") {
+                              setGObrigatorio(false);
+                            }
+                          }}
+                        >
+                          <option value="PRINCIPAL">PRINCIPAL</option>
+                          <option value="OBRIGATORIO">OBRIGATORIO</option>
+                          <option value="OPCIONAL">OPCIONAL</option>
+                          <option value="ADICIONAL">ADICIONAL</option>
+                        </select>
+                      </div>
+
                       <div className="flex items-center gap-3">
                         <label className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
                             checked={gObrigatorio}
-                            onChange={(e) => setGObrigatorio(e.target.checked)}
+                            onChange={(e) => {
+                              const next = e.target.checked;
+                              setGObrigatorio(next);
+                              if (next && gPapel !== "PRINCIPAL" && gPapel !== "OBRIGATORIO") {
+                                setGPapel("OBRIGATORIO");
+                              }
+                              if (!next && gPapel === "OBRIGATORIO") {
+                                setGPapel("OPCIONAL");
+                              }
+                            }}
+                            disabled={gPapel === "PRINCIPAL" || gPapel === "OBRIGATORIO"}
                           />
                           Obrigatorio
                         </label>
@@ -420,19 +468,35 @@ export default function AdminDocumentosConjuntosPage() {
                     <p className="mt-2 text-sm text-slate-500">Nenhum grupo cadastrado.</p>
                   ) : (
                     <div className="mt-2 grid gap-2">
-                      {c.grupos.map((g) => (
-                        <div key={g.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold">{g.nome}</p>
-                              <p className="text-xs text-slate-600">{g.codigo}</p>
-                              <p className="text-xs text-slate-500">
-                                Ordem: {g.ordem} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"}
-                                {g.papel ? ` | Papel: ${g.papel}` : ""}
-                              </p>
-                              {g.descricao ? <p className="mt-1 text-xs text-slate-500">{g.descricao}</p> : null}
-                            </div>
+                    {c.grupos.map((g) => (
+                      <div key={g.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold">{g.nome}</p>
+                            <p className="text-xs text-slate-600">{g.codigo}</p>
+                            <p className="text-xs text-slate-500">
+                              Ordem: {g.ordem} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"}
+                              {g.papel ? ` | Papel: ${g.papel}` : ""}
+                            </p>
+                            {g.descricao ? <p className="mt-1 text-xs text-slate-500">{g.descricao}</p> : null}
                           </div>
+                          {g.papel ? (
+                            <span
+                              className={[
+                                "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                                g.papel === "PRINCIPAL"
+                                  ? "bg-slate-900 text-white"
+                                  : g.papel === "OBRIGATORIO"
+                                    ? "bg-slate-700 text-white"
+                                    : g.papel === "ADICIONAL"
+                                      ? "bg-slate-200 text-slate-700"
+                                      : "bg-slate-100 text-slate-700",
+                              ].join(" ")}
+                            >
+                              {g.papel}
+                            </span>
+                          ) : null}
+                        </div>
 
                           <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                             <div className="flex items-center justify-between gap-2">

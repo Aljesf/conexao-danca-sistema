@@ -57,7 +57,7 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
     () => [
       "Fluxo manual: Conjunto -> Grupos -> Modelo por Grupo -> Emissao.",
       "Grupos OBRIGATORIO ficam sempre incluidos.",
-      "E obrigatorio selecionar exatamente 1 grupo com papel PRINCIPAL por emissao.",
+      "E obrigatorio selecionar exatamente 1 modelo dentro do grupo PRINCIPAL.",
       "Ano (2024/2026) nao e grupo: e escolha de MODELO dentro do grupo PRINCIPAL.",
     ],
     []
@@ -114,11 +114,12 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
     const sel: Record<number, number> = {};
     for (const g of gs) {
       const papel = (g.papel ?? "").toUpperCase();
-      const isObrig = papel === "OBRIGATORIO" || g.obrigatorio === true;
+      const isPrincipal = papel === "PRINCIPAL";
+      const isObrig = isPrincipal || papel === "OBRIGATORIO" || g.obrigatorio === true;
       inc[g.id] = isObrig ? true : false;
 
       const opts = map[g.id] ?? [];
-      if (opts.length === 1) sel[g.id] = opts[0];
+      if (opts.length === 1 && isObrig) sel[g.id] = opts[0];
     }
     setIncluirGrupo(inc);
     setModeloEscolhido(sel);
@@ -148,15 +149,19 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
       return;
     }
 
-    const principaisIncluidos = grupos.filter(
-      (g) => (g.papel ?? "").toUpperCase() === "PRINCIPAL" && (incluirGrupo[g.id] ?? false)
-    );
-    if (principaisIncluidos.length === 0) {
-      setErro("Selecione 1 grupo PRINCIPAL para emissao.");
+    const principais = grupos.filter((g) => (g.papel ?? "").toUpperCase() === "PRINCIPAL");
+    if (principais.length === 0) {
+      setErro("Este conjunto nao possui grupo PRINCIPAL configurado.");
       return;
     }
-    if (principaisIncluidos.length > 1) {
-      setErro("Selecione apenas 1 grupo PRINCIPAL para emissao.");
+    if (principais.length > 1) {
+      setErro("Existe mais de um grupo PRINCIPAL neste conjunto.");
+      return;
+    }
+
+    const principal = principais[0];
+    if (!incluirGrupo[principal.id]) {
+      setErro("O grupo PRINCIPAL deve estar incluido.");
       return;
     }
 
@@ -274,7 +279,8 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
               {grupos.map((g) => {
                 const opts = modelosPorGrupo[g.id] ?? [];
                 const papel = (g.papel ?? "").toUpperCase();
-                const isObrig = papel === "OBRIGATORIO" || g.obrigatorio === true;
+                const isPrincipal = papel === "PRINCIPAL";
+                const isObrig = isPrincipal || papel === "OBRIGATORIO" || g.obrigatorio === true;
                 const checked = incluirGrupo[g.id] ?? isObrig;
 
                 return (

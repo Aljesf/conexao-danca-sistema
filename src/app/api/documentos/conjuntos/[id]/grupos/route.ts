@@ -70,6 +70,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   };
 
   const supabase = await getSupabaseServerSSR();
+  if (papel === "PRINCIPAL") {
+    const { data: existente, error: principalErr } = await supabase
+      .from("documentos_grupos")
+      .select("id")
+      .eq("conjunto_id", conjuntoId)
+      .eq("papel", "PRINCIPAL")
+      .limit(1);
+
+    if (principalErr) {
+      return NextResponse.json({ ok: false, message: principalErr.message }, { status: 500 });
+    }
+
+    if ((existente ?? []).length > 0) {
+      return NextResponse.json(
+        { ok: false, message: "Ja existe um grupo PRINCIPAL neste conjunto." },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("documentos_grupos")
     .insert(payload)

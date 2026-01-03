@@ -65,6 +65,37 @@ export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string
   }
 
   const supabase = await getSupabaseServerSSR();
+  if (body.papel === "PRINCIPAL") {
+    const { data: grupoAtual, error: grupoErr } = await supabase
+      .from("documentos_grupos")
+      .select("id,conjunto_id")
+      .eq("id", id)
+      .single();
+
+    if (grupoErr || !grupoAtual) {
+      return NextResponse.json({ ok: false, message: "Grupo nao encontrado." }, { status: 404 });
+    }
+
+    const { data: existente, error: principalErr } = await supabase
+      .from("documentos_grupos")
+      .select("id")
+      .eq("conjunto_id", grupoAtual.conjunto_id)
+      .eq("papel", "PRINCIPAL")
+      .neq("id", id)
+      .limit(1);
+
+    if (principalErr) {
+      return NextResponse.json({ ok: false, message: principalErr.message }, { status: 500 });
+    }
+
+    if ((existente ?? []).length > 0) {
+      return NextResponse.json(
+        { ok: false, message: "Ja existe um grupo PRINCIPAL neste conjunto." },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("documentos_grupos")
     .update(patch)
