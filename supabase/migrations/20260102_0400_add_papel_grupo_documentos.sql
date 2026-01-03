@@ -1,11 +1,11 @@
 begin;
 
 -- 1.1) Adicionar coluna papel
-alter table public.documentos_conjuntos_grupos
+alter table public.documentos_grupos
   add column if not exists papel text;
 
 -- 1.2) Backfill seguro (caso ja exista boolean obrigatorio)
-update public.documentos_conjuntos_grupos
+update public.documentos_grupos
 set papel =
   case
     when obrigatorio = true then 'OBRIGATORIO'
@@ -17,17 +17,17 @@ where papel is null;
 do $$
 begin
   if not exists (
-    select 1 from pg_constraint where conname = 'documentos_grupos_papel_chk'
+    select 1 from pg_constraint where conname in ('documentos_grupos_papel_check', 'documentos_grupos_papel_chk')
   ) then
-    alter table public.documentos_conjuntos_grupos
-      add constraint documentos_grupos_papel_chk
+    alter table public.documentos_grupos
+      add constraint documentos_grupos_papel_check
       check (papel in ('PRINCIPAL','OBRIGATORIO','OPCIONAL','ADICIONAL'));
   end if;
 end $$;
 
 -- 1.4) Garantir 1 PRINCIPAL por conjunto
 create unique index if not exists documentos_grupos_principal_unico
-  on public.documentos_conjuntos_grupos (conjunto_id)
+  on public.documentos_grupos (conjunto_id)
   where papel = 'PRINCIPAL';
 
 commit;

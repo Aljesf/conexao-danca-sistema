@@ -21,7 +21,7 @@ begin
     alter table public.documentos_conjuntos_grupos_modelos
       add constraint doc_grupo_modelo_grupo_fk
       foreign key (conjunto_grupo_id)
-      references public.documentos_conjuntos_grupos(id)
+      references public.documentos_grupos(id)
       on delete cascade;
   end if;
 end $$;

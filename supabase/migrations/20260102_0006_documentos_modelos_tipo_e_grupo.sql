@@ -40,7 +40,7 @@ begin
     alter table public.documentos_modelo
       add constraint documentos_modelo_conjunto_grupo_fk
       foreign key (conjunto_grupo_id)
-      references public.documentos_conjuntos_grupos(id)
+      references public.documentos_grupos(id)
       on delete set null;
   end if;
 end $$;
