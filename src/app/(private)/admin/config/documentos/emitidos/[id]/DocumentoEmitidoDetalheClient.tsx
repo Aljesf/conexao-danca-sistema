@@ -13,6 +13,7 @@ type DocEmitido = {
   pdf_url?: string | null;
   conteudo_html?: string | null;
   conteudo_renderizado_md?: string | null;
+  conteudo_resolvido_html?: string | null;
   editado_manual?: boolean;
   created_at?: string;
   updated_at?: string | null;
@@ -44,7 +45,11 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
       if (!res.ok || !json.ok || !json.data) {
         throw new Error(json.message || "Falha ao carregar documento emitido.");
       }
-      const baseHtml = json.data.conteudo_html || json.data.conteudo_renderizado_md || "<p></p>";
+      const baseHtml =
+        json.data.conteudo_resolvido_html ||
+        json.data.conteudo_html ||
+        json.data.conteudo_renderizado_md ||
+        "<p></p>";
       setDoc(json.data);
       setHtml(baseHtml);
     } catch (e) {
@@ -182,9 +187,14 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                   <div className="mt-3 flex justify-end gap-2">
                     <button
                       type="button"
-                      className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
-                      onClick={() => {
-                        setHtml(doc.conteudo_html || doc.conteudo_renderizado_md || "<p></p>");
+                    className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                    onClick={() => {
+                        setHtml(
+                          doc.conteudo_resolvido_html ||
+                            doc.conteudo_html ||
+                            doc.conteudo_renderizado_md ||
+                            "<p></p>",
+                        );
                         setModoEditar(false);
                       }}
                     >
@@ -212,7 +222,11 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                       className="prose max-w-none"
                       // Conteudo emitido e gerado internamente.
                       dangerouslySetInnerHTML={{
-                        __html: doc.conteudo_html || doc.conteudo_renderizado_md || "<p>(sem conteudo)</p>",
+                        __html:
+                          doc.conteudo_resolvido_html ||
+                          doc.conteudo_html ||
+                          doc.conteudo_renderizado_md ||
+                          "<p>(sem conteudo)</p>",
                       }}
                     />
                   </div>

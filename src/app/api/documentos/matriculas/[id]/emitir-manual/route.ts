@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import {
+  resolvePlaceholdersHtml,
+  type DocumentoVariavel,
+} from "@/lib/documentos/resolvePlaceholders";
 
 type Item = { grupo_id: number; documento_modelo_id: number; incluir: boolean };
 type Body = {
@@ -19,17 +23,6 @@ function normalizePapel(value: unknown): Papel | null {
   return PAPEIS_VALIDOS.includes(upper as Papel) ? (upper as Papel) : null;
 }
 
-function renderTemplate(template: string, vars: Record<string, unknown>): string {
-  return template.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_match, key: string) => {
-    const k = String(key).trim().toUpperCase();
-    const v = vars[k];
-    if (v === null || typeof v === "undefined") return "";
-    if (typeof v === "string") return v;
-    if (typeof v === "number" || typeof v === "boolean") return String(v);
-    return JSON.stringify(v);
-  });
-}
-
 function resolveModeloTemplate(modelo: Record<string, unknown>): string {
   const formato = String(modelo.formato ?? "MARKDOWN");
   if (formato === "RICH_HTML") {
@@ -38,6 +31,65 @@ function resolveModeloTemplate(modelo: Record<string, unknown>): string {
   }
   const texto = modelo.texto_modelo_md;
   return typeof texto === "string" ? texto : "";
+}
+
+function getByPath(obj: unknown, path: string): unknown {
+  if (!obj || typeof obj !== "object") return undefined;
+  const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+  let cur: unknown = obj;
+  for (const part of parts) {
+    if (!cur || typeof cur !== "object") return undefined;
+    const rec = cur as Record<string, unknown>;
+    cur = rec[part];
+  }
+  return cur;
+}
+
+function buildVariaveisByCodigo(rows: Array<Record<string, unknown>>): Map<string, DocumentoVariavel> {
+  const map = new Map<string, DocumentoVariavel>();
+  for (const row of rows) {
+    const codigo = String(row.codigo ?? "").trim().toUpperCase();
+    if (!codigo) continue;
+    map.set(codigo, {
+      codigo,
+      path_origem: typeof row.path_origem === "string" ? row.path_origem : row.path_origem ?? null,
+      formato: typeof row.formato === "string" ? row.formato : row.formato ?? null,
+      tipo: typeof row.tipo === "string" ? row.tipo : row.tipo ?? null,
+    });
+  }
+  return map;
+}
+
+function buildVariaveisUtilizadas(args: {
+  htmlTemplate: string;
+  variaveisByCodigo: Map<string, DocumentoVariavel>;
+  contexto: Record<string, unknown>;
+}): Record<string, unknown> {
+  const { htmlTemplate, variaveisByCodigo, contexto } = args;
+  const vars: Record<string, unknown> = {};
+
+  htmlTemplate.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_match, codeRaw: string) => {
+    const code = String(codeRaw || "").trim();
+    if (!code || Object.prototype.hasOwnProperty.call(vars, code)) return "";
+    const v = variaveisByCodigo.get(code);
+    const val = v?.path_origem
+      ? getByPath(contexto, v.path_origem)
+      : getByPath(contexto, `variaveis_manuais.${code}`);
+    vars[code] = typeof val === "undefined" ? null : val;
+    return "";
+  });
+
+  return vars;
+}
+
+function normalizeManualVars(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const code = k.trim().toUpperCase();
+    if (!code) continue;
+    out[code] = v;
+  }
+  return out;
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -59,7 +111,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const { data: mat, error: matErr } = await supabase
     .from("matriculas")
-    .select("id, documento_conjunto_id, pessoa_id, responsavel_financeiro_id")
+    .select("*")
     .eq("id", matriculaId)
     .single();
 
@@ -129,7 +181,53 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const emitidos: Array<Record<string, unknown>> = [];
   const snapshot = (body.snapshot_financeiro ?? {}) as Record<string, unknown>;
-  const manuais = (body.variaveis_manuais ?? {}) as Record<string, unknown>;
+  const manuaisRaw = (body.variaveis_manuais ?? {}) as Record<string, unknown>;
+  const manuais = normalizeManualVars(manuaisRaw);
+
+  const { data: variaveisRaw, error: variaveisErr } = await supabase
+    .from("documentos_variaveis")
+    .select("codigo, path_origem, formato, tipo")
+    .eq("ativo", true);
+
+  if (variaveisErr) {
+    return NextResponse.json({ ok: false, message: variaveisErr.message }, { status: 500 });
+  }
+
+  const variaveisByCodigo = buildVariaveisByCodigo(
+    (variaveisRaw ?? []) as unknown as Array<Record<string, unknown>>,
+  );
+
+  const pessoaId = Number((mat as Record<string, unknown>).pessoa_id);
+  const respFinId = Number((mat as Record<string, unknown>).responsavel_financeiro_id);
+
+  const { data: aluno } = await supabase.from("pessoas").select("*").eq("id", pessoaId).single();
+  const { data: responsavel } = await supabase.from("pessoas").select("*").eq("id", respFinId).single();
+
+  const vinculoIdRaw = (mat as Record<string, unknown>).vinculo_id;
+  const vinculoId = typeof vinculoIdRaw === "number" ? vinculoIdRaw : Number(vinculoIdRaw);
+  let turma: Record<string, unknown> | null = null;
+
+  if (Number.isFinite(vinculoId)) {
+    const { data: turmaData, error: turmaErr } = await supabase
+      .from("turmas")
+      .select("*")
+      .eq("turma_id", vinculoId)
+      .maybeSingle();
+
+    if (!turmaErr && turmaData) {
+      turma = turmaData as Record<string, unknown>;
+    }
+  }
+
+  const contexto: Record<string, unknown> = {
+    aluno: aluno ?? null,
+    turma,
+    matricula: mat,
+    responsavel: responsavel ?? null,
+    escola: null,
+    snapshot_financeiro: snapshot,
+    variaveis_manuais: manuais,
+  };
 
   const grupoIdsIncluidos = Array.from(new Set(selecionados.filter((s) => s.incluir).map((s) => s.grupo_id)));
   if (grupoIdsIncluidos.length === 0) {
@@ -176,18 +274,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ ok: false, message: `Modelo nao encontrado: ${item.documento_modelo_id}` }, { status: 404 });
     }
 
-    const vars: Record<string, unknown> = { ...manuais };
-
     const template = resolveModeloTemplate(modelo as Record<string, unknown>);
-    const conteudo = renderTemplate(template, vars);
-    const hash = crypto.createHash("sha256").update(conteudo, "utf8").digest("hex");
+    const conteudoResolvido = resolvePlaceholdersHtml({
+      htmlTemplate: template,
+      variaveisByCodigo,
+      contexto,
+    });
+    const hash = crypto.createHash("sha256").update(conteudoResolvido, "utf8").digest("hex");
+    const variaveisUtilizadas = buildVariaveisUtilizadas({
+      htmlTemplate: template,
+      variaveisByCodigo,
+      contexto,
+    });
 
     const baseInsert: Record<string, unknown> = {
       matricula_id: matriculaId,
       status_assinatura: "PENDENTE",
-      conteudo_renderizado_md: conteudo,
-      conteudo_html: conteudo,
-      variaveis_utilizadas_json: vars,
+      conteudo_renderizado_md: conteudoResolvido,
+      conteudo_html: conteudoResolvido,
+      conteudo_template_html: template,
+      conteudo_resolvido_html: conteudoResolvido,
+      contexto_json: contexto,
+      variaveis_utilizadas_json: variaveisUtilizadas,
       snapshot_financeiro_json: snapshot,
       hash_conteudo: hash,
       documento_conjunto_id: conjuntoId,

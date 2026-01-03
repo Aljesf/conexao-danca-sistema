@@ -2,11 +2,9 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 import {
-  formatCentavosBRL,
-  getByPath,
-  safeParseSchema,
-  type PlaceholderSchemaItem,
-} from "@/lib/documentos/placeholders";
+  resolvePlaceholdersHtml,
+  type DocumentoVariavel,
+} from "@/lib/documentos/resolvePlaceholders";
 
 type EmitirDocumentoPayload = {
   matricula_id: number;
@@ -16,99 +14,6 @@ type EmitirDocumentoPayload = {
   snapshot_financeiro?: Record<string, unknown>;
 };
 
-function renderTemplate(template: string, vars: Record<string, unknown>): string {
-  return template.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_match, key: string) => {
-    const k = String(key).trim().toUpperCase();
-    const v = vars[k];
-    if (v === null || typeof v === "undefined") return "";
-    if (typeof v === "string") return v;
-    if (typeof v === "number" || typeof v === "boolean") return String(v);
-    return JSON.stringify(v);
-  });
-}
-
-function readSnapshotValue(snapshot: Record<string, unknown>, fromKey: string): unknown {
-  if (!fromKey) return undefined;
-  if (fromKey.includes(".")) {
-    return getByPath({ snapshot_financeiro: snapshot }, fromKey);
-  }
-  return snapshot[fromKey];
-}
-
-function buildCalcValue(item: PlaceholderSchemaItem, snapshot: Record<string, unknown>): string | undefined {
-  if (!item.calc) return undefined;
-
-  if (item.calc.type === "STATIC") {
-    return item.calc.staticValue ?? item.defaultValue ?? "";
-  }
-
-  if (item.calc.type === "SNAPSHOT") {
-    const fromKey = (item.calc.fromKey ?? "").trim();
-    const raw = fromKey ? readSnapshotValue(snapshot, fromKey) : undefined;
-    if (typeof raw === "string") return raw;
-    if (typeof raw === "number") return String(raw);
-    return item.defaultValue;
-  }
-
-  if (item.calc.type === "FORMAT_MOEDA") {
-    const fromKey = (item.calc.fromKey ?? "").trim();
-    const raw = fromKey ? readSnapshotValue(snapshot, fromKey) : undefined;
-    if (typeof raw === "number") return formatCentavosBRL(raw);
-    return item.defaultValue;
-  }
-
-  return item.defaultValue;
-}
-
-function buildVariablesFromSchema(args: {
-  schema: PlaceholderSchemaItem[];
-  ctxDb: Record<string, unknown>;
-  snapshot: Record<string, unknown>;
-  manual: Record<string, unknown>;
-}): { vars: Record<string, unknown>; missingRequired: string[] } {
-  const { schema, ctxDb, snapshot, manual } = args;
-  const vars: Record<string, unknown> = {};
-  const missingRequired: string[] = [];
-
-  for (const item of schema) {
-    const key = item.key.trim().toUpperCase();
-    let value: unknown;
-
-    if (item.source === "DB" && item.db?.path) {
-      value = getByPath(ctxDb, item.db.path);
-      if (typeof value === "undefined" || value === null || value === "") {
-        value = item.defaultValue;
-      }
-    }
-
-    if (item.source === "CALC") {
-      value = buildCalcValue(item, snapshot);
-    }
-
-    if (item.source === "MANUAL") {
-      value = manual[key];
-      if (typeof value === "undefined" || value === null || value === "") {
-        value = item.defaultValue;
-      }
-    }
-
-    if ((typeof value === "undefined" || value === null || value === "") && item.required) {
-      missingRequired.push(key);
-    }
-
-    if (typeof value !== "undefined") {
-      vars[key] = value;
-    }
-  }
-
-  for (const [kRaw, v] of Object.entries(manual)) {
-    const k = kRaw.trim().toUpperCase();
-    vars[k] = v;
-  }
-
-  return { vars, missingRequired };
-}
-
 function resolveModeloTemplate(modelo: Record<string, unknown>): string {
   const formato = String(modelo.formato ?? "MARKDOWN");
   if (formato === "RICH_HTML") {
@@ -117,6 +22,65 @@ function resolveModeloTemplate(modelo: Record<string, unknown>): string {
   }
   const texto = modelo.texto_modelo_md;
   return typeof texto === "string" ? texto : "";
+}
+
+function getByPath(obj: unknown, path: string): unknown {
+  if (!obj || typeof obj !== "object") return undefined;
+  const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+  let cur: unknown = obj;
+  for (const part of parts) {
+    if (!cur || typeof cur !== "object") return undefined;
+    const rec = cur as Record<string, unknown>;
+    cur = rec[part];
+  }
+  return cur;
+}
+
+function buildVariaveisByCodigo(rows: Array<Record<string, unknown>>): Map<string, DocumentoVariavel> {
+  const map = new Map<string, DocumentoVariavel>();
+  for (const row of rows) {
+    const codigo = String(row.codigo ?? "").trim().toUpperCase();
+    if (!codigo) continue;
+    map.set(codigo, {
+      codigo,
+      path_origem: typeof row.path_origem === "string" ? row.path_origem : row.path_origem ?? null,
+      formato: typeof row.formato === "string" ? row.formato : row.formato ?? null,
+      tipo: typeof row.tipo === "string" ? row.tipo : row.tipo ?? null,
+    });
+  }
+  return map;
+}
+
+function buildVariaveisUtilizadas(args: {
+  htmlTemplate: string;
+  variaveisByCodigo: Map<string, DocumentoVariavel>;
+  contexto: Record<string, unknown>;
+}): Record<string, unknown> {
+  const { htmlTemplate, variaveisByCodigo, contexto } = args;
+  const vars: Record<string, unknown> = {};
+
+  htmlTemplate.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_match, codeRaw: string) => {
+    const code = String(codeRaw || "").trim();
+    if (!code || Object.prototype.hasOwnProperty.call(vars, code)) return "";
+    const v = variaveisByCodigo.get(code);
+    const val = v?.path_origem
+      ? getByPath(contexto, v.path_origem)
+      : getByPath(contexto, `variaveis_manuais.${code}`);
+    vars[code] = typeof val === "undefined" ? null : val;
+    return "";
+  });
+
+  return vars;
+}
+
+function normalizeManualVars(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const code = k.trim().toUpperCase();
+    if (!code) continue;
+    out[code] = v;
+  }
+  return out;
 }
 
 export async function POST(req: Request) {
@@ -182,50 +146,56 @@ export async function POST(req: Request) {
     }
   }
 
-  const ctxDb: Record<string, unknown> = {
-    matricula,
-    aluno,
-    responsavel,
-    turma,
-  };
-
   const snapshot = (body.snapshot_financeiro ?? {}) as Record<string, unknown>;
-  const manual = (body.variaveis_manuais ?? {}) as Record<string, unknown>;
+  const manualRaw = (body.variaveis_manuais ?? {}) as Record<string, unknown>;
+  const manual = normalizeManualVars(manualRaw);
 
-  const schema = safeParseSchema((modelo as Record<string, unknown>).placeholders_schema_json);
-  const fallbackSchema: PlaceholderSchemaItem[] = schema.length
-    ? schema
-    : [
-        { key: "ALUNO_NOME", source: "DB", required: true, db: { path: "aluno.nome" } },
-        { key: "RESP_FIN_NOME", source: "DB", required: true, db: { path: "responsavel.nome" } },
-        { key: "ANO_REFERENCIA", source: "DB", required: false, db: { path: "matricula.ano_referencia" } },
-      ];
+  const { data: variaveisRaw, error: variaveisErr } = await supabase
+    .from("documentos_variaveis")
+    .select("codigo, path_origem, formato, tipo")
+    .eq("ativo", true);
 
-  const { vars, missingRequired } = buildVariablesFromSchema({
-    schema: fallbackSchema,
-    ctxDb,
-    snapshot,
-    manual,
-  });
-
-  if (missingRequired.length > 0) {
-    return NextResponse.json(
-      { error: "Placeholders obrigatorios ausentes.", missing: missingRequired },
-      { status: 400 },
-    );
+  if (variaveisErr) {
+    return NextResponse.json({ error: variaveisErr.message }, { status: 500 });
   }
 
+  const variaveisByCodigo = buildVariaveisByCodigo(
+    (variaveisRaw ?? []) as unknown as Array<Record<string, unknown>>,
+  );
+
+  const contexto: Record<string, unknown> = {
+    aluno: aluno ?? null,
+    turma,
+    matricula,
+    responsavel: responsavel ?? null,
+    escola: null,
+    snapshot_financeiro: snapshot,
+    variaveis_manuais: manual,
+  };
+
   const template = resolveModeloTemplate(modelo as Record<string, unknown>);
-  const conteudo = renderTemplate(template, vars);
-  const hash = crypto.createHash("sha256").update(conteudo, "utf8").digest("hex");
+  const conteudoResolvido = resolvePlaceholdersHtml({
+    htmlTemplate: template,
+    variaveisByCodigo,
+    contexto,
+  });
+  const hash = crypto.createHash("sha256").update(conteudoResolvido, "utf8").digest("hex");
+  const variaveisUtilizadas = buildVariaveisUtilizadas({
+    htmlTemplate: template,
+    variaveisByCodigo,
+    contexto,
+  });
 
   const insertPayload = {
     matricula_id: body.matricula_id,
     contrato_modelo_id: documentoModeloId,
     status_assinatura: "PENDENTE",
-    conteudo_renderizado_md: conteudo,
-    conteudo_html: conteudo,
-    variaveis_utilizadas_json: vars,
+    conteudo_renderizado_md: conteudoResolvido,
+    conteudo_html: conteudoResolvido,
+    conteudo_template_html: template,
+    conteudo_resolvido_html: conteudoResolvido,
+    contexto_json: contexto,
+    variaveis_utilizadas_json: variaveisUtilizadas,
     snapshot_financeiro_json: snapshot,
     hash_conteudo: hash,
   };
