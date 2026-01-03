@@ -13,6 +13,7 @@ import { EditorRico, type VariavelDoc } from "@/components/documentos/EditorRico
 import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
 type TipoDocOpt = { id: number; label: string };
+type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
 
 async function fetchVariaveisAtivas(): Promise<VariavelDoc[]> {
   const res = await fetch("/api/documentos/variaveis?ativo=1", { cache: "no-store" });
@@ -44,6 +45,10 @@ export default function AdminDocumentosModelosPage() {
   const [novoHtml, setNovoHtml] = useState("<p></p>");
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
+  const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
+  const [conjuntoId, setConjuntoId] = useState<number | "">("");
+  const [conjuntoGrupoId, setConjuntoGrupoId] = useState<number | "">("");
+  const [vinculoOrdem, setVinculoOrdem] = useState<number>(1);
   const [saving, setSaving] = useState(false);
   const [variaveis, setVariaveis] = useState<VariavelDoc[]>([]);
   const [variaveisLoading, setVariaveisLoading] = useState(false);
@@ -103,6 +108,38 @@ export default function AdminDocumentosModelosPage() {
     }
   }
 
+  async function carregarConjuntosComGrupos() {
+    try {
+      const res = await fetch("/api/documentos/conjuntos?include=grupos", { cache: "no-store" });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: Array<{
+          id?: number;
+          nome?: string;
+          codigo?: string;
+          grupos?: Array<{ id?: number; nome?: string; codigo?: string }>;
+        }>;
+        message?: string;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar conjuntos.");
+      const list = (json.data ?? [])
+        .map((c) => ({
+          id: Number(c.id),
+          label: `${String(c.nome ?? "").trim()} (${String(c.codigo ?? "").trim()})`,
+          grupos: (c.grupos ?? [])
+            .map((g) => ({
+              id: Number(g.id),
+              label: `${String(g.nome ?? "").trim()} (${String(g.codigo ?? "").trim()})`,
+            }))
+            .filter((g) => Number.isFinite(g.id) && g.id > 0),
+        }))
+        .filter((c) => Number.isFinite(c.id) && c.id > 0);
+      setConjuntos(list);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar conjuntos.");
+    }
+  }
+
   async function criarModelo() {
     setSaving(true);
     setErro(null);
@@ -133,16 +170,25 @@ export default function AdminDocumentosModelosPage() {
               texto_modelo_md: novoTextoMarkdown,
             };
 
+      const payloadFinal = {
+        ...payload,
+        conjunto_grupo_id: conjuntoGrupoId ? conjuntoGrupoId : null,
+        ordem: vinculoOrdem,
+      };
+
       const res = await fetch("/api/documentos/modelos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payloadFinal),
       });
       const json = (await res.json()) as { data?: DocumentoModeloDTO; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao criar modelo.");
       setNovoTitulo("");
       setNovoTextoMarkdown("");
       setNovoHtml("<p></p>");
+      setConjuntoId("");
+      setConjuntoGrupoId("");
+      setVinculoOrdem(1);
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao criar modelo.");
@@ -155,6 +201,7 @@ export default function AdminDocumentosModelosPage() {
     void carregar();
     void recarregarVariaveis();
     void carregarTiposDoc();
+    void carregarConjuntosComGrupos();
   }, []);
 
   return (
@@ -219,6 +266,59 @@ export default function AdminDocumentosModelosPage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="md:col-span-2 grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">Conjunto (opcional)</label>
+              <select
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                value={conjuntoId}
+                onChange={(e) => {
+                  const next = e.target.value ? Number(e.target.value) : "";
+                  setConjuntoId(next);
+                  setConjuntoGrupoId("");
+                }}
+              >
+                <option value="">Selecione...</option>
+                {conjuntos.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Grupo (opcional)</label>
+              <select
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                value={conjuntoGrupoId}
+                onChange={(e) => setConjuntoGrupoId(e.target.value ? Number(e.target.value) : "")}
+                disabled={!conjuntoId}
+              >
+                <option value="">{conjuntoId ? "Selecione..." : "Selecione um conjunto primeiro"}</option>
+                {(conjuntos.find((c) => c.id === conjuntoId)?.grupos || []).map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Ordem do vinculo (opcional)</label>
+              <input
+                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                type="number"
+                min={1}
+                value={vinculoOrdem}
+                onChange={(e) => setVinculoOrdem(Number(e.target.value))}
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Se o modelo estiver vinculado a mais de um grupo, gerencie os demais vinculos em Conjuntos e Grupos.
+              </p>
+            </div>
           </div>
 
           <div className="md:col-span-3">

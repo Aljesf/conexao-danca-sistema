@@ -7,6 +7,8 @@ type DocumentoModeloUpdatePayload = {
   versao?: string;
   ativo?: boolean;
   tipo_documento_id?: number | null;
+  conjunto_grupo_id?: number | null;
+  ordem?: number | null;
   texto_modelo_md?: string;
   conteudo_html?: string;
   formato?: DocumentoModeloFormato;
@@ -44,7 +46,35 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: error.message }, { status: 404 });
   }
 
-  return NextResponse.json({ data }, { status: 200 });
+  const { data: vinculos, error: vincErr } = await supabase
+    .from("documentos_conjuntos_grupos_modelos")
+    .select(
+      "conjunto_grupo_id,ordem,ativo, documentos_conjuntos_grupos:conjunto_grupo_id ( id,codigo,nome,conjunto_id, documentos_conjuntos:conjunto_id ( id,codigo,nome ) )",
+    )
+    .eq("modelo_id", modeloId)
+    .eq("ativo", true)
+    .order("ordem", { ascending: true });
+
+  if (vincErr) {
+    return NextResponse.json({ error: vincErr.message }, { status: 500 });
+  }
+
+  const vinculosOut = (vinculos ?? []).map((v) => {
+    const grupo = v.documentos_conjuntos_grupos as
+      | { codigo?: string | null; nome?: string | null; documentos_conjuntos?: { codigo?: string | null; nome?: string | null } | null }
+      | null
+      | undefined;
+    return {
+      conjunto_grupo_id: v.conjunto_grupo_id,
+      ordem: v.ordem,
+      grupo_codigo: grupo?.codigo ?? null,
+      grupo_nome: grupo?.nome ?? null,
+      conjunto_codigo: grupo?.documentos_conjuntos?.codigo ?? null,
+      conjunto_nome: grupo?.documentos_conjuntos?.nome ?? null,
+    };
+  });
+
+  return NextResponse.json({ data: { ...data, vinculos: vinculosOut } }, { status: 200 });
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -61,6 +91,14 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const textoMarkdown = asText(body.texto_modelo_md);
   const conteudoHtmlRaw = asText(body.conteudo_html);
   const tipoDocumentoId = Number(body.tipo_documento_id);
+  const conjuntoGrupoIdRaw = body.conjunto_grupo_id;
+  const conjuntoGrupoId =
+    conjuntoGrupoIdRaw === null || conjuntoGrupoIdRaw === undefined || conjuntoGrupoIdRaw === ""
+      ? null
+      : Number(conjuntoGrupoIdRaw);
+  const ordemRaw = body.ordem;
+  const ordem =
+    ordemRaw === null || ordemRaw === undefined || ordemRaw === "" ? 1 : Number(ordemRaw);
   const formatoBody =
     typeof body.formato !== "undefined" ? normalizeFormato(body.formato) : undefined;
   const wantsHtml = formatoBody === "RICH_HTML" || (formatoBody === undefined && conteudoHtmlRaw !== null);
@@ -71,6 +109,21 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       { error: "Tipo de documento e obrigatorio." },
       { status: 400 },
     );
+  }
+
+  if (conjuntoGrupoId !== null) {
+    if (!Number.isFinite(conjuntoGrupoId) || conjuntoGrupoId <= 0) {
+      return NextResponse.json(
+        { error: "Grupo invalido para vinculo do modelo." },
+        { status: 400 },
+      );
+    }
+    if (!Number.isFinite(ordem) || ordem <= 0) {
+      return NextResponse.json(
+        { error: "Ordem invalida para vinculo do modelo." },
+        { status: 400 },
+      );
+    }
   }
 
   const updatePayload: Record<string, unknown> = {};
@@ -118,6 +171,24 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (conjuntoGrupoId !== null) {
+    const { error: linkErr } = await supabase
+      .from("documentos_conjuntos_grupos_modelos")
+      .upsert(
+        {
+          conjunto_grupo_id: conjuntoGrupoId,
+          modelo_id: modeloId,
+          ordem,
+          ativo: true,
+        },
+        { onConflict: "conjunto_grupo_id,modelo_id" },
+      );
+
+    if (linkErr) {
+      return NextResponse.json({ error: linkErr.message }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ data }, { status: 200 });

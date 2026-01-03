@@ -18,6 +18,8 @@ export type DocumentoModeloDTO = {
 export type DocumentoModeloCreatePayload = {
   titulo: string;
   tipo_documento_id?: number;
+  conjunto_grupo_id?: number | null;
+  ordem?: number | null;
   versao?: string;
   ativo?: boolean;
   formato?: DocumentoModeloFormato;

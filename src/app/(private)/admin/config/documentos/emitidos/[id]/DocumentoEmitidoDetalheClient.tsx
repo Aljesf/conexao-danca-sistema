@@ -91,8 +91,17 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   }
 
   function imprimirComoPdf() {
+    document.body.classList.add("print-mode");
     window.print();
   }
+
+  React.useEffect(() => {
+    function onAfterPrint() {
+      document.body.classList.remove("print-mode");
+    }
+    window.addEventListener("afterprint", onAfterPrint);
+    return () => window.removeEventListener("afterprint", onAfterPrint);
+  }, []);
 
   const modeloId = doc?.documento_modelo_id ?? doc?.contrato_modelo_id ?? "-";
   const status = doc?.status_assinatura ?? doc?.status ?? "-";
@@ -100,7 +109,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="no-print rounded-2xl border bg-white p-6 shadow-sm">
           <h1 className="text-xl font-semibold">Documento emitido</h1>
           <p className="mt-1 text-sm text-slate-600">
             Visualizacao, impressao em PDF e edicao manual (admin).
@@ -108,10 +117,10 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
         </div>
 
         {erro ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>
+          <div className="no-print rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{erro}</div>
         ) : null}
         {okMsg ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <div className="no-print rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
             {okMsg}
           </div>
         ) : null}
@@ -121,7 +130,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             <p className="text-sm text-slate-500">Carregando...</p>
           ) : (
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="no-print flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-slate-700">
                   <p>
                     <strong>ID:</strong> {doc.id}
@@ -173,7 +182,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                 </div>
               </div>
 
-              <hr />
+              <hr className="no-print" />
 
               {modoEditar ? (
                 <div>
@@ -187,7 +196,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                   <div className="mt-3 flex justify-end gap-2">
                     <button
                       type="button"
-                    className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                      className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       onClick={() => {
                         setHtml(
                           doc.conteudo_resolvido_html ||
@@ -219,6 +228,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
                   <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
                     <div
+                      id="print-area"
                       className="prose max-w-none"
                       // Conteudo emitido e gerado internamente.
                       dangerouslySetInnerHTML={{
@@ -239,18 +249,44 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
       <style jsx global>{`
         @media print {
-          body {
-            background: white !important;
+          body * {
+            visibility: hidden !important;
           }
-          nav,
-          aside,
-          header,
-          button {
-            display: none !important;
+
+          #print-area,
+          #print-area * {
+            visibility: visible !important;
           }
-          .prose {
+
+          #print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+
+          .rounded-lg,
+          .rounded-2xl,
+          .shadow-sm,
+          .border {
+            border: none !important;
+            box-shadow: none !important;
+          }
+
+          #print-area {
             font-size: 12pt;
+            line-height: 1.4;
           }
+
+          @page {
+            margin: 15mm;
+          }
+        }
+
+        body.print-mode .no-print {
+          display: none !important;
         }
       `}</style>
     </div>

@@ -24,6 +24,7 @@ type DocumentoModelo = {
   conteudo_html?: string | null;
   placeholders_schema_json: unknown;
   observacoes: string | null;
+  vinculos?: VinculoModelo[];
 };
 
 type Origem =
@@ -48,6 +49,16 @@ type DocumentoVariavel = {
 };
 
 type TipoDocOpt = { id: number; label: string };
+type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
+
+type VinculoModelo = {
+  conjunto_grupo_id?: number | null;
+  ordem?: number | null;
+  grupo_codigo?: string | null;
+  grupo_nome?: string | null;
+  conjunto_codigo?: string | null;
+  conjunto_nome?: string | null;
+};
 
 export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const idNum = Number(props.id);
@@ -72,6 +83,12 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
 
+  const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
+  const [conjuntoId, setConjuntoId] = useState<number | "">("");
+  const [conjuntoGrupoId, setConjuntoGrupoId] = useState<number | "">("");
+  const [vinculoOrdem, setVinculoOrdem] = useState<number>(1);
+  const [vinculosAtuais, setVinculosAtuais] = useState<VinculoModelo[]>([]);
+
   const editorRef = useRef<EditorRicoHandle | null>(null);
 
   const carregar = useCallback(async () => {
@@ -90,6 +107,19 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setTitulo(m.titulo ?? "");
       setAtivo(Boolean(m.ativo));
       setTipoDocumentoId(m.tipo_documento_id ?? "");
+      const vinculos = Array.isArray(m.vinculos) ? m.vinculos : [];
+      setVinculosAtuais(vinculos);
+      if (vinculos.length > 0) {
+        const primeiro = vinculos[0];
+        const grupoId = Number(primeiro.conjunto_grupo_id);
+        setConjuntoGrupoId(Number.isFinite(grupoId) ? grupoId : "");
+        const ordemAtual = Number(primeiro.ordem);
+        setVinculoOrdem(Number.isFinite(ordemAtual) && ordemAtual > 0 ? ordemAtual : 1);
+      } else {
+        setConjuntoGrupoId("");
+        setVinculoOrdem(1);
+      }
+      setConjuntoId("");
       const formatoInicial: DocumentoModeloFormato = m.formato === "RICH_HTML" ? "RICH_HTML" : "MARKDOWN";
       setFormato(formatoInicial);
       const conteudoHtmlInicial = m.conteudo_html ?? m.texto_modelo_md ?? "";
@@ -137,12 +167,51 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     }
   }, []);
 
+  const carregarConjuntosComGrupos = useCallback(async () => {
+    try {
+      const res = await fetch("/api/documentos/conjuntos?include=grupos", { cache: "no-store" });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: Array<{
+          id?: number;
+          nome?: string;
+          codigo?: string;
+          grupos?: Array<{ id?: number; nome?: string; codigo?: string }>;
+        }>;
+        message?: string;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar conjuntos.");
+      const list = (json.data ?? [])
+        .map((c) => ({
+          id: Number(c.id),
+          label: `${String(c.nome ?? "").trim()} (${String(c.codigo ?? "").trim()})`,
+          grupos: (c.grupos ?? [])
+            .map((g) => ({
+              id: Number(g.id),
+              label: `${String(g.nome ?? "").trim()} (${String(g.codigo ?? "").trim()})`,
+            }))
+            .filter((g) => Number.isFinite(g.id) && g.id > 0),
+        }))
+        .filter((c) => Number.isFinite(c.id) && c.id > 0);
+      setConjuntos(list);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar conjuntos.");
+    }
+  }, []);
+
   useEffect(() => {
     if (!Number.isFinite(idNum)) return;
     void carregar();
     void carregarVariaveis();
     void carregarTiposDoc();
-  }, [carregar, carregarTiposDoc, carregarVariaveis, idNum]);
+    void carregarConjuntosComGrupos();
+  }, [carregar, carregarConjuntosComGrupos, carregarTiposDoc, carregarVariaveis, idNum]);
+
+  useEffect(() => {
+    if (!conjuntoGrupoId || conjuntos.length === 0) return;
+    const conjunto = conjuntos.find((c) => c.grupos.some((g) => g.id === conjuntoGrupoId));
+    if (conjunto) setConjuntoId(conjunto.id);
+  }, [conjuntos, conjuntoGrupoId]);
 
   const variaveisAtivas = useMemo(() => variaveis.filter((v) => v.ativo), [variaveis]);
   const variaveisEditor = useMemo<VariavelDoc[]>(
@@ -178,6 +247,8 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           ativo,
           formato,
           tipo_documento_id: tipoDocumentoId,
+          conjunto_grupo_id: conjuntoGrupoId || null,
+          ordem: vinculoOrdem,
           ...(formato === "RICH_HTML" ? { conteudo_html: conteudoHtml } : { texto_modelo_md: textoMarkdown }),
           placeholders_schema_json: schemaFinal,
         }),
@@ -273,6 +344,72 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
                 <option value="MARKDOWN">Markdown (legado)</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Conjunto (opcional)</label>
+            <select
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              value={conjuntoId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setConjuntoId(next);
+                setConjuntoGrupoId("");
+              }}
+            >
+              <option value="">Selecione...</option>
+              {conjuntos.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Grupo (opcional)</label>
+            <select
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              value={conjuntoGrupoId}
+              onChange={(e) => setConjuntoGrupoId(e.target.value ? Number(e.target.value) : "")}
+              disabled={!conjuntoId}
+            >
+              <option value="">{conjuntoId ? "Selecione..." : "Selecione um conjunto primeiro"}</option>
+              {(conjuntos.find((c) => c.id === conjuntoId)?.grupos || []).map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Ordem do vinculo (opcional)</label>
+            <input
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              type="number"
+              min={1}
+              value={vinculoOrdem}
+              onChange={(e) => setVinculoOrdem(Number(e.target.value))}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Se o modelo estiver vinculado a mais de um grupo, gerencie os demais vinculos em Conjuntos e Grupos.
+            </p>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="text-sm font-medium">Vinculos atuais</label>
+            {vinculosAtuais.length === 0 ? (
+              <p className="mt-1 text-xs text-slate-500">Sem vinculos ativos.</p>
+            ) : (
+              <ul className="mt-1 space-y-1 text-xs text-slate-600">
+                {vinculosAtuais.map((v) => (
+                  <li key={`${v.conjunto_grupo_id ?? "v"}-${v.ordem ?? 0}`}>
+                    {v.conjunto_nome ?? "-"} / {v.grupo_nome ?? "-"} (ordem {v.ordem ?? 1})
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="md:col-span-2">
