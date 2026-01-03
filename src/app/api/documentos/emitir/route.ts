@@ -26,6 +26,28 @@ type DocumentoVariavelDb = DocumentoVariavel & {
   target_column: string | null;
 };
 
+function normalizeJoinPathForRpc(joinPath: JoinEdge[] | null): JoinEdge[] | null {
+  if (!joinPath || joinPath.length === 0) return null;
+  return joinPath.map((edge) => {
+    if (edge.direction === "IN") {
+      return {
+        from_table: edge.to_table,
+        from_column: edge.to_column,
+        to_table: edge.from_table,
+        to_column: edge.from_column,
+        constraint_name: edge.constraint_name,
+      };
+    }
+    return {
+      from_table: edge.from_table,
+      from_column: edge.from_column,
+      to_table: edge.to_table,
+      to_column: edge.to_column,
+      constraint_name: edge.constraint_name,
+    };
+  });
+}
+
 function resolveModeloTemplate(modelo: Record<string, unknown>): string {
   const formato = String(modelo.formato ?? "MARKDOWN");
   if (formato === "RICH_HTML") {
@@ -80,11 +102,12 @@ async function resolveTemplateValues(params: {
         const targetColumn = variavel.target_column;
 
         if (rootTable && targetTable && targetColumn) {
+          const joinPath = normalizeJoinPathForRpc(variavel.join_path ?? null);
           const { data, error } = await supabase.rpc("documentos_resolver_por_join_path", {
             p_root_table: rootTable,
             p_root_pk: rootPk,
             p_root_id: rootId,
-            p_join_path: variavel.join_path ?? null,
+            p_join_path: joinPath,
             p_target_table: targetTable,
             p_target_column: targetColumn,
           });

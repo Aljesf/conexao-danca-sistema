@@ -28,6 +28,7 @@ type VariavelPayload = {
 };
 
 type JoinEdge = {
+  direction?: "IN" | "OUT";
   from_table: string;
   from_column: string;
   to_table: string;
@@ -83,6 +84,8 @@ function parseJoinPath(raw: unknown): { value: JoinEdge[] | null; error?: string
     const from_column = String(rec.from_column ?? "").trim();
     const to_table = String(rec.to_table ?? "").trim();
     const to_column = String(rec.to_column ?? "").trim();
+    const directionRaw = typeof rec.direction === "string" ? rec.direction.trim().toUpperCase() : "";
+    const direction = directionRaw === "IN" || directionRaw === "OUT" ? directionRaw : undefined;
     const constraint_name =
       typeof rec.constraint_name === "string" ? rec.constraint_name : undefined;
 
@@ -90,7 +93,7 @@ function parseJoinPath(raw: unknown): { value: JoinEdge[] | null; error?: string
       return { value: null, error: "join_path invalido." };
     }
 
-    edges.push({ from_table, from_column, to_table, to_column, constraint_name });
+    edges.push({ direction, from_table, from_column, to_table, to_column, constraint_name });
   }
 
   return { value: edges };

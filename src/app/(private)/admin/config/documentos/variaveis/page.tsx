@@ -36,6 +36,7 @@ type DocumentoVariavel = {
 };
 
 type JoinEdge = {
+  direction?: "IN" | "OUT";
   from_table: string;
   from_column: string;
   to_table: string;
@@ -50,6 +51,7 @@ type SchemaRoot = {
 };
 
 type SchemaAdj = {
+  direction: "IN" | "OUT";
   from_table: string;
   from_column: string;
   to_table: string;
@@ -83,15 +85,6 @@ const ORIGEM_HINTS: Record<Origem, string> = {
   MANUAL: "Nao precisa de join; sera preenchido na emissao.",
 };
 
-const ORIGENS: Origem[] = [
-  "ALUNO",
-  "RESPONSAVEL_FINANCEIRO",
-  "MATRICULA",
-  "TURMA",
-  "ESCOLA",
-  "FINANCEIRO",
-  "MANUAL",
-];
 const TIPOS: Tipo[] = ["TEXTO", "MONETARIO", "DATA"];
 const MAX_HOPS = 3;
 
@@ -110,7 +103,8 @@ export default function AdminDocumentosVariaveisPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [codigo, setCodigo] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [origem, setOrigem] = useState<Origem>("ALUNO");
+  const [origem, setOrigem] = useState<Origem>("MATRICULA");
+  const [origemJoin, setOrigemJoin] = useState<Origem>("MATRICULA");
   const [tipo, setTipo] = useState<Tipo>("TEXTO");
   const [formato, setFormato] = useState("");
   const [ativo, setAtivo] = useState(true);
@@ -128,29 +122,42 @@ export default function AdminDocumentosVariaveisPage() {
     return [];
   }, [tipo]);
 
-  const breadcrumb = useMemo(() => {
-    const parts = [rootTable, ...joinPath.map((j) => j.to_table)];
-    return parts.filter((p) => p && p.trim().length > 0);
+  const getNextTable = (edge: SchemaAdj | JoinEdge) =>
+    edge.direction === "IN" ? edge.from_table : edge.to_table;
+
+  const tablesPath = useMemo(() => {
+    const tables = [rootTable];
+    for (const edge of joinPath) {
+      tables.push(getNextTable(edge) || "");
+    }
+    return tables;
   }, [rootTable, joinPath]);
 
-  const targetTable = breadcrumb[breadcrumb.length - 1] || rootTable;
+  const breadcrumb = useMemo(
+    () => tablesPath.filter((p) => p && p.trim().length > 0),
+    [tablesPath],
+  );
 
-  const edgeKey = (edge: SchemaAdj | JoinEdge) =>
-    `${edge.from_table}.${edge.from_column}->${edge.to_table}.${edge.to_column}`;
+  const targetTable = tablesPath[tablesPath.length - 1] || rootTable;
+
+  const edgeKey = (edge: SchemaAdj | JoinEdge) => {
+    const direction = edge.direction ?? "OUT";
+    return `${direction}:${edge.from_table}.${edge.from_column}->${edge.to_table}.${edge.to_column}`;
+  };
 
   const hopTables = useMemo(
-    () => [
-      rootTable,
-      joinPath[0]?.to_table ?? "",
-      joinPath[1]?.to_table ?? "",
-    ],
-    [rootTable, joinPath],
+    () => [tablesPath[0] ?? "", tablesPath[1] ?? "", tablesPath[2] ?? ""],
+    [tablesPath],
   );
 
   const isJoinEdge = (edge: unknown): edge is JoinEdge => {
     if (!edge || typeof edge !== "object") return false;
     const rec = edge as Record<string, unknown>;
     return (
+      (typeof rec.direction === "undefined" ||
+        rec.direction === "IN" ||
+        rec.direction === "OUT" ||
+        typeof rec.direction === "string") &&
       typeof rec.from_table === "string" &&
       typeof rec.from_column === "string" &&
       typeof rec.to_table === "string" &&
@@ -222,10 +229,11 @@ export default function AdminDocumentosVariaveisPage() {
   };
 
   const handleHopChange = (index: number, value: string) => {
-    const table = index === 0 ? rootTable : joinPath[index - 1]?.to_table;
+    const table = hopTables[index];
     if (!table) return;
     if (!value) {
       setJoinPath((prev) => prev.slice(0, index));
+      setTargetColumn("");
       return;
     }
     const options = adjCache[table] ?? [];
@@ -236,6 +244,7 @@ export default function AdminDocumentosVariaveisPage() {
       next[index] = selected;
       return next;
     });
+    setTargetColumn("");
   };
 
   const carregar = useCallback(async () => {
@@ -257,7 +266,8 @@ export default function AdminDocumentosVariaveisPage() {
     setEditingId(null);
     setCodigo("");
     setDescricao("");
-    setOrigem("ALUNO");
+    setOrigem("MATRICULA");
+    setOrigemJoin("MATRICULA");
     setTipo("TEXTO");
     setFormato("");
     setAtivo(true);
@@ -273,6 +283,7 @@ export default function AdminDocumentosVariaveisPage() {
     setCodigo(item.codigo);
     setDescricao(item.descricao);
     setOrigem(item.origem);
+    if (item.origem !== "MANUAL") setOrigemJoin(item.origem);
     setTipo(item.tipo);
     setFormato(item.formato ?? "");
     setAtivo(item.ativo);
@@ -374,7 +385,8 @@ export default function AdminDocumentosVariaveisPage() {
 
   useEffect(() => {
     for (const edge of joinPath) {
-      void carregarAdj(edge.to_table);
+      const nextTable = edge.direction === "IN" ? edge.from_table : edge.to_table;
+      if (nextTable) void carregarAdj(nextTable);
     }
   }, [joinPath, carregarAdj]);
 
@@ -452,18 +464,29 @@ export default function AdminDocumentosVariaveisPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">De onde vem o valor?</label>
-            <select
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              value={origem}
-              onChange={(e) => setOrigem(e.target.value as Origem)}
-            >
-              {ORIGENS.map((o) => (
-                <option key={o} value={o}>
-                  {ORIGEM_LABELS[o]}
-                </option>
-              ))}
-            </select>
+            <label className="text-sm font-medium">Origem do valor</label>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={origem === "MANUAL"}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    if (origem !== "MANUAL") setOrigemJoin(origem);
+                    setOrigem("MANUAL");
+                  } else {
+                    setOrigem(origemJoin !== "MANUAL" ? origemJoin : "MATRICULA");
+                  }
+                }}
+              />
+              <span className="text-sm">Variavel manual (preenchida na emissao)</span>
+            </div>
+            {origem !== "MANUAL" ? (
+              <p className="mt-1 text-xs text-slate-500">
+                Modo join ativo: {ORIGEM_LABELS[origem] ?? origem}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-slate-500">{origemHint}</p>
+            )}
           </div>
 
           <div>
@@ -547,7 +570,8 @@ export default function AdminDocumentosVariaveisPage() {
                           <option value="">Parar aqui</option>
                           {options.map((edge) => (
                             <option key={edgeKey(edge)} value={edgeKey(edge)}>
-                              {edge.from_table}.{edge.from_column} {"->"} {edge.to_table}.{edge.to_column}
+                              {edge.direction}: {edge.from_table}.{edge.from_column} {"->"} {edge.to_table}.
+                              {edge.to_column}
                             </option>
                           ))}
                         </select>
