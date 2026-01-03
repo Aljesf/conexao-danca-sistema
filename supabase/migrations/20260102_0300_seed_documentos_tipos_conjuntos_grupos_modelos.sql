@@ -241,15 +241,15 @@ m_2024 as (
 m_bolsa as (
   select id as modelo_id from public.documentos_modelo where titulo = 'Minuta — Termo de Bolsa Artística (Movimento Conexão Dança)' order by id desc limit 1
 )
-insert into public.documentos_grupos_modelos (grupo_id, documento_modelo_id)
+insert into public.documentos_conjuntos_grupos_modelos (conjunto_grupo_id, modelo_id)
 select g_mr.grupo_id, m_2026.modelo_id from g_mr, m_2026
 on conflict do nothing;
 
-insert into public.documentos_grupos_modelos (grupo_id, documento_modelo_id)
+insert into public.documentos_conjuntos_grupos_modelos (conjunto_grupo_id, modelo_id)
 select g_mr.grupo_id, m_2024.modelo_id from g_mr, m_2024
 on conflict do nothing;
 
-insert into public.documentos_grupos_modelos (grupo_id, documento_modelo_id)
+insert into public.documentos_conjuntos_grupos_modelos (conjunto_grupo_id, modelo_id)
 select g_bm.grupo_id, m_bolsa.modelo_id from g_bm, m_bolsa
 on conflict do nothing;
 
