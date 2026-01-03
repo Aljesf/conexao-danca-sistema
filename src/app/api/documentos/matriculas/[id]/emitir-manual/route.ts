@@ -24,6 +24,8 @@ type DocumentoVariavelDb = DocumentoVariavel & {
   join_path: JoinEdge[] | null;
   target_table: string | null;
   target_column: string | null;
+  ai_gerada: boolean;
+  mapeamento_pendente: boolean;
 };
 
 const isInDirection = (direction?: string | null) =>
@@ -86,6 +88,8 @@ function buildVariaveisByCodigo(rows: Array<Record<string, unknown>>): Map<strin
       join_path: Array.isArray(row.join_path) ? (row.join_path as JoinEdge[]) : null,
       target_table: typeof row.target_table === "string" ? row.target_table : row.target_table ?? null,
       target_column: typeof row.target_column === "string" ? row.target_column : row.target_column ?? null,
+      ai_gerada: Boolean(row.ai_gerada),
+      mapeamento_pendente: Boolean(row.mapeamento_pendente),
     });
   }
   return map;
@@ -106,6 +110,12 @@ async function resolveTemplateValues(params: {
   await Promise.all(
     codes.map(async (code) => {
       const variavel = variaveisByCodigo.get(code);
+
+      if (variavel?.mapeamento_pendente) {
+        valoresFormatados[code] = "";
+        utilizadas[code] = null;
+        return;
+      }
 
       if (variavel?.root_table) {
         const rootTable = variavel.root_table;
@@ -257,7 +267,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { data: variaveisRaw, error: variaveisErr } = await supabase
     .from("documentos_variaveis")
     .select(
-      "codigo, path_origem, formato, tipo, root_table, root_pk_column, join_path, target_table, target_column",
+      "codigo, path_origem, formato, tipo, root_table, root_pk_column, join_path, target_table, target_column, ai_gerada, mapeamento_pendente",
     )
     .eq("ativo", true);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { SystemContextCard } from "@/components/system/SystemContextCard";
 import { SystemHelpCard } from "@/components/system/SystemHelpCard";
@@ -9,7 +9,8 @@ import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { EditorRico, type EditorRicoHandle, type VariavelDoc } from "@/components/documentos/EditorRico";
+import { RichTextEditor, type RteVariable } from "@/components/ui/RichTextEditor/RichTextEditor";
+import { AiAssistenteModelos } from "@/components/documentos/AiAssistenteModelos";
 import { safeParseSchema, type PlaceholderSchemaItem } from "@/lib/documentos/placeholders";
 import type { DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
@@ -62,7 +63,22 @@ type VinculoModelo = {
   conjunto_nome?: string | null;
 };
 
-const VARIAVEIS_VAZIAS: VariavelDoc[] = [];
+const VARIAVEIS_VAZIAS: RteVariable[] = [];
+
+function markdownToHtmlSimples(markdown: string): string {
+  const trimmed = markdown.trim();
+  if (!trimmed) return "<p></p>";
+  const escaped = trimmed
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const blocos = escaped
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => `<p>${part.replace(/\n/g, "<br/>")}</p>`);
+  return blocos.join("") || "<p></p>";
+}
 
 export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const idNum = Number(props.id);
@@ -93,8 +109,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const [conjuntoGrupoId, setConjuntoGrupoId] = useState<number | "">("");
   const [vinculoOrdem, setVinculoOrdem] = useState<number>(1);
   const [vinculosAtuais, setVinculosAtuais] = useState<VinculoModelo[]>([]);
-
-  const editorRef = useRef<EditorRicoHandle | null>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -220,7 +234,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   }, [conjuntos, conjuntoGrupoId]);
 
   const variaveisAtivas = useMemo(() => variaveis.filter((v) => v.ativo), [variaveis]);
-  const variaveisEditor = useMemo<VariavelDoc[]>(
+  const variaveisEditor = useMemo<RteVariable[]>(
     () =>
       variaveisAtivas.map((v) => ({
         code: v.codigo,
@@ -309,6 +323,14 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           "Edite dados gerais e texto do modelo.",
           "Use o editor para inserir variaveis no cursor.",
         ]}
+      />
+
+      <AiAssistenteModelos
+        onApplyTemplateHtml={(html) => {
+          setFormato("RICH_HTML");
+          setConteudoHtml(html);
+          setTextoMarkdown(html);
+        }}
       />
 
       <SystemSectionCard
@@ -433,26 +455,46 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           Este cabecalho pode conter logo e dados da escola. Sera repetido na impressao/PDF.
         </p>
         <div className="mt-3">
-          <EditorRico valueHtml={cabecalhoHtml} onChangeHtml={setCabecalhoHtml} variaveis={VARIAVEIS_VAZIAS} />
+          <RichTextEditor
+            valueHtml={cabecalhoHtml}
+            onChangeHtml={setCabecalhoHtml}
+            minHeightPx={180}
+            enableVariables={false}
+            enableImages
+            variables={VARIAVEIS_VAZIAS}
+          />
         </div>
       </SystemSectionCard>
 
       <SystemSectionCard title="Texto do modelo">
         {variaveisErro ? <p className="mb-2 text-sm text-red-600">{variaveisErro}</p> : null}
         {formato === "RICH_HTML" ? (
-          <EditorRico
-            ref={editorRef}
+          <RichTextEditor
             valueHtml={conteudoHtml}
             onChangeHtml={setConteudoHtml}
-            variaveis={variaveisEditor}
+            enableVariables
+            variables={variaveisEditor}
           />
         ) : (
-          <Textarea
-            value={textoMarkdown}
-            onChange={(e) => setTextoMarkdown(e.target.value)}
-            rows={12}
-            placeholder="Cole aqui o texto do modelo com placeholders, ex.: {{ALUNO_NOME}}"
-          />
+          <div className="space-y-2">
+            <Textarea
+              value={textoMarkdown}
+              onChange={(e) => setTextoMarkdown(e.target.value)}
+              rows={12}
+              placeholder="Cole aqui o texto do modelo com placeholders, ex.: {{ALUNO_NOME}}"
+            />
+            <button
+              type="button"
+              className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+              onClick={() => {
+                const html = markdownToHtmlSimples(textoMarkdown);
+                setConteudoHtml(html);
+                setFormato("RICH_HTML");
+              }}
+            >
+              Usar editor rico
+            </button>
+          </div>
         )}
       </SystemSectionCard>
 

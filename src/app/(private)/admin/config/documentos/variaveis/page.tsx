@@ -35,6 +35,8 @@ type DocumentoVariavel = {
   target_column: string | null;
   display_label: string | null;
   path_labels: PathLabels | null;
+  ai_gerada?: boolean;
+  mapeamento_pendente?: boolean;
 };
 
 type JoinEdge = {
@@ -152,6 +154,7 @@ export default function AdminDocumentosVariaveisPage() {
   const [adjCache, setAdjCache] = useState<Record<string, SchemaAdj[]>>({});
   const [columns, setColumns] = useState<SchemaColumn[]>([]);
   const [columnsLoading, setColumnsLoading] = useState(false);
+  const [mostrarPendentes, setMostrarPendentes] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [codigo, setCodigo] = useState("");
@@ -168,6 +171,8 @@ export default function AdminDocumentosVariaveisPage() {
   const [joinPath, setJoinPath] = useState<JoinEdge[]>([]);
   const [hopLabels, setHopLabels] = useState<string[]>(["", "", ""]);
   const [targetColumn, setTargetColumn] = useState("");
+  const [mapeamentoPendente, setMapeamentoPendente] = useState(false);
+  const [aiGerada, setAiGerada] = useState(false);
 
   const precisaJoin = origem !== "MANUAL";
   const origemHint = ORIGEM_HINTS[origem];
@@ -396,6 +401,8 @@ export default function AdminDocumentosVariaveisPage() {
     setJoinPath([]);
     setHopLabels(["", "", ""]);
     setTargetColumn("");
+    setMapeamentoPendente(false);
+    setAiGerada(false);
   };
 
   const editar = (item: DocumentoVariavel) => {
@@ -423,6 +430,8 @@ export default function AdminDocumentosVariaveisPage() {
       labels.hop3_label ?? "",
     ]);
     setTargetColumn(item.target_column ?? "");
+    setMapeamentoPendente(Boolean(item.mapeamento_pendente));
+    setAiGerada(Boolean(item.ai_gerada));
     setOkMsg(null);
     setErro(null);
   };
@@ -478,6 +487,7 @@ export default function AdminDocumentosVariaveisPage() {
       tipo,
       formato: formato.trim() || null,
       ativo,
+      mapeamento_pendente: false,
       root_table: precisaJoin ? rootTable.trim() : null,
       root_pk_column: precisaJoin ? rootPkColumn.trim() || "id" : null,
       join_path: precisaJoin ? joinPath : null,
@@ -557,6 +567,16 @@ export default function AdminDocumentosVariaveisPage() {
     );
   }, [columns]);
 
+  const pendentesCount = useMemo(
+    () => itens.filter((item) => item.mapeamento_pendente).length,
+    [itens],
+  );
+
+  const itensFiltrados = useMemo(
+    () => (mostrarPendentes ? itens.filter((item) => item.mapeamento_pendente) : itens),
+    [itens, mostrarPendentes],
+  );
+
   return (
     <SystemPage>
       <SystemContextCard
@@ -596,6 +616,13 @@ export default function AdminDocumentosVariaveisPage() {
         {okMsg ? (
           <div className="rounded-md border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700">
             {okMsg}
+          </div>
+        ) : null}
+        {editingId && (mapeamentoPendente || aiGerada) ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
+            {mapeamentoPendente ? "Variavel pendente de mapeamento." : null}
+            {mapeamentoPendente && aiGerada ? " " : null}
+            {aiGerada ? "Origem: IA." : null}
           </div>
         ) : null}
 
@@ -790,7 +817,16 @@ export default function AdminDocumentosVariaveisPage() {
           <p className="text-sm text-slate-600">Nenhuma variavel cadastrada.</p>
         ) : (
           <div className="grid gap-3">
-            {itens.map((item) => (
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={mostrarPendentes}
+                onChange={(e) => setMostrarPendentes(e.target.checked)}
+              />
+              Mostrar apenas pendentes de mapeamento ({pendentesCount})
+            </label>
+
+            {itensFiltrados.map((item) => (
               <div key={item.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -801,6 +837,12 @@ export default function AdminDocumentosVariaveisPage() {
                       {item.descricao} | Origem: {ORIGEM_LABELS[item.origem] ?? item.origem} | Ativo:{" "}
                       {item.ativo ? "Sim" : "Nao"}
                     </div>
+                    {item.mapeamento_pendente ? (
+                      <div className="mt-1 text-xs text-amber-700">Pendente de mapeamento</div>
+                    ) : null}
+                    {item.ai_gerada ? (
+                      <div className="mt-1 text-xs text-slate-500">Gerada por IA</div>
+                    ) : null}
                     {item.root_table ? (
                       <div className="mt-1 text-xs text-slate-500">
                         Root: {item.root_table}.{item.root_pk_column ?? "id"}

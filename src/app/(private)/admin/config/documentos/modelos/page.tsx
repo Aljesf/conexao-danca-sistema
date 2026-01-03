@@ -9,14 +9,15 @@ import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { EditorRico, type VariavelDoc } from "@/components/documentos/EditorRico";
+import { RichTextEditor, type RteVariable } from "@/components/ui/RichTextEditor/RichTextEditor";
+import { AiAssistenteModelos } from "@/components/documentos/AiAssistenteModelos";
 import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
 type TipoDocOpt = { id: number; label: string };
 type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
-const VARIAVEIS_VAZIAS: VariavelDoc[] = [];
+const VARIAVEIS_VAZIAS: RteVariable[] = [];
 
-async function fetchVariaveisAtivas(): Promise<VariavelDoc[]> {
+async function fetchVariaveisAtivas(): Promise<RteVariable[]> {
   const res = await fetch("/api/documentos/variaveis?ativo=1", { cache: "no-store" });
   const json = (await res.json()) as {
     data?: Array<{ codigo?: string; descricao?: string }>;
@@ -52,7 +53,7 @@ export default function AdminDocumentosModelosPage() {
   const [conjuntoGrupoId, setConjuntoGrupoId] = useState<number | "">("");
   const [vinculoOrdem, setVinculoOrdem] = useState<number>(1);
   const [saving, setSaving] = useState(false);
-  const [variaveis, setVariaveis] = useState<VariavelDoc[]>([]);
+  const [variaveis, setVariaveis] = useState<RteVariable[]>([]);
   const [variaveisLoading, setVariaveisLoading] = useState(false);
   const [variaveisErro, setVariaveisErro] = useState<string | null>(null);
 
@@ -227,6 +228,14 @@ export default function AdminDocumentosModelosPage() {
         ]}
       />
 
+      <AiAssistenteModelos
+        onApplyTemplateHtml={(html) => {
+          setNovoFormato("RICH_HTML");
+          setNovoHtml(html);
+          setNovoTextoMarkdown(html);
+        }}
+      />
+
       <SystemSectionCard
         title="Novo modelo"
         description="Crie o template inicial e depois edite schema e texto no detalhe."
@@ -355,7 +364,12 @@ export default function AdminDocumentosModelosPage() {
                       {variaveisLoading ? "Recarregando..." : "Recarregar variaveis"}
                     </button>
                   </div>
-                  <EditorRico valueHtml={novoHtml} onChangeHtml={setNovoHtml} variaveis={variaveis} />
+                  <RichTextEditor
+                    valueHtml={novoHtml}
+                    onChangeHtml={setNovoHtml}
+                    enableVariables
+                    variables={variaveis}
+                  />
                 </>
               ) : (
                 <Textarea
@@ -374,7 +388,14 @@ export default function AdminDocumentosModelosPage() {
               Pode conter logo e dados da escola. Repetido na impressao/PDF.
             </p>
             <div className="mt-2">
-              <EditorRico valueHtml={cabecalhoHtml} onChangeHtml={setCabecalhoHtml} variaveis={VARIAVEIS_VAZIAS} />
+              <RichTextEditor
+                valueHtml={cabecalhoHtml}
+                onChangeHtml={setCabecalhoHtml}
+                minHeightPx={180}
+                enableVariables={false}
+                enableImages
+                variables={VARIAVEIS_VAZIAS}
+              />
             </div>
           </div>
         </div>

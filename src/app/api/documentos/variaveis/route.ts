@@ -27,6 +27,8 @@ type VariavelPayload = {
   target_column?: string | null;
   display_label?: string | null;
   path_labels?: unknown;
+  ai_gerada?: boolean;
+  mapeamento_pendente?: boolean;
 };
 
 type JoinEdge = {
@@ -220,6 +222,9 @@ export async function POST(req: Request) {
     path_origem: pathOrigem,
     formato,
     ativo: typeof body.ativo === "boolean" ? body.ativo : true,
+    ai_gerada: typeof body.ai_gerada === "boolean" ? body.ai_gerada : false,
+    mapeamento_pendente:
+      typeof body.mapeamento_pendente === "boolean" ? body.mapeamento_pendente : false,
     root_table: body.origem === "MANUAL" ? null : rootTable,
     root_pk_column: body.origem === "MANUAL" ? null : rootPkColumn,
     join_path: body.origem === "MANUAL" ? null : joinPathParsed.value,
@@ -293,6 +298,10 @@ export async function PUT(req: Request) {
     updatePayload.path_labels = body.path_labels ?? null;
   }
 
+  if (typeof body.mapeamento_pendente === "boolean") {
+    updatePayload.mapeamento_pendente = body.mapeamento_pendente;
+  }
+
   const rootTable = typeof body.root_table === "string" ? body.root_table.trim() : "";
   const rootPkColumn =
     typeof body.root_pk_column === "string" ? body.root_pk_column.trim() || "id" : "id";
@@ -363,6 +372,9 @@ export async function PUT(req: Request) {
     updatePayload.join_path = joinPathParsed.value;
     updatePayload.target_table = targetTable;
     updatePayload.target_column = targetColumn;
+    if (typeof body.mapeamento_pendente === "undefined") {
+      updatePayload.mapeamento_pendente = false;
+    }
   }
 
   const { data, error } = await supabase

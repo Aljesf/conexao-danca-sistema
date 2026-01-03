@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { EditorRico, type VariavelDoc } from "@/components/documentos/EditorRico";
+import { RichTextEditor } from "@/components/ui/RichTextEditor/RichTextEditor";
 
 type DocEmitido = {
   id: number;
@@ -22,8 +22,6 @@ type DocEmitido = {
 };
 
 type ApiResp<T> = { ok?: boolean; data?: T; message?: string };
-
-const VARIAVEIS_VAZIAS: VariavelDoc[] = [];
 
 export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const docId = Number(id);
@@ -193,7 +191,12 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                     Use apenas para correcoes pontuais. Este documento ja foi emitido.
                   </p>
                   <div className="mt-3">
-                    <EditorRico valueHtml={html} onChangeHtml={setHtml} variaveis={VARIAVEIS_VAZIAS} />
+                    <RichTextEditor
+                      valueHtml={html}
+                      onChangeHtml={setHtml}
+                      minHeightPx={240}
+                      enableVariables={false}
+                    />
                   </div>
                   <div className="mt-3 flex justify-end gap-2">
                     <button
