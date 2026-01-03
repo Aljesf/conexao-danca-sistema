@@ -26,6 +26,13 @@ type Modelo = {
   ativo: boolean;
   tipo_documento?: string | null;
 };
+type GrupoModeloLink = {
+  grupo_modelo_id: number;
+  ordem: number;
+  ativo: boolean;
+  modelo_id: number;
+  documentos_modelo?: { id: number; titulo: string } | null;
+};
 
 type MatriculaConjuntoResponse = {
   ok?: boolean;
@@ -47,7 +54,7 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
 
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [modelos, setModelos] = useState<Modelo[]>([]);
-  const [modelosPorGrupo, setModelosPorGrupo] = useState<Record<number, number[]>>({});
+  const [modelosPorGrupo, setModelosPorGrupo] = useState<Record<number, GrupoModeloLink[]>>({});
 
   const [incluirGrupo, setIncluirGrupo] = useState<Record<number, boolean>>({});
   const [modeloEscolhido, setModeloEscolhido] = useState<Record<number, number>>({});
@@ -99,13 +106,14 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
     const gs = (jsonG.data ?? []).slice().sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
     setGrupos(gs);
 
-    const map: Record<number, number[]> = {};
+    const map: Record<number, GrupoModeloLink[]> = {};
     await Promise.all(
       gs.map(async (g) => {
-        const res = await fetch(`/api/documentos/grupos/${g.id}/modelos`);
-        const json = (await res.json()) as ApiResponse<number[]>;
+        const res = await fetch(`/api/documentos/conjuntos/grupos/${g.id}/modelos`);
+        const json = (await res.json()) as ApiResponse<GrupoModeloLink[]>;
         if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao carregar modelos do grupo.");
-        map[g.id] = json.data ?? [];
+        const ativos = (json.data ?? []).filter((link) => link.ativo);
+        map[g.id] = ativos;
       })
     );
     setModelosPorGrupo(map);
@@ -119,7 +127,7 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
       inc[g.id] = isObrig ? true : false;
 
       const opts = map[g.id] ?? [];
-      if (opts.length === 1 && isObrig) sel[g.id] = opts[0];
+      if (opts.length === 1 && isObrig) sel[g.id] = opts[0].modelo_id;
     }
     setIncluirGrupo(inc);
     setModeloEscolhido(sel);
@@ -162,6 +170,11 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
     const principal = principais[0];
     if (!incluirGrupo[principal.id]) {
       setErro("O grupo PRINCIPAL deve estar incluido.");
+      return;
+    }
+    const modelosPrincipal = modelosPorGrupo[principal.id] ?? [];
+    if (modelosPrincipal.length === 0) {
+      setErro("Grupo PRINCIPAL sem modelo configurado.");
       return;
     }
 
@@ -325,11 +338,15 @@ export default function MatriculaDocumentosClient(props: { id: string }) {
                         disabled={!checked}
                       >
                         <option value="">Selecione...</option>
-                        {opts.map((mid) => {
-                          const m = modelos.find((x) => x.id === mid);
-                          const label = m ? `${m.titulo} (${m.versao})` : `Modelo #${mid}`;
+                        {opts.map((link) => {
+                          const m = modelos.find((x) => x.id === link.modelo_id);
+                          const label = link.documentos_modelo?.titulo
+                            ? link.documentos_modelo.titulo
+                            : m
+                              ? `${m.titulo} (${m.versao})`
+                              : `Modelo #${link.modelo_id}`;
                           return (
-                            <option key={mid} value={mid}>
+                            <option key={link.grupo_modelo_id} value={link.modelo_id}>
                               {label}
                             </option>
                           );

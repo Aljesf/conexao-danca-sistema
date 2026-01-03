@@ -21,6 +21,7 @@ type Grupo = {
   descricao: string | null;
   ordem: number;
   obrigatorio: boolean;
+  ativo?: boolean | null;
   papel?: GrupoPapel | null;
 };
 
@@ -67,6 +68,23 @@ export default function AdminDocumentosConjuntosPage() {
   const [gOrdem, setGOrdem] = React.useState<number>(1);
   const [gObrigatorio, setGObrigatorio] = React.useState(false);
   const [gPapel, setGPapel] = React.useState<GrupoPapel>("OPCIONAL");
+  const [gAtivo, setGAtivo] = React.useState(true);
+
+  const [conjuntoEditId, setConjuntoEditId] = React.useState<number | null>(null);
+  const [ceNome, setCeNome] = React.useState("");
+  const [ceDescricao, setCeDescricao] = React.useState("");
+  const [ceAtivo, setCeAtivo] = React.useState(true);
+  const [salvandoConjunto, setSalvandoConjunto] = React.useState(false);
+
+  const [grupoEditId, setGrupoEditId] = React.useState<number | null>(null);
+  const [grupoEditConjuntoId, setGrupoEditConjuntoId] = React.useState<number | null>(null);
+  const [gECodigo, setGECodigo] = React.useState("");
+  const [gENome, setGENome] = React.useState("");
+  const [gEDescricao, setGEDescricao] = React.useState("");
+  const [gEOrdem, setGEOrdem] = React.useState<number>(1);
+  const [gEAtivo, setGEAtivo] = React.useState(true);
+  const [gEPapel, setGEPapel] = React.useState<GrupoPapel>("OPCIONAL");
+  const [salvandoGrupo, setSalvandoGrupo] = React.useState(false);
 
   const [modelosByGrupo, setModelosByGrupo] = React.useState<Record<number, GrupoModeloLink[]>>({});
   const [modelosLoadingByGrupo, setModelosLoadingByGrupo] = React.useState<Record<number, boolean>>({});
@@ -75,6 +93,9 @@ export default function AdminDocumentosConjuntosPage() {
   const [selectedModeloByGrupo, setSelectedModeloByGrupo] = React.useState<Record<number, number | "">>({});
   const [ordemByGrupo, setOrdemByGrupo] = React.useState<Record<number, number>>({});
   const [linkingByGrupo, setLinkingByGrupo] = React.useState<Record<number, boolean>>({});
+  const [ordemLinkById, setOrdemLinkById] = React.useState<Record<number, number>>({});
+  const [updatingLinkById, setUpdatingLinkById] = React.useState<Record<number, boolean>>({});
+  const [removingLinkById, setRemovingLinkById] = React.useState<Record<number, boolean>>({});
 
   async function carregarTudo() {
     setErro(null);
@@ -111,6 +132,13 @@ export default function AdminDocumentosConjuntosPage() {
         `/api/documentos/conjuntos/grupos/${grupoId}/modelos`,
       );
       setModelosByGrupo((prev) => ({ ...prev, [grupoId]: data ?? [] }));
+      setOrdemLinkById((prev) => {
+        const next = { ...prev };
+        for (const link of data ?? []) {
+          next[link.grupo_modelo_id] = link.ordem;
+        }
+        return next;
+      });
     } catch (e) {
       setModelosErroByGrupo((prev) => ({
         ...prev,
@@ -118,6 +146,106 @@ export default function AdminDocumentosConjuntosPage() {
       }));
     } finally {
       setModelosLoadingByGrupo((prev) => ({ ...prev, [grupoId]: false }));
+    }
+  }
+
+  function abrirEdicaoConjunto(conjunto: Conjunto) {
+    setConjuntoEditId(conjunto.id);
+    setCeNome(conjunto.nome);
+    setCeDescricao(conjunto.descricao ?? "");
+    setCeAtivo(conjunto.ativo);
+  }
+
+  async function salvarConjuntoEdicao() {
+    if (!conjuntoEditId) return;
+    setErro(null);
+    setSalvandoConjunto(true);
+    try {
+      const payload = {
+        nome: ceNome.trim(),
+        descricao: ceDescricao.trim() || null,
+        ativo: ceAtivo,
+      };
+
+      if (!payload.nome) {
+        setErro("Nome do conjunto e obrigatorio.");
+        return;
+      }
+
+      const res = await fetch(`/api/documentos/conjuntos/${conjuntoEditId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json()) as ApiResp<unknown>;
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao atualizar conjunto.");
+
+      setConjuntoEditId(null);
+      await carregarTudo();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro inesperado.");
+    } finally {
+      setSalvandoConjunto(false);
+    }
+  }
+
+  function abrirEdicaoGrupo(conjuntoId: number, grupo: Grupo) {
+    setGrupoEditId(grupo.id);
+    setGrupoEditConjuntoId(conjuntoId);
+    setGECodigo(grupo.codigo ?? "");
+    setGENome(grupo.nome ?? "");
+    setGEDescricao(grupo.descricao ?? "");
+    setGEOrdem(grupo.ordem ?? 1);
+    setGEAtivo(grupo.ativo !== false);
+    const papel = (grupo.papel ?? (grupo.obrigatorio ? "OBRIGATORIO" : "OPCIONAL")) as GrupoPapel;
+    setGEPapel(papel);
+  }
+
+  async function salvarGrupoEdicao() {
+    if (!grupoEditId || !grupoEditConjuntoId) return;
+    setErro(null);
+    setSalvandoGrupo(true);
+    try {
+      const conjuntoAtual = conjuntos.find((c) => c.id === grupoEditConjuntoId);
+      const principalExiste = (conjuntoAtual?.grupos ?? []).some(
+        (g) => g.id !== grupoEditId && (g.papel ?? "").toUpperCase() === "PRINCIPAL",
+      );
+      if (gEPapel === "PRINCIPAL" && principalExiste) {
+        setErro("Ja existe um grupo PRINCIPAL neste conjunto.");
+        return;
+      }
+
+      const obrigatorio = gEPapel === "PRINCIPAL" || gEPapel === "OBRIGATORIO";
+      const payload = {
+        codigo: gECodigo.trim(),
+        nome: gENome.trim(),
+        descricao: gEDescricao.trim() || null,
+        ordem: Number(gEOrdem) || 1,
+        ativo: gEAtivo,
+        papel: gEPapel,
+        obrigatorio,
+      };
+
+      if (!payload.codigo || !payload.nome) {
+        setErro("Codigo e nome do grupo sao obrigatorios.");
+        return;
+      }
+
+      const res = await fetch(`/api/documentos/conjuntos/grupos/${grupoEditId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json()) as ApiResp<unknown>;
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao atualizar grupo.");
+
+      setGrupoEditId(null);
+      setGrupoEditConjuntoId(null);
+      await carregarTudo();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro inesperado.");
+    } finally {
+      setSalvandoGrupo(false);
     }
   }
 
@@ -148,6 +276,48 @@ export default function AdminDocumentosConjuntosPage() {
       }));
     } finally {
       setLinkingByGrupo((prev) => ({ ...prev, [grupoId]: false }));
+    }
+  }
+
+  async function atualizarVinculo(linkId: number, grupoId: number, payload: { ordem?: number; ativo?: boolean }) {
+    setUpdatingLinkById((prev) => ({ ...prev, [linkId]: true }));
+    setModelosErroByGrupo((prev) => ({ ...prev, [grupoId]: null }));
+    try {
+      const res = await fetch(`/api/documentos/conjuntos/grupos/modelos/${linkId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json()) as ApiResp<unknown>;
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao atualizar vinculo.");
+      await carregarModelosGrupo(grupoId);
+    } catch (e) {
+      setModelosErroByGrupo((prev) => ({
+        ...prev,
+        [grupoId]: e instanceof Error ? e.message : "Erro ao atualizar vinculo.",
+      }));
+    } finally {
+      setUpdatingLinkById((prev) => ({ ...prev, [linkId]: false }));
+    }
+  }
+
+  async function removerVinculo(linkId: number, grupoId: number) {
+    setRemovingLinkById((prev) => ({ ...prev, [linkId]: true }));
+    setModelosErroByGrupo((prev) => ({ ...prev, [grupoId]: null }));
+    try {
+      const res = await fetch(`/api/documentos/conjuntos/grupos/modelos/${linkId}`, {
+        method: "DELETE",
+      });
+      const json = (await res.json()) as ApiResp<unknown>;
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao remover vinculo.");
+      await carregarModelosGrupo(grupoId);
+    } catch (e) {
+      setModelosErroByGrupo((prev) => ({
+        ...prev,
+        [grupoId]: e instanceof Error ? e.message : "Erro ao remover vinculo.",
+      }));
+    } finally {
+      setRemovingLinkById((prev) => ({ ...prev, [linkId]: false }));
     }
   }
 
@@ -209,6 +379,7 @@ export default function AdminDocumentosConjuntosPage() {
         descricao: gDescricao.trim() || null,
         ordem: Number(gOrdem) || 1,
         obrigatorio,
+        ativo: gAtivo,
         papel: gPapel,
       };
 
@@ -227,6 +398,7 @@ export default function AdminDocumentosConjuntosPage() {
       setGOrdem(1);
       setGObrigatorio(false);
       setGPapel("OPCIONAL");
+      setGAtivo(true);
 
       await carregarTudo();
     } catch (e) {
@@ -336,9 +508,26 @@ export default function AdminDocumentosConjuntosPage() {
                       onClick={() => {
                         setGrupoFormOpenId((prev) => (prev === c.id ? null : c.id));
                         setGOrdem((c.grupos?.length || 0) + 1);
+                        setGAtivo(true);
+                        setGPapel("OPCIONAL");
+                        setGObrigatorio(false);
                       }}
                     >
                       + Novo grupo
+                    </button>
+
+                    <button
+                      className="rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+                      type="button"
+                      onClick={() => {
+                        if (conjuntoEditId === c.id) {
+                          setConjuntoEditId(null);
+                          return;
+                        }
+                        abrirEdicaoConjunto(c);
+                      }}
+                    >
+                      Editar conjunto
                     </button>
 
                     <a
@@ -350,6 +539,62 @@ export default function AdminDocumentosConjuntosPage() {
                     </a>
                   </div>
                 </div>
+
+                {conjuntoEditId === c.id ? (
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold">Editar conjunto</p>
+                    <p className="mt-1 text-xs text-slate-600">Atualize os dados do conjunto.</p>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div>
+                        <label className="text-sm font-medium">Nome</label>
+                        <input
+                          className="mt-1 w-full rounded-md border p-2 text-sm"
+                          value={ceNome}
+                          onChange={(e) => setCeNome(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-3 md:items-end">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={ceAtivo}
+                            onChange={(e) => setCeAtivo(e.target.checked)}
+                          />
+                          Ativo
+                        </label>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="text-sm font-medium">Descricao</label>
+                        <input
+                          className="mt-1 w-full rounded-md border p-2 text-sm"
+                          value={ceDescricao}
+                          onChange={(e) => setCeDescricao(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button
+                        className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                        onClick={() => setConjuntoEditId(null)}
+                        type="button"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        className="rounded-md bg-slate-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                        onClick={salvarConjuntoEdicao}
+                        disabled={salvandoConjunto || !ceNome.trim()}
+                        type="button"
+                      >
+                        {salvandoConjunto ? "Salvando..." : "Salvar alteracoes"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
 
                 {grupoFormOpenId === c.id ? (
                   <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -431,6 +676,17 @@ export default function AdminDocumentosConjuntosPage() {
                         </label>
                       </div>
 
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={gAtivo}
+                            onChange={(e) => setGAtivo(e.target.checked)}
+                          />
+                          Ativo
+                        </label>
+                      </div>
+
                       <div>
                         <label className="text-sm font-medium">Ordem</label>
                         <input
@@ -475,28 +731,131 @@ export default function AdminDocumentosConjuntosPage() {
                             <p className="text-sm font-semibold">{g.nome}</p>
                             <p className="text-xs text-slate-600">{g.codigo}</p>
                             <p className="text-xs text-slate-500">
-                              Ordem: {g.ordem} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"}
+                              Ordem: {g.ordem} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"} | Ativo:{" "}
+                              {g.ativo === false ? "Nao" : "Sim"}
                               {g.papel ? ` | Papel: ${g.papel}` : ""}
                             </p>
                             {g.descricao ? <p className="mt-1 text-xs text-slate-500">{g.descricao}</p> : null}
                           </div>
-                          {g.papel ? (
-                            <span
-                              className={[
-                                "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                                g.papel === "PRINCIPAL"
-                                  ? "bg-slate-900 text-white"
-                                  : g.papel === "OBRIGATORIO"
-                                    ? "bg-slate-700 text-white"
-                                    : g.papel === "ADICIONAL"
-                                      ? "bg-slate-200 text-slate-700"
-                                      : "bg-slate-100 text-slate-700",
-                              ].join(" ")}
+                          <div className="flex items-center gap-2">
+                            {g.papel ? (
+                              <span
+                                className={[
+                                  "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                                  g.papel === "PRINCIPAL"
+                                    ? "bg-slate-900 text-white"
+                                    : g.papel === "OBRIGATORIO"
+                                      ? "bg-slate-700 text-white"
+                                      : g.papel === "ADICIONAL"
+                                        ? "bg-slate-200 text-slate-700"
+                                        : "bg-slate-100 text-slate-700",
+                                ].join(" ")}
+                              >
+                                {g.papel}
+                              </span>
+                            ) : null}
+                            <button
+                              className="rounded-md border bg-white px-2 py-1 text-[10px] uppercase tracking-wide hover:bg-slate-50"
+                              type="button"
+                              onClick={() => abrirEdicaoGrupo(c.id, g)}
                             >
-                              {g.papel}
-                            </span>
-                          ) : null}
+                              Editar
+                            </button>
+                          </div>
                         </div>
+
+                        {grupoEditId === g.id ? (
+                          <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              Editar grupo
+                            </p>
+                            <div className="mt-2 grid gap-3 md:grid-cols-2">
+                              <div>
+                                <label className="text-xs font-medium">Codigo</label>
+                                <input
+                                  className="mt-1 w-full rounded-md border p-2 text-xs"
+                                  value={gECodigo}
+                                  onChange={(e) => setGECodigo(e.target.value)}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-medium">Nome</label>
+                                <input
+                                  className="mt-1 w-full rounded-md border p-2 text-xs"
+                                  value={gENome}
+                                  onChange={(e) => setGENome(e.target.value)}
+                                />
+                              </div>
+
+                              <div className="md:col-span-2">
+                                <label className="text-xs font-medium">Descricao</label>
+                                <input
+                                  className="mt-1 w-full rounded-md border p-2 text-xs"
+                                  value={gEDescricao}
+                                  onChange={(e) => setGEDescricao(e.target.value)}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-medium">Papel</label>
+                                <select
+                                  className="mt-1 w-full rounded-md border p-2 text-xs"
+                                  value={gEPapel}
+                                  onChange={(e) => setGEPapel(e.target.value as GrupoPapel)}
+                                >
+                                  <option value="PRINCIPAL">PRINCIPAL</option>
+                                  <option value="OBRIGATORIO">OBRIGATORIO</option>
+                                  <option value="OPCIONAL">OPCIONAL</option>
+                                  <option value="ADICIONAL">ADICIONAL</option>
+                                </select>
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-medium">Ordem</label>
+                                <input
+                                  className="mt-1 w-full rounded-md border p-2 text-xs"
+                                  type="number"
+                                  min={1}
+                                  value={gEOrdem}
+                                  onChange={(e) => setGEOrdem(Number(e.target.value))}
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <label className="flex items-center gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={gEAtivo}
+                                    onChange={(e) => setGEAtivo(e.target.checked)}
+                                  />
+                                  Ativo
+                                </label>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex justify-end gap-2">
+                              <button
+                                className="rounded-md border bg-white px-3 py-1.5 text-xs hover:bg-slate-50"
+                                type="button"
+                                onClick={() => {
+                                  setGrupoEditId(null);
+                                  setGrupoEditConjuntoId(null);
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                className="rounded-md bg-slate-800 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                                type="button"
+                                onClick={salvarGrupoEdicao}
+                                disabled={salvandoGrupo || !gECodigo.trim() || !gENome.trim()}
+                              >
+                                {salvandoGrupo ? "Salvando..." : "Salvar"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
 
                           <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                             <div className="flex items-center justify-between gap-2">
@@ -535,9 +894,65 @@ export default function AdminDocumentosConjuntosPage() {
                                     {(modelosByGrupo[g.id] || []).map((m) => (
                                       <div
                                         key={m.grupo_modelo_id}
-                                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                                        className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs"
                                       >
-                                        {m.documentos_modelo?.titulo || `Modelo #${m.modelo_id}`}
+                                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                          <div>
+                                            <p className="font-medium text-slate-700">
+                                              {m.documentos_modelo?.titulo || `Modelo #${m.modelo_id}`}
+                                            </p>
+                                            <p className="text-[10px] text-slate-500">
+                                              Ordem: {m.ordem} | Ativo: {m.ativo ? "Sim" : "Nao"}
+                                            </p>
+                                          </div>
+
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <input
+                                              className="w-20 rounded-md border p-1 text-xs"
+                                              type="number"
+                                              min={1}
+                                              value={ordemLinkById[m.grupo_modelo_id] ?? m.ordem}
+                                              onChange={(e) =>
+                                                setOrdemLinkById((prev) => ({
+                                                  ...prev,
+                                                  [m.grupo_modelo_id]: Number(e.target.value) || 1,
+                                                }))
+                                              }
+                                            />
+                                            <button
+                                              className="rounded-md border bg-white px-2 py-1 text-[10px] hover:bg-slate-50 disabled:opacity-60"
+                                              type="button"
+                                              onClick={() =>
+                                                atualizarVinculo(m.grupo_modelo_id, g.id, {
+                                                  ordem: ordemLinkById[m.grupo_modelo_id] ?? m.ordem,
+                                                })
+                                              }
+                                              disabled={updatingLinkById[m.grupo_modelo_id]}
+                                            >
+                                              Salvar ordem
+                                            </button>
+                                            <button
+                                              className="rounded-md border bg-white px-2 py-1 text-[10px] hover:bg-slate-50 disabled:opacity-60"
+                                              type="button"
+                                              onClick={() =>
+                                                atualizarVinculo(m.grupo_modelo_id, g.id, {
+                                                  ativo: !m.ativo,
+                                                })
+                                              }
+                                              disabled={updatingLinkById[m.grupo_modelo_id]}
+                                            >
+                                              {m.ativo ? "Desativar" : "Reativar"}
+                                            </button>
+                                            <button
+                                              className="rounded-md border border-red-200 bg-white px-2 py-1 text-[10px] text-red-600 hover:bg-red-50 disabled:opacity-60"
+                                              type="button"
+                                              onClick={() => removerVinculo(m.grupo_modelo_id, g.id)}
+                                              disabled={removingLinkById[m.grupo_modelo_id]}
+                                            >
+                                              Remover
+                                            </button>
+                                          </div>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>

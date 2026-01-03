@@ -7,6 +7,7 @@ type GrupoCreate = {
   descricao?: string | null;
   obrigatorio?: boolean;
   ordem?: number;
+  ativo?: boolean;
   papel?: "PRINCIPAL" | "OBRIGATORIO" | "OPCIONAL" | "ADICIONAL";
 };
 
@@ -58,6 +59,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const obrigatorio = typeof body.obrigatorio === "boolean" ? body.obrigatorio : false;
   const papel = body.papel ?? (obrigatorio ? "OBRIGATORIO" : "OPCIONAL");
+  const ativo = typeof body.ativo === "boolean" ? body.ativo : true;
 
   const payload = {
     conjunto_id: conjuntoId,
@@ -65,6 +67,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     nome: body.nome.trim(),
     descricao: body.descricao ?? null,
     obrigatorio,
+    ativo,
     ordem: Number.isFinite(Number(body.ordem)) ? Number(body.ordem) : 1,
     papel,
   };

@@ -137,15 +137,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   const { data: vincs, error: vincErr } = await supabase
-    .from("documentos_grupos_modelos")
-    .select("grupo_id, documento_modelo_id")
-    .in("grupo_id", grupoIdsIncluidos);
+    .from("documentos_conjuntos_grupos_modelos")
+    .select("conjunto_grupo_id, modelo_id, ativo")
+    .in("conjunto_grupo_id", grupoIdsIncluidos)
+    .eq("ativo", true);
 
   if (vincErr) return NextResponse.json({ ok: false, message: vincErr.message }, { status: 500 });
 
   const allowed = new Set<string>();
   for (const r of (vincs ?? []) as unknown as Array<Record<string, unknown>>) {
-    const k = `${Number(r.grupo_id)}:${Number(r.documento_modelo_id)}`;
+    const k = `${Number(r.conjunto_grupo_id)}:${Number(r.modelo_id)}`;
     allowed.add(k);
   }
 

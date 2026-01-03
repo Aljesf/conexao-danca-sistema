@@ -26,6 +26,7 @@ type GrupoRow = {
   descricao: string | null;
   ordem: number;
   obrigatorio: boolean;
+  ativo: boolean;
   papel: "PRINCIPAL" | "OBRIGATORIO" | "OPCIONAL" | "ADICIONAL" | null;
   created_at?: string;
   updated_at?: string;
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
 
   const { data: grupos, error: errGrupos } = await supabase
     .from("documentos_grupos")
-    .select("id,conjunto_id,codigo,nome,descricao,ordem,obrigatorio,papel,created_at,updated_at")
+    .select("id,conjunto_id,codigo,nome,descricao,ordem,obrigatorio,ativo,papel,created_at,updated_at")
     .in("conjunto_id", conjuntoIds)
     .order("conjunto_id", { ascending: true })
     .order("ordem", { ascending: true });

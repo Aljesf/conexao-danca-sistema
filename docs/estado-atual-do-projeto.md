@@ -51,6 +51,9 @@ Documentos — Motor institucional (Modelos, Variáveis, Operações, Conjuntos,
 - Governanca de grupos por papel (PRINCIPAL/OBRIGATORIO/OPCIONAL/ADICIONAL)
 - Regra de emissao: matricula exige 1 grupo PRINCIPAL
 - Redirect legado: /admin/config/documentos/conjuntos/[id] -> #conjunto-<id>
+- Admin Documentos completo (editar conjuntos/grupos, vincular modelos, ordenar/remover)
+- Governanca de grupos finalizada (papel + PRINCIPAL unico)
+- Matricula depende apenas da configuracao de grupos/modelos
 
 ---
 

@@ -17,11 +17,11 @@ function normCodigo(input: string): string {
 
 const PAPEIS_VALIDOS = ["PRINCIPAL", "OBRIGATORIO", "OPCIONAL", "ADICIONAL"] as const;
 
-export async function GET(_: Request, ctx: { params: Promise<{ grupoId: string }> }) {
-  const { grupoId } = await ctx.params;
-  const id = Number(grupoId);
+export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const grupoId = Number(id);
 
-  if (!Number.isFinite(id)) {
+  if (!Number.isFinite(grupoId)) {
     return NextResponse.json({ ok: false, message: "ID invalido." }, { status: 400 });
   }
 
@@ -29,7 +29,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ grupoId: string }
   const { data, error } = await supabase
     .from("documentos_grupos")
     .select("*")
-    .eq("id", id)
+    .eq("id", grupoId)
     .single();
 
   if (error) {
@@ -39,11 +39,11 @@ export async function GET(_: Request, ctx: { params: Promise<{ grupoId: string }
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string }> }) {
-  const { grupoId } = await ctx.params;
-  const id = Number(grupoId);
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const grupoId = Number(id);
 
-  if (!Number.isFinite(id)) {
+  if (!Number.isFinite(grupoId)) {
     return NextResponse.json({ ok: false, message: "ID invalido." }, { status: 400 });
   }
 
@@ -71,7 +71,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string
     const { data: grupoAtual, error: grupoErr } = await supabase
       .from("documentos_grupos")
       .select("id,conjunto_id")
-      .eq("id", id)
+      .eq("id", grupoId)
       .single();
 
     if (grupoErr || !grupoAtual) {
@@ -83,7 +83,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string
       .select("id")
       .eq("conjunto_id", grupoAtual.conjunto_id)
       .eq("papel", "PRINCIPAL")
-      .neq("id", id)
+      .neq("id", grupoId)
       .limit(1);
 
     if (principalErr) {
@@ -101,7 +101,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string
   const { data, error } = await supabase
     .from("documentos_grupos")
     .update(patch)
-    .eq("id", id)
+    .eq("id", grupoId)
     .select("*")
     .single();
 
