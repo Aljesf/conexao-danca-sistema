@@ -49,31 +49,71 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: error.message }, { status: 404 });
   }
 
-  const { data: vinculos, error: vincErr } = await supabase
+  const { data: links, error: linkErr } = await supabase
     .from("documentos_conjuntos_grupos_modelos")
-    .select(
-      "conjunto_grupo_id,ordem,ativo, documentos_conjuntos_grupos:conjunto_grupo_id ( id,codigo,nome,conjunto_id, documentos_conjuntos:conjunto_id ( id,codigo,nome ) )",
-    )
+    .select("conjunto_grupo_id,ordem,ativo")
     .eq("modelo_id", modeloId)
     .eq("ativo", true)
     .order("ordem", { ascending: true });
 
-  if (vincErr) {
-    return NextResponse.json({ error: vincErr.message }, { status: 500 });
+  if (linkErr) {
+    return NextResponse.json({ error: linkErr.message }, { status: 500 });
   }
 
-  const vinculosOut = (vinculos ?? []).map((v) => {
-    const grupo = v.documentos_conjuntos_grupos as
-      | { codigo?: string | null; nome?: string | null; documentos_conjuntos?: { codigo?: string | null; nome?: string | null } | null }
-      | null
-      | undefined;
+  const grupoIds = (links ?? [])
+    .map((x) => Number((x as Record<string, unknown>).conjunto_grupo_id))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  let grupos: Array<Record<string, unknown>> = [];
+  if (grupoIds.length > 0) {
+    const { data: gData, error: gErr } = await supabase
+      .from("documentos_conjuntos_grupos")
+      .select("id,codigo,nome,conjunto_id")
+      .in("id", grupoIds);
+    if (gErr) {
+      return NextResponse.json({ error: gErr.message }, { status: 500 });
+    }
+    grupos = (gData ?? []) as Array<Record<string, unknown>>;
+  }
+
+  const conjuntoIds = Array.from(
+    new Set(
+      grupos
+        .map((g) => Number(g.conjunto_id))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  );
+
+  let conjuntos: Array<Record<string, unknown>> = [];
+  if (conjuntoIds.length > 0) {
+    const { data: cData, error: cErr } = await supabase
+      .from("documentos_conjuntos")
+      .select("id,codigo,nome")
+      .in("id", conjuntoIds);
+    if (cErr) {
+      return NextResponse.json({ error: cErr.message }, { status: 500 });
+    }
+    conjuntos = (cData ?? []) as Array<Record<string, unknown>>;
+  }
+
+  const grupoById = new Map<number, Record<string, unknown>>(grupos.map((g) => [Number(g.id), g]));
+  const conjuntoById = new Map<number, Record<string, unknown>>(
+    conjuntos.map((c) => [Number(c.id), c]),
+  );
+
+  const vinculosOut = (links ?? []).map((lnk) => {
+    const gid = Number((lnk as Record<string, unknown>).conjunto_grupo_id);
+    const g = grupoById.get(gid);
+    const c = g ? conjuntoById.get(Number(g.conjunto_id)) : null;
+    const ordem = Number((lnk as Record<string, unknown>).ordem);
+
     return {
-      conjunto_grupo_id: v.conjunto_grupo_id,
-      ordem: v.ordem,
-      grupo_codigo: grupo?.codigo ?? null,
-      grupo_nome: grupo?.nome ?? null,
-      conjunto_codigo: grupo?.documentos_conjuntos?.codigo ?? null,
-      conjunto_nome: grupo?.documentos_conjuntos?.nome ?? null,
+      conjunto_grupo_id: gid,
+      ordem: Number.isFinite(ordem) && ordem > 0 ? ordem : 1,
+      grupo_codigo: g?.codigo ?? null,
+      grupo_nome: g?.nome ?? null,
+      conjunto_codigo: c?.codigo ?? null,
+      conjunto_nome: c?.nome ?? null,
     };
   });
 
