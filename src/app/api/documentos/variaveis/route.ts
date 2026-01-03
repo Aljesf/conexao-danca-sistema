@@ -20,6 +20,19 @@ type VariavelPayload = {
   path_origem?: string | null;
   formato?: string | null;
   ativo?: boolean;
+  root_table?: string | null;
+  root_pk_column?: string | null;
+  join_path?: unknown;
+  target_table?: string | null;
+  target_column?: string | null;
+};
+
+type JoinEdge = {
+  from_table: string;
+  from_column: string;
+  to_table: string;
+  to_column: string;
+  constraint_name?: string;
 };
 
 const ORIGENS: Origem[] = [
@@ -53,6 +66,34 @@ function validateFormato(tipo: Tipo, formato: string | null): string | null {
   if (tipo === "DATA" && FORMATOS_DATA.includes(formato)) return formato;
   if (tipo === "TEXTO") return null;
   return null;
+}
+
+function parseJoinPath(raw: unknown): { value: JoinEdge[] | null; error?: string } {
+  if (raw === null || typeof raw === "undefined") return { value: null };
+  if (!Array.isArray(raw)) return { value: null, error: "join_path deve ser uma lista." };
+  if (raw.length > 3) return { value: null, error: "join_path aceita no maximo 3 saltos." };
+
+  const edges: JoinEdge[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") {
+      return { value: null, error: "join_path invalido." };
+    }
+    const rec = item as Record<string, unknown>;
+    const from_table = String(rec.from_table ?? "").trim();
+    const from_column = String(rec.from_column ?? "").trim();
+    const to_table = String(rec.to_table ?? "").trim();
+    const to_column = String(rec.to_column ?? "").trim();
+    const constraint_name =
+      typeof rec.constraint_name === "string" ? rec.constraint_name : undefined;
+
+    if (!from_table || !from_column || !to_table || !to_column) {
+      return { value: null, error: "join_path invalido." };
+    }
+
+    edges.push({ from_table, from_column, to_table, to_column, constraint_name });
+  }
+
+  return { value: edges };
 }
 
 export async function GET(req: Request) {
@@ -97,11 +138,31 @@ export async function POST(req: Request) {
   }
 
   const pathOrigem = body.origem === "MANUAL" ? null : body.path_origem?.trim() || null;
-  if (body.origem !== "MANUAL" && !pathOrigem) {
-    return NextResponse.json({ error: "Path tecnico obrigatorio para origem nao MANUAL." }, { status: 400 });
-  }
 
   const formato = validateFormato(body.tipo, body.formato ?? null);
+  const rootTable = String(body.root_table || "").trim();
+  const rootPkColumn = String(body.root_pk_column || "id").trim();
+  const targetTable = String(body.target_table || "").trim();
+  const targetColumn = String(body.target_column || "").trim();
+  const joinPathParsed = parseJoinPath(body.join_path);
+
+  if (body.origem !== "MANUAL") {
+    if (rootTable !== "matriculas") {
+      return NextResponse.json(
+        { error: "root_table invalido. Use 'matriculas'." },
+        { status: 400 },
+      );
+    }
+    if (!targetTable || !targetColumn) {
+      return NextResponse.json(
+        { error: "target_table e target_column sao obrigatorios." },
+        { status: 400 },
+      );
+    }
+    if (joinPathParsed.error) {
+      return NextResponse.json({ error: joinPathParsed.error }, { status: 400 });
+    }
+  }
 
   const insertPayload = {
     codigo,
@@ -111,6 +172,11 @@ export async function POST(req: Request) {
     path_origem: pathOrigem,
     formato,
     ativo: typeof body.ativo === "boolean" ? body.ativo : true,
+    root_table: body.origem === "MANUAL" ? null : rootTable,
+    root_pk_column: body.origem === "MANUAL" ? null : rootPkColumn,
+    join_path: body.origem === "MANUAL" ? null : joinPathParsed.value,
+    target_table: body.origem === "MANUAL" ? null : targetTable,
+    target_column: body.origem === "MANUAL" ? null : targetColumn,
   };
 
   const { data, error } = await supabase
@@ -153,6 +219,11 @@ export async function PUT(req: Request) {
   const origemAtual = (updatePayload.origem as Origem | undefined) ?? body.origem;
   if (origemAtual === "MANUAL") {
     updatePayload.path_origem = null;
+    updatePayload.root_table = null;
+    updatePayload.root_pk_column = null;
+    updatePayload.join_path = null;
+    updatePayload.target_table = null;
+    updatePayload.target_column = null;
   } else if (typeof body.path_origem === "string") {
     updatePayload.path_origem = body.path_origem.trim() || null;
   }
@@ -160,6 +231,43 @@ export async function PUT(req: Request) {
   const tipoAtual = (updatePayload.tipo as Tipo | undefined) ?? body.tipo;
   if (tipoAtual && typeof tipoAtual === "string") {
     updatePayload.formato = validateFormato(tipoAtual as Tipo, body.formato ?? null);
+  }
+
+  const rootTable = typeof body.root_table === "string" ? body.root_table.trim() : "";
+  const rootPkColumn = typeof body.root_pk_column === "string" ? body.root_pk_column.trim() : "";
+  const targetTable = typeof body.target_table === "string" ? body.target_table.trim() : "";
+  const targetColumn = typeof body.target_column === "string" ? body.target_column.trim() : "";
+  const joinPathParsed = parseJoinPath(body.join_path);
+
+  const updateJoinFields =
+    typeof body.root_table !== "undefined" ||
+    typeof body.root_pk_column !== "undefined" ||
+    typeof body.target_table !== "undefined" ||
+    typeof body.target_column !== "undefined" ||
+    typeof body.join_path !== "undefined";
+
+  if (origemAtual !== "MANUAL" && updateJoinFields) {
+    if (rootTable !== "matriculas") {
+      return NextResponse.json(
+        { error: "root_table invalido. Use 'matriculas'." },
+        { status: 400 },
+      );
+    }
+    if (!targetTable || !targetColumn) {
+      return NextResponse.json(
+        { error: "target_table e target_column sao obrigatorios." },
+        { status: 400 },
+      );
+    }
+    if (joinPathParsed.error) {
+      return NextResponse.json({ error: joinPathParsed.error }, { status: 400 });
+    }
+
+    updatePayload.root_table = rootTable;
+    updatePayload.root_pk_column = rootPkColumn || "id";
+    updatePayload.join_path = joinPathParsed.value;
+    updatePayload.target_table = targetTable;
+    updatePayload.target_column = targetColumn;
   }
 
   const { data, error } = await supabase

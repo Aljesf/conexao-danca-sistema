@@ -28,6 +28,39 @@ type DocumentoVariavel = {
   path_origem: string | null;
   formato: string | null;
   ativo: boolean;
+  root_table: string | null;
+  root_pk_column: string | null;
+  join_path: JoinEdge[] | null;
+  target_table: string | null;
+  target_column: string | null;
+};
+
+type JoinEdge = {
+  from_table: string;
+  from_column: string;
+  to_table: string;
+  to_column: string;
+  constraint_name?: string;
+};
+
+type SchemaRoot = {
+  key: string;
+  label: string;
+  pk: string;
+};
+
+type SchemaAdj = {
+  from_table: string;
+  from_column: string;
+  to_table: string;
+  to_column: string;
+  constraint_name?: string;
+};
+
+type SchemaColumn = {
+  column_name: string;
+  data_type: string;
+  is_nullable: string;
 };
 
 const ORIGEM_LABELS: Record<Origem, string> = {
@@ -41,13 +74,13 @@ const ORIGEM_LABELS: Record<Origem, string> = {
 };
 
 const ORIGEM_HINTS: Record<Origem, string> = {
-  ALUNO: "ex: aluno.nome | aluno.cpf",
-  RESPONSAVEL_FINANCEIRO: "ex: responsavel.nome | responsavel.cpf",
-  MATRICULA: "ex: matricula.ano_referencia | matricula.data_matricula",
-  TURMA: "ex: turma.nome | turma.curso | turma.ano_referencia",
-  ESCOLA: "ex: escola.nome | escola.cnpj",
-  FINANCEIRO: "ex: snapshot_financeiro.valor_total_contratado_centavos",
-  MANUAL: "Nao precisa de path; sera preenchido na emissao.",
+  ALUNO: "Use o wizard para navegar a partir de matriculas ate a coluna desejada.",
+  RESPONSAVEL_FINANCEIRO: "Use o wizard para navegar a partir de matriculas ate a coluna desejada.",
+  MATRICULA: "Selecione diretamente colunas de matriculas.",
+  TURMA: "Use o wizard para navegar a partir de matriculas ate turmas.",
+  ESCOLA: "Use o wizard para navegar a partir de matriculas ate a tabela da escola.",
+  FINANCEIRO: "Use o wizard para navegar ou mantenha via snapshot financeiro.",
+  MANUAL: "Nao precisa de join; sera preenchido na emissao.",
 };
 
 const ORIGENS: Origem[] = [
@@ -60,6 +93,7 @@ const ORIGENS: Origem[] = [
   "MANUAL",
 ];
 const TIPOS: Tipo[] = ["TEXTO", "MONETARIO", "DATA"];
+const MAX_HOPS = 3;
 
 export default function AdminDocumentosVariaveisPage() {
   const [loading, setLoading] = useState(true);
@@ -67,17 +101,25 @@ export default function AdminDocumentosVariaveisPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [itens, setItens] = useState<DocumentoVariavel[]>([]);
+  const [roots, setRoots] = useState<SchemaRoot[]>([]);
+  const [rootsLoading, setRootsLoading] = useState(true);
+  const [adjCache, setAdjCache] = useState<Record<string, SchemaAdj[]>>({});
+  const [columns, setColumns] = useState<SchemaColumn[]>([]);
+  const [columnsLoading, setColumnsLoading] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [codigo, setCodigo] = useState("");
   const [descricao, setDescricao] = useState("");
   const [origem, setOrigem] = useState<Origem>("ALUNO");
   const [tipo, setTipo] = useState<Tipo>("TEXTO");
-  const [pathOrigem, setPathOrigem] = useState("");
   const [formato, setFormato] = useState("");
   const [ativo, setAtivo] = useState(true);
+  const [rootTable, setRootTable] = useState("matriculas");
+  const [rootPkColumn, setRootPkColumn] = useState("id");
+  const [joinPath, setJoinPath] = useState<JoinEdge[]>([]);
+  const [targetColumn, setTargetColumn] = useState("");
 
-  const precisaPath = origem !== "MANUAL";
+  const precisaJoin = origem !== "MANUAL";
   const origemHint = ORIGEM_HINTS[origem];
 
   const opcoesFormato = useMemo(() => {
@@ -85,6 +127,116 @@ export default function AdminDocumentosVariaveisPage() {
     if (tipo === "DATA") return ["DATA_CURTA"];
     return [];
   }, [tipo]);
+
+  const breadcrumb = useMemo(() => {
+    const parts = [rootTable, ...joinPath.map((j) => j.to_table)];
+    return parts.filter((p) => p && p.trim().length > 0);
+  }, [rootTable, joinPath]);
+
+  const targetTable = breadcrumb[breadcrumb.length - 1] || rootTable;
+
+  const edgeKey = (edge: SchemaAdj | JoinEdge) =>
+    `${edge.from_table}.${edge.from_column}->${edge.to_table}.${edge.to_column}`;
+
+  const hopTables = useMemo(
+    () => [
+      rootTable,
+      joinPath[0]?.to_table ?? "",
+      joinPath[1]?.to_table ?? "",
+    ],
+    [rootTable, joinPath],
+  );
+
+  const isJoinEdge = (edge: unknown): edge is JoinEdge => {
+    if (!edge || typeof edge !== "object") return false;
+    const rec = edge as Record<string, unknown>;
+    return (
+      typeof rec.from_table === "string" &&
+      typeof rec.from_column === "string" &&
+      typeof rec.to_table === "string" &&
+      typeof rec.to_column === "string"
+    );
+  };
+
+  const carregarRoots = useCallback(async () => {
+    setRootsLoading(true);
+    try {
+      const res = await fetch("/api/documentos/schema/roots");
+      const json = (await res.json()) as { ok?: boolean; data?: SchemaRoot[]; message?: string };
+      if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao carregar roots.");
+      const list = json.data ?? [];
+      setRoots(list);
+      if (list.length > 0) {
+        const current = list.find((r) => r.key === rootTable) ?? list[0];
+        setRootTable(current.key);
+        setRootPkColumn(current.pk || "id");
+      }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar roots.");
+    } finally {
+      setRootsLoading(false);
+    }
+  }, [rootTable]);
+
+  const carregarAdj = useCallback(
+    async (table: string) => {
+      if (!table || adjCache[table]) return;
+      try {
+        const res = await fetch(`/api/documentos/schema/adj?table=${encodeURIComponent(table)}`);
+        const json = (await res.json()) as { ok?: boolean; data?: SchemaAdj[]; message?: string };
+        if (!res.ok || !json.ok) {
+          throw new Error(json.message ?? "Falha ao carregar adjacencias.");
+        }
+        setAdjCache((prev) => ({ ...prev, [table]: json.data ?? [] }));
+      } catch (e) {
+        setErro(e instanceof Error ? e.message : "Erro ao carregar adjacencias.");
+      }
+    },
+    [adjCache],
+  );
+
+  const carregarColumns = useCallback(async (table: string) => {
+    if (!table) return;
+    setColumnsLoading(true);
+    try {
+      const res = await fetch(`/api/documentos/schema/columns?table=${encodeURIComponent(table)}`);
+      const json = (await res.json()) as { ok?: boolean; data?: SchemaColumn[]; message?: string };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message ?? "Falha ao carregar colunas.");
+      }
+      setColumns(json.data ?? []);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar colunas.");
+    } finally {
+      setColumnsLoading(false);
+    }
+  }, []);
+
+  const handleRootChange = (value: string) => {
+    const selected = roots.find((r) => r.key === value);
+    const nextTable = selected?.key ?? value;
+    setRootTable(nextTable);
+    setRootPkColumn(selected?.pk ?? "id");
+    setJoinPath([]);
+    setTargetColumn("");
+  };
+
+  const handleHopChange = (index: number, value: string) => {
+    const table = index === 0 ? rootTable : joinPath[index - 1]?.to_table;
+    if (!table) return;
+    if (!value) {
+      setJoinPath((prev) => prev.slice(0, index));
+      return;
+    }
+    const options = adjCache[table] ?? [];
+    const selected = options.find((edge) => edgeKey(edge) === value);
+    if (!selected) return;
+    setJoinPath((prev) => {
+      const next = prev.slice(0, index);
+      next[index] = selected;
+      return next;
+    });
+  };
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -107,9 +259,13 @@ export default function AdminDocumentosVariaveisPage() {
     setDescricao("");
     setOrigem("ALUNO");
     setTipo("TEXTO");
-    setPathOrigem("");
     setFormato("");
     setAtivo(true);
+    const defaultRoot = roots.find((r) => r.key === "matriculas") ?? roots[0];
+    setRootTable(defaultRoot?.key ?? "matriculas");
+    setRootPkColumn(defaultRoot?.pk ?? "id");
+    setJoinPath([]);
+    setTargetColumn("");
   };
 
   const editar = (item: DocumentoVariavel) => {
@@ -118,9 +274,15 @@ export default function AdminDocumentosVariaveisPage() {
     setDescricao(item.descricao);
     setOrigem(item.origem);
     setTipo(item.tipo);
-    setPathOrigem(item.path_origem ?? "");
     setFormato(item.formato ?? "");
     setAtivo(item.ativo);
+    setRootTable(item.root_table ?? "matriculas");
+    setRootPkColumn(item.root_pk_column ?? "id");
+    const safeJoin = Array.isArray(item.join_path)
+      ? item.join_path.filter(isJoinEdge)
+      : [];
+    setJoinPath(safeJoin);
+    setTargetColumn(item.target_column ?? "");
     setOkMsg(null);
     setErro(null);
   };
@@ -136,8 +298,14 @@ export default function AdminDocumentosVariaveisPage() {
       return;
     }
 
-    if (precisaPath && !pathOrigem.trim()) {
-      setErro("Path tecnico obrigatorio para origem nao MANUAL.");
+    if (precisaJoin && !targetColumn.trim()) {
+      setErro("Selecione a coluna de destino.");
+      setSaving(false);
+      return;
+    }
+
+    if (precisaJoin && !rootTable.trim()) {
+      setErro("Selecione o root.");
       setSaving(false);
       return;
     }
@@ -148,9 +316,13 @@ export default function AdminDocumentosVariaveisPage() {
       descricao: descricao.trim(),
       origem,
       tipo,
-      path_origem: precisaPath ? pathOrigem.trim() : null,
       formato: formato.trim() || null,
       ativo,
+      root_table: precisaJoin ? rootTable.trim() : null,
+      root_pk_column: precisaJoin ? rootPkColumn.trim() || "id" : null,
+      join_path: precisaJoin ? joinPath : null,
+      target_table: precisaJoin ? targetTable.trim() : null,
+      target_column: precisaJoin ? targetColumn.trim() : null,
     };
 
     try {
@@ -192,6 +364,36 @@ export default function AdminDocumentosVariaveisPage() {
     void carregar();
   }, [carregar]);
 
+  useEffect(() => {
+    void carregarRoots();
+  }, [carregarRoots]);
+
+  useEffect(() => {
+    if (rootTable) void carregarAdj(rootTable);
+  }, [rootTable, carregarAdj]);
+
+  useEffect(() => {
+    for (const edge of joinPath) {
+      void carregarAdj(edge.to_table);
+    }
+  }, [joinPath, carregarAdj]);
+
+  useEffect(() => {
+    if (!precisaJoin) {
+      setColumns([]);
+      return;
+    }
+    setColumns([]);
+    if (targetTable) void carregarColumns(targetTable);
+  }, [precisaJoin, targetTable, carregarColumns]);
+
+  useEffect(() => {
+    if (columns.length === 0) return;
+    setTargetColumn((prev) =>
+      prev && columns.some((c) => c.column_name === prev) ? prev : "",
+    );
+  }, [columns]);
+
   return (
     <SystemPage>
       <SystemContextCard
@@ -206,14 +408,14 @@ export default function AdminDocumentosVariaveisPage() {
       <SystemHelpCard
         items={[
           "Use codigo em CAIXA ALTA, ex: ALUNO_NOME.",
-          "Origem MANUAL dispensa path tecnico.",
+          "Origem MANUAL dispensa wizard de joins.",
           "Variaveis inativas nao aparecem para selecao nos modelos.",
         ]}
       />
 
       <SystemSectionCard
         title={editingId ? "Editar variavel" : "Cadastrar variavel"}
-        description="Defina origem, tipo e path tecnico para gerar o placeholder automaticamente."
+        description="Defina origem, tipo e o caminho por joins do schema."
         footer={
           <div className="flex w-full flex-wrap justify-between gap-2">
             <Button variant="ghost" onClick={limparFormulario} disabled={saving}>
@@ -296,21 +498,92 @@ export default function AdminDocumentosVariaveisPage() {
             </select>
           </div>
 
-          {precisaPath ? (
-            <div className="md:col-span-3">
-              <label className="text-sm font-medium">Campo (path) dentro do contexto</label>
-              <div className="mt-1">
-                <Input value={pathOrigem} onChange={(e) => setPathOrigem(e.target.value)} placeholder="ex: aluno.nome" />
-              </div>
-              <p className="mt-1 text-xs text-slate-500">{origemHint}</p>
-            </div>
-          ) : null}
+          {precisaJoin ? (
+            <div className="md:col-span-3 space-y-3">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div>
+                  <label className="text-sm font-medium">Ponto de partida (root)</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={rootTable}
+                    onChange={(e) => handleRootChange(e.target.value)}
+                    disabled={rootsLoading}
+                  >
+                    {rootsLoading ? <option>Carregando...</option> : null}
+                    {!rootsLoading && roots.length === 0 ? <option value="">Sem roots</option> : null}
+                    {roots.map((r) => (
+                      <option key={r.key} value={r.key}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-          {!precisaPath ? (
+                <div>
+                  <label className="text-sm font-medium">PK do root</label>
+                  <Input value={rootPkColumn} onChange={(e) => setRootPkColumn(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white/70 p-3">
+                <div className="text-sm font-semibold">Wizard (ate 3 saltos)</div>
+                <div className="mt-2 grid gap-3 md:grid-cols-3">
+                  {Array.from({ length: MAX_HOPS }).map((_, index) => {
+                    const table = hopTables[index];
+                    const options = table ? adjCache[table] ?? [] : [];
+                    const selectedEdge = joinPath[index];
+                    const selectedValue = selectedEdge ? edgeKey(selectedEdge) : "";
+                    const disabled = index > 0 && !joinPath[index - 1];
+
+                    return (
+                      <div key={`hop-${index}`}>
+                        <label className="text-xs font-medium">Hop {index + 1}</label>
+                        <select
+                          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                          value={selectedValue}
+                          onChange={(e) => handleHopChange(index, e.target.value)}
+                          disabled={!table || disabled}
+                        >
+                          <option value="">Parar aqui</option>
+                          {options.map((edge) => (
+                            <option key={edgeKey(edge)} value={edgeKey(edge)}>
+                              {edge.from_table}.{edge.from_column} {"->"} {edge.to_table}.{edge.to_column}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Caminho: {breadcrumb.length ? breadcrumb.join(" -> ") : "(nenhum)"}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Coluna de destino ({targetTable})</label>
+                <select
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  value={targetColumn}
+                  onChange={(e) => setTargetColumn(e.target.value)}
+                  disabled={columnsLoading || !targetTable}
+                >
+                  <option value="">Selecione...</option>
+                  {columns.map((col) => (
+                    <option key={col.column_name} value={col.column_name}>
+                      {col.column_name} ({col.data_type})
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">{origemHint}</p>
+              </div>
+            </div>
+          ) : (
             <div className="md:col-span-3">
               <p className="text-xs text-slate-500">{origemHint}</p>
             </div>
-          ) : null}
+          )}
 
           <div className="flex items-center gap-2">
             <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
@@ -337,8 +610,23 @@ export default function AdminDocumentosVariaveisPage() {
                       {item.descricao} | Origem: {ORIGEM_LABELS[item.origem] ?? item.origem} | Ativo:{" "}
                       {item.ativo ? "Sim" : "Nao"}
                     </div>
-                    {item.path_origem ? (
+                    {item.root_table ? (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Root: {item.root_table}.{item.root_pk_column ?? "id"}
+                      </div>
+                    ) : null}
+                    {item.target_table && item.target_column ? (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Destino: {item.target_table}.{item.target_column}
+                      </div>
+                    ) : null}
+                    {!item.root_table && item.path_origem ? (
                       <div className="mt-1 text-xs text-slate-500">Path: {item.path_origem}</div>
+                    ) : null}
+                    {item.join_path && item.join_path.length > 0 ? (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Saltos: {item.join_path.length}
+                      </div>
                     ) : null}
                     {item.formato ? (
                       <div className="mt-1 text-xs text-slate-500">Formato: {item.formato}</div>

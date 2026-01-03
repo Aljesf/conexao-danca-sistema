@@ -5,7 +5,7 @@ export type DocumentoVariavel = {
   tipo: string | null;
 };
 
-function getByPath(obj: unknown, path: string): unknown {
+export function getByPath(obj: unknown, path: string): unknown {
   if (!obj || typeof obj !== "object") return undefined;
   const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
   let cur: unknown = obj;
@@ -17,7 +17,7 @@ function getByPath(obj: unknown, path: string): unknown {
   return cur;
 }
 
-function formatValue(value: unknown, formato: string | null): string {
+export function formatValue(value: unknown, formato: string | null): string {
   if (value === null || value === undefined) return "";
 
   const raw = typeof value === "string" || typeof value === "number" ? String(value) : "";
@@ -42,6 +42,16 @@ function formatValue(value: unknown, formato: string | null): string {
   }
 
   return raw;
+}
+
+export function extractPlaceholderCodes(htmlTemplate: string): string[] {
+  const codes = new Set<string>();
+  htmlTemplate.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_match, codeRaw: string) => {
+    const code = String(codeRaw || "").trim();
+    if (code) codes.add(code);
+    return "";
+  });
+  return Array.from(codes);
 }
 
 /**

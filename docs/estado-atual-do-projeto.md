@@ -231,3 +231,11 @@ Vers├úo l├│gica: **v1.0 (Servi├ºo + Unidade de Execu├º├úo)**
 - Criado padrao-base de paginas operacionais (PageHeader/SectionCard/ToolbarRow) e aplicado em /escola/matriculas.
 
 - Pessoas: adicionada aba "Dados escolares" (matriculas/vinculos) em /pessoas/[id] e bloco de vinculos em /pessoas/[id]/curriculo.
+
+## Atualizacoes recentes (Documentos - 2026-01-02)
+
+- Variaveis por introspeccao do schema: root_table + join_path (ate 3 saltos) + target_table/target_column.
+- RPCs de schema: documentos_schema_columns, documentos_schema_table_columns, documentos_schema_fks, documentos_schema_adj.
+- RPC de resolucao: documentos_resolver_por_join_path (resolve valor por matricula_id).
+- Emissao resolve variaveis via join_path quando root_table esta preenchido.
+- UI de variaveis com wizard de joins e selecao de coluna final.

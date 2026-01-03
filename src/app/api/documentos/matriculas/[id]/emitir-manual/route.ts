@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 import {
-  resolvePlaceholdersHtml,
+  extractPlaceholderCodes,
+  formatValue,
+  getByPath,
   type DocumentoVariavel,
 } from "@/lib/documentos/resolvePlaceholders";
+import { type JoinEdge } from "@/lib/documentos/resolveByJoinPath";
 
 type Item = { grupo_id: number; documento_modelo_id: number; incluir: boolean };
 type Body = {
@@ -12,6 +16,14 @@ type Body = {
   itens: Item[];
   variaveis_manuais?: Record<string, unknown>;
   snapshot_financeiro?: Record<string, unknown>;
+};
+
+type DocumentoVariavelDb = DocumentoVariavel & {
+  root_table: string | null;
+  root_pk_column: string | null;
+  join_path: JoinEdge[] | null;
+  target_table: string | null;
+  target_column: string | null;
 };
 
 const PAPEIS_VALIDOS = ["PRINCIPAL", "OBRIGATORIO", "OPCIONAL", "ADICIONAL"] as const;
@@ -33,20 +45,8 @@ function resolveModeloTemplate(modelo: Record<string, unknown>): string {
   return typeof texto === "string" ? texto : "";
 }
 
-function getByPath(obj: unknown, path: string): unknown {
-  if (!obj || typeof obj !== "object") return undefined;
-  const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
-  let cur: unknown = obj;
-  for (const part of parts) {
-    if (!cur || typeof cur !== "object") return undefined;
-    const rec = cur as Record<string, unknown>;
-    cur = rec[part];
-  }
-  return cur;
-}
-
-function buildVariaveisByCodigo(rows: Array<Record<string, unknown>>): Map<string, DocumentoVariavel> {
-  const map = new Map<string, DocumentoVariavel>();
+function buildVariaveisByCodigo(rows: Array<Record<string, unknown>>): Map<string, DocumentoVariavelDb> {
+  const map = new Map<string, DocumentoVariavelDb>();
   for (const row of rows) {
     const codigo = String(row.codigo ?? "").trim().toUpperCase();
     if (!codigo) continue;
@@ -55,31 +55,75 @@ function buildVariaveisByCodigo(rows: Array<Record<string, unknown>>): Map<strin
       path_origem: typeof row.path_origem === "string" ? row.path_origem : row.path_origem ?? null,
       formato: typeof row.formato === "string" ? row.formato : row.formato ?? null,
       tipo: typeof row.tipo === "string" ? row.tipo : row.tipo ?? null,
+      root_table: typeof row.root_table === "string" ? row.root_table : row.root_table ?? null,
+      root_pk_column:
+        typeof row.root_pk_column === "string" ? row.root_pk_column : row.root_pk_column ?? null,
+      join_path: Array.isArray(row.join_path) ? (row.join_path as JoinEdge[]) : null,
+      target_table: typeof row.target_table === "string" ? row.target_table : row.target_table ?? null,
+      target_column: typeof row.target_column === "string" ? row.target_column : row.target_column ?? null,
     });
   }
   return map;
 }
 
-function buildVariaveisUtilizadas(args: {
-  htmlTemplate: string;
-  variaveisByCodigo: Map<string, DocumentoVariavel>;
+async function resolveTemplateValues(params: {
+  template: string;
   contexto: Record<string, unknown>;
-}): Record<string, unknown> {
-  const { htmlTemplate, variaveisByCodigo, contexto } = args;
-  const vars: Record<string, unknown> = {};
+  variaveisByCodigo: Map<string, DocumentoVariavelDb>;
+  supabase: SupabaseClient;
+  rootId: number;
+}): Promise<{ resolved: string; utilizadas: Record<string, unknown> }> {
+  const { template, contexto, variaveisByCodigo, supabase, rootId } = params;
+  const codes = extractPlaceholderCodes(template);
+  const valoresFormatados: Record<string, string> = {};
+  const utilizadas: Record<string, unknown> = {};
 
-  htmlTemplate.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_match, codeRaw: string) => {
+  await Promise.all(
+    codes.map(async (code) => {
+      const variavel = variaveisByCodigo.get(code);
+
+      if (variavel?.root_table) {
+        const rootTable = variavel.root_table;
+        const rootPk = variavel.root_pk_column || "id";
+        const targetTable = variavel.target_table;
+        const targetColumn = variavel.target_column;
+
+        if (rootTable && targetTable && targetColumn) {
+          const { data, error } = await supabase.rpc("documentos_resolver_por_join_path", {
+            p_root_table: rootTable,
+            p_root_pk: rootPk,
+            p_root_id: rootId,
+            p_join_path: variavel.join_path ?? null,
+            p_target_table: targetTable,
+            p_target_column: targetColumn,
+          });
+
+          const raw = error ? null : data;
+          valoresFormatados[code] = formatValue(raw, variavel.formato);
+          utilizadas[code] = typeof raw === "undefined" ? null : raw;
+          return;
+        }
+      }
+
+      if (variavel?.path_origem) {
+        const raw = getByPath(contexto, variavel.path_origem);
+        valoresFormatados[code] = formatValue(raw, variavel.formato);
+        utilizadas[code] = typeof raw === "undefined" ? null : raw;
+        return;
+      }
+
+      const rawManual = getByPath(contexto, `variaveis_manuais.${code}`);
+      valoresFormatados[code] = formatValue(rawManual, variavel?.formato ?? null);
+      utilizadas[code] = typeof rawManual === "undefined" ? null : rawManual;
+    }),
+  );
+
+  const resolved = template.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_match, codeRaw: string) => {
     const code = String(codeRaw || "").trim();
-    if (!code || Object.prototype.hasOwnProperty.call(vars, code)) return "";
-    const v = variaveisByCodigo.get(code);
-    const val = v?.path_origem
-      ? getByPath(contexto, v.path_origem)
-      : getByPath(contexto, `variaveis_manuais.${code}`);
-    vars[code] = typeof val === "undefined" ? null : val;
-    return "";
+    return code ? valoresFormatados[code] ?? "" : "";
   });
 
-  return vars;
+  return { resolved, utilizadas };
 }
 
 function normalizeManualVars(raw: Record<string, unknown>): Record<string, unknown> {
@@ -186,7 +230,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const { data: variaveisRaw, error: variaveisErr } = await supabase
     .from("documentos_variaveis")
-    .select("codigo, path_origem, formato, tipo")
+    .select(
+      "codigo, path_origem, formato, tipo, root_table, root_pk_column, join_path, target_table, target_column",
+    )
     .eq("ativo", true);
 
   if (variaveisErr) {
@@ -275,17 +321,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const template = resolveModeloTemplate(modelo as Record<string, unknown>);
-    const conteudoResolvido = resolvePlaceholdersHtml({
-      htmlTemplate: template,
-      variaveisByCodigo,
-      contexto,
-    });
+    const { resolved: conteudoResolvido, utilizadas: variaveisUtilizadas } =
+      await resolveTemplateValues({
+        template,
+        variaveisByCodigo,
+        contexto,
+        supabase,
+        rootId: matriculaId,
+      });
     const hash = crypto.createHash("sha256").update(conteudoResolvido, "utf8").digest("hex");
-    const variaveisUtilizadas = buildVariaveisUtilizadas({
-      htmlTemplate: template,
-      variaveisByCodigo,
-      contexto,
-    });
 
     const baseInsert: Record<string, unknown> = {
       matricula_id: matriculaId,
