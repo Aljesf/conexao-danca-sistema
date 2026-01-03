@@ -6,7 +6,6 @@ export type DocumentoModeloDTO = {
   versao: string;
   ativo: boolean;
   tipo_documento_id: number | null;
-  conjunto_grupo_id?: number | null;
   formato: DocumentoModeloFormato | null;
   texto_modelo_md: string | null;
   conteudo_html: string | null;
@@ -19,7 +18,6 @@ export type DocumentoModeloDTO = {
 export type DocumentoModeloCreatePayload = {
   titulo: string;
   tipo_documento_id?: number;
-  conjunto_grupo_id?: number | null;
   versao?: string;
   ativo?: boolean;
   formato?: DocumentoModeloFormato;

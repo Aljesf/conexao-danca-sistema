@@ -26,10 +26,13 @@ type DocumentoVariavelDb = DocumentoVariavel & {
   target_column: string | null;
 };
 
+const isInDirection = (direction?: string | null) =>
+  direction === "IN" || direction === "IN_GUESS";
+
 function normalizeJoinPathForRpc(joinPath: JoinEdge[] | null): JoinEdge[] | null {
   if (!joinPath || joinPath.length === 0) return null;
   return joinPath.map((edge) => {
-    if (edge.direction === "IN") {
+    if (isInDirection(edge.direction)) {
       return {
         from_table: edge.to_table,
         from_column: edge.to_column,
@@ -335,7 +338,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const { data: modelo, error: modErr } = await supabase
       .from("documentos_modelo")
-      .select("*")
+      .select("id,formato,conteudo_html,texto_modelo_md")
       .eq("id", item.documento_modelo_id)
       .single();
 
@@ -358,7 +361,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       matricula_id: matriculaId,
       status_assinatura: "PENDENTE",
       conteudo_renderizado_md: conteudoResolvido,
-      conteudo_html: conteudoResolvido,
       conteudo_template_html: template,
       conteudo_resolvido_html: conteudoResolvido,
       contexto_json: contexto,

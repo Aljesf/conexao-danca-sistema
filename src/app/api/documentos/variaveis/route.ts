@@ -30,7 +30,7 @@ type VariavelPayload = {
 };
 
 type JoinEdge = {
-  direction?: "IN" | "OUT";
+  direction?: "IN" | "OUT" | "IN_GUESS" | "OUT_GUESS";
   from_table: string;
   from_column: string;
   to_table: string;
@@ -87,7 +87,13 @@ function parseJoinPath(raw: unknown): { value: JoinEdge[] | null; error?: string
     const to_table = String(rec.to_table ?? "").trim();
     const to_column = String(rec.to_column ?? "").trim();
     const directionRaw = typeof rec.direction === "string" ? rec.direction.trim().toUpperCase() : "";
-    const direction = directionRaw === "IN" || directionRaw === "OUT" ? directionRaw : undefined;
+    const direction =
+      directionRaw === "IN" ||
+      directionRaw === "OUT" ||
+      directionRaw === "IN_GUESS" ||
+      directionRaw === "OUT_GUESS"
+        ? directionRaw
+        : undefined;
     const constraint_name =
       typeof rec.constraint_name === "string" ? rec.constraint_name : undefined;
 
@@ -155,20 +161,54 @@ export async function POST(req: Request) {
   const joinPathParsed = parseJoinPath(body.join_path);
 
   if (body.origem !== "MANUAL") {
-    if (rootTable !== "matriculas") {
+    if (!rootTable || !targetTable || !targetColumn) {
       return NextResponse.json(
-        { error: "root_table invalido. Use 'matriculas'." },
-        { status: 400 },
-      );
-    }
-    if (!targetTable || !targetColumn) {
-      return NextResponse.json(
-        { error: "target_table e target_column sao obrigatorios." },
+        { error: "root_table, target_table e target_column sao obrigatorios." },
         { status: 400 },
       );
     }
     if (joinPathParsed.error) {
       return NextResponse.json({ error: joinPathParsed.error }, { status: 400 });
+    }
+
+    {
+      const { data, error } = await supabase.rpc("documentos_schema_table_columns", {
+        p_table: rootTable,
+      });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      const rootCols = Array.isArray(data) ? (data as Array<{ column_name?: string }>) : [];
+      if (rootCols.length === 0) {
+        return NextResponse.json(
+          { error: `root_table invalida: ${rootTable}` },
+          { status: 400 },
+        );
+      }
+      const hasPk = rootCols.some((c) => String(c.column_name) === rootPkColumn);
+      if (!hasPk) {
+        return NextResponse.json(
+          { error: `PK do root invalida: ${rootPkColumn}` },
+          { status: 400 },
+        );
+      }
+    }
+
+    {
+      const { data, error } = await supabase.rpc("documentos_schema_table_columns", {
+        p_table: targetTable,
+      });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      const targetCols = Array.isArray(data) ? (data as Array<{ column_name?: string }>) : [];
+      const hasCol = targetCols.some((c) => String(c.column_name) === targetColumn);
+      if (!hasCol) {
+        return NextResponse.json(
+          { error: `Coluna destino invalida: ${targetTable}.${targetColumn}` },
+          { status: 400 },
+        );
+      }
     }
   }
 
@@ -254,7 +294,8 @@ export async function PUT(req: Request) {
   }
 
   const rootTable = typeof body.root_table === "string" ? body.root_table.trim() : "";
-  const rootPkColumn = typeof body.root_pk_column === "string" ? body.root_pk_column.trim() : "";
+  const rootPkColumn =
+    typeof body.root_pk_column === "string" ? body.root_pk_column.trim() || "id" : "id";
   const targetTable = typeof body.target_table === "string" ? body.target_table.trim() : "";
   const targetColumn = typeof body.target_column === "string" ? body.target_column.trim() : "";
   const joinPathParsed = parseJoinPath(body.join_path);
@@ -267,20 +308,54 @@ export async function PUT(req: Request) {
     typeof body.join_path !== "undefined";
 
   if (origemAtual !== "MANUAL" && updateJoinFields) {
-    if (rootTable !== "matriculas") {
+    if (!rootTable || !targetTable || !targetColumn) {
       return NextResponse.json(
-        { error: "root_table invalido. Use 'matriculas'." },
-        { status: 400 },
-      );
-    }
-    if (!targetTable || !targetColumn) {
-      return NextResponse.json(
-        { error: "target_table e target_column sao obrigatorios." },
+        { error: "root_table, target_table e target_column sao obrigatorios." },
         { status: 400 },
       );
     }
     if (joinPathParsed.error) {
       return NextResponse.json({ error: joinPathParsed.error }, { status: 400 });
+    }
+
+    {
+      const { data, error } = await supabase.rpc("documentos_schema_table_columns", {
+        p_table: rootTable,
+      });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      const rootCols = Array.isArray(data) ? (data as Array<{ column_name?: string }>) : [];
+      if (rootCols.length === 0) {
+        return NextResponse.json(
+          { error: `root_table invalida: ${rootTable}` },
+          { status: 400 },
+        );
+      }
+      const hasPk = rootCols.some((c) => String(c.column_name) === rootPkColumn);
+      if (!hasPk) {
+        return NextResponse.json(
+          { error: `PK do root invalida: ${rootPkColumn}` },
+          { status: 400 },
+        );
+      }
+    }
+
+    {
+      const { data, error } = await supabase.rpc("documentos_schema_table_columns", {
+        p_table: targetTable,
+      });
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      const targetCols = Array.isArray(data) ? (data as Array<{ column_name?: string }>) : [];
+      const hasCol = targetCols.some((c) => String(c.column_name) === targetColumn);
+      if (!hasCol) {
+        return NextResponse.json(
+          { error: `Coluna destino invalida: ${targetTable}.${targetColumn}` },
+          { status: 400 },
+        );
+      }
     }
 
     updatePayload.root_table = rootTable;

@@ -1,5 +1,5 @@
 export type JoinEdge = {
-  direction?: "IN" | "OUT";
+  direction?: "IN" | "OUT" | "IN_GUESS" | "OUT_GUESS";
   from_table: string;
   from_column: string;
   to_table: string;

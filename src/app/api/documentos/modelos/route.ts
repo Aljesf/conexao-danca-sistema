@@ -15,7 +15,9 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("documentos_modelo")
-    .select("*")
+    .select(
+      "id,titulo,versao,ativo,tipo_documento_id,formato,texto_modelo_md,conteudo_html,placeholders_schema_json,observacoes,created_at,updated_at",
+    )
     .order("titulo", { ascending: true });
 
   if (error) {
@@ -31,11 +33,6 @@ export async function POST(req: Request) {
 
   const formato = normalizeFormato(body.formato);
   const tipoDocumentoId = Number(body.tipo_documento_id);
-  const conjuntoGrupoIdRaw = body.conjunto_grupo_id;
-  const conjuntoGrupoId =
-    conjuntoGrupoIdRaw === null || conjuntoGrupoIdRaw === undefined || conjuntoGrupoIdRaw === ""
-      ? null
-      : Number(conjuntoGrupoIdRaw);
   const textoMarkdown = asText(body.texto_modelo_md);
   const conteudoHtmlRaw = asText(body.conteudo_html);
   const conteudoHtml = formato === "RICH_HTML" ? (conteudoHtmlRaw.trim() ? conteudoHtmlRaw : textoMarkdown) : "";
@@ -50,13 +47,6 @@ export async function POST(req: Request) {
   if (!Number.isFinite(tipoDocumentoId) || tipoDocumentoId <= 0) {
     return NextResponse.json(
       { error: "Tipo de documento e obrigatorio." },
-      { status: 400 },
-    );
-  }
-
-  if (conjuntoGrupoId !== null && (!Number.isFinite(conjuntoGrupoId) || conjuntoGrupoId <= 0)) {
-    return NextResponse.json(
-      { error: "Grupo do conjunto invalido." },
       { status: 400 },
     );
   }
@@ -80,7 +70,6 @@ export async function POST(req: Request) {
     versao: body.versao ?? "v1.0",
     ativo: body.ativo ?? true,
     tipo_documento_id: tipoDocumentoId,
-    conjunto_grupo_id: conjuntoGrupoId,
     formato,
     texto_modelo_md: formato === "RICH_HTML" ? conteudoHtml : textoMarkdown,
     conteudo_html: formato === "RICH_HTML" ? conteudoHtml : null,

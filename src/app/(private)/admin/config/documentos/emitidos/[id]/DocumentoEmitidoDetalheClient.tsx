@@ -11,9 +11,9 @@ type DocEmitido = {
   status_assinatura?: string | null;
   status?: string | null;
   pdf_url?: string | null;
-  conteudo_html?: string | null;
   conteudo_renderizado_md?: string | null;
   conteudo_resolvido_html?: string | null;
+  conteudo_template_html?: string | null;
   editado_manual?: boolean;
   created_at?: string;
   updated_at?: string | null;
@@ -47,7 +47,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
       }
       const baseHtml =
         json.data.conteudo_resolvido_html ||
-        json.data.conteudo_html ||
+        json.data.conteudo_template_html ||
         json.data.conteudo_renderizado_md ||
         "<p></p>";
       setDoc(json.data);
@@ -76,7 +76,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
       const res = await fetch(`/api/documentos/emitidos/${docId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conteudo_html: html }),
+        body: JSON.stringify({ conteudo_resolvido_html: html }),
       });
       const json = (await res.json()) as ApiResp<unknown>;
       if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao salvar edicao.");
@@ -188,10 +188,10 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                     <button
                       type="button"
                     className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
-                    onClick={() => {
+                      onClick={() => {
                         setHtml(
                           doc.conteudo_resolvido_html ||
-                            doc.conteudo_html ||
+                            doc.conteudo_template_html ||
                             doc.conteudo_renderizado_md ||
                             "<p></p>",
                         );
@@ -224,7 +224,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                       dangerouslySetInnerHTML={{
                         __html:
                           doc.conteudo_resolvido_html ||
-                          doc.conteudo_html ||
+                          doc.conteudo_template_html ||
                           doc.conteudo_renderizado_md ||
                           "<p>(sem conteudo)</p>",
                       }}

@@ -1,8 +1,31 @@
 import { NextResponse } from "next/server";
+import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+
+type ApiResp<T> = { ok: boolean; data?: T; message?: string };
+
+type RootRow = {
+  root_table: string | null;
+  root_pk: string | null;
+  label: string | null;
+};
 
 export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    data: [{ key: "matriculas", label: "Matriculas (root: matriculas.id)", pk: "id" }],
-  });
+  const supabase = await getSupabaseServerSSR();
+
+  const { data, error } = await supabase.rpc("documentos_schema_roots_public");
+  if (error) {
+    return NextResponse.json(
+      { ok: false, message: error.message } satisfies ApiResp<never>,
+      { status: 500 },
+    );
+  }
+
+  const rows = Array.isArray(data) ? (data as RootRow[]) : [];
+  const out = rows.map((row) => ({
+    key: String(row.root_table ?? ""),
+    label: String(row.label ?? ""),
+    pk: String(row.root_pk ?? "id"),
+  }));
+
+  return NextResponse.json({ ok: true, data: out } satisfies ApiResp<typeof out>);
 }

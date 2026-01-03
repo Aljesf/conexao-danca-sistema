@@ -38,13 +38,15 @@ type DocumentoVariavel = {
 };
 
 type JoinEdge = {
-  direction?: "IN" | "OUT";
+  direction?: JoinDirection;
   from_table: string;
   from_column: string;
   to_table: string;
   to_column: string;
   constraint_name?: string;
 };
+
+type JoinDirection = "IN" | "OUT" | "IN_GUESS" | "OUT_GUESS";
 
 type SchemaRoot = {
   key: string;
@@ -53,7 +55,7 @@ type SchemaRoot = {
 };
 
 type SchemaAdj = {
-  direction: "IN" | "OUT";
+  direction: JoinDirection;
   from_table: string;
   from_column: string;
   to_table: string;
@@ -98,11 +100,14 @@ const ORIGEM_HINTS: Record<Origem, string> = {
 const TIPOS: Tipo[] = ["TEXTO", "MONETARIO", "DATA"];
 const MAX_HOPS = 3;
 
-const getNextTable = (edge: { direction?: "IN" | "OUT"; from_table: string; to_table: string }) =>
-  edge.direction === "IN" ? edge.from_table : edge.to_table;
+const isInDirection = (direction?: JoinDirection) =>
+  direction === "IN" || direction === "IN_GUESS";
 
-const getNextColumn = (edge: { direction?: "IN" | "OUT"; from_column: string; to_column: string }) =>
-  edge.direction === "IN" ? edge.from_column : edge.to_column;
+const getNextTable = (edge: { direction?: JoinDirection; from_table: string; to_table: string }) =>
+  isInDirection(edge.direction) ? edge.from_table : edge.to_table;
+
+const getNextColumn = (edge: { direction?: JoinDirection; from_column: string; to_column: string }) =>
+  isInDirection(edge.direction) ? edge.from_column : edge.to_column;
 
 const humanizeLabel = (value: string) =>
   value
@@ -234,11 +239,12 @@ export default function AdminDocumentosVariaveisPage() {
   const isJoinEdge = (edge: unknown): edge is JoinEdge => {
     if (!edge || typeof edge !== "object") return false;
     const rec = edge as Record<string, unknown>;
+    const directionOk =
+      typeof rec.direction === "undefined" ||
+      (typeof rec.direction === "string" &&
+        ["IN", "OUT", "IN_GUESS", "OUT_GUESS"].includes(rec.direction));
     return (
-      (typeof rec.direction === "undefined" ||
-        rec.direction === "IN" ||
-        rec.direction === "OUT" ||
-        typeof rec.direction === "string") &&
+      directionOk &&
       typeof rec.from_table === "string" &&
       typeof rec.from_column === "string" &&
       typeof rec.to_table === "string" &&
@@ -530,7 +536,7 @@ export default function AdminDocumentosVariaveisPage() {
 
   useEffect(() => {
     for (const edge of joinPath) {
-      const nextTable = edge.direction === "IN" ? edge.from_table : edge.to_table;
+      const nextTable = getNextTable(edge);
       if (nextTable) void carregarAdj(nextTable);
     }
   }, [joinPath, carregarAdj]);

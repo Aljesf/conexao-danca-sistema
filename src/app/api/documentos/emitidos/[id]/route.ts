@@ -38,11 +38,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 
   const body = (await req.json()) as Record<string, unknown>;
-  const conteudoHtml = typeof body.conteudo_html === "string" ? body.conteudo_html : "";
+  const conteudoResolvido =
+    typeof body.conteudo_resolvido_html === "string" ? body.conteudo_resolvido_html : "";
 
-  if (!conteudoHtml.trim()) {
+  if (!conteudoResolvido.trim()) {
     return NextResponse.json(
-      { ok: false, message: "Conteudo HTML e obrigatorio." } satisfies ApiResp<never>,
+      { ok: false, message: "Conteudo resolvido e obrigatorio." } satisfies ApiResp<never>,
       { status: 400 },
     );
   }
@@ -52,7 +53,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { data, error } = await supabase
     .from("documentos_emitidos")
     .update({
-      conteudo_html: conteudoHtml,
+      conteudo_resolvido_html: conteudoResolvido,
       editado_manual: true,
       updated_at: new Date().toISOString(),
     })

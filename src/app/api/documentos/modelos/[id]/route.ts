@@ -7,7 +7,6 @@ type DocumentoModeloUpdatePayload = {
   versao?: string;
   ativo?: boolean;
   tipo_documento_id?: number | null;
-  conjunto_grupo_id?: number | null;
   texto_modelo_md?: string;
   conteudo_html?: string;
   formato?: DocumentoModeloFormato;
@@ -35,7 +34,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const { data, error } = await supabase
     .from("documentos_modelo")
-    .select("*")
+    .select(
+      "id,titulo,versao,ativo,tipo_documento_id,formato,texto_modelo_md,conteudo_html,placeholders_schema_json,observacoes,created_at,updated_at",
+    )
     .eq("id", modeloId)
     .single();
 
@@ -60,11 +61,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const textoMarkdown = asText(body.texto_modelo_md);
   const conteudoHtmlRaw = asText(body.conteudo_html);
   const tipoDocumentoId = Number(body.tipo_documento_id);
-  const conjuntoGrupoIdRaw = body.conjunto_grupo_id;
-  const conjuntoGrupoId =
-    conjuntoGrupoIdRaw === null || conjuntoGrupoIdRaw === undefined || conjuntoGrupoIdRaw === ""
-      ? null
-      : Number(conjuntoGrupoIdRaw);
   const formatoBody =
     typeof body.formato !== "undefined" ? normalizeFormato(body.formato) : undefined;
   const wantsHtml = formatoBody === "RICH_HTML" || (formatoBody === undefined && conteudoHtmlRaw !== null);
@@ -77,19 +73,11 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     );
   }
 
-  if (conjuntoGrupoId !== null && (!Number.isFinite(conjuntoGrupoId) || conjuntoGrupoId <= 0)) {
-    return NextResponse.json(
-      { error: "Grupo do conjunto invalido." },
-      { status: 400 },
-    );
-  }
-
   const updatePayload: Record<string, unknown> = {};
   if (typeof body.titulo === "string") updatePayload.titulo = body.titulo;
   if (typeof body.versao === "string") updatePayload.versao = body.versao;
   if (typeof body.ativo === "boolean") updatePayload.ativo = body.ativo;
   updatePayload.tipo_documento_id = tipoDocumentoId;
-  updatePayload.conjunto_grupo_id = conjuntoGrupoId;
   if (typeof body.observacoes === "string" || body.observacoes === null) updatePayload.observacoes = body.observacoes;
   if (typeof body.placeholders_schema_json !== "undefined") {
     updatePayload.placeholders_schema_json = body.placeholders_schema_json;
