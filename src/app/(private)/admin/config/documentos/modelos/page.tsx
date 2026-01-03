@@ -15,6 +15,7 @@ import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documento
 
 type TipoDocOpt = { id: number; label: string };
 type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
+type LayoutOpt = { id: number; label: string };
 const VARIAVEIS_VAZIAS: RteVariable[] = [];
 
 async function fetchVariaveisAtivas(): Promise<RteVariable[]> {
@@ -48,6 +49,8 @@ export default function AdminDocumentosModelosPage() {
   const [cabecalhoHtml, setCabecalhoHtml] = useState("<p></p>");
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
+  const [layouts, setLayouts] = useState<LayoutOpt[]>([]);
+  const [layoutId, setLayoutId] = useState<number | "">("");
   const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
   const [conjuntoId, setConjuntoId] = useState<number | "">("");
   const [conjuntoGrupoId, setConjuntoGrupoId] = useState<number | "">("");
@@ -108,6 +111,27 @@ export default function AdminDocumentosModelosPage() {
       setTiposDoc(list);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar tipos.");
+    }
+  }
+
+  async function carregarLayouts() {
+    try {
+      const res = await fetch("/api/documentos/layouts?ativo=1", { cache: "no-store" });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: Array<{ layout_id?: number; nome?: string }>;
+        message?: string;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar layouts.");
+      const list = (json.data ?? [])
+        .map((l) => ({
+          id: Number(l.layout_id),
+          label: String(l.nome ?? "").trim(),
+        }))
+        .filter((l) => Number.isFinite(l.id) && l.id > 0);
+      setLayouts(list);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar layouts.");
     }
   }
 
@@ -178,6 +202,7 @@ export default function AdminDocumentosModelosPage() {
         conjunto_grupo_id: conjuntoGrupoId ? conjuntoGrupoId : null,
         ordem: vinculoOrdem,
         cabecalho_html: cabecalhoHtml,
+        layout_id: layoutId ? layoutId : null,
       };
 
       const res = await fetch("/api/documentos/modelos", {
@@ -191,6 +216,7 @@ export default function AdminDocumentosModelosPage() {
       setNovoTextoMarkdown("");
       setNovoHtml("<p></p>");
       setCabecalhoHtml("<p></p>");
+      setLayoutId("");
       setConjuntoId("");
       setConjuntoGrupoId("");
       setVinculoOrdem(1);
@@ -206,6 +232,7 @@ export default function AdminDocumentosModelosPage() {
     void carregar();
     void recarregarVariaveis();
     void carregarTiposDoc();
+    void carregarLayouts();
     void carregarConjuntosComGrupos();
   }, []);
 
@@ -276,6 +303,22 @@ export default function AdminDocumentosModelosPage() {
               {tiposDoc.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Layout (cabecalho/rodape)</label>
+            <select
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              value={layoutId}
+              onChange={(e) => setLayoutId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">Sem layout</option>
+              {layouts.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label || `Layout ${l.id}`}
                 </option>
               ))}
             </select>

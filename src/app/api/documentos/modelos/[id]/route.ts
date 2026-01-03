@@ -9,6 +9,7 @@ type DocumentoModeloUpdatePayload = {
   tipo_documento_id?: number | null;
   conjunto_grupo_id?: number | null;
   ordem?: number | null;
+  layout_id?: number | null;
   texto_modelo_md?: string;
   conteudo_html?: string;
   cabecalho_html?: string | null;
@@ -39,7 +40,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { data, error } = await supabase
     .from("documentos_modelo")
     .select(
-      "id,titulo,versao,ativo,tipo_documento_id,formato,texto_modelo_md,conteudo_html,cabecalho_html,rodape_html,placeholders_schema_json,observacoes,created_at,updated_at",
+      "id,titulo,versao,ativo,tipo_documento_id,layout_id,formato,texto_modelo_md,conteudo_html,cabecalho_html,rodape_html,placeholders_schema_json,observacoes,created_at,updated_at",
     )
     .eq("id", modeloId)
     .single();
@@ -98,6 +99,11 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     conjuntoGrupoIdRaw === null || conjuntoGrupoIdRaw === undefined || conjuntoGrupoIdRaw === ""
       ? null
       : Number(conjuntoGrupoIdRaw);
+  const layoutIdRaw = body.layout_id;
+  const layoutId =
+    layoutIdRaw === null || layoutIdRaw === undefined || layoutIdRaw === ""
+      ? null
+      : Number(layoutIdRaw);
   const ordemRaw = body.ordem;
   const ordem =
     ordemRaw === null || ordemRaw === undefined || ordemRaw === "" ? 1 : Number(ordemRaw);
@@ -132,11 +138,18 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     }
   }
 
+  if (layoutId !== null) {
+    if (!Number.isFinite(layoutId) || layoutId <= 0) {
+      return NextResponse.json({ error: "Layout invalido." }, { status: 400 });
+    }
+  }
+
   const updatePayload: Record<string, unknown> = {};
   if (typeof body.titulo === "string") updatePayload.titulo = body.titulo;
   if (typeof body.versao === "string") updatePayload.versao = body.versao;
   if (typeof body.ativo === "boolean") updatePayload.ativo = body.ativo;
   updatePayload.tipo_documento_id = tipoDocumentoId;
+  if (typeof body.layout_id !== "undefined") updatePayload.layout_id = layoutId;
   if (typeof body.observacoes === "string" || body.observacoes === null) updatePayload.observacoes = body.observacoes;
   if (typeof body.placeholders_schema_json !== "undefined") {
     updatePayload.placeholders_schema_json = body.placeholders_schema_json;

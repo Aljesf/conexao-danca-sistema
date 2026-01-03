@@ -239,3 +239,9 @@ Vers├úo l├│gica: **v1.0 (Servi├ºo + Unidade de Execu├º├úo)**
 - RPC de resolucao: documentos_resolver_por_join_path (resolve valor por matricula_id).
 - Emissao resolve variaveis via join_path quando root_table esta preenchido.
 - UI de variaveis com wizard de joins e selecao de coluna final.
+
+## Atualizacoes recentes (Documentos - 2026-01-03)
+
+- Banco de imagens: catalogo + upload em Storage (bucket documentos-imagens) e seletor no RichTextEditor.
+- Layouts reutilizaveis: documentos_layouts + layout_id em documentos_modelo.
+- Emissao congela cabecalho/rodape do layout no documentos_emitidos (nao muda apos edicao).

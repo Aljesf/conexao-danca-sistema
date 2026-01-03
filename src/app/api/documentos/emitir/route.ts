@@ -177,7 +177,7 @@ export async function POST(req: Request) {
 
   const { data: modelo, error: modeloErr } = await supabase
     .from("documentos_modelo")
-    .select("id,formato,conteudo_html,texto_modelo_md,cabecalho_html,rodape_html")
+    .select("id,formato,conteudo_html,texto_modelo_md,cabecalho_html,rodape_html,layout_id")
     .eq("id", documentoModeloId)
     .single();
 
@@ -256,6 +256,22 @@ export async function POST(req: Request) {
   };
 
   const template = resolveModeloTemplate(modelo as Record<string, unknown>);
+  const layoutIdRaw = (modelo as Record<string, unknown>).layout_id;
+  const layoutId = typeof layoutIdRaw === "number" ? layoutIdRaw : Number(layoutIdRaw);
+  let cabecalhoFinal = (modelo as Record<string, unknown>).cabecalho_html ?? null;
+  let rodapeFinal = (modelo as Record<string, unknown>).rodape_html ?? null;
+
+  if (Number.isFinite(layoutId) && layoutId > 0) {
+    const { data: layout } = await supabase
+      .from("documentos_layouts")
+      .select("cabecalho_html,rodape_html")
+      .eq("layout_id", layoutId)
+      .maybeSingle();
+    if (layout) {
+      cabecalhoFinal = (layout as Record<string, unknown>).cabecalho_html ?? cabecalhoFinal;
+      rodapeFinal = (layout as Record<string, unknown>).rodape_html ?? rodapeFinal;
+    }
+  }
   const { resolved: conteudoResolvido, utilizadas: variaveisUtilizadas } =
     await resolveTemplateValues({
       template,
@@ -273,8 +289,8 @@ export async function POST(req: Request) {
     conteudo_renderizado_md: conteudoResolvido,
     conteudo_template_html: template,
     conteudo_resolvido_html: conteudoResolvido,
-    cabecalho_html: (modelo as Record<string, unknown>).cabecalho_html ?? null,
-    rodape_html: (modelo as Record<string, unknown>).rodape_html ?? null,
+    cabecalho_html: cabecalhoFinal,
+    rodape_html: rodapeFinal,
     contexto_json: contexto,
     variaveis_utilizadas_json: variaveisUtilizadas,
     snapshot_financeiro_json: snapshot,

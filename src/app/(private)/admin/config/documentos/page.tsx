@@ -56,6 +56,15 @@ export default function AdminConfigDocumentosHome() {
           </SystemSectionCard>
         </Link>
 
+        <Link href="/admin/config/documentos/layouts" className="block">
+          <SystemSectionCard
+            title="Layouts reutilizaveis"
+            description="Cabecalho e rodape padronizados para modelos."
+          >
+            <p className="text-sm text-slate-600">Defina layout e reutilize em varios modelos.</p>
+          </SystemSectionCard>
+        </Link>
+
         <Link href="/admin/config/documentos/imagens" className="block">
           <SystemSectionCard
             title="Banco de imagens"

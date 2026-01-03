@@ -16,7 +16,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("documentos_modelo")
     .select(
-      "id,titulo,versao,ativo,tipo_documento_id,formato,texto_modelo_md,conteudo_html,cabecalho_html,rodape_html,placeholders_schema_json,observacoes,created_at,updated_at",
+      "id,titulo,versao,ativo,tipo_documento_id,layout_id,formato,texto_modelo_md,conteudo_html,cabecalho_html,rodape_html,placeholders_schema_json,observacoes,created_at,updated_at",
     )
     .order("titulo", { ascending: true });
 
@@ -38,6 +38,11 @@ export async function POST(req: Request) {
     conjuntoGrupoIdRaw === null || conjuntoGrupoIdRaw === undefined || conjuntoGrupoIdRaw === ""
       ? null
       : Number(conjuntoGrupoIdRaw);
+  const layoutIdRaw = body.layout_id;
+  const layoutId =
+    layoutIdRaw === null || layoutIdRaw === undefined || layoutIdRaw === ""
+      ? null
+      : Number(layoutIdRaw);
   const ordemRaw = body.ordem;
   const ordem =
     ordemRaw === null || ordemRaw === undefined || ordemRaw === "" ? 1 : Number(ordemRaw);
@@ -76,6 +81,12 @@ export async function POST(req: Request) {
     }
   }
 
+  if (layoutId !== null) {
+    if (!Number.isFinite(layoutId) || layoutId <= 0) {
+      return NextResponse.json({ error: "Layout invalido." }, { status: 400 });
+    }
+  }
+
   if (formato === "MARKDOWN" && !textoMarkdown.trim()) {
     return NextResponse.json(
       { error: "Texto (Markdown) obrigatorio para formato MARKDOWN." },
@@ -95,6 +106,7 @@ export async function POST(req: Request) {
     versao: body.versao ?? "v1.0",
     ativo: body.ativo ?? true,
     tipo_documento_id: tipoDocumentoId,
+    layout_id: layoutId,
     formato,
     texto_modelo_md: formato === "RICH_HTML" ? conteudoHtml : textoMarkdown,
     conteudo_html: formato === "RICH_HTML" ? conteudoHtml : null,

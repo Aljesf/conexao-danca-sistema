@@ -248,6 +248,10 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                           "<p>(sem conteudo)</p>",
                       }}
                     />
+                    <div
+                      id="print-footer"
+                      dangerouslySetInnerHTML={{ __html: doc.rodape_html || "" }}
+                    />
                   </div>
                 </div>
               )}
@@ -265,7 +269,9 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
           #print-header,
           #print-header *,
           #print-area,
-          #print-area * {
+          #print-area *,
+          #print-footer,
+          #print-footer * {
             visibility: visible !important;
           }
 
@@ -284,8 +290,18 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             right: 0 !important;
             top: 0 !important;
             margin-top: 35mm !important;
+            margin-bottom: 25mm !important;
             width: 100% !important;
             padding: 0 !important;
+          }
+
+          #print-footer {
+            position: fixed !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
           }
 
           .rounded-lg,

@@ -20,6 +20,7 @@ type DocumentoModelo = {
   versao: string;
   ativo: boolean;
   tipo_documento_id?: number | null;
+  layout_id?: number | null;
   formato?: DocumentoModeloFormato | null;
   texto_modelo_md: string | null;
   conteudo_html?: string | null;
@@ -53,6 +54,7 @@ type DocumentoVariavel = {
 
 type TipoDocOpt = { id: number; label: string };
 type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
+type LayoutOpt = { id: number; label: string };
 
 type VinculoModelo = {
   conjunto_grupo_id?: number | null;
@@ -103,6 +105,8 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
 
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
+  const [layouts, setLayouts] = useState<LayoutOpt[]>([]);
+  const [layoutId, setLayoutId] = useState<number | "">("");
 
   const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
   const [conjuntoId, setConjuntoId] = useState<number | "">("");
@@ -126,6 +130,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setTitulo(m.titulo ?? "");
       setAtivo(Boolean(m.ativo));
       setTipoDocumentoId(m.tipo_documento_id ?? "");
+      setLayoutId(m.layout_id ?? "");
       const vinculos = Array.isArray(m.vinculos) ? m.vinculos : [];
       setVinculosAtuais(vinculos);
       if (vinculos.length > 0) {
@@ -187,6 +192,27 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     }
   }, []);
 
+  const carregarLayouts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/documentos/layouts?ativo=1", { cache: "no-store" });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        data?: Array<{ layout_id?: number; nome?: string }>;
+        message?: string;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar layouts.");
+      const list = (json.data ?? [])
+        .map((l) => ({
+          id: Number(l.layout_id),
+          label: String(l.nome ?? "").trim(),
+        }))
+        .filter((l) => Number.isFinite(l.id) && l.id > 0);
+      setLayouts(list);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao carregar layouts.");
+    }
+  }, []);
+
   const carregarConjuntosComGrupos = useCallback(async () => {
     try {
       const res = await fetch("/api/documentos/conjuntos?include=grupos", { cache: "no-store" });
@@ -224,8 +250,9 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     void carregar();
     void carregarVariaveis();
     void carregarTiposDoc();
+    void carregarLayouts();
     void carregarConjuntosComGrupos();
-  }, [carregar, carregarConjuntosComGrupos, carregarTiposDoc, carregarVariaveis, idNum]);
+  }, [carregar, carregarConjuntosComGrupos, carregarLayouts, carregarTiposDoc, carregarVariaveis, idNum]);
 
   useEffect(() => {
     if (!conjuntoGrupoId || conjuntos.length === 0) return;
@@ -267,6 +294,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           ativo,
           formato,
           tipo_documento_id: tipoDocumentoId,
+          layout_id: layoutId || null,
           conjunto_grupo_id: conjuntoGrupoId || null,
           ordem: vinculoOrdem,
           cabecalho_html: cabecalhoHtml,
@@ -356,6 +384,22 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
               {tiposDoc.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Layout (cabecalho/rodape)</label>
+            <select
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              value={layoutId}
+              onChange={(e) => setLayoutId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">Sem layout</option>
+              {layouts.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label || `Layout ${l.id}`}
                 </option>
               ))}
             </select>
