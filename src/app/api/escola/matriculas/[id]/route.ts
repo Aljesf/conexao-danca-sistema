@@ -36,6 +36,12 @@ type CartaoConexaoResumo = {
   parcelas_pendentes: number;
   proximo_vencimento: string | null;
   fatura_id_proxima: number | null;
+  parcelas_proximas: Array<{
+    periodo: string | null;
+    vencimento: string | null;
+    valor_centavos: number;
+    status: string | null;
+  }>;
 };
 
 function isSchemaMissing(err: unknown): boolean {
@@ -227,19 +233,32 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
       const contaId = contas && contas.length > 0 ? Number(contas[0]?.id) : null;
       if (contaId && Number.isFinite(contaId)) {
         const statusFaturas = ["ABERTA", "PENDENTE", "EM_ABERTO"];
-        const { data: fatura, error: faturaErr } = await admin
+        const { data: faturasRaw, error: faturasErr } = await admin
           .from("credito_conexao_faturas")
-          .select("id, data_vencimento, status")
+          .select("id, periodo_referencia, data_vencimento, status, valor_total_centavos")
           .eq("conta_conexao_id", contaId)
           .in("status", statusFaturas)
           .order("data_vencimento", { ascending: true, nullsFirst: false })
           .order("data_fechamento", { ascending: true, nullsFirst: false })
-          .limit(1)
-          .maybeSingle();
+          .limit(4);
 
-        if (faturaErr && !isSchemaMissing(faturaErr)) {
-          return errJson("server_error", "Falha ao buscar faturas do cartao conexao.", 500, { faturaErr });
+        if (faturasErr && !isSchemaMissing(faturasErr)) {
+          return errJson("server_error", "Falha ao buscar faturas do cartao conexao.", 500, { faturasErr });
         }
+
+        const faturas = (faturasRaw ?? []).map((row) => {
+          const record = row as Record<string, unknown>;
+          const valorRaw = Number(record.valor_total_centavos);
+          return {
+            id: Number(record.id),
+            periodo: typeof record.periodo_referencia === "string" ? record.periodo_referencia : null,
+            vencimento: typeof record.data_vencimento === "string" ? record.data_vencimento : null,
+            valor_centavos: Number.isFinite(valorRaw) ? valorRaw : 0,
+            status: typeof record.status === "string" ? record.status : null,
+          };
+        });
+
+        const proximaFatura = faturas.length > 0 ? faturas[0] : null;
 
         const statusLancamentos = ["PENDENTE_FATURA", "FATURADO"];
         const { count: pendentesCount, error: pendentesErr } = await admin
@@ -254,8 +273,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
 
         resumoCartao = {
           parcelas_pendentes: pendentesCount ?? 0,
-          proximo_vencimento: fatura?.data_vencimento ?? null,
-          fatura_id_proxima: fatura?.id ? Number(fatura.id) : null,
+          proximo_vencimento: proximaFatura?.vencimento ?? null,
+          fatura_id_proxima: proximaFatura?.id ? Number(proximaFatura.id) : null,
+          parcelas_proximas: faturas.map((f) => ({
+            periodo: f.periodo,
+            vencimento: f.vencimento,
+            valor_centavos: f.valor_centavos,
+            status: f.status,
+          })),
         };
       }
     }

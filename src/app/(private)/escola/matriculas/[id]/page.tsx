@@ -28,6 +28,12 @@ type MatriculaDetalheResp = {
     parcelas_pendentes: number;
     proximo_vencimento: string | null;
     fatura_id_proxima: number | null;
+    parcelas_proximas: Array<{
+      periodo: string | null;
+      vencimento: string | null;
+      valor_centavos: number;
+      status: string | null;
+    }>;
   } | null;
   error?: string;
   message?: string;
@@ -95,6 +101,8 @@ export default function MatriculaDetalhePage() {
   const respId = useMemo(() => Number(matricula?.responsavel_financeiro_id ?? NaN), [matricula]);
   const resumo = data?.financeiro_resumo ?? null;
   const resumoCartao = data?.resumo_financeiro_cartao_conexao ?? null;
+  const parcelasProximas = resumoCartao?.parcelas_proximas ?? [];
+  const parcelasVisiveis = parcelasProximas.slice(0, 4);
 
   return (
     <div className="p-4 space-y-6">
@@ -154,6 +162,29 @@ export default function MatriculaDetalhePage() {
                 "-"
               )}
             </div>
+            {resumoCartao ? (
+              parcelasVisiveis.length > 0 ? (
+                <div className="mt-2 grid gap-2">
+                  {parcelasVisiveis.map((parcela, index) => {
+                    const vencimento = parcela.vencimento ? formatDateISO(parcela.vencimento) : "-";
+                    const valor = Number.isFinite(parcela.valor_centavos)
+                      ? formatBRLFromCents(Number(parcela.valor_centavos))
+                      : "-";
+                    const status = parcela.status ?? "-";
+                    return (
+                      <div
+                        key={`${parcela.periodo ?? parcela.vencimento ?? "parcela"}-${index}`}
+                        className="rounded-md border bg-slate-50 px-3 py-2 text-xs"
+                      >
+                        {`${vencimento} - ${valor} - ${status}`}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-2 text-xs text-muted-foreground">Nenhuma parcela aberta.</div>
+              )
+            ) : null}
             <div>
               Proximo vencimento:{" "}
               {resumoCartao?.proximo_vencimento ? formatDateISO(resumoCartao.proximo_vencimento) : "-"}

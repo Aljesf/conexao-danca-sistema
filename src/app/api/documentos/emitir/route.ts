@@ -32,6 +32,43 @@ type DocumentoVariavelDb = DocumentoVariavel & {
   mapeamento_pendente: boolean;
 };
 
+type ParcelaCartaoConexao = {
+  periodo: string;
+  vencimento: string;
+  valor: string;
+  status: string;
+};
+
+type FaturaCartaoRow = {
+  id: number;
+  periodo_referencia: string | null;
+  data_vencimento: string | null;
+  valor_total_centavos: number | null;
+  status: string | null;
+};
+
+type FaturaLinkRow = {
+  fatura_id: number;
+  lancamento_id: number;
+};
+
+type LancamentoCartaoRow = {
+  id: number;
+  valor_centavos: number | null;
+};
+
+function formatDateBR(dateISO: string | null): string {
+  if (!dateISO) return "";
+  const [y, m, d] = dateISO.split("-");
+  if (!y || !m || !d) return dateISO;
+  return `${d}/${m}/${y}`;
+}
+
+function formatBRLFromCentavos(centavos: number): string {
+  const valor = Number.isFinite(centavos) ? centavos / 100 : 0;
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 const isInDirection = (direction?: string | null) =>
   direction === "IN" || direction === "IN_GUESS";
 
@@ -256,6 +293,124 @@ export async function POST(req: Request) {
     variaveis_manuais: manual,
   };
 
+  const parcelasCartao: ParcelaCartaoConexao[] = [];
+  if (Number.isFinite(respFinId) && respFinId > 0) {
+    const { data: contas, error: contaErr } = await supabase
+      .from("credito_conexao_contas")
+      .select("id")
+      .eq("pessoa_titular_id", respFinId)
+      .eq("ativo", true)
+      .order("id", { ascending: false })
+      .limit(1);
+
+    if (contaErr) {
+      return NextResponse.json({ error: contaErr.message }, { status: 500 });
+    }
+
+    const contaId = contas && contas.length > 0 ? Number(contas[0]?.id) : null;
+    if (contaId && Number.isFinite(contaId)) {
+      const statusFaturas = ["ABERTA", "PENDENTE", "EM_ABERTO"];
+      const { data: faturasRaw, error: faturasErr } = await supabase
+        .from("credito_conexao_faturas")
+        .select("id,periodo_referencia,data_vencimento,valor_total_centavos,status,data_fechamento")
+        .eq("conta_conexao_id", contaId)
+        .in("status", statusFaturas)
+        .order("data_vencimento", { ascending: true, nullsFirst: false })
+        .order("data_fechamento", { ascending: true, nullsFirst: false })
+        .limit(120);
+
+      if (faturasErr) {
+        return NextResponse.json({ error: faturasErr.message }, { status: 500 });
+      }
+
+      const faturas: FaturaCartaoRow[] = (faturasRaw ?? []).map((row) => {
+        const record = row as Record<string, unknown>;
+        const valorRaw = Number(record.valor_total_centavos);
+        return {
+          id: Number(record.id),
+          periodo_referencia: typeof record.periodo_referencia === "string" ? record.periodo_referencia : null,
+          data_vencimento: typeof record.data_vencimento === "string" ? record.data_vencimento : null,
+          valor_total_centavos: Number.isFinite(valorRaw) ? valorRaw : null,
+          status: typeof record.status === "string" ? record.status : null,
+        };
+      });
+
+      const faturaIds = faturas.map((f) => f.id).filter((id) => Number.isFinite(id) && id > 0);
+      const somaPorFatura = new Map<number, number>();
+
+      if (faturaIds.length > 0) {
+        const { data: linksRaw, error: linksErr } = await supabase
+          .from("credito_conexao_fatura_lancamentos")
+          .select("fatura_id,lancamento_id")
+          .in("fatura_id", faturaIds);
+
+        if (linksErr) {
+          return NextResponse.json({ error: linksErr.message }, { status: 500 });
+        }
+
+        const links: FaturaLinkRow[] = (linksRaw ?? []).map((row) => {
+          const record = row as Record<string, unknown>;
+          return {
+            fatura_id: Number(record.fatura_id),
+            lancamento_id: Number(record.lancamento_id),
+          };
+        });
+
+        const lancamentoIds = Array.from(
+          new Set(links.map((l) => l.lancamento_id).filter((id) => Number.isFinite(id) && id > 0)),
+        );
+
+        if (lancamentoIds.length > 0) {
+          const { data: lancRaw, error: lancErr } = await supabase
+            .from("credito_conexao_lancamentos")
+            .select("id,valor_centavos")
+            .in("id", lancamentoIds);
+
+          if (lancErr) {
+            return NextResponse.json({ error: lancErr.message }, { status: 500 });
+          }
+
+          const lancamentos: LancamentoCartaoRow[] = (lancRaw ?? []).map((row) => {
+            const record = row as Record<string, unknown>;
+            const valorRaw = Number(record.valor_centavos);
+            return {
+              id: Number(record.id),
+              valor_centavos: Number.isFinite(valorRaw) ? valorRaw : null,
+            };
+          });
+
+          const valorPorLancamento = new Map<number, number>();
+          for (const l of lancamentos) {
+            if (Number.isFinite(l.id)) {
+              valorPorLancamento.set(l.id, Number(l.valor_centavos ?? 0));
+            }
+          }
+
+          for (const link of links) {
+            const valor = valorPorLancamento.get(link.lancamento_id) ?? 0;
+            if (!Number.isFinite(valor)) continue;
+            somaPorFatura.set(link.fatura_id, (somaPorFatura.get(link.fatura_id) ?? 0) + valor);
+          }
+        }
+      }
+
+      for (const fatura of faturas) {
+        const soma = somaPorFatura.get(fatura.id) ?? 0;
+        const valorCentavos =
+          Number.isFinite(soma) && soma > 0 ? soma : Number(fatura.valor_total_centavos ?? 0);
+
+        parcelasCartao.push({
+          periodo: fatura.periodo_referencia ?? "",
+          vencimento: formatDateBR(fatura.data_vencimento ?? null),
+          valor: formatBRLFromCentavos(valorCentavos),
+          status: fatura.status ?? "",
+        });
+      }
+    }
+  }
+
+  contexto.PARCELAS_CARTAO_CONEXAO = parcelasCartao;
+
   const template = resolveModeloTemplate(modelo as Record<string, unknown>);
   const headerTemplateIdRaw = (modelo as Record<string, unknown>).header_template_id;
   const headerTemplateId = typeof headerTemplateIdRaw === "number" ? headerTemplateIdRaw : Number(headerTemplateIdRaw);
@@ -332,7 +487,7 @@ export async function POST(req: Request) {
   if (Number.isFinite(body.matricula_id)) {
     operacaoTipo = OPERACAO_TIPOS.MATRICULA;
   }
-  const collectionsResolved =
+  const collectionsResolved: Record<string, Array<Record<string, string>>> =
     collectionCodes.length > 0
       ? await resolveCollections({
           operacaoTipo,
@@ -340,15 +495,25 @@ export async function POST(req: Request) {
           colecoes: collectionCodes,
         })
       : {};
-  const colecoesVazias = Object.entries(collectionsResolved)
-    .filter(([, rows]) => Array.isArray(rows) && rows.length === 0)
-    .map(([code]) => code);
+  const collectionsResolvedFinal: Record<string, Array<Record<string, string>>> = {
+    ...collectionsResolved,
+    PARCELAS_CARTAO_CONEXAO: parcelasCartao,
+  };
+  const colecoesDetectadasSet = new Set<string>(collectionCodes);
+  if (parcelasCartao.length > 0) {
+    colecoesDetectadasSet.add("PARCELAS_CARTAO_CONEXAO");
+  }
+  const colecoesDetectadas = Array.from(colecoesDetectadasSet);
+  const colecoesVazias = colecoesDetectadas.filter((code) => {
+    const rows = collectionsResolvedFinal[code];
+    return Array.isArray(rows) && rows.length === 0;
+  });
   const variaveisUtilizadasFinal = {
     ...variaveisUtilizadas,
-    __colecoes_detectadas: collectionCodes,
+    __colecoes_detectadas: colecoesDetectadas,
     __colecoes_vazias: colecoesVazias,
   };
-  const conteudoResolvido = renderTemplateHtml(template, { ...simpleContext, ...collectionsResolved });
+  const conteudoResolvido = renderTemplateHtml(template, { ...simpleContext, ...collectionsResolvedFinal });
   const conteudoTemplateLimpo = stripBackgroundStyles(template);
   const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
   const hash = crypto.createHash("sha256").update(conteudoResolvidoLimpo, "utf8").digest("hex");
@@ -388,12 +553,12 @@ export async function POST(req: Request) {
       documentoEmitidoId: data?.id ?? null,
       operacaoTipo,
       operacaoId,
-      colecoesDetectadas: collectionCodes,
+      colecoesDetectadas,
     });
     console.log(
       "[DOC-EMITIDO][COLECOES]",
       Object.fromEntries(
-        Object.entries(collectionsResolved).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
+        Object.entries(collectionsResolvedFinal).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
       ),
     );
     if (colecoesVazias.length > 0) {
