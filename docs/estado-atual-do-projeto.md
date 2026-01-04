@@ -262,10 +262,10 @@ APIs concluidas:
 
 Paginas/componentes concluidos:
 
-- /administracao/documentos/colecoes (consulta de catalogo + exemplos)
+- /admin/config/documentos/colecoes (catalogo institucional, somente leitura)
+- Editor de modelos com insercao assistida de colecoes (modal + tabela padrao)
 
 Pendencias:
 
-- Integrar botao "Inserir bloco de colecao" em outros editores (se aplicavel)
 - Evoluir registry de resolvers (retirar hardcode e organizar por modulos)
 - Criar colecoes adicionais (parcelas com vencimento, se houver fonte especifica)

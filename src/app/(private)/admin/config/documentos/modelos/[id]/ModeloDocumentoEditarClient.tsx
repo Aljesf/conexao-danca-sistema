@@ -365,12 +365,14 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
         {loading ? <p className="text-xs text-slate-500">Carregando...</p> : null}
       </SystemContextCard>
 
-      <SystemHelpCard
-        items={[
-          "Edite dados gerais e texto do modelo.",
-          "Use o editor para inserir variaveis no cursor.",
-        ]}
-      />
+        <SystemHelpCard
+          items={[
+            "Edite dados gerais e texto do modelo.",
+            "Use o editor para inserir variaveis no cursor.",
+            "Variaveis de colecao representam listas automaticas vinculadas a operacao.",
+            "O sistema renderiza automaticamente todas as linhas existentes.",
+          ]}
+        />
 
       <AiAssistenteModelos
         onApplyTemplateHtml={(html) => {

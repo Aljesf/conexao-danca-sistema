@@ -263,6 +263,8 @@ export default function AdminDocumentosModelosPage() {
         items={[
           "Crie um modelo inicial e use a tela de detalhe para ajustar texto e schema.",
           "Use placeholders em CAIXA ALTA para variaveis de documento.",
+          "Variaveis de colecao representam listas automaticas vinculadas a operacao.",
+          "O sistema renderiza automaticamente todas as linhas existentes nas colecoes.",
           "Modelos ativos ficam disponiveis para emissao.",
         ]}
       />
@@ -473,13 +475,17 @@ export default function AdminDocumentosModelosPage() {
               {novoFormato === "RICH_HTML" ? (
                 <>
                   {variaveisErro ? <p className="mb-2 text-sm text-red-600">{variaveisErro}</p> : null}
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-slate-500">
-                      Variaveis sao herdadas do cadastro do sistema. Apenas variaveis ativas aparecem aqui.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void recarregarVariaveis()}
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="space-y-1 text-xs text-slate-500">
+                        <p>Variaveis sao herdadas do cadastro do sistema. Apenas variaveis ativas aparecem aqui.</p>
+                        <p>
+                          Variaveis de colecao representam listas automaticas vinculadas a operacao. O sistema
+                          renderiza automaticamente todas as linhas existentes.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void recarregarVariaveis()}
                       className="rounded-md border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                       disabled={variaveisLoading}
                     >

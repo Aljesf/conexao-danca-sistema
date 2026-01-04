@@ -10,8 +10,13 @@ import Color from "@tiptap/extension-color";
 import Highlight from "@tiptap/extension-highlight";
 import FontFamily from "@tiptap/extension-font-family";
 import Image from "@tiptap/extension-image";
+import { Table } from "@tiptap/extension-table";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import TableRow from "@tiptap/extension-table-row";
 
 import { FontSize } from "@/components/documentos/tiptap/FontSize";
+import { ColecaoPickerModal, type ColecaoCatalogo } from "@/components/documentos/ColecaoPickerModal";
 import { ImagemPickerModal } from "@/components/documentos/ImagemPickerModal";
 
 import {
@@ -29,6 +34,7 @@ import {
   AlignJustify,
   Highlighter,
   Type,
+  Table as TableIcon,
   Image as ImageIcon,
 } from "lucide-react";
 
@@ -92,6 +98,33 @@ const FONTES = [
 
 const TAMANHOS = ["10px", "12px", "14px", "16px", "18px", "20px", "24px", "28px", "32px"];
 
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function buildColecaoTable(colecao: ColecaoCatalogo): string {
+  const headers = colecao.colunas
+    .map((col) => `    <th>${escapeHtml(col.label || col.codigo)}</th>`)
+    .join("\n");
+  const cells = colecao.colunas.map((col) => `    <td>{{${col.codigo}}}</td>`).join("\n");
+  return [
+    "<table>",
+    "  <thead>",
+    "  <tr>",
+    headers,
+    "  </tr>",
+    "  </thead>",
+    "  <tbody>",
+    `  {{#${colecao.codigo}}}`,
+    "  <tr>",
+    cells,
+    "  </tr>",
+    `  {{/${colecao.codigo}}}`,
+    "  </tbody>",
+    "</table>",
+  ].join("\n");
+}
+
 export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   function RichTextEditor(
     {
@@ -107,14 +140,15 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
     ref,
   ) {
     const [pickerOpen, setPickerOpen] = React.useState(false);
-    const [colecoes, setColecoes] = React.useState<
-      Array<{ codigo: string; nome: string; colunas: Array<{ codigo: string }> }>
-    >([]);
-    const [colecoesLoading, setColecoesLoading] = React.useState(false);
+    const [colecaoModalOpen, setColecaoModalOpen] = React.useState(false);
     const editor = useEditor({
       immediatelyRender: false,
       extensions: [
         StarterKit,
+        Table.configure({ resizable: true }),
+        TableRow,
+        TableHeader,
+        TableCell,
         Underline,
         TextStyle,
         Color,
@@ -170,65 +204,19 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
       [editor],
     );
 
+    const handleInsertColecao = React.useCallback(
+      (colecao: ColecaoCatalogo) => {
+        if (!editor) return;
+        const html = buildColecaoTable(colecao);
+        editor.chain().focus().insertContent(html).run();
+      },
+      [editor],
+    );
+
     if (!editor) return null;
 
     const canUndo = editor.can().chain().focus().undo().run();
     const canRedo = editor.can().chain().focus().redo().run();
-
-    function buildColecaoExample(codigo: string, colunas: Array<{ codigo: string }>): string {
-      const cols = colunas.map((col) => `  <td>{{${col.codigo}}}</td>`).join("\n");
-      return `{{#${codigo}}}\n<tr>\n${cols}\n</tr>\n{{/${codigo}}}`;
-    }
-
-    async function inserirBlocoColecao() {
-      if (colecoesLoading) return;
-      setColecoesLoading(true);
-      try {
-        let lista = colecoes;
-        if (!lista.length) {
-          const res = await fetch("/api/documentos/colecoes/catalogo", { cache: "no-store" });
-          const json = (await res.json()) as {
-            data?: Array<{ codigo?: string; nome?: string; colunas?: Array<{ codigo?: string }> }>;
-          };
-          if (!res.ok) throw new Error("Falha ao carregar catalogo.");
-          lista = (json.data ?? [])
-            .map((c) => ({
-              codigo: String(c.codigo ?? "").trim().toUpperCase(),
-              nome: String(c.nome ?? "").trim(),
-              colunas: (c.colunas ?? [])
-                .map((col) => ({ codigo: String(col.codigo ?? "").trim().toUpperCase() }))
-                .filter((col) => col.codigo.length > 0),
-            }))
-            .filter((c) => c.codigo.length > 0);
-          setColecoes(lista);
-        }
-
-        if (!lista.length) {
-          window.alert("Nenhuma colecao encontrada.");
-          return;
-        }
-
-        const options = lista
-          .map((c, idx) => `${idx + 1}) ${c.codigo} - ${c.nome}`)
-          .join("\n");
-        const choiceRaw = window.prompt(`Escolha a colecao:\n${options}`);
-        if (!choiceRaw) return;
-        const choice = choiceRaw.trim().toUpperCase();
-        const index = Number(choice);
-        const selected = Number.isFinite(index) ? lista[index - 1] : lista.find((c) => c.codigo === choice);
-        if (!selected) {
-          window.alert("Colecao nao encontrada.");
-          return;
-        }
-
-        const bloco = buildColecaoExample(selected.codigo, selected.colunas);
-        editor.chain().focus().insertContent(bloco).run();
-      } catch {
-        window.alert("Falha ao carregar colecoes.");
-      } finally {
-        setColecoesLoading(false);
-      }
-    }
 
     return (
       <div className="space-y-2">
@@ -333,15 +321,14 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
           <ToolbarButton title="Refazer" onClick={() => editor.chain().focus().redo().run()} disabled={!canRedo}>
             <Redo2 size={16} />
           </ToolbarButton>
-
-        {enableImages ? (
-          <>
-            <span className="mx-1 h-6 w-px bg-slate-200" />
-            <ToolbarButton title="Inserir imagem" onClick={() => setPickerOpen(true)}>
-              <ImageIcon size={16} />
-            </ToolbarButton>
-          </>
-        ) : null}
+          {enableImages ? (
+            <>
+              <span className="mx-1 h-6 w-px bg-slate-200" />
+              <ToolbarButton title="Inserir imagem" onClick={() => setPickerOpen(true)}>
+                <ImageIcon size={16} />
+              </ToolbarButton>
+            </>
+          ) : null}
 
           {enableVariables ? (
             <>
@@ -367,20 +354,26 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
               </select>
             </>
           ) : null}
-
-          {enableCollections ? (
-            <>
-              <span className="mx-1 h-6 w-px bg-slate-200" />
-              <ToolbarButton
-                title="Inserir bloco de colecao"
-                onClick={inserirBlocoColecao}
-                disabled={colecoesLoading}
-              >
-                <List size={16} />
-              </ToolbarButton>
-            </>
-          ) : null}
         </div>
+
+        {enableCollections ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+            <div className="max-w-3xl">
+              <span className="font-medium text-slate-700">Variaveis de colecao:</span>{" "}
+              variaveis de colecao representam listas automaticas vinculadas a operacao. O sistema renderiza
+              automaticamente todas as linhas existentes.
+            </div>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              onClick={() => setColecaoModalOpen(true)}
+              title="Inserir variavel de colecao"
+            >
+              <TableIcon size={14} />
+              Inserir variavel de colecao
+            </button>
+          </div>
+        ) : null}
 
         <EditorContent editor={editor} />
 
@@ -391,6 +384,14 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
             onSelect={(url) => {
               editor.chain().focus().setImage({ src: url }).run();
             }}
+          />
+        ) : null}
+
+        {enableCollections ? (
+          <ColecaoPickerModal
+            open={colecaoModalOpen}
+            onClose={() => setColecaoModalOpen(false)}
+            onInsert={handleInsertColecao}
           />
         ) : null}
       </div>
