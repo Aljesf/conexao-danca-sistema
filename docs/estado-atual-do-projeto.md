@@ -248,3 +248,24 @@ Vers├úo l├│gica: **v1.0 (Servi├ºo + Unidade de Execu├º├úo)**
 - Layout fisico HEADER/BODY/FOOTER: templates dedicados e alturas no modelo (header/footer/page margin).
 - Emissao agora congela header_html/footer_html e alturas no documentos_emitidos.
 - Sanitizacao do HTML emitido remove estilos de background do corpo (MVP).
+
+## Atualizacoes recentes (Documentos - 2026-01-03 - Colecoes)
+
+SQL concluido:
+
+- Documentos: catalogo de colecoes e colunas (documentos_colecoes / documentos_colecoes_colunas) + seeds iniciais.
+
+APIs concluidas:
+
+- GET /api/documentos/colecoes/catalogo
+- POST /api/documentos/colecoes/resolve
+
+Paginas/componentes concluidos:
+
+- /administracao/documentos/colecoes (consulta de catalogo + exemplos)
+
+Pendencias:
+
+- Integrar botao "Inserir bloco de colecao" em outros editores (se aplicavel)
+- Evoluir registry de resolvers (retirar hardcode e organizar por modulos)
+- Criar colecoes adicionais (parcelas com vencimento, se houver fonte especifica)

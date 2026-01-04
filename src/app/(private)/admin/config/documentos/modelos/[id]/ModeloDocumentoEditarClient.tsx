@@ -587,6 +587,7 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
             valueHtml={conteudoHtml}
             onChangeHtml={setConteudoHtml}
             enableVariables
+            enableCollections
             variables={variaveisEditor}
           />
         ) : (

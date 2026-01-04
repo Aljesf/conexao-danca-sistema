@@ -45,6 +45,7 @@ export type RichTextEditorProps = {
   minHeightPx?: number;
   enableVariables?: boolean;
   variables?: RteVariable[];
+  enableCollections?: boolean;
   enableImages?: boolean;
   className?: string;
 };
@@ -99,12 +100,17 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
       minHeightPx = 260,
       enableVariables = false,
       variables = [],
+      enableCollections = false,
       enableImages = true,
       className,
     },
     ref,
   ) {
     const [pickerOpen, setPickerOpen] = React.useState(false);
+    const [colecoes, setColecoes] = React.useState<
+      Array<{ codigo: string; nome: string; colunas: Array<{ codigo: string }> }>
+    >([]);
+    const [colecoesLoading, setColecoesLoading] = React.useState(false);
     const editor = useEditor({
       immediatelyRender: false,
       extensions: [
@@ -168,6 +174,61 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
 
     const canUndo = editor.can().chain().focus().undo().run();
     const canRedo = editor.can().chain().focus().redo().run();
+
+    function buildColecaoExample(codigo: string, colunas: Array<{ codigo: string }>): string {
+      const cols = colunas.map((col) => `  <td>{{${col.codigo}}}</td>`).join("\n");
+      return `{{#${codigo}}}\n<tr>\n${cols}\n</tr>\n{{/${codigo}}}`;
+    }
+
+    async function inserirBlocoColecao() {
+      if (colecoesLoading) return;
+      setColecoesLoading(true);
+      try {
+        let lista = colecoes;
+        if (!lista.length) {
+          const res = await fetch("/api/documentos/colecoes/catalogo", { cache: "no-store" });
+          const json = (await res.json()) as {
+            data?: Array<{ codigo?: string; nome?: string; colunas?: Array<{ codigo?: string }> }>;
+          };
+          if (!res.ok) throw new Error("Falha ao carregar catalogo.");
+          lista = (json.data ?? [])
+            .map((c) => ({
+              codigo: String(c.codigo ?? "").trim().toUpperCase(),
+              nome: String(c.nome ?? "").trim(),
+              colunas: (c.colunas ?? [])
+                .map((col) => ({ codigo: String(col.codigo ?? "").trim().toUpperCase() }))
+                .filter((col) => col.codigo.length > 0),
+            }))
+            .filter((c) => c.codigo.length > 0);
+          setColecoes(lista);
+        }
+
+        if (!lista.length) {
+          window.alert("Nenhuma colecao encontrada.");
+          return;
+        }
+
+        const options = lista
+          .map((c, idx) => `${idx + 1}) ${c.codigo} - ${c.nome}`)
+          .join("\n");
+        const choiceRaw = window.prompt(`Escolha a colecao:\n${options}`);
+        if (!choiceRaw) return;
+        const choice = choiceRaw.trim().toUpperCase();
+        const index = Number(choice);
+        const selected = Number.isFinite(index) ? lista[index - 1] : lista.find((c) => c.codigo === choice);
+        if (!selected) {
+          window.alert("Colecao nao encontrada.");
+          return;
+        }
+
+        const bloco = buildColecaoExample(selected.codigo, selected.colunas);
+        editor.chain().focus().insertContent(bloco).run();
+      } catch {
+        window.alert("Falha ao carregar colecoes.");
+      } finally {
+        setColecoesLoading(false);
+      }
+    }
 
     return (
       <div className="space-y-2">
@@ -304,6 +365,19 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
                   </option>
                 ))}
               </select>
+            </>
+          ) : null}
+
+          {enableCollections ? (
+            <>
+              <span className="mx-1 h-6 w-px bg-slate-200" />
+              <ToolbarButton
+                title="Inserir bloco de colecao"
+                onClick={inserirBlocoColecao}
+                disabled={colecoesLoading}
+              >
+                <List size={16} />
+              </ToolbarButton>
             </>
           ) : null}
         </div>

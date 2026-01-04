@@ -490,6 +490,7 @@ export default function AdminDocumentosModelosPage() {
                     valueHtml={novoHtml}
                     onChangeHtml={setNovoHtml}
                     enableVariables
+                    enableCollections
                     variables={variaveis}
                   />
                 </>
