@@ -10,6 +10,8 @@ import {
 } from "@/lib/documentos/resolvePlaceholders";
 import { type JoinEdge } from "@/lib/documentos/resolveByJoinPath";
 import { stripBackgroundStyles } from "@/lib/documentos/sanitizeHtml";
+import { resolveCollections } from "@/lib/documentos/collectionsResolver";
+import { extractCollectionCodes, renderTemplateHtml } from "@/lib/documentos/templateRenderer";
 
 type Item = { grupo_id: number; documento_modelo_id: number; incluir: boolean };
 type Body = {
@@ -102,7 +104,7 @@ async function resolveTemplateValues(params: {
   variaveisByCodigo: Map<string, DocumentoVariavelDb>;
   supabase: SupabaseClient;
   rootId: number;
-}): Promise<{ resolved: string; utilizadas: Record<string, unknown> }> {
+}): Promise<{ values: Record<string, string>; utilizadas: Record<string, unknown> }> {
   const { template, contexto, variaveisByCodigo, supabase, rootId } = params;
   const codes = extractPlaceholderCodes(template);
   const valoresFormatados: Record<string, string> = {};
@@ -155,12 +157,7 @@ async function resolveTemplateValues(params: {
     }),
   );
 
-  const resolved = template.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_match, codeRaw: string) => {
-    const code = String(codeRaw || "").trim();
-    return code ? valoresFormatados[code] ?? "" : "";
-  });
-
-  return { resolved, utilizadas };
+  return { values: valoresFormatados, utilizadas };
 }
 
 function normalizeManualVars(raw: Record<string, unknown>): Record<string, unknown> {
@@ -421,14 +418,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const footerHeightPx = Number.isFinite(footerHeightValue) && footerHeightValue > 0 ? footerHeightValue : 80;
     const pageMarginMm = Number.isFinite(pageMarginValue) && pageMarginValue > 0 ? pageMarginValue : 15;
 
-    const { resolved: conteudoResolvido, utilizadas: variaveisUtilizadas } =
-      await resolveTemplateValues({
-        template,
-        variaveisByCodigo,
-        contexto,
-        supabase,
-        rootId: matriculaId,
-      });
+    const { values: simpleContext, utilizadas: variaveisUtilizadas } = await resolveTemplateValues({
+      template,
+      variaveisByCodigo,
+      contexto,
+      supabase,
+      rootId: matriculaId,
+    });
+    const collectionCodes = extractCollectionCodes(template);
+    const collectionsResolved =
+      collectionCodes.length > 0
+        ? await resolveCollections({
+            operacaoTipo: "MATRICULA",
+            operacaoId: matriculaId,
+            colecoes: collectionCodes,
+          })
+        : {};
+    const conteudoResolvido = renderTemplateHtml(template, { ...simpleContext, ...collectionsResolved });
     const conteudoTemplateLimpo = stripBackgroundStyles(template);
     const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
     const hash = crypto.createHash("sha256").update(conteudoResolvidoLimpo, "utf8").digest("hex");
