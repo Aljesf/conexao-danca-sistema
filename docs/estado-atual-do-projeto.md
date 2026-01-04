@@ -269,3 +269,35 @@ Pendencias:
 
 - Evoluir registry de resolvers (retirar hardcode e organizar por modulos)
 - Criar colecoes adicionais (parcelas com vencimento, se houver fonte especifica)
+
+## Atualizacoes recentes (Matriculas/Documentos - 2026-01-04)
+
+SQL concluido:
+
+- Matriculas: ledger canonico de linhas financeiras (`matriculas_financeiro_linhas`).
+- Documentos: novas colecoes `MATRICULA_ENTRADAS` e `MATRICULA_PARCELAS` (seeds no catalogo).
+
+APIs concluidas:
+
+- Liquidacao de matricula grava ledger para ENTRADA e LANCAMENTO_CREDITO.
+- Resolver de colecoes usa ledger para ENTRADAS/PARCELAS e prioriza ledger em LANCAMENTOS_CREDITO.
+
+Paginas:
+
+- Detalhe de matricula exibe resumo financeiro baseado no ledger.
+
+Pendencias:
+
+- Backfill/geracao de parcelas no ledger a partir da fonte real (cobrancas/planos).
+
+## Atualizacoes recentes (Documentos/Matrículas - 2026-01-05)
+
+APIs concluidas:
+
+- Normalizacao de operacaoTipo no pipeline de documento emitido (matricula).
+- Log temporario (flag DOCS_EMIT_DEBUG=1) para diagnostico de colecoes no emitido.
+
+Paginas:
+
+- /escola/matriculas/[id]/documentos (lista de emitidos com links).
+- Bloco Documentos no detalhe da matricula (atalhos para listar/emitir).

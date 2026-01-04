@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveCollections } from "@/lib/documentos/collectionsResolver";
+import { normalizeOperacaoTipo } from "@/lib/documentos/operacaoTipos";
 
 type ResolveRequestBody = {
   operacaoTipo: string;
@@ -24,7 +25,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const data = await resolveCollections({ operacaoTipo, operacaoId, colecoes });
+    const operacaoTipoNorm = normalizeOperacaoTipo(operacaoTipo);
+    const data = await resolveCollections({ operacaoTipo: operacaoTipoNorm, operacaoId, colecoes });
     return NextResponse.json({ data }, { status: 200 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro ao resolver colecoes";

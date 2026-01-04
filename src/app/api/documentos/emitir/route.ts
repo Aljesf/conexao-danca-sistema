@@ -12,6 +12,7 @@ import { type JoinEdge } from "@/lib/documentos/resolveByJoinPath";
 import { stripBackgroundStyles } from "@/lib/documentos/sanitizeHtml";
 import { resolveCollections } from "@/lib/documentos/collectionsResolver";
 import { extractCollectionCodes, renderTemplateHtml } from "@/lib/documentos/templateRenderer";
+import { normalizeOperacaoTipo, OPERACAO_TIPOS } from "@/lib/documentos/operacaoTipos";
 
 type EmitirDocumentoPayload = {
   matricula_id: number;
@@ -325,14 +326,28 @@ export async function POST(req: Request) {
     rootId: body.matricula_id,
   });
   const collectionCodes = extractCollectionCodes(template);
+  const operacaoId = body.matricula_id;
+  const operacaoTipoRaw = OPERACAO_TIPOS.MATRICULA;
+  let operacaoTipo = normalizeOperacaoTipo(operacaoTipoRaw);
+  if (Number.isFinite(body.matricula_id)) {
+    operacaoTipo = OPERACAO_TIPOS.MATRICULA;
+  }
   const collectionsResolved =
     collectionCodes.length > 0
       ? await resolveCollections({
-          operacaoTipo: "MATRICULA",
-          operacaoId: body.matricula_id,
+          operacaoTipo,
+          operacaoId,
           colecoes: collectionCodes,
         })
       : {};
+  const colecoesVazias = Object.entries(collectionsResolved)
+    .filter(([, rows]) => Array.isArray(rows) && rows.length === 0)
+    .map(([code]) => code);
+  const variaveisUtilizadasFinal = {
+    ...variaveisUtilizadas,
+    __colecoes_detectadas: collectionCodes,
+    __colecoes_vazias: colecoesVazias,
+  };
   const conteudoResolvido = renderTemplateHtml(template, { ...simpleContext, ...collectionsResolved });
   const conteudoTemplateLimpo = stripBackgroundStyles(template);
   const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
@@ -353,7 +368,7 @@ export async function POST(req: Request) {
     footer_height_px: footerHeightPx,
     page_margin_mm: pageMarginMm,
     contexto_json: contexto,
-    variaveis_utilizadas_json: variaveisUtilizadas,
+    variaveis_utilizadas_json: variaveisUtilizadasFinal,
     snapshot_financeiro_json: snapshot,
     hash_conteudo: hash,
   };
@@ -366,6 +381,24 @@ export async function POST(req: Request) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (process.env.DOCS_EMIT_DEBUG === "1") {
+    console.log("[DOC-EMITIDO][CTX]", {
+      documentoEmitidoId: data?.id ?? null,
+      operacaoTipo,
+      operacaoId,
+      colecoesDetectadas: collectionCodes,
+    });
+    console.log(
+      "[DOC-EMITIDO][COLECOES]",
+      Object.fromEntries(
+        Object.entries(collectionsResolved).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
+      ),
+    );
+    if (colecoesVazias.length > 0) {
+      console.log("[DOC-EMITIDO][AVISO] colecoes vazias:", colecoesVazias);
+    }
   }
 
   return NextResponse.json({ data }, { status: 201 });

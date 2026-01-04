@@ -22,6 +22,7 @@ type DocEmitido = {
   cabecalho_html?: string | null;
   rodape_html?: string | null;
   editado_manual?: boolean;
+  variaveis_utilizadas_json?: Record<string, unknown> | null;
   created_at?: string;
   updated_at?: string | null;
 };
@@ -123,6 +124,22 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     "--footer-height-px": `${footerHeightPx}px`,
     "--page-margin-mm": `${pageMarginMm}mm`,
   } as React.CSSProperties;
+  const colecoesVazias = React.useMemo(() => {
+    const raw = doc?.variaveis_utilizadas_json;
+    if (!raw || typeof raw !== "object") return [];
+    const rec = raw as Record<string, unknown>;
+    const list = rec.__colecoes_vazias;
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => String(item)).filter(Boolean);
+  }, [doc]);
+  const colecoesDetectadas = React.useMemo(() => {
+    const raw = doc?.variaveis_utilizadas_json;
+    if (!raw || typeof raw !== "object") return [];
+    const rec = raw as Record<string, unknown>;
+    const list = rec.__colecoes_detectadas;
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => String(item)).filter(Boolean);
+  }, [doc]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
@@ -140,6 +157,12 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
         {okMsg ? (
           <div className="no-print rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
             {okMsg}
+          </div>
+        ) : null}
+        {colecoesDetectadas.length > 0 && colecoesVazias.length > 0 ? (
+          <div className="no-print rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            Colecoes sem dados: {colecoesVazias.join(", ")}. Verifique se o modelo usa a colecao correta para a
+            matricula.
           </div>
         ) : null}
 

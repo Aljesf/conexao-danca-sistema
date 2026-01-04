@@ -54,6 +54,36 @@ function mapLancamentos(rows: Array<Record<string, unknown>>): CollectionRow[] {
   });
 }
 
+function mapLedgerRows(rows: Array<Record<string, unknown>>, opts: { dateKey: string }): CollectionRow[] {
+  return rows.map((row) => {
+    const data = getString(row, opts.dateKey);
+    const descricao = getString(row, "descricao") ?? "";
+    const status = getString(row, "status") ?? "";
+    const valorCentavos = getNumber(row, "valor_centavos") ?? 0;
+    return {
+      DATA: formatDateBR(data),
+      DESCRICAO: descricao,
+      VALOR: formatBRLFromCentavos(valorCentavos),
+      STATUS: status,
+    };
+  });
+}
+
+function mapLedgerParcelas(rows: Array<Record<string, unknown>>): CollectionRow[] {
+  return rows.map((row) => {
+    const vencimento = getString(row, "vencimento");
+    const descricao = getString(row, "descricao") ?? "";
+    const status = getString(row, "status") ?? "";
+    const valorCentavos = getNumber(row, "valor_centavos") ?? 0;
+    return {
+      VENCIMENTO: formatDateBR(vencimento),
+      DESCRICAO: descricao,
+      VALOR: formatBRLFromCentavos(valorCentavos),
+      STATUS: status,
+    };
+  });
+}
+
 export async function resolveCollections(input: ResolveCollectionsInput): Promise<CollectionsResolved> {
   const supabase = await getSupabaseServerSSR();
   const operacaoTipo = input.operacaoTipo.trim().toUpperCase();
@@ -83,7 +113,49 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
       continue;
     }
 
+    if (codigo === "MATRICULA_ENTRADAS" || codigo === "MATRICULA_ENTRADA") {
+      const { data, error } = await supabase
+        .from("matriculas_financeiro_linhas")
+        .select("data_evento,descricao,valor_centavos,status")
+        .eq("matricula_id", input.operacaoId)
+        .eq("tipo", "ENTRADA")
+        .order("data_evento", { ascending: true })
+        .limit(500);
+
+      if (error) throw new Error(error.message);
+      resp[codigo] = mapLedgerRows((data ?? []) as Array<Record<string, unknown>>, { dateKey: "data_evento" });
+      continue;
+    }
+
+    if (codigo === "MATRICULA_PARCELAS") {
+      const { data, error } = await supabase
+        .from("matriculas_financeiro_linhas")
+        .select("vencimento,descricao,valor_centavos,status")
+        .eq("matricula_id", input.operacaoId)
+        .eq("tipo", "PARCELA")
+        .order("vencimento", { ascending: true })
+        .limit(500);
+
+      if (error) throw new Error(error.message);
+      resp[codigo] = mapLedgerParcelas((data ?? []) as Array<Record<string, unknown>>);
+      continue;
+    }
+
     if (codigo === "MATRICULA_LANCAMENTOS_CREDITO") {
+      const { data: ledgerRows, error: ledgerError } = await supabase
+        .from("matriculas_financeiro_linhas")
+        .select("data_evento,descricao,valor_centavos,status")
+        .eq("matricula_id", input.operacaoId)
+        .eq("tipo", "LANCAMENTO_CREDITO")
+        .order("data_evento", { ascending: true })
+        .limit(500);
+
+      if (ledgerError) throw new Error(ledgerError.message);
+      if (ledgerRows && ledgerRows.length > 0) {
+        resp[codigo] = mapLedgerRows(ledgerRows as Array<Record<string, unknown>>, { dateKey: "data_evento" });
+        continue;
+      }
+
       const { data, error } = await supabase
         .from("credito_conexao_lancamentos")
         .select("data_lancamento,descricao,valor_centavos,status,origem_sistema,origem_id")
@@ -136,11 +208,6 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
 
       if (error) throw new Error(error.message);
       resp[codigo] = mapLancamentos((data ?? []) as Array<Record<string, unknown>>);
-      continue;
-    }
-
-    if (codigo === "MATRICULA_ENTRADA") {
-      resp[codigo] = [];
       continue;
     }
   }

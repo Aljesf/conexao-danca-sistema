@@ -21,6 +21,20 @@ type Payload = {
   motivo_excecao?: string;
 };
 
+type LedgerTipo = "ENTRADA" | "PARCELA" | "LANCAMENTO_CREDITO" | "OUTRO";
+
+type LedgerInsert = {
+  matricula_id: number;
+  tipo: LedgerTipo;
+  descricao: string;
+  valor_centavos: number;
+  vencimento: string | null;
+  data_evento: string | null;
+  status: string;
+  origem_tabela: string | null;
+  origem_id: number | null;
+};
+
 function asInt(n: unknown): number | null {
   if (typeof n === "number" && Number.isFinite(n)) return Math.trunc(n);
   if (typeof n === "string" && n.trim() !== "" && !Number.isNaN(Number(n))) return Math.trunc(Number(n));
@@ -120,6 +134,11 @@ function buildDateFromYMD(year: number, month: number, day: number): string {
   const mm = String(month).padStart(2, "0");
   const dd = String(day).padStart(2, "0");
   return `${year}-${mm}-${dd}`;
+}
+
+function dateFromPeriodo(periodo: string): string | null {
+  if (!/^\d{4}-\d{2}$/.test(periodo)) return null;
+  return `${periodo}-01`;
 }
 
 async function ensureContaCreditoConexaoAluno(params: { supabase: any; pessoaTitularId: number }) {
@@ -390,6 +409,28 @@ export async function POST(req: Request) {
       descricao: "Pagamento presencial - Entrada (pro-rata) matricula",
     });
 
+    if (body.tipo_primeira_cobranca === "ENTRADA_PRORATA") {
+      const ledgerEntrada: LedgerInsert = {
+        matricula_id: matricula.id,
+        tipo: "ENTRADA",
+        descricao: "Entrada / Pro-rata",
+        valor_centavos: valorFinal,
+        vencimento: null,
+        data_evento: dataPg,
+        status: "PAGO",
+        origem_tabela: "recebimentos",
+        origem_id: receb.id,
+      };
+
+      const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerEntrada);
+      if (ledgerErr) {
+        return NextResponse.json(
+          { error: "falha_inserir_ledger", details: ledgerErr.message },
+          { status: 500 },
+        );
+      }
+    }
+
     const { error: errUpd } = await supabase
       .from("matriculas")
       .update({
@@ -452,6 +493,7 @@ export async function POST(req: Request) {
 
           for (let mes = mesPrimeiraMensalidadeCheia; mes <= 12; mes++) {
             const periodo = buildPeriodo(anoRef, mes);
+            const dataEvento = buildDateFromYMD(anoRef, mes, 1);
 
             const { data: lanc, error: errLanc } = await supabase
               .from("credito_conexao_lancamentos")
@@ -481,6 +523,26 @@ export async function POST(req: Request) {
             });
 
             debugCartao.linked_faturas += 1;
+
+            const ledgerLinha: LedgerInsert = {
+              matricula_id: matricula.id,
+              tipo: "LANCAMENTO_CREDITO",
+              descricao: `Mensalidade ${periodo} - matricula`,
+              valor_centavos: valorMensalidadeCheia,
+              vencimento: null,
+              data_evento: dataEvento,
+              status: "PENDENTE_FATURA",
+              origem_tabela: "credito_conexao_lancamentos",
+              origem_id: lanc.id,
+            };
+
+            const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
+            if (ledgerErr) {
+              return NextResponse.json(
+                { error: "falha_inserir_ledger", details: ledgerErr.message },
+                { status: 500 },
+              );
+            }
           }
         }
       } catch (err) {
@@ -547,6 +609,26 @@ export async function POST(req: Request) {
       lancamentoId: lanc.id,
       valorCentavos: valorFinal,
     });
+
+    const ledgerLinha: LedgerInsert = {
+      matricula_id: matricula.id,
+      tipo: "LANCAMENTO_CREDITO",
+      descricao: "Mensalidade cheia - matricula",
+      valor_centavos: valorFinal,
+      vencimento: null,
+      data_evento: dateFromPeriodo(periodo),
+      status: "PENDENTE_FATURA",
+      origem_tabela: "credito_conexao_lancamentos",
+      origem_id: lanc.id,
+    };
+
+    const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
+    if (ledgerErr) {
+      return NextResponse.json(
+        { error: "falha_inserir_ledger", details: ledgerErr.message },
+        { status: 500 },
+      );
+    }
 
     const { error: errUpd } = await supabase
       .from("matriculas")

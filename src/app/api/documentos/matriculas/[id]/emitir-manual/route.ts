@@ -12,6 +12,7 @@ import { type JoinEdge } from "@/lib/documentos/resolveByJoinPath";
 import { stripBackgroundStyles } from "@/lib/documentos/sanitizeHtml";
 import { resolveCollections } from "@/lib/documentos/collectionsResolver";
 import { extractCollectionCodes, renderTemplateHtml } from "@/lib/documentos/templateRenderer";
+import { normalizeOperacaoTipo, OPERACAO_TIPOS } from "@/lib/documentos/operacaoTipos";
 
 type Item = { grupo_id: number; documento_modelo_id: number; incluir: boolean };
 type Body = {
@@ -426,14 +427,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       rootId: matriculaId,
     });
     const collectionCodes = extractCollectionCodes(template);
+    const operacaoId = matriculaId;
+    const operacaoTipoRaw = OPERACAO_TIPOS.MATRICULA;
+    let operacaoTipo = normalizeOperacaoTipo(operacaoTipoRaw);
+    if (Number.isFinite(matriculaId)) {
+      operacaoTipo = OPERACAO_TIPOS.MATRICULA;
+    }
     const collectionsResolved =
       collectionCodes.length > 0
         ? await resolveCollections({
-            operacaoTipo: "MATRICULA",
-            operacaoId: matriculaId,
+            operacaoTipo,
+            operacaoId,
             colecoes: collectionCodes,
           })
         : {};
+    const colecoesVazias = Object.entries(collectionsResolved)
+      .filter(([, rows]) => Array.isArray(rows) && rows.length === 0)
+      .map(([code]) => code);
+    const variaveisUtilizadasFinal = {
+      ...variaveisUtilizadas,
+      __colecoes_detectadas: collectionCodes,
+      __colecoes_vazias: colecoesVazias,
+    };
     const conteudoResolvido = renderTemplateHtml(template, { ...simpleContext, ...collectionsResolved });
     const conteudoTemplateLimpo = stripBackgroundStyles(template);
     const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
@@ -453,7 +468,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       footer_height_px: footerHeightPx,
       page_margin_mm: pageMarginMm,
       contexto_json: contexto,
-      variaveis_utilizadas_json: variaveisUtilizadas,
+      variaveis_utilizadas_json: variaveisUtilizadasFinal,
       snapshot_financeiro_json: snapshot,
       hash_conteudo: hash,
       documento_conjunto_id: conjuntoId,
@@ -473,6 +488,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const { data, error } = await supabase.from("documentos_emitidos").insert(try2).select("*").single();
       if (error) return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
       inserted = data as unknown as Record<string, unknown>;
+    }
+
+    if (process.env.DOCS_EMIT_DEBUG === "1") {
+      console.log("[DOC-EMITIDO][CTX]", {
+        documentoEmitidoId: inserted?.id ?? null,
+        operacaoTipo,
+        operacaoId,
+        colecoesDetectadas: collectionCodes,
+      });
+      console.log(
+        "[DOC-EMITIDO][COLECOES]",
+        Object.fromEntries(
+          Object.entries(collectionsResolved).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
+        ),
+      );
+      if (colecoesVazias.length > 0) {
+        console.log("[DOC-EMITIDO][AVISO] colecoes vazias:", colecoesVazias);
+      }
     }
 
     emitidos.push(inserted);

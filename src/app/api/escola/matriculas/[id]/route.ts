@@ -24,6 +24,14 @@ type UnidadeExecucaoRow = {
   origem_tipo: string | null;
 };
 
+type FinanceiroResumo = {
+  entrada_total_paga_centavos: number;
+  parcelas_pendentes_count: number;
+  parcelas_pendentes_total_centavos: number;
+  proximo_vencimento: string | null;
+  ultima_atualizacao: string | null;
+};
+
 function isSchemaMissing(err: unknown): boolean {
   const e = err as PostgrestError | null;
   return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
@@ -140,6 +148,62 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
       return errJson("server_error", "Falha ao buscar plano de pagamento.", 500, { planoErr });
     }
 
+    let financeiroResumo: FinanceiroResumo | null = null;
+    const { data: linhas, error: linhasErr } = await admin
+      .from("matriculas_financeiro_linhas")
+      .select("tipo,valor_centavos,status,vencimento,updated_at,created_at")
+      .eq("matricula_id", matriculaId);
+
+    if (linhasErr && !isSchemaMissing(linhasErr)) {
+      return errJson("server_error", "Falha ao buscar resumo financeiro.", 500, { linhasErr });
+    }
+
+    if (!linhasErr && linhas) {
+      let entradaTotal = 0;
+      let parcelasPendentesCount = 0;
+      let parcelasPendentesTotal = 0;
+      let proximoVencimento: string | null = null;
+      let ultimaAtualizacao: string | null = null;
+
+      for (const row of linhas as Array<Record<string, unknown>>) {
+        const tipo = String(row.tipo ?? "").trim().toUpperCase();
+        const status = String(row.status ?? "").trim().toUpperCase();
+        const valor = Number(row.valor_centavos ?? 0);
+        const vencimento = typeof row.vencimento === "string" ? row.vencimento : null;
+        const updatedAt =
+          typeof row.updated_at === "string"
+            ? row.updated_at
+            : typeof row.created_at === "string"
+              ? row.created_at
+              : null;
+
+        if (Number.isFinite(valor)) {
+          if (tipo === "ENTRADA" && status === "PAGO") {
+            entradaTotal += valor;
+          }
+          if (tipo === "PARCELA" && status === "PENDENTE") {
+            parcelasPendentesCount += 1;
+            parcelasPendentesTotal += valor;
+            if (vencimento && (!proximoVencimento || vencimento < proximoVencimento)) {
+              proximoVencimento = vencimento;
+            }
+          }
+        }
+
+        if (updatedAt && (!ultimaAtualizacao || updatedAt > ultimaAtualizacao)) {
+          ultimaAtualizacao = updatedAt;
+        }
+      }
+
+      financeiroResumo = {
+        entrada_total_paga_centavos: entradaTotal,
+        parcelas_pendentes_count: parcelasPendentesCount,
+        parcelas_pendentes_total_centavos: parcelasPendentesTotal,
+        proximo_vencimento: proximoVencimento,
+        ultima_atualizacao: ultimaAtualizacao,
+      };
+    }
+
     const ueRow = unidadeExecucao as UnidadeExecucaoRow | null;
     const unidadeExecucaoLabel = ueRow
       ? formatUnidadeExecucaoLabel({
@@ -164,6 +228,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
         unidade_execucao_label: unidadeExecucaoLabel,
         preco_aplicado: precoAplicado,
         plano_pagamento: planoPagamento ?? null,
+        financeiro_resumo: financeiroResumo,
         historico: [],
       },
       200,

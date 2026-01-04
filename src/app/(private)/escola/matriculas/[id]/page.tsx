@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { formatBRLFromCents } from "@/lib/formatters/money";
-import { formatDateTimeISO } from "@/lib/formatters/date";
+import { formatDateISO, formatDateTimeISO } from "@/lib/formatters/date";
 
 type MatriculaDetalheResp = {
   ok: boolean;
@@ -17,6 +17,13 @@ type MatriculaDetalheResp = {
   unidade_execucao_label?: string | null;
   preco_aplicado?: { valor_centavos?: number; moeda?: string | null; created_at?: string | null } | null;
   plano_pagamento?: { id?: number; titulo?: string | null; ciclo_cobranca?: string | null; numero_parcelas?: number | null } | null;
+  financeiro_resumo?: {
+    entrada_total_paga_centavos: number;
+    parcelas_pendentes_count: number;
+    parcelas_pendentes_total_centavos: number;
+    proximo_vencimento: string | null;
+    ultima_atualizacao: string | null;
+  } | null;
   error?: string;
   message?: string;
 };
@@ -81,6 +88,7 @@ export default function MatriculaDetalhePage() {
   const matricula = data?.matricula ?? null;
   const pessoaId = useMemo(() => Number(matricula?.pessoa_id ?? NaN), [matricula]);
   const respId = useMemo(() => Number(matricula?.responsavel_financeiro_id ?? NaN), [matricula]);
+  const resumo = data?.financeiro_resumo ?? null;
 
   return (
     <div className="p-4 space-y-6">
@@ -125,6 +133,29 @@ export default function MatriculaDetalhePage() {
           <div className="rounded-lg border p-4 space-y-2">
             <div className="text-sm font-semibold">Resumo financeiro</div>
             <div>
+              Entrada paga:{" "}
+              {resumo
+                ? formatBRLFromCents(Number(resumo.entrada_total_paga_centavos))
+                : "-"}
+            </div>
+            <div>
+              Parcelas pendentes:{" "}
+              {resumo ? (
+                <>
+                  <span>{resumo.parcelas_pendentes_count}</span>{" "}
+                  <span>({formatBRLFromCents(Number(resumo.parcelas_pendentes_total_centavos))})</span>
+                </>
+              ) : (
+                "-"
+              )}
+            </div>
+            <div>
+              Proximo vencimento: {resumo?.proximo_vencimento ? formatDateISO(resumo.proximo_vencimento) : "-"}
+            </div>
+            <div>
+              Ultima atualizacao: {resumo?.ultima_atualizacao ? formatDateTimeISO(resumo.ultima_atualizacao) : "-"}
+            </div>
+            <div>
               Mensalidade aplicada:{" "}
               {data.preco_aplicado?.valor_centavos !== undefined
                 ? formatBRLFromCents(Number(data.preco_aplicado.valor_centavos))
@@ -132,15 +163,33 @@ export default function MatriculaDetalhePage() {
             </div>
             <div>Moeda: {data.preco_aplicado?.moeda ?? "-"}</div>
             <div>
-              Atualizado em: {data.preco_aplicado?.created_at ? formatDateTimeISO(data.preco_aplicado.created_at) : "-"}
-            </div>
-            <div>
               Plano de pagamento:{" "}
               {data.plano_pagamento?.titulo?.trim() || (data.plano_pagamento?.id ? `Plano #${data.plano_pagamento.id}` : "-")}
             </div>
             <div>
               Ciclo: {data.plano_pagamento?.ciclo_cobranca ?? "-"}{" "}
               {data.plano_pagamento?.numero_parcelas ? `(${data.plano_pagamento.numero_parcelas} parcelas)` : ""}
+            </div>
+          </div>
+
+          <div className="rounded-lg border p-4 space-y-3">
+            <div className="text-sm font-semibold">Documentos</div>
+            <p className="text-sm text-muted-foreground">
+              Emissao e consulta de documentos vinculados a esta matricula.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/escola/matriculas/${id}/documentos`}
+                className="rounded-md border px-3 py-2 text-sm text-muted-foreground hover:underline"
+              >
+                Ver documentos
+              </Link>
+              <Link
+                href={`/admin/config/documentos/modelos?emitirParaMatriculaId=${id}`}
+                className="rounded-md border border-slate-800 px-3 py-2 text-sm font-medium"
+              >
+                Emitir documento
+              </Link>
             </div>
           </div>
 
