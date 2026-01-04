@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { stripBackgroundStyles } from "@/lib/documentos/sanitizeHtml";
 
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
 
@@ -40,8 +41,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const body = (await req.json()) as Record<string, unknown>;
   const conteudoResolvido =
     typeof body.conteudo_resolvido_html === "string" ? body.conteudo_resolvido_html : "";
+  const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
 
-  if (!conteudoResolvido.trim()) {
+  if (!conteudoResolvidoLimpo.trim()) {
     return NextResponse.json(
       { ok: false, message: "Conteudo resolvido e obrigatorio." } satisfies ApiResp<never>,
       { status: 400 },
@@ -53,7 +55,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { data, error } = await supabase
     .from("documentos_emitidos")
     .update({
-      conteudo_resolvido_html: conteudoResolvido,
+      conteudo_resolvido_html: conteudoResolvidoLimpo,
       editado_manual: true,
       updated_at: new Date().toISOString(),
     })

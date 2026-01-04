@@ -14,6 +14,11 @@ type DocEmitido = {
   conteudo_renderizado_md?: string | null;
   conteudo_resolvido_html?: string | null;
   conteudo_template_html?: string | null;
+  header_html?: string | null;
+  footer_html?: string | null;
+  header_height_px?: number | null;
+  footer_height_px?: number | null;
+  page_margin_mm?: number | null;
   cabecalho_html?: string | null;
   rodape_html?: string | null;
   editado_manual?: boolean;
@@ -105,6 +110,19 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
   const modeloId = doc?.documento_modelo_id ?? doc?.contrato_modelo_id ?? "-";
   const status = doc?.status_assinatura ?? doc?.status ?? "-";
+  const headerHtml = doc?.header_html ?? doc?.cabecalho_html ?? "";
+  const footerHtml = doc?.footer_html ?? doc?.rodape_html ?? "";
+  const headerHeightValue = Number(doc?.header_height_px);
+  const footerHeightValue = Number(doc?.footer_height_px);
+  const pageMarginValue = Number(doc?.page_margin_mm);
+  const headerHeightPx = Number.isFinite(headerHeightValue) && headerHeightValue > 0 ? headerHeightValue : 120;
+  const footerHeightPx = Number.isFinite(footerHeightValue) && footerHeightValue > 0 ? footerHeightValue : 80;
+  const pageMarginMm = Number.isFinite(pageMarginValue) && pageMarginValue > 0 ? pageMarginValue : 15;
+  const printVars = {
+    "--header-height-px": `${headerHeightPx}px`,
+    "--footer-height-px": `${footerHeightPx}px`,
+    "--page-margin-mm": `${pageMarginMm}mm`,
+  } as React.CSSProperties;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
@@ -232,26 +250,30 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                   </p>
 
                   <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
-                    <div
-                      id="print-header"
-                      dangerouslySetInnerHTML={{ __html: doc.cabecalho_html || "" }}
-                    />
-                    <div
-                      id="print-area"
-                      className="prose max-w-none"
-                      // Conteudo emitido e gerado internamente.
-                      dangerouslySetInnerHTML={{
-                        __html:
-                          doc.conteudo_resolvido_html ||
-                          doc.conteudo_template_html ||
-                          doc.conteudo_renderizado_md ||
-                          "<p>(sem conteudo)</p>",
-                      }}
-                    />
-                    <div
-                      id="print-footer"
-                      dangerouslySetInnerHTML={{ __html: doc.rodape_html || "" }}
-                    />
+                    <div id="print-root" style={printVars}>
+                      <div
+                        id="print-header"
+                        className="prose max-w-none"
+                        dangerouslySetInnerHTML={{ __html: headerHtml }}
+                      />
+                      <div
+                        id="print-body"
+                        className="prose max-w-none"
+                        // Conteudo emitido e gerado internamente.
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            doc.conteudo_resolvido_html ||
+                            doc.conteudo_template_html ||
+                            doc.conteudo_renderizado_md ||
+                            "<p>(sem conteudo)</p>",
+                        }}
+                      />
+                      <div
+                        id="print-footer"
+                        className="prose max-w-none"
+                        dangerouslySetInnerHTML={{ __html: footerHtml }}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -268,40 +290,46 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
           #print-header,
           #print-header *,
-          #print-area,
-          #print-area *,
+          #print-body,
+          #print-body *,
           #print-footer,
           #print-footer * {
             visibility: visible !important;
           }
 
+          #print-root {
+            position: relative !important;
+            width: 100% !important;
+          }
+
           #print-header {
             position: fixed !important;
             left: 0 !important;
-            top: 0 !important;
+            top: var(--page-margin-mm, 15mm) !important;
             right: 0 !important;
+            height: var(--header-height-px, 120px) !important;
             padding: 0 !important;
             margin: 0 !important;
-          }
-
-          #print-area {
-            position: absolute !important;
-            left: 0 !important;
-            right: 0 !important;
-            top: 0 !important;
-            margin-top: 35mm !important;
-            margin-bottom: 25mm !important;
-            width: 100% !important;
-            padding: 0 !important;
           }
 
           #print-footer {
             position: fixed !important;
             left: 0 !important;
             right: 0 !important;
-            bottom: 0 !important;
+            bottom: var(--page-margin-mm, 15mm) !important;
+            height: var(--footer-height-px, 80px) !important;
             padding: 0 !important;
             margin: 0 !important;
+          }
+
+          #print-body {
+            position: relative !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin-top: calc(var(--page-margin-mm, 15mm) + var(--header-height-px, 120px)) !important;
+            margin-bottom: calc(var(--page-margin-mm, 15mm) + var(--footer-height-px, 80px)) !important;
           }
 
           .rounded-lg,
@@ -312,13 +340,13 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             box-shadow: none !important;
           }
 
-          #print-area {
+          #print-body {
             font-size: 12pt;
             line-height: 1.4;
           }
 
           @page {
-            margin: 15mm;
+            margin: var(--page-margin-mm, 15mm);
           }
         }
 

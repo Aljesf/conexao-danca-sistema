@@ -15,8 +15,7 @@ import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documento
 
 type TipoDocOpt = { id: number; label: string };
 type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
-type LayoutOpt = { id: number; label: string };
-const VARIAVEIS_VAZIAS: RteVariable[] = [];
+type LayoutTemplateOpt = { id: number; label: string; tipo: "HEADER" | "FOOTER"; height_px: number };
 
 async function fetchVariaveisAtivas(): Promise<RteVariable[]> {
   const res = await fetch("/api/documentos/variaveis?ativo=1", { cache: "no-store" });
@@ -46,11 +45,15 @@ export default function AdminDocumentosModelosPage() {
   const [novoFormato, setNovoFormato] = useState<DocumentoModeloFormato>("RICH_HTML");
   const [novoTextoMarkdown, setNovoTextoMarkdown] = useState("");
   const [novoHtml, setNovoHtml] = useState("<p></p>");
-  const [cabecalhoHtml, setCabecalhoHtml] = useState("<p></p>");
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
-  const [layouts, setLayouts] = useState<LayoutOpt[]>([]);
-  const [layoutId, setLayoutId] = useState<number | "">("");
+  const [headerTemplates, setHeaderTemplates] = useState<LayoutTemplateOpt[]>([]);
+  const [footerTemplates, setFooterTemplates] = useState<LayoutTemplateOpt[]>([]);
+  const [headerTemplateId, setHeaderTemplateId] = useState<number | "">("");
+  const [footerTemplateId, setFooterTemplateId] = useState<number | "">("");
+  const [headerHeightPx, setHeaderHeightPx] = useState<number>(120);
+  const [footerHeightPx, setFooterHeightPx] = useState<number>(80);
+  const [pageMarginMm, setPageMarginMm] = useState<number>(15);
   const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
   const [conjuntoId, setConjuntoId] = useState<number | "">("");
   const [conjuntoGrupoId, setConjuntoGrupoId] = useState<number | "">("");
@@ -114,24 +117,27 @@ export default function AdminDocumentosModelosPage() {
     }
   }
 
-  async function carregarLayouts() {
+  async function carregarLayoutTemplates() {
     try {
-      const res = await fetch("/api/documentos/layouts?ativo=1", { cache: "no-store" });
+      const res = await fetch("/api/documentos/layout-templates?ativo=1", { cache: "no-store" });
       const json = (await res.json()) as {
         ok?: boolean;
-        data?: Array<{ layout_id?: number; nome?: string }>;
+        data?: Array<{ layout_template_id?: number; nome?: string; tipo?: string; height_px?: number }>;
         message?: string;
       };
-      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar layouts.");
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar templates.");
       const list = (json.data ?? [])
-        .map((l) => ({
-          id: Number(l.layout_id),
-          label: String(l.nome ?? "").trim(),
+        .map((t) => ({
+          id: Number(t.layout_template_id),
+          label: String(t.nome ?? "").trim(),
+          tipo: String(t.tipo ?? "").trim().toUpperCase() as "HEADER" | "FOOTER",
+          height_px: Number(t.height_px) || 0,
         }))
-        .filter((l) => Number.isFinite(l.id) && l.id > 0);
-      setLayouts(list);
+        .filter((t) => Number.isFinite(t.id) && t.id > 0 && (t.tipo === "HEADER" || t.tipo === "FOOTER"));
+      setHeaderTemplates(list.filter((t) => t.tipo === "HEADER"));
+      setFooterTemplates(list.filter((t) => t.tipo === "FOOTER"));
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao carregar layouts.");
+      setErro(e instanceof Error ? e.message : "Erro ao carregar templates.");
     }
   }
 
@@ -201,8 +207,11 @@ export default function AdminDocumentosModelosPage() {
         ...payload,
         conjunto_grupo_id: conjuntoGrupoId ? conjuntoGrupoId : null,
         ordem: vinculoOrdem,
-        cabecalho_html: cabecalhoHtml,
-        layout_id: layoutId ? layoutId : null,
+        header_template_id: headerTemplateId ? headerTemplateId : null,
+        footer_template_id: footerTemplateId ? footerTemplateId : null,
+        header_height_px: headerHeightPx,
+        footer_height_px: footerHeightPx,
+        page_margin_mm: pageMarginMm,
       };
 
       const res = await fetch("/api/documentos/modelos", {
@@ -215,8 +224,11 @@ export default function AdminDocumentosModelosPage() {
       setNovoTitulo("");
       setNovoTextoMarkdown("");
       setNovoHtml("<p></p>");
-      setCabecalhoHtml("<p></p>");
-      setLayoutId("");
+      setHeaderTemplateId("");
+      setFooterTemplateId("");
+      setHeaderHeightPx(120);
+      setFooterHeightPx(80);
+      setPageMarginMm(15);
       setConjuntoId("");
       setConjuntoGrupoId("");
       setVinculoOrdem(1);
@@ -232,7 +244,7 @@ export default function AdminDocumentosModelosPage() {
     void carregar();
     void recarregarVariaveis();
     void carregarTiposDoc();
-    void carregarLayouts();
+    void carregarLayoutTemplates();
     void carregarConjuntosComGrupos();
   }, []);
 
@@ -309,19 +321,86 @@ export default function AdminDocumentosModelosPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Layout (cabecalho/rodape)</label>
+            <label className="text-sm font-medium">Header template</label>
             <select
               className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              value={layoutId}
-              onChange={(e) => setLayoutId(e.target.value ? Number(e.target.value) : "")}
+              value={headerTemplateId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setHeaderTemplateId(next);
+                if (next) {
+                  const found = headerTemplates.find((t) => t.id === next);
+                  if (found && Number.isFinite(found.height_px) && found.height_px > 0) {
+                    setHeaderHeightPx(found.height_px);
+                  }
+                }
+              }}
             >
-              <option value="">Sem layout</option>
-              {layouts.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.label || `Layout ${l.id}`}
+              <option value="">Sem header</option>
+              {headerTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label || `Header ${t.id}`}
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Footer template</label>
+            <select
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              value={footerTemplateId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setFooterTemplateId(next);
+                if (next) {
+                  const found = footerTemplates.find((t) => t.id === next);
+                  if (found && Number.isFinite(found.height_px) && found.height_px > 0) {
+                    setFooterHeightPx(found.height_px);
+                  }
+                }
+              }}
+            >
+              <option value="">Sem footer</option>
+              {footerTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label || `Footer ${t.id}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Altura header (px)</label>
+            <input
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              type="number"
+              min={40}
+              value={headerHeightPx}
+              onChange={(e) => setHeaderHeightPx(Number(e.target.value))}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Altura footer (px)</label>
+            <input
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              type="number"
+              min={40}
+              value={footerHeightPx}
+              onChange={(e) => setFooterHeightPx(Number(e.target.value))}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Margem da pagina (mm)</label>
+            <input
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              type="number"
+              min={5}
+              value={pageMarginMm}
+              onChange={(e) => setPageMarginMm(Number(e.target.value))}
+            />
           </div>
 
           <div className="md:col-span-2 grid gap-3 md:grid-cols-2">
@@ -425,22 +504,6 @@ export default function AdminDocumentosModelosPage() {
             </div>
           </div>
 
-          <div className="md:col-span-3">
-            <label className="text-sm font-medium">Cabecalho do documento (opcional)</label>
-            <p className="mt-1 text-xs text-slate-500">
-              Pode conter logo e dados da escola. Repetido na impressao/PDF.
-            </p>
-            <div className="mt-2">
-              <RichTextEditor
-                valueHtml={cabecalhoHtml}
-                onChangeHtml={setCabecalhoHtml}
-                minHeightPx={180}
-                enableVariables={false}
-                enableImages
-                variables={VARIAVEIS_VAZIAS}
-              />
-            </div>
-          </div>
         </div>
       </SystemSectionCard>
 

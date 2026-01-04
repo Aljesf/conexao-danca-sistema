@@ -245,3 +245,6 @@ Vers├úo l├│gica: **v1.0 (Servi├ºo + Unidade de Execu├º├úo)**
 - Banco de imagens: catalogo + upload em Storage (bucket documentos-imagens) e seletor no RichTextEditor.
 - Layouts reutilizaveis: documentos_layouts + layout_id em documentos_modelo.
 - Emissao congela cabecalho/rodape do layout no documentos_emitidos (nao muda apos edicao).
+- Layout fisico HEADER/BODY/FOOTER: templates dedicados e alturas no modelo (header/footer/page margin).
+- Emissao agora congela header_html/footer_html e alturas no documentos_emitidos.
+- Sanitizacao do HTML emitido remove estilos de background do corpo (MVP).

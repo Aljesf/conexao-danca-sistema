@@ -65,6 +65,15 @@ export default function AdminConfigDocumentosHome() {
           </SystemSectionCard>
         </Link>
 
+        <Link href="/admin/config/documentos/layout-templates" className="block">
+          <SystemSectionCard
+            title="Layout templates (header/footer)"
+            description="Templates fisicos de cabecalho e rodape com altura."
+          >
+            <p className="text-sm text-slate-600">Defina HTML e altura fisica para impressao.</p>
+          </SystemSectionCard>
+        </Link>
+
         <Link href="/admin/config/documentos/imagens" className="block">
           <SystemSectionCard
             title="Banco de imagens"

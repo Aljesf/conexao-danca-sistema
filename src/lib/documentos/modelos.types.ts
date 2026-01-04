@@ -7,6 +7,11 @@ export type DocumentoModeloDTO = {
   ativo: boolean;
   tipo_documento_id: number | null;
   layout_id?: number | null;
+  header_template_id?: number | null;
+  footer_template_id?: number | null;
+  header_height_px?: number | null;
+  footer_height_px?: number | null;
+  page_margin_mm?: number | null;
   formato: DocumentoModeloFormato | null;
   texto_modelo_md: string | null;
   conteudo_html: string | null;
@@ -24,6 +29,11 @@ export type DocumentoModeloCreatePayload = {
   conjunto_grupo_id?: number | null;
   ordem?: number | null;
   layout_id?: number | null;
+  header_template_id?: number | null;
+  footer_template_id?: number | null;
+  header_height_px?: number | null;
+  footer_height_px?: number | null;
+  page_margin_mm?: number | null;
   versao?: string;
   ativo?: boolean;
   formato?: DocumentoModeloFormato;

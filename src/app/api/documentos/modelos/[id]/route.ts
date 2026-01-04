@@ -10,6 +10,11 @@ type DocumentoModeloUpdatePayload = {
   conjunto_grupo_id?: number | null;
   ordem?: number | null;
   layout_id?: number | null;
+  header_template_id?: number | null;
+  footer_template_id?: number | null;
+  header_height_px?: number | null;
+  footer_height_px?: number | null;
+  page_margin_mm?: number | null;
   texto_modelo_md?: string;
   conteudo_html?: string;
   cabecalho_html?: string | null;
@@ -40,7 +45,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { data, error } = await supabase
     .from("documentos_modelo")
     .select(
-      "id,titulo,versao,ativo,tipo_documento_id,layout_id,formato,texto_modelo_md,conteudo_html,cabecalho_html,rodape_html,placeholders_schema_json,observacoes,created_at,updated_at",
+      "id,titulo,versao,ativo,tipo_documento_id,layout_id,header_template_id,footer_template_id,header_height_px,footer_height_px,page_margin_mm,formato,texto_modelo_md,conteudo_html,cabecalho_html,rodape_html,placeholders_schema_json,observacoes,created_at,updated_at",
     )
     .eq("id", modeloId)
     .single();
@@ -144,6 +149,31 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     layoutIdRaw === null || layoutIdRaw === undefined || layoutIdRaw === ""
       ? null
       : Number(layoutIdRaw);
+  const headerTemplateIdRaw = body.header_template_id;
+  const headerTemplateId =
+    headerTemplateIdRaw === null || headerTemplateIdRaw === undefined || headerTemplateIdRaw === ""
+      ? null
+      : Number(headerTemplateIdRaw);
+  const footerTemplateIdRaw = body.footer_template_id;
+  const footerTemplateId =
+    footerTemplateIdRaw === null || footerTemplateIdRaw === undefined || footerTemplateIdRaw === ""
+      ? null
+      : Number(footerTemplateIdRaw);
+  const headerHeightRaw = body.header_height_px;
+  const headerHeight =
+    headerHeightRaw === null || headerHeightRaw === undefined || headerHeightRaw === ""
+      ? null
+      : Number(headerHeightRaw);
+  const footerHeightRaw = body.footer_height_px;
+  const footerHeight =
+    footerHeightRaw === null || footerHeightRaw === undefined || footerHeightRaw === ""
+      ? null
+      : Number(footerHeightRaw);
+  const pageMarginRaw = body.page_margin_mm;
+  const pageMargin =
+    pageMarginRaw === null || pageMarginRaw === undefined || pageMarginRaw === ""
+      ? null
+      : Number(pageMarginRaw);
   const ordemRaw = body.ordem;
   const ordem =
     ordemRaw === null || ordemRaw === undefined || ordemRaw === "" ? 1 : Number(ordemRaw);
@@ -184,12 +214,47 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     }
   }
 
+  if (headerTemplateId !== null) {
+    if (!Number.isFinite(headerTemplateId) || headerTemplateId <= 0) {
+      return NextResponse.json({ error: "Header template invalido." }, { status: 400 });
+    }
+  }
+
+  if (footerTemplateId !== null) {
+    if (!Number.isFinite(footerTemplateId) || footerTemplateId <= 0) {
+      return NextResponse.json({ error: "Footer template invalido." }, { status: 400 });
+    }
+  }
+
+  if (headerHeight !== null) {
+    if (!Number.isFinite(headerHeight) || headerHeight <= 0) {
+      return NextResponse.json({ error: "Altura do header invalida." }, { status: 400 });
+    }
+  }
+
+  if (footerHeight !== null) {
+    if (!Number.isFinite(footerHeight) || footerHeight <= 0) {
+      return NextResponse.json({ error: "Altura do footer invalida." }, { status: 400 });
+    }
+  }
+
+  if (pageMargin !== null) {
+    if (!Number.isFinite(pageMargin) || pageMargin <= 0) {
+      return NextResponse.json({ error: "Margem de pagina invalida." }, { status: 400 });
+    }
+  }
+
   const updatePayload: Record<string, unknown> = {};
   if (typeof body.titulo === "string") updatePayload.titulo = body.titulo;
   if (typeof body.versao === "string") updatePayload.versao = body.versao;
   if (typeof body.ativo === "boolean") updatePayload.ativo = body.ativo;
   updatePayload.tipo_documento_id = tipoDocumentoId;
   if (typeof body.layout_id !== "undefined") updatePayload.layout_id = layoutId;
+  if (typeof body.header_template_id !== "undefined") updatePayload.header_template_id = headerTemplateId;
+  if (typeof body.footer_template_id !== "undefined") updatePayload.footer_template_id = footerTemplateId;
+  if (headerHeight !== null) updatePayload.header_height_px = headerHeight;
+  if (footerHeight !== null) updatePayload.footer_height_px = footerHeight;
+  if (pageMargin !== null) updatePayload.page_margin_mm = pageMargin;
   if (typeof body.observacoes === "string" || body.observacoes === null) updatePayload.observacoes = body.observacoes;
   if (typeof body.placeholders_schema_json !== "undefined") {
     updatePayload.placeholders_schema_json = body.placeholders_schema_json;

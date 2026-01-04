@@ -9,6 +9,7 @@ import {
   type DocumentoVariavel,
 } from "@/lib/documentos/resolvePlaceholders";
 import { type JoinEdge } from "@/lib/documentos/resolveByJoinPath";
+import { stripBackgroundStyles } from "@/lib/documentos/sanitizeHtml";
 
 type Item = { grupo_id: number; documento_modelo_id: number; incluir: boolean };
 type Body = {
@@ -348,7 +349,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const { data: modelo, error: modErr } = await supabase
       .from("documentos_modelo")
-      .select("id,formato,conteudo_html,texto_modelo_md,cabecalho_html,rodape_html,layout_id")
+      .select(
+        "id,formato,conteudo_html,texto_modelo_md,cabecalho_html,rodape_html,layout_id,header_template_id,footer_template_id,header_height_px,footer_height_px,page_margin_mm",
+      )
       .eq("id", item.documento_modelo_id)
       .single();
 
@@ -357,10 +360,44 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const template = resolveModeloTemplate(modelo as Record<string, unknown>);
+    const headerTemplateIdRaw = (modelo as Record<string, unknown>).header_template_id;
+    const headerTemplateId = typeof headerTemplateIdRaw === "number" ? headerTemplateIdRaw : Number(headerTemplateIdRaw);
+    const footerTemplateIdRaw = (modelo as Record<string, unknown>).footer_template_id;
+    const footerTemplateId = typeof footerTemplateIdRaw === "number" ? footerTemplateIdRaw : Number(footerTemplateIdRaw);
     const layoutIdRaw = (modelo as Record<string, unknown>).layout_id;
     const layoutId = typeof layoutIdRaw === "number" ? layoutIdRaw : Number(layoutIdRaw);
     let cabecalhoFinal = (modelo as Record<string, unknown>).cabecalho_html ?? null;
     let rodapeFinal = (modelo as Record<string, unknown>).rodape_html ?? null;
+
+    let headerHtmlFinal: string | null = null;
+    let footerHtmlFinal: string | null = null;
+
+    const templateIds = [headerTemplateId, footerTemplateId].filter(
+      (id) => Number.isFinite(id) && Number(id) > 0,
+    );
+
+    if (templateIds.length > 0) {
+      const { data: templates } = await supabase
+        .from("documentos_layout_templates")
+        .select("layout_template_id,html")
+        .in("layout_template_id", templateIds);
+
+      if (templates && Array.isArray(templates)) {
+        const byId = new Map<number, string>();
+        for (const t of templates as Array<Record<string, unknown>>) {
+          const tid = Number(t.layout_template_id);
+          if (Number.isFinite(tid) && tid > 0) {
+            byId.set(tid, typeof t.html === "string" ? t.html : "");
+          }
+        }
+        if (Number.isFinite(headerTemplateId) && headerTemplateId > 0) {
+          headerHtmlFinal = byId.get(headerTemplateId) ?? null;
+        }
+        if (Number.isFinite(footerTemplateId) && footerTemplateId > 0) {
+          footerHtmlFinal = byId.get(footerTemplateId) ?? null;
+        }
+      }
+    }
 
     if (Number.isFinite(layoutId) && layoutId > 0) {
       const { data: layout } = await supabase
@@ -373,6 +410,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         rodapeFinal = (layout as Record<string, unknown>).rodape_html ?? rodapeFinal;
       }
     }
+
+    if (!headerHtmlFinal) headerHtmlFinal = cabecalhoFinal;
+    if (!footerHtmlFinal) footerHtmlFinal = rodapeFinal;
+
+    const headerHeightValue = Number((modelo as Record<string, unknown>).header_height_px);
+    const footerHeightValue = Number((modelo as Record<string, unknown>).footer_height_px);
+    const pageMarginValue = Number((modelo as Record<string, unknown>).page_margin_mm);
+    const headerHeightPx = Number.isFinite(headerHeightValue) && headerHeightValue > 0 ? headerHeightValue : 120;
+    const footerHeightPx = Number.isFinite(footerHeightValue) && footerHeightValue > 0 ? footerHeightValue : 80;
+    const pageMarginMm = Number.isFinite(pageMarginValue) && pageMarginValue > 0 ? pageMarginValue : 15;
+
     const { resolved: conteudoResolvido, utilizadas: variaveisUtilizadas } =
       await resolveTemplateValues({
         template,
@@ -381,16 +429,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         supabase,
         rootId: matriculaId,
       });
-    const hash = crypto.createHash("sha256").update(conteudoResolvido, "utf8").digest("hex");
+    const conteudoTemplateLimpo = stripBackgroundStyles(template);
+    const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
+    const hash = crypto.createHash("sha256").update(conteudoResolvidoLimpo, "utf8").digest("hex");
 
     const baseInsert: Record<string, unknown> = {
       matricula_id: matriculaId,
       status_assinatura: "PENDENTE",
-      conteudo_renderizado_md: conteudoResolvido,
-      conteudo_template_html: template,
-      conteudo_resolvido_html: conteudoResolvido,
-      cabecalho_html: cabecalhoFinal,
-      rodape_html: rodapeFinal,
+      conteudo_renderizado_md: conteudoResolvidoLimpo,
+      conteudo_template_html: conteudoTemplateLimpo,
+      conteudo_resolvido_html: conteudoResolvidoLimpo,
+      cabecalho_html: headerHtmlFinal,
+      rodape_html: footerHtmlFinal,
+      header_html: headerHtmlFinal,
+      footer_html: footerHtmlFinal,
+      header_height_px: headerHeightPx,
+      footer_height_px: footerHeightPx,
+      page_margin_mm: pageMarginMm,
       contexto_json: contexto,
       variaveis_utilizadas_json: variaveisUtilizadas,
       snapshot_financeiro_json: snapshot,

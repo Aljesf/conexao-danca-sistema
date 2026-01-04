@@ -21,6 +21,11 @@ type DocumentoModelo = {
   ativo: boolean;
   tipo_documento_id?: number | null;
   layout_id?: number | null;
+  header_template_id?: number | null;
+  footer_template_id?: number | null;
+  header_height_px?: number | null;
+  footer_height_px?: number | null;
+  page_margin_mm?: number | null;
   formato?: DocumentoModeloFormato | null;
   texto_modelo_md: string | null;
   conteudo_html?: string | null;
@@ -54,7 +59,7 @@ type DocumentoVariavel = {
 
 type TipoDocOpt = { id: number; label: string };
 type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
-type LayoutOpt = { id: number; label: string };
+type LayoutTemplateOpt = { id: number; label: string; tipo: "HEADER" | "FOOTER"; height_px: number };
 
 type VinculoModelo = {
   conjunto_grupo_id?: number | null;
@@ -64,8 +69,6 @@ type VinculoModelo = {
   conjunto_codigo?: string | null;
   conjunto_nome?: string | null;
 };
-
-const VARIAVEIS_VAZIAS: RteVariable[] = [];
 
 function markdownToHtmlSimples(markdown: string): string {
   const trimmed = markdown.trim();
@@ -101,12 +104,16 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
   const [formato, setFormato] = useState<DocumentoModeloFormato>("MARKDOWN");
   const [conteudoHtml, setConteudoHtml] = useState("");
   const [textoMarkdown, setTextoMarkdown] = useState("");
-  const [cabecalhoHtml, setCabecalhoHtml] = useState("<p></p>");
 
   const [tiposDoc, setTiposDoc] = useState<TipoDocOpt[]>([]);
   const [tipoDocumentoId, setTipoDocumentoId] = useState<number | "">("");
-  const [layouts, setLayouts] = useState<LayoutOpt[]>([]);
-  const [layoutId, setLayoutId] = useState<number | "">("");
+  const [headerTemplates, setHeaderTemplates] = useState<LayoutTemplateOpt[]>([]);
+  const [footerTemplates, setFooterTemplates] = useState<LayoutTemplateOpt[]>([]);
+  const [headerTemplateId, setHeaderTemplateId] = useState<number | "">("");
+  const [footerTemplateId, setFooterTemplateId] = useState<number | "">("");
+  const [headerHeightPx, setHeaderHeightPx] = useState<number>(120);
+  const [footerHeightPx, setFooterHeightPx] = useState<number>(80);
+  const [pageMarginMm, setPageMarginMm] = useState<number>(15);
 
   const [conjuntos, setConjuntos] = useState<ConjuntoOpt[]>([]);
   const [conjuntoId, setConjuntoId] = useState<number | "">("");
@@ -130,7 +137,14 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       setTitulo(m.titulo ?? "");
       setAtivo(Boolean(m.ativo));
       setTipoDocumentoId(m.tipo_documento_id ?? "");
-      setLayoutId(m.layout_id ?? "");
+      setHeaderTemplateId(m.header_template_id ?? "");
+      setFooterTemplateId(m.footer_template_id ?? "");
+      const headerHeightValue = Number(m.header_height_px);
+      const footerHeightValue = Number(m.footer_height_px);
+      const pageMarginValue = Number(m.page_margin_mm);
+      setHeaderHeightPx(Number.isFinite(headerHeightValue) && headerHeightValue > 0 ? headerHeightValue : 120);
+      setFooterHeightPx(Number.isFinite(footerHeightValue) && footerHeightValue > 0 ? footerHeightValue : 80);
+      setPageMarginMm(Number.isFinite(pageMarginValue) && pageMarginValue > 0 ? pageMarginValue : 15);
       const vinculos = Array.isArray(m.vinculos) ? m.vinculos : [];
       setVinculosAtuais(vinculos);
       if (vinculos.length > 0) {
@@ -150,7 +164,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
       const textoMarkdownInicial = m.texto_modelo_md ?? m.conteudo_html ?? "";
       setConteudoHtml(conteudoHtmlInicial);
       setTextoMarkdown(textoMarkdownInicial);
-      setCabecalhoHtml(m.cabecalho_html ?? "<p></p>");
       setSchemaAtual(safeParseSchema(m.placeholders_schema_json));
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar.");
@@ -192,24 +205,27 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     }
   }, []);
 
-  const carregarLayouts = useCallback(async () => {
+  const carregarLayoutTemplates = useCallback(async () => {
     try {
-      const res = await fetch("/api/documentos/layouts?ativo=1", { cache: "no-store" });
+      const res = await fetch("/api/documentos/layout-templates?ativo=1", { cache: "no-store" });
       const json = (await res.json()) as {
         ok?: boolean;
-        data?: Array<{ layout_id?: number; nome?: string }>;
+        data?: Array<{ layout_template_id?: number; nome?: string; tipo?: string; height_px?: number }>;
         message?: string;
       };
-      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar layouts.");
+      if (!res.ok || !json.ok) throw new Error(json.message || "Falha ao carregar templates.");
       const list = (json.data ?? [])
-        .map((l) => ({
-          id: Number(l.layout_id),
-          label: String(l.nome ?? "").trim(),
+        .map((t) => ({
+          id: Number(t.layout_template_id),
+          label: String(t.nome ?? "").trim(),
+          tipo: String(t.tipo ?? "").trim().toUpperCase() as "HEADER" | "FOOTER",
+          height_px: Number(t.height_px) || 0,
         }))
-        .filter((l) => Number.isFinite(l.id) && l.id > 0);
-      setLayouts(list);
+        .filter((t) => Number.isFinite(t.id) && t.id > 0 && (t.tipo === "HEADER" || t.tipo === "FOOTER"));
+      setHeaderTemplates(list.filter((t) => t.tipo === "HEADER"));
+      setFooterTemplates(list.filter((t) => t.tipo === "FOOTER"));
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao carregar layouts.");
+      setErro(e instanceof Error ? e.message : "Erro ao carregar templates.");
     }
   }, []);
 
@@ -250,9 +266,9 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     void carregar();
     void carregarVariaveis();
     void carregarTiposDoc();
-    void carregarLayouts();
+    void carregarLayoutTemplates();
     void carregarConjuntosComGrupos();
-  }, [carregar, carregarConjuntosComGrupos, carregarLayouts, carregarTiposDoc, carregarVariaveis, idNum]);
+  }, [carregar, carregarConjuntosComGrupos, carregarLayoutTemplates, carregarTiposDoc, carregarVariaveis, idNum]);
 
   useEffect(() => {
     if (!conjuntoGrupoId || conjuntos.length === 0) return;
@@ -294,10 +310,13 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           ativo,
           formato,
           tipo_documento_id: tipoDocumentoId,
-          layout_id: layoutId || null,
           conjunto_grupo_id: conjuntoGrupoId || null,
           ordem: vinculoOrdem,
-          cabecalho_html: cabecalhoHtml,
+          header_template_id: headerTemplateId || null,
+          footer_template_id: footerTemplateId || null,
+          header_height_px: headerHeightPx,
+          footer_height_px: footerHeightPx,
+          page_margin_mm: pageMarginMm,
           ...(formato === "RICH_HTML" ? { conteudo_html: conteudoHtml } : { texto_modelo_md: textoMarkdown }),
           placeholders_schema_json: schemaFinal,
         }),
@@ -390,19 +409,86 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Layout (cabecalho/rodape)</label>
+            <label className="text-sm font-medium">Header template</label>
             <select
               className="mt-1 w-full rounded-md border p-2 text-sm"
-              value={layoutId}
-              onChange={(e) => setLayoutId(e.target.value ? Number(e.target.value) : "")}
+              value={headerTemplateId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setHeaderTemplateId(next);
+                if (next) {
+                  const found = headerTemplates.find((t) => t.id === next);
+                  if (found && Number.isFinite(found.height_px) && found.height_px > 0) {
+                    setHeaderHeightPx(found.height_px);
+                  }
+                }
+              }}
             >
-              <option value="">Sem layout</option>
-              {layouts.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.label || `Layout ${l.id}`}
+              <option value="">Sem header</option>
+              {headerTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label || `Header ${t.id}`}
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Footer template</label>
+            <select
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              value={footerTemplateId}
+              onChange={(e) => {
+                const next = e.target.value ? Number(e.target.value) : "";
+                setFooterTemplateId(next);
+                if (next) {
+                  const found = footerTemplates.find((t) => t.id === next);
+                  if (found && Number.isFinite(found.height_px) && found.height_px > 0) {
+                    setFooterHeightPx(found.height_px);
+                  }
+                }
+              }}
+            >
+              <option value="">Sem footer</option>
+              {footerTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label || `Footer ${t.id}`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Altura header (px)</label>
+            <input
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              type="number"
+              min={40}
+              value={headerHeightPx}
+              onChange={(e) => setHeaderHeightPx(Number(e.target.value))}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Altura footer (px)</label>
+            <input
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              type="number"
+              min={40}
+              value={footerHeightPx}
+              onChange={(e) => setFooterHeightPx(Number(e.target.value))}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium">Margem da pagina (mm)</label>
+            <input
+              className="mt-1 w-full rounded-md border p-2 text-sm"
+              type="number"
+              min={5}
+              value={pageMarginMm}
+              onChange={(e) => setPageMarginMm(Number(e.target.value))}
+            />
           </div>
 
           <div>
@@ -491,22 +577,6 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
               Ativo
             </label>
           </div>
-        </div>
-      </SystemSectionCard>
-
-      <SystemSectionCard title="Cabecalho do documento">
-        <p className="text-xs text-slate-500">
-          Este cabecalho pode conter logo e dados da escola. Sera repetido na impressao/PDF.
-        </p>
-        <div className="mt-3">
-          <RichTextEditor
-            valueHtml={cabecalhoHtml}
-            onChangeHtml={setCabecalhoHtml}
-            minHeightPx={180}
-            enableVariables={false}
-            enableImages
-            variables={VARIAVEIS_VAZIAS}
-          />
         </div>
       </SystemSectionCard>
 
