@@ -5,7 +5,6 @@ import { formatDateTimeISO } from "@/lib/formatters/date";
 type DocumentoEmitidoRow = {
   id: number;
   matricula_id: number | null;
-  modelo_id: number | null;
   contrato_modelo_id: number | null;
   status: string | null;
   created_at: string | null;
@@ -25,7 +24,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   const supabase = await getSupabaseServerSSR();
   const { data: emitidos, error } = await supabase
     .from("documentos_emitidos")
-    .select("id, matricula_id, modelo_id, contrato_modelo_id, status, created_at")
+    .select("id, matricula_id, contrato_modelo_id, status, created_at")
     .eq("matricula_id", matriculaId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -77,7 +76,7 @@ export default async function Page({ params }: { params: { id: string } }) {
         ) : (
           <div className="grid gap-3">
             {lista.map((doc) => {
-              const modeloId = doc.modelo_id ?? doc.contrato_modelo_id ?? null;
+              const modeloId = doc.contrato_modelo_id ?? null;
               return (
                 <div key={doc.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-3">

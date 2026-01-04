@@ -311,3 +311,11 @@ APIs concluidas:
 Paginas:
 
 - Resumo financeiro da matricula usa o agregado do Cartao Conexao para parcelas/vencimento.
+
+## Atualizacoes recentes (Documentos/Matrículas - 2026-01-07)
+
+- Listagem de emitidos por matricula usa o campo correto `documentos_emitidos.contrato_modelo_id`.
+
+## Atualizacoes recentes (Documentos - 2026-01-08)
+
+- Contexto do emitido agora inclui colecao `parcelas[]` para templates (dados do Cartao Conexao).

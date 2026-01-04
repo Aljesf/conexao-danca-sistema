@@ -410,6 +410,13 @@ export async function POST(req: Request) {
   }
 
   contexto.PARCELAS_CARTAO_CONEXAO = parcelasCartao;
+  const parcelasDocumento = parcelasCartao.map((parcela) => ({
+    data: parcela.vencimento,
+    descricao: parcela.periodo ? `Fatura ${parcela.periodo}` : "Fatura",
+    valor: parcela.valor,
+    status: parcela.status,
+  }));
+  contexto.parcelas = parcelasDocumento;
 
   const template = resolveModeloTemplate(modelo as Record<string, unknown>);
   const headerTemplateIdRaw = (modelo as Record<string, unknown>).header_template_id;
@@ -498,10 +505,12 @@ export async function POST(req: Request) {
   const collectionsResolvedFinal: Record<string, Array<Record<string, string>>> = {
     ...collectionsResolved,
     PARCELAS_CARTAO_CONEXAO: parcelasCartao,
+    parcelas: parcelasDocumento,
   };
+  const hasParcelasTag = /{{#\s*parcelas\s*}}/i.test(template);
   const colecoesDetectadasSet = new Set<string>(collectionCodes);
-  if (parcelasCartao.length > 0) {
-    colecoesDetectadasSet.add("PARCELAS_CARTAO_CONEXAO");
+  if (hasParcelasTag) {
+    colecoesDetectadasSet.add("parcelas");
   }
   const colecoesDetectadas = Array.from(colecoesDetectadasSet);
   const colecoesVazias = colecoesDetectadas.filter((code) => {
