@@ -301,3 +301,13 @@ Paginas:
 
 - /escola/matriculas/[id]/documentos (lista de emitidos com links).
 - Bloco Documentos no detalhe da matricula (atalhos para listar/emitir).
+
+## Atualizacoes recentes (Matriculas - 2026-01-06)
+
+APIs concluidas:
+
+- Detalhe da matricula agrega resumo do Cartao Conexao (parcelas pendentes e proximo vencimento).
+
+Paginas:
+
+- Resumo financeiro da matricula usa o agregado do Cartao Conexao para parcelas/vencimento.

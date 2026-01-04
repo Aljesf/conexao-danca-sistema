@@ -32,6 +32,12 @@ type FinanceiroResumo = {
   ultima_atualizacao: string | null;
 };
 
+type CartaoConexaoResumo = {
+  parcelas_pendentes: number;
+  proximo_vencimento: string | null;
+  fatura_id_proxima: number | null;
+};
+
 function isSchemaMissing(err: unknown): boolean {
   const e = err as PostgrestError | null;
   return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
@@ -204,6 +210,56 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
       };
     }
 
+    let resumoCartao: CartaoConexaoResumo | null = null;
+    if (responsavelId) {
+      const { data: contas, error: contaErr } = await admin
+        .from("credito_conexao_contas")
+        .select("id, ativo, tipo_conta")
+        .eq("pessoa_titular_id", responsavelId)
+        .eq("ativo", true)
+        .order("id", { ascending: false })
+        .limit(1);
+
+      if (contaErr && !isSchemaMissing(contaErr)) {
+        return errJson("server_error", "Falha ao buscar conta do cartao conexao.", 500, { contaErr });
+      }
+
+      const contaId = contas && contas.length > 0 ? Number(contas[0]?.id) : null;
+      if (contaId && Number.isFinite(contaId)) {
+        const statusFaturas = ["ABERTA", "PENDENTE", "EM_ABERTO"];
+        const { data: fatura, error: faturaErr } = await admin
+          .from("credito_conexao_faturas")
+          .select("id, data_vencimento, status")
+          .eq("conta_conexao_id", contaId)
+          .in("status", statusFaturas)
+          .order("data_vencimento", { ascending: true, nullsFirst: false })
+          .order("data_fechamento", { ascending: true, nullsFirst: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (faturaErr && !isSchemaMissing(faturaErr)) {
+          return errJson("server_error", "Falha ao buscar faturas do cartao conexao.", 500, { faturaErr });
+        }
+
+        const statusLancamentos = ["PENDENTE_FATURA", "FATURADO"];
+        const { count: pendentesCount, error: pendentesErr } = await admin
+          .from("credito_conexao_lancamentos")
+          .select("id", { count: "exact", head: true })
+          .eq("conta_conexao_id", contaId)
+          .in("status", statusLancamentos);
+
+        if (pendentesErr && !isSchemaMissing(pendentesErr)) {
+          return errJson("server_error", "Falha ao buscar lancamentos do cartao conexao.", 500, { pendentesErr });
+        }
+
+        resumoCartao = {
+          parcelas_pendentes: pendentesCount ?? 0,
+          proximo_vencimento: fatura?.data_vencimento ?? null,
+          fatura_id_proxima: fatura?.id ? Number(fatura.id) : null,
+        };
+      }
+    }
+
     const ueRow = unidadeExecucao as UnidadeExecucaoRow | null;
     const unidadeExecucaoLabel = ueRow
       ? formatUnidadeExecucaoLabel({
@@ -229,6 +285,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
         preco_aplicado: precoAplicado,
         plano_pagamento: planoPagamento ?? null,
         financeiro_resumo: financeiroResumo,
+        resumo_financeiro_cartao_conexao: resumoCartao,
         historico: [],
       },
       200,

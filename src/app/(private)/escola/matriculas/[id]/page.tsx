@@ -24,6 +24,11 @@ type MatriculaDetalheResp = {
     proximo_vencimento: string | null;
     ultima_atualizacao: string | null;
   } | null;
+  resumo_financeiro_cartao_conexao?: {
+    parcelas_pendentes: number;
+    proximo_vencimento: string | null;
+    fatura_id_proxima: number | null;
+  } | null;
   error?: string;
   message?: string;
 };
@@ -89,6 +94,7 @@ export default function MatriculaDetalhePage() {
   const pessoaId = useMemo(() => Number(matricula?.pessoa_id ?? NaN), [matricula]);
   const respId = useMemo(() => Number(matricula?.responsavel_financeiro_id ?? NaN), [matricula]);
   const resumo = data?.financeiro_resumo ?? null;
+  const resumoCartao = data?.resumo_financeiro_cartao_conexao ?? null;
 
   return (
     <div className="p-4 space-y-6">
@@ -140,17 +146,17 @@ export default function MatriculaDetalhePage() {
             </div>
             <div>
               Parcelas pendentes:{" "}
-              {resumo ? (
+              {resumoCartao ? (
                 <>
-                  <span>{resumo.parcelas_pendentes_count}</span>{" "}
-                  <span>({formatBRLFromCents(Number(resumo.parcelas_pendentes_total_centavos))})</span>
+                  <span>{resumoCartao.parcelas_pendentes}</span>
                 </>
               ) : (
                 "-"
               )}
             </div>
             <div>
-              Proximo vencimento: {resumo?.proximo_vencimento ? formatDateISO(resumo.proximo_vencimento) : "-"}
+              Proximo vencimento:{" "}
+              {resumoCartao?.proximo_vencimento ? formatDateISO(resumoCartao.proximo_vencimento) : "-"}
             </div>
             <div>
               Ultima atualizacao: {resumo?.ultima_atualizacao ? formatDateTimeISO(resumo.ultima_atualizacao) : "-"}
