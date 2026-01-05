@@ -62,8 +62,13 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
 
         const contextoAtual = Number(contextoId);
         const contextoExiste = lista.some((c) => c.id === contextoAtual);
+        const anoRef = turma.ano_referencia ?? null;
+        const matchAno =
+          tipoContexto === "PERIODO_LETIVO" && typeof anoRef === "number"
+            ? lista.find((c) => c.ano_referencia === anoRef) ?? null
+            : null;
         if (!contextoExiste) {
-          setContextoId(lista[0] ? String(lista[0].id) : "");
+          setContextoId(matchAno ? String(matchAno.id) : lista[0] ? String(lista[0].id) : "");
         }
       } catch (e) {
         if (!active) return;
@@ -78,7 +83,7 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
     return () => {
       active = false;
     };
-  }, [tipoTurma, contextoId]);
+  }, [tipoTurma, contextoId, turma.ano_referencia]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

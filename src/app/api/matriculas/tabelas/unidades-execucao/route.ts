@@ -44,6 +44,7 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const servicoId = Number(url.searchParams.get("servico_id") || 0);
+    const contextoId = Number(url.searchParams.get("contexto_id") || 0);
     if (!Number.isFinite(servicoId) || servicoId <= 0) {
       return NextResponse.json(
         {
@@ -57,12 +58,42 @@ export async function GET(req: Request) {
     }
 
     const admin = getAdmin();
-    const { data, error } = await admin
+    let turmaIds: number[] | null = null;
+    if (Number.isFinite(contextoId) && contextoId > 0) {
+      const { data: turmasCtx, error: turmasErr } = await admin
+        .from("turmas")
+        .select("turma_id")
+        .eq("contexto_matricula_id", contextoId);
+      if (turmasErr) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "server_error",
+            message: "Falha ao filtrar turmas pelo contexto.",
+            details: { turmasErr },
+          } satisfies ApiErr,
+          { status: 500 },
+        );
+      }
+      turmaIds = (turmasCtx ?? [])
+        .map((row) => Number((row as { turma_id?: number }).turma_id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+      if (turmaIds.length === 0) {
+        return NextResponse.json({ ok: true, data: [] } satisfies ApiOk<unknown[]>, { status: 200 });
+      }
+    }
+
+    let query = admin
       .from("escola_unidades_execucao")
-      .select("unidade_execucao_id, denominacao, nome")
+      .select("unidade_execucao_id, denominacao, nome, origem_tipo, origem_id")
       .eq("servico_id", servicoId)
-      .eq("ativo", true)
-      .order("nome", { ascending: true });
+      .eq("ativo", true);
+
+    if (turmaIds) {
+      query = query.eq("origem_tipo", "TURMA").in("origem_id", turmaIds);
+    }
+
+    const { data, error } = await query.order("nome", { ascending: true });
 
     if (error) {
       if (isMissingRelation(error)) {
@@ -86,10 +117,18 @@ export async function GET(req: Request) {
       );
     }
 
-    const mapped = (data ?? []).map((ue: any) => ({
-      id: Number(ue.unidade_execucao_id),
-      label: `${String(ue.denominacao)}: ${String(ue.nome)} [UE: ${Number(ue.unidade_execucao_id)}]`,
-    }));
+    const mapped = (data ?? []).map((ue) => {
+      const record = ue as {
+        unidade_execucao_id: number | null;
+        denominacao: string | null;
+        nome: string | null;
+      };
+      const ueId = Number(record.unidade_execucao_id);
+      return {
+        id: ueId,
+        label: `${String(record.denominacao ?? "")}: ${String(record.nome ?? "")} [UE: ${ueId}]`,
+      };
+    });
 
     return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
   } catch (e: unknown) {

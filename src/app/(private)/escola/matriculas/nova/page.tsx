@@ -105,7 +105,7 @@ type PrecoResolverResp = {
 type PrecoDebug = NonNullable<PrecoResolverResp["data"]>["debug"];
 
 function labelTipo(tipo: TipoMatricula): string {
-  return tipo === "REGULAR" ? "Turma regular" : "Curso livre";
+  return tipo === "REGULAR" ? "Curso regular" : "Curso livre";
 }
 
 function mapContextoTipo(tipo: TipoMatricula): ContextoTipo {
@@ -602,7 +602,7 @@ export default function NovaMatriculaPage() {
                   value={tipo}
                   onChange={(e) => setTipo(e.target.value as TipoMatricula)}
                 >
-                  <option value="REGULAR">Turma regular</option>
+                  <option value="REGULAR">Curso regular</option>
                   <option value="CURSO_LIVRE">Curso livre</option>
                 </select>
               </div>
