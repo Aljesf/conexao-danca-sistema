@@ -1,10 +1,9 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { CicloPoliticaCard } from "./CicloPoliticaCard";
 
 type TipoConta = "ALUNO" | "COLABORADOR";
 
@@ -19,33 +18,12 @@ type RegraParcelamento = {
   ativo: boolean;
 };
 
-type ConfigRow = {
-  tipo_conta: TipoConta;
-  dia_fechamento: number;
-  dia_vencimento: number;
-  tolerancia_dias: number;
-  multa_percentual: number;
-  juros_dia_percentual: number;
-  ativo: boolean;
-};
-
-export default function ConfiguracoesCreditoConexaoPage() {
+export default function Page() {
   const [regras, setRegras] = useState<RegraParcelamento[]>([]);
   const [loadingRegras, setLoadingRegras] = useState(false);
   const [savingRegra, setSavingRegra] = useState(false);
   const [erroRegra, setErroRegra] = useState<string | null>(null);
   const [editandoId, setEditandoId] = useState<number | null>(null);
-
-  const [loadingConfig, setLoadingConfig] = useState<boolean>(true);
-  const [savingConfig, setSavingConfig] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<TipoConta>("ALUNO");
-  const [configs, setConfigs] = useState<Record<TipoConta, ConfigRow | null>>({
-    ALUNO: null,
-    COLABORADOR: null,
-  });
-  const [erroConfig, setErroConfig] = useState<string | null>(null);
-
-  const currentConfig = useMemo(() => configs[activeTab], [configs, activeTab]);
 
   const [form, setForm] = useState<RegraParcelamento>({
     tipo_conta: "ALUNO",
@@ -93,26 +71,6 @@ export default function ConfiguracoesCreditoConexaoPage() {
 
   useEffect(() => {
     carregarRegras();
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      setLoadingConfig(true);
-      setErroConfig(null);
-      try {
-        const res = await fetch("/api/admin/credito-conexao/configuracoes");
-        const json = (await res.json()) as { ok?: boolean; data?: ConfigRow[] };
-        const data = json.data ?? [];
-        const aluno = data.find((x) => x.tipo_conta === "ALUNO") ?? null;
-        const colab = data.find((x) => x.tipo_conta === "COLABORADOR") ?? null;
-        setConfigs({ ALUNO: aluno, COLABORADOR: colab });
-      } catch (e: unknown) {
-        console.error("Erro ao carregar configuracoes do cartao", e);
-        setErroConfig("Erro ao carregar configuracoes do cartao.");
-      } finally {
-        setLoadingConfig(false);
-      }
-    })();
   }, []);
 
   function editarRegra(regra: RegraParcelamento) {
@@ -176,149 +134,17 @@ export default function ConfiguracoesCreditoConexaoPage() {
     }
   }
 
-  async function salvarConfig(tipo: TipoConta) {
-    const cfg = configs[tipo];
-    if (!cfg) return;
-    setSavingConfig(true);
-    setErroConfig(null);
-    try {
-      const res = await fetch("/api/admin/credito-conexao/configuracoes", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cfg),
-      });
-      const json = (await res.json()) as { ok?: boolean; data?: ConfigRow; error?: string };
-      if (!res.ok || !json.ok || !json.data) {
-        setErroConfig(`Falha ao salvar: ${json.error ?? "erro_desconhecido"}`);
-        return;
-      }
-      setConfigs((prev) => ({ ...prev, [tipo]: json.data! }));
-    } catch (e: unknown) {
-      console.error("Erro ao salvar configuracoes do cartao", e);
-      setErroConfig("Erro ao salvar configuracoes do cartao.");
-    } finally {
-      setSavingConfig(false);
-    }
-  }
-
-  function updateConfigField<K extends keyof ConfigRow>(tipo: TipoConta, key: K, value: ConfigRow[K]) {
-    setConfigs((prev) => {
-      const cur = prev[tipo];
-      if (!cur) return prev;
-      return { ...prev, [tipo]: { ...cur, [key]: value } };
-    });
-  }
-
   return (
-    <div className="p-6 space-y-6">
-      <div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white p-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div>
         <h1 className="text-2xl font-semibold">Cartao Conexao - Configuracoes</h1>
         <p className="text-sm text-gray-600">
           Ajuste o ciclo do cartao e a politica institucional de atraso, alem das regras de parcelamento.
         </p>
-      </div>
+        </div>
 
-      {erroConfig && <div className="text-sm text-red-600">{erroConfig}</div>}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Ciclo e Politica do Cartao</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-sm text-muted-foreground">
-            Multa e juros nao sao aplicados automaticamente ainda; servem como politica institucional e base para fase futura.
-          </div>
-          {loadingConfig || !currentConfig ? (
-            <div className="mt-4 text-sm text-muted-foreground">Carregando configuracoes...</div>
-          ) : (
-            <div className="mt-4 space-y-4">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("ALUNO")}
-                  className={`rounded-md border px-3 py-1 text-sm ${
-                    activeTab === "ALUNO" ? "bg-slate-900 text-white" : "bg-white"
-                  }`}
-                >
-                  ALUNO
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("COLABORADOR")}
-                  className={`rounded-md border px-3 py-1 text-sm ${
-                    activeTab === "COLABORADOR" ? "bg-slate-900 text-white" : "bg-white"
-                  }`}
-                >
-                  COLABORADOR
-                </button>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Dia de fechamento</div>
-                  <Input
-                    type="number"
-                    value={currentConfig.dia_fechamento}
-                    onChange={(e) => updateConfigField(activeTab, "dia_fechamento", Number(e.target.value))}
-                    min={1}
-                    max={31}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Dia de vencimento</div>
-                  <Input
-                    type="number"
-                    value={currentConfig.dia_vencimento}
-                    onChange={(e) => updateConfigField(activeTab, "dia_vencimento", Number(e.target.value))}
-                    min={1}
-                    max={31}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Tolerancia (dias)</div>
-                  <Input
-                    type="number"
-                    value={currentConfig.tolerancia_dias}
-                    onChange={(e) => updateConfigField(activeTab, "tolerancia_dias", Number(e.target.value))}
-                    min={0}
-                    max={30}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Multa (%)</div>
-                  <Input
-                    type="number"
-                    value={currentConfig.multa_percentual}
-                    onChange={(e) => updateConfigField(activeTab, "multa_percentual", Number(e.target.value))}
-                    min={0}
-                    step="0.01"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">Juros ao dia (%)</div>
-                  <Input
-                    type="number"
-                    value={currentConfig.juros_dia_percentual}
-                    onChange={(e) => updateConfigField(activeTab, "juros_dia_percentual", Number(e.target.value))}
-                    min={0}
-                    step="0.01"
-                  />
-                </div>
-
-                <div className="flex items-end">
-                  <Button onClick={() => void salvarConfig(activeTab)} disabled={savingConfig}>
-                    {savingConfig ? "Salvando..." : "Salvar configuracoes"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <CicloPoliticaCard />
 
       {erroRegra && <div className="text-sm text-red-600">{erroRegra}</div>}
 
@@ -557,6 +383,7 @@ export default function ConfiguracoesCreditoConexaoPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
