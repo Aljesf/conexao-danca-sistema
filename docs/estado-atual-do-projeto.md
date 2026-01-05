@@ -383,3 +383,9 @@ Paginas:
 - API: `POST /api/credito-conexao/gerar-lancamentos-mensais` (lancamentos por turma no contexto).
 - API: `POST /api/matriculas/preview-financeiro` (snapshot de compromisso previsto).
 - Matrícula nova: suporte a Projeto artistico na selecao de tipo e resumo de contexto.
+
+## Atualizacoes recentes (Credito Conexao - 2026-01-19)
+
+- SQL: unicidade de fatura por conta+periodo_referencia (cc_faturas_unique_conta_periodo).
+- API: POST /api/credito-conexao/fechar-fatura (fecha 1 conta por competencia).
+- API: POST /api/credito-conexao/fechar-faturas (lote por competencia).
