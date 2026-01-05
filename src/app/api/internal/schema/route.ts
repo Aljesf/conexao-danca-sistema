@@ -1,31 +1,40 @@
 import { NextResponse } from "next/server";
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
 
-const SNAPSHOT_FILE = path.join(process.cwd(), "docs", "schema-snapshot.json");
+type SnapshotResponse = {
+  tables: string[];
+  columns: {
+    documentos_colecoes: Array<{ column_name: string; data_type: string }>;
+    documentos_variaveis: Array<{ column_name: string; data_type: string }>;
+  };
+  samples: Record<string, unknown>;
+};
+
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) throw new Error(`Variavel de ambiente ausente: ${name}`);
+  return v;
+}
 
 export async function GET() {
   try {
-    const raw = await fs.readFile(SNAPSHOT_FILE, "utf-8");
-    const data = JSON.parse(raw);
+    const url = requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+    const serviceKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const supabase = createClient(url, serviceKey, {
+      auth: { persistSession: false },
+    });
 
-    return NextResponse.json(
-      {
-        ok: true,
-        schema: data,
-      },
-      { status: 200 }
-    );
-  } catch (error: unknown) {
-    const err = error as Error;
+    const { data, error } = await supabase.rpc("admin_schema_snapshot");
+    if (error) {
+      return NextResponse.json(
+        { ok: false, error: error.message, hint: error.hint ?? null },
+        { status: 500 },
+      );
+    }
 
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "SCHEMA_SNAPSHOT_NOT_AVAILABLE",
-        detail: err.message,
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: true, data: data as SnapshotResponse }, { status: 200 });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Erro desconhecido";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

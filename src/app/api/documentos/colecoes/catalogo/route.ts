@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { listarColecoes } from "@/lib/documentos/documentos-variaveis";
 
 type ColecaoColuna = {
   codigo: string;
@@ -19,53 +19,27 @@ type ColecaoCatalogo = {
 };
 
 export async function GET() {
-  const supabase = await getSupabaseServerSSR();
+  try {
+    const colecoes = await listarColecoes({ somenteAtivas: true, somenteColunasAtivas: true });
 
-  const { data: colecoes, error: colecoesError } = await supabase
-    .from("documentos_colecoes")
-    .select("id,codigo,nome,descricao,root_tipo,ordem")
-    .eq("ativo", true)
-    .order("ordem", { ascending: true });
+    const payload: ColecaoCatalogo[] = colecoes.map((c) => ({
+      codigo: c.codigo,
+      nome: c.nome,
+      descricao: c.descricao,
+      root_tipo: c.root_tipo,
+      ordem: c.ordem,
+      colunas: c.colunas.map((col) => ({
+        codigo: col.codigo,
+        label: col.label,
+        tipo: col.tipo,
+        formato: col.formato ?? null,
+        ordem: col.ordem,
+      })),
+    }));
 
-  if (colecoesError) {
-    return NextResponse.json({ error: colecoesError.message }, { status: 500 });
+    return NextResponse.json({ data: payload }, { status: 200 });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Erro ao carregar colecoes.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const colecaoIds = (colecoes ?? []).map((c) => c.id);
-
-  const { data: colunas, error: colunasError } = await supabase
-    .from("documentos_colecoes_colunas")
-    .select("colecao_id,codigo,label,tipo,formato,ordem")
-    .eq("ativo", true)
-    .in("colecao_id", colecaoIds.length ? colecaoIds : [-1])
-    .order("ordem", { ascending: true });
-
-  if (colunasError) {
-    return NextResponse.json({ error: colunasError.message }, { status: 500 });
-  }
-
-  const mapColunas = new Map<number, ColecaoColuna[]>();
-  for (const col of colunas ?? []) {
-    const rec = col as { colecao_id: number } & ColecaoColuna;
-    const arr = mapColunas.get(rec.colecao_id) ?? [];
-    arr.push({
-      codigo: rec.codigo,
-      label: rec.label,
-      tipo: rec.tipo,
-      formato: rec.formato ?? null,
-      ordem: rec.ordem,
-    });
-    mapColunas.set(rec.colecao_id, arr);
-  }
-
-  const payload: ColecaoCatalogo[] = (colecoes ?? []).map((c) => ({
-    codigo: c.codigo,
-    nome: c.nome,
-    descricao: c.descricao ?? null,
-    root_tipo: c.root_tipo,
-    ordem: c.ordem,
-    colunas: mapColunas.get(c.id) ?? [],
-  }));
-
-  return NextResponse.json({ data: payload }, { status: 200 });
 }

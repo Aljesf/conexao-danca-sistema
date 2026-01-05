@@ -291,6 +291,17 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
     formato === "RICH_HTML"
       ? conteudoHtml.replace(/<[^>]+>/g, "").trim().length > 0
       : textoMarkdown.trim().length > 0;
+  const colecoesDetectadas = useMemo(() => {
+    const source = formato === "RICH_HTML" ? conteudoHtml : textoMarkdown;
+    const regex = /{{#([A-Za-z0-9_]+)}}/g;
+    const found = new Set<string>();
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(source)) !== null) {
+      const code = String(match[1] ?? "").trim();
+      if (code) found.add(code.toUpperCase());
+    }
+    return Array.from(found);
+  }, [conteudoHtml, formato, textoMarkdown]);
 
   async function salvar() {
     setSaving(true);
@@ -613,6 +624,10 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
             </button>
           </div>
         )}
+        <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <span className="font-semibold text-slate-700">Colecoes detectadas no template:</span>{" "}
+          {colecoesDetectadas.length > 0 ? colecoesDetectadas.join(", ") : "Nenhuma."}
+        </div>
       </SystemSectionCard>
 
       <SystemSectionCard

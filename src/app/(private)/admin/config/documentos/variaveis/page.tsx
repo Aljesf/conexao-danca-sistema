@@ -79,6 +79,15 @@ type PathLabels = {
   target_label?: string;
 };
 
+type ColecaoItem = {
+  id: number;
+  codigo: string;
+  nome: string;
+  descricao: string | null;
+  root_tipo: string;
+  ativo: boolean;
+};
+
 const ORIGEM_LABELS: Record<Origem, string> = {
   ALUNO: "Aluno (dados da pessoa)",
   RESPONSAVEL_FINANCEIRO: "Responsavel financeiro",
@@ -155,6 +164,9 @@ export default function AdminDocumentosVariaveisPage() {
   const [columns, setColumns] = useState<SchemaColumn[]>([]);
   const [columnsLoading, setColumnsLoading] = useState(false);
   const [mostrarPendentes, setMostrarPendentes] = useState(false);
+  const [colecoes, setColecoes] = useState<ColecaoItem[]>([]);
+  const [colecoesLoading, setColecoesLoading] = useState(false);
+  const [colecoesErro, setColecoesErro] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [codigo, setCodigo] = useState("");
@@ -384,6 +396,21 @@ export default function AdminDocumentosVariaveisPage() {
     }
   }, []);
 
+  const carregarColecoes = useCallback(async () => {
+    setColecoesLoading(true);
+    setColecoesErro(null);
+    try {
+      const res = await fetch("/api/documentos/colecoes", { cache: "no-store" });
+      const json = (await res.json()) as { data?: ColecaoItem[]; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Falha ao carregar colecoes.");
+      setColecoes(json.data ?? []);
+    } catch (e) {
+      setColecoesErro(e instanceof Error ? e.message : "Erro ao carregar colecoes.");
+    } finally {
+      setColecoesLoading(false);
+    }
+  }, []);
+
   const limparFormulario = () => {
     setEditingId(null);
     setCodigo("");
@@ -539,6 +566,10 @@ export default function AdminDocumentosVariaveisPage() {
   useEffect(() => {
     void carregarRoots();
   }, [carregarRoots]);
+
+  useEffect(() => {
+    void carregarColecoes();
+  }, [carregarColecoes]);
 
   useEffect(() => {
     if (rootTable) void carregarAdj(rootTable);
@@ -875,6 +906,42 @@ export default function AdminDocumentosVariaveisPage() {
                       </Button>
                     ) : null}
                   </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SystemSectionCard>
+
+      <SystemSectionCard
+        title="Colecoes cadastradas"
+        description="Atalho para editar colecoes usadas nos templates."
+      >
+        {colecoesErro ? <p className="text-sm text-red-600">{colecoesErro}</p> : null}
+        {colecoesLoading ? (
+          <p className="text-sm text-slate-600">Carregando colecoes...</p>
+        ) : colecoes.length === 0 ? (
+          <p className="text-sm text-slate-600">Nenhuma colecao cadastrada.</p>
+        ) : (
+          <div className="grid gap-3">
+            {colecoes.map((col) => (
+              <div key={col.codigo} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold">{col.nome}</div>
+                    <div className="mt-1 text-xs text-slate-600">
+                      {col.codigo} | Root: {col.root_tipo} | Ativo: {col.ativo ? "Sim" : "Nao"}
+                    </div>
+                    {col.descricao ? (
+                      <div className="mt-1 text-xs text-slate-500">{col.descricao}</div>
+                    ) : null}
+                  </div>
+                  <Link
+                    className="text-sm underline text-slate-600"
+                    href={`/admin/config/documentos/colecoes?edit=${col.id}`}
+                  >
+                    Editar
+                  </Link>
                 </div>
               </div>
             ))}

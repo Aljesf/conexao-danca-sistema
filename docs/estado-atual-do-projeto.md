@@ -322,3 +322,15 @@ Paginas:
 
 - Contexto do emitido agora inclui colecao `parcelas[]` para templates (dados do Cartao Conexao).
 - Recarregar emitido recalcula parcelas via `matriculas_financeiro_linhas` e atualiza o HTML.
+
+## Atualizacoes recentes (Diagnostico - 2026-01-09)
+
+- RPC `admin_schema_snapshot` criada para snapshot seguro do schema (service_role).
+- Rota `/api/internal/schema` usa a RPC para diagnostico de documentos.
+- Pagina `/admin/diagnostico/schema` exibe o JSON e permite copiar.
+
+## Atualizacoes recentes (Documentos - 2026-01-10)
+
+- Admin Documentos: Colecoes agora listam e permitem edicao (metadados + colunas).
+- Variaveis: secao de colecoes com atalho para edicao.
+- Modelos: editor mostra colecoes detectadas no template (padroniza codigo usado).
