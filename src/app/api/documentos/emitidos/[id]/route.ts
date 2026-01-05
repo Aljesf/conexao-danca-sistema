@@ -221,160 +221,177 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 }
 
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const { id } = await ctx.params;
-  const docId = Number(id);
-  if (!Number.isFinite(docId) || docId <= 0) {
-    return NextResponse.json(
-      { ok: false, message: "ID invalido." } satisfies ApiResp<never>,
-      { status: 400 },
-    );
-  }
+  try {
+    const { id } = await ctx.params;
+    const docId = Number(id);
+    if (!Number.isFinite(docId) || docId <= 0) {
+      return NextResponse.json(
+        { ok: false, message: "ID invalido." } satisfies ApiResp<never>,
+        { status: 400 },
+      );
+    }
 
-  const supabase = await getSupabaseServerSSR();
-  const { data: doc, error: docErr } = await supabase
-    .from("documentos_emitidos")
-    .select("*")
-    .eq("id", docId)
-    .single();
-
-  if (docErr || !doc) {
-    return NextResponse.json({ ok: false, message: "Documento emitido nao encontrado." } satisfies ApiResp<never>, {
-      status: 404,
-    });
-  }
-
-  const docRec = doc as Record<string, unknown>;
-  const matriculaId = Number(docRec.matricula_id);
-  if (!Number.isFinite(matriculaId) || matriculaId <= 0) {
-    return NextResponse.json({ ok: false, message: "Matricula invalida no emitido." } satisfies ApiResp<never>, {
-      status: 400,
-    });
-  }
-
-  const contextoBase =
-    docRec.contexto_json && typeof docRec.contexto_json === "object"
-      ? (docRec.contexto_json as Record<string, unknown>)
-      : {};
-
-  const contratoModeloIdRaw = docRec.contrato_modelo_id ?? docRec.documento_modelo_id;
-  const contratoModeloId =
-    typeof contratoModeloIdRaw === "number" ? contratoModeloIdRaw : Number(contratoModeloIdRaw);
-
-  let template = resolveTemplateBase(docRec);
-  if (Number.isFinite(contratoModeloId) && contratoModeloId > 0) {
-    const { data: modelo, error: modeloErr } = await supabase
-      .from("documentos_modelo")
-      .select("id,formato,conteudo_html,texto_modelo_md")
-      .eq("id", contratoModeloId)
+    const supabase = await getSupabaseServerSSR();
+    const { data: doc, error: docErr } = await supabase
+      .from("documentos_emitidos")
+      .select("*")
+      .eq("id", docId)
       .single();
 
-    if (modeloErr || !modelo) {
-      return NextResponse.json({ ok: false, message: "Modelo nao encontrado." } satisfies ApiResp<never>, {
+    if (docErr || !doc) {
+      return NextResponse.json({ ok: false, message: "Documento emitido nao encontrado." } satisfies ApiResp<never>, {
         status: 404,
       });
     }
 
-    template = resolveModeloTemplate(modelo as Record<string, unknown>);
+    const docRec = doc as Record<string, unknown>;
+    const matriculaId = Number(docRec.matricula_id);
+    if (!Number.isFinite(matriculaId) || matriculaId <= 0) {
+      return NextResponse.json({ ok: false, message: "Matricula invalida no emitido." } satisfies ApiResp<never>, {
+        status: 400,
+      });
+    }
+
+    const contextoBase =
+      docRec.contexto_json && typeof docRec.contexto_json === "object"
+        ? (docRec.contexto_json as Record<string, unknown>)
+        : {};
+
+    const contratoModeloIdRaw = docRec.contrato_modelo_id ?? docRec.documento_modelo_id;
+    const contratoModeloId =
+      typeof contratoModeloIdRaw === "number" ? contratoModeloIdRaw : Number(contratoModeloIdRaw);
+
+    let template = resolveTemplateBase(docRec);
+    if (Number.isFinite(contratoModeloId) && contratoModeloId > 0) {
+      const { data: modelo, error: modeloErr } = await supabase
+        .from("documentos_modelo")
+        .select("id,formato,conteudo_html,texto_modelo_md")
+        .eq("id", contratoModeloId)
+        .single();
+
+      if (modeloErr || !modelo) {
+        return NextResponse.json({ ok: false, message: "Modelo nao encontrado." } satisfies ApiResp<never>, {
+          status: 404,
+        });
+      }
+
+      template = resolveModeloTemplate(modelo as Record<string, unknown>);
+
+      if (process.env.DOCS_EMIT_DEBUG === "1") {
+        console.log("[emitido-reload] emitido_id:", docId, "matricula_id:", matriculaId, "modelo_id:", contratoModeloId);
+        console.log("[emitido-reload] modelo_carregado_id:", modelo.id, "tamanho_texto:", template.length);
+      }
+    }
+
+    const contextoPersistido: Record<string, unknown> = {
+      ...contextoBase,
+    };
+
+    const { data: variaveisRaw, error: variaveisErr } = await supabase
+      .from("documentos_variaveis")
+      .select(
+        "codigo, path_origem, formato, tipo, root_table, root_pk_column, join_path, target_table, target_column, ai_gerada, mapeamento_pendente",
+      )
+      .eq("ativo", true);
+
+    if (variaveisErr) {
+      return NextResponse.json({ ok: false, message: variaveisErr.message } satisfies ApiResp<never>, { status: 500 });
+    }
+
+    const variaveisByCodigo = buildVariaveisByCodigo(
+      (variaveisRaw ?? []) as unknown as Array<Record<string, unknown>>,
+    );
+
+    const { values: simpleContext, utilizadas: variaveisUtilizadas } = await resolveTemplateValues({
+      template,
+      variaveisByCodigo,
+      contexto: contextoPersistido,
+      supabase,
+      rootId: matriculaId,
+    });
+
+    const collectionCodes = extractCollectionCodes(template);
+    const operacaoTipo = normalizeOperacaoTipo(OPERACAO_TIPOS.MATRICULA);
+    const collectionsResolved =
+      collectionCodes.length > 0
+        ? await resolveCollections({
+            operacaoTipo,
+            operacaoId: matriculaId,
+            colecoes: collectionCodes,
+          })
+        : {};
+
+    const collectionsResolvedFinal: Record<string, Array<Record<string, string>>> = {
+      ...collectionsResolved,
+    };
+
+    const colecoesDetectadasSet = new Set<string>(collectionCodes);
+    const colecoesDetectadas = Array.from(colecoesDetectadasSet);
+    const colecoesVazias = colecoesDetectadas.filter((code) => {
+      const rows = collectionsResolvedFinal[code];
+      return Array.isArray(rows) && rows.length === 0;
+    });
+
+    const variaveisUtilizadasFinal = {
+      ...variaveisUtilizadas,
+      __colecoes_detectadas: colecoesDetectadas,
+      __colecoes_vazias: colecoesVazias,
+    };
+
+    const contextoFinal: Record<string, unknown> = {
+      ...simpleContext,
+      ...collectionsResolvedFinal,
+    };
 
     if (process.env.DOCS_EMIT_DEBUG === "1") {
-      console.log("[emitido-reload] emitido_id:", docId, "matricula_id:", matriculaId, "modelo_id:", contratoModeloId);
-      console.log("[emitido-reload] modelo_carregado_id:", modelo.id, "tamanho_texto:", template.length);
+      console.log("[doc-colecao] matricula_id:", matriculaId);
+      console.log("[doc-colecao] colecoes_detectadas:", colecoesDetectadas);
+      console.log("[doc-colecao] keys_contexto:", Object.keys(contextoFinal));
+      const rows = collectionsResolvedFinal.MATRICULA_PARCELAS;
+      console.log("[doc-colecao] MATRICULA_PARCELAS_len:", Array.isArray(rows) ? rows.length : 0);
+      console.log(
+        "[doc-colecao] colecoes_linhas:",
+        Object.fromEntries(
+          Object.entries(collectionsResolvedFinal).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
+        ),
+      );
+      console.log(
+        "[emitido-render]",
+        "keys:",
+        Object.keys(contextoFinal),
+        "parcelas_len:",
+        Array.isArray((contextoFinal as Record<string, unknown>).MATRICULA_PARCELAS)
+          ? (contextoFinal as Record<string, unknown>).MATRICULA_PARCELAS.length
+          : "N/A",
+      );
     }
-  }
 
-  const contextoFinal: Record<string, unknown> = {
-    ...contextoBase,
-  };
+    const conteudoResolvido = renderTemplateHtml(template, contextoFinal);
+    const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
 
-  const { data: variaveisRaw, error: variaveisErr } = await supabase
-    .from("documentos_variaveis")
-    .select(
-      "codigo, path_origem, formato, tipo, root_table, root_pk_column, join_path, target_table, target_column, ai_gerada, mapeamento_pendente",
-    )
-    .eq("ativo", true);
+    const { data: atualizado, error: updErr } = await supabase
+      .from("documentos_emitidos")
+      .update({
+        conteudo_template_html: template,
+        conteudo_resolvido_html: conteudoResolvidoLimpo,
+        contexto_json: contextoPersistido,
+        variaveis_utilizadas_json: variaveisUtilizadasFinal,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", docId)
+      .select("id, updated_at")
+      .single();
 
-  if (variaveisErr) {
-    return NextResponse.json({ ok: false, message: variaveisErr.message } satisfies ApiResp<never>, { status: 500 });
-  }
+    if (updErr) {
+      return NextResponse.json({ ok: false, message: updErr.message } satisfies ApiResp<never>, { status: 500 });
+    }
 
-  const variaveisByCodigo = buildVariaveisByCodigo(
-    (variaveisRaw ?? []) as unknown as Array<Record<string, unknown>>,
-  );
-
-  const { values: simpleContext, utilizadas: variaveisUtilizadas } = await resolveTemplateValues({
-    template,
-    variaveisByCodigo,
-    contexto: contextoFinal,
-    supabase,
-    rootId: matriculaId,
-  });
-
-  const collectionCodes = extractCollectionCodes(template);
-  const operacaoTipo = normalizeOperacaoTipo(OPERACAO_TIPOS.MATRICULA);
-  const collectionsResolved =
-    collectionCodes.length > 0
-      ? await resolveCollections({
-          operacaoTipo,
-          operacaoId: matriculaId,
-          colecoes: collectionCodes,
-        })
-      : {};
-
-  const collectionsResolvedFinal: Record<string, Array<Record<string, string>>> = {
-    ...collectionsResolved,
-  };
-
-  const colecoesDetectadasSet = new Set<string>(collectionCodes);
-  const colecoesDetectadas = Array.from(colecoesDetectadasSet);
-  const colecoesVazias = colecoesDetectadas.filter((code) => {
-    const rows = collectionsResolvedFinal[code];
-    return Array.isArray(rows) && rows.length === 0;
-  });
-
-  const variaveisUtilizadasFinal = {
-    ...variaveisUtilizadas,
-    __colecoes_detectadas: colecoesDetectadas,
-    __colecoes_vazias: colecoesVazias,
-  };
-
-  const contextoRender: Record<string, unknown> = {
-    ...simpleContext,
-    ...collectionsResolvedFinal,
-  };
-
-  if (process.env.DOCS_EMIT_DEBUG === "1") {
-    console.log("[doc-colecao] matricula_id:", matriculaId);
-    console.log("[doc-colecao] colecoes_detectadas:", colecoesDetectadas);
-    console.log("[doc-colecao] keys_contexto:", Object.keys(contextoRender));
-    const rows = collectionsResolvedFinal.MATRICULA_PARCELAS;
-    console.log("[doc-colecao] MATRICULA_PARCELAS_len:", Array.isArray(rows) ? rows.length : 0);
-    console.log(
-      "[doc-colecao] colecoes_linhas:",
-      Object.fromEntries(
-        Object.entries(collectionsResolvedFinal).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
-      ),
+    return NextResponse.json({ ok: true, data: atualizado } satisfies ApiResp<unknown>, { status: 200 });
+  } catch (err) {
+    console.error("[emitido-reload] erro", err);
+    return NextResponse.json(
+      { ok: false, message: err instanceof Error ? err.message : "Erro desconhecido" },
+      { status: 500 },
     );
   }
-
-  const conteudoResolvido = renderTemplateHtml(template, contextoRender);
-  const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
-
-  const { data: atualizado, error: updErr } = await supabase
-    .from("documentos_emitidos")
-    .update({
-      conteudo_template_html: template,
-      conteudo_resolvido_html: conteudoResolvidoLimpo,
-      contexto_json: contextoFinal,
-      variaveis_utilizadas_json: variaveisUtilizadasFinal,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", docId)
-    .select("id, updated_at")
-    .single();
-
-  if (updErr) {
-    return NextResponse.json({ ok: false, message: updErr.message } satisfies ApiResp<never>, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, data: atualizado } satisfies ApiResp<unknown>, { status: 200 });
 }

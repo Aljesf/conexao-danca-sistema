@@ -351,3 +351,9 @@ Paginas:
 - Fonte de parcelas no emitido: usa a mesma base do resumo financeiro (credito_conexao_lancamentos).
 - Colecao MATRICULA_PARCELAS usa matricula_id como origem e injeta chave exata no contexto.
 - Recarregar emitido busca o modelo atual (contrato_modelo_id) antes de renderizar.
+
+## Atualizacoes recentes (Documentos - 2026-01-15)
+
+- Preview do emitido renderiza com o contexto final (inclui colecoes).
+- Log de confirmacao inclui chaves do contexto e tamanho de MATRICULA_PARCELAS.
+- POST de recarregar emitido retorna JSON mesmo em erro (sem ReferenceError).
