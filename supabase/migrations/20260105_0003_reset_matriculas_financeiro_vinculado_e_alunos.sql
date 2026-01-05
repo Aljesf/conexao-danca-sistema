@@ -71,13 +71,19 @@ BEGIN
   END IF;
 END $$;
 
--- 3) Crédito Conexão: apagar lançamentos vinculados à matrícula (origem) + zerar TODAS as faturas (como solicitado)
+-- 3) Credito Conexao: apagar lancamentos vinculados a matricula (origem) + zerar TODAS as faturas (como solicitado)
 DO $$
 DECLARE
   has_origem_sistema boolean;
   has_origem_id boolean;
 BEGIN
-  -- 3.1 apagar lançamentos originados de matrícula (sem tocar em outros, quando possível)
+  -- 3.1 zerar primeiro tabelas filhas das faturas
+  IF to_regclass('public.credito_conexao_fatura_lancamentos') IS NOT NULL THEN
+    EXECUTE 'TRUNCATE TABLE public.credito_conexao_fatura_lancamentos RESTART IDENTITY CASCADE';
+    RAISE NOTICE 'credito_conexao_fatura_lancamentos: TRUNCATE total + RESTART IDENTITY';
+  END IF;
+
+  -- 3.2 apagar lancamentos originados de matricula (sem tocar em outros, quando possivel)
   IF to_regclass('public.credito_conexao_lancamentos') IS NOT NULL THEN
     SELECT EXISTS (
       SELECT 1 FROM information_schema.columns
@@ -104,16 +110,11 @@ BEGIN
       ';
       RAISE NOTICE 'credito_conexao_lancamentos: DELETE por origem=MATRICULA (fallback)';
     ELSE
-      RAISE NOTICE 'credito_conexao_lancamentos: sem colunas de origem; NÃO apagado automaticamente para evitar impacto em outros módulos.';
+      RAISE NOTICE 'credito_conexao_lancamentos: sem colunas de origem; NAO apagado automaticamente para evitar impacto em outros modulos.';
     END IF;
   END IF;
 
-  -- 3.2 ZERAR TODAS AS FATURAS (pedido explícito) e pivôs relacionados (com RESTART IDENTITY)
-  IF to_regclass('public.credito_conexao_fatura_lancamentos') IS NOT NULL THEN
-    EXECUTE 'TRUNCATE TABLE public.credito_conexao_fatura_lancamentos RESTART IDENTITY CASCADE';
-    RAISE NOTICE 'credito_conexao_fatura_lancamentos: TRUNCATE total + RESTART IDENTITY';
-  END IF;
-
+  -- 3.3 zerar todas as faturas (pedido explicito) com RESTART IDENTITY
   IF to_regclass('public.credito_conexao_faturas') IS NOT NULL THEN
     EXECUTE 'TRUNCATE TABLE public.credito_conexao_faturas RESTART IDENTITY CASCADE';
     RAISE NOTICE 'credito_conexao_faturas: TRUNCATE total + RESTART IDENTITY';
