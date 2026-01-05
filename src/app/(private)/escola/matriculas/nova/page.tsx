@@ -9,7 +9,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import ToolbarRow from "@/components/layout/ToolbarRow";
 
-type TipoMatricula = "REGULAR" | "CURSO_LIVRE";
+type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 
 type ContextoMatricula = {
@@ -106,7 +106,9 @@ type PrecoResolverResp = {
 type PrecoDebug = NonNullable<PrecoResolverResp["data"]>["debug"];
 
 function labelTipo(tipo: TipoMatricula): string {
-  return tipo === "REGULAR" ? "Curso regular" : "Curso livre";
+  if (tipo === "REGULAR") return "Curso regular";
+  if (tipo === "CURSO_LIVRE") return "Curso livre";
+  return "Projeto artístico";
 }
 
 function labelContexto(contexto: ContextoMatricula): string {
@@ -240,7 +242,8 @@ export default function NovaMatriculaPage() {
       try {
         setServicosErro(null);
         setCarregandoServicos(true);
-        const servicoTipo = tipo === "REGULAR" ? "CURSO_REGULAR" : "CURSO_LIVRE";
+        const servicoTipo =
+          tipo === "REGULAR" ? "CURSO_REGULAR" : tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "PROJETO_ARTISTICO";
         const data = await fetchJSON<ServicosResp>(`/api/matriculas/tabelas/servicos?tipo=${servicoTipo}`);
         if (!ativo) return;
         setServicos(data.data ?? []);
@@ -610,6 +613,7 @@ export default function NovaMatriculaPage() {
                 >
                   <option value="REGULAR">Curso regular</option>
                   <option value="CURSO_LIVRE">Curso livre</option>
+                  <option value="PROJETO_ARTISTICO">Projeto artístico</option>
                 </select>
               </div>
 
@@ -837,7 +841,14 @@ export default function NovaMatriculaPage() {
             <div>Aluno: {aluno?.nome ?? "Nao selecionado"}</div>
             <div>Responsavel: {responsavel?.nome ?? "Nao selecionado"}</div>
             <div>Tipo: {labelTipo(tipo)}</div>
-            <div>Contexto: {contextoSelecionado ? labelContexto(contextoSelecionado) : "-"}</div>
+            <div>
+              Contexto:{" "}
+              {contextoObrigatorio
+                ? contextoSelecionado
+                  ? labelContexto(contextoSelecionado)
+                  : "-"
+                : "Definido pelo curso/projeto"}
+            </div>
             <div>Cursos/UEs: {itensResumo.length > 0 ? itensResumo.join(" | ") : "-"}</div>
             <div>UE principal: {turmaSelecionada ? labelUnidadeExecucao(turmaSelecionada) : "-"}</div>
             {tabelaLoading ? (

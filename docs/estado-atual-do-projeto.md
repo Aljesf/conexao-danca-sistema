@@ -375,3 +375,11 @@ Paginas:
 - Turmas: criacao/edicao exige contexto_matricula_id (REGULAR resolve periodo letivo automaticamente).
 - Escola > Nova matricula: seleciona contexto, lista UEs do contexto e permite selecao multipla em REGULAR.
 - Periodo letivo / Curso livre / Projeto artistico agora sao ancoras formais de matricula.
+
+## Atualizacoes recentes (Matriculas - 2026-01-18)
+
+- Turmas: contexto_matricula_id reforcado como referencia principal de contexto (FK e indice).
+- Novo ledger de previsao: tabela `matriculas_compromissos_previstos` com snapshot financeiro.
+- API: `POST /api/credito-conexao/gerar-lancamentos-mensais` (lancamentos por turma no contexto).
+- API: `POST /api/matriculas/preview-financeiro` (snapshot de compromisso previsto).
+- Matrícula nova: suporte a Projeto artistico na selecao de tipo e resumo de contexto.

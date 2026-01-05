@@ -10,8 +10,9 @@ type DocumentoEmitidoRow = {
   created_at: string | null;
 };
 
-export default async function Page({ params }: { params: { id: string } }) {
-  const matriculaId = Number(params.id);
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const matriculaId = Number(id);
   if (!Number.isFinite(matriculaId) || matriculaId <= 0) {
     return (
       <div className="p-6">

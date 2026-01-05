@@ -312,7 +312,7 @@ export async function POST(req: Request) {
 
   if (insErr) return serverError("Falha ao criar matricula.", { insErr });
 
-  if (tipoMatricula === "REGULAR" || tipoMatricula === "CURSO_LIVRE") {
+  if (tipoMatricula === "REGULAR" || tipoMatricula === "CURSO_LIVRE" || tipoMatricula === "PROJETO_ARTISTICO") {
     const dtInicio = dataInicioVinculo ?? dataMatricula ?? null;
 
     for (const turmaId of vinculosIds) {
