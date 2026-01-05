@@ -1,11 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button, Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "shadcn/ui";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import type { Turma } from "@/types/turmas";
+
+type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+
+type ContextoMatricula = {
+  id: number;
+  tipo: ContextoTipo;
+  titulo: string;
+  ano_referencia: number | null;
+  status: string;
+};
+
+function mapContextoTipo(tipoTurma: string | null | undefined): ContextoTipo {
+  const tipo = (tipoTurma ?? "REGULAR").toUpperCase();
+  if (tipo === "CURSO_LIVRE") return "CURSO_LIVRE";
+  if (tipo === "ENSAIO" || tipo === "PROJETO_ARTISTICO") return "PROJETO_ARTISTICO";
+  return "PERIODO_LETIVO";
+}
 
 type Props = {
   turma: Turma;
@@ -17,6 +34,51 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [tipoTurma, setTipoTurma] = useState<string>(turma.tipo_turma ?? "REGULAR");
+  const [contextos, setContextos] = useState<ContextoMatricula[]>([]);
+  const [contextoId, setContextoId] = useState<string>(
+    turma.contexto_matricula_id ? String(turma.contexto_matricula_id) : "",
+  );
+  const [contextosErro, setContextosErro] = useState<string | null>(null);
+  const [contextosLoading, setContextosLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function carregarContextos() {
+      setContextosErro(null);
+      setContextosLoading(true);
+      try {
+        const tipoContexto = mapContextoTipo(tipoTurma);
+        const params = new URLSearchParams({ tipo: tipoContexto, status: "ATIVO" });
+        const resp = await fetch(`/api/matriculas/contextos?${params.toString()}`);
+        const json = (await resp.json()) as { ok?: boolean; data?: ContextoMatricula[]; error?: string };
+        if (!resp.ok || json.ok === false) {
+          throw new Error(json.error || "Falha ao carregar contextos.");
+        }
+        if (!active) return;
+        const lista = json.data ?? [];
+        setContextos(lista);
+
+        const contextoAtual = Number(contextoId);
+        const contextoExiste = lista.some((c) => c.id === contextoAtual);
+        if (!contextoExiste) {
+          setContextoId(lista[0] ? String(lista[0].id) : "");
+        }
+      } catch (e) {
+        if (!active) return;
+        setContextosErro(e instanceof Error ? e.message : "Falha ao carregar contextos.");
+        setContextos([]);
+      } finally {
+        if (active) setContextosLoading(false);
+      }
+    }
+
+    void carregarContextos();
+    return () => {
+      active = false;
+    };
+  }, [tipoTurma, contextoId]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,6 +92,12 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
       return;
     }
 
+    const contextoIdNum = contextoId ? Number(contextoId) : null;
+    if (!contextoIdNum || !Number.isFinite(contextoIdNum)) {
+      setErro("Selecione o contexto da matricula.");
+      return;
+    }
+
     setSaving(true);
     setErro(null);
 
@@ -37,7 +105,7 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
       nome,
       curso: (formData.get("curso") as string) || null,
       nivel: (formData.get("nivel") as string) || null,
-      tipo_turma: (formData.get("tipo_turma") as string) || null,
+      tipo_turma: tipoTurma || null,
       turno: (formData.get("turno") as string) || null,
       ano_referencia: formData.get("ano_referencia") ? Number(formData.get("ano_referencia")) : null,
       status: (formData.get("status") as string) || turma.status || null,
@@ -48,6 +116,7 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
         ? Number(formData.get("frequencia_minima_percentual"))
         : null,
       observacoes: (formData.get("observacoes") as string) || null,
+      contexto_matricula_id: contextoIdNum,
     };
 
     const { error } = await supabase.from("turmas").update(payload).eq("turma_id", turmaId);
@@ -111,7 +180,8 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tipo</label>
               <select
                 name="tipo_turma"
-                defaultValue={turma.tipo_turma ?? "REGULAR"}
+                value={tipoTurma}
+                onChange={(e) => setTipoTurma(e.target.value)}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
               >
                 <option value="REGULAR">REGULAR</option>
@@ -166,6 +236,27 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
                 defaultValue={turma.frequencia_minima_percentual ?? ""}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
               />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contexto da matricula</label>
+              <select
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={contextoId}
+                onChange={(e) => setContextoId(e.target.value)}
+                disabled={contextosLoading}
+              >
+                <option value="">{contextosLoading ? "Carregando..." : "Selecione..."}</option>
+                {contextos.map((c) => (
+                  <option key={`contexto-${c.id}`} value={c.id}>
+                    {c.titulo}
+                    {c.ano_referencia ? ` (${c.ano_referencia})` : ""}
+                  </option>
+                ))}
+              </select>
+              {contextosErro ? <p className="mt-1 text-[11px] text-rose-600">{contextosErro}</p> : null}
             </div>
           </div>
 

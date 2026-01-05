@@ -10,6 +10,15 @@ import SectionCard from "@/components/layout/SectionCard";
 import ToolbarRow from "@/components/layout/ToolbarRow";
 
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE";
+type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+
+type ContextoMatricula = {
+  id: number;
+  tipo: ContextoTipo;
+  titulo: string;
+  ano_referencia: number | null;
+  status: string;
+};
 
 type TurmaOpcao = {
   turma_id: number;
@@ -17,6 +26,8 @@ type TurmaOpcao = {
   curso: string | null;
   tipo_turma: string | null;
   ano_referencia: number | null;
+  unidade_execucao_id?: number | null;
+  unidade_execucao_label?: string | null;
   idade_minima?: number | null;
   idade_maxima?: number | null;
   suggested?: boolean;
@@ -32,8 +43,7 @@ type CursosResp = {
 type TurmasResp = {
   ok: boolean;
   turmas?: TurmaOpcao[];
-  idade?: number | null;
-  idade_aviso?: string | null;
+  contexto?: ContextoMatricula;
   message?: string;
   error?: string;
 };
@@ -92,6 +102,10 @@ function labelTipo(tipo: TipoMatricula): string {
   return tipo === "REGULAR" ? "Turma regular" : "Curso livre";
 }
 
+function mapContextoTipo(tipo: TipoMatricula): ContextoTipo {
+  return tipo === "REGULAR" ? "PERIODO_LETIVO" : "CURSO_LIVRE";
+}
+
 function formatFaixaEtaria(min?: number | null, max?: number | null): string | null {
   if (min === null && max === null) return null;
   const minLabel = min ?? "-";
@@ -105,6 +119,17 @@ function labelTurma(turma: TurmaOpcao): string {
   const faixa = formatFaixaEtaria(turma.idade_minima ?? null, turma.idade_maxima ?? null);
   const prefixo = turma.suggested ? "Sugestao: " : "";
   return `${prefixo}${nome} (${ano})${faixa ? ` | Faixa ${faixa}` : ""}`;
+}
+
+function labelContexto(contexto: ContextoMatricula): string {
+  const ano = contexto.ano_referencia ? ` (${contexto.ano_referencia})` : "";
+  return `${contexto.titulo}${ano}`;
+}
+
+function labelUnidadeExecucao(turma: TurmaOpcao): string {
+  if (turma.unidade_execucao_label?.trim()) return turma.unidade_execucao_label;
+  if (turma.nome?.trim()) return turma.nome;
+  return `Turma #${turma.turma_id}`;
 }
 
 function extractErrorMessage(data: unknown, status: number): string {
@@ -144,19 +169,21 @@ export default function NovaMatriculaPage() {
   const [aluno, setAluno] = useState<PessoaSearchItem | null>(null);
   const [responsavel, setResponsavel] = useState<PessoaSearchItem | null>(null);
   const [tipo, setTipo] = useState<TipoMatricula>("REGULAR");
+  const [contextos, setContextos] = useState<ContextoMatricula[]>([]);
+  const [contextoId, setContextoId] = useState<number | null>(null);
+  const [contextosErro, setContextosErro] = useState<string | null>(null);
+  const [contextosLoading, setContextosLoading] = useState(false);
   const [cursos, setCursos] = useState<string[]>([]);
   const [cursoSelecionado, setCursoSelecionado] = useState<string>("");
   const [turmas, setTurmas] = useState<TurmaOpcao[]>([]);
   const [turmaId, setTurmaId] = useState<number | null>(null);
+  const [turmasSelecionadas, setTurmasSelecionadas] = useState<TurmaOpcao[]>([]);
   const [anoReferencia, setAnoReferencia] = useState<number>(() => new Date().getFullYear());
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [dataInicioVinculo, setDataInicioVinculo] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [politicaModo, setPoliticaModo] = useState<"PADRAO" | "ADIAR_PARA_VENCIMENTO">("PADRAO");
   const [motivoExcecao, setMotivoExcecao] = useState<string>("");
   const [observacoes, setObservacoes] = useState<string>("");
-
-  const [idadeSugestao, setIdadeSugestao] = useState<number | null>(null);
-  const [idadeAviso, setIdadeAviso] = useState<string | null>(null);
 
   const [cursosErro, setCursosErro] = useState<string | null>(null);
   const [turmasErro, setTurmasErro] = useState<string | null>(null);
@@ -171,9 +198,14 @@ export default function NovaMatriculaPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  const turmaPrincipalId = tipo === "REGULAR" ? turmasSelecionadas[0]?.turma_id ?? null : turmaId;
   const turmaSelecionada = useMemo(
-    () => turmas.find((t) => t.turma_id === turmaId) ?? null,
-    [turmas, turmaId],
+    () => turmas.find((t) => t.turma_id === turmaPrincipalId) ?? null,
+    [turmas, turmaPrincipalId],
+  );
+  const contextoSelecionado = useMemo(
+    () => contextos.find((c) => c.id === contextoId) ?? null,
+    [contextos, contextoId],
   );
 
   const precoOk = !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado;
@@ -181,8 +213,9 @@ export default function NovaMatriculaPage() {
   const podeSalvar =
     !!aluno &&
     !!responsavel &&
+    Number.isFinite(contextoId ?? NaN) &&
     !!cursoSelecionado &&
-    !!turmaSelecionada &&
+    (tipo === "REGULAR" ? turmasSelecionadas.length > 0 : !!turmaSelecionada) &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
     (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0) &&
     precoOk;
@@ -212,17 +245,58 @@ export default function NovaMatriculaPage() {
     setTurmas([]);
     setTurmaId(null);
     setTurmasErro(null);
-    setIdadeSugestao(null);
-    setIdadeAviso(null);
+    setTurmasSelecionadas([]);
+    setContextoId(null);
+    setContextos([]);
   }, [tipo]);
 
   useEffect(() => {
-    if (!cursoSelecionado.trim()) {
+    let ativo = true;
+    (async () => {
+      try {
+        setContextosErro(null);
+        setContextosLoading(true);
+        const tipoContexto = mapContextoTipo(tipo);
+        const params = new URLSearchParams({ tipo: tipoContexto, status: "ATIVO" });
+        if (tipo === "REGULAR" && Number.isFinite(anoReferencia)) {
+          params.set("ano", String(anoReferencia));
+        }
+        const data = await fetchJSON<{ ok: boolean; data?: ContextoMatricula[]; error?: string }>(
+          `/api/matriculas/contextos?${params.toString()}`,
+        );
+        if (!ativo) return;
+        const lista = data.data ?? [];
+        setContextos(lista);
+
+        const contextoAtual = Number(contextoId ?? NaN);
+        const contextoExiste = lista.some((c) => c.id === contextoAtual);
+        const matchAno =
+          tipo === "REGULAR" && Number.isFinite(anoReferencia)
+            ? lista.find((c) => c.ano_referencia === anoReferencia) ?? null
+            : null;
+        const padrao = matchAno ?? lista[0] ?? null;
+        if (!contextoExiste) {
+          setContextoId(padrao ? padrao.id : null);
+        }
+      } catch (e: unknown) {
+        if (!ativo) return;
+        setContextosErro(e instanceof Error ? e.message : "Falha ao carregar contextos.");
+        setContextos([]);
+      } finally {
+        if (ativo) setContextosLoading(false);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [tipo, anoReferencia, contextoId]);
+
+  useEffect(() => {
+    if (!cursoSelecionado.trim() || !contextoId) {
       setTurmas([]);
       setTurmaId(null);
+      setTurmasSelecionadas([]);
       setTurmasErro(null);
-      setIdadeSugestao(null);
-      setIdadeAviso(null);
       return;
     }
 
@@ -232,16 +306,16 @@ export default function NovaMatriculaPage() {
         setTurmasErro(null);
         setCarregandoTurmas(true);
         const params = new URLSearchParams({
-          tipo,
           curso: cursoSelecionado,
-          data_matricula: dataMatricula,
+          tipo_turma: tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "REGULAR",
         });
-        if (aluno?.id) params.set("aluno_id", String(aluno.id));
-        const data = await fetchJSON<TurmasResp>(`/api/escola/matriculas/opcoes/turmas?${params.toString()}`);
+        const data = await fetchJSON<TurmasResp>(
+          `/api/matriculas/contextos/${contextoId}/unidades-execucao?${params.toString()}`,
+        );
         if (!ativo) return;
         setTurmas(data.turmas ?? []);
-        setIdadeSugestao(typeof data.idade === "number" ? data.idade : null);
-        setIdadeAviso(data.idade_aviso ?? null);
+        setTurmaId(null);
+        setTurmasSelecionadas([]);
       } catch (e: unknown) {
         if (ativo) setTurmasErro(e instanceof Error ? e.message : "Falha ao carregar turmas.");
       } finally {
@@ -251,7 +325,7 @@ export default function NovaMatriculaPage() {
     return () => {
       ativo = false;
     };
-  }, [tipo, cursoSelecionado, aluno?.id, dataMatricula]);
+  }, [tipo, cursoSelecionado, contextoId]);
 
   useEffect(() => {
     if (tipo === "REGULAR" && turmaSelecionada?.ano_referencia) {
@@ -259,13 +333,23 @@ export default function NovaMatriculaPage() {
     }
   }, [tipo, turmaSelecionada]);
 
+  function toggleTurmaSelecionada(turma: TurmaOpcao) {
+    setTurmasSelecionadas((prev) => {
+      const exists = prev.some((t) => t.turma_id === turma.turma_id);
+      if (exists) {
+        return prev.filter((t) => t.turma_id !== turma.turma_id);
+      }
+      return [...prev, turma];
+    });
+  }
+
   useEffect(() => {
     setTabelaAplicavel(null);
     setItemAplicado(null);
     setDebugInfo(null);
     setTabelaErro(null);
 
-    if (!aluno?.id || !turmaId || !anoReferencia) return;
+    if (!aluno?.id || !turmaPrincipalId || !anoReferencia) return;
     let ativo = true;
     const controller = new AbortController();
     const debounceId = window.setTimeout(() => {
@@ -275,7 +359,7 @@ export default function NovaMatriculaPage() {
           const params = new URLSearchParams({
             aluno_id: String(aluno.id),
             alvo_tipo: "TURMA",
-            alvo_id: String(turmaId),
+            alvo_id: String(turmaPrincipalId),
             ano: String(anoReferencia),
           });
           const data = await fetchJSON<PrecoResolverResp>("/api/matriculas/precos/resolver?" + params.toString(), {
@@ -300,13 +384,28 @@ export default function NovaMatriculaPage() {
       controller.abort();
       window.clearTimeout(debounceId);
     };
-  }, [aluno?.id, turmaId, anoReferencia, isDev]);
+  }, [aluno?.id, turmaPrincipalId, anoReferencia, isDev]);
 
   async function onSubmit() {
     setErro(null);
 
-    if (!aluno || !responsavel || !turmaSelecionada) {
-      setErro("Selecione aluno, responsavel financeiro e turma.");
+    if (!aluno || !responsavel) {
+      setErro("Selecione aluno e responsavel financeiro.");
+      return;
+    }
+
+    if (!contextoId) {
+      setErro("Selecione o contexto da matricula.");
+      return;
+    }
+
+    if (tipo === "REGULAR" && turmasSelecionadas.length === 0) {
+      setErro("Selecione ao menos uma unidade de execucao.");
+      return;
+    }
+
+    if (tipo !== "REGULAR" && !turmaSelecionada) {
+      setErro("Selecione a turma.");
       return;
     }
 
@@ -327,11 +426,20 @@ export default function NovaMatriculaPage() {
 
     setLoading(true);
     try {
+      const vinculosIds =
+        tipo === "REGULAR" ? turmasSelecionadas.map((t) => t.turma_id) : turmaSelecionada ? [turmaSelecionada.turma_id] : [];
+      const vinculoPrincipalId = vinculosIds[0];
+
+      if (!vinculoPrincipalId) {
+        throw new Error("Turma principal nao encontrada para concluir a matricula.");
+      }
+
       const payload: Record<string, unknown> = {
         pessoa_id: aluno.id,
         responsavel_financeiro_id: responsavel.id,
         tipo_matricula: tipo,
-        vinculo_id: turmaSelecionada.turma_id,
+        vinculo_id: vinculoPrincipalId,
+        ...(vinculosIds.length > 1 ? { vinculos_ids: vinculosIds } : {}),
         data_matricula: dataMatricula,
         data_inicio_vinculo: dataInicioVinculo,
         observacoes: observacoes.trim() || null,
@@ -493,8 +601,39 @@ export default function NovaMatriculaPage() {
           </SectionCard>
         </div>
 
-        <SectionCard title="Curso e turma">
+        <SectionCard title="Contexto, curso e turmas">
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{tipo === "REGULAR" ? "Periodo letivo" : "Contexto de matricula"}</label>
+              <select
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                value={contextoId ?? ""}
+                onChange={(e) => {
+                  const nextId = e.target.value ? Number(e.target.value) : null;
+                  setContextoId(nextId);
+                  if (tipo === "REGULAR") {
+                    const encontrado = contextos.find((c) => c.id === nextId) ?? null;
+                    if (encontrado?.ano_referencia) setAnoReferencia(encontrado.ano_referencia);
+                  }
+                }}
+                disabled={contextosLoading}
+              >
+                <option value="">Selecione...</option>
+                {contextos.map((contexto) => (
+                  <option key={contexto.id} value={contexto.id}>
+                    {labelContexto(contexto)}
+                  </option>
+                ))}
+              </select>
+              {contextosLoading ? (
+                <p className="text-xs text-muted-foreground">Carregando contextos...</p>
+              ) : null}
+              {contextosErro ? <p className="text-xs text-red-600">{contextosErro}</p> : null}
+              {!contextosLoading && contextos.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhum contexto ativo encontrado.</p>
+              ) : null}
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Curso</label>
               <select
@@ -504,7 +643,7 @@ export default function NovaMatriculaPage() {
                   setCursoSelecionado(e.target.value);
                   setTurmaId(null);
                 }}
-                disabled={carregandoCursos}
+                disabled={carregandoCursos || !contextoId}
               >
                 <option value="">Selecione...</option>
                 {cursos.map((curso) => (
@@ -513,10 +652,63 @@ export default function NovaMatriculaPage() {
                   </option>
                 ))}
               </select>
+              {!contextoId ? (
+                <p className="text-xs text-muted-foreground">Selecione o contexto para habilitar o curso.</p>
+              ) : null}
               {cursosErro ? <p className="text-xs text-red-600">{cursosErro}</p> : null}
             </div>
+          </div>
 
-            <div className="space-y-2">
+          {tipo === "REGULAR" ? (
+            <div className="mt-4 space-y-2">
+              <label className="text-sm font-medium">Unidades de execucao (multiplas)</label>
+              {!contextoId || !cursoSelecionado ? (
+                <p className="text-xs text-muted-foreground">Selecione contexto e curso para listar unidades.</p>
+              ) : (
+                <div className="grid gap-2">
+                  {turmas.map((turma) => {
+                    const selecionada = turmasSelecionadas.some((t) => t.turma_id === turma.turma_id);
+                    const turmaLabel = labelTurma(turma);
+                    const ueLabel = labelUnidadeExecucao(turma);
+                    return (
+                      <label
+                        key={turma.turma_id}
+                        className={[
+                          "flex items-start gap-3 rounded-md border px-3 py-2 text-sm",
+                          selecionada ? "border-slate-900 bg-slate-50" : "border-slate-200",
+                        ].join(" ")}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={selecionada}
+                          onChange={() => toggleTurmaSelecionada(turma)}
+                          disabled={carregandoTurmas}
+                        />
+                        <div>
+                          <div className="font-medium text-slate-900">{ueLabel}</div>
+                          {ueLabel !== turmaLabel ? (
+                            <div className="text-xs text-slate-500">{turmaLabel}</div>
+                          ) : null}
+                        </div>
+                      </label>
+                    );
+                  })}
+                  {!carregandoTurmas && turmas.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhuma unidade encontrada para este contexto.</p>
+                  ) : null}
+                </div>
+              )}
+              {carregandoTurmas ? (
+                <p className="text-xs text-muted-foreground">Carregando unidades de execucao...</p>
+              ) : null}
+              {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}
+              {turmasSelecionadas.length > 0 ? (
+                <p className="text-xs text-slate-500">Selecionadas: {turmasSelecionadas.length}</p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-4 space-y-2">
               <label className="text-sm font-medium">Turma</label>
               <select
                 className="w-full rounded-md border px-3 py-2 text-sm"
@@ -536,12 +728,7 @@ export default function NovaMatriculaPage() {
               ) : null}
               {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}
             </div>
-          </div>
-
-          {idadeAviso ? <p className="mt-3 text-xs text-amber-600">{idadeAviso}</p> : null}
-          {idadeSugestao !== null ? (
-            <p className="mt-1 text-xs text-muted-foreground">Idade considerada para sugestao: {idadeSugestao} anos.</p>
-          ) : null}
+          )}
         </SectionCard>
 
         <SectionCard title="Primeiro pagamento">
@@ -583,8 +770,16 @@ export default function NovaMatriculaPage() {
             <div>Aluno: {aluno?.nome ?? "Nao selecionado"}</div>
             <div>Responsavel: {responsavel?.nome ?? "Nao selecionado"}</div>
             <div>Tipo: {labelTipo(tipo)}</div>
+            <div>Contexto: {contextoSelecionado ? labelContexto(contextoSelecionado) : "-"}</div>
             <div>Curso: {cursoSelecionado || "-"}</div>
-            <div>Turma: {turmaSelecionada ? labelTurma(turmaSelecionada) : "-"}</div>
+            {tipo === "REGULAR" ? (
+              <div>
+                Unidades de execucao:{" "}
+                {turmasSelecionadas.length > 0 ? turmasSelecionadas.map(labelUnidadeExecucao).join(", ") : "-"}
+              </div>
+            ) : (
+              <div>Turma: {turmaSelecionada ? labelTurma(turmaSelecionada) : "-"}</div>
+            )}
             {tabelaLoading ? (
               <div>Tabela aplicada: carregando...</div>
             ) : tabelaErro ? (

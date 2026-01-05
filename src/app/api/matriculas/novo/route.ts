@@ -22,6 +22,7 @@ type BodyNovo = {
   responsavel_financeiro_id: number;
   tipo_matricula: TipoMatricula;
   vinculo_id: number;
+  vinculos_ids?: number[] | null;
   ano_referencia?: number | null;
   data_matricula?: string | null;
   data_inicio_vinculo?: string | null;
@@ -50,6 +51,22 @@ function parseDateOrNull(value: unknown): string | null {
   return value;
 }
 
+function normalizeIdArray(value: unknown): number[] | null {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return null;
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const raw of value) {
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    if (!seen.has(id)) {
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out;
+}
+
 export async function POST(req: Request) {
   const cookieStore = await cookies();
   const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
@@ -73,10 +90,27 @@ export async function POST(req: Request) {
   const pessoaId = Number(body.pessoa_id);
   const respFinId = Number(body.responsavel_financeiro_id);
   const tipoMatricula = body.tipo_matricula;
-  const vinculoId = Number(body.vinculo_id);
+  let vinculoId = Number(body.vinculo_id);
+  const vinculosIdsParsed = normalizeIdArray(body.vinculos_ids);
+  if (vinculosIdsParsed === null) {
+    return badRequest("vinculos_ids invalidos.");
+  }
+  let vinculosIds = vinculosIdsParsed ?? [];
 
-  if (!pessoaId || !respFinId || !tipoMatricula || !vinculoId) {
-    return badRequest("Campos obrigatorios ausentes: pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id.");
+  if (!Number.isFinite(vinculoId) || vinculoId <= 0) {
+    vinculoId = vinculosIds[0] ?? NaN;
+  }
+
+  if (!pessoaId || !respFinId || !tipoMatricula || !Number.isFinite(vinculoId) || vinculoId <= 0) {
+    return badRequest(
+      "Campos obrigatorios ausentes: pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id (ou vinculos_ids).",
+    );
+  }
+
+  if (vinculosIds.length === 0) {
+    vinculosIds = [vinculoId];
+  } else if (!vinculosIds.includes(vinculoId)) {
+    vinculosIds.unshift(vinculoId);
   }
 
   const anoRef = body.ano_referencia ?? null;
@@ -112,14 +146,18 @@ export async function POST(req: Request) {
   if (respErr) return serverError("Falha ao validar responsavel financeiro.", { respErr });
   if (!respFin) return badRequest("responsavel_financeiro_id nao encontrado.");
 
-  const { data: turma, error: turmaErr } = await supabase
+  const { data: turmas, error: turmaErr } = await supabase
     .from("turmas")
     .select("turma_id")
-    .eq("turma_id", vinculoId)
-    .maybeSingle();
+    .in("turma_id", vinculosIds);
 
   if (turmaErr) return serverError("Falha ao validar turma (vinculo_id).", { turmaErr });
-  if (!turma) return badRequest("vinculo_id (turma) nao encontrado.");
+
+  const foundIds = new Set((turmas ?? []).map((t) => Number((t as { turma_id?: number }).turma_id)));
+  const missingIds = vinculosIds.filter((id) => !foundIds.has(id));
+  if (missingIds.length > 0) {
+    return badRequest("vinculo_id (turma) nao encontrado.", { missing_ids: missingIds });
+  }
 
   if (anoRef !== null) {
     const resolveUrl = new URL("/api/matriculas/precos/resolver", req.url);
@@ -277,37 +315,39 @@ export async function POST(req: Request) {
   if (tipoMatricula === "REGULAR" || tipoMatricula === "CURSO_LIVRE") {
     const dtInicio = dataInicioVinculo ?? dataMatricula ?? null;
 
-    const { data: taExist, error: taErr } = await supabase
-      .from("turma_aluno")
-      .select("turma_aluno_id, matricula_id")
-      .eq("turma_id", vinculoId)
-      .eq("aluno_pessoa_id", pessoaId)
-      .is("dt_fim", null)
-      .limit(1);
-
-    if (taErr) return serverError("Falha ao checar turma_aluno.", { taErr });
-
-    if (!taExist || taExist.length === 0) {
-      const { error: taInsErr } = await supabase
+    for (const turmaId of vinculosIds) {
+      const { data: taExist, error: taErr } = await supabase
         .from("turma_aluno")
-        .insert({
-          turma_id: vinculoId,
-          aluno_pessoa_id: pessoaId,
-          matricula_id: (matriculaCriada as { id: number }).id,
-          dt_inicio: dtInicio,
-          status: "ativo",
-        });
+        .select("turma_aluno_id, matricula_id")
+        .eq("turma_id", turmaId)
+        .eq("aluno_pessoa_id", pessoaId)
+        .is("dt_fim", null)
+        .limit(1);
 
-      if (taInsErr) return serverError("Falha ao criar vinculo turma_aluno.", { taInsErr });
-    } else {
-      const current = taExist[0];
-      if (!current.matricula_id) {
-        const { error: taUpdErr } = await supabase
+      if (taErr) return serverError("Falha ao checar turma_aluno.", { taErr, turmaId });
+
+      if (!taExist || taExist.length === 0) {
+        const { error: taInsErr } = await supabase
           .from("turma_aluno")
-          .update({ matricula_id: (matriculaCriada as { id: number }).id })
-          .eq("turma_aluno_id", current.turma_aluno_id);
+          .insert({
+            turma_id: turmaId,
+            aluno_pessoa_id: pessoaId,
+            matricula_id: (matriculaCriada as { id: number }).id,
+            dt_inicio: dtInicio,
+            status: "ativo",
+          });
 
-        if (taUpdErr) return serverError("Falha ao atualizar matricula_id em turma_aluno.", { taUpdErr });
+        if (taInsErr) return serverError("Falha ao criar vinculo turma_aluno.", { taInsErr, turmaId });
+      } else {
+        const current = taExist[0];
+        if (!current.matricula_id) {
+          const { error: taUpdErr } = await supabase
+            .from("turma_aluno")
+            .update({ matricula_id: (matriculaCriada as { id: number }).id })
+            .eq("turma_aluno_id", current.turma_aluno_id);
+
+          if (taUpdErr) return serverError("Falha ao atualizar matricula_id em turma_aluno.", { taUpdErr, turmaId });
+        }
       }
     }
   }

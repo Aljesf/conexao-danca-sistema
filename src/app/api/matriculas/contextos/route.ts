@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type ContextoStatus = "ATIVO" | "ENCERRADO" | "CANCELADO";
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const ano = searchParams.get("ano");
   const anoInt = ano ? Number(ano) : null;
 
-  const supabase = await createClient();
+  const supabase = getSupabaseAdmin();
 
   let query = supabase
     .from("escola_contextos_matricula")

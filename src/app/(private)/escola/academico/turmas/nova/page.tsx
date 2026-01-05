@@ -16,6 +16,14 @@ type Nivel = {
 type Professor = { id: number; nome: string };
 type Local = { id: number; nome: string; tipo: string };
 type Espaco = { id: number; local_id: number; nome: string; tipo: string; capacidade: number | null };
+type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+type ContextoMatricula = {
+  id: number;
+  tipo: ContextoTipo;
+  titulo: string;
+  ano_referencia: number | null;
+  status: string;
+};
 
 const TIPOS_TURMA: TipoTurma[] = ["REGULAR", "CURSO_LIVRE", "ENSAIO"];
 const TURNOS: TurnoTurma[] = ["MANHA", "TARDE", "NOITE", "INTEGRAL"];
@@ -88,6 +96,12 @@ function compactarNiveis(resumo: string | null): string {
   return `${primeiros}/+${abreviados.length - 2}`;
 }
 
+function mapContextoTipo(tipo: TipoTurma): ContextoTipo {
+  if (tipo === "REGULAR") return "PERIODO_LETIVO";
+  if (tipo === "CURSO_LIVRE") return "CURSO_LIVRE";
+  return "PROJETO_ARTISTICO";
+}
+
 function montarNomeTurma(params: {
   curso?: string | null;
   nivelResumo?: string | null;
@@ -131,6 +145,8 @@ export default function NovaTurmaPage() {
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  const [tipoTurma, setTipoTurma] = useState<TipoTurma>("REGULAR");
+
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [cursoId, setCursoId] = useState<string>("");
 
@@ -155,6 +171,10 @@ export default function NovaTurmaPage() {
   const anoAtual = new Date().getFullYear();
   const anosReferencia = Array.from({ length: 4 }, (_, i) => anoAtual - 1 + i);
   const [anoReferencia, setAnoReferencia] = useState<number>(anoAtual);
+  const [contextos, setContextos] = useState<ContextoMatricula[]>([]);
+  const [contextoId, setContextoId] = useState<string>("");
+  const [contextosErro, setContextosErro] = useState<string | null>(null);
+  const [contextosLoading, setContextosLoading] = useState(false);
 
   const [nomeManualHabilitado, setNomeManualHabilitado] = useState(false);
   const [nomeManual, setNomeManual] = useState("");
@@ -186,6 +206,53 @@ export default function NovaTurmaPage() {
     }
     void carregar();
   }, [supabase]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function carregarContextos() {
+      setContextosErro(null);
+      setContextosLoading(true);
+      try {
+        const tipoContexto = mapContextoTipo(tipoTurma);
+        const params = new URLSearchParams({ tipo: tipoContexto, status: "ATIVO" });
+        if (tipoTurma === "REGULAR" && Number.isFinite(anoReferencia)) {
+          params.set("ano", String(anoReferencia));
+        }
+        const resp = await fetch(`/api/matriculas/contextos?${params.toString()}`);
+        const json = (await resp.json()) as { ok?: boolean; data?: ContextoMatricula[]; error?: string };
+        if (!resp.ok || json.ok === false) {
+          throw new Error(json.error || "Falha ao carregar contextos.");
+        }
+        if (!active) return;
+        const lista = json.data ?? [];
+        setContextos(lista);
+
+        const contextoAtual = Number(contextoId);
+        const contextoExiste = lista.some((c) => c.id === contextoAtual);
+        const matchAno =
+          tipoTurma === "REGULAR" && Number.isFinite(anoReferencia)
+            ? lista.find((c) => c.ano_referencia === anoReferencia) ?? null
+            : null;
+        const padrao = matchAno ?? lista[0] ?? null;
+
+        if (!contextoExiste) {
+          setContextoId(padrao ? String(padrao.id) : "");
+        }
+      } catch (e) {
+        if (!active) return;
+        setContextosErro(e instanceof Error ? e.message : "Falha ao carregar contextos.");
+        setContextos([]);
+      } finally {
+        if (active) setContextosLoading(false);
+      }
+    }
+
+    void carregarContextos();
+    return () => {
+      active = false;
+    };
+  }, [tipoTurma, anoReferencia, contextoId]);
 
   useEffect(() => {
     let active = true;
@@ -383,16 +450,22 @@ export default function NovaTurmaPage() {
         ),
       );
 
-      const tipoTurma = (formData.get("tipo_turma") as string) || "REGULAR";
-      if ((tipoTurma === "REGULAR" || tipoTurma === "CURSO_LIVRE") && niveisIdsPayload.length === 0) {
+      const tipoTurmaSelecionado = tipoTurma;
+      if ((tipoTurmaSelecionado === "REGULAR" || tipoTurmaSelecionado === "CURSO_LIVRE") && niveisIdsPayload.length === 0) {
         setErro("Selecione ao menos um nivel.");
         setSaving(false);
         return;
       }
 
-      const anoRefStr = formData.get("ano_referencia") as string | null;
       const cargaStr = formData.get("carga_horaria_prevista") as string | null;
       const freqStr = formData.get("frequencia_minima") as string | null;
+      const contextoIdNum = contextoId ? Number(contextoId) : null;
+
+      if (!contextoIdNum || !Number.isFinite(contextoIdNum)) {
+        setErro("Selecione o contexto da matricula.");
+        setSaving(false);
+        return;
+      }
 
       const diasMarcados = diasSelecionados;
       const nomeFinal =
@@ -406,11 +479,11 @@ export default function NovaTurmaPage() {
 
       const payload = {
         nome: nomeFinal,
-        tipo_turma: tipoTurma,
+        tipo_turma: tipoTurmaSelecionado,
         turno: (formData.get("turno") as string) || null,
         status: (formData.get("status") as string) || "EM_PREPARACAO",
         nivel: nivelTexto,
-        ano_referencia: anoRefStr ? Number(anoRefStr) : null,
+        ano_referencia: Number.isFinite(anoReferencia) ? anoReferencia : null,
         curso: cursoTexto || null,
         espaco_id: Number(espacoId),
         capacidade: formData.get("capacidade") ? Number(formData.get("capacidade")) : null,
@@ -423,6 +496,7 @@ export default function NovaTurmaPage() {
         hora_fim: null,
         professor_id: professorPrincipalId ? Number(professorPrincipalId) : null,
         observacoes: (formData.get("observacoes") as string) || null,
+        contexto_matricula_id: contextoIdNum,
       };
       const horariosPorDiaPayload: { day_of_week: number; inicio: string; fim: string }[] = [];
       for (const dia of DIAS_SEMANA) {
@@ -489,7 +563,8 @@ export default function NovaTurmaPage() {
               <select
                 name="tipo_turma"
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                defaultValue="REGULAR"
+                value={tipoTurma}
+                onChange={(e) => setTipoTurma(e.target.value as TipoTurma)}
               >
                 {TIPOS_TURMA.map((t) => (
                   <option key={`tipo-${t}`} value={t}>
@@ -659,20 +734,42 @@ export default function NovaTurmaPage() {
                 Faixa etaria prevista: {faixaEtariaPrevista.min ?? "-"} a {faixaEtariaPrevista.max ?? "-"}
               </div>
             </div>
-            <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ano de referencia</label>
-              <select
-                name="ano_referencia"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                value={anoReferencia}
-                onChange={(e) => setAnoReferencia(Number(e.target.value))}
-              >
-                {anosReferencia.map((ano) => (
-                  <option key={`ano-${ano}`} value={ano}>
-                    {ano}
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ano de referencia</label>
+                <select
+                  name="ano_referencia"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                  value={anoReferencia}
+                  onChange={(e) => setAnoReferencia(Number(e.target.value))}
+                >
+                  {anosReferencia.map((ano) => (
+                    <option key={`ano-${ano}`} value={ano}>
+                      {ano}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contexto da matricula</label>
+                <select
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={contextoId}
+                  onChange={(e) => setContextoId(e.target.value)}
+                  disabled={contextosLoading}
+                >
+                  <option value="">
+                    {contextosLoading ? "Carregando..." : "Selecione..."}
                   </option>
-                ))}
-              </select>
+                  {contextos.map((c) => (
+                    <option key={`contexto-${c.id}`} value={c.id}>
+                      {c.titulo}
+                      {c.ano_referencia ? ` (${c.ano_referencia})` : ""}
+                    </option>
+                  ))}
+                </select>
+                {contextosErro ? <p className="mt-1 text-[11px] text-rose-600">{contextosErro}</p> : null}
+              </div>
             </div>
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Capacidade (opcional)</label>

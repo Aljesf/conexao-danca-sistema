@@ -8,6 +8,7 @@ export type AtualizarTurmaInput = {
   tipo_turma?: string | null;
   turno?: string | null;
   ano_referencia?: number | null;
+  contexto_matricula_id?: number | null;
   status?: string | null;
   data_inicio?: string | null;
   data_fim?: string | null;
@@ -141,6 +142,7 @@ export async function obterTurmaPorId(turmaId: number) {
         data_fim,
         carga_horaria_prevista,
         frequencia_minima_percentual,
+        contexto_matricula_id,
         observacoes,
         professor_id
       `,
@@ -182,6 +184,7 @@ export async function atualizarTurma(turmaId: number, dados: AtualizarTurmaInput
         data_fim,
         carga_horaria_prevista,
         frequencia_minima_percentual,
+        contexto_matricula_id,
         observacoes,
         professor_id
       `,

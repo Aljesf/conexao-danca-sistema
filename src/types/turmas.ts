@@ -28,6 +28,7 @@ export interface Turma {
   ano_referencia: number | null;
   curso: string | null;
   modalidade: string | null; // representa o curso como texto hoje
+  contexto_matricula_id?: number | null;
   carga_horaria_prevista: number | null;
   frequencia_minima_percentual: number | null;
   data_inicio: string | null;

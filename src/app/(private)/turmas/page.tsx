@@ -23,6 +23,22 @@ type Turma = {
   horarios?: { day_of_week: number; inicio: string; fim: string }[];
 };
 
+type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+
+type ContextoMatricula = {
+  id: number;
+  tipo: ContextoTipo;
+  titulo: string;
+  ano_referencia: number | null;
+  status: string;
+};
+
+function mapContextoTipo(tipoTurma: string): ContextoTipo {
+  if (tipoTurma === "CURSO_LIVRE") return "CURSO_LIVRE";
+  if (tipoTurma === "ENSAIO" || tipoTurma === "PROJETO_ARTISTICO") return "PROJETO_ARTISTICO";
+  return "PERIODO_LETIVO";
+}
+
 const NIVEL_OPCOES = [
   "Baby",
   "Infantil",
@@ -68,6 +84,10 @@ export default function TurmasPage() {
     passe_livre: false,
     online: false,
   });
+  const [tipoTurma, setTipoTurma] = useState("REGULAR");
+  const [contextos, setContextos] = useState<ContextoMatricula[]>([]);
+  const [contextoId, setContextoId] = useState<string>("");
+  const [contextosErro, setContextosErro] = useState<string | null>(null);
 
   const [week, setWeek] = useState<Horario[]>(
     DIAS.map((d) => ({ day: d.value, on: false, inicio: "", fim: "" }))
@@ -98,6 +118,38 @@ export default function TurmasPage() {
     carregarTurmas();
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    async function carregarContextos() {
+      setContextosErro(null);
+      try {
+        const tipo = mapContextoTipo(tipoTurma);
+        const params = new URLSearchParams({ tipo, status: "ATIVO" });
+        const res = await fetch(`/api/matriculas/contextos?${params.toString()}`);
+        const json = (await res.json()) as { ok?: boolean; data?: ContextoMatricula[]; error?: string };
+        if (!res.ok || json.ok === false) {
+          throw new Error(json.error || "Falha ao carregar contextos.");
+        }
+        if (!active) return;
+        const lista = json.data ?? [];
+        setContextos(lista);
+        const atual = Number(contextoId);
+        const existe = lista.some((c) => c.id === atual);
+        if (!existe) {
+          setContextoId(lista[0] ? String(lista[0].id) : "");
+        }
+      } catch (e) {
+        if (!active) return;
+        setContextosErro(e instanceof Error ? e.message : "Falha ao carregar contextos.");
+        setContextos([]);
+      }
+    }
+    void carregarContextos();
+    return () => {
+      active = false;
+    };
+  }, [tipoTurma, contextoId]);
+
   function updateWeek(idx: number, patch: Partial<Horario>) {
     setWeek((w) => {
       const copy = [...w];
@@ -109,6 +161,12 @@ export default function TurmasPage() {
   async function criar(e: React.FormEvent) {
     e.preventDefault();
     setErro("");
+
+    const contextoIdNum = contextoId ? Number(contextoId) : null;
+    if (!contextoIdNum || !Number.isFinite(contextoIdNum)) {
+      setErro("Selecione o contexto da matricula.");
+      return;
+    }
 
     const horarios = week
       .filter((h) => h.on && h.inicio && h.fim)
@@ -130,6 +188,8 @@ export default function TurmasPage() {
       particular: form.particular,
       passe_livre: form.passe_livre,
       online: form.online,
+      tipo_turma: tipoTurma,
+      contexto_matricula_id: contextoIdNum,
     };
 
     const res = await fetch("/api/turmas", {
@@ -194,6 +254,31 @@ export default function TurmasPage() {
           value={form.nome}
           onChange={(e) => setForm({ ...form, nome: e.target.value })}
         />
+
+        <select
+          value={tipoTurma}
+          onChange={(e) => setTipoTurma(e.target.value)}
+          style={{ padding: 8 }}
+        >
+          <option value="REGULAR">REGULAR</option>
+          <option value="CURSO_LIVRE">CURSO_LIVRE</option>
+          <option value="ENSAIO">ENSAIO</option>
+        </select>
+
+        <select
+          value={contextoId}
+          onChange={(e) => setContextoId(e.target.value)}
+          style={{ padding: 8 }}
+        >
+          <option value="">— selecione o contexto —</option>
+          {contextos.map((c) => (
+            <option key={`contexto-${c.id}`} value={c.id}>
+              {c.titulo}
+              {c.ano_referencia ? ` (${c.ano_referencia})` : ""}
+            </option>
+          ))}
+        </select>
+        {contextosErro && <p style={{ color: "tomato" }}>{contextosErro}</p>}
 
         <select
           value={form.nivel}

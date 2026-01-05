@@ -367,3 +367,11 @@ Paginas:
 - Debug do recarregar inclui htmlLen/primeiraParcela e o preview mostra o HTML len.
 - Preview usa fallback apenas quando previewHtml vazio e debug sempre mostra payload apos recarregar.
 - Contrato de matricula usa vencimento nas parcelas e remove status da colecao MATRICULA_PARCELAS.
+
+## Atualizacoes recentes (Matriculas - 2026-01-04)
+
+- Contexto de matricula criado (escola_contextos_matricula) e turmas agora apontam contexto_matricula_id.
+- API: GET /api/matriculas/contextos e /api/matriculas/contextos/[id]/unidades-execucao.
+- Turmas: criacao/edicao exige contexto_matricula_id (REGULAR resolve periodo letivo automaticamente).
+- Escola > Nova matricula: seleciona contexto, lista UEs do contexto e permite selecao multipla em REGULAR.
+- Periodo letivo / Curso livre / Projeto artistico agora sao ancoras formais de matricula.

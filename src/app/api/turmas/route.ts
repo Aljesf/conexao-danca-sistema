@@ -1,5 +1,6 @@
 // src/app/api/turmas/route.ts
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 
@@ -117,6 +118,8 @@ const DIA_VALUE_BY_ALIAS = new Map(
   DIAS_SEMANA_MAP.flatMap((d) => [d.label, ...d.aliases].map((alias) => [alias, d.value] as const)),
 );
 
+type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+
 function isHorarioValido(value: string | null): boolean {
   if (!value) return false;
   return /^\d{2}:\d{2}(:\d{2})?$/.test(value);
@@ -148,6 +151,115 @@ function normalizeDiaLabel(value: unknown): string | null {
   const diaValue = normalizeDiaValue(value);
   if (diaValue === null) return null;
   return DIA_LABEL_BY_VALUE.get(diaValue) ?? null;
+}
+
+function parseOptionalNumber(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeTipoTurma(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.toUpperCase();
+}
+
+function mapContextoTipo(tipoTurma: string | null): ContextoTipo | null {
+  if (!tipoTurma) return null;
+  if (tipoTurma === "REGULAR") return "PERIODO_LETIVO";
+  if (tipoTurma === "CURSO_LIVRE") return "CURSO_LIVRE";
+  if (tipoTurma === "ENSAIO" || tipoTurma === "PROJETO_ARTISTICO") return "PROJETO_ARTISTICO";
+  return null;
+}
+
+async function resolveContextoMatriculaId(params: {
+  supabase: SupabaseClient;
+  contextoRaw: unknown;
+  tipoTurma: string | null;
+  anoReferencia: number | null;
+}) {
+  const { supabase, contextoRaw, tipoTurma, anoReferencia } = params;
+  const contextoTipo = mapContextoTipo(tipoTurma);
+
+  if (contextoRaw === null || contextoRaw === undefined || contextoRaw === "") {
+    if (contextoTipo === "PERIODO_LETIVO" && typeof anoReferencia === "number") {
+      const { data, error } = await supabase
+        .from("escola_contextos_matricula")
+        .select("id,tipo,ano_referencia")
+        .eq("tipo", "PERIODO_LETIVO")
+        .eq("ano_referencia", anoReferencia)
+        .maybeSingle();
+      if (error) {
+        return {
+          ok: false as const,
+          response: NextResponse.json({ error: "erro_contexto", message: error.message }, { status: 500 }),
+        };
+      }
+      if (data?.id) {
+        return { ok: true as const, contextoId: Number(data.id) };
+      }
+    }
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: "contexto_matricula_obrigatorio", message: "Informe o contexto da matricula." },
+        { status: 400 },
+      ),
+    };
+  }
+
+  const contextoId = Number(contextoRaw);
+  if (!Number.isFinite(contextoId) || contextoId <= 0) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "contexto_matricula_invalido" }, { status: 400 }),
+    };
+  }
+
+  const { data: contexto, error: contextoErr } = await supabase
+    .from("escola_contextos_matricula")
+    .select("id,tipo,ano_referencia")
+    .eq("id", contextoId)
+    .maybeSingle();
+
+  if (contextoErr) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "erro_contexto", message: contextoErr.message }, { status: 500 }),
+    };
+  }
+  if (!contexto) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "contexto_matricula_nao_encontrado" }, { status: 400 }),
+    };
+  }
+
+  if (contextoTipo && String(contexto.tipo) !== contextoTipo) {
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: "contexto_tipo_invalido", message: "Contexto nao compatível com o tipo da turma." },
+        { status: 400 },
+      ),
+    };
+  }
+
+  if (contextoTipo === "PERIODO_LETIVO" && typeof anoReferencia === "number") {
+    const anoCtx = contexto.ano_referencia === null ? null : Number(contexto.ano_referencia);
+    if (anoCtx && anoCtx !== anoReferencia) {
+      return {
+        ok: false as const,
+        response: NextResponse.json(
+          { error: "contexto_ano_invalido", message: "Ano de referencia nao confere com o contexto." },
+          { status: 400 },
+        ),
+      };
+    }
+  }
+
+  return { ok: true as const, contextoId };
 }
 
 function parseHorariosPorDia(
@@ -269,6 +381,8 @@ export async function POST(req: Request) {
     }
   }
   const nomeRaw = typeof turmaPayload.nome === "string" ? turmaPayload.nome.trim() : "";
+  const tipoTurma = normalizeTipoTurma(turmaPayload.tipo_turma);
+  const anoReferencia = parseOptionalNumber(turmaPayload.ano_referencia);
   const horariosParsed = parseHorariosPorDia(payload.horarios_por_dia ?? payload.horarios);
 
   if ("espaco_id" in turmaPayload) {
@@ -303,12 +417,25 @@ export async function POST(req: Request) {
 
   const diasEfetivos = Array.from(new Set(horariosParsed.map((h) => h.dia_label)));
 
+  const contextoRes = await resolveContextoMatriculaId({
+    supabase,
+    contextoRaw: turmaPayload.contexto_matricula_id,
+    tipoTurma,
+    anoReferencia,
+  });
+
+  if (!contextoRes.ok) {
+    return contextoRes.response;
+  }
+
+  turmaPayload.contexto_matricula_id = contextoRes.contextoId;
+
   const nomeGerado = montarNomeTurma({
     curso: turmaPayload.curso ?? null,
     nivelResumo: turmaPayload.nivel ?? null,
     turno: turmaPayload.turno ?? null,
     dias: diasEfetivos,
-    ano: turmaPayload.ano_referencia ?? null,
+    ano: anoReferencia ?? null,
   });
 
   const turmaInsert = {
