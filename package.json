@@ -8,7 +8,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "snapshot:db": "tsx scripts/snapshotDb.ts"
+    "snapshot:db": "tsx scripts/snapshotDb.ts",
+    "import:pessoas": "tsx scripts/imports/import_pessoas.ts",
+    "import:pessoas:file": "tsx scripts/imports/import_pessoas.ts data/imports/pessoas.csv",
+    "deploy:vercel:preview": "vercel deploy",
+    "deploy:vercel:prod": "vercel deploy --prod"
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.75",

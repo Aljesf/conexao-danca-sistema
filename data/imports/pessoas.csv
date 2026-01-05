@@ -1,0 +1,2 @@
+﻿nome,email,telefone,cpf,ativo,observacoes
+Exemplo Aluno,exemplo@teste.com,91999999999,00000000000,true,Importado por CSV
