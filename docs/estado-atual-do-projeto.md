@@ -365,3 +365,4 @@ Paginas:
 - UI do emitido exibe painel Debug (recarregar) quando a resposta traz debug.
 - Preview do emitido agora aplica o HTML retornado pelo POST de recarregar.
 - Debug do recarregar inclui htmlLen/primeiraParcela e o preview mostra o HTML len.
+- Preview usa fallback apenas quando previewHtml vazio e debug sempre mostra payload apos recarregar.

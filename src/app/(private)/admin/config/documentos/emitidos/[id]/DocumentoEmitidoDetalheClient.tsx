@@ -37,8 +37,8 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const [erro, setErro] = React.useState<string | null>(null);
 
   const [modoEditar, setModoEditar] = React.useState(false);
-  const [html, setHtml] = React.useState<string>("<p></p>");
-  const [previewHtml, setPreviewHtml] = React.useState<string>("<p></p>");
+  const [html, setHtml] = React.useState<string>("");
+  const [previewHtml, setPreviewHtml] = React.useState<string>("");
   const [salvando, setSalvando] = React.useState(false);
   const [okMsg, setOkMsg] = React.useState<string | null>(null);
   const [debug, setDebug] = React.useState<unknown>(null);
@@ -85,13 +85,20 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
       if (!res.ok || !json.ok) {
         throw new Error(json.message || "Falha ao recarregar documento emitido.");
       }
+      const jsonRecord =
+        json && typeof json === "object" ? (json as Record<string, unknown>) : null;
+      const fallbackDebug = {
+        ok: json?.ok ?? null,
+        httpStatus: res.status,
+        hasHtml: typeof json?.html === "string",
+        htmlLen: typeof json?.html === "string" ? json.html.length : 0,
+        keys: jsonRecord ? Object.keys(jsonRecord) : [],
+      };
       if (typeof json.html === "string") {
         setPreviewHtml(json.html);
         setHtml(json.html);
       }
-      if (json.debug) {
-        setDebug(json.debug);
-      }
+      setDebug(json.debug ?? fallbackDebug);
       setOkMsg("Documento recarregado com dados atuais da matricula.");
       await carregar(
         typeof json.html === "string"
@@ -165,7 +172,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     "--page-margin-mm": `${pageMarginMm}mm`,
   } as React.CSSProperties;
   const previewConteudo =
-    previewHtml ||
+    (previewHtml && previewHtml.trim().length > 0 ? previewHtml : "") ||
     doc?.conteudo_resolvido_html ||
     doc?.conteudo_template_html ||
     doc?.conteudo_renderizado_md ||
@@ -211,6 +218,12 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-xs text-slate-100">
               {JSON.stringify(debug, null, 2)}
             </pre>
+            <div className="mt-3 text-xs text-slate-200">
+              <div className="font-semibold text-slate-100">Preview (primeiros 300 chars)</div>
+              <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
+                {(previewHtml || "").slice(0, 300)}
+              </pre>
+            </div>
           </details>
         ) : null}
         {colecoesDetectadas.length > 0 && colecoesVazias.length > 0 ? (
@@ -349,7 +362,10 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                     </div>
                   </div>
                   {debug ? (
-                    <div className="mt-2 text-xs text-slate-500">HTML len: {previewConteudo.length}</div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      HTML len (previewHtml): {previewHtml.length} | HTML len (fallback):{" "}
+                      {previewConteudo.length}
+                    </div>
                   ) : null}
                 </div>
               )}
