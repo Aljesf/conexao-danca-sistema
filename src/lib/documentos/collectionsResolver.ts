@@ -1,4 +1,5 @@
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { listarParcelasResumoPorMatriculaId } from "@/lib/matriculas/resumoFinanceiro";
 
 export type ResolveCollectionsInput = {
   operacaoTipo: string;
@@ -69,17 +70,16 @@ function mapLedgerRows(rows: Array<Record<string, unknown>>, opts: { dateKey: st
   });
 }
 
-function mapLedgerParcelas(rows: Array<Record<string, unknown>>): CollectionRow[] {
-  return rows.map((row) => {
-    const vencimento = getString(row, "vencimento");
-    const descricao = getString(row, "descricao") ?? "";
-    const status = getString(row, "status") ?? "";
-    const valorCentavos = getNumber(row, "valor_centavos") ?? 0;
+function mapParcelasResumo(
+  rows: Array<{ vencimento: string | null; valorCentavos: number; status: string; descricao: string | null }>,
+): CollectionRow[] {
+  return rows.map((row, index) => {
+    const descricao = row.descricao ?? `Parcela ${index + 1}`;
     return {
-      VENCIMENTO: formatDateBR(vencimento),
+      DATA: formatDateBR(row.vencimento),
       DESCRICAO: descricao,
-      VALOR: formatBRLFromCentavos(valorCentavos),
-      STATUS: status,
+      VALOR: formatBRLFromCentavos(row.valorCentavos ?? 0),
+      STATUS: row.status ?? "",
     };
   });
 }
@@ -88,6 +88,7 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
   const supabase = await getSupabaseServerSSR();
   const operacaoTipo = input.operacaoTipo.trim().toUpperCase();
   const colecoes = Array.from(new Set(input.colecoes.map((c) => c.trim().toUpperCase()).filter(Boolean)));
+  const debug = process.env.DOCS_EMIT_DEBUG === "1";
 
   const resp: CollectionsResolved = {};
 
@@ -128,20 +129,25 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
     }
 
     if (codigo === "MATRICULA_PARCELAS") {
-      const { data, error } = await supabase
-        .from("matriculas_financeiro_linhas")
-        .select("vencimento,descricao,valor_centavos,status")
-        .eq("matricula_id", input.operacaoId)
-        .eq("tipo", "PARCELA")
-        .order("vencimento", { ascending: true })
-        .limit(500);
+      if (debug) {
+        console.log("[doc-colecao] matricula_id:", input.operacaoId);
+      }
 
-      if (error) throw new Error(error.message);
-      resp[codigo] = mapLedgerParcelas((data ?? []) as Array<Record<string, unknown>>);
+      const parcelasResumo = await listarParcelasResumoPorMatriculaId(input.operacaoId);
+      resp[codigo] = mapParcelasResumo(parcelasResumo);
+
+      if (debug) {
+        console.log("[doc-colecao] MATRICULA_PARCELAS_len:", resp[codigo].length);
+      }
       continue;
     }
 
     if (codigo === "MATRICULA_LANCAMENTOS_CREDITO") {
+      const origemId = input.operacaoId;
+      if (debug) {
+        console.log("[doc-colecao] resolvendo:", codigo, "root:", rootTipo, "origem_id:", origemId);
+      }
+
       const { data: ledgerRows, error: ledgerError } = await supabase
         .from("matriculas_financeiro_linhas")
         .select("data_evento,descricao,valor_centavos,status")
@@ -151,6 +157,9 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
         .limit(500);
 
       if (ledgerError) throw new Error(ledgerError.message);
+      if (debug) {
+        console.log("[doc-colecao] ledger_linhas:", Array.isArray(ledgerRows) ? ledgerRows.length : 0);
+      }
       if (ledgerRows && ledgerRows.length > 0) {
         resp[codigo] = mapLedgerRows(ledgerRows as Array<Record<string, unknown>>, { dateKey: "data_evento" });
         continue;
@@ -159,13 +168,16 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
       const { data, error } = await supabase
         .from("credito_conexao_lancamentos")
         .select("data_lancamento,descricao,valor_centavos,status,origem_sistema,origem_id")
-        .eq("origem_sistema", "MATRICULA")
-        .eq("origem_id", input.operacaoId)
+        .eq("origem_id", origemId)
+        .in("origem_sistema", ["MATRICULA", "MATRICULAS"])
         .order("data_lancamento", { ascending: true })
         .limit(500);
 
       if (error) throw new Error(error.message);
       let rows = mapLancamentos((data ?? []) as Array<Record<string, unknown>>);
+      if (debug) {
+        console.log("[doc-colecao] lancamentos_origem:", rows.length);
+      }
 
       if (rows.length === 0) {
         const { data: fallback, error: fallbackError } = await supabase
@@ -177,6 +189,9 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
 
         if (!fallbackError) {
           rows = mapLancamentos((fallback ?? []) as Array<Record<string, unknown>>);
+          if (debug) {
+            console.log("[doc-colecao] lancamentos_fallback_matricula:", rows.length);
+          }
         }
       }
 

@@ -25,34 +25,6 @@ type DocumentoVariavelDb = DocumentoVariavel & {
   mapeamento_pendente: boolean;
 };
 
-type FinanceiroLinhaRow = {
-  data_evento: string | null;
-  vencimento: string | null;
-  descricao: string | null;
-  valor_centavos: number | null;
-  status: string | null;
-  tipo: string | null;
-};
-
-type ParcelaDocumento = {
-  data: string;
-  descricao: string;
-  valor: string;
-  status: string;
-};
-
-function formatDateBR(dateISO: string | null): string {
-  if (!dateISO) return "";
-  const [y, m, d] = dateISO.split("-");
-  if (!y || !m || !d) return dateISO;
-  return `${d}/${m}/${y}`;
-}
-
-function formatBRLFromCentavos(centavos: number): string {
-  const valor = Number.isFinite(centavos) ? centavos / 100 : 0;
-  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
 const isInDirection = (direction?: string | null) =>
   direction === "IN" || direction === "IN_GUESS";
 
@@ -172,6 +144,16 @@ function resolveTemplateBase(doc: Record<string, unknown>): string {
   return typeof resolved === "string" ? resolved : "";
 }
 
+function resolveModeloTemplate(modelo: Record<string, unknown>): string {
+  const formato = String(modelo.formato ?? "MARKDOWN");
+  if (formato === "RICH_HTML") {
+    const html = modelo.conteudo_html;
+    if (typeof html === "string" && html.trim()) return html;
+  }
+  const texto = modelo.texto_modelo_md;
+  return typeof texto === "string" ? texto : "";
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const docId = Number(id);
@@ -274,41 +256,36 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       ? (docRec.contexto_json as Record<string, unknown>)
       : {};
 
-  const { data: linhasRaw, error: linhasErr } = await supabase
-    .from("matriculas_financeiro_linhas")
-    .select("data_evento,vencimento,descricao,valor_centavos,status,tipo")
-    .eq("matricula_id", matriculaId)
-    .in("tipo", ["PARCELA", "LANCAMENTO_CREDITO"])
-    .order("data_evento", { ascending: true, nullsFirst: false })
-    .order("vencimento", { ascending: true, nullsFirst: false })
-    .limit(500);
+  const contratoModeloIdRaw = docRec.contrato_modelo_id ?? docRec.documento_modelo_id;
+  const contratoModeloId =
+    typeof contratoModeloIdRaw === "number" ? contratoModeloIdRaw : Number(contratoModeloIdRaw);
 
-  if (linhasErr) {
-    return NextResponse.json({ ok: false, message: linhasErr.message } satisfies ApiResp<never>, { status: 500 });
+  let template = resolveTemplateBase(docRec);
+  if (Number.isFinite(contratoModeloId) && contratoModeloId > 0) {
+    const { data: modelo, error: modeloErr } = await supabase
+      .from("documentos_modelo")
+      .select("id,formato,conteudo_html,texto_modelo_md")
+      .eq("id", contratoModeloId)
+      .single();
+
+    if (modeloErr || !modelo) {
+      return NextResponse.json({ ok: false, message: "Modelo nao encontrado." } satisfies ApiResp<never>, {
+        status: 404,
+      });
+    }
+
+    template = resolveModeloTemplate(modelo as Record<string, unknown>);
+
+    if (process.env.DOCS_EMIT_DEBUG === "1") {
+      console.log("[emitido-reload] emitido_id:", docId, "matricula_id:", matriculaId, "modelo_id:", contratoModeloId);
+      console.log("[emitido-reload] modelo_carregado_id:", modelo.id, "tamanho_texto:", template.length);
+    }
   }
-
-  const linhas = (linhasRaw ?? []) as FinanceiroLinhaRow[];
-  const parcelas: ParcelaDocumento[] = linhas.map((row, index) => {
-    const data = formatDateBR(row.data_evento ?? row.vencimento ?? null);
-    const descricao = row.descricao?.trim() || `Parcela ${index + 1}`;
-    const valor = formatBRLFromCentavos(Number(row.valor_centavos ?? 0));
-    const status = row.status?.trim() || "";
-    return {
-      data,
-      descricao,
-      valor,
-      status,
-    };
-  });
-
-  console.log("[emitido-context] matricula_id:", matriculaId, "parcelas:", parcelas.length);
 
   const contextoFinal: Record<string, unknown> = {
     ...contextoBase,
-    parcelas,
   };
 
-  const template = resolveTemplateBase(docRec);
   const { data: variaveisRaw, error: variaveisErr } = await supabase
     .from("documentos_variaveis")
     .select(
@@ -342,15 +319,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
           colecoes: collectionCodes,
         })
       : {};
+
   const collectionsResolvedFinal: Record<string, Array<Record<string, string>>> = {
     ...collectionsResolved,
-    parcelas,
   };
-  const hasParcelasTag = /{{#\s*parcelas\s*}}/i.test(template);
+
   const colecoesDetectadasSet = new Set<string>(collectionCodes);
-  if (hasParcelasTag) {
-    colecoesDetectadasSet.add("parcelas");
-  }
   const colecoesDetectadas = Array.from(colecoesDetectadasSet);
   const colecoesVazias = colecoesDetectadas.filter((code) => {
     const rows = collectionsResolvedFinal[code];
@@ -363,12 +337,32 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     __colecoes_vazias: colecoesVazias,
   };
 
-  const conteudoResolvido = renderTemplateHtml(template, { ...simpleContext, ...collectionsResolvedFinal });
+  const contextoRender: Record<string, unknown> = {
+    ...simpleContext,
+    ...collectionsResolvedFinal,
+  };
+
+  if (process.env.DOCS_EMIT_DEBUG === "1") {
+    console.log("[doc-colecao] matricula_id:", matriculaId);
+    console.log("[doc-colecao] colecoes_detectadas:", colecoesDetectadas);
+    console.log("[doc-colecao] keys_contexto:", Object.keys(contextoRender));
+    const rows = collectionsResolvedFinal.MATRICULA_PARCELAS;
+    console.log("[doc-colecao] MATRICULA_PARCELAS_len:", Array.isArray(rows) ? rows.length : 0);
+    console.log(
+      "[doc-colecao] colecoes_linhas:",
+      Object.fromEntries(
+        Object.entries(collectionsResolvedFinal).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
+      ),
+    );
+  }
+
+  const conteudoResolvido = renderTemplateHtml(template, contextoRender);
   const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
 
   const { data: atualizado, error: updErr } = await supabase
     .from("documentos_emitidos")
     .update({
+      conteudo_template_html: template,
       conteudo_resolvido_html: conteudoResolvidoLimpo,
       contexto_json: contextoFinal,
       variaveis_utilizadas_json: variaveisUtilizadasFinal,

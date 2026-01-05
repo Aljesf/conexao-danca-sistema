@@ -339,3 +339,15 @@ Paginas:
 
 - Detector de colecoes nao depende de conjuntos/grupos para carregar modelos.
 - Tabela `documentos_conjuntos_grupos` criada como base minima (quando ausente).
+
+## Atualizacoes recentes (Documentos - 2026-01-12)
+
+- Resolver de colecoes: root Matricula usa matricula_id como origem.
+- Colecao MATRICULA_LANCAMENTOS_CREDITO busca no ledger e faz fallback para credito_conexao_lancamentos.
+- Origem_sistema usada: MATRICULA (com fallback MATRICULAS).
+
+## Atualizacoes recentes (Documentos - 2026-01-14)
+
+- Fonte de parcelas no emitido: usa a mesma base do resumo financeiro (credito_conexao_lancamentos).
+- Colecao MATRICULA_PARCELAS usa matricula_id como origem e injeta chave exata no contexto.
+- Recarregar emitido busca o modelo atual (contrato_modelo_id) antes de renderizar.
