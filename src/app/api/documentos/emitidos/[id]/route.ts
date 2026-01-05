@@ -343,6 +343,40 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       ...collectionsResolvedFinal,
     };
 
+    const debugEnabled = process.env.DOCS_EMIT_DEBUG === "1";
+    const parcelasRaw = (contextoFinal as Record<string, unknown>)["MATRICULA_PARCELAS"];
+    const parcelasArr = Array.isArray(parcelasRaw) ? (parcelasRaw as unknown[]) : [];
+    const primeiraParcela = parcelasArr.length > 0 ? parcelasArr[0] : null;
+
+    let sanityDbLen: number | null = null;
+    if (debugEnabled) {
+      const { data: sanityRows, error: sanityErr } = await supabase
+        .from("credito_conexao_lancamentos")
+        .select("id")
+        .in("origem_sistema", ["MATRICULA", "MATRICULAS"])
+        .eq("origem_id", matriculaId);
+
+      if (!sanityErr && Array.isArray(sanityRows)) {
+        sanityDbLen = sanityRows.length;
+      } else {
+        sanityDbLen = -1;
+      }
+    }
+
+    const debugPayload = debugEnabled
+      ? {
+          emitidoId: docId,
+          matriculaId,
+          contratoModeloId,
+          templateSize: template.length,
+          colecoesDetectadas: Array.isArray(colecoesDetectadas) ? colecoesDetectadas : [],
+          parcelasLen: parcelasArr.length,
+          primeiraParcela,
+          sanityDbLen,
+          keysContexto: Object.keys(contextoFinal),
+        }
+      : null;
+
     if (process.env.DOCS_EMIT_DEBUG === "1") {
       console.log("[doc-colecao] matricula_id:", matriculaId);
       console.log("[doc-colecao] colecoes_detectadas:", colecoesDetectadas);
@@ -386,7 +420,10 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       return NextResponse.json({ ok: false, message: updErr.message } satisfies ApiResp<never>, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, data: atualizado } satisfies ApiResp<unknown>, { status: 200 });
+    return NextResponse.json(
+      { ok: true, data: atualizado, ...(debugEnabled ? { debug: debugPayload } : {}) } satisfies ApiResp<unknown>,
+      { status: 200 },
+    );
   } catch (err) {
     console.error("[emitido-reload] erro", err);
     return NextResponse.json(

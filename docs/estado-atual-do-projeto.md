@@ -358,3 +358,7 @@ Paginas:
 - Log de confirmacao inclui chaves do contexto e tamanho de MATRICULA_PARCELAS.
 - POST de recarregar emitido retorna JSON mesmo em erro (sem ReferenceError).
 - Page do emitido aguarda params (corrige warning do Next.js).
+
+## Atualizacoes recentes (Documentos - 2026-01-16)
+
+- POST de recarregar emitido inclui bloco debug no JSON quando DOCS_EMIT_DEBUG=1.
