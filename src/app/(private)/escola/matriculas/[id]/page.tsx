@@ -35,6 +35,13 @@ type MatriculaDetalheResp = {
       status: string | null;
     }>;
   } | null;
+  documentos_emitidos?: Array<{
+    id: number;
+    matricula_id: number | null;
+    contrato_modelo_id: number | null;
+    status_assinatura: string | null;
+    created_at: string | null;
+  }>;
   error?: string;
   message?: string;
 };
@@ -103,6 +110,7 @@ export default function MatriculaDetalhePage() {
   const resumoCartao = data?.resumo_financeiro_cartao_conexao ?? null;
   const parcelasProximas = resumoCartao?.parcelas_proximas ?? [];
   const parcelasVisiveis = parcelasProximas.slice(0, 4);
+  const documentosEmitidos = data?.documentos_emitidos ?? [];
 
   return (
     <div className="p-4 space-y-6">
@@ -228,6 +236,27 @@ export default function MatriculaDetalhePage() {
                 Emitir documento
               </Link>
             </div>
+            {documentosEmitidos.length === 0 ? (
+              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                Nenhum documento emitido para esta matricula.
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {documentosEmitidos.map((doc) => (
+                  <Link
+                    key={doc.id}
+                    href={`/admin/config/documentos/emitidos/${doc.id}`}
+                    className="rounded-md border bg-white px-3 py-2 text-xs hover:bg-slate-50"
+                  >
+                    <div className="font-semibold">Documento #{doc.id}</div>
+                    <div className="mt-1 text-muted-foreground">
+                      Modelo: {doc.contrato_modelo_id ?? "-"} • Status: {doc.status_assinatura ?? "-"} • Criado em:{" "}
+                      {doc.created_at ? formatDateTimeISO(doc.created_at) : "-"}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border p-4 space-y-3">

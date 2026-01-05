@@ -315,6 +315,8 @@ Paginas:
 ## Atualizacoes recentes (Documentos/Matrículas - 2026-01-07)
 
 - Listagem de emitidos por matricula usa o campo correto `documentos_emitidos.contrato_modelo_id`.
+- Detalhe da matricula exibe documentos emitidos e linka para o admin.
+- Botao "Ver documentos" aponta para `/escola/matriculas/[id]/documentos`.
 
 ## Atualizacoes recentes (Documentos - 2026-01-08)
 

@@ -44,6 +44,14 @@ type CartaoConexaoResumo = {
   }>;
 };
 
+type DocumentoEmitidoResumo = {
+  id: number;
+  matricula_id: number | null;
+  contrato_modelo_id: number | null;
+  status_assinatura: string | null;
+  created_at: string | null;
+};
+
 function isSchemaMissing(err: unknown): boolean {
   const e = err as PostgrestError | null;
   return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
@@ -285,6 +293,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
       }
     }
 
+    const { data: emitidos, error: emitidosErr } = await admin
+      .from("documentos_emitidos")
+      .select("id, matricula_id, contrato_modelo_id, status_assinatura, created_at")
+      .eq("matricula_id", matriculaId)
+      .order("id", { ascending: false })
+      .limit(20);
+
+    if (emitidosErr && !isSchemaMissing(emitidosErr)) {
+      return errJson("server_error", "Falha ao buscar documentos emitidos.", 500, { emitidosErr });
+    }
+
     const ueRow = unidadeExecucao as UnidadeExecucaoRow | null;
     const unidadeExecucaoLabel = ueRow
       ? formatUnidadeExecucaoLabel({
@@ -311,6 +330,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
         plano_pagamento: planoPagamento ?? null,
         financeiro_resumo: financeiroResumo,
         resumo_financeiro_cartao_conexao: resumoCartao,
+        documentos_emitidos: (emitidos ?? []) as DocumentoEmitidoResumo[],
         historico: [],
       },
       200,

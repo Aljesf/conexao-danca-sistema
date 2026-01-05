@@ -6,7 +6,7 @@ type DocumentoEmitidoRow = {
   id: number;
   matricula_id: number | null;
   contrato_modelo_id: number | null;
-  status: string | null;
+  status_assinatura: string | null;
   created_at: string | null;
 };
 
@@ -24,7 +24,7 @@ export default async function Page({ params }: { params: { id: string } }) {
   const supabase = await getSupabaseServerSSR();
   const { data: emitidos, error } = await supabase
     .from("documentos_emitidos")
-    .select("id, matricula_id, contrato_modelo_id, status, created_at")
+    .select("id, matricula_id, contrato_modelo_id, status_assinatura, created_at")
     .eq("matricula_id", matriculaId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -78,23 +78,17 @@ export default async function Page({ params }: { params: { id: string } }) {
             {lista.map((doc) => {
               const modeloId = doc.contrato_modelo_id ?? null;
               return (
-                <div key={doc.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold">Documento #{doc.id}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        Status: {doc.status ?? "-"} | Modelo: {modeloId ?? "-"} | Criado em:{" "}
-                        {doc.created_at ? formatDateTimeISO(doc.created_at) : "-"}
-                      </div>
-                    </div>
-                    <Link
-                      href={`/admin/config/documentos/emitidos/${doc.id}`}
-                      className="text-sm underline text-slate-600"
-                    >
-                      Abrir no admin
-                    </Link>
+                <Link
+                  key={doc.id}
+                  href={`/admin/config/documentos/emitidos/${doc.id}`}
+                  className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm hover:bg-slate-50"
+                >
+                  <div className="text-sm font-semibold">Documento #{doc.id}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    Status: {doc.status_assinatura ?? "-"} | Modelo: {modeloId ?? "-"} | Criado em:{" "}
+                    {doc.created_at ? formatDateTimeISO(doc.created_at) : "-"}
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
