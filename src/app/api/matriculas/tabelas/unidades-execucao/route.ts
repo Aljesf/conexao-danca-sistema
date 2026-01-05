@@ -58,8 +58,32 @@ export async function GET(req: Request) {
     }
 
     const admin = getAdmin();
+
+    const { data: servico, error: servicoErr } = await admin
+      .from("escola_produtos_educacionais")
+      .select("id,tipo,contexto_matricula_id")
+      .eq("id", servicoId)
+      .maybeSingle();
+
+    if (servicoErr || !servico) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "bad_request",
+          message: "servico nao encontrado.",
+          details: { servicoId },
+        } satisfies ApiErr,
+        { status: 404 },
+      );
+    }
+
+    const servicoTipo = String((servico as { tipo?: string }).tipo || "").toUpperCase();
+    const servicoContextoId = Number(
+      (servico as { contexto_matricula_id?: number | null }).contexto_matricula_id ?? 0,
+    );
+    const deveFiltrarPorContextoNaTurma = servicoTipo === "CURSO_REGULAR" || servicoTipo === "REGULAR";
     let turmaIds: number[] | null = null;
-    if (Number.isFinite(contextoId) && contextoId > 0) {
+    if (deveFiltrarPorContextoNaTurma && Number.isFinite(contextoId) && contextoId > 0) {
       const { data: turmasCtx, error: turmasErr } = await admin
         .from("turmas")
         .select("turma_id")
@@ -81,16 +105,29 @@ export async function GET(req: Request) {
       if (turmaIds.length === 0) {
         return NextResponse.json({ ok: true, data: [] } satisfies ApiOk<unknown[]>, { status: 200 });
       }
+    } else if (!deveFiltrarPorContextoNaTurma && Number.isFinite(contextoId) && contextoId > 0) {
+      if (Number.isFinite(servicoContextoId) && servicoContextoId > 0 && contextoId !== servicoContextoId) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "bad_request",
+            message: "contexto incompativel com o servico informado.",
+            details: { contextoId, servicoContextoId },
+          } satisfies ApiErr,
+          { status: 409 },
+        );
+      }
     }
 
     let query = admin
       .from("escola_unidades_execucao")
       .select("unidade_execucao_id, denominacao, nome, origem_tipo, origem_id")
       .eq("servico_id", servicoId)
-      .eq("ativo", true);
+      .eq("ativo", true)
+      .eq("origem_tipo", "TURMA");
 
     if (turmaIds) {
-      query = query.eq("origem_tipo", "TURMA").in("origem_id", turmaIds);
+      query = query.in("origem_id", turmaIds);
     }
 
     const { data, error } = await query.order("nome", { ascending: true });
@@ -117,15 +154,53 @@ export async function GET(req: Request) {
       );
     }
 
+    const origemTurmaIds = (data ?? [])
+      .map((ue) => Number((ue as { origem_id?: number }).origem_id))
+      .filter((id) => Number.isFinite(id) && id > 0);
+
+    const turmaById = new Map<number, { nome: string | null; ano_referencia: number | null; curso: string | null }>();
+    if (origemTurmaIds.length > 0) {
+      const { data: turmas, error: turmasErr } = await admin
+        .from("turmas")
+        .select("turma_id,nome,ano_referencia,curso")
+        .in("turma_id", Array.from(new Set(origemTurmaIds)));
+
+      if (!turmasErr) {
+        (turmas ?? []).forEach((t) => {
+          const record = t as {
+            turma_id?: number | null;
+            nome?: string | null;
+            ano_referencia?: number | null;
+            curso?: string | null;
+          };
+          const turmaId = Number(record.turma_id);
+          if (!Number.isFinite(turmaId) || turmaId <= 0) return;
+          turmaById.set(turmaId, {
+            nome: record.nome ?? null,
+            ano_referencia: record.ano_referencia ?? null,
+            curso: record.curso ?? null,
+          });
+        });
+      }
+    }
+
     const mapped = (data ?? []).map((ue) => {
       const record = ue as {
         unidade_execucao_id: number | null;
         denominacao: string | null;
         nome: string | null;
+        origem_id?: number | null;
       };
       const ueId = Number(record.unidade_execucao_id);
+      const turmaId = Number(record.origem_id);
+      const turma = Number.isFinite(turmaId) ? turmaById.get(turmaId) ?? null : null;
       return {
         id: ueId,
+        unidade_execucao_id: ueId,
+        turma_id: Number.isFinite(turmaId) ? turmaId : null,
+        turma_nome: turma?.nome ?? null,
+        turma_ano_referencia: turma?.ano_referencia ?? null,
+        turma_curso: turma?.curso ?? null,
         label: `${String(record.denominacao ?? "")}: ${String(record.nome ?? "")} [UE: ${ueId}]`,
       };
     });

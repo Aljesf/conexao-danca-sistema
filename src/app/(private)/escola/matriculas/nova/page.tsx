@@ -20,36 +20,37 @@ type ContextoMatricula = {
   status: string;
 };
 
-type TurmaOpcao = {
-  turma_id: number;
-  nome: string | null;
-  curso: string | null;
-  tipo_turma: string | null;
-  ano_referencia: number | null;
-  unidade_execucao_id?: number | null;
-  unidade_execucao_label?: string | null;
-  idade_minima?: number | null;
-  idade_maxima?: number | null;
-  suggested?: boolean;
+type UnidadeExecucaoOpcao = {
+  unidade_execucao_id: number;
+  turma_id: number | null;
+  label: string;
+  turma_nome?: string | null;
+  turma_ano_referencia?: number | null;
+  turma_curso?: string | null;
 };
 
 type MatriculaCarrinhoItem = {
   id: string;
-  curso: string | null;
+  servico_id: number | null;
   turma_id: number | null;
 };
 
-type CursosResp = {
+type ServicoOpcao = {
+  id: number;
+  label: string;
+  contexto_matricula_id?: number | null;
+};
+
+type ServicosResp = {
   ok: boolean;
-  cursos?: string[];
+  data?: ServicoOpcao[];
   message?: string;
   error?: string;
 };
 
-type TurmasResp = {
+type UnidadesResp = {
   ok: boolean;
-  turmas?: TurmaOpcao[];
-  contexto?: ContextoMatricula;
+  data?: UnidadeExecucaoOpcao[];
   message?: string;
   error?: string;
 };
@@ -108,19 +109,15 @@ function labelTipo(tipo: TipoMatricula): string {
   return tipo === "REGULAR" ? "Curso regular" : "Curso livre";
 }
 
-function mapContextoTipo(tipo: TipoMatricula): ContextoTipo {
-  return tipo === "REGULAR" ? "PERIODO_LETIVO" : "CURSO_LIVRE";
-}
-
 function labelContexto(contexto: ContextoMatricula): string {
   const ano = contexto.ano_referencia ? ` (${contexto.ano_referencia})` : "";
   return `${contexto.titulo}${ano}`;
 }
 
-function labelUnidadeExecucao(turma: TurmaOpcao): string {
-  if (turma.unidade_execucao_label?.trim()) return turma.unidade_execucao_label;
-  if (turma.nome?.trim()) return turma.nome;
-  return `Turma #${turma.turma_id}`;
+function labelUnidadeExecucao(unidade: UnidadeExecucaoOpcao): string {
+  if (unidade.label?.trim()) return unidade.label;
+  if (unidade.turma_nome?.trim()) return unidade.turma_nome;
+  return unidade.turma_id ? `Turma #${unidade.turma_id}` : "Turma";
 }
 
 function createCarrinhoItem(): MatriculaCarrinhoItem {
@@ -128,7 +125,7 @@ function createCarrinhoItem(): MatriculaCarrinhoItem {
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return { id, curso: null, turma_id: null };
+  return { id, servico_id: null, turma_id: null };
 }
 
 function extractErrorMessage(data: unknown, status: number): string {
@@ -172,9 +169,9 @@ export default function NovaMatriculaPage() {
   const [contextoId, setContextoId] = useState<number | null>(null);
   const [contextosErro, setContextosErro] = useState<string | null>(null);
   const [contextosLoading, setContextosLoading] = useState(false);
-  const [cursos, setCursos] = useState<string[]>([]);
+  const [servicos, setServicos] = useState<ServicoOpcao[]>([]);
   const [itensCarrinho, setItensCarrinho] = useState<MatriculaCarrinhoItem[]>(() => [createCarrinhoItem()]);
-  const [turmasPorCurso, setTurmasPorCurso] = useState<Record<string, TurmaOpcao[]>>({});
+  const [uesPorServico, setUesPorServico] = useState<Record<number, UnidadeExecucaoOpcao[]>>({});
   const [anoReferencia, setAnoReferencia] = useState<number>(() => new Date().getFullYear());
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [dataInicioVinculo, setDataInicioVinculo] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -182,10 +179,10 @@ export default function NovaMatriculaPage() {
   const [motivoExcecao, setMotivoExcecao] = useState<string>("");
   const [observacoes, setObservacoes] = useState<string>("");
 
-  const [cursosErro, setCursosErro] = useState<string | null>(null);
-  const [turmasErro, setTurmasErro] = useState<string | null>(null);
-  const [carregandoCursos, setCarregandoCursos] = useState(false);
-  const [carregandoTurmas, setCarregandoTurmas] = useState(false);
+  const [servicosErro, setServicosErro] = useState<string | null>(null);
+  const [uesErro, setUesErro] = useState<string | null>(null);
+  const [carregandoServicos, setCarregandoServicos] = useState(false);
+  const [carregandoUes, setCarregandoUes] = useState(false);
   const [tabelaAplicavel, setTabelaAplicavel] = useState<TabelaAplicavel | null>(null);
   const [itemAplicado, setItemAplicado] = useState<ItemAplicado | null>(null);
   const [debugInfo, setDebugInfo] = useState<PrecoDebug | null>(null);
@@ -197,10 +194,10 @@ export default function NovaMatriculaPage() {
 
   const principalItem = itensCarrinho[0] ?? null;
   const turmaPrincipalId = principalItem?.turma_id ?? null;
-  const turmasDisponiveis = useMemo(() => Object.values(turmasPorCurso).flat(), [turmasPorCurso]);
+  const uesDisponiveis = useMemo(() => Object.values(uesPorServico).flat(), [uesPorServico]);
   const turmaSelecionada = useMemo(
-    () => turmasDisponiveis.find((t) => t.turma_id === turmaPrincipalId) ?? null,
-    [turmasDisponiveis, turmaPrincipalId],
+    () => uesDisponiveis.find((t) => t.turma_id === turmaPrincipalId) ?? null,
+    [uesDisponiveis, turmaPrincipalId],
   );
   const contextoSelecionado = useMemo(
     () => contextos.find((c) => c.id === contextoId) ?? null,
@@ -210,25 +207,27 @@ export default function NovaMatriculaPage() {
     () =>
       itensCarrinho
         .map((item, idx) => {
-          if (!item.curso || !item.turma_id) return null;
-          const turma = turmasDisponiveis.find((t) => t.turma_id === item.turma_id) ?? null;
+          if (!item.servico_id || !item.turma_id) return null;
+          const servico = servicos.find((s) => s.id === item.servico_id) ?? null;
+          const turma = uesDisponiveis.find((t) => t.turma_id === item.turma_id) ?? null;
           const ueLabel = turma ? labelUnidadeExecucao(turma) : `UE #${item.turma_id}`;
           const prefixo = idx === 0 ? "Principal" : `Item ${idx + 1}`;
-          return `${prefixo}: ${item.curso} - ${ueLabel}`;
+          return `${prefixo}: ${servico?.label ?? `Servico #${item.servico_id}`} - ${ueLabel}`;
         })
         .filter((item): item is string => !!item),
-    [itensCarrinho, turmasDisponiveis],
+    [itensCarrinho, uesDisponiveis, servicos],
   );
 
+  const contextoObrigatorio = tipo === "REGULAR";
   const precoOk = !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado;
   const itensCompletos =
-    itensCarrinho.length > 0 && itensCarrinho.every((item) => Boolean(item.curso && item.turma_id));
-  const principalCompleto = Boolean(principalItem?.curso && principalItem?.turma_id);
+    itensCarrinho.length > 0 && itensCarrinho.every((item) => Boolean(item.servico_id && item.turma_id));
+  const principalCompleto = Boolean(principalItem?.servico_id && principalItem?.turma_id);
 
   const podeSalvar =
     !!aluno &&
     !!responsavel &&
-    Number.isFinite(contextoId ?? NaN) &&
+    (!contextoObrigatorio || Number.isFinite(contextoId ?? NaN)) &&
     itensCompletos &&
     principalCompleto &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
@@ -239,39 +238,47 @@ export default function NovaMatriculaPage() {
     let ativo = true;
     (async () => {
       try {
-        setCursosErro(null);
-        setCarregandoCursos(true);
-        const data = await fetchJSON<CursosResp>("/api/escola/matriculas/opcoes/cursos");
+        setServicosErro(null);
+        setCarregandoServicos(true);
+        const servicoTipo = tipo === "REGULAR" ? "CURSO_REGULAR" : "CURSO_LIVRE";
+        const data = await fetchJSON<ServicosResp>(`/api/matriculas/tabelas/servicos?tipo=${servicoTipo}`);
         if (!ativo) return;
-        setCursos(data.cursos ?? []);
+        setServicos(data.data ?? []);
       } catch (e: unknown) {
-        if (ativo) setCursosErro(e instanceof Error ? e.message : "Falha ao carregar cursos.");
+        if (ativo) setServicosErro(e instanceof Error ? e.message : "Falha ao carregar servicos.");
       } finally {
-        if (ativo) setCarregandoCursos(false);
+        if (ativo) setCarregandoServicos(false);
       }
     })();
     return () => {
       ativo = false;
     };
-  }, []);
+  }, [tipo]);
 
   useEffect(() => {
     setItensCarrinho([createCarrinhoItem()]);
-    setTurmasPorCurso({});
-    setTurmasErro(null);
+    setUesPorServico({});
+    setUesErro(null);
     setContextoId(null);
     setContextos([]);
   }, [tipo]);
 
   useEffect(() => {
+    if (!contextoObrigatorio) {
+      setContextos([]);
+      setContextoId(null);
+      setContextosErro(null);
+      setContextosLoading(false);
+      return;
+    }
+
     let ativo = true;
     (async () => {
       try {
         setContextosErro(null);
         setContextosLoading(true);
-        const tipoContexto = mapContextoTipo(tipo);
-        const params = new URLSearchParams({ tipo: tipoContexto, status: "ATIVO" });
-        if (tipo === "REGULAR" && Number.isFinite(anoReferencia)) {
+        const params = new URLSearchParams({ tipo: "PERIODO_LETIVO", status: "ATIVO" });
+        if (Number.isFinite(anoReferencia)) {
           params.set("ano", String(anoReferencia));
         }
         const data = await fetchJSON<{ ok: boolean; data?: ContextoMatricula[]; error?: string }>(
@@ -283,10 +290,9 @@ export default function NovaMatriculaPage() {
 
         const contextoAtual = Number(contextoId ?? NaN);
         const contextoExiste = lista.some((c) => c.id === contextoAtual);
-        const matchAno =
-          tipo === "REGULAR" && Number.isFinite(anoReferencia)
-            ? lista.find((c) => c.ano_referencia === anoReferencia) ?? null
-            : null;
+        const matchAno = Number.isFinite(anoReferencia)
+          ? lista.find((c) => c.ano_referencia === anoReferencia) ?? null
+          : null;
         const padrao = matchAno ?? lista[0] ?? null;
         if (!contextoExiste) {
           setContextoId(padrao ? padrao.id : null);
@@ -302,62 +308,62 @@ export default function NovaMatriculaPage() {
     return () => {
       ativo = false;
     };
-  }, [tipo, anoReferencia, contextoId]);
+  }, [contextoObrigatorio, anoReferencia, contextoId]);
 
   useEffect(() => {
+    if (!contextoObrigatorio) return;
     setItensCarrinho((prev) => prev.map((item) => ({ ...item, turma_id: null })));
-    setTurmasPorCurso({});
-    setTurmasErro(null);
-    setCarregandoTurmas(false);
-  }, [contextoId]);
+    setUesPorServico({});
+    setUesErro(null);
+    setCarregandoUes(false);
+  }, [contextoObrigatorio, contextoId]);
 
-  const cursosSelecionados = useMemo(() => {
+  const servicosSelecionados = useMemo(() => {
     const lista = itensCarrinho
-      .map((item) => item.curso?.trim())
-      .filter((curso): curso is string => !!curso);
+      .map((item) => item.servico_id)
+      .filter((id): id is number => Number.isFinite(id ?? NaN));
     return Array.from(new Set(lista));
   }, [itensCarrinho]);
 
   useEffect(() => {
-    if (!contextoId || cursosSelecionados.length === 0) {
-      setTurmasErro(null);
-      setCarregandoTurmas(false);
+    if ((contextoObrigatorio && !contextoId) || servicosSelecionados.length === 0) {
+      setUesErro(null);
+      setCarregandoUes(false);
       return;
     }
 
-    const pendentes = cursosSelecionados.filter((curso) => !turmasPorCurso[curso]);
+    const pendentes = servicosSelecionados.filter((servicoId) => !uesPorServico[servicoId]);
     if (pendentes.length === 0) return;
 
     let ativo = true;
     (async () => {
       try {
-        setTurmasErro(null);
-        setCarregandoTurmas(true);
-        for (const curso of pendentes) {
-          const params = new URLSearchParams({
-            curso,
-            tipo_turma: tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "REGULAR",
-          });
-          const data = await fetchJSON<TurmasResp>(
-            `/api/matriculas/contextos/${contextoId}/unidades-execucao?${params.toString()}`,
-          );
+        setUesErro(null);
+        setCarregandoUes(true);
+        for (const servicoId of pendentes) {
+          const url = new URL("/api/matriculas/tabelas/unidades-execucao", window.location.origin);
+          url.searchParams.set("servico_id", String(servicoId));
+          if (contextoObrigatorio && contextoId) {
+            url.searchParams.set("contexto_id", String(contextoId));
+          }
+          const data = await fetchJSON<UnidadesResp>(url.toString());
           if (!ativo) return;
-          setTurmasPorCurso((prev) => ({ ...prev, [curso]: data.turmas ?? [] }));
+          setUesPorServico((prev) => ({ ...prev, [servicoId]: data.data ?? [] }));
         }
       } catch (e: unknown) {
-        if (ativo) setTurmasErro(e instanceof Error ? e.message : "Falha ao carregar turmas.");
+        if (ativo) setUesErro(e instanceof Error ? e.message : "Falha ao carregar unidades.");
       } finally {
-        if (ativo) setCarregandoTurmas(false);
+        if (ativo) setCarregandoUes(false);
       }
     })();
     return () => {
       ativo = false;
     };
-  }, [tipo, contextoId, cursosSelecionados, turmasPorCurso]);
+  }, [contextoObrigatorio, contextoId, servicosSelecionados, uesPorServico]);
 
   useEffect(() => {
-    if (tipo === "REGULAR" && turmaSelecionada?.ano_referencia) {
-      setAnoReferencia(turmaSelecionada.ano_referencia);
+    if (tipo === "REGULAR" && turmaSelecionada?.turma_ano_referencia) {
+      setAnoReferencia(turmaSelecionada.turma_ano_referencia);
     }
   }, [tipo, turmaSelecionada]);
 
@@ -424,7 +430,7 @@ export default function NovaMatriculaPage() {
       return;
     }
 
-    if (!contextoId) {
+    if (contextoObrigatorio && !contextoId) {
       setErro("Selecione o contexto da matricula.");
       return;
     }
@@ -468,7 +474,7 @@ export default function NovaMatriculaPage() {
       const unidadeExecucaoIds = Array.from(
         new Set(
           vinculosIds
-            .map((id) => turmasDisponiveis.find((t) => t.turma_id === id)?.unidade_execucao_id ?? null)
+            .map((id) => uesDisponiveis.find((t) => t.turma_id === id)?.unidade_execucao_id ?? null)
             .filter((id): id is number => typeof id === "number"),
         ),
       );
@@ -647,36 +653,40 @@ export default function NovaMatriculaPage() {
 
         <SectionCard title="Contexto, cursos e turmas">
           <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{tipo === "REGULAR" ? "Periodo letivo" : "Contexto de matricula"}</label>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={contextoId ?? ""}
-                onChange={(e) => {
-                  const nextId = e.target.value ? Number(e.target.value) : null;
-                  setContextoId(nextId);
-                  if (tipo === "REGULAR") {
+            {contextoObrigatorio ? (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Periodo letivo</label>
+                <select
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={contextoId ?? ""}
+                  onChange={(e) => {
+                    const nextId = e.target.value ? Number(e.target.value) : null;
+                    setContextoId(nextId);
                     const encontrado = contextos.find((c) => c.id === nextId) ?? null;
                     if (encontrado?.ano_referencia) setAnoReferencia(encontrado.ano_referencia);
-                  }
-                }}
-                disabled={contextosLoading}
-              >
-                <option value="">Selecione...</option>
-                {contextos.map((contexto) => (
-                  <option key={contexto.id} value={contexto.id}>
-                    {labelContexto(contexto)}
-                  </option>
-                ))}
-              </select>
-              {contextosLoading ? (
-                <p className="text-xs text-muted-foreground">Carregando contextos...</p>
-              ) : null}
-              {contextosErro ? <p className="text-xs text-red-600">{contextosErro}</p> : null}
-              {!contextosLoading && contextos.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhum contexto ativo encontrado.</p>
-              ) : null}
-            </div>
+                  }}
+                  disabled={contextosLoading}
+                >
+                  <option value="">Selecione...</option>
+                  {contextos.map((contexto) => (
+                    <option key={contexto.id} value={contexto.id}>
+                      {labelContexto(contexto)}
+                    </option>
+                  ))}
+                </select>
+                {contextosLoading ? (
+                  <p className="text-xs text-muted-foreground">Carregando contextos...</p>
+                ) : null}
+                {contextosErro ? <p className="text-xs text-red-600">{contextosErro}</p> : null}
+                {!contextosLoading && contextos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhum contexto ativo encontrado.</p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                Contexto de matricula definido pelo curso/projeto selecionado.
+              </div>
+            )}
 
             <div className="space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -695,12 +705,12 @@ export default function NovaMatriculaPage() {
                 </button>
               </div>
 
-              {!contextoId ? (
+              {contextoObrigatorio && !contextoId ? (
                 <p className="text-xs text-muted-foreground">Selecione o contexto para habilitar os cursos.</p>
               ) : null}
 
               {itensCarrinho.map((item, idx) => {
-                const ues = item.curso ? turmasPorCurso[item.curso] ?? [] : [];
+                const ues = item.servico_id ? uesPorServico[item.servico_id] ?? [] : [];
                 return (
                   <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
@@ -729,21 +739,21 @@ export default function NovaMatriculaPage() {
                         <label className="text-sm font-medium">Curso</label>
                         <select
                           className="w-full rounded-md border px-3 py-2 text-sm"
-                          value={item.curso ?? ""}
+                          value={item.servico_id ? String(item.servico_id) : ""}
                           onChange={(e) => {
-                            const nextCurso = e.target.value ? e.target.value : null;
-                            updateItemCarrinho(item.id, { curso: nextCurso, turma_id: null });
+                            const nextServicoId = e.target.value ? Number(e.target.value) : null;
+                            updateItemCarrinho(item.id, { servico_id: nextServicoId, turma_id: null });
                           }}
-                          disabled={carregandoCursos || !contextoId}
+                          disabled={carregandoServicos || (contextoObrigatorio && !contextoId)}
                         >
                           <option value="">Selecione...</option>
-                          {cursos.map((curso) => (
-                            <option key={curso} value={curso}>
-                              {curso}
+                          {servicos.map((servico) => (
+                            <option key={servico.id} value={servico.id}>
+                              {servico.label}
                             </option>
                           ))}
                         </select>
-                        {cursosErro ? <p className="text-xs text-red-600">{cursosErro}</p> : null}
+                        {servicosErro ? <p className="text-xs text-red-600">{servicosErro}</p> : null}
                       </div>
 
                       <div className="space-y-1">
@@ -755,20 +765,23 @@ export default function NovaMatriculaPage() {
                             const nextId = e.target.value ? Number(e.target.value) : null;
                             updateItemCarrinho(item.id, { turma_id: nextId });
                           }}
-                          disabled={!item.curso || !contextoId || carregandoTurmas}
+                          disabled={!item.servico_id || (contextoObrigatorio && !contextoId) || carregandoUes}
                         >
                           <option value="">
-                            {item.curso ? "Selecione a turma" : "Selecione o curso primeiro"}
+                            {item.servico_id ? "Selecione a turma" : "Selecione o curso primeiro"}
                           </option>
-                          {ues.map((turma) => (
-                            <option key={turma.turma_id} value={turma.turma_id}>
-                              {labelUnidadeExecucao(turma)}
-                            </option>
-                          ))}
+                          {ues
+                            .filter((turma) => Number.isFinite(turma.turma_id ?? NaN))
+                            .map((turma) => (
+                              <option key={String(turma.unidade_execucao_id)} value={turma.turma_id ?? ""}>
+                                {labelUnidadeExecucao(turma)}
+                              </option>
+                            ))}
                         </select>
-                        {!carregandoTurmas && item.curso && ues.length === 0 ? (
+                        {!carregandoUes && item.servico_id && ues.length === 0 ? (
                           <p className="text-xs text-muted-foreground">
-                            Nenhuma unidade encontrada para este curso no contexto selecionado.
+                            Nenhuma unidade encontrada para este curso
+                            {contextoObrigatorio ? " no contexto selecionado" : ""}.
                           </p>
                         ) : null}
                       </div>
@@ -777,10 +790,10 @@ export default function NovaMatriculaPage() {
                 );
               })}
 
-              {carregandoTurmas ? (
+              {carregandoUes ? (
                 <p className="text-xs text-muted-foreground">Carregando turmas...</p>
               ) : null}
-              {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}
+              {uesErro ? <p className="text-xs text-red-600">{uesErro}</p> : null}
             </div>
           </div>
         </SectionCard>
