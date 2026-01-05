@@ -357,3 +357,4 @@ Paginas:
 - Preview do emitido renderiza com o contexto final (inclui colecoes).
 - Log de confirmacao inclui chaves do contexto e tamanho de MATRICULA_PARCELAS.
 - POST de recarregar emitido retorna JSON mesmo em erro (sem ReferenceError).
+- Page do emitido aguarda params (corrige warning do Next.js).
