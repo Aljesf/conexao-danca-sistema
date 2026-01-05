@@ -81,31 +81,40 @@ where t.tipo_turma = 'REGULAR'
   and e.ano_referencia = t.ano_referencia
   and (t.contexto_matricula_id is null);
 
--- 4) Trigger simples de updated_at (se voce ja tiver padrao global, manter so se necessario)
--- Aqui aplicamos apenas se nao existir trigger semelhante.
+-- 4) Trigger de updated_at (seguro: funcao especifica, sem sobrescrever padrao global)
 do $$
 begin
+  -- cria a funcao apenas se nao existir
+  if not exists (
+    select 1
+    from pg_proc
+    where pronamespace = 'public'::regnamespace
+      and proname = 'set_updated_at_escola_contextos_matricula'
+  ) then
+    execute $fn$
+      create function public.set_updated_at_escola_contextos_matricula()
+      returns trigger
+      language plpgsql
+      as $body$
+      begin
+        new.updated_at = now();
+        return new;
+      end;
+      $body$;
+    $fn$;
+  end if;
+
+  -- cria o trigger apenas se nao existir
   if not exists (
     select 1
     from pg_trigger
     where tgname = 'trg_escola_contextos_matricula_updated_at'
   ) then
-    create or replace function public.set_updated_at()
-    returns trigger
-    language plpgsql
-    as $fn$
-    begin
-      new.updated_at = now();
-      return new;
-    end;
-    $fn$;
-
-    create trigger trg_escola_contextos_matricula_updated_at
-    before update on public.escola_contextos_matricula
-    for each row execute function public.set_updated_at();
+    execute $trg$
+      create trigger trg_escola_contextos_matricula_updated_at
+      before update on public.escola_contextos_matricula
+      for each row
+      execute function public.set_updated_at_escola_contextos_matricula();
+    $trg$;
   end if;
 end $$;
-
-commit;
-
-select pg_notify('pgrst', 'reload schema');
