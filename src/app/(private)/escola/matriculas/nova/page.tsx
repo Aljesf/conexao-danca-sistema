@@ -32,6 +32,7 @@ type UnidadeExecucaoOpcao = {
 type MatriculaCarrinhoItem = {
   id: string;
   servico_id: number | null;
+  unidade_execucao_id: number | null;
   turma_id: number | null;
 };
 
@@ -85,6 +86,8 @@ type PrecoResolverResp = {
     qtd_modalidades: number | null;
     tier?: { id: number; item_codigo: string; tipo_item: string } | null;
     item_aplicado: ItemAplicado;
+    valor_final_centavos?: number | null;
+    valor_final_brl?: string | null;
     alvo?: { tipo: string; id: number };
     debug?: {
       servico_id: number | null;
@@ -104,6 +107,15 @@ type PrecoResolverResp = {
 };
 
 type PrecoDebug = NonNullable<PrecoResolverResp["data"]>["debug"];
+
+type PrecoItem = {
+  idx: number;
+  servico_id: number;
+  unidade_execucao_id: number;
+  turma_id: number;
+  valor_final_centavos: number;
+  valor_final_brl: string;
+};
 
 function labelTipo(tipo: TipoMatricula): string {
   if (tipo === "REGULAR") return "Curso regular";
@@ -127,7 +139,7 @@ function createCarrinhoItem(): MatriculaCarrinhoItem {
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return { id, servico_id: null, turma_id: null };
+  return { id, servico_id: null, unidade_execucao_id: null, turma_id: null };
 }
 
 function extractErrorMessage(data: unknown, status: number): string {
@@ -188,6 +200,7 @@ export default function NovaMatriculaPage() {
   const [tabelaAplicavel, setTabelaAplicavel] = useState<TabelaAplicavel | null>(null);
   const [itemAplicado, setItemAplicado] = useState<ItemAplicado | null>(null);
   const [debugInfo, setDebugInfo] = useState<PrecoDebug | null>(null);
+  const [precosItens, setPrecosItens] = useState<PrecoItem[]>([]);
   const [tabelaErro, setTabelaErro] = useState<string | null>(null);
   const [tabelaLoading, setTabelaLoading] = useState(false);
 
@@ -209,9 +222,12 @@ export default function NovaMatriculaPage() {
     () =>
       itensCarrinho
         .map((item, idx) => {
-          if (!item.servico_id || !item.turma_id) return null;
+          if (!item.servico_id || !item.unidade_execucao_id || !item.turma_id) return null;
           const servico = servicos.find((s) => s.id === item.servico_id) ?? null;
-          const turma = uesDisponiveis.find((t) => t.turma_id === item.turma_id) ?? null;
+          const turma =
+            uesDisponiveis.find((t) => t.unidade_execucao_id === item.unidade_execucao_id) ??
+            uesDisponiveis.find((t) => t.turma_id === item.turma_id) ??
+            null;
           const ueLabel = turma ? labelUnidadeExecucao(turma) : `UE #${item.turma_id}`;
           const prefixo = idx === 0 ? "Principal" : `Item ${idx + 1}`;
           return `${prefixo}: ${servico?.label ?? `Servico #${item.servico_id}`} - ${ueLabel}`;
@@ -219,18 +235,39 @@ export default function NovaMatriculaPage() {
         .filter((item): item is string => !!item),
     [itensCarrinho, uesDisponiveis, servicos],
   );
+  const totalMensalidadeCentavos = useMemo(
+    () => precosItens.reduce((acc, item) => acc + item.valor_final_centavos, 0),
+    [precosItens],
+  );
+  const totalMensalidadeBRL = useMemo(
+    () =>
+      (totalMensalidadeCentavos / 100).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }),
+    [totalMensalidadeCentavos],
+  );
 
   const contextoObrigatorio = tipo === "REGULAR";
-  const precoOk = !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado;
-  const itensCompletos =
-    itensCarrinho.length > 0 && itensCarrinho.every((item) => Boolean(item.servico_id && item.turma_id));
-  const principalCompleto = Boolean(principalItem?.servico_id && principalItem?.turma_id);
+  const itensCompletosOk =
+    itensCarrinho.length > 0 &&
+    itensCarrinho.every(
+      (item) =>
+        typeof item.servico_id === "number" &&
+        typeof item.unidade_execucao_id === "number" &&
+        typeof item.turma_id === "number",
+    );
+  const precosItensOk = itensCompletosOk && precosItens.length === itensCarrinho.length;
+  const precoOk = !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado && precosItensOk;
+  const principalCompleto = Boolean(
+    principalItem?.servico_id && principalItem?.unidade_execucao_id && principalItem?.turma_id,
+  );
 
   const podeSalvar =
     !!aluno &&
     !!responsavel &&
     (!contextoObrigatorio || Number.isFinite(contextoId ?? NaN)) &&
-    itensCompletos &&
+    itensCompletosOk &&
     principalCompleto &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
     (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0) &&
@@ -315,7 +352,7 @@ export default function NovaMatriculaPage() {
 
   useEffect(() => {
     if (!contextoObrigatorio) return;
-    setItensCarrinho((prev) => prev.map((item) => ({ ...item, turma_id: null })));
+    setItensCarrinho((prev) => prev.map((item) => ({ ...item, unidade_execucao_id: null, turma_id: null })));
     setUesPorServico({});
     setUesErro(null);
     setCarregandoUes(false);
@@ -425,6 +462,73 @@ export default function NovaMatriculaPage() {
     };
   }, [aluno?.id, turmaPrincipalId, anoReferencia, isDev]);
 
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      if (!aluno?.id || !Number.isFinite(anoReferencia)) {
+        if (ativo) setPrecosItens([]);
+        return;
+      }
+
+      const completos = itensCarrinho
+        .map((it, idx) => ({ it, idx }))
+        .filter(
+          ({ it }) =>
+            typeof it.servico_id === "number" &&
+            typeof it.unidade_execucao_id === "number" &&
+            typeof it.turma_id === "number",
+        );
+
+      if (completos.length === 0 || completos.length !== itensCarrinho.length) {
+        if (ativo) setPrecosItens([]);
+        return;
+      }
+
+      const results: PrecoItem[] = [];
+
+      for (const { it, idx } of completos) {
+        const servicoId = it.servico_id as number;
+        const unidadeExecucaoId = it.unidade_execucao_id as number;
+        const turmaId = it.turma_id as number;
+
+        const url = new URL("/api/matriculas/precos/resolver", window.location.origin);
+        url.searchParams.set("aluno_id", String(aluno.id));
+        url.searchParams.set("alvo_tipo", "TURMA");
+        url.searchParams.set("alvo_id", String(turmaId));
+        url.searchParams.set("ano", String(anoReferencia));
+        url.searchParams.set("servico_id", String(servicoId));
+        url.searchParams.set("unidade_execucao_id", String(unidadeExecucaoId));
+        url.searchParams.set("ano_referencia", String(anoReferencia));
+        url.searchParams.set("tier_ordem_override", String(idx + 1));
+
+        const res = await fetch(url.toString());
+        if (!res.ok) continue;
+
+        const json = (await res.json()) as PrecoResolverResp;
+        const cent = json.data?.valor_final_centavos ?? json.data?.item_aplicado?.valor_centavos ?? null;
+        if (typeof cent !== "number" || !Number.isFinite(cent)) continue;
+
+        const brl =
+          (json.data?.valor_final_brl && json.data.valor_final_brl.trim()) || formatCurrency(cent);
+
+        results.push({
+          idx,
+          servico_id: servicoId,
+          unidade_execucao_id: unidadeExecucaoId,
+          turma_id: turmaId,
+          valor_final_centavos: cent,
+          valor_final_brl: brl,
+        });
+      }
+
+      if (!ativo) return;
+      setPrecosItens(results.sort((a, b) => a.idx - b.idx));
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [aluno?.id, anoReferencia, itensCarrinho]);
+
   async function onSubmit() {
     setErro(null);
 
@@ -443,7 +547,7 @@ export default function NovaMatriculaPage() {
       return;
     }
 
-    if (!itensCompletos) {
+    if (!itensCompletosOk) {
       setErro("Complete todos os cursos e turmas antes de continuar.");
       return;
     }
@@ -465,22 +569,21 @@ export default function NovaMatriculaPage() {
 
     setLoading(true);
     try {
-      const vinculosIds: number[] = [];
-      const seen = new Set<number>();
-      for (const item of itensCarrinho) {
-        if (typeof item.turma_id !== "number") continue;
-        if (seen.has(item.turma_id)) continue;
-        seen.add(item.turma_id);
-        vinculosIds.push(item.turma_id);
-      }
+      const itensPayload = itensCarrinho
+        .map((item) => ({
+          servico_id: item.servico_id,
+          unidade_execucao_id: item.unidade_execucao_id,
+          turma_id: item.turma_id,
+        }))
+        .filter(
+          (item): item is { servico_id: number; unidade_execucao_id: number; turma_id: number } =>
+            typeof item.servico_id === "number" &&
+            typeof item.unidade_execucao_id === "number" &&
+            typeof item.turma_id === "number",
+        );
+      const vinculosIds = Array.from(new Set(itensPayload.map((item) => item.turma_id)));
       const vinculoPrincipalId = vinculosIds[0];
-      const unidadeExecucaoIds = Array.from(
-        new Set(
-          vinculosIds
-            .map((id) => uesDisponiveis.find((t) => t.turma_id === id)?.unidade_execucao_id ?? null)
-            .filter((id): id is number => typeof id === "number"),
-        ),
-      );
+      const unidadeExecucaoIds = Array.from(new Set(itensPayload.map((item) => item.unidade_execucao_id)));
 
       if (!vinculoPrincipalId) {
         throw new Error("Turma principal nao encontrada para concluir a matricula.");
@@ -492,7 +595,9 @@ export default function NovaMatriculaPage() {
         tipo_matricula: tipo,
         vinculo_id: vinculoPrincipalId,
         ...(vinculosIds.length > 1 ? { vinculos_ids: vinculosIds } : {}),
+        itens: itensPayload,
         ...(unidadeExecucaoIds.length > 0 ? { unidade_execucao_ids: unidadeExecucaoIds } : {}),
+        total_mensalidade_centavos: totalMensalidadeCentavos,
         data_matricula: dataMatricula,
         data_inicio_vinculo: dataInicioVinculo,
         observacoes: observacoes.trim() || null,
@@ -746,7 +851,11 @@ export default function NovaMatriculaPage() {
                           value={item.servico_id ? String(item.servico_id) : ""}
                           onChange={(e) => {
                             const nextServicoId = e.target.value ? Number(e.target.value) : null;
-                            updateItemCarrinho(item.id, { servico_id: nextServicoId, turma_id: null });
+                            updateItemCarrinho(item.id, {
+                              servico_id: nextServicoId,
+                              unidade_execucao_id: null,
+                              turma_id: null,
+                            });
                           }}
                           disabled={carregandoServicos || (contextoObrigatorio && !contextoId)}
                         >
@@ -764,10 +873,17 @@ export default function NovaMatriculaPage() {
                         <label className="text-sm font-medium">Turma (Unidade de execucao)</label>
                         <select
                           className="w-full rounded-md border px-3 py-2 text-sm"
-                          value={item.turma_id ?? ""}
+                          value={item.unidade_execucao_id ?? ""}
                           onChange={(e) => {
                             const nextId = e.target.value ? Number(e.target.value) : null;
-                            updateItemCarrinho(item.id, { turma_id: nextId });
+                            const selected =
+                              nextId && Number.isFinite(nextId)
+                                ? ues.find((turma) => turma.unidade_execucao_id === nextId) ?? null
+                                : null;
+                            updateItemCarrinho(item.id, {
+                              unidade_execucao_id: nextId,
+                              turma_id: selected?.turma_id ?? null,
+                            });
                           }}
                           disabled={!item.servico_id || (contextoObrigatorio && !contextoId) || carregandoUes}
                         >
@@ -777,7 +893,7 @@ export default function NovaMatriculaPage() {
                           {ues
                             .filter((turma) => Number.isFinite(turma.turma_id ?? NaN))
                             .map((turma) => (
-                              <option key={String(turma.unidade_execucao_id)} value={turma.turma_id ?? ""}>
+                              <option key={String(turma.unidade_execucao_id)} value={turma.unidade_execucao_id}>
                                 {labelUnidadeExecucao(turma)}
                               </option>
                             ))}
@@ -862,7 +978,23 @@ export default function NovaMatriculaPage() {
             ) : (
               <div>Tabela aplicada: -</div>
             )}
-            <div>Mensalidade aplicada: {itemAplicado ? formatCurrency(itemAplicado.valor_centavos) : "-"}</div>
+            <div className="text-sm">
+              <div className="font-medium">Mensalidades por item</div>
+              {precosItens.length === 0 ? (
+                <div className="mt-1 text-muted-foreground">-</div>
+              ) : (
+                <>
+                  <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                    {precosItens.map((p) => (
+                      <li key={p.idx}>
+                        {p.idx + 1}a modalidade: {p.valor_final_brl}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 font-semibold">Total mensalidade: {totalMensalidadeBRL}</div>
+                </>
+              )}
+            </div>
             <div>Plano de pagamento: Plano padrao aplicado</div>
             <div>Data da matricula: {dataMatricula}</div>
             <div>Inicio do vinculo: {dataInicioVinculo}</div>

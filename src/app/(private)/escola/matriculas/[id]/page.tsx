@@ -111,6 +111,7 @@ export default function MatriculaDetalhePage() {
   const parcelasProximas = resumoCartao?.parcelas_proximas ?? [];
   const parcelasVisiveis = parcelasProximas.slice(0, 4);
   const documentosEmitidos = data?.documentos_emitidos ?? [];
+  const documentosHref = `/escola/matriculas/${id}/documentos`;
 
   return (
     <div className="p-4 space-y-6">
@@ -224,13 +225,13 @@ export default function MatriculaDetalhePage() {
             </p>
             <div className="flex flex-wrap gap-2">
               <Link
-                href={`/escola/matriculas/${id}/documentos`}
+                href={documentosHref}
                 className="rounded-md border px-3 py-2 text-sm text-muted-foreground hover:underline"
               >
                 Ver documentos
               </Link>
               <Link
-                href={`/admin/config/documentos/modelos?emitirParaMatriculaId=${id}`}
+                href={`${documentosHref}?emitir=1`}
                 className="rounded-md border border-slate-800 px-3 py-2 text-sm font-medium"
               >
                 Emitir documento

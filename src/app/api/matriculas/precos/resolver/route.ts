@@ -227,7 +227,8 @@ export async function GET(req: Request) {
     const alvoIdParam = url.searchParams.get("alvo_id");
     const turmaIdParam = url.searchParams.get("turma_id");
     const alvoInput = Number(alvoIdParam || turmaIdParam || "");
-    const ano = Number(url.searchParams.get("ano") || "");
+    const ano = Number(url.searchParams.get("ano") || url.searchParams.get("ano_referencia") || "");
+    const tierOrdemOverride = toPositiveNumber(url.searchParams.get("tier_ordem_override"));
 
     if (!alunoId) return badRequest("aluno_id e obrigatorio.");
     if (!alvoInput) return badRequest("alvo_id e obrigatorio.");
@@ -353,8 +354,8 @@ export async function GET(req: Request) {
     }
 
     let tierGrupoId: number | null = null;
-    let tierOrdem: number | null = null;
-    let quantidadeModalidades: number | null = null;
+    let tierOrdem: number | null = tierOrdemOverride ?? null;
+    let quantidadeModalidades: number | null = tierOrdemOverride ?? null;
     let tierValorCentavos: number | null = null;
 
     const { data: servicoTier, error: servicoTierErr } = await admin
@@ -386,6 +387,7 @@ export async function GET(req: Request) {
           (servicosGrupo ?? []).map((s) => (s as { id?: number | null }).id),
         );
         if (servicosGrupoIds.length) {
+        if (!tierOrdemOverride) {
           const qtdGrupoRes = await calcularModalidadesPorGrupo(admin, alunoId, ano, servicosGrupoIds, servicoId);
           if (qtdGrupoRes.ok) {
             quantidadeModalidades = qtdGrupoRes.quantidadeModalidades;
@@ -394,6 +396,7 @@ export async function GET(req: Request) {
             console.error("[precos/resolver] qtdGrupo", qtdGrupoRes.response);
           }
         }
+      }
       }
 
       if (tierOrdem) {
@@ -443,11 +446,15 @@ export async function GET(req: Request) {
     }
 
     let qtdModalidades: number | null = null;
-    const qtdRes = await calcularQtdModalidades(admin, alunoId, ano, servicoId, alvoTipo);
-    if (qtdRes.ok) {
-      qtdModalidades = qtdRes.qtdModalidades;
+    if (tierOrdemOverride) {
+      qtdModalidades = tierOrdemOverride;
     } else {
-      console.error("[precos/resolver] qtdModalidades", qtdRes.response);
+      const qtdRes = await calcularQtdModalidades(admin, alunoId, ano, servicoId, alvoTipo);
+      if (qtdRes.ok) {
+        qtdModalidades = qtdRes.qtdModalidades;
+      } else {
+        console.error("[precos/resolver] qtdModalidades", qtdRes.response);
+      }
     }
 
     let tier: TierRow | null = null;
@@ -529,6 +536,12 @@ export async function GET(req: Request) {
       item = { ...item, valor_centavos: tierValorCentavos };
     }
     const valorFinalCentavos = item?.valor_centavos ?? null;
+    const valorFinalBrl =
+      typeof valorFinalCentavos === "number"
+        ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+            valorFinalCentavos / 100,
+          )
+        : null;
     const debug =
       process.env.NODE_ENV !== "production"
         ? {
@@ -559,6 +572,8 @@ export async function GET(req: Request) {
               : null,
           tier: tier ? { id: tier.id, item_codigo: tier.item_codigo, tipo_item: tier.tipo_item } : null,
           item_aplicado: item,
+          valor_final_centavos: valorFinalCentavos,
+          valor_final_brl: valorFinalBrl,
           alvo: { tipo: alvoTipo, id: alvoId },
           ...(debug ? { debug } : {}),
         },

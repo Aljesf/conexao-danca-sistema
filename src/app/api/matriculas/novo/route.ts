@@ -23,6 +23,7 @@ type BodyNovo = {
   tipo_matricula: TipoMatricula;
   vinculo_id: number;
   vinculos_ids?: number[] | null;
+  itens?: MatriculaItem[] | null;
   ano_referencia?: number | null;
   data_matricula?: string | null;
   data_inicio_vinculo?: string | null;
@@ -32,6 +33,12 @@ type BodyNovo = {
   documento_modelo_id?: number | null;
   contrato_modelo_id?: number | null;
   observacoes?: string | null;
+};
+
+type MatriculaItem = {
+  servico_id: number;
+  unidade_execucao_id: number;
+  turma_id: number;
 };
 
 function badRequest(message: string, details?: Record<string, unknown>) {
@@ -67,6 +74,24 @@ function normalizeIdArray(value: unknown): number[] | null {
   return out;
 }
 
+function parseItens(value: unknown): MatriculaItem[] | null {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return null;
+  const itens: MatriculaItem[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") return null;
+    const record = raw as Record<string, unknown>;
+    const servicoId = Number(record.servico_id);
+    const unidadeExecucaoId = Number(record.unidade_execucao_id);
+    const turmaId = Number(record.turma_id);
+    if (!Number.isFinite(servicoId) || servicoId <= 0) return null;
+    if (!Number.isFinite(unidadeExecucaoId) || unidadeExecucaoId <= 0) return null;
+    if (!Number.isFinite(turmaId) || turmaId <= 0) return null;
+    itens.push({ servico_id: servicoId, unidade_execucao_id: unidadeExecucaoId, turma_id: turmaId });
+  }
+  return itens;
+}
+
 export async function POST(req: Request) {
   const cookieStore = await cookies();
   const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
@@ -90,6 +115,16 @@ export async function POST(req: Request) {
   const pessoaId = Number(body.pessoa_id);
   const respFinId = Number(body.responsavel_financeiro_id);
   const tipoMatricula = body.tipo_matricula;
+  const itensParsed = parseItens(body.itens);
+  if (itensParsed === null) {
+    return badRequest("itens invalidos.");
+  }
+  const itens = itensParsed ?? [];
+  const hasItens = Object.prototype.hasOwnProperty.call(body as Record<string, unknown>, "itens");
+  if (hasItens && itens.length === 0) {
+    return badRequest("itens_obrigatorios.");
+  }
+
   let vinculoId = Number(body.vinculo_id);
   const vinculosIdsParsed = normalizeIdArray(body.vinculos_ids);
   if (vinculosIdsParsed === null) {
@@ -97,20 +132,26 @@ export async function POST(req: Request) {
   }
   let vinculosIds = vinculosIdsParsed ?? [];
 
-  if (!Number.isFinite(vinculoId) || vinculoId <= 0) {
-    vinculoId = vinculosIds[0] ?? NaN;
+  if (itens.length > 0) {
+    const principal = itens[0];
+    vinculoId = principal.turma_id;
+    vinculosIds = Array.from(new Set(itens.map((item) => item.turma_id)));
+  } else {
+    if (!Number.isFinite(vinculoId) || vinculoId <= 0) {
+      vinculoId = vinculosIds[0] ?? NaN;
+    }
+
+    if (vinculosIds.length === 0 && Number.isFinite(vinculoId) && vinculoId > 0) {
+      vinculosIds = [vinculoId];
+    } else if (vinculosIds.length > 0 && Number.isFinite(vinculoId) && !vinculosIds.includes(vinculoId)) {
+      vinculosIds.unshift(vinculoId);
+    }
   }
 
   if (!pessoaId || !respFinId || !tipoMatricula || !Number.isFinite(vinculoId) || vinculoId <= 0) {
     return badRequest(
-      "Campos obrigatorios ausentes: pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id (ou vinculos_ids).",
+      "Campos obrigatorios ausentes: pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id (ou itens/vinculos_ids).",
     );
-  }
-
-  if (vinculosIds.length === 0) {
-    vinculosIds = [vinculoId];
-  } else if (!vinculosIds.includes(vinculoId)) {
-    vinculosIds.unshift(vinculoId);
   }
 
   const anoRef = body.ano_referencia ?? null;
