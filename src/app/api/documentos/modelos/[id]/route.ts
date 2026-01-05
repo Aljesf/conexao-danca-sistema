@@ -76,9 +76,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       .select("id,codigo,nome,conjunto_id")
       .in("id", grupoIds);
     if (gErr) {
-      return NextResponse.json({ error: gErr.message }, { status: 500 });
+      const msg = gErr.message ?? "";
+      const isMissingTable =
+        msg.includes("documentos_conjuntos_grupos") && msg.toLowerCase().includes("does not exist");
+      if (!isMissingTable) {
+        return NextResponse.json({ error: gErr.message }, { status: 500 });
+      }
+    } else {
+      grupos = (gData ?? []) as Array<Record<string, unknown>>;
     }
-    grupos = (gData ?? []) as Array<Record<string, unknown>>;
   }
 
   const conjuntoIds = Array.from(

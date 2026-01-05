@@ -334,3 +334,8 @@ Paginas:
 - Admin Documentos: Colecoes agora listam e permitem edicao (metadados + colunas).
 - Variaveis: secao de colecoes com atalho para edicao.
 - Modelos: editor mostra colecoes detectadas no template (padroniza codigo usado).
+
+## Atualizacoes recentes (Documentos - 2026-01-11)
+
+- Detector de colecoes nao depende de conjuntos/grupos para carregar modelos.
+- Tabela `documentos_conjuntos_grupos` criada como base minima (quando ausente).
