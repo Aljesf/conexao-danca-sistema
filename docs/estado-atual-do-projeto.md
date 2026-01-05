@@ -321,3 +321,4 @@ Paginas:
 ## Atualizacoes recentes (Documentos - 2026-01-08)
 
 - Contexto do emitido agora inclui colecao `parcelas[]` para templates (dados do Cartao Conexao).
+- Recarregar emitido recalcula parcelas via `matriculas_financeiro_linhas` e atualiza o HTML.

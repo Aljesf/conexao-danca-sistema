@@ -65,6 +65,25 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     }
   }
 
+  async function recarregarEmitido() {
+    setErro(null);
+    setOkMsg(null);
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/documentos/emitidos/${docId}`, { method: "POST" });
+      const json = (await res.json()) as ApiResp<unknown>;
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message || "Falha ao recarregar documento emitido.");
+      }
+      setOkMsg("Documento recarregado com dados atuais da matricula.");
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro inesperado.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   React.useEffect(() => {
     if (!Number.isFinite(docId) || docId <= 0) {
       setErro("ID invalido.");
@@ -216,7 +235,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                   <button
                     type="button"
                     className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
-                    onClick={carregar}
+                    onClick={recarregarEmitido}
                   >
                     Recarregar
                   </button>
