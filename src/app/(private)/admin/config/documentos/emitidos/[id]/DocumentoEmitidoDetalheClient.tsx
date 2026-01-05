@@ -38,7 +38,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
   const [modoEditar, setModoEditar] = React.useState(false);
   const [html, setHtml] = React.useState<string>("<p></p>");
-  const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = React.useState<string>("<p></p>");
   const [salvando, setSalvando] = React.useState(false);
   const [okMsg, setOkMsg] = React.useState<string | null>(null);
   const [debug, setDebug] = React.useState<unknown>(null);
@@ -80,7 +80,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     setDebug(null);
     setLoading(true);
     try {
-      const res = await fetch(`/api/documentos/emitidos/${docId}`, { method: "POST" });
+      const res = await fetch(`/api/documentos/emitidos/${docId}?debug=1`, { method: "POST" });
       const json = (await res.json()) as ApiResp<unknown>;
       if (!res.ok || !json.ok) {
         throw new Error(json.message || "Falha ao recarregar documento emitido.");
@@ -165,10 +165,10 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     "--page-margin-mm": `${pageMarginMm}mm`,
   } as React.CSSProperties;
   const previewConteudo =
-    previewHtml ??
-    doc?.conteudo_resolvido_html ??
-    doc?.conteudo_template_html ??
-    doc?.conteudo_renderizado_md ??
+    previewHtml ||
+    doc?.conteudo_resolvido_html ||
+    doc?.conteudo_template_html ||
+    doc?.conteudo_renderizado_md ||
     "<p>(sem conteudo)</p>";
   const colecoesVazias = React.useMemo(() => {
     const raw = doc?.variaveis_utilizadas_json;
@@ -348,6 +348,9 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                       />
                     </div>
                   </div>
+                  {debug ? (
+                    <div className="mt-2 text-xs text-slate-500">HTML len: {previewConteudo.length}</div>
+                  ) : null}
                 </div>
               )}
             </div>

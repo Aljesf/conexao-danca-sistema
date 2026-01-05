@@ -364,3 +364,4 @@ Paginas:
 - POST de recarregar emitido inclui bloco debug no JSON quando DOCS_EMIT_DEBUG=1.
 - UI do emitido exibe painel Debug (recarregar) quando a resposta traz debug.
 - Preview do emitido agora aplica o HTML retornado pelo POST de recarregar.
+- Debug do recarregar inclui htmlLen/primeiraParcela e o preview mostra o HTML len.

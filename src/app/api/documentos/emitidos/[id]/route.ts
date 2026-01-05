@@ -220,7 +220,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   return NextResponse.json({ ok: true, data } satisfies ApiResp<unknown>);
 }
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
     const docId = Number(id);
@@ -343,10 +343,22 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       ...collectionsResolvedFinal,
     };
 
-    const debugEnabled = process.env.DOCS_EMIT_DEBUG === "1";
+    const url = new URL(req.url);
+    const debugEnabled = process.env.DOCS_EMIT_DEBUG === "1" || url.searchParams.get("debug") === "1";
     const parcelasRaw = (contextoFinal as Record<string, unknown>)["MATRICULA_PARCELAS"];
-    const parcelasArr = Array.isArray(parcelasRaw) ? (parcelasRaw as unknown[]) : [];
+    const parcelasArr = Array.isArray(parcelasRaw) ? (parcelasRaw as Array<Record<string, unknown>>) : [];
     const primeiraParcela = parcelasArr.length > 0 ? parcelasArr[0] : null;
+    const previewLinhaDebug =
+      debugEnabled && primeiraParcela && typeof primeiraParcela === "object"
+        ? [
+            "<tr>",
+            `<td>${String(primeiraParcela.DATA ?? "")}</td>`,
+            `<td>${String(primeiraParcela.DESCRICAO ?? "")}</td>`,
+            `<td>${String(primeiraParcela.VALOR ?? "")}</td>`,
+            `<td>${String(primeiraParcela.STATUS ?? "")}</td>`,
+            "</tr>",
+          ].join("")
+        : null;
 
     let sanityDbLen: number | null = null;
     if (debugEnabled) {
@@ -363,21 +375,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       }
     }
 
-    const debugPayload = debugEnabled
-      ? {
-          emitidoId: docId,
-          matriculaId,
-          contratoModeloId,
-          templateSize: template.length,
-          colecoesDetectadas: Array.isArray(colecoesDetectadas) ? colecoesDetectadas : [],
-          parcelasLen: parcelasArr.length,
-          primeiraParcela,
-          sanityDbLen,
-          keysContexto: Object.keys(contextoFinal),
-        }
-      : null;
-
-    if (process.env.DOCS_EMIT_DEBUG === "1") {
+    if (debugEnabled) {
       console.log("[doc-colecao] matricula_id:", matriculaId);
       console.log("[doc-colecao] colecoes_detectadas:", colecoesDetectadas);
       console.log("[doc-colecao] keys_contexto:", Object.keys(contextoFinal));
@@ -402,6 +400,23 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
     const conteudoResolvido = renderTemplateHtml(template, contextoFinal);
     const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
+    const htmlLen = conteudoResolvidoLimpo.length;
+
+    const debugPayload = debugEnabled
+      ? {
+          emitidoId: docId,
+          matriculaId,
+          contratoModeloId,
+          templateSize: template.length,
+          colecoesDetectadas: Array.isArray(colecoesDetectadas) ? colecoesDetectadas : [],
+          parcelasLen: parcelasArr.length,
+          primeiraParcela,
+          previewLinhaDebug,
+          sanityDbLen,
+          htmlLen,
+          keysContexto: Object.keys(contextoFinal),
+        }
+      : null;
 
     const { data: atualizado, error: updErr } = await supabase
       .from("documentos_emitidos")
