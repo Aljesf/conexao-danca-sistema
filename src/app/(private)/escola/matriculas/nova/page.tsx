@@ -33,6 +33,12 @@ type TurmaOpcao = {
   suggested?: boolean;
 };
 
+type MatriculaCarrinhoItem = {
+  id: string;
+  curso: string | null;
+  turma_id: number | null;
+};
+
 type CursosResp = {
   ok: boolean;
   cursos?: string[];
@@ -106,21 +112,6 @@ function mapContextoTipo(tipo: TipoMatricula): ContextoTipo {
   return tipo === "REGULAR" ? "PERIODO_LETIVO" : "CURSO_LIVRE";
 }
 
-function formatFaixaEtaria(min?: number | null, max?: number | null): string | null {
-  if (min === null && max === null) return null;
-  const minLabel = min ?? "-";
-  const maxLabel = max ?? "-";
-  return `${minLabel}-${maxLabel}`;
-}
-
-function labelTurma(turma: TurmaOpcao): string {
-  const nome = turma.nome?.trim() ? turma.nome : `Turma #${turma.turma_id}`;
-  const ano = turma.ano_referencia ?? "-";
-  const faixa = formatFaixaEtaria(turma.idade_minima ?? null, turma.idade_maxima ?? null);
-  const prefixo = turma.suggested ? "Sugestao: " : "";
-  return `${prefixo}${nome} (${ano})${faixa ? ` | Faixa ${faixa}` : ""}`;
-}
-
 function labelContexto(contexto: ContextoMatricula): string {
   const ano = contexto.ano_referencia ? ` (${contexto.ano_referencia})` : "";
   return `${contexto.titulo}${ano}`;
@@ -130,6 +121,14 @@ function labelUnidadeExecucao(turma: TurmaOpcao): string {
   if (turma.unidade_execucao_label?.trim()) return turma.unidade_execucao_label;
   if (turma.nome?.trim()) return turma.nome;
   return `Turma #${turma.turma_id}`;
+}
+
+function createCarrinhoItem(): MatriculaCarrinhoItem {
+  const id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return { id, curso: null, turma_id: null };
 }
 
 function extractErrorMessage(data: unknown, status: number): string {
@@ -174,10 +173,8 @@ export default function NovaMatriculaPage() {
   const [contextosErro, setContextosErro] = useState<string | null>(null);
   const [contextosLoading, setContextosLoading] = useState(false);
   const [cursos, setCursos] = useState<string[]>([]);
-  const [cursoSelecionado, setCursoSelecionado] = useState<string>("");
-  const [turmas, setTurmas] = useState<TurmaOpcao[]>([]);
-  const [turmaId, setTurmaId] = useState<number | null>(null);
-  const [turmasSelecionadas, setTurmasSelecionadas] = useState<TurmaOpcao[]>([]);
+  const [itensCarrinho, setItensCarrinho] = useState<MatriculaCarrinhoItem[]>(() => [createCarrinhoItem()]);
+  const [turmasPorCurso, setTurmasPorCurso] = useState<Record<string, TurmaOpcao[]>>({});
   const [anoReferencia, setAnoReferencia] = useState<number>(() => new Date().getFullYear());
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [dataInicioVinculo, setDataInicioVinculo] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -198,24 +195,42 @@ export default function NovaMatriculaPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const turmaPrincipalId = tipo === "REGULAR" ? turmasSelecionadas[0]?.turma_id ?? null : turmaId;
+  const principalItem = itensCarrinho[0] ?? null;
+  const turmaPrincipalId = principalItem?.turma_id ?? null;
+  const turmasDisponiveis = useMemo(() => Object.values(turmasPorCurso).flat(), [turmasPorCurso]);
   const turmaSelecionada = useMemo(
-    () => turmas.find((t) => t.turma_id === turmaPrincipalId) ?? null,
-    [turmas, turmaPrincipalId],
+    () => turmasDisponiveis.find((t) => t.turma_id === turmaPrincipalId) ?? null,
+    [turmasDisponiveis, turmaPrincipalId],
   );
   const contextoSelecionado = useMemo(
     () => contextos.find((c) => c.id === contextoId) ?? null,
     [contextos, contextoId],
   );
+  const itensResumo = useMemo(
+    () =>
+      itensCarrinho
+        .map((item, idx) => {
+          if (!item.curso || !item.turma_id) return null;
+          const turma = turmasDisponiveis.find((t) => t.turma_id === item.turma_id) ?? null;
+          const ueLabel = turma ? labelUnidadeExecucao(turma) : `UE #${item.turma_id}`;
+          const prefixo = idx === 0 ? "Principal" : `Item ${idx + 1}`;
+          return `${prefixo}: ${item.curso} - ${ueLabel}`;
+        })
+        .filter((item): item is string => !!item),
+    [itensCarrinho, turmasDisponiveis],
+  );
 
   const precoOk = !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado;
+  const itensCompletos =
+    itensCarrinho.length > 0 && itensCarrinho.every((item) => Boolean(item.curso && item.turma_id));
+  const principalCompleto = Boolean(principalItem?.curso && principalItem?.turma_id);
 
   const podeSalvar =
     !!aluno &&
     !!responsavel &&
     Number.isFinite(contextoId ?? NaN) &&
-    !!cursoSelecionado &&
-    (tipo === "REGULAR" ? turmasSelecionadas.length > 0 : !!turmaSelecionada) &&
+    itensCompletos &&
+    principalCompleto &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
     (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0) &&
     precoOk;
@@ -241,11 +256,9 @@ export default function NovaMatriculaPage() {
   }, []);
 
   useEffect(() => {
-    setCursoSelecionado("");
-    setTurmas([]);
-    setTurmaId(null);
+    setItensCarrinho([createCarrinhoItem()]);
+    setTurmasPorCurso({});
     setTurmasErro(null);
-    setTurmasSelecionadas([]);
     setContextoId(null);
     setContextos([]);
   }, [tipo]);
@@ -292,30 +305,45 @@ export default function NovaMatriculaPage() {
   }, [tipo, anoReferencia, contextoId]);
 
   useEffect(() => {
-    if (!cursoSelecionado.trim() || !contextoId) {
-      setTurmas([]);
-      setTurmaId(null);
-      setTurmasSelecionadas([]);
+    setItensCarrinho((prev) => prev.map((item) => ({ ...item, turma_id: null })));
+    setTurmasPorCurso({});
+    setTurmasErro(null);
+    setCarregandoTurmas(false);
+  }, [contextoId]);
+
+  const cursosSelecionados = useMemo(() => {
+    const lista = itensCarrinho
+      .map((item) => item.curso?.trim())
+      .filter((curso): curso is string => !!curso);
+    return Array.from(new Set(lista));
+  }, [itensCarrinho]);
+
+  useEffect(() => {
+    if (!contextoId || cursosSelecionados.length === 0) {
       setTurmasErro(null);
+      setCarregandoTurmas(false);
       return;
     }
+
+    const pendentes = cursosSelecionados.filter((curso) => !turmasPorCurso[curso]);
+    if (pendentes.length === 0) return;
 
     let ativo = true;
     (async () => {
       try {
         setTurmasErro(null);
         setCarregandoTurmas(true);
-        const params = new URLSearchParams({
-          curso: cursoSelecionado,
-          tipo_turma: tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "REGULAR",
-        });
-        const data = await fetchJSON<TurmasResp>(
-          `/api/matriculas/contextos/${contextoId}/unidades-execucao?${params.toString()}`,
-        );
-        if (!ativo) return;
-        setTurmas(data.turmas ?? []);
-        setTurmaId(null);
-        setTurmasSelecionadas([]);
+        for (const curso of pendentes) {
+          const params = new URLSearchParams({
+            curso,
+            tipo_turma: tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "REGULAR",
+          });
+          const data = await fetchJSON<TurmasResp>(
+            `/api/matriculas/contextos/${contextoId}/unidades-execucao?${params.toString()}`,
+          );
+          if (!ativo) return;
+          setTurmasPorCurso((prev) => ({ ...prev, [curso]: data.turmas ?? [] }));
+        }
       } catch (e: unknown) {
         if (ativo) setTurmasErro(e instanceof Error ? e.message : "Falha ao carregar turmas.");
       } finally {
@@ -325,7 +353,7 @@ export default function NovaMatriculaPage() {
     return () => {
       ativo = false;
     };
-  }, [tipo, cursoSelecionado, contextoId]);
+  }, [tipo, contextoId, cursosSelecionados, turmasPorCurso]);
 
   useEffect(() => {
     if (tipo === "REGULAR" && turmaSelecionada?.ano_referencia) {
@@ -333,14 +361,16 @@ export default function NovaMatriculaPage() {
     }
   }, [tipo, turmaSelecionada]);
 
-  function toggleTurmaSelecionada(turma: TurmaOpcao) {
-    setTurmasSelecionadas((prev) => {
-      const exists = prev.some((t) => t.turma_id === turma.turma_id);
-      if (exists) {
-        return prev.filter((t) => t.turma_id !== turma.turma_id);
-      }
-      return [...prev, turma];
-    });
+  function addItemCarrinho() {
+    setItensCarrinho((prev) => [...prev, createCarrinhoItem()]);
+  }
+
+  function removeItemCarrinho(id: string) {
+    setItensCarrinho((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.id !== id)));
+  }
+
+  function updateItemCarrinho(id: string, patch: Partial<MatriculaCarrinhoItem>) {
+    setItensCarrinho((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
   useEffect(() => {
@@ -399,13 +429,13 @@ export default function NovaMatriculaPage() {
       return;
     }
 
-    if (tipo === "REGULAR" && turmasSelecionadas.length === 0) {
-      setErro("Selecione ao menos uma unidade de execucao.");
+    if (!principalCompleto) {
+      setErro("Selecione o curso e a turma principal.");
       return;
     }
 
-    if (tipo !== "REGULAR" && !turmaSelecionada) {
-      setErro("Selecione a turma.");
+    if (!itensCompletos) {
+      setErro("Complete todos os cursos e turmas antes de continuar.");
       return;
     }
 
@@ -426,9 +456,22 @@ export default function NovaMatriculaPage() {
 
     setLoading(true);
     try {
-      const vinculosIds =
-        tipo === "REGULAR" ? turmasSelecionadas.map((t) => t.turma_id) : turmaSelecionada ? [turmaSelecionada.turma_id] : [];
+      const vinculosIds: number[] = [];
+      const seen = new Set<number>();
+      for (const item of itensCarrinho) {
+        if (typeof item.turma_id !== "number") continue;
+        if (seen.has(item.turma_id)) continue;
+        seen.add(item.turma_id);
+        vinculosIds.push(item.turma_id);
+      }
       const vinculoPrincipalId = vinculosIds[0];
+      const unidadeExecucaoIds = Array.from(
+        new Set(
+          vinculosIds
+            .map((id) => turmasDisponiveis.find((t) => t.turma_id === id)?.unidade_execucao_id ?? null)
+            .filter((id): id is number => typeof id === "number"),
+        ),
+      );
 
       if (!vinculoPrincipalId) {
         throw new Error("Turma principal nao encontrada para concluir a matricula.");
@@ -440,6 +483,7 @@ export default function NovaMatriculaPage() {
         tipo_matricula: tipo,
         vinculo_id: vinculoPrincipalId,
         ...(vinculosIds.length > 1 ? { vinculos_ids: vinculosIds } : {}),
+        ...(unidadeExecucaoIds.length > 0 ? { unidade_execucao_ids: unidadeExecucaoIds } : {}),
         data_matricula: dataMatricula,
         data_inicio_vinculo: dataInicioVinculo,
         observacoes: observacoes.trim() || null,
@@ -601,8 +645,8 @@ export default function NovaMatriculaPage() {
           </SectionCard>
         </div>
 
-        <SectionCard title="Contexto, curso e turmas">
-          <div className="grid gap-4 md:grid-cols-2">
+        <SectionCard title="Contexto, cursos e turmas">
+          <div className="space-y-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">{tipo === "REGULAR" ? "Periodo letivo" : "Contexto de matricula"}</label>
               <select
@@ -634,101 +678,111 @@ export default function NovaMatriculaPage() {
               ) : null}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Curso</label>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={cursoSelecionado}
-                onChange={(e) => {
-                  setCursoSelecionado(e.target.value);
-                  setTurmaId(null);
-                }}
-                disabled={carregandoCursos || !contextoId}
-              >
-                <option value="">Selecione...</option>
-                {cursos.map((curso) => (
-                  <option key={curso} value={curso}>
-                    {curso}
-                  </option>
-                ))}
-              </select>
-              {!contextoId ? (
-                <p className="text-xs text-muted-foreground">Selecione o contexto para habilitar o curso.</p>
-              ) : null}
-              {cursosErro ? <p className="text-xs text-red-600">{cursosErro}</p> : null}
-            </div>
-          </div>
-
-          {tipo === "REGULAR" ? (
-            <div className="mt-4 space-y-2">
-              <label className="text-sm font-medium">Unidades de execucao (multiplas)</label>
-              {!contextoId || !cursoSelecionado ? (
-                <p className="text-xs text-muted-foreground">Selecione contexto e curso para listar unidades.</p>
-              ) : (
-                <div className="grid gap-2">
-                  {turmas.map((turma) => {
-                    const selecionada = turmasSelecionadas.some((t) => t.turma_id === turma.turma_id);
-                    const turmaLabel = labelTurma(turma);
-                    const ueLabel = labelUnidadeExecucao(turma);
-                    return (
-                      <label
-                        key={turma.turma_id}
-                        className={[
-                          "flex items-start gap-3 rounded-md border px-3 py-2 text-sm",
-                          selecionada ? "border-slate-900 bg-slate-50" : "border-slate-200",
-                        ].join(" ")}
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-1"
-                          checked={selecionada}
-                          onChange={() => toggleTurmaSelecionada(turma)}
-                          disabled={carregandoTurmas}
-                        />
-                        <div>
-                          <div className="font-medium text-slate-900">{ueLabel}</div>
-                          {ueLabel !== turmaLabel ? (
-                            <div className="text-xs text-slate-500">{turmaLabel}</div>
-                          ) : null}
-                        </div>
-                      </label>
-                    );
-                  })}
-                  {!carregandoTurmas && turmas.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Nenhuma unidade encontrada para este contexto.</p>
-                  ) : null}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium">Cursos e turmas (multiplos)</div>
+                  <div className="text-xs text-slate-500">
+                    Adicione um curso por vez e selecione a turma. O primeiro item vira a unidade principal.
+                  </div>
                 </div>
-              )}
-              {carregandoTurmas ? (
-                <p className="text-xs text-muted-foreground">Carregando unidades de execucao...</p>
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:border-slate-300"
+                  onClick={addItemCarrinho}
+                >
+                  + Adicionar curso
+                </button>
+              </div>
+
+              {!contextoId ? (
+                <p className="text-xs text-muted-foreground">Selecione o contexto para habilitar os cursos.</p>
               ) : null}
-              {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}
-              {turmasSelecionadas.length > 0 ? (
-                <p className="text-xs text-slate-500">Selecionadas: {turmasSelecionadas.length}</p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="mt-4 space-y-2">
-              <label className="text-sm font-medium">Turma</label>
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={turmaId ?? ""}
-                onChange={(e) => setTurmaId(e.target.value ? Number(e.target.value) : null)}
-                disabled={!cursoSelecionado || carregandoTurmas}
-              >
-                <option value="">Selecione...</option>
-                {turmas.map((turma) => (
-                  <option key={turma.turma_id} value={turma.turma_id}>
-                    {labelTurma(turma)}
-                  </option>
-                ))}
-              </select>
+
+              {itensCarrinho.map((item, idx) => {
+                const ues = item.curso ? turmasPorCurso[item.curso] ?? [] : [];
+                return (
+                  <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold">
+                          {idx === 0 ? "Curso / Turma (Principal)" : `Curso / Turma (${idx + 1})`}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {idx === 0
+                            ? "Define a referencia principal do resumo e da precificacao (MVP)."
+                            : "Item adicional do combo."}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-xs text-slate-500 hover:text-slate-700"
+                        onClick={() => removeItemCarrinho(item.id)}
+                        disabled={itensCarrinho.length <= 1}
+                      >
+                        Remover
+                      </button>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Curso</label>
+                        <select
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={item.curso ?? ""}
+                          onChange={(e) => {
+                            const nextCurso = e.target.value ? e.target.value : null;
+                            updateItemCarrinho(item.id, { curso: nextCurso, turma_id: null });
+                          }}
+                          disabled={carregandoCursos || !contextoId}
+                        >
+                          <option value="">Selecione...</option>
+                          {cursos.map((curso) => (
+                            <option key={curso} value={curso}>
+                              {curso}
+                            </option>
+                          ))}
+                        </select>
+                        {cursosErro ? <p className="text-xs text-red-600">{cursosErro}</p> : null}
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Turma (Unidade de execucao)</label>
+                        <select
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={item.turma_id ?? ""}
+                          onChange={(e) => {
+                            const nextId = e.target.value ? Number(e.target.value) : null;
+                            updateItemCarrinho(item.id, { turma_id: nextId });
+                          }}
+                          disabled={!item.curso || !contextoId || carregandoTurmas}
+                        >
+                          <option value="">
+                            {item.curso ? "Selecione a turma" : "Selecione o curso primeiro"}
+                          </option>
+                          {ues.map((turma) => (
+                            <option key={turma.turma_id} value={turma.turma_id}>
+                              {labelUnidadeExecucao(turma)}
+                            </option>
+                          ))}
+                        </select>
+                        {!carregandoTurmas && item.curso && ues.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            Nenhuma unidade encontrada para este curso no contexto selecionado.
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
               {carregandoTurmas ? (
                 <p className="text-xs text-muted-foreground">Carregando turmas...</p>
               ) : null}
               {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}
             </div>
-          )}
+          </div>
         </SectionCard>
 
         <SectionCard title="Primeiro pagamento">
@@ -771,15 +825,8 @@ export default function NovaMatriculaPage() {
             <div>Responsavel: {responsavel?.nome ?? "Nao selecionado"}</div>
             <div>Tipo: {labelTipo(tipo)}</div>
             <div>Contexto: {contextoSelecionado ? labelContexto(contextoSelecionado) : "-"}</div>
-            <div>Curso: {cursoSelecionado || "-"}</div>
-            {tipo === "REGULAR" ? (
-              <div>
-                Unidades de execucao:{" "}
-                {turmasSelecionadas.length > 0 ? turmasSelecionadas.map(labelUnidadeExecucao).join(", ") : "-"}
-              </div>
-            ) : (
-              <div>Turma: {turmaSelecionada ? labelTurma(turmaSelecionada) : "-"}</div>
-            )}
+            <div>Cursos/UEs: {itensResumo.length > 0 ? itensResumo.join(" | ") : "-"}</div>
+            <div>UE principal: {turmaSelecionada ? labelUnidadeExecucao(turmaSelecionada) : "-"}</div>
             {tabelaLoading ? (
               <div>Tabela aplicada: carregando...</div>
             ) : tabelaErro ? (
