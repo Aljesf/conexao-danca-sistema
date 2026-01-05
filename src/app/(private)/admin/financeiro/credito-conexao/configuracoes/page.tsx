@@ -212,7 +212,7 @@ export default function ConfiguracoesCreditoConexaoPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Credito Conexao - Configuracoes</h1>
+        <h1 className="text-2xl font-semibold">Cartao Conexao - Configuracoes</h1>
         <p className="text-sm text-gray-600">
           Ajuste o ciclo do cartao e a politica institucional de atraso, alem das regras de parcelamento.
         </p>
@@ -222,7 +222,7 @@ export default function ConfiguracoesCreditoConexaoPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Ciclo e politica do cartao</CardTitle>
+          <CardTitle>Ciclo e Politica do Cartao</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-sm text-muted-foreground">
@@ -240,7 +240,7 @@ export default function ConfiguracoesCreditoConexaoPage() {
                     activeTab === "ALUNO" ? "bg-slate-900 text-white" : "bg-white"
                   }`}
                 >
-                  Aluno
+                  ALUNO
                 </button>
                 <button
                   type="button"
@@ -249,7 +249,7 @@ export default function ConfiguracoesCreditoConexaoPage() {
                     activeTab === "COLABORADOR" ? "bg-slate-900 text-white" : "bg-white"
                   }`}
                 >
-                  Colaborador
+                  COLABORADOR
                 </button>
               </div>
 

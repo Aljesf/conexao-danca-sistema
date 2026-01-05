@@ -384,6 +384,11 @@ Paginas:
 - API: `POST /api/matriculas/preview-financeiro` (snapshot de compromisso previsto).
 - Matrícula nova: suporte a Projeto artistico na selecao de tipo e resumo de contexto.
 
+## Atualizacoes recentes (Auth - 2026-01-06)
+
+- SQL: tabela auth_signup_allowlist para controlar emails permitidos no signup.
+- SQL: handle_new_user passa a exigir allowlist e cria pessoa/profile com pessoa_id preenchido.
+
 ## Atualizacoes recentes (Credito Conexao - 2026-01-19)
 
 - SQL: unicidade de fatura por conta+periodo_referencia (cc_faturas_unique_conta_periodo).
