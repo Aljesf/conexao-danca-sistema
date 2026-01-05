@@ -137,23 +137,49 @@ export default function Page() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white p-6">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div>
-        <h1 className="text-2xl font-semibold">Cartao Conexao - Configuracoes</h1>
-        <p className="text-sm text-gray-600">
-          Ajuste o ciclo do cartao e a politica institucional de atraso, alem das regras de parcelamento.
-        </p>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Cartao Conexao - Configuracoes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-muted-foreground">
+              Defina o ciclo institucional do Cartao Conexao (fechamento e vencimento) e mantenha as regras de
+              parcelamento. Este painel governa a emissao de faturas mensais e a politica declarativa de atraso.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Entenda esta tela</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+              <li>
+                <span className="font-medium text-slate-900">Ciclo do cartao</span>: define o dia de fechamento e o dia
+                de vencimento por tipo de conta (Aluno/Colaborador).
+              </li>
+              <li>
+                <span className="font-medium text-slate-900">Multa e juros</span>: sao parametros institucionais
+                declarativos nesta fase (nao aplicados automaticamente).
+              </li>
+              <li>
+                <span className="font-medium text-slate-900">Parcelamento</span>: define taxas minimas/maximas e
+                condicoes para compras parceladas no Cartao Conexao.
+              </li>
+            </ul>
+          </CardContent>
+        </Card>
 
         <CicloPoliticaCard />
 
-      {erroRegra && <div className="text-sm text-red-600">{erroRegra}</div>}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Regras de parcelamento</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Regras de parcelamento</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {erroRegra && <div className="text-sm text-red-600">{erroRegra}</div>}
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-6">
             <div className="border rounded-xl bg-white shadow-sm">
               {loadingRegras ? (
                 <div className="p-4 text-sm text-gray-600">Carregando regras...</div>
@@ -381,8 +407,8 @@ export default function Page() {
               </form>
             </div>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

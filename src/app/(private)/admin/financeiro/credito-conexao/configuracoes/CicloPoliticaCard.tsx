@@ -35,6 +35,7 @@ export function CicloPoliticaCard() {
     ALUNO: null,
     COLABORADOR: null,
   });
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const current = useMemo(() => configs[tab], [configs, tab]);
 
@@ -49,6 +50,7 @@ export function CicloPoliticaCard() {
       setConfigs({ ALUNO: aluno, COLABORADOR: colab });
     } finally {
       setLoading(false);
+      setMessage(null);
     }
   }
 
@@ -68,19 +70,19 @@ export function CicloPoliticaCard() {
     if (!current) return;
 
     if (current.dia_fechamento < 1 || current.dia_fechamento > 31) {
-      alert("Dia de fechamento invalido. Use 1 a 31.");
+      setMessage({ type: "error", text: "Dia de fechamento invalido. Use 1 a 31." });
       return;
     }
     if (current.dia_vencimento < 1 || current.dia_vencimento > 31) {
-      alert("Dia de vencimento invalido. Use 1 a 31.");
+      setMessage({ type: "error", text: "Dia de vencimento invalido. Use 1 a 31." });
       return;
     }
     if (current.tolerancia_dias < 0 || current.tolerancia_dias > 30) {
-      alert("Tolerancia invalida. Use 0 a 30.");
+      setMessage({ type: "error", text: "Tolerancia invalida. Use 0 a 30." });
       return;
     }
     if (current.multa_percentual < 0 || current.juros_dia_percentual < 0) {
-      alert("Multa e juros nao podem ser negativos.");
+      setMessage({ type: "error", text: "Multa e juros nao podem ser negativos." });
       return;
     }
 
@@ -102,12 +104,12 @@ export function CicloPoliticaCard() {
 
       const json = (await res.json()) as ApiPutResponse;
       if (!res.ok || !json.ok || !json.data) {
-        alert(`Falha ao salvar: ${json.error ?? "erro_desconhecido"}`);
+        setMessage({ type: "error", text: `Falha ao salvar: ${json.error ?? "erro_desconhecido"}` });
         return;
       }
 
       setConfigs((prev) => ({ ...prev, [tab]: json.data! }));
-      alert("Configuracoes salvas.");
+      setMessage({ type: "success", text: "Configuracoes salvas com sucesso." });
     } finally {
       setSaving(false);
     }
@@ -124,6 +126,18 @@ export function CicloPoliticaCard() {
           Configure o dia de fechamento e o dia de vencimento do cartao por tipo de conta. Multa e juros sao parametros
           institucionais declarativos nesta fase (nao sao aplicados automaticamente no calculo).
         </div>
+        {message && (
+          <div
+            className={[
+              "mt-3 rounded-lg border px-3 py-2 text-sm",
+              message.type === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-red-200 bg-red-50 text-red-800",
+            ].join(" ")}
+          >
+            {message.text}
+          </div>
+        )}
 
         <div className="mt-4">
           <Tabs value={tab} onValueChange={(v) => setTab(v as TipoConta)}>
@@ -136,63 +150,81 @@ export function CicloPoliticaCard() {
               {loading || !current ? (
                 <div className="mt-4 text-sm text-muted-foreground">Carregando configuracoes...</div>
               ) : (
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Dia de fechamento</div>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={current.dia_fechamento}
-                      onChange={(e) => patch("dia_fechamento", safeNumber(e.target.value))}
-                    />
+                <div className="mt-4">
+                  <div className="grid gap-2">
+                    <div className="text-sm font-semibold">Ciclo do cartao</div>
+                    <div className="text-xs text-muted-foreground">
+                      Define o fechamento e o vencimento da fatura por tipo de conta.
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Dia de vencimento</div>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={current.dia_vencimento}
-                      onChange={(e) => patch("dia_vencimento", safeNumber(e.target.value))}
-                    />
+                  <div className="mt-3 grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Dia de fechamento</div>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={current.dia_fechamento}
+                        onChange={(e) => patch("dia_fechamento", safeNumber(e.target.value))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Dia de vencimento</div>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={current.dia_vencimento}
+                        onChange={(e) => patch("dia_vencimento", safeNumber(e.target.value))}
+                      />
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Tolerancia (dias)</div>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={30}
-                      value={current.tolerancia_dias}
-                      onChange={(e) => patch("tolerancia_dias", safeNumber(e.target.value))}
-                    />
+                  <div className="mt-6 grid gap-2">
+                    <div className="text-sm font-semibold">Politica de atraso (declarativa)</div>
+                    <div className="text-xs text-muted-foreground">
+                      Multa e juros sao parametros institucionais. Nesta fase, nao sao aplicados automaticamente.
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Multa (%)</div>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={current.multa_percentual}
-                      onChange={(e) => patch("multa_percentual", safeNumber(e.target.value))}
-                    />
+                  <div className="mt-3 grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Tolerancia (dias)</div>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={30}
+                        value={current.tolerancia_dias}
+                        onChange={(e) => patch("tolerancia_dias", safeNumber(e.target.value))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Multa (%)</div>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={current.multa_percentual}
+                        onChange={(e) => patch("multa_percentual", safeNumber(e.target.value))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Juros ao dia (%)</div>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={current.juros_dia_percentual}
+                        onChange={(e) => patch("juros_dia_percentual", safeNumber(e.target.value))}
+                      />
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">Juros ao dia (%)</div>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={current.juros_dia_percentual}
-                      onChange={(e) => patch("juros_dia_percentual", safeNumber(e.target.value))}
-                    />
-                  </div>
-
-                  <div className="flex items-end gap-2">
+                  <div className="mt-6 flex items-end gap-2">
                     <Button onClick={() => void save()} disabled={saving}>
                       {saving ? "Salvando..." : "Salvar configuracoes"}
                     </Button>
