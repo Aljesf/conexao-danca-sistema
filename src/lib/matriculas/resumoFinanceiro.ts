@@ -16,6 +16,7 @@ type ContaRow = {
 };
 
 type LancamentoRow = {
+  id: number;
   data_lancamento: string | null;
   descricao: string | null;
   valor_centavos: number | null;
@@ -58,7 +59,7 @@ export async function listarParcelasResumoPorMatriculaId(
   let rows: LancamentoRow[] = [];
   const { data: lancamentos, error: lancErr } = await admin
     .from("credito_conexao_lancamentos")
-    .select("data_lancamento,descricao,valor_centavos,status,origem_sistema,origem_id")
+    .select("id,data_lancamento,descricao,valor_centavos,status,origem_sistema,origem_id")
     .eq("origem_id", matriculaId)
     .in("origem_sistema", ["MATRICULA", "MATRICULAS"])
     .in("status", STATUS_PENDENTES)
@@ -72,7 +73,7 @@ export async function listarParcelasResumoPorMatriculaId(
   if (rows.length === 0) {
     const { data: fallback, error: fallbackErr } = await admin
       .from("credito_conexao_lancamentos")
-      .select("data_lancamento,descricao,valor_centavos,status")
+      .select("id,data_lancamento,descricao,valor_centavos,status")
       .eq("conta_conexao_id", contaId)
       .in("status", STATUS_PENDENTES)
       .order("data_lancamento", { ascending: true })
@@ -83,10 +84,60 @@ export async function listarParcelasResumoPorMatriculaId(
     }
   }
 
-  return rows.map((row) => ({
-    vencimento: row.data_lancamento ?? null,
-    valorCentavos: Number(row.valor_centavos ?? 0),
-    status: String(row.status ?? ""),
-    descricao: row.descricao ?? null,
-  }));
+  const lancamentoIds = rows
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  const faturaIdByLancamentoId = new Map<number, number>();
+  const vencimentoByFaturaId = new Map<number, string | null>();
+
+  if (lancamentoIds.length > 0) {
+    const { data: links, error: linksErr } = await admin
+      .from("credito_conexao_fatura_lancamentos")
+      .select("lancamento_id,fatura_id")
+      .in("lancamento_id", lancamentoIds);
+
+    if (!linksErr && links) {
+      const faturaIds = new Set<number>();
+      for (const link of links as Array<Record<string, unknown>>) {
+        const lancamentoId = Number(link.lancamento_id);
+        const faturaId = Number(link.fatura_id);
+        if (Number.isFinite(lancamentoId) && Number.isFinite(faturaId)) {
+          faturaIdByLancamentoId.set(lancamentoId, faturaId);
+          faturaIds.add(faturaId);
+        }
+      }
+
+      if (faturaIds.size > 0) {
+        const { data: faturas, error: faturasErr } = await admin
+          .from("credito_conexao_faturas")
+          .select("id,data_vencimento")
+          .in("id", Array.from(faturaIds));
+
+        if (!faturasErr && faturas) {
+          for (const fatura of faturas as Array<Record<string, unknown>>) {
+            const faturaId = Number(fatura.id);
+            const vencimento =
+              typeof fatura.data_vencimento === "string" ? fatura.data_vencimento : null;
+            if (Number.isFinite(faturaId)) {
+              vencimentoByFaturaId.set(faturaId, vencimento);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return rows.map((row) => {
+    const rowId = Number(row.id);
+    const faturaId = Number.isFinite(rowId) ? faturaIdByLancamentoId.get(rowId) ?? null : null;
+    const vencimento = faturaId ? vencimentoByFaturaId.get(faturaId) ?? null : null;
+
+    return {
+      vencimento: vencimento ?? row.data_lancamento ?? null,
+      valorCentavos: Number(row.valor_centavos ?? 0),
+      status: String(row.status ?? ""),
+      descricao: row.descricao ?? null,
+    };
+  });
 }

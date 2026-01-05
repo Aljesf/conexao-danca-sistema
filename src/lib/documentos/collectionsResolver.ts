@@ -79,7 +79,6 @@ function mapParcelasResumo(
       DATA: formatDateBR(row.vencimento),
       DESCRICAO: descricao,
       VALOR: formatBRLFromCentavos(row.valorCentavos ?? 0),
-      STATUS: row.status ?? "",
     };
   });
 }

@@ -366,3 +366,4 @@ Paginas:
 - Preview do emitido agora aplica o HTML retornado pelo POST de recarregar.
 - Debug do recarregar inclui htmlLen/primeiraParcela e o preview mostra o HTML len.
 - Preview usa fallback apenas quando previewHtml vazio e debug sempre mostra payload apos recarregar.
+- Contrato de matricula usa vencimento nas parcelas e remove status da colecao MATRICULA_PARCELAS.
