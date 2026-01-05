@@ -362,3 +362,5 @@ Paginas:
 ## Atualizacoes recentes (Documentos - 2026-01-16)
 
 - POST de recarregar emitido inclui bloco debug no JSON quando DOCS_EMIT_DEBUG=1.
+- UI do emitido exibe painel Debug (recarregar) quando a resposta traz debug.
+- Preview do emitido agora aplica o HTML retornado pelo POST de recarregar.

@@ -27,7 +27,7 @@ type DocEmitido = {
   updated_at?: string | null;
 };
 
-type ApiResp<T> = { ok?: boolean; data?: T; message?: string };
+type ApiResp<T> = { ok?: boolean; data?: T; message?: string; debug?: unknown; html?: string };
 
 export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const docId = Number(id);
@@ -38,10 +38,14 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
   const [modoEditar, setModoEditar] = React.useState(false);
   const [html, setHtml] = React.useState<string>("<p></p>");
+  const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
   const [salvando, setSalvando] = React.useState(false);
   const [okMsg, setOkMsg] = React.useState<string | null>(null);
+  const [debug, setDebug] = React.useState<unknown>(null);
 
-  async function carregar() {
+  type LoadOptions = { preservePreviewHtml?: boolean; preserveEditorHtml?: boolean };
+
+  async function carregar(options?: LoadOptions) {
     setErro(null);
     setOkMsg(null);
     setLoading(true);
@@ -57,7 +61,12 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
         json.data.conteudo_renderizado_md ||
         "<p></p>";
       setDoc(json.data);
-      setHtml(baseHtml);
+      if (!options?.preserveEditorHtml) {
+        setHtml(baseHtml);
+      }
+      if (!options?.preservePreviewHtml) {
+        setPreviewHtml(baseHtml);
+      }
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado.");
     } finally {
@@ -68,6 +77,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   async function recarregarEmitido() {
     setErro(null);
     setOkMsg(null);
+    setDebug(null);
     setLoading(true);
     try {
       const res = await fetch(`/api/documentos/emitidos/${docId}`, { method: "POST" });
@@ -75,8 +85,19 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
       if (!res.ok || !json.ok) {
         throw new Error(json.message || "Falha ao recarregar documento emitido.");
       }
+      if (typeof json.html === "string") {
+        setPreviewHtml(json.html);
+        setHtml(json.html);
+      }
+      if (json.debug) {
+        setDebug(json.debug);
+      }
       setOkMsg("Documento recarregado com dados atuais da matricula.");
-      await carregar();
+      await carregar(
+        typeof json.html === "string"
+          ? { preservePreviewHtml: true, preserveEditorHtml: true }
+          : undefined,
+      );
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado.");
     } finally {
@@ -143,6 +164,12 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     "--footer-height-px": `${footerHeightPx}px`,
     "--page-margin-mm": `${pageMarginMm}mm`,
   } as React.CSSProperties;
+  const previewConteudo =
+    previewHtml ??
+    doc?.conteudo_resolvido_html ??
+    doc?.conteudo_template_html ??
+    doc?.conteudo_renderizado_md ??
+    "<p>(sem conteudo)</p>";
   const colecoesVazias = React.useMemo(() => {
     const raw = doc?.variaveis_utilizadas_json;
     if (!raw || typeof raw !== "object") return [];
@@ -177,6 +204,14 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
           <div className="no-print rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
             {okMsg}
           </div>
+        ) : null}
+        {debug ? (
+          <details className="no-print rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <summary className="cursor-pointer font-medium">Debug (recarregar)</summary>
+            <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-slate-950 p-3 text-xs text-slate-100">
+              {JSON.stringify(debug, null, 2)}
+            </pre>
+          </details>
         ) : null}
         {colecoesDetectadas.length > 0 && colecoesVazias.length > 0 ? (
           <div className="no-print rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -303,11 +338,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                         className="prose max-w-none"
                         // Conteudo emitido e gerado internamente.
                         dangerouslySetInnerHTML={{
-                          __html:
-                            doc.conteudo_resolvido_html ||
-                            doc.conteudo_template_html ||
-                            doc.conteudo_renderizado_md ||
-                            "<p>(sem conteudo)</p>",
+                          __html: previewConteudo,
                         }}
                       />
                       <div

@@ -421,7 +421,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     }
 
     return NextResponse.json(
-      { ok: true, data: atualizado, ...(debugEnabled ? { debug: debugPayload } : {}) } satisfies ApiResp<unknown>,
+      {
+        ok: true,
+        data: atualizado,
+        html: conteudoResolvidoLimpo,
+        ...(debugEnabled ? { debug: debugPayload } : {}),
+      } satisfies ApiResp<unknown>,
       { status: 200 },
     );
   } catch (err) {
