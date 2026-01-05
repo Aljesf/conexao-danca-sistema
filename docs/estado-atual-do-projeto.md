@@ -387,5 +387,12 @@ Paginas:
 ## Atualizacoes recentes (Credito Conexao - 2026-01-19)
 
 - SQL: unicidade de fatura por conta+periodo_referencia (cc_faturas_unique_conta_periodo).
+- Lib: helper de fechamento mensal em src/lib/creditoConexao/fechamento.ts (idempotencia por competencia).
 - API: POST /api/credito-conexao/fechar-fatura (fecha 1 conta por competencia).
 - API: POST /api/credito-conexao/fechar-faturas (lote por competencia).
+
+## Atualizacoes recentes (Credito Conexao - 2026-01-20)
+
+- SQL: tabela credito_conexao_configuracoes (ciclo, tolerancia, multa e juros por tipo_conta).
+- API: GET/PUT /api/admin/credito-conexao/configuracoes.
+- UI: /admin/financeiro/credito-conexao/configuracoes com card de ciclo/politica + regras de parcelamento.
