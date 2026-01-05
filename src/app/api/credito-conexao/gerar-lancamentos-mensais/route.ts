@@ -7,6 +7,9 @@ import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 type GerarMensalBody = {
   matricula_id?: number;
   contexto_matricula_id?: number | null;
+  aluno_pessoa_id?: number;
+  responsavel_financeiro_id?: number;
+  ano_referencia?: number;
   competencia?: string | null; // YYYY-MM (opcional)
 };
 
@@ -66,6 +69,13 @@ function normalizeCompetencia(value: unknown): string | null {
   const trimmed = value.trim();
   if (!/^\d{4}-\d{2}$/.test(trimmed)) return null;
   return trimmed;
+}
+
+function competenciaAtual(): string {
+  const now = new Date();
+  const ano = now.getUTCFullYear();
+  const mes = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `${ano}-${mes}`;
 }
 
 function isTurmaAtivaStatus(statusRaw: unknown): boolean {
@@ -196,47 +206,66 @@ export async function POST(req: Request) {
     }
 
     const matriculaId = toPositiveNumber(body.matricula_id);
-    if (!matriculaId) {
-      return errJson("bad_request", "matricula_id invalido.", 400, { matricula_id: body.matricula_id });
+    const alunoIdBody = toPositiveNumber(body.aluno_pessoa_id);
+    const responsavelBody = toPositiveNumber(body.responsavel_financeiro_id);
+    const anoBody = toPositiveNumber(body.ano_referencia);
+    if (!matriculaId && !alunoIdBody) {
+      return errJson(
+        "bad_request",
+        "Informe matricula_id ou aluno_pessoa_id.",
+        400,
+        { matricula_id: body.matricula_id, aluno_pessoa_id: body.aluno_pessoa_id },
+      );
     }
 
     const admin = getSupabaseAdmin();
 
-    const { data: matricula, error: matErr } = await admin
-      .from("matriculas")
-      .select("id,pessoa_id,responsavel_financeiro_id,vinculo_id,ano_referencia")
-      .eq("id", matriculaId)
-      .maybeSingle();
-
-    if (matErr) {
-      return errJson("server_error", "Falha ao buscar matricula.", 500, { matErr });
-    }
-    if (!matricula) {
-      return errJson("not_found", "Matricula nao encontrada.", 404);
-    }
-
-    const alunoId = toPositiveNumber((matricula as { pessoa_id?: number }).pessoa_id);
-    const responsavelId =
-      toPositiveNumber((matricula as { responsavel_financeiro_id?: number }).responsavel_financeiro_id) ??
-      alunoId;
-
-    if (!alunoId || !responsavelId) {
-      return errJson("bad_request", "Matricula sem aluno/responsavel valido.", 400);
-    }
-
+    let alunoId: number | null = alunoIdBody ?? null;
+    let responsavelId: number | null = responsavelBody ?? null;
     let contextoId = toPositiveNumber(body.contexto_matricula_id);
-    if (!contextoId) {
-      const vinculoId = toPositiveNumber((matricula as { vinculo_id?: number }).vinculo_id);
-      if (vinculoId) {
-        const { data: turmaCtx, error: turmaCtxErr } = await admin
-          .from("turmas")
-          .select("contexto_matricula_id")
-          .eq("turma_id", vinculoId)
-          .maybeSingle();
-        if (!turmaCtxErr) {
-          contextoId = toPositiveNumber((turmaCtx as { contexto_matricula_id?: number | null })?.contexto_matricula_id);
+    let anoReferencia = anoBody ?? null;
+
+    if (matriculaId) {
+      const { data: matricula, error: matErr } = await admin
+        .from("matriculas")
+        .select("id,pessoa_id,responsavel_financeiro_id,vinculo_id,ano_referencia")
+        .eq("id", matriculaId)
+        .maybeSingle();
+
+      if (matErr) {
+        return errJson("server_error", "Falha ao buscar matricula.", 500, { matErr });
+      }
+      if (!matricula) {
+        return errJson("not_found", "Matricula nao encontrada.", 404);
+      }
+
+      alunoId = toPositiveNumber((matricula as { pessoa_id?: number }).pessoa_id);
+      responsavelId =
+        toPositiveNumber((matricula as { responsavel_financeiro_id?: number }).responsavel_financeiro_id) ??
+        alunoId;
+      if (!anoReferencia) {
+        anoReferencia = toPositiveNumber((matricula as { ano_referencia?: number | null }).ano_referencia);
+      }
+
+      if (!contextoId) {
+        const vinculoId = toPositiveNumber((matricula as { vinculo_id?: number }).vinculo_id);
+        if (vinculoId) {
+          const { data: turmaCtx, error: turmaCtxErr } = await admin
+            .from("turmas")
+            .select("contexto_matricula_id")
+            .eq("turma_id", vinculoId)
+            .maybeSingle();
+          if (!turmaCtxErr) {
+            contextoId = toPositiveNumber(
+              (turmaCtx as { contexto_matricula_id?: number | null })?.contexto_matricula_id,
+            );
+          }
         }
       }
+    }
+
+    if (!alunoId || !responsavelId) {
+      return errJson("bad_request", "Aluno/responsavel financeiro invalidos.", 400);
     }
 
     if (!contextoId) {
@@ -258,7 +287,7 @@ export async function POST(req: Request) {
 
     const anoRef =
       toPositiveNumber((contexto as { ano_referencia?: number | null })?.ano_referencia) ??
-      toPositiveNumber((matricula as { ano_referencia?: number | null })?.ano_referencia) ??
+      anoReferencia ??
       new Date().getFullYear();
 
     const { data: turmasCtx, error: turmasErr } = await admin
@@ -328,48 +357,58 @@ export async function POST(req: Request) {
     }
 
     const contaConexaoId = await ensureContaConexao(admin, responsavelId);
-    const competencia = normalizeCompetencia(body.competencia);
+    const competencia = normalizeCompetencia(body.competencia) ?? competenciaAtual();
     const cookieHeader = cookieStore.toString();
 
-    const descricoes: string[] = [];
     const lancamentosPayload: Array<Record<string, unknown>> = [];
+    const { data: ues, error: ueErr } = await admin
+      .from("escola_unidades_execucao")
+      .select("unidade_execucao_id,servico_id,origem_id")
+      .eq("origem_tipo", "TURMA")
+      .in("origem_id", turmasAtivas.map((t) => t.turma_id))
+      .eq("ativo", true);
+
+    if (ueErr && !isSchemaMissing(ueErr)) {
+      return errJson("server_error", "Falha ao resolver unidades de execucao.", 500, { ueErr });
+    }
+
+    const ueByTurma = new Map<number, { unidade_execucao_id: number; servico_id: number | null }>();
+    (ues ?? []).forEach((row) => {
+      const record = row as { unidade_execucao_id?: number; servico_id?: number | null; origem_id?: number | null };
+      const turmaId = toPositiveNumber(record.origem_id);
+      const ueId = toPositiveNumber(record.unidade_execucao_id);
+      if (!turmaId || !ueId) return;
+      ueByTurma.set(turmaId, {
+        unidade_execucao_id: ueId,
+        servico_id: toPositiveNumber(record.servico_id),
+      });
+    });
+
     for (const turma of turmasAtivas) {
       const resultado = await resolverMensalidadePorTurma(req, cookieHeader, alunoId, turma.turma_id, anoRef);
       const turmaNome = turma.nome?.trim() || `Turma ${turma.turma_id}`;
       const descBase = resultado.descricao?.trim() || "Mensalidade";
-      const competenciaLabel = competencia ? ` ${competencia}` : "";
-      const descricao = `${descBase}${competenciaLabel} - ${turmaNome}`;
-      descricoes.push(descricao);
+      const descricao = `${descBase} ${competencia} - ${turmaNome}`;
+      const ueRef = ueByTurma.get(turma.turma_id) ?? null;
+      const refParts: string[] = [];
+      if (ueRef?.servico_id) refParts.push(`servico:${ueRef.servico_id}`);
+      if (ueRef?.unidade_execucao_id) refParts.push(`ue:${ueRef.unidade_execucao_id}`);
+      refParts.push(`turma:${turma.turma_id}`);
+      const referenciaItem = refParts.join("|");
       lancamentosPayload.push({
         conta_conexao_id: contaConexaoId,
         valor_centavos: resultado.valor_centavos,
         numero_parcelas: 1,
         status: "PENDENTE_FATURA",
         origem_sistema: "MATRICULA_MENSAL",
-        origem_id: matriculaId,
+        origem_id: matriculaId ?? alunoId,
         descricao,
+        competencia,
+        referencia_item: referenciaItem,
       });
     }
 
-    let existentes = new Set<string>();
-    if (descricoes.length > 0) {
-      const { data: existentesRows, error: existentesErr } = await admin
-        .from("credito_conexao_lancamentos")
-        .select("descricao")
-        .eq("origem_sistema", "MATRICULA_MENSAL")
-        .eq("origem_id", matriculaId)
-        .in("descricao", descricoes);
-
-      if (!existentesErr && existentesRows) {
-        existentes = new Set(
-          existentesRows
-            .map((row) => String((row as { descricao?: string | null }).descricao ?? ""))
-            .filter((d) => d),
-        );
-      }
-    }
-
-    const payloadFinal = lancamentosPayload.filter((l) => !existentes.has(String(l.descricao ?? "")));
+    const payloadFinal = lancamentosPayload;
     if (payloadFinal.length === 0) {
       return NextResponse.json(
         { ok: true, data: { lancamentos: [], warning: "Sem novos lancamentos para criar." } },
@@ -379,7 +418,10 @@ export async function POST(req: Request) {
 
     const { data: created, error: insErr } = await admin
       .from("credito_conexao_lancamentos")
-      .insert(payloadFinal)
+      .upsert(payloadFinal, {
+        onConflict: "conta_conexao_id,competencia,referencia_item",
+        ignoreDuplicates: true,
+      })
       .select("id,descricao,valor_centavos");
 
     if (insErr) {

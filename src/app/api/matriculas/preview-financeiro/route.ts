@@ -7,6 +7,9 @@ import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 type PreviewBody = {
   matricula_id?: number;
   contexto_matricula_id?: number | null;
+  aluno_pessoa_id?: number;
+  responsavel_financeiro_id?: number;
+  ano_referencia?: number;
 };
 
 type TurmaRow = {
@@ -125,43 +128,61 @@ export async function POST(req: Request) {
     }
 
     const matriculaId = toPositiveNumber(body.matricula_id);
-    if (!matriculaId) {
-      return errJson("bad_request", "matricula_id invalido.", 400, { matricula_id: body.matricula_id });
+    const alunoBody = toPositiveNumber(body.aluno_pessoa_id);
+    const anoBody = toPositiveNumber(body.ano_referencia);
+    if (!matriculaId && !alunoBody) {
+      return errJson(
+        "bad_request",
+        "Informe matricula_id ou aluno_pessoa_id.",
+        400,
+        { matricula_id: body.matricula_id, aluno_pessoa_id: body.aluno_pessoa_id },
+      );
     }
 
     const admin = getSupabaseAdmin();
 
-    const { data: matricula, error: matErr } = await admin
-      .from("matriculas")
-      .select("id,pessoa_id,responsavel_financeiro_id,vinculo_id,ano_referencia")
-      .eq("id", matriculaId)
-      .maybeSingle();
-
-    if (matErr) {
-      return errJson("server_error", "Falha ao buscar matricula.", 500, { matErr });
-    }
-    if (!matricula) {
-      return errJson("not_found", "Matricula nao encontrada.", 404);
-    }
-
-    const alunoId = toPositiveNumber((matricula as { pessoa_id?: number }).pessoa_id);
-    if (!alunoId) {
-      return errJson("bad_request", "Matricula sem aluno valido.", 400);
-    }
-
+    let alunoId: number | null = alunoBody ?? null;
     let contextoId = toPositiveNumber(body.contexto_matricula_id);
-    if (!contextoId) {
-      const vinculoId = toPositiveNumber((matricula as { vinculo_id?: number }).vinculo_id);
-      if (vinculoId) {
-        const { data: turmaCtx, error: turmaCtxErr } = await admin
-          .from("turmas")
-          .select("contexto_matricula_id")
-          .eq("turma_id", vinculoId)
-          .maybeSingle();
-        if (!turmaCtxErr) {
-          contextoId = toPositiveNumber((turmaCtx as { contexto_matricula_id?: number | null })?.contexto_matricula_id);
+    let anoReferencia = anoBody ?? null;
+
+    if (matriculaId) {
+      const { data: matricula, error: matErr } = await admin
+        .from("matriculas")
+        .select("id,pessoa_id,responsavel_financeiro_id,vinculo_id,ano_referencia")
+        .eq("id", matriculaId)
+        .maybeSingle();
+
+      if (matErr) {
+        return errJson("server_error", "Falha ao buscar matricula.", 500, { matErr });
+      }
+      if (!matricula) {
+        return errJson("not_found", "Matricula nao encontrada.", 404);
+      }
+
+      alunoId = toPositiveNumber((matricula as { pessoa_id?: number }).pessoa_id);
+      if (!anoReferencia) {
+        anoReferencia = toPositiveNumber((matricula as { ano_referencia?: number | null }).ano_referencia);
+      }
+
+      if (!contextoId) {
+        const vinculoId = toPositiveNumber((matricula as { vinculo_id?: number }).vinculo_id);
+        if (vinculoId) {
+          const { data: turmaCtx, error: turmaCtxErr } = await admin
+            .from("turmas")
+            .select("contexto_matricula_id")
+            .eq("turma_id", vinculoId)
+            .maybeSingle();
+          if (!turmaCtxErr) {
+            contextoId = toPositiveNumber(
+              (turmaCtx as { contexto_matricula_id?: number | null })?.contexto_matricula_id,
+            );
+          }
         }
       }
+    }
+
+    if (!alunoId) {
+      return errJson("bad_request", "Aluno invalido para gerar preview.", 400);
     }
 
     if (!contextoId) {
@@ -183,7 +204,7 @@ export async function POST(req: Request) {
 
     const anoRef =
       toPositiveNumber((contexto as { ano_referencia?: number | null })?.ano_referencia) ??
-      toPositiveNumber((matricula as { ano_referencia?: number | null })?.ano_referencia) ??
+      anoReferencia ??
       new Date().getFullYear();
 
     const { data: turmasCtx, error: turmasErr } = await admin
@@ -275,7 +296,7 @@ export async function POST(req: Request) {
     const totalAnual = totalMensal * meses;
 
     const snapshot = {
-      matricula_id: matriculaId,
+      matricula_id: matriculaId ?? null,
       contexto_matricula_id: contextoId,
       meses_previstos: meses,
       total_mensal_previsto_centavos: totalMensal,
