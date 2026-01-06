@@ -30,6 +30,90 @@ type MatriculaPessoaItem = {
   unidade_execucao_label: string | null;
 };
 
+type PessoaCuidados = {
+  id: number;
+  pessoa_id: number;
+  historico_lesoes: string | null;
+  restricoes_fisicas: string | null;
+  condicoes_neuro: string | null;
+  tipo_sanguineo: string | null;
+  alergias_alimentares: string | null;
+  alergias_medicamentos: string | null;
+  alergias_produtos: string | null;
+  pode_consumir_acucar: string | null;
+  pode_consumir_refrigerante: string | null;
+  restricoes_alimentares_observacoes: string | null;
+  tipo_autorizacao_saida: string | null;
+  contato_emergencia_pessoa_id: number | null;
+  contato_emergencia_relacao: string | null;
+  contato_emergencia_observacao: string | null;
+};
+
+type PessoaCuidadosForm = {
+  historico_lesoes: string;
+  restricoes_fisicas: string;
+  condicoes_neuro: string;
+  tipo_sanguineo: string;
+  alergias_alimentares: string;
+  alergias_medicamentos: string;
+  alergias_produtos: string;
+  pode_consumir_acucar: string;
+  pode_consumir_refrigerante: string;
+  restricoes_alimentares_observacoes: string;
+  tipo_autorizacao_saida: string;
+  contato_emergencia_pessoa_id: string;
+  contato_emergencia_relacao: string;
+  contato_emergencia_observacao: string;
+};
+
+type PessoaAutorizadoPessoa = {
+  id: number;
+  nome: string | null;
+  telefone?: string | null;
+  email?: string | null;
+};
+
+type PessoaAutorizado = {
+  id: number;
+  pessoa_cuidados_id: number;
+  pessoa_autorizada_id: number;
+  parentesco: string | null;
+  observacoes: string | null;
+  created_at: string | null;
+  pessoa_autorizada?: PessoaAutorizadoPessoa | null;
+};
+
+type PessoaMedida = {
+  id: number;
+  pessoa_id: number;
+  categoria: string;
+  tamanho: string;
+  data_referencia: string | null;
+  observacao: string | null;
+  created_at: string | null;
+};
+
+type PessoaObservacao = {
+  id: number;
+  pessoa_id: number;
+  natureza: string;
+  titulo: string | null;
+  descricao: string;
+  data_referencia: string | null;
+  created_at: string | null;
+};
+
+type PessoaObservacaoPedagogica = {
+  id: number;
+  pessoa_id: number;
+  observado_em: string;
+  professor_pessoa_id: number | null;
+  titulo: string | null;
+  descricao: string;
+  created_at: string | null;
+  professor?: { id: number; nome: string | null } | null;
+};
+
 // calcula idade em anos a partir da data de nascimento (YYYY-MM-DD)
 function calcularIdade(dateStr: string | null): number | null {
   if (!dateStr) return null;
@@ -66,6 +150,61 @@ function formatGenero(
   }
 }
 
+function emptyCuidadosForm(): PessoaCuidadosForm {
+  return {
+    historico_lesoes: "",
+    restricoes_fisicas: "",
+    condicoes_neuro: "",
+    tipo_sanguineo: "",
+    alergias_alimentares: "",
+    alergias_medicamentos: "",
+    alergias_produtos: "",
+    pode_consumir_acucar: "",
+    pode_consumir_refrigerante: "",
+    restricoes_alimentares_observacoes: "",
+    tipo_autorizacao_saida: "",
+    contato_emergencia_pessoa_id: "",
+    contato_emergencia_relacao: "",
+    contato_emergencia_observacao: "",
+  };
+}
+
+function cuidadosToForm(data: PessoaCuidados | null | undefined): PessoaCuidadosForm {
+  if (!data) return emptyCuidadosForm();
+  return {
+    historico_lesoes: data.historico_lesoes ?? "",
+    restricoes_fisicas: data.restricoes_fisicas ?? "",
+    condicoes_neuro: data.condicoes_neuro ?? "",
+    tipo_sanguineo: data.tipo_sanguineo ?? "",
+    alergias_alimentares: data.alergias_alimentares ?? "",
+    alergias_medicamentos: data.alergias_medicamentos ?? "",
+    alergias_produtos: data.alergias_produtos ?? "",
+    pode_consumir_acucar: data.pode_consumir_acucar ?? "",
+    pode_consumir_refrigerante: data.pode_consumir_refrigerante ?? "",
+    restricoes_alimentares_observacoes:
+      data.restricoes_alimentares_observacoes ?? "",
+    tipo_autorizacao_saida: data.tipo_autorizacao_saida ?? "",
+    contato_emergencia_pessoa_id:
+      data.contato_emergencia_pessoa_id?.toString() ?? "",
+    contato_emergencia_relacao: data.contato_emergencia_relacao ?? "",
+    contato_emergencia_observacao: data.contato_emergencia_observacao ?? "",
+  };
+}
+
+function parseOptionalNumber(value: string): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 export default function PessoaDetalhesPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -96,6 +235,60 @@ export default function PessoaDetalhesPage() {
   const [nacionalidade, setNacionalidade] = useState("");
   const [naturalidade, setNaturalidade] = useState("");
   const [observacoes, setObservacoes] = useState("");
+
+  const [cuidados, setCuidados] = useState<PessoaCuidados | null>(null);
+  const [cuidadosForm, setCuidadosForm] = useState<PessoaCuidadosForm>(
+    emptyCuidadosForm()
+  );
+  const [cuidadosLoading, setCuidadosLoading] = useState(false);
+  const [cuidadosErro, setCuidadosErro] = useState<string | null>(null);
+  const [cuidadosSaving, setCuidadosSaving] = useState(false);
+
+  const [autorizados, setAutorizados] = useState<PessoaAutorizado[]>([]);
+  const [autorizadosLoading, setAutorizadosLoading] = useState(false);
+  const [autorizadosErro, setAutorizadosErro] = useState<string | null>(null);
+  const [editAutorizadoId, setEditAutorizadoId] = useState<number | null>(null);
+  const [novoAutorizadoId, setNovoAutorizadoId] = useState("");
+  const [novoAutorizadoParentesco, setNovoAutorizadoParentesco] =
+    useState("");
+  const [novoAutorizadoObs, setNovoAutorizadoObs] = useState("");
+
+  const [medidas, setMedidas] = useState<PessoaMedida[]>([]);
+  const [medidasLoading, setMedidasLoading] = useState(false);
+  const [medidasErro, setMedidasErro] = useState<string | null>(null);
+  const [editMedidaId, setEditMedidaId] = useState<number | null>(null);
+  const [novaMedida, setNovaMedida] = useState({
+    categoria: "",
+    tamanho: "",
+    data_referencia: "",
+    observacao: "",
+  });
+
+  const [observacoesGerais, setObservacoesGerais] = useState<
+    PessoaObservacao[]
+  >([]);
+  const [obsGeraisLoading, setObsGeraisLoading] = useState(false);
+  const [obsGeraisErro, setObsGeraisErro] = useState<string | null>(null);
+  const [editObsGeralId, setEditObsGeralId] = useState<number | null>(null);
+  const [novaObsGeral, setNovaObsGeral] = useState({
+    natureza: "",
+    titulo: "",
+    descricao: "",
+    data_referencia: "",
+  });
+
+  const [observacoesPedagogicas, setObservacoesPedagogicas] = useState<
+    PessoaObservacaoPedagogica[]
+  >([]);
+  const [obsPedLoading, setObsPedLoading] = useState(false);
+  const [obsPedErro, setObsPedErro] = useState<string | null>(null);
+  const [editObsPedId, setEditObsPedId] = useState<number | null>(null);
+  const [novaObsPed, setNovaObsPed] = useState({
+    observado_em: "",
+    professor_pessoa_id: "",
+    titulo: "",
+    descricao: "",
+  });
 
   const [matriculas, setMatriculas] = useState<MatriculaPessoaItem[]>([]);
   const [matriculasLoading, setMatriculasLoading] = useState(false);
@@ -216,6 +409,38 @@ export default function PessoaDetalhesPage() {
     () => (pessoa?.tipo_pessoa === "JURIDICA" ? "Endereço fiscal" : "Endereço"),
     [pessoa?.tipo_pessoa]
   );
+  const showAutorizados = cuidadosForm.tipo_autorizacao_saida === "AUTORIZADOS";
+  const cuidadosTextareas = [
+    { key: "historico_lesoes", label: "Historico de lesoes" },
+    { key: "restricoes_fisicas", label: "Restricoes fisicas" },
+    { key: "condicoes_neuro", label: "Condicoes neuro" },
+    { key: "alergias_alimentares", label: "Alergias alimentares" },
+    { key: "alergias_medicamentos", label: "Alergias a medicamentos" },
+    { key: "alergias_produtos", label: "Alergias a produtos" },
+    {
+      key: "restricoes_alimentares_observacoes",
+      label: "Restricoes alimentares (observacoes)",
+      span: "md:col-span-2",
+    },
+    {
+      key: "contato_emergencia_observacao",
+      label: "Observacao do contato emergencia",
+      span: "md:col-span-2",
+    },
+  ] as const;
+  const cuidadosInputs = [
+    { key: "tipo_sanguineo", label: "Tipo sanguineo", type: "text" },
+    {
+      key: "contato_emergencia_pessoa_id",
+      label: "Contato emergencia (pessoa_id)",
+      type: "number",
+    },
+    {
+      key: "contato_emergencia_relacao",
+      label: "Relacao contato emergencia",
+      type: "text",
+    },
+  ] as const;
 
   useEffect(() => {
     if (!id || abaAtiva !== "escolar") return;
@@ -257,6 +482,15 @@ export default function PessoaDetalhesPage() {
     return () => {
       active = false;
     };
+  }, [id, abaAtiva]);
+
+  useEffect(() => {
+    if (!id || abaAtiva !== "observacoes") return;
+    void carregarCuidados();
+    void carregarAutorizados();
+    void carregarMedidas();
+    void carregarObservacoesGerais();
+    void carregarObservacoesPedagogicas();
   }, [id, abaAtiva]);
 
   async function handleSalvar() {
@@ -307,6 +541,746 @@ export default function PessoaDetalhesPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function carregarCuidados() {
+    if (!id) return;
+    try {
+      setCuidadosLoading(true);
+      setCuidadosErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/cuidados`);
+      const json = (await res.json()) as {
+        cuidados?: PessoaCuidados | null;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao carregar cuidados.");
+      }
+
+      const data = json.cuidados ?? null;
+      setCuidados(data);
+      setCuidadosForm(cuidadosToForm(data));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao carregar cuidados.";
+      setCuidadosErro(msg);
+    } finally {
+      setCuidadosLoading(false);
+    }
+  }
+
+  async function carregarAutorizados() {
+    if (!id) return;
+    try {
+      setAutorizadosLoading(true);
+      setAutorizadosErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/cuidados/autorizados`);
+      const json = (await res.json()) as {
+        items?: PessoaAutorizado[];
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao carregar autorizados.");
+      }
+
+      setAutorizados(Array.isArray(json.items) ? json.items : []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao carregar autorizados.";
+      setAutorizadosErro(msg);
+    } finally {
+      setAutorizadosLoading(false);
+    }
+  }
+
+  async function carregarMedidas() {
+    if (!id) return;
+    try {
+      setMedidasLoading(true);
+      setMedidasErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/medidas`);
+      const json = (await res.json()) as {
+        items?: PessoaMedida[];
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao carregar medidas.");
+      }
+
+      setMedidas(Array.isArray(json.items) ? json.items : []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao carregar medidas.";
+      setMedidasErro(msg);
+    } finally {
+      setMedidasLoading(false);
+    }
+  }
+
+  async function carregarObservacoesGerais() {
+    if (!id) return;
+    try {
+      setObsGeraisLoading(true);
+      setObsGeraisErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/observacoes`);
+      const json = (await res.json()) as {
+        items?: PessoaObservacao[];
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao carregar observacoes.");
+      }
+
+      setObservacoesGerais(Array.isArray(json.items) ? json.items : []);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao carregar observacoes.";
+      setObsGeraisErro(msg);
+    } finally {
+      setObsGeraisLoading(false);
+    }
+  }
+
+  async function carregarObservacoesPedagogicas() {
+    if (!id) return;
+    try {
+      setObsPedLoading(true);
+      setObsPedErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/observacoes-pedagogicas`);
+      const json = (await res.json()) as {
+        items?: PessoaObservacaoPedagogica[];
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao carregar observacoes pedagogicas.");
+      }
+
+      setObservacoesPedagogicas(Array.isArray(json.items) ? json.items : []);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Erro ao carregar observacoes pedagogicas.";
+      setObsPedErro(msg);
+    } finally {
+      setObsPedLoading(false);
+    }
+  }
+
+  async function salvarCuidados() {
+    if (!id) return;
+    try {
+      setCuidadosSaving(true);
+      setCuidadosErro(null);
+
+      const payload = {
+        historico_lesoes: cuidadosForm.historico_lesoes.trim() || null,
+        restricoes_fisicas: cuidadosForm.restricoes_fisicas.trim() || null,
+        condicoes_neuro: cuidadosForm.condicoes_neuro.trim() || null,
+        tipo_sanguineo: cuidadosForm.tipo_sanguineo.trim() || null,
+        alergias_alimentares: cuidadosForm.alergias_alimentares.trim() || null,
+        alergias_medicamentos:
+          cuidadosForm.alergias_medicamentos.trim() || null,
+        alergias_produtos: cuidadosForm.alergias_produtos.trim() || null,
+        pode_consumir_acucar: cuidadosForm.pode_consumir_acucar.trim() || null,
+        pode_consumir_refrigerante:
+          cuidadosForm.pode_consumir_refrigerante.trim() || null,
+        restricoes_alimentares_observacoes:
+          cuidadosForm.restricoes_alimentares_observacoes.trim() || null,
+        tipo_autorizacao_saida:
+          cuidadosForm.tipo_autorizacao_saida.trim() || null,
+        contato_emergencia_pessoa_id: parseOptionalNumber(
+          cuidadosForm.contato_emergencia_pessoa_id
+        ),
+        contato_emergencia_relacao:
+          cuidadosForm.contato_emergencia_relacao.trim() || null,
+        contato_emergencia_observacao:
+          cuidadosForm.contato_emergencia_observacao.trim() || null,
+      };
+
+      const res = await fetch(`/api/pessoas/${id}/cuidados`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json()) as {
+        cuidados?: PessoaCuidados | null;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao salvar cuidados.");
+      }
+
+      const data = json.cuidados ?? null;
+      setCuidados(data);
+      setCuidadosForm(cuidadosToForm(data));
+      await carregarAutorizados();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao salvar cuidados.";
+      setCuidadosErro(msg);
+    } finally {
+      setCuidadosSaving(false);
+    }
+  }
+
+  async function adicionarAutorizado() {
+    if (!id) return;
+    try {
+      setAutorizadosErro(null);
+      const pessoaId = parseOptionalNumber(novoAutorizadoId);
+      if (!pessoaId) {
+        throw new Error("Pessoa autorizada invalida.");
+      }
+
+      const res = await fetch(`/api/pessoas/${id}/cuidados/autorizados`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pessoa_autorizada_id: pessoaId,
+          parentesco: novoAutorizadoParentesco.trim() || null,
+          observacoes: novoAutorizadoObs.trim() || null,
+        }),
+      });
+      const json = (await res.json()) as {
+        item?: PessoaAutorizado;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao adicionar autorizado.");
+      }
+
+      if (json.item) {
+        setAutorizados((prev) => [...prev, json.item as PessoaAutorizado]);
+      }
+      setEditAutorizadoId(null);
+      setNovoAutorizadoId("");
+      setNovoAutorizadoParentesco("");
+      setNovoAutorizadoObs("");
+      await carregarAutorizados();
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao adicionar autorizado.";
+      setAutorizadosErro(msg);
+    }
+  }
+
+  async function atualizarAutorizado(
+    idAutorizado: number,
+    parentesco: string | null,
+    observacoes: string | null
+  ) {
+    try {
+      setAutorizadosErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/cuidados/autorizados`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: idAutorizado,
+          parentesco: parentesco ?? null,
+          observacoes: observacoes ?? null,
+        }),
+      });
+
+      const json = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao atualizar autorizado.");
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao atualizar autorizado.";
+      setAutorizadosErro(msg);
+    }
+  }
+
+  async function removerAutorizado(idAutorizado: number) {
+    try {
+      setAutorizadosErro(null);
+
+      const res = await fetch(
+        `/api/pessoas/${id}/cuidados/autorizados?id=${idAutorizado}`,
+        { method: "DELETE" }
+      );
+      const json = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao remover autorizado.");
+      }
+
+      setAutorizados((prev) => prev.filter((item) => item.id !== idAutorizado));
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao remover autorizado.";
+      setAutorizadosErro(msg);
+    }
+  }
+
+  function iniciarEdicaoAutorizado(item: PessoaAutorizado) {
+    setEditAutorizadoId(item.id);
+    setNovoAutorizadoId(item.pessoa_autorizada_id.toString());
+    setNovoAutorizadoParentesco(item.parentesco ?? "");
+    setNovoAutorizadoObs(item.observacoes ?? "");
+  }
+
+  function cancelarEdicaoAutorizado() {
+    setEditAutorizadoId(null);
+    setNovoAutorizadoId("");
+    setNovoAutorizadoParentesco("");
+    setNovoAutorizadoObs("");
+  }
+
+  async function salvarAutorizadoForm() {
+    if (editAutorizadoId) {
+      await atualizarAutorizado(
+        editAutorizadoId,
+        novoAutorizadoParentesco.trim() || null,
+        novoAutorizadoObs.trim() || null
+      );
+      await carregarAutorizados();
+      cancelarEdicaoAutorizado();
+      return;
+    }
+
+    await adicionarAutorizado();
+  }
+
+  async function adicionarMedida() {
+    if (!id) return;
+    try {
+      setMedidasErro(null);
+      if (!novaMedida.categoria.trim() || !novaMedida.tamanho.trim()) {
+        throw new Error("Categoria e tamanho sao obrigatorios.");
+      }
+
+      const res = await fetch(`/api/pessoas/${id}/medidas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categoria: novaMedida.categoria.trim(),
+          tamanho: novaMedida.tamanho.trim(),
+          data_referencia: novaMedida.data_referencia || null,
+          observacao: novaMedida.observacao.trim() || null,
+        }),
+      });
+      const json = (await res.json()) as {
+        item?: PessoaMedida;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao adicionar medida.");
+      }
+
+      if (json.item) {
+        setMedidas((prev) => [json.item as PessoaMedida, ...prev]);
+      }
+      setEditMedidaId(null);
+      setNovaMedida({
+        categoria: "",
+        tamanho: "",
+        data_referencia: "",
+        observacao: "",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao adicionar medida.";
+      setMedidasErro(msg);
+    }
+  }
+
+  async function atualizarMedida(item: PessoaMedida) {
+    try {
+      setMedidasErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/medidas`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          categoria: item.categoria,
+          tamanho: item.tamanho,
+          data_referencia: item.data_referencia ?? null,
+          observacao: item.observacao ?? null,
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao atualizar medida.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao atualizar medida.";
+      setMedidasErro(msg);
+    }
+  }
+
+  async function removerMedida(idMedida: number) {
+    try {
+      setMedidasErro(null);
+
+      const res = await fetch(
+        `/api/pessoas/${id}/medidas?id=${idMedida}`,
+        { method: "DELETE" }
+      );
+      const json = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao remover medida.");
+      }
+
+      setMedidas((prev) => prev.filter((item) => item.id !== idMedida));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao remover medida.";
+      setMedidasErro(msg);
+    }
+  }
+
+  async function adicionarObsGeral() {
+    if (!id) return;
+    try {
+      setObsGeraisErro(null);
+      if (!novaObsGeral.natureza.trim() || !novaObsGeral.descricao.trim()) {
+        throw new Error("Natureza e descricao sao obrigatorias.");
+      }
+
+      const res = await fetch(`/api/pessoas/${id}/observacoes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          natureza: novaObsGeral.natureza.trim(),
+          titulo: novaObsGeral.titulo.trim() || null,
+          descricao: novaObsGeral.descricao.trim(),
+          data_referencia: novaObsGeral.data_referencia || null,
+        }),
+      });
+      const json = (await res.json()) as {
+        item?: PessoaObservacao;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao adicionar observacao.");
+      }
+
+      if (json.item) {
+        setObservacoesGerais((prev) => [json.item as PessoaObservacao, ...prev]);
+      }
+      setEditObsGeralId(null);
+      setNovaObsGeral({
+        natureza: "",
+        titulo: "",
+        descricao: "",
+        data_referencia: "",
+      });
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao adicionar observacao.";
+      setObsGeraisErro(msg);
+    }
+  }
+
+  async function atualizarObsGeral(item: PessoaObservacao) {
+    try {
+      setObsGeraisErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/observacoes`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          natureza: item.natureza,
+          titulo: item.titulo ?? null,
+          descricao: item.descricao,
+          data_referencia: item.data_referencia ?? null,
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao atualizar observacao.");
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao atualizar observacao.";
+      setObsGeraisErro(msg);
+    }
+  }
+
+  async function removerObsGeral(idObs: number) {
+    try {
+      setObsGeraisErro(null);
+
+      const res = await fetch(
+        `/api/pessoas/${id}/observacoes?id=${idObs}`,
+        { method: "DELETE" }
+      );
+      const json = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao remover observacao.");
+      }
+
+      setObservacoesGerais((prev) => prev.filter((item) => item.id !== idObs));
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Erro ao remover observacao.";
+      setObsGeraisErro(msg);
+    }
+  }
+
+  async function adicionarObsPed() {
+    if (!id) return;
+    try {
+      setObsPedErro(null);
+      if (!novaObsPed.descricao.trim()) {
+        throw new Error("Descricao e obrigatoria.");
+      }
+
+      const observadoEm = novaObsPed.observado_em
+        ? new Date(novaObsPed.observado_em).toISOString()
+        : null;
+
+      const res = await fetch(`/api/pessoas/${id}/observacoes-pedagogicas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          observado_em: observadoEm,
+          professor_pessoa_id: parseOptionalNumber(
+            novaObsPed.professor_pessoa_id
+          ),
+          titulo: novaObsPed.titulo.trim() || null,
+          descricao: novaObsPed.descricao.trim(),
+        }),
+      });
+      const json = (await res.json()) as {
+        item?: PessoaObservacaoPedagogica;
+        error?: string;
+      };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao adicionar observacao pedagogica.");
+      }
+
+      if (json.item) {
+        setObservacoesPedagogicas((prev) => [
+          json.item as PessoaObservacaoPedagogica,
+          ...prev,
+        ]);
+      }
+      setEditObsPedId(null);
+      setNovaObsPed({
+        observado_em: "",
+        professor_pessoa_id: "",
+        titulo: "",
+        descricao: "",
+      });
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Erro ao adicionar observacao pedagogica.";
+      setObsPedErro(msg);
+    }
+  }
+
+  async function atualizarObsPed(item: PessoaObservacaoPedagogica) {
+    try {
+      setObsPedErro(null);
+
+      const res = await fetch(`/api/pessoas/${id}/observacoes-pedagogicas`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: item.id,
+          observado_em: item.observado_em,
+          professor_pessoa_id: item.professor_pessoa_id ?? null,
+          titulo: item.titulo ?? null,
+          descricao: item.descricao,
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao atualizar observacao pedagogica.");
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Erro ao atualizar observacao pedagogica.";
+      setObsPedErro(msg);
+    }
+  }
+
+  async function removerObsPed(idObs: number) {
+    try {
+      setObsPedErro(null);
+
+      const res = await fetch(
+        `/api/pessoas/${id}/observacoes-pedagogicas?id=${idObs}`,
+        { method: "DELETE" }
+      );
+      const json = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(json.error || "Falha ao remover observacao pedagogica.");
+      }
+
+      setObservacoesPedagogicas((prev) =>
+        prev.filter((item) => item.id !== idObs)
+      );
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Erro ao remover observacao pedagogica.";
+      setObsPedErro(msg);
+    }
+  }
+
+  function iniciarEdicaoMedida(item: PessoaMedida) {
+    setEditMedidaId(item.id);
+    setNovaMedida({
+      categoria: item.categoria ?? "",
+      tamanho: item.tamanho ?? "",
+      data_referencia: item.data_referencia ?? "",
+      observacao: item.observacao ?? "",
+    });
+  }
+
+  function cancelarEdicaoMedida() {
+    setEditMedidaId(null);
+    setNovaMedida({
+      categoria: "",
+      tamanho: "",
+      data_referencia: "",
+      observacao: "",
+    });
+  }
+
+  async function salvarMedidaForm() {
+    if (editMedidaId) {
+      if (!novaMedida.categoria.trim() || !novaMedida.tamanho.trim()) {
+        setMedidasErro("Categoria e tamanho sao obrigatorios.");
+        return;
+      }
+
+      await atualizarMedida({
+        id: editMedidaId,
+        pessoa_id: pessoa?.id ?? 0,
+        categoria: novaMedida.categoria.trim(),
+        tamanho: novaMedida.tamanho.trim(),
+        data_referencia: novaMedida.data_referencia || null,
+        observacao: novaMedida.observacao.trim() || null,
+        created_at: null,
+      });
+      await carregarMedidas();
+      cancelarEdicaoMedida();
+      return;
+    }
+
+    await adicionarMedida();
+  }
+
+  function iniciarEdicaoObsGeral(item: PessoaObservacao) {
+    setEditObsGeralId(item.id);
+    setNovaObsGeral({
+      natureza: item.natureza ?? "",
+      titulo: item.titulo ?? "",
+      descricao: item.descricao ?? "",
+      data_referencia: item.data_referencia ?? "",
+    });
+  }
+
+  function cancelarEdicaoObsGeral() {
+    setEditObsGeralId(null);
+    setNovaObsGeral({
+      natureza: "",
+      titulo: "",
+      descricao: "",
+      data_referencia: "",
+    });
+  }
+
+  async function salvarObsGeralForm() {
+    if (editObsGeralId) {
+      if (!novaObsGeral.natureza.trim() || !novaObsGeral.descricao.trim()) {
+        setObsGeraisErro("Natureza e descricao sao obrigatorias.");
+        return;
+      }
+
+      await atualizarObsGeral({
+        id: editObsGeralId,
+        pessoa_id: pessoa?.id ?? 0,
+        natureza: novaObsGeral.natureza.trim(),
+        titulo: novaObsGeral.titulo.trim() || null,
+        descricao: novaObsGeral.descricao.trim(),
+        data_referencia: novaObsGeral.data_referencia || null,
+        created_at: null,
+      });
+      await carregarObservacoesGerais();
+      cancelarEdicaoObsGeral();
+      return;
+    }
+
+    await adicionarObsGeral();
+  }
+
+  function iniciarEdicaoObsPed(item: PessoaObservacaoPedagogica) {
+    setEditObsPedId(item.id);
+    setNovaObsPed({
+      observado_em: toDatetimeLocal(item.observado_em),
+      professor_pessoa_id: item.professor_pessoa_id?.toString() ?? "",
+      titulo: item.titulo ?? "",
+      descricao: item.descricao ?? "",
+    });
+  }
+
+  function cancelarEdicaoObsPed() {
+    setEditObsPedId(null);
+    setNovaObsPed({
+      observado_em: "",
+      professor_pessoa_id: "",
+      titulo: "",
+      descricao: "",
+    });
+  }
+
+  async function salvarObsPedForm() {
+    if (editObsPedId) {
+      if (!novaObsPed.descricao.trim()) {
+        setObsPedErro("Descricao e obrigatoria.");
+        return;
+      }
+
+      const observadoEm = novaObsPed.observado_em
+        ? new Date(novaObsPed.observado_em).toISOString()
+        : new Date().toISOString();
+
+      await atualizarObsPed({
+        id: editObsPedId,
+        pessoa_id: pessoa?.id ?? 0,
+        observado_em: observadoEm,
+        professor_pessoa_id: parseOptionalNumber(novaObsPed.professor_pessoa_id),
+        titulo: novaObsPed.titulo.trim() || null,
+        descricao: novaObsPed.descricao.trim(),
+        created_at: null,
+      });
+      await carregarObservacoesPedagogicas();
+      cancelarEdicaoObsPed();
+      return;
+    }
+
+    await adicionarObsPed();
   }
 
   const abas: { id: AbaId; label: string; icon: string }[] = [
@@ -794,6 +1768,661 @@ export default function PessoaDetalhesPage() {
                       {observacoes || "Nenhuma observação registrada."}
                     </p>
                   )}
+                  <SectionCard
+                    title="Observacoes pedagogicas"
+                    description="Historico pedagogico (base para diario de classe)."
+                  >
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Observado em</div>
+                        <input
+                          type="datetime-local"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaObsPed.observado_em}
+                          onChange={(e) =>
+                            setNovaObsPed((prev) => ({
+                              ...prev,
+                              observado_em: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Professor (pessoa_id)</div>
+                        <input
+                          type="number"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaObsPed.professor_pessoa_id}
+                          onChange={(e) =>
+                            setNovaObsPed((prev) => ({
+                              ...prev,
+                              professor_pessoa_id: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Titulo</div>
+                        <input
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaObsPed.titulo}
+                          onChange={(e) =>
+                            setNovaObsPed((prev) => ({
+                              ...prev,
+                              titulo: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1 md:col-span-4">
+                        <div className="text-xs text-slate-400">Descricao</div>
+                        <textarea
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          rows={2}
+                          value={novaObsPed.descricao}
+                          onChange={(e) =>
+                            setNovaObsPed((prev) => ({
+                              ...prev,
+                              descricao: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void salvarObsPedForm()}
+                        className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white/70 px-4 py-2 text-xs font-medium text-violet-700 shadow-sm hover:bg-violet-50"
+                      >
+                        {editObsPedId ? "Salvar edicao" : "Adicionar observacao"}
+                      </button>
+                      {editObsPedId ? (
+                        <button
+                          type="button"
+                          onClick={() => cancelarEdicaoObsPed()}
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                        >
+                          Cancelar
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {obsPedLoading ? (
+                      <p className="mt-3 text-sm text-slate-500">Carregando...</p>
+                    ) : null}
+                    {obsPedErro ? (
+                      <p className="mt-3 text-sm text-red-600">{obsPedErro}</p>
+                    ) : null}
+
+                    {observacoesPedagogicas.length === 0 ? (
+                      <p className="mt-3 text-sm text-slate-500">
+                        Nenhuma observacao pedagogica.
+                      </p>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {observacoesPedagogicas.map((item) => (
+                          <div
+                            key={item.id}
+                            className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-medium">
+                                  {item.titulo ?? "Observacao pedagogica"}
+                                </div>
+                                <div className="text-xs text-slate-400">
+                                  {formatDateTime(item.observado_em)} -
+                                  {" "}
+                                  {item.professor?.nome ??
+                                    (item.professor_pessoa_id
+                                      ? "Pessoa #" + item.professor_pessoa_id
+                                      : "Professor nao informado")}
+                                </div>
+                              </div>
+                              {editObsPedId === item.id ? (
+                                <span className="text-xs text-violet-600">Em edicao</span>
+                              ) : null}
+                            </div>
+                            {item.descricao ? (
+                              <div className="mt-2 text-sm text-slate-600">
+                                {item.descricao}
+                              </div>
+                            ) : null}
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => iniciarEdicaoObsPed(item)}
+                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removerObsPed(item.id)}
+                                className="inline-flex items-center gap-2 rounded-full border border-rose-100 bg-white px-3 py-1.5 text-xs font-medium text-rose-600 shadow-sm hover:bg-rose-50"
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                  <SectionCard
+                    title="Observacoes gerais"
+                    description="Observacoes categorizadas e historico manual."
+                  >
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Natureza</div>
+                        <input
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaObsGeral.natureza}
+                          onChange={(e) =>
+                            setNovaObsGeral((prev) => ({
+                              ...prev,
+                              natureza: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Titulo</div>
+                        <input
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaObsGeral.titulo}
+                          onChange={(e) =>
+                            setNovaObsGeral((prev) => ({
+                              ...prev,
+                              titulo: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Data referencia</div>
+                        <input
+                          type="date"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaObsGeral.data_referencia}
+                          onChange={(e) =>
+                            setNovaObsGeral((prev) => ({
+                              ...prev,
+                              data_referencia: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1 md:col-span-4">
+                        <div className="text-xs text-slate-400">Descricao</div>
+                        <textarea
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          rows={2}
+                          value={novaObsGeral.descricao}
+                          onChange={(e) =>
+                            setNovaObsGeral((prev) => ({
+                              ...prev,
+                              descricao: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void salvarObsGeralForm()}
+                        className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white/70 px-4 py-2 text-xs font-medium text-violet-700 shadow-sm hover:bg-violet-50"
+                      >
+                        {editObsGeralId ? "Salvar edicao" : "Adicionar observacao"}
+                      </button>
+                      {editObsGeralId ? (
+                        <button
+                          type="button"
+                          onClick={() => cancelarEdicaoObsGeral()}
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                        >
+                          Cancelar
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {obsGeraisLoading ? (
+                      <p className="mt-3 text-sm text-slate-500">Carregando...</p>
+                    ) : null}
+                    {obsGeraisErro ? (
+                      <p className="mt-3 text-sm text-red-600">{obsGeraisErro}</p>
+                    ) : null}
+
+                    {observacoesGerais.length === 0 ? (
+                      <p className="mt-3 text-sm text-slate-500">
+                        Nenhuma observacao geral.
+                      </p>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {observacoesGerais.map((item) => (
+                          <div
+                            key={item.id}
+                            className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-medium">
+                                  {item.titulo ?? item.natureza}
+                                </div>
+                                <div className="text-xs text-slate-400">
+                                  {item.natureza} - {item.data_referencia ?? "-"}
+                                </div>
+                              </div>
+                              {editObsGeralId === item.id ? (
+                                <span className="text-xs text-violet-600">Em edicao</span>
+                              ) : null}
+                            </div>
+                            {item.descricao ? (
+                              <div className="mt-2 text-sm text-slate-600">
+                                {item.descricao}
+                              </div>
+                            ) : null}
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => iniciarEdicaoObsGeral(item)}
+                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removerObsGeral(item.id)}
+                                className="inline-flex items-center gap-2 rounded-full border border-rose-100 bg-white px-3 py-1.5 text-xs font-medium text-rose-600 shadow-sm hover:bg-rose-50"
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                  <SectionCard
+                    title="Medidas declaradas"
+                    description="Historico manual de tamanhos e medidas informadas."
+                  >
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Categoria</div>
+                        <input
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaMedida.categoria}
+                          onChange={(e) =>
+                            setNovaMedida((prev) => ({
+                              ...prev,
+                              categoria: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Tamanho</div>
+                        <input
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaMedida.tamanho}
+                          onChange={(e) =>
+                            setNovaMedida((prev) => ({
+                              ...prev,
+                              tamanho: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Data referencia</div>
+                        <input
+                          type="date"
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaMedida.data_referencia}
+                          onChange={(e) =>
+                            setNovaMedida((prev) => ({
+                              ...prev,
+                              data_referencia: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1 md:col-span-4">
+                        <div className="text-xs text-slate-400">Observacao</div>
+                        <input
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={novaMedida.observacao}
+                          onChange={(e) =>
+                            setNovaMedida((prev) => ({
+                              ...prev,
+                              observacao: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void salvarMedidaForm()}
+                        className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white/70 px-4 py-2 text-xs font-medium text-violet-700 shadow-sm hover:bg-violet-50"
+                      >
+                        {editMedidaId ? "Salvar edicao" : "Adicionar medida"}
+                      </button>
+                      {editMedidaId ? (
+                        <button
+                          type="button"
+                          onClick={() => cancelarEdicaoMedida()}
+                          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                        >
+                          Cancelar
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {medidasLoading ? (
+                      <p className="mt-3 text-sm text-slate-500">Carregando...</p>
+                    ) : null}
+                    {medidasErro ? (
+                      <p className="mt-3 text-sm text-red-600">{medidasErro}</p>
+                    ) : null}
+
+                    {medidas.length === 0 ? (
+                      <p className="mt-3 text-sm text-slate-500">
+                        Nenhuma medida declarada.
+                      </p>
+                    ) : (
+                      <div className="mt-4 space-y-3">
+                        {medidas.map((item) => (
+                          <div
+                            key={item.id}
+                            className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-medium">
+                                  {item.categoria} - {item.tamanho}
+                                </div>
+                                <div className="text-xs text-slate-400">
+                                  {item.data_referencia ?? "-"}
+                                </div>
+                              </div>
+                              {editMedidaId === item.id ? (
+                                <span className="text-xs text-violet-600">Em edicao</span>
+                              ) : null}
+                            </div>
+                            {item.observacao ? (
+                              <div className="mt-2 text-sm text-slate-600">
+                                {item.observacao}
+                              </div>
+                            ) : null}
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => iniciarEdicaoMedida(item)}
+                                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removerMedida(item.id)}
+                                className="inline-flex items-center gap-2 rounded-full border border-rose-100 bg-white px-3 py-1.5 text-xs font-medium text-rose-600 shadow-sm hover:bg-rose-50"
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                  {showAutorizados ? (
+                    <SectionCard
+                      title="Autorizados para busca"
+                      description="Somente quando a saida exige autorizados."
+                    >
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="space-y-1">
+                          <div className="text-xs text-slate-400">Pessoa autorizada (pessoa_id)</div>
+                          <input
+                            type="number"
+                            disabled={editAutorizadoId !== null}
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={novoAutorizadoId}
+                            onChange={(e) => setNovoAutorizadoId(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-xs text-slate-400">Parentesco</div>
+                          <input
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={novoAutorizadoParentesco}
+                            onChange={(e) => setNovoAutorizadoParentesco(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-xs text-slate-400">Observacoes</div>
+                          <input
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                            value={novoAutorizadoObs}
+                            onChange={(e) => setNovoAutorizadoObs(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void salvarAutorizadoForm()}
+                          className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white/70 px-4 py-2 text-xs font-medium text-violet-700 shadow-sm hover:bg-violet-50"
+                        >
+                          {editAutorizadoId ? "Salvar edicao" : "Adicionar autorizado"}
+                        </button>
+                        {editAutorizadoId ? (
+                          <button
+                            type="button"
+                            onClick={() => cancelarEdicaoAutorizado()}
+                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                          >
+                            Cancelar
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {autorizadosLoading ? (
+                        <p className="mt-3 text-sm text-slate-500">Carregando...</p>
+                      ) : null}
+                      {autorizadosErro ? (
+                        <p className="mt-3 text-sm text-red-600">{autorizadosErro}</p>
+                      ) : null}
+
+                      {autorizados.length === 0 ? (
+                        <p className="mt-3 text-sm text-slate-500">
+                          Nenhuma pessoa autorizada cadastrada.
+                        </p>
+                      ) : (
+                        <div className="mt-4 space-y-3">
+                          {autorizados.map((item) => (
+                            <div
+                              key={item.id}
+                              className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-medium">
+                                    {item.pessoa_autorizada?.nome ??
+                                      "Pessoa #" + item.pessoa_autorizada_id}
+                                  </div>
+                                  <div className="text-xs text-slate-400">
+                                    {item.parentesco ?? "Parentesco nao informado"}
+                                  </div>
+                                </div>
+                                {editAutorizadoId === item.id ? (
+                                  <span className="text-xs text-violet-600">Em edicao</span>
+                                ) : null}
+                              </div>
+                              {item.observacoes ? (
+                                <div className="mt-2 text-sm text-slate-600">
+                                  {item.observacoes}
+                                </div>
+                              ) : null}
+                              <div className="mt-2 flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => iniciarEdicaoAutorizado(item)}
+                                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void removerAutorizado(item.id)}
+                                  className="inline-flex items-center gap-2 rounded-full border border-rose-100 bg-white px-3 py-1.5 text-xs font-medium text-rose-600 shadow-sm hover:bg-rose-50"
+                                >
+                                  Remover
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                  <SectionCard
+                    title="Ficha de cuidados"
+                    description="Informacoes de saude, alergias e autorizacao de saida."
+                  >
+                    {cuidadosLoading ? (
+                      <p className="text-sm text-slate-500">Carregando...</p>
+                    ) : null}
+                    {cuidadosErro ? (
+                      <p className="text-sm text-red-600">{cuidadosErro}</p>
+                    ) : null}
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {cuidadosTextareas.map((field) => {
+                        const key = field.key as keyof PessoaCuidadosForm;
+                        return (
+                          <div
+                            key={field.key}
+                            className={`space-y-1 ${field.span ?? ""}`}
+                          >
+                            <div className="text-xs text-slate-400">{field.label}</div>
+                            <textarea
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              rows={2}
+                              value={cuidadosForm[key]}
+                              onChange={(e) =>
+                                setCuidadosForm((prev) => ({
+                                  ...prev,
+                                  [key]: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        );
+                      })}
+
+                      {cuidadosInputs.map((field) => {
+                        const key = field.key as keyof PessoaCuidadosForm;
+                        return (
+                          <div key={field.key} className="space-y-1">
+                            <div className="text-xs text-slate-400">{field.label}</div>
+                            <input
+                              type={field.type}
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                              value={cuidadosForm[key]}
+                              onChange={(e) =>
+                                setCuidadosForm((prev) => ({
+                                  ...prev,
+                                  [key]: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                        );
+                      })}
+
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Tipo de autorizacao de saida</div>
+                        <select
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={cuidadosForm.tipo_autorizacao_saida}
+                          onChange={(e) =>
+                            setCuidadosForm((prev) => ({
+                              ...prev,
+                              tipo_autorizacao_saida: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="RESPONSAVEL">RESPONSAVEL</option>
+                          <option value="AUTORIZADOS">AUTORIZADOS</option>
+                          <option value="LIVRE">LIVRE</option>
+                        </select>
+                        <p className="text-xs text-slate-400">
+                          Use "AUTORIZADOS" para habilitar a lista de pessoas autorizadas.
+                        </p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Pode consumir acucar</div>
+                        <select
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={cuidadosForm.pode_consumir_acucar}
+                          onChange={(e) =>
+                            setCuidadosForm((prev) => ({
+                              ...prev,
+                              pode_consumir_acucar: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="PODE">PODE</option>
+                          <option value="EVITAR">EVITAR</option>
+                          <option value="NAO_PODE">NAO_PODE</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-400">Pode consumir refrigerante</div>
+                        <select
+                          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                          value={cuidadosForm.pode_consumir_refrigerante}
+                          onChange={(e) =>
+                            setCuidadosForm((prev) => ({
+                              ...prev,
+                              pode_consumir_refrigerante: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="PODE">PODE</option>
+                          <option value="EVITAR">EVITAR</option>
+                          <option value="NAO_PODE">NAO_PODE</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void salvarCuidados()}
+                        disabled={cuidadosSaving}
+                        className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white/70 px-4 py-2 text-xs font-medium text-violet-700 shadow-sm hover:bg-violet-50"
+                      >
+                        {cuidadosSaving ? "Salvando..." : "Salvar ficha"}
+                      </button>
+                    </div>
+                  </SectionCard>
+                        </div>
+                      )}
+                    </SectionCard>
+                  ) : null}
+                      </div>
+                    )}
+                  </SectionCard>
+                      </div>
+                    )}
+                  </SectionCard>
+                      </div>
+                    )}
+                  </SectionCard>
                 </div>
               )}
 
