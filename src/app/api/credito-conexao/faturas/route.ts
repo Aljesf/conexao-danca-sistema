@@ -60,6 +60,31 @@ function clampDay(year: number, month: number, day: number): number {
   return day;
 }
 
+function buildComposicaoResumo(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const itens = Array.isArray(record.itens) ? record.itens : [];
+  if (!itens.length) return null;
+
+  const parts: string[] = [];
+  for (let i = 0; i < itens.length; i++) {
+    if (parts.length >= 3) break;
+    const item = itens[i] as Record<string, unknown>;
+    const label = typeof item.label === "string" && item.label.trim() ? item.label.trim() : `Item ${i + 1}`;
+    const posicao = typeof item.posicao === "number" && Number.isFinite(item.posicao) ? item.posicao : i + 1;
+    const valorBrl =
+      typeof item.valor_brl === "string" && item.valor_brl.trim() ? item.valor_brl.trim() : null;
+    parts.push(`${label} (${posicao}a)${valorBrl ? ` ${valorBrl}` : ""}`);
+  }
+
+  let resumo = parts.join(" + ");
+  if (itens.length > parts.length) resumo += " + ...";
+  const totalBrl =
+    typeof record.total_brl === "string" && record.total_brl.trim() ? record.total_brl.trim() : null;
+  if (totalBrl) resumo = `Total ${totalBrl} | ${resumo}`;
+  return resumo;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams;
@@ -156,6 +181,39 @@ export async function GET(req: NextRequest) {
     const contaMap = new Map<number, ContaConexaoRow>();
     for (const c of contas) contaMap.set(c.id, c);
 
+    const composicaoByFatura = new Map<number, string>();
+    const faturaIds = faturas.map((f) => Number(f.id)).filter((id) => Number.isFinite(id));
+    if (faturaIds.length > 0) {
+      const { data: lancamentosRaw, error: lancErr } = await supabase
+        .from("credito_conexao_fatura_lancamentos")
+        .select(
+          `
+          fatura_id,
+          lancamento:credito_conexao_lancamentos (
+            id,
+            composicao_json,
+            descricao
+          )
+        `,
+        )
+        .in("fatura_id", faturaIds);
+
+      if (lancErr) {
+        console.error("Erro ao carregar composicao das faturas", lancErr);
+      } else {
+        (lancamentosRaw ?? []).forEach((row) => {
+          const record = row as Record<string, unknown>;
+          const faturaId = Number(record.fatura_id);
+          if (!Number.isFinite(faturaId) || composicaoByFatura.has(faturaId)) return;
+          const lanc = (record.lancamento ?? null) as Record<string, unknown> | null;
+          const resumo =
+            buildComposicaoResumo(lanc?.composicao_json ?? null) ??
+            (typeof lanc?.descricao === "string" && lanc.descricao.trim() ? lanc.descricao.trim() : null);
+          if (resumo) composicaoByFatura.set(faturaId, resumo);
+        });
+      }
+    }
+
     const rows = faturas.map((f) => {
       const conta = contaMap.get(f.conta_conexao_id) ?? null;
       const pessoaNome = conta?.pessoas?.nome ?? "—";
@@ -184,6 +242,7 @@ export async function GET(req: NextRequest) {
         taxas_centavos: taxas,
         total_centavos: total,
         status: f.status,
+        composicao_resumo: composicaoByFatura.get(f.id) ?? null,
       };
     });
 

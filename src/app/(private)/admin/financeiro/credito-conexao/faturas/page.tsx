@@ -25,6 +25,7 @@ type ApiRow = {
   taxas_centavos: number;
   total_centavos: number;
   status: string;
+  composicao_resumo?: string | null;
 };
 
 type ApiResp = {
@@ -298,7 +299,15 @@ export default function AdminCreditoConexaoFaturasPage() {
                       <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
                         {formatBRLFromCentavos(r.taxas_centavos)}
                       </td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
+                      <td
+                        style={{
+                          padding: 10,
+                          borderBottom: "1px solid #eee",
+                          textAlign: "right",
+                          cursor: r.composicao_resumo ? "help" : "default",
+                        }}
+                        title={r.composicao_resumo?.trim() || undefined}
+                      >
                         {formatBRLFromCentavos(r.total_centavos)}
                       </td>
                       <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.status}</td>

@@ -36,16 +36,11 @@ type ResolverResp = {
       descricao?: string | null;
       codigo_item?: string;
     };
+    valor_final_centavos?: number | null;
+    valor_final_brl?: string | null;
   };
   message?: string;
   error?: string;
-};
-
-type LancamentoCriado = {
-  id: number;
-  turma_id: number | null;
-  valor_centavos: number;
-  descricao: string;
 };
 
 type ApiErrorCode = "bad_request" | "unauthorized" | "not_found" | "server_error" | "conflict";
@@ -158,12 +153,16 @@ async function resolverMensalidadePorTurma(
   alunoId: number,
   turmaId: number,
   ano: number,
+  tierOrdemOverride?: number | null,
 ): Promise<{ valor_centavos: number; descricao: string | null }> {
   const resolveUrl = new URL("/api/matriculas/precos/resolver", req.url);
   resolveUrl.searchParams.set("aluno_id", String(alunoId));
   resolveUrl.searchParams.set("alvo_tipo", "TURMA");
   resolveUrl.searchParams.set("alvo_id", String(turmaId));
   resolveUrl.searchParams.set("ano", String(ano));
+  if (tierOrdemOverride && Number.isFinite(tierOrdemOverride)) {
+    resolveUrl.searchParams.set("tier_ordem_override", String(tierOrdemOverride));
+  }
 
   const resolveRes = await fetch(resolveUrl.toString(), { headers: { cookie: cookieHeader } });
   let payload: ResolverResp | null = null;
@@ -179,7 +178,7 @@ async function resolverMensalidadePorTurma(
   }
 
   const item = payload.data?.item_aplicado;
-  const valor = Number(item?.valor_centavos);
+  const valor = Number(payload.data?.valor_final_centavos ?? item?.valor_centavos);
   if (!Number.isFinite(valor) || valor <= 0) {
     throw new Error("valor_mensal_invalido");
   }
@@ -360,7 +359,12 @@ export async function POST(req: Request) {
     const competencia = normalizeCompetencia(body.competencia) ?? competenciaAtual();
     const cookieHeader = cookieStore.toString();
 
-    const lancamentosPayload: Array<Record<string, unknown>> = [];
+    const itensAtivos: Array<{
+      servico_id: number | null;
+      unidade_execucao_id: number | null;
+      turma_id: number;
+      label: string;
+    }> = [];
     const { data: ues, error: ueErr } = await admin
       .from("escola_unidades_execucao")
       .select("unidade_execucao_id,servico_id,origem_id")
@@ -385,65 +389,117 @@ export async function POST(req: Request) {
     });
 
     for (const turma of turmasAtivas) {
-      const resultado = await resolverMensalidadePorTurma(req, cookieHeader, alunoId, turma.turma_id, anoRef);
-      const turmaNome = turma.nome?.trim() || `Turma ${turma.turma_id}`;
-      const descBase = resultado.descricao?.trim() || "Mensalidade";
-      const descricao = `${descBase} ${competencia} - ${turmaNome}`;
       const ueRef = ueByTurma.get(turma.turma_id) ?? null;
-      const refParts: string[] = [];
-      if (ueRef?.servico_id) refParts.push(`servico:${ueRef.servico_id}`);
-      if (ueRef?.unidade_execucao_id) refParts.push(`ue:${ueRef.unidade_execucao_id}`);
-      refParts.push(`turma:${turma.turma_id}`);
-      const referenciaItem = refParts.join("|");
-      lancamentosPayload.push({
-        conta_conexao_id: contaConexaoId,
-        valor_centavos: resultado.valor_centavos,
-        numero_parcelas: 1,
-        status: "PENDENTE_FATURA",
-        origem_sistema: "MATRICULA_MENSAL",
-        origem_id: matriculaId ?? alunoId,
-        descricao,
-        competencia,
-        referencia_item: referenciaItem,
+      itensAtivos.push({
+        turma_id: turma.turma_id,
+        label: turma.nome?.trim() || `Turma ${turma.turma_id}`,
+        servico_id: ueRef?.servico_id ?? null,
+        unidade_execucao_id: ueRef?.unidade_execucao_id ?? null,
       });
     }
 
-    const payloadFinal = lancamentosPayload;
-    if (payloadFinal.length === 0) {
+    if (itensAtivos.length === 0) {
       return NextResponse.json(
-        { ok: true, data: { lancamentos: [], warning: "Sem novos lancamentos para criar." } },
+        { ok: true, data: { created: 0, skipped: 0, message: "Sem itens ativos para esta competencia." } },
         { status: 200 },
       );
     }
 
-    const { data: created, error: insErr } = await admin
-      .from("credito_conexao_lancamentos")
-      .upsert(payloadFinal, {
-        onConflict: "conta_conexao_id,competencia,referencia_item",
-        ignoreDuplicates: true,
-      })
-      .select("id,descricao,valor_centavos");
+    let totalCentavos = 0;
+    const composicaoItens: Array<{
+      posicao: number;
+      servico_id: number | null;
+      unidade_execucao_id: number | null;
+      turma_id: number;
+      label: string;
+      valor_centavos: number;
+      valor_brl: string;
+    }> = [];
 
-    if (insErr) {
-      return errJson("server_error", "Falha ao criar lancamentos mensais.", 500, { insErr });
+    for (let i = 0; i < itensAtivos.length; i++) {
+      const it = itensAtivos[i];
+      const posicaoTier = i + 1;
+
+      const resultado = await resolverMensalidadePorTurma(
+        req,
+        cookieHeader,
+        alunoId,
+        it.turma_id,
+        anoRef,
+        posicaoTier,
+      );
+
+      totalCentavos += resultado.valor_centavos;
+      const valorBrl = (resultado.valor_centavos / 100).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      });
+
+      composicaoItens.push({
+        posicao: posicaoTier,
+        servico_id: it.servico_id,
+        unidade_execucao_id: it.unidade_execucao_id,
+        turma_id: it.turma_id,
+        label: it.label,
+        valor_centavos: resultado.valor_centavos,
+        valor_brl: valorBrl,
+      });
     }
 
-    const createdMap = (created ?? []) as Array<Record<string, unknown>>;
-    const lancamentosCriados: LancamentoCriado[] = createdMap.map((row) => ({
-      id: toPositiveNumber(row.id) ?? 0,
-      turma_id: null,
-      valor_centavos: Number(row.valor_centavos ?? 0),
-      descricao: String(row.descricao ?? ""),
-    }));
+    const composicaoTextoCurto = composicaoItens
+      .map((x) => `${x.label} (${x.posicao}a)`)
+      .join(" + ");
+
+    const descricao = `Mensalidade (${competencia}) - ${composicaoTextoCurto}`;
+    const referenciaItem = `mensalidade|ctx:${contextoId}|aluno:${alunoId}|comp:${competencia}`;
+    const composicaoJson = {
+      competencia,
+      contexto_matricula_id: contextoId,
+      aluno_pessoa_id: alunoId,
+      responsavel_financeiro_id: responsavelId,
+      ano_referencia: anoRef,
+      total_centavos: totalCentavos,
+      total_brl: (totalCentavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      itens: composicaoItens,
+    };
+
+    const { error: insErr } = await admin.from("credito_conexao_lancamentos").insert({
+      conta_conexao_id: contaConexaoId,
+      origem_sistema: "MATRICULA_MENSAL",
+      origem_id: contextoId,
+      descricao,
+      valor_centavos: totalCentavos,
+      data_lancamento: `${competencia}-01`,
+      status: "PENDENTE_FATURA",
+      competencia,
+      referencia_item: referenciaItem,
+      composicao_json: composicaoJson,
+    });
+
+    if (insErr) {
+      const msg = insErr.message ?? "";
+      const isDup =
+        insErr.code === "23505" ||
+        msg.toLowerCase().includes("duplicate") ||
+        msg.toLowerCase().includes("unique");
+      if (isDup) {
+        return NextResponse.json(
+          { ok: true, data: { created: 0, skipped: 1, total_centavos: totalCentavos } },
+          { status: 200 },
+        );
+      }
+      return errJson("server_error", "Falha ao criar lancamento mensal consolidado.", 500, { insErr });
+    }
 
     return NextResponse.json(
       {
         ok: true,
         data: {
-          matricula_id: matriculaId,
-          contexto_matricula_id: contextoId,
+          created: 1,
+          skipped: 0,
           conta_conexao_id: contaConexaoId,
-          lancamentos: lancamentosCriados,
+          competencia,
+          total_centavos: totalCentavos,
         },
       },
       { status: 200 },

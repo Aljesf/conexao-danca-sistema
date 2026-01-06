@@ -23,6 +23,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         numero_parcelas,
         data_lancamento,
         status,
+        composicao_json,
         created_at
       )
     `

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -29,7 +29,54 @@ type LancamentoFatura = {
   valor_centavos?: number | null;
   numero_parcelas?: number | null;
   status?: string | null;
+  composicao_json?: unknown;
 };
+
+type ComposicaoItemView = {
+  posicao: number;
+  label: string;
+  valor_centavos: number | null;
+  valor_brl: string | null;
+};
+
+type ComposicaoView = {
+  competencia: string | null;
+  total_centavos: number | null;
+  total_brl: string | null;
+  itens: ComposicaoItemView[];
+};
+
+function parseComposicao(raw: unknown): ComposicaoView | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const itensRaw = Array.isArray(record.itens) ? record.itens : [];
+  if (itensRaw.length === 0) return null;
+
+  const itens = itensRaw.map((itemRaw, index) => {
+    const item = itemRaw as Record<string, unknown>;
+    const label = typeof item.label === "string" && item.label.trim() ? item.label.trim() : `Item ${index + 1}`;
+    const posicao =
+      typeof item.posicao === "number" && Number.isFinite(item.posicao) ? item.posicao : index + 1;
+    const valorCentavos =
+      typeof item.valor_centavos === "number" && Number.isFinite(item.valor_centavos)
+        ? item.valor_centavos
+        : null;
+    const valorBrl =
+      typeof item.valor_brl === "string" && item.valor_brl.trim() ? item.valor_brl.trim() : null;
+    return { posicao, label, valor_centavos: valorCentavos, valor_brl: valorBrl };
+  });
+
+  const totalCentavos =
+    typeof record.total_centavos === "number" && Number.isFinite(record.total_centavos)
+      ? record.total_centavos
+      : null;
+  const totalBrl =
+    typeof record.total_brl === "string" && record.total_brl.trim() ? record.total_brl.trim() : null;
+  const competencia =
+    typeof record.competencia === "string" && record.competencia.trim() ? record.competencia.trim() : null;
+
+  return { competencia, total_centavos: totalCentavos, total_brl: totalBrl, itens };
+}
 
 export default function DetalheFaturaCreditoConexaoPage() {
   const params = useParams();
@@ -67,6 +114,11 @@ export default function DetalheFaturaCreditoConexaoPage() {
     const taxas = Number(fatura.valor_taxas_centavos ?? 0);
     return Math.max(0, total - taxas);
   }, [fatura]);
+  const composicoes = useMemo(() => {
+    return lancamentos
+      .map((l) => parseComposicao(l.composicao_json))
+      .filter((item): item is ComposicaoView => !!item);
+  }, [lancamentos]);
 
   async function carregar() {
     try {
@@ -359,7 +411,38 @@ export default function DetalheFaturaCreditoConexaoPage() {
             <div className="px-4 py-3 border-b">
               <h2 className="text-sm font-semibold">Lançamentos vinculados</h2>
             </div>
-
+            {composicoes.length > 0 ? (
+              <div className="p-4 border-b bg-slate-50/60">
+                {composicoes.map((comp, index) => {
+                  const totalLabel =
+                    comp.total_brl ??
+                    (typeof comp.total_centavos === "number" ? fmtMoney(comp.total_centavos) : "N/A");
+                  return (
+                    <div key={`comp-${index}`} className="space-y-2">
+                      <div className="text-sm font-semibold">Composicao da mensalidade</div>
+                      <div className="text-xs text-gray-600">
+                        Competencia: {comp.competencia ?? "N/A"} | Total: {totalLabel}
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        {comp.itens.map((item) => {
+                          const valorLabel =
+                            item.valor_brl ??
+                            (typeof item.valor_centavos === "number" ? fmtMoney(item.valor_centavos) : "N/A");
+                          return (
+                            <div key={`${item.label}-${item.posicao}`} className="flex justify-between gap-3">
+                              <span>
+                                {item.label} ({item.posicao}a)
+                              </span>
+                              <span className="text-gray-600">{valorLabel}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             {lancamentos.length === 0 ? (
               <div className="p-4 text-sm text-gray-600">Nenhum lançamento encontrado.</div>
             ) : (
