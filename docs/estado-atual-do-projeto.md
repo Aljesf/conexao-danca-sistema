@@ -92,3 +92,22 @@ Versão lógica: v1.1 (cobrança canônica + composição + múltiplas UEs conso
 1) Ajustar Loja: cobrança por parcela/competência (Cartão Conexão)
 2) Validar integração NEOFIN (somente fatura)
 3) Rodar lint/build e corrigir eventuais avisos do TS/ESLint
+
+---
+
+## Atualizacoes recentes (Calendario - 2026-01-06)
+
+SQL concluido:
+- 20260105_0001_calendario_periodo_letivo_mvp.sql (periodos_letivos + calendario_itens_institucionais)
+- 20260105_0002_eventos_internos_mvp.sql (eventos_internos com datetime)
+
+APIs concluidas:
+- GET /api/calendario/feed (inclui EVENTO_INTERNO)
+- GET /api/calendario/grade
+
+Paginas:
+- /calendario (MVP com periodo letivo, itens institucionais e eventos internos)
+
+Pendencias:
+- Aplicar migrations no Supabase e validar feed/grade na UI.
+- Rodar npm run lint e npm run build.
