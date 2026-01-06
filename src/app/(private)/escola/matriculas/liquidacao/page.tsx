@@ -17,6 +17,7 @@ type MatriculaResumo = {
   primeira_cobranca_status: string;
   primeira_cobranca_tipo: string | null;
   primeira_cobranca_valor_centavos: number | null;
+  total_mensalidade_centavos: number | null;
 };
 
 export default function Page() {
@@ -57,7 +58,7 @@ export default function Page() {
       const { data: m, error: mErr } = await supabase
         .from("matriculas")
         .select(
-          "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos",
+          "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos",
         )
         .eq("id", idNum)
         .single();
@@ -69,7 +70,7 @@ export default function Page() {
       }
 
       setMatricula(m as MatriculaResumo);
-      const valorStr = typeof m.primeira_cobranca_valor_centavos === "number" ? String(m.primeira_cobranca_valor_centavos) : "";
+      const valorStr = typeof m.total_mensalidade_centavos === "number" ? String(m.total_mensalidade_centavos) : "";
       setValorCentavos(valorStr);
       if (!valorStr) {
         setErro("Valor nao resolvido na matricula. Volte e gere a matricula novamente.");
@@ -202,8 +203,9 @@ export default function Page() {
     <div className="p-6 max-w-3xl">
       <h1 className="text-xl font-semibold">Liquidação da Matrícula (Ato)</h1>
 
-      <p className="mt-2 text-sm text-muted-foreground">
-        Esta etapa é obrigatória para efetivar a matrícula. Selecione como será tratada a primeira cobrança.
+      <p className="text-sm text-muted-foreground mt-2">
+        Este valor refere-se à <strong>entrada no ato</strong>. A mensalidade recorrente será cobrada separadamente via
+        <strong> Cartão Conexão</strong>.
       </p>
 
       {erro ? (
@@ -257,10 +259,10 @@ export default function Page() {
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-medium">Valor (centavos)</label>
                   <input
-                    className="border rounded-md p-2 bg-muted"
+                    className="border rounded-md p-2"
                     inputMode="numeric"
                     value={valorCentavos}
-                    readOnly
+                    onChange={(e) => setValorCentavos(e.target.value)}
                   />
                 </div>
                 <div className="flex flex-col gap-2">
@@ -275,10 +277,10 @@ export default function Page() {
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">Valor a lançar no Cartão (centavos)</label>
               <input
-                className="border rounded-md p-2 bg-muted"
+                className="border rounded-md p-2"
                 inputMode="numeric"
                 value={valorCentavos}
-                readOnly
+                onChange={(e) => setValorCentavos(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">Este lançamento não cria recebimento nem movimento de caixa.</p>
             </div>
