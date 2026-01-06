@@ -463,7 +463,7 @@ export async function POST(req: Request) {
       itens: composicaoItens,
     };
 
-    const { error: insErr } = await admin.from("credito_conexao_lancamentos").insert({
+    const payloadLanc = {
       conta_conexao_id: contaConexaoId,
       origem_sistema: "MATRICULA_MENSAL",
       origem_id: contextoId,
@@ -474,31 +474,25 @@ export async function POST(req: Request) {
       competencia,
       referencia_item: referenciaItem,
       composicao_json: composicaoJson,
+    };
+
+    const { error: upErr } = await admin.from("credito_conexao_lancamentos").upsert(payloadLanc, {
+      onConflict: "conta_conexao_id,competencia,referencia_item",
+      ignoreDuplicates: false,
     });
 
-    if (insErr) {
-      const msg = insErr.message ?? "";
-      const isDup =
-        insErr.code === "23505" ||
-        msg.toLowerCase().includes("duplicate") ||
-        msg.toLowerCase().includes("unique");
-      if (isDup) {
-        return NextResponse.json(
-          { ok: true, data: { created: 0, skipped: 1, total_centavos: totalCentavos } },
-          { status: 200 },
-        );
-      }
-      return errJson("server_error", "Falha ao criar lancamento mensal consolidado.", 500, { insErr });
+    if (upErr) {
+      return NextResponse.json(
+        { ok: false, error: "falha_upsert_lancamento_consolidado", detail: upErr.message },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json(
       {
         ok: true,
         data: {
-          created: 1,
-          skipped: 0,
-          conta_conexao_id: contaConexaoId,
-          competencia,
+          upserted: 1,
           total_centavos: totalCentavos,
         },
       },

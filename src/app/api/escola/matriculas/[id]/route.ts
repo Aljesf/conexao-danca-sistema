@@ -52,6 +52,11 @@ type DocumentoEmitidoResumo = {
   created_at: string | null;
 };
 
+type TurmaVinculadaResumo = {
+  turma_id: number;
+  nome: string | null;
+};
+
 function isSchemaMissing(err: unknown): boolean {
   const e = err as PostgrestError | null;
   return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
@@ -304,6 +309,25 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
       return errJson("server_error", "Falha ao buscar documentos emitidos.", 500, { emitidosErr });
     }
 
+    const { data: turmasRaw, error: turmasErr } = await admin
+      .from("turma_aluno")
+      .select("turma:turmas(turma_id,nome), status")
+      .eq("matricula_id", matriculaId)
+      .in("status", ["ATIVO", "ativo"]);
+
+    if (turmasErr && !isSchemaMissing(turmasErr)) {
+      return errJson("server_error", "Falha ao buscar turmas vinculadas.", 500, { turmasErr });
+    }
+
+    const turmasVinculadas: TurmaVinculadaResumo[] = (turmasRaw ?? [])
+      .map((row) => {
+        const turma = (row as { turma?: { turma_id?: number | null; nome?: string | null } | null }).turma;
+        const turmaId = toPositiveNumber(turma?.turma_id);
+        if (!turmaId) return null;
+        return { turma_id: turmaId, nome: turma?.nome ?? null };
+      })
+      .filter((row): row is TurmaVinculadaResumo => !!row);
+
     const ueRow = unidadeExecucao as UnidadeExecucaoRow | null;
     const unidadeExecucaoLabel = ueRow
       ? formatUnidadeExecucaoLabel({
@@ -331,6 +355,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
         financeiro_resumo: financeiroResumo,
         resumo_financeiro_cartao_conexao: resumoCartao,
         documentos_emitidos: (emitidos ?? []) as DocumentoEmitidoResumo[],
+        turmas_vinculadas: turmasVinculadas,
         historico: [],
       },
       200,

@@ -23,6 +23,21 @@ function formatDateBR(dateISO: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function clampDay(year: number, month: number, day: number): number {
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (day < 1) return 1;
+  if (day > last) return last;
+  return day;
+}
+
+function buildIsoDate(year: number, month: number, day: number): string {
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
 function getString(row: Record<string, unknown>, key: string): string | null {
   const value = row[key];
   if (typeof value === "string") return value;
@@ -134,6 +149,81 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
 
       const parcelasResumo = await listarParcelasResumoPorMatriculaId(input.operacaoId);
       resp[codigo] = mapParcelasResumo(parcelasResumo);
+
+      if (resp[codigo].length === 0) {
+        const { data: matricula, error: matErr } = await supabase
+          .from("matriculas")
+          .select("id,total_mensalidade_centavos,ano_referencia,pessoa_id,responsavel_financeiro_id")
+          .eq("id", input.operacaoId)
+          .maybeSingle();
+
+        if (!matErr && matricula) {
+          const valorMensalCentavos = Number(
+            (matricula as { total_mensalidade_centavos?: number | null }).total_mensalidade_centavos ?? 0,
+          );
+          let anoReferencia = Number(
+            (matricula as { ano_referencia?: number | null }).ano_referencia ?? new Date().getFullYear(),
+          );
+          if (!Number.isFinite(anoReferencia) || anoReferencia < 2000) {
+            anoReferencia = new Date().getFullYear();
+          }
+          const responsavelId = getNumber(matricula as Record<string, unknown>, "responsavel_financeiro_id");
+          const pessoaId = getNumber(matricula as Record<string, unknown>, "pessoa_id");
+
+          let diaVencimento = 12;
+          const titularId = responsavelId ?? pessoaId;
+          if (titularId) {
+            const { data: conta } = await supabase
+              .from("credito_conexao_contas")
+              .select("dia_vencimento,ativo,tipo_conta")
+              .eq("pessoa_titular_id", titularId)
+              .eq("tipo_conta", "ALUNO")
+              .eq("ativo", true)
+              .order("id", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const diaConta = Number((conta as { dia_vencimento?: number | null }).dia_vencimento);
+            if (Number.isFinite(diaConta) && diaConta >= 1 && diaConta <= 31) {
+              diaVencimento = diaConta;
+            }
+          }
+
+          const { data: turmasRaw } = await supabase
+            .from("turma_aluno")
+            .select("turma:turmas(turma_id,nome)")
+            .eq("matricula_id", input.operacaoId)
+            .in("status", ["ATIVO", "ativo"]);
+
+          const turmaLabels = (turmasRaw ?? [])
+            .map((row) => {
+              const turma = (row as { turma?: { turma_id?: number | null; nome?: string | null } | null }).turma;
+              const nome = turma?.nome?.trim();
+              const turmaRecord = turma && typeof turma === "object" ? (turma as Record<string, unknown>) : null;
+              const turmaId = turmaRecord ? getNumber(turmaRecord, "turma_id") : null;
+              if (nome) return nome;
+              if (turmaId) return `Turma #${turmaId}`;
+              return null;
+            })
+            .filter((label): label is string => !!label);
+
+          const composicaoTexto = turmaLabels.length > 0 ? turmaLabels.join(" + ") : "composicao";
+          const valorLabel = formatBRLFromCentavos(Number.isFinite(valorMensalCentavos) ? valorMensalCentavos : 0);
+
+          const previsao: CollectionRow[] = [];
+          for (let mes = 1; mes <= 12; mes += 1) {
+            const competencia = `${anoReferencia}-${pad2(mes)}`;
+            const dataIso = buildIsoDate(anoReferencia, mes, clampDay(anoReferencia, mes, diaVencimento));
+            previsao.push({
+              DATA: formatDateBR(dataIso),
+              DESCRICAO: `Mensalidade (${competencia}) - ${composicaoTexto}`,
+              VALOR: valorLabel,
+            });
+          }
+
+          resp[codigo] = previsao;
+        }
+      }
 
       if (debug) {
         console.log("[doc-colecao] MATRICULA_PARCELAS_len:", resp[codigo].length);

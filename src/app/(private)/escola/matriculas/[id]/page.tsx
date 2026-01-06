@@ -42,6 +42,10 @@ type MatriculaDetalheResp = {
     status_assinatura: string | null;
     created_at: string | null;
   }>;
+  turmas_vinculadas?: Array<{
+    turma_id: number;
+    nome: string | null;
+  }>;
   error?: string;
   message?: string;
 };
@@ -111,8 +115,13 @@ export default function MatriculaDetalhePage() {
   const parcelasProximas = resumoCartao?.parcelas_proximas ?? [];
   const parcelasVisiveis = parcelasProximas.slice(0, 4);
   const documentosEmitidos = data?.documentos_emitidos ?? [];
+  const turmasVinculadas = data?.turmas_vinculadas ?? [];
   const verDocs = `/escola/matriculas/${id}/documentos`;
   const emitirDocs = `/escola/matriculas/${id}/documentos/emitir`;
+  const totalMensalidadeCentavos = Number(matricula?.total_mensalidade_centavos ?? NaN);
+  const totalMensalidadeLabel = Number.isFinite(totalMensalidadeCentavos)
+    ? formatBRLFromCents(totalMensalidadeCentavos)
+    : "-";
 
   return (
     <div className="p-4 space-y-6">
@@ -152,6 +161,22 @@ export default function MatriculaDetalhePage() {
             <div>Unidade de execucao: {data.unidade_execucao_label ?? "-"}</div>
             <div>UE ID: {data.unidade_execucao?.unidade_execucao_id ?? "-"}</div>
             <div>Turma ID: {data.turma?.turma_id ?? "-"}</div>
+            <div className="mt-3 text-sm">
+              <div className="text-sm font-semibold">Turmas vinculadas</div>
+              {turmasVinculadas.length === 0 ? (
+                <div className="mt-1 text-muted-foreground">-</div>
+              ) : (
+                <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                  {turmasVinculadas.map((t) => (
+                    <li key={t.turma_id}>{t.nome ?? `Turma #${t.turma_id}`}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="mt-3 text-sm">
+              <div className="text-sm font-semibold">Mensalidade consolidada (referencia)</div>
+              <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
+            </div>
           </div>
 
           <div className="rounded-lg border p-4 space-y-2">

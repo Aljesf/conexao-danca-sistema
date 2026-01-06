@@ -23,7 +23,7 @@ type BodyNovo = {
   tipo_matricula: TipoMatricula;
   vinculo_id: number;
   vinculos_ids?: number[] | null;
-  itens?: MatriculaItem[] | null;
+  itens?: MatriculaItemIn[] | null;
   ano_referencia?: number | null;
   data_matricula?: string | null;
   data_inicio_vinculo?: string | null;
@@ -34,6 +34,12 @@ type BodyNovo = {
   contrato_modelo_id?: number | null;
   observacoes?: string | null;
   total_mensalidade_centavos?: number | null;
+};
+
+type MatriculaItemIn = {
+  servico_id: number;
+  unidade_execucao_id: number;
+  turma_id?: number | null;
 };
 
 type MatriculaItem = {
@@ -75,20 +81,27 @@ function normalizeIdArray(value: unknown): number[] | null {
   return out;
 }
 
-function parseItens(value: unknown): MatriculaItem[] | null {
+function parseItens(value: unknown): MatriculaItemIn[] | null {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) return null;
-  const itens: MatriculaItem[] = [];
+  const itens: MatriculaItemIn[] = [];
   for (const raw of value) {
     if (!raw || typeof raw !== "object") return null;
     const record = raw as Record<string, unknown>;
     const servicoId = Number(record.servico_id);
     const unidadeExecucaoId = Number(record.unidade_execucao_id);
-    const turmaId = Number(record.turma_id);
     if (!Number.isFinite(servicoId) || servicoId <= 0) return null;
     if (!Number.isFinite(unidadeExecucaoId) || unidadeExecucaoId <= 0) return null;
-    if (!Number.isFinite(turmaId) || turmaId <= 0) return null;
-    itens.push({ servico_id: servicoId, unidade_execucao_id: unidadeExecucaoId, turma_id: turmaId });
+    const turmaRaw = record.turma_id;
+    const turmaId = turmaRaw === undefined || turmaRaw === null ? null : Number(turmaRaw);
+    if (turmaRaw !== undefined && turmaRaw !== null) {
+      if (!Number.isFinite(turmaId) || (turmaId as number) <= 0) return null;
+    }
+    itens.push({
+      servico_id: servicoId,
+      unidade_execucao_id: unidadeExecucaoId,
+      turma_id: Number.isFinite(turmaId as number) ? (turmaId as number) : null,
+    });
   }
   return itens;
 }
@@ -120,11 +133,46 @@ export async function POST(req: Request) {
   if (itensParsed === null) {
     return badRequest("itens invalidos.");
   }
-  const itens = itensParsed ?? [];
+  const itensIn = itensParsed ?? [];
   const hasItens = Object.prototype.hasOwnProperty.call(body as Record<string, unknown>, "itens");
-  if (hasItens && itens.length === 0) {
+  if (hasItens && itensIn.length === 0) {
     return badRequest("itens_obrigatorios.");
   }
+
+  const itensResolved: MatriculaItem[] = [];
+  for (const it of itensIn) {
+    const servicoId = Number(it.servico_id);
+    const ueId = Number(it.unidade_execucao_id);
+    const turmaIdDirect = it.turma_id ?? null;
+
+    if (!Number.isFinite(servicoId) || !Number.isFinite(ueId)) continue;
+
+    if (typeof turmaIdDirect === "number" && Number.isFinite(turmaIdDirect)) {
+      itensResolved.push({ servico_id: servicoId, unidade_execucao_id: ueId, turma_id: turmaIdDirect });
+      continue;
+    }
+
+    const { data: ue, error: ueErr } = await supabase
+      .from("escola_unidades_execucao")
+      .select("origem_tipo, origem_id")
+      .eq("unidade_execucao_id", ueId)
+      .maybeSingle();
+
+    if (ueErr || !ue || ue.origem_tipo !== "TURMA" || !ue.origem_id) {
+      return NextResponse.json(
+        { ok: false, error: "nao_foi_possivel_resolver_turma", ue_id: ueId },
+        { status: 500 },
+      );
+    }
+
+    itensResolved.push({ servico_id: servicoId, unidade_execucao_id: ueId, turma_id: Number(ue.origem_id) });
+  }
+
+  if (itensIn.length > 0 && itensResolved.length === 0) {
+    return NextResponse.json({ ok: false, error: "itens_invalidos" }, { status: 400 });
+  }
+
+  const itens = itensIn.length > 0 ? itensResolved : [];
 
   let vinculoId = Number(body.vinculo_id);
   const vinculosIdsParsed = normalizeIdArray(body.vinculos_ids);

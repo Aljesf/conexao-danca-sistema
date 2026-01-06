@@ -21,6 +21,7 @@ type ContextoMatricula = {
 };
 
 type UnidadeExecucaoOpcao = {
+  id: number;
   unidade_execucao_id: number;
   turma_id: number | null;
   label: string;
@@ -388,7 +389,12 @@ export default function NovaMatriculaPage() {
           }
           const data = await fetchJSON<UnidadesResp>(url.toString());
           if (!ativo) return;
-          setUesPorServico((prev) => ({ ...prev, [servicoId]: data.data ?? [] }));
+          const mapped = (data.data ?? []).map((ue) => ({
+            ...ue,
+            id: Number.isFinite(ue.id) ? ue.id : ue.unidade_execucao_id,
+            turma_id: Number.isFinite(ue.turma_id ?? NaN) ? ue.turma_id : null,
+          }));
+          setUesPorServico((prev) => ({ ...prev, [servicoId]: mapped }));
         }
       } catch (e: unknown) {
         if (ativo) setUesErro(e instanceof Error ? e.message : "Falha ao carregar unidades.");
