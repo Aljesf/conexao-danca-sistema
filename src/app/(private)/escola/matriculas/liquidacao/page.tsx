@@ -14,6 +14,7 @@ type MatriculaResumo = {
   id: number;
   pessoa_id: number;
   responsavel_financeiro_id: number;
+  status_fluxo: string;
   primeira_cobranca_status: string;
   primeira_cobranca_tipo: string | null;
   primeira_cobranca_valor_centavos: number | null;
@@ -58,7 +59,7 @@ export default function Page() {
       const { data: m, error: mErr } = await supabase
         .from("matriculas")
         .select(
-          "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos",
+          "id, status_fluxo, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos",
         )
         .eq("id", idNum)
         .single();
@@ -70,7 +71,9 @@ export default function Page() {
       }
 
       setMatricula(m as MatriculaResumo);
-      const valorStr = typeof m.total_mensalidade_centavos === "number" ? String(m.total_mensalidade_centavos) : "";
+      const valorSugeridoEntradaCentavos =
+        typeof m.total_mensalidade_centavos === "number" ? m.total_mensalidade_centavos : 0;
+      const valorStr = typeof m.total_mensalidade_centavos === "number" ? String(valorSugeridoEntradaCentavos) : "";
       setValorCentavos(valorStr);
       if (!valorStr) {
         setErro("Valor nao resolvido na matricula. Volte e gere a matricula novamente.");
@@ -180,6 +183,19 @@ export default function Page() {
 
       if (json?.status === "LANCADA_CARTAO") {
         alert("Lancado no Cartao Conexao. Verifique a fatura do periodo.");
+      }
+
+      const finalizeRes = await fetch(`/api/matriculas/${matricula.id}/finalizar`, { method: "POST" });
+      if (!finalizeRes.ok) {
+        let finalizeMessage = "Falha ao finalizar matricula.";
+        try {
+          const finalizeJson = (await finalizeRes.json()) as { error?: string; message?: string };
+          finalizeMessage = finalizeJson.message ?? finalizeJson.error ?? finalizeMessage;
+        } catch {
+          // mantem mensagem generica
+        }
+        setErro(finalizeMessage);
+        return;
       }
 
       router.push(`/escola/matriculas/${matricula.id}`);

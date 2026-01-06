@@ -89,7 +89,11 @@ async function fetchMatriculas(admin: ReturnType<typeof getSupabaseAdmin>, param
   ];
   if (params.includeProduto) selectBase.push("produto_id");
 
-  let query = admin.from("matriculas").select(selectBase.join(",")).eq("ano_referencia", params.ano);
+  let query = admin
+    .from("matriculas")
+    .select(selectBase.join(","))
+    .eq("ano_referencia", params.ano)
+    .eq("status_fluxo", "ATIVA");
 
   if (params.pessoaId) {
     query = query.eq("pessoa_id", params.pessoaId);
