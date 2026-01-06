@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import type { PostgrestError } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type GerarMensalBody = {
@@ -10,13 +9,12 @@ type GerarMensalBody = {
   aluno_pessoa_id?: number;
   responsavel_financeiro_id?: number;
   ano_referencia?: number;
-  competencia?: string | null; // YYYY-MM (opcional)
+  competencia?: string | null; // YYYY-MM
 };
 
 type TurmaAtiva = {
   turma_id: number;
   nome: string | null;
-  data_inicio: string | null;
 };
 
 type TurmaAlunoRow = {
@@ -24,7 +22,6 @@ type TurmaAlunoRow = {
   turmas?: {
     turma_id?: number | null;
     nome?: string | null;
-    data_inicio?: string | null;
   } | null;
 };
 
@@ -49,11 +46,6 @@ function errJson(code: ApiErrorCode, message: string, status: number, details?: 
   return NextResponse.json({ ok: false, error: code, message, details: details ?? null }, { status });
 }
 
-function isSchemaMissing(err: unknown): boolean {
-  const e = err as PostgrestError | null;
-  return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
-}
-
 function toPositiveNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -66,76 +58,8 @@ function normalizeCompetencia(value: unknown): string | null {
   return trimmed;
 }
 
-function competenciaAtual(): string {
-  const now = new Date();
-  const ano = now.getUTCFullYear();
-  const mes = String(now.getUTCMonth() + 1).padStart(2, "0");
-  return `${ano}-${mes}`;
-}
-
-async function fetchVencimentoDiaPadrao(admin: ReturnType<typeof getSupabaseAdmin>): Promise<number> {
-  const { data, error } = await admin
-    .from("matricula_configuracoes")
-    .select("vencimento_dia_padrao")
-    .eq("ativo", true)
-    .order("id", { ascending: false })
-    .limit(1);
-
-  if (error || !data || data.length === 0) return 10;
-  const dia = Number((data[0] as { vencimento_dia_padrao?: number }).vencimento_dia_padrao);
-  return Number.isFinite(dia) && dia >= 1 && dia <= 31 ? dia : 10;
-}
-
-async function ensureContaConexao(
-  admin: ReturnType<typeof getSupabaseAdmin>,
-  pessoaTitularId: number,
-): Promise<number> {
-  const { data: contas, error: contasErr } = await admin
-    .from("credito_conexao_contas")
-    .select("id, ativo, tipo_conta")
-    .eq("pessoa_titular_id", pessoaTitularId)
-    .eq("tipo_conta", "ALUNO")
-    .order("id", { ascending: false })
-    .limit(1);
-
-  if (contasErr && !isSchemaMissing(contasErr)) {
-    throw new Error("falha_buscar_conta_conexao");
-  }
-
-  if (contas && contas.length > 0) {
-    const conta = contas[0] as { id?: number; ativo?: boolean };
-    if (conta.ativo === false) {
-      throw new Error("conta_conexao_inativa");
-    }
-    const contaId = toPositiveNumber(conta.id);
-    if (!contaId) throw new Error("conta_conexao_invalida");
-    return contaId;
-  }
-
-  const diaVenc = await fetchVencimentoDiaPadrao(admin);
-  const { data: created, error: createErr } = await admin
-    .from("credito_conexao_contas")
-    .insert({
-      pessoa_titular_id: pessoaTitularId,
-      tipo_conta: "ALUNO",
-      descricao_exibicao: null,
-      dia_fechamento: 10,
-      dia_vencimento: diaVenc,
-      centro_custo_principal_id: null,
-      ativo: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
-
-  if (createErr || !created) {
-    throw new Error("falha_criar_conta_conexao");
-  }
-
-  const contaId = toPositiveNumber((created as { id?: number }).id);
-  if (!contaId) throw new Error("conta_conexao_invalida");
-  return contaId;
+function formatBrl(valorCentavos: number): string {
+  return (valorCentavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 async function resolverMensalidadePorTurma(
@@ -197,8 +121,12 @@ export async function POST(req: Request) {
 
     const matriculaId = toPositiveNumber(body.matricula_id);
     const anoBody = toPositiveNumber(body.ano_referencia);
+    const competencia = normalizeCompetencia(body.competencia);
     if (!matriculaId) {
       return errJson("bad_request", "matricula_id_obrigatorio", 400, { matricula_id: body.matricula_id });
+    }
+    if (!competencia) {
+      return errJson("bad_request", "competencia_invalida", 400, { competencia: body.competencia });
     }
 
     const admin = getSupabaseAdmin();
@@ -229,9 +157,25 @@ export async function POST(req: Request) {
       return errJson("bad_request", "Aluno/responsavel financeiro invalidos.", 400);
     }
 
+    const { data: conta, error: contaErr } = await admin
+      .from("credito_conexao_contas")
+      .select("id")
+      .eq("pessoa_titular_id", responsavelId)
+      .eq("tipo_conta", "ALUNO")
+      .maybeSingle();
+
+    if (contaErr) {
+      return errJson("server_error", "Falha ao buscar conta do Cartao Conexao.", 500, { contaErr });
+    }
+
+    const contaConexaoId = toPositiveNumber((conta as { id?: number }).id);
+    if (!contaConexaoId) {
+      return errJson("not_found", "conta_cartao_conexao_nao_encontrada", 404);
+    }
+
     const { data: turmasRaw, error: turmasErr } = await admin
       .from("turma_aluno")
-      .select("turma_id, turmas:turmas(turma_id,nome,data_inicio)")
+      .select("turma_id, turmas:turmas(turma_id,nome)")
       .eq("matricula_id", matriculaId)
       .in("status", ["ATIVO", "ativo"]);
 
@@ -247,25 +191,15 @@ export async function POST(req: Request) {
         return {
           turma_id: turmaId,
           nome: record.turmas?.nome ?? null,
-          data_inicio: record.turmas?.data_inicio ?? null,
         };
       })
       .filter((row): row is TurmaAtiva => !!row)
-      .sort((a, b) => {
-        const da = a.data_inicio ?? "";
-        const db = b.data_inicio ?? "";
-        if (da && db) return da.localeCompare(db);
-        if (da) return -1;
-        if (db) return 1;
-        return a.turma_id - b.turma_id;
-      });
+      .sort((a, b) => a.turma_id - b.turma_id);
 
     if (turmasAtivas.length === 0) {
       return errJson("bad_request", "sem_turmas_ativas_para_matricula", 400);
     }
 
-    const contaConexaoId = await ensureContaConexao(admin, responsavelId);
-    const competencia = normalizeCompetencia(body.competencia) ?? competenciaAtual();
     const cookieHeader = cookieStore.toString();
 
     const itensAtivos: Array<{
@@ -281,7 +215,7 @@ export async function POST(req: Request) {
       .in("origem_id", turmasAtivas.map((t) => t.turma_id))
       .eq("ativo", true);
 
-    if (ueErr && !isSchemaMissing(ueErr)) {
+    if (ueErr) {
       return errJson("server_error", "Falha ao resolver unidades de execucao.", 500, { ueErr });
     }
 
@@ -308,10 +242,7 @@ export async function POST(req: Request) {
     }
 
     if (itensAtivos.length === 0) {
-      return NextResponse.json(
-        { ok: true, data: { created: 0, skipped: 0, message: "Sem itens ativos para esta competencia." } },
-        { status: 200 },
-      );
+      return errJson("bad_request", "sem_turmas_ativas_para_matricula", 400);
     }
 
     let totalCentavos = 0;
@@ -339,10 +270,7 @@ export async function POST(req: Request) {
       );
 
       totalCentavos += resultado.valor_centavos;
-      const valorBrl = (resultado.valor_centavos / 100).toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      });
+      const valorBrl = formatBrl(resultado.valor_centavos);
 
       composicaoItens.push({
         posicao: posicaoTier,
@@ -356,8 +284,8 @@ export async function POST(req: Request) {
     }
 
     const descricao =
-      `Mensalidade (${competencia}) - ` +
-      composicaoItens.map((item) => `${item.posicao}a modalidade: ${item.valor_brl}`).join(" | ");
+      `Mensalidade ${competencia} - ` +
+      composicaoItens.map((item) => `${item.posicao}a: ${item.label} ${item.valor_brl}`).join(" | ");
     const referenciaItem = `mensalidade|matricula:${matriculaId}|comp:${competencia}`;
     const composicaoJson = {
       matricula_id: matriculaId,
@@ -366,7 +294,7 @@ export async function POST(req: Request) {
       responsavel_financeiro_id: responsavelId,
       ano_referencia: anoRef,
       total_centavos: totalCentavos,
-      total_brl: (totalCentavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+      total_brl: formatBrl(totalCentavos),
       itens: composicaoItens,
     };
 
@@ -395,12 +323,25 @@ export async function POST(req: Request) {
       );
     }
 
+    const { error: legacyErr } = await admin
+      .from("credito_conexao_lancamentos")
+      .update({ status: "CANCELADO" })
+      .eq("conta_conexao_id", contaConexaoId)
+      .ilike("descricao", `%Mensalidade%${competencia}%`)
+      .is("competencia", null);
+
+    if (legacyErr) {
+      return errJson("server_error", "falha_cancelar_lancamentos_legados", 500, { legacyErr });
+    }
+
     return NextResponse.json(
       {
         ok: true,
         data: {
-          upserted: 1,
+          conta_conexao_id: contaConexaoId,
+          competencia,
           total_centavos: totalCentavos,
+          total_itens: composicaoItens.length,
         },
       },
       { status: 200 },
