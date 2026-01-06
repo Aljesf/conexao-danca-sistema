@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 type ApiConta = {
   id: number;
@@ -256,19 +257,20 @@ export default function AdminCreditoConexaoFaturasPage() {
                 <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Taxas</th>
                 <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Total</th>
                 <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Status</th>
+                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Ações</th>
               </tr>
             </thead>
 
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: 12 }}>
+                  <td colSpan={10} style={{ padding: 12 }}>
                     Carregando...
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: 12 }}>
+                  <td colSpan={10} style={{ padding: 12 }}>
                     Nenhuma fatura para este filtro.
                   </td>
                 </tr>
@@ -311,6 +313,13 @@ export default function AdminCreditoConexaoFaturasPage() {
                         {formatBRLFromCentavos(r.total_centavos)}
                       </td>
                       <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.status}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
+                        <Link href={`/admin/financeiro/credito-conexao/faturas/${r.id}`}>
+                          <Button variant="secondary" size="sm">
+                            Ver fatura
+                          </Button>
+                        </Link>
+                      </td>
                     </tr>
                   );
                 })
