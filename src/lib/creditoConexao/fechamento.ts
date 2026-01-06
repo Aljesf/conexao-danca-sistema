@@ -101,6 +101,7 @@ export async function fecharFaturaPorCompetencia(input: FecharFaturaInput): Prom
     .select("id, valor_centavos")
     .eq("conta_conexao_id", contaConexaoId)
     .eq("competencia", competencia)
+    .not("cobranca_id", "is", null)
     .eq("status", "PENDENTE_FATURA");
 
   if (lancErr) {

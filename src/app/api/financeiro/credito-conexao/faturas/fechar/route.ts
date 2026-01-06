@@ -88,6 +88,8 @@ export async function POST(req: Request) {
       .from("credito_conexao_lancamentos")
       .select("id, valor_centavos, numero_parcelas")
       .eq("conta_conexao_id", contaConexaoId)
+      .eq("competencia", periodo_ref)
+      .not("cobranca_id", "is", null)
       .eq("status", "PENDENTE_FATURA");
 
     if (lancamentosError) {

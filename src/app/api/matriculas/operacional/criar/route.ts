@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Pool } from "pg";
+import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 
 export const runtime = "nodejs";
 
@@ -56,16 +57,6 @@ type ServicoItemPrecoAtivo = {
   moeda: string;
 };
 
-type CriarLancamentoCartaoInput = {
-  conta_conexao_id: number;
-  valor_centavos: number;
-  numero_parcelas: number; // 1
-  status: "PENDENTE_FATURA";
-  origem_sistema: "MATRICULA";
-  origem_id: number; // matriculas.id
-  descricao: string;
-};
-
 type DbClient = {
   query: (q: string, p?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
 };
@@ -83,6 +74,17 @@ function isValidISODate(value: string): boolean {
   if (Number.isNaN(d.getTime())) return false;
   const [y, m, day] = value.split("-").map((v) => Number(v));
   return d.getUTCFullYear() === y && d.getUTCMonth() + 1 === m && d.getUTCDate() === day;
+}
+
+function competenciaFromDate(value: string): string | null {
+  if (!isValidISODate(value)) return null;
+  return value.slice(0, 7);
+}
+
+function buildVencimentoFromCompetencia(competencia: string, dia: number): string {
+  const [ano, mes] = competencia.split("-");
+  const dd = String(dia).padStart(2, "0");
+  return `${ano}-${mes}-${dd}`;
 }
 
 function clampInt(n: number, min: number, max: number): number {
@@ -229,38 +231,6 @@ async function ensureContaConexaoAluno(
     RETURNING id
     `,
     [responsavelFinanceiroId, vencimentoDiaPadrao, centroCustoPrincipalId],
-  );
-
-  return Number(rows[0]?.id);
-}
-
-async function inserirLancamentoCartao(client: DbClient, l: CriarLancamentoCartaoInput): Promise<number> {
-  const { rows } = await client.query(
-    `
-    INSERT INTO public.credito_conexao_lancamentos (
-      conta_conexao_id,
-      valor_centavos,
-      numero_parcelas,
-      status,
-      origem_sistema,
-      origem_id,
-      descricao,
-      created_at,
-      updated_at
-    ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,now(),now()
-    )
-    RETURNING id
-    `,
-    [
-      l.conta_conexao_id,
-      l.valor_centavos,
-      l.numero_parcelas,
-      l.status,
-      l.origem_sistema,
-      l.origem_id,
-      l.descricao,
-    ],
   );
 
   return Number(rows[0]?.id);
@@ -597,6 +567,9 @@ export async function POST(req: Request) {
 
       const dataMatriculaEfetiva =
         dataMatricula ?? String((await client.query("SELECT current_date AS d")).rows[0]?.d);
+      const competenciaCartao =
+        competenciaFromDate(dataMatriculaEfetiva) ?? new Date().toISOString().slice(0, 7);
+      const vencimentoCartao = buildVencimentoFromCompetencia(competenciaCartao, diaVenc);
 
       const tipoMatricula = servico?.tipo ?? "REGULAR";
 
@@ -652,9 +625,10 @@ export async function POST(req: Request) {
         const { rows: jaExiste } = await client.query(
           `
           SELECT id
-          FROM public.credito_conexao_lancamentos
-          WHERE origem_sistema = 'MATRICULA'
+          FROM public.cobrancas
+          WHERE origem_tipo = 'MATRICULA'
             AND origem_id = $1
+            AND origem_subtipo = 'CARTAO_CONEXAO'
           LIMIT 1
           `,
           [matriculaId],
@@ -695,6 +669,12 @@ export async function POST(req: Request) {
         descricao: string;
         valor_centavos: number;
         status: "PENDENTE_FATURA";
+      }> = [];
+      const cartaoCobrancas: Array<{
+        id: number;
+        competencia: string;
+        descricao: string;
+        valor_centavos: number;
       }> = [];
 
       let contaConexaoId: number | null = null;
@@ -744,26 +724,76 @@ export async function POST(req: Request) {
       if (usarItensNoCartao && contaConexaoId) {
         for (const item of itensCalculados) {
           const desc = `Matricula: ${item.nome}`;
-          const idLanc = await inserirLancamentoCartao(client, {
-            conta_conexao_id: contaConexaoId,
-            valor_centavos: item.valor_centavos,
-            numero_parcelas: 1,
-            status: "PENDENTE_FATURA",
-            origem_sistema: "MATRICULA",
-            origem_id: matriculaId,
-            descricao: desc,
-          });
+          const { rows: cobrRows } = await client.query(
+            `
+            INSERT INTO public.cobrancas (
+              pessoa_id,
+              descricao,
+              valor_centavos,
+              vencimento,
+              status,
+              origem_tipo,
+              origem_id,
+              origem_subtipo,
+              competencia_ano_mes
+            ) VALUES (
+              $1,$2,$3,$4,'PENDENTE',$5,$6,'CARTAO_CONEXAO',$7
+            )
+            RETURNING id
+            `,
+            [
+              responsavelFinanceiroId,
+              desc,
+              item.valor_centavos,
+              vencimentoCartao,
+              "MATRICULA",
+              matriculaId,
+              competenciaCartao,
+            ],
+          );
 
-          createdLancamentos.push({
-            id: idLanc,
+          const cobrancaId = Number(cobrRows[0]?.id);
+          if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({ error: "falha_criar_cobranca_cartao" }, { status: 500 });
+          }
+
+          cartaoCobrancas.push({
+            id: cobrancaId,
+            competencia: competenciaCartao,
             descricao: desc,
             valor_centavos: item.valor_centavos,
-            status: "PENDENTE_FATURA",
           });
         }
       }
 
       await client.query("COMMIT");
+
+      if (cartaoCobrancas.length > 0 && contaConexaoId) {
+        try {
+          for (const cobranca of cartaoCobrancas) {
+            const lanc = await upsertLancamentoPorCobranca({
+              cobrancaId: cobranca.id,
+              contaConexaoId,
+              competencia: cobranca.competencia,
+              valorCentavos: cobranca.valor_centavos,
+              descricao: cobranca.descricao,
+              origemSistema: "MATRICULA",
+              origemId: matriculaId,
+            });
+
+            createdLancamentos.push({
+              id: lanc.id,
+              descricao: cobranca.descricao,
+              valor_centavos: cobranca.valor_centavos,
+              status: "PENDENTE_FATURA",
+            });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "erro_desconhecido";
+          return NextResponse.json({ error: "falha_upsert_lancamentos_cartao", message: msg }, { status: 500 });
+        }
+      }
 
       return NextResponse.json(
         {

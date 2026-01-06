@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 
 type GerarMensalBody = {
   matricula_id?: number;
@@ -71,6 +72,15 @@ function normalizeCompetencia(value: unknown): string | null {
 
 function formatBrl(valorCentavos: number): string {
   return (valorCentavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function buildVencimento(competencia: string, diaVencimento: number | null): string {
+  const [anoStr, mesStr] = competencia.split("-");
+  const ano = Number(anoStr);
+  const mes = Number(mesStr);
+  const dia = diaVencimento && diaVencimento >= 1 && diaVencimento <= 31 ? diaVencimento : 12;
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  return data.toISOString().slice(0, 10);
 }
 
 async function resolverMensalidadePorTurma(
@@ -170,7 +180,7 @@ export async function POST(req: Request) {
 
     const { data: conta, error: contaErr } = await admin
       .from("credito_conexao_contas")
-      .select("id")
+      .select("id, dia_vencimento")
       .eq("pessoa_titular_id", responsavelId)
       .eq("tipo_conta", "ALUNO")
       .maybeSingle();
@@ -183,6 +193,7 @@ export async function POST(req: Request) {
     if (!contaConexaoId) {
       return errJson("not_found", "conta_cartao_conexao_nao_encontrada", 404);
     }
+    const diaVencimento = toPositiveNumber((conta as { dia_vencimento?: number | null }).dia_vencimento) ?? null;
 
     const { data: taRows, error: taErr } = await admin
       .from("turma_aluno")
@@ -326,29 +337,83 @@ export async function POST(req: Request) {
       itens,
     };
 
-    const payloadLanc = {
-      conta_conexao_id: contaConexaoId,
-      origem_sistema: "MATRICULA_MENSAL",
-      origem_id: matriculaId,
-      descricao,
-      valor_centavos: totalCentavos,
-      data_lancamento: `${competencia}-01`,
-      status: "PENDENTE_FATURA",
-      competencia,
-      referencia_item: referenciaItem,
-      composicao_json: composicaoJson,
-    };
+    const vencimento = buildVencimento(competencia, diaVencimento);
 
-    const { error: upErr } = await admin.from("credito_conexao_lancamentos").upsert(payloadLanc, {
-      onConflict: "conta_conexao_id,competencia,referencia_item",
-      ignoreDuplicates: false,
-    });
+    const { data: cobrancaExistente, error: cobrFindErr } = await admin
+      .from("cobrancas")
+      .select("id")
+      .eq("pessoa_id", responsavelId)
+      .eq("origem_tipo", "MATRICULA")
+      .eq("origem_id", matriculaId)
+      .eq("origem_subtipo", "CARTAO_CONEXAO")
+      .eq("competencia_ano_mes", competencia)
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (upErr) {
-      return NextResponse.json(
-        { ok: false, error: "falha_upsert_lancamento_consolidado", detail: upErr.message },
-        { status: 500 },
-      );
+    if (cobrFindErr) {
+      return errJson("server_error", "Falha ao buscar cobranca.", 500, { cobrFindErr });
+    }
+
+    let cobrancaId = toPositiveNumber((cobrancaExistente as { id?: number } | null)?.id);
+
+    if (!cobrancaId) {
+      const { data: cobranca, error: cobrErr } = await admin
+        .from("cobrancas")
+        .insert({
+          pessoa_id: responsavelId,
+          descricao,
+          valor_centavos: totalCentavos,
+          vencimento,
+          status: "PENDENTE",
+          origem_tipo: "MATRICULA",
+          origem_id: matriculaId,
+          origem_subtipo: "CARTAO_CONEXAO",
+          competencia_ano_mes: competencia,
+        })
+        .select("id")
+        .single();
+
+      if (cobrErr || !cobranca) {
+        return errJson("server_error", "Falha ao criar cobranca.", 500, { cobrErr });
+      }
+
+      cobrancaId = toPositiveNumber((cobranca as { id?: number }).id);
+    } else {
+      const { error: cobrUpdErr } = await admin
+        .from("cobrancas")
+        .update({
+          descricao,
+          valor_centavos: totalCentavos,
+          vencimento,
+          origem_subtipo: "CARTAO_CONEXAO",
+          competencia_ano_mes: competencia,
+        })
+        .eq("id", cobrancaId);
+
+      if (cobrUpdErr) {
+        return errJson("server_error", "Falha ao atualizar cobranca.", 500, { cobrUpdErr });
+      }
+    }
+
+    if (!cobrancaId) {
+      return errJson("server_error", "cobranca_id_invalido", 500);
+    }
+
+    try {
+      await upsertLancamentoPorCobranca({
+        cobrancaId,
+        contaConexaoId,
+        competencia,
+        valorCentavos: totalCentavos,
+        descricao,
+        origemSistema: "MATRICULA_MENSAL",
+        origemId: matriculaId,
+        composicaoJson: composicaoJson as Record<string, unknown>,
+      });
+    } catch (upErr) {
+      const detail = upErr instanceof Error ? upErr.message : String(upErr);
+      return errJson("server_error", "falha_upsert_lancamento_consolidado", 500, { detail });
     }
 
     return NextResponse.json(
@@ -356,6 +421,7 @@ export async function POST(req: Request) {
         ok: true,
         data: {
           conta_conexao_id: contaConexaoId,
+          cobranca_id: cobrancaId,
           competencia,
           referencia_item: referenciaItem,
           total_centavos: totalCentavos,

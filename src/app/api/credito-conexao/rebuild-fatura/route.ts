@@ -62,17 +62,37 @@ export async function POST(req: Request) {
 
   const { data: lancs, error: lErr } = await supabase
     .from("credito_conexao_lancamentos")
-    .select("id, valor_centavos, status, referencia_item, competencia")
+    .select("id, valor_centavos, status, referencia_item, competencia, cobranca_id")
     .eq("conta_conexao_id", contaId)
     .eq("competencia", competencia)
-    .not("referencia_item", "is", null)
+    .not("cobranca_id", "is", null)
     .in("status", ["PENDENTE_FATURA", "FATURADO"]);
 
   if (lErr) {
     return NextResponse.json({ ok: false, error: "falha_buscar_lancamentos", detail: lErr.message }, { status: 500 });
   }
 
-  const lista = lancs ?? [];
+  let lista = lancs ?? [];
+  if (lista.length === 0) {
+    const { data: legacy, error: legacyErr } = await supabase
+      .from("credito_conexao_lancamentos")
+      .select("id, valor_centavos, status, referencia_item, competencia, cobranca_id")
+      .eq("conta_conexao_id", contaId)
+      .eq("competencia", competencia)
+      .is("cobranca_id", null)
+      .not("referencia_item", "is", null)
+      .in("status", ["PENDENTE_FATURA", "FATURADO"]);
+
+    if (legacyErr) {
+      return NextResponse.json(
+        { ok: false, error: "falha_buscar_lancamentos_legado", detail: legacyErr.message },
+        { status: 500 },
+      );
+    }
+
+    lista = legacy ?? [];
+  }
+
   if (lista.length === 0) {
     return NextResponse.json(
       {

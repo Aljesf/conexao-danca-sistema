@@ -73,6 +73,8 @@ export async function POST(req: Request) {
       .from("credito_conexao_lancamentos")
       .select("id, valor_centavos, numero_parcelas, origem_sistema, origem_id")
       .eq("conta_conexao_id", contaId)
+      .eq("competencia", periodoReferencia)
+      .not("cobranca_id", "is", null)
       .eq("status", "PENDENTE_FATURA")
       .in("origem_sistema", incluirOrigens);
 
