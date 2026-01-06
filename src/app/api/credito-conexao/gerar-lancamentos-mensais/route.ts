@@ -12,17 +12,28 @@ type GerarMensalBody = {
   competencia?: string | null; // YYYY-MM
 };
 
-type TurmaAtiva = {
-  turma_id: number;
-  nome: string | null;
-};
-
 type TurmaAlunoRow = {
   turma_id: number | null;
-  turmas?: {
-    turma_id?: number | null;
-    nome?: string | null;
-  } | null;
+  status?: string | null;
+  dt_inicio?: string | null;
+  dt_fim?: string | null;
+};
+
+type TurmaVinculada = {
+  turma_id: number;
+  status: string | null;
+  dt_inicio: string | null;
+  dt_fim: string | null;
+};
+
+type ComposicaoItem = {
+  ordem: number;
+  turma_id: number;
+  ue_id: number;
+  servico_id: number;
+  label: string;
+  valor_centavos: number;
+  valor_brl: string;
 };
 
 type ResolverResp = {
@@ -173,120 +184,137 @@ export async function POST(req: Request) {
       return errJson("not_found", "conta_cartao_conexao_nao_encontrada", 404);
     }
 
-    const { data: turmasRaw, error: turmasErr } = await admin
+    const { data: taRows, error: taErr } = await admin
       .from("turma_aluno")
-      .select("turma_id, turmas:turmas(turma_id,nome)")
-      .eq("matricula_id", matriculaId)
-      .in("status", ["ATIVO", "ativo"]);
+      .select("turma_id,status,dt_inicio,dt_fim")
+      .eq("matricula_id", matriculaId);
 
-    if (turmasErr) {
-      return errJson("server_error", "Falha ao buscar turmas da matricula.", 500, { turmasErr });
+    if (taErr) {
+      return NextResponse.json(
+        { ok: false, error: "falha_buscar_turma_aluno", detail: taErr.message },
+        { status: 500 },
+      );
     }
 
-    const turmasAtivas: TurmaAtiva[] = (turmasRaw ?? [])
+    const competenciaInicio = `${competencia}-01`;
+
+    const turmaRows: TurmaVinculada[] = (taRows ?? [])
       .map((row) => {
         const record = row as TurmaAlunoRow;
-        const turmaId = toPositiveNumber(record.turma_id ?? record.turmas?.turma_id);
+        const turmaId = toPositiveNumber(record.turma_id);
         if (!turmaId) return null;
+        const statusRaw = record.status;
         return {
           turma_id: turmaId,
-          nome: record.turmas?.nome ?? null,
+          status: typeof statusRaw === "string" ? statusRaw : statusRaw ? String(statusRaw) : null,
+          dt_inicio: record.dt_inicio ? String(record.dt_inicio) : null,
+          dt_fim: record.dt_fim ? String(record.dt_fim) : null,
         };
       })
-      .filter((row): row is TurmaAtiva => !!row)
-      .sort((a, b) => a.turma_id - b.turma_id);
+      .filter((row): row is TurmaVinculada => !!row)
+      .filter((row) => {
+        const statusNorm = row.status ? row.status.trim().toUpperCase() : null;
+        const statusOk = !statusNorm || statusNorm === "ATIVO" || statusNorm === "ATIVA";
+        if (!statusOk) return false;
+        if (row.dt_fim && row.dt_fim < competenciaInicio) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const da = a.dt_inicio ?? "";
+        const db = b.dt_inicio ?? "";
+        if (da < db) return -1;
+        if (da > db) return 1;
+        return a.turma_id - b.turma_id;
+      });
 
-    if (turmasAtivas.length === 0) {
-      return errJson("bad_request", "sem_turmas_ativas_para_matricula", 400);
+    if (turmaRows.length === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "sem_turmas_ativas_para_matricula",
+          debug: { matricula_id: matriculaId, rows: taRows ?? [] },
+        },
+        { status: 409 },
+      );
     }
 
+    const turmaIdsOrdenados = turmaRows.map((row) => row.turma_id);
     const cookieHeader = cookieStore.toString();
 
-    const itensAtivos: Array<{
-      servico_id: number | null;
-      unidade_execucao_id: number | null;
-      turma_id: number;
-      label: string;
-    }> = [];
-    const { data: ues, error: ueErr } = await admin
-      .from("escola_unidades_execucao")
-      .select("unidade_execucao_id,servico_id,origem_id")
-      .eq("origem_tipo", "TURMA")
-      .in("origem_id", turmasAtivas.map((t) => t.turma_id))
-      .eq("ativo", true);
-
-    if (ueErr) {
-      return errJson("server_error", "Falha ao resolver unidades de execucao.", 500, { ueErr });
-    }
-
-    const ueByTurma = new Map<number, { unidade_execucao_id: number; servico_id: number | null }>();
-    (ues ?? []).forEach((row) => {
-      const record = row as { unidade_execucao_id?: number; servico_id?: number | null; origem_id?: number | null };
-      const turmaId = toPositiveNumber(record.origem_id);
-      const ueId = toPositiveNumber(record.unidade_execucao_id);
-      if (!turmaId || !ueId) return;
-      ueByTurma.set(turmaId, {
-        unidade_execucao_id: ueId,
-        servico_id: toPositiveNumber(record.servico_id),
-      });
-    });
-
-    for (const turma of turmasAtivas) {
-      const ueRef = ueByTurma.get(turma.turma_id) ?? null;
-      itensAtivos.push({
-        turma_id: turma.turma_id,
-        label: turma.nome?.trim() || `Turma ${turma.turma_id}`,
-        servico_id: ueRef?.servico_id ?? null,
-        unidade_execucao_id: ueRef?.unidade_execucao_id ?? null,
-      });
-    }
-
-    if (itensAtivos.length === 0) {
-      return errJson("bad_request", "sem_turmas_ativas_para_matricula", 400);
-    }
-
     let totalCentavos = 0;
-    const composicaoItens: Array<{
-      posicao: number;
-      servico_id: number | null;
-      unidade_execucao_id: number | null;
-      turma_id: number;
-      label: string;
-      valor_centavos: number;
-      valor_brl: string;
-    }> = [];
+    const itens: ComposicaoItem[] = [];
 
-    for (let i = 0; i < itensAtivos.length; i++) {
-      const it = itensAtivos[i];
-      const posicaoTier = i + 1;
+    for (let i = 0; i < turmaIdsOrdenados.length; i++) {
+      const turmaId = turmaIdsOrdenados[i];
+      const ordem = i + 1;
 
-      const resultado = await resolverMensalidadePorTurma(
-        req,
-        cookieHeader,
-        alunoId,
-        it.turma_id,
-        anoRef,
-        posicaoTier,
-      );
+      const { data: ue, error: ueErr } = await admin
+        .from("escola_unidades_execucao")
+        .select("unidade_execucao_id, servico_id")
+        .eq("origem_tipo", "TURMA")
+        .eq("origem_id", turmaId)
+        .maybeSingle();
+
+      if (ueErr || !ue) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "ue_nao_encontrada_para_turma",
+            debug: { turma_id: turmaId, ueErr: ueErr?.message ?? null },
+          },
+          { status: 500 },
+        );
+      }
+
+      const ueId = toPositiveNumber((ue as { unidade_execucao_id?: number }).unidade_execucao_id);
+      const servicoId = toPositiveNumber((ue as { servico_id?: number }).servico_id);
+      if (!ueId || !servicoId) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "ue_invalida_para_turma",
+            debug: { turma_id: turmaId, unidade_execucao_id: ueId, servico_id: servicoId },
+          },
+          { status: 500 },
+        );
+      }
+
+      const { data: turma } = await admin.from("turmas").select("nome").eq("turma_id", turmaId).maybeSingle();
+      const label = turma?.nome ? String(turma.nome) : `Turma ${turmaId}`;
+
+      let resultado: { valor_centavos: number };
+      try {
+        resultado = await resolverMensalidadePorTurma(req, cookieHeader, alunoId, turmaId, anoRef, ordem);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "erro_resolver_preco";
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "falha_resolver_preco",
+            debug: { turma_id: turmaId, servico_id: servicoId, ue_id: ueId, message },
+          },
+          { status: 500 },
+        );
+      }
 
       totalCentavos += resultado.valor_centavos;
       const valorBrl = formatBrl(resultado.valor_centavos);
 
-      composicaoItens.push({
-        posicao: posicaoTier,
-        servico_id: it.servico_id,
-        unidade_execucao_id: it.unidade_execucao_id,
-        turma_id: it.turma_id,
-        label: it.label,
+      itens.push({
+        ordem,
+        turma_id: turmaId,
+        ue_id: ueId,
+        servico_id: servicoId,
+        label,
         valor_centavos: resultado.valor_centavos,
         valor_brl: valorBrl,
       });
     }
 
+    const referenciaItem = `mensalidade|matricula:${matriculaId}|comp:${competencia}`;
     const descricao =
       `Mensalidade ${competencia} - ` +
-      composicaoItens.map((item) => `${item.posicao}a: ${item.label} ${item.valor_brl}`).join(" | ");
-    const referenciaItem = `mensalidade|matricula:${matriculaId}|comp:${competencia}`;
+      itens.map((item) => `${item.ordem}a ${item.label}: ${item.valor_brl}`).join(" | ");
     const composicaoJson = {
       matricula_id: matriculaId,
       competencia,
@@ -295,7 +323,7 @@ export async function POST(req: Request) {
       ano_referencia: anoRef,
       total_centavos: totalCentavos,
       total_brl: formatBrl(totalCentavos),
-      itens: composicaoItens,
+      itens,
     };
 
     const payloadLanc = {
@@ -329,8 +357,15 @@ export async function POST(req: Request) {
         data: {
           conta_conexao_id: contaConexaoId,
           competencia,
+          referencia_item: referenciaItem,
           total_centavos: totalCentavos,
-          total_itens: composicaoItens.length,
+          itens,
+        },
+        debug: {
+          turmas_encontradas: turmaRows,
+          turma_ids_ordenados: turmaIdsOrdenados,
+          total_centavos: totalCentavos,
+          itens,
         },
       },
       { status: 200 },
