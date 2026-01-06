@@ -15,10 +15,9 @@ export const escolaSidebar: SidebarSection[] = [
     id: "escola-calendario",
     title: "Calendário",
     items: [
-      { label: "🚧 📅 Visão geral", href: "/calendario" },
-      { label: "🚧 📅 Eventos internos", href: "/calendario/eventos-internos" },
-      { label: "🚧 📅 Eventos externos", href: "/calendario/eventos-externos" },
-      { label: "🚧 📅 Feriados", href: "/calendario/feriados" },
+      { label: "🚧 📅 Visão geral", href: "/escola/calendario" },
+      { label: "🚧 📅 Eventos internos", href: "/escola/calendario/eventos-internos" },
+      { label: "🚧 📅 Feriados", href: "/escola/calendario/feriados" },
     ],
   },
   {
