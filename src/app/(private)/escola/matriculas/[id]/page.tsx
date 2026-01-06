@@ -112,8 +112,6 @@ export default function MatriculaDetalhePage() {
   const respId = useMemo(() => Number(matricula?.responsavel_financeiro_id ?? NaN), [matricula]);
   const resumo = data?.financeiro_resumo ?? null;
   const resumoCartao = data?.resumo_financeiro_cartao_conexao ?? null;
-  const parcelasProximas = resumoCartao?.parcelas_proximas ?? [];
-  const parcelasVisiveis = parcelasProximas.slice(0, 4);
   const documentosEmitidos = data?.documentos_emitidos ?? [];
   const turmasVinculadas = data?.turmas_vinculadas ?? [];
   const verDocs = `/escola/matriculas/${id}/documentos`;
@@ -187,39 +185,20 @@ export default function MatriculaDetalhePage() {
                 ? formatBRLFromCents(Number(resumo.entrada_total_paga_centavos))
                 : "-"}
             </div>
-            <div>
-              Parcelas pendentes:{" "}
-              {resumoCartao ? (
-                <>
-                  <span>{resumoCartao.parcelas_pendentes}</span>
-                </>
-              ) : (
-                "-"
-              )}
+            <div className="mt-2 text-sm">
+              <div className="font-medium">Mensalidade consolidada</div>
+              <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
             </div>
-            {resumoCartao ? (
-              parcelasVisiveis.length > 0 ? (
-                <div className="mt-2 grid gap-2">
-                  {parcelasVisiveis.map((parcela, index) => {
-                    const vencimento = parcela.vencimento ? formatDateISO(parcela.vencimento) : "-";
-                    const valor = Number.isFinite(parcela.valor_centavos)
-                      ? formatBRLFromCents(Number(parcela.valor_centavos))
-                      : "-";
-                    const status = parcela.status ?? "-";
-                    return (
-                      <div
-                        key={`${parcela.periodo ?? parcela.vencimento ?? "parcela"}-${index}`}
-                        className="rounded-md border bg-slate-50 px-3 py-2 text-xs"
-                      >
-                        {`${vencimento} - ${valor} - ${status}`}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="mt-2 text-xs text-muted-foreground">Nenhuma parcela aberta.</div>
-              )
-            ) : null}
+            <div className="mt-2 text-sm text-muted-foreground">
+              A mensalidade recorrente e cobrada via <strong>Cartao Conexao</strong>. Use o painel de
+              faturas para acompanhar o ciclo mensal.
+            </div>
+            <Link
+              className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
+              href="/admin/financeiro/credito-conexao/faturas"
+            >
+              Ver faturas do Cartao Conexao
+            </Link>
             <div>
               Proximo vencimento:{" "}
               {resumoCartao?.proximo_vencimento ? formatDateISO(resumoCartao.proximo_vencimento) : "-"}
