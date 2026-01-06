@@ -42,6 +42,12 @@ type MatriculaDetalheResp = {
     status_assinatura: string | null;
     created_at: string | null;
   }>;
+  itens_matricula?: Array<{
+    turma_id: number;
+    turma_nome: string | null;
+    ue_id: number | null;
+    ue_label: string | null;
+  }>;
   turmas_vinculadas?: Array<{
     turma_id: number;
     nome: string | null;
@@ -113,9 +119,9 @@ export default function MatriculaDetalhePage() {
   const resumo = data?.financeiro_resumo ?? null;
   const resumoCartao = data?.resumo_financeiro_cartao_conexao ?? null;
   const documentosEmitidos = data?.documentos_emitidos ?? [];
-  const turmasVinculadas = data?.turmas_vinculadas ?? [];
+  const itensMatricula = data?.itens_matricula ?? [];
   const verDocs = `/escola/matriculas/${id}/documentos`;
-  const emitirDocs = `/escola/matriculas/${id}/documentos/emitir`;
+  const emitirDocs = `/escola/matriculas/${id}/documentos?emitir=1`;
   const totalMensalidadeCentavos = Number(matricula?.total_mensalidade_centavos ?? NaN);
   const totalMensalidadeLabel = Number.isFinite(totalMensalidadeCentavos)
     ? formatBRLFromCents(totalMensalidadeCentavos)
@@ -151,26 +157,33 @@ export default function MatriculaDetalhePage() {
           </div>
 
           <div className="rounded-lg border p-4 space-y-2">
-            <div className="text-sm font-semibold">Servico e unidade de execucao</div>
-            <div>
-              Servico: {data.servico?.titulo?.trim() || (data.servico?.id ? `Servico #${data.servico.id}` : "-")}
-            </div>
-            <div>Servico ID: {data.servico?.id ?? "-"}</div>
-            <div>Unidade de execucao: {data.unidade_execucao_label ?? "-"}</div>
-            <div>UE ID: {data.unidade_execucao?.unidade_execucao_id ?? "-"}</div>
-            <div>Turma ID: {data.turma?.turma_id ?? "-"}</div>
-            <div className="mt-3 text-sm">
-              <div className="text-sm font-semibold">Turmas vinculadas</div>
-              {turmasVinculadas.length === 0 ? (
-                <div className="mt-1 text-muted-foreground">-</div>
-              ) : (
-                <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                  {turmasVinculadas.map((t) => (
-                    <li key={t.turma_id}>{t.nome ?? `Turma #${t.turma_id}`}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            <div className="text-sm font-semibold">Itens da matricula</div>
+            {itensMatricula.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nenhum item ativo encontrado.</div>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {itensMatricula.map((it) => (
+                  <div key={it.turma_id} className="rounded-md border p-2">
+                    <div className="font-medium">{it.turma_nome ?? `Turma #${it.turma_id}`}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {it.ue_label ? `UE: ${it.ue_label}` : `Turma ID: ${it.turma_id}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {data.servico || data.unidade_execucao_label || data.turma?.turma_id ? (
+              <div className="mt-3 text-sm">
+                <div className="font-semibold">Principal (legado)</div>
+                <div className="text-muted-foreground">
+                  Servico:{" "}
+                  {data.servico?.titulo?.trim() || (data.servico?.id ? `Servico #${data.servico.id}` : "-")} | UE:{" "}
+                  {data.unidade_execucao_label ?? "-"} | Turma ID: {data.turma?.turma_id ?? "-"}
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-3 text-sm">
               <div className="text-sm font-semibold">Mensalidade consolidada (referencia)</div>
               <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
@@ -190,8 +203,8 @@ export default function MatriculaDetalhePage() {
               <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
             </div>
             <div className="mt-2 text-sm text-muted-foreground">
-              A mensalidade recorrente e cobrada via <strong>Cartao Conexao</strong>. Use o painel de
-              faturas para acompanhar o ciclo mensal.
+              A mensalidade recorrente e cobrada via <strong>Cartao Conexao</strong> (faturas mensais). Use o painel
+              de faturas para acompanhar o ciclo mensal.
             </div>
             <Link
               className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"

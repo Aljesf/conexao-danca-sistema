@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 import { formatDateTimeISO } from "@/lib/formatters/date";
+import EmitirDocumentosClient from "./EmitirDocumentosClient";
 
 type DocumentoEmitidoRow = {
   id: number;
@@ -10,7 +11,13 @@ type DocumentoEmitidoRow = {
   created_at: string | null;
 };
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: { emitir?: string };
+}) {
   const { id } = await params;
   const matriculaId = Number(id);
   if (!Number.isFinite(matriculaId) || matriculaId <= 0) {
@@ -20,6 +27,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         <p className="mt-2 text-sm text-muted-foreground">ID de matricula invalido.</p>
       </div>
     );
+  }
+
+  if (searchParams?.emitir === "1") {
+    return <EmitirDocumentosClient matriculaId={matriculaId} />;
   }
 
   const supabase = await getSupabaseServerSSR();
@@ -42,7 +53,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   }
 
   const lista = (emitidos ?? []) as DocumentoEmitidoRow[];
-  const emitirDocs = `/escola/matriculas/${matriculaId}/documentos/emitir`;
+  const emitirDocs = `/escola/matriculas/${matriculaId}/documentos?emitir=1`;
 
   return (
     <div className="p-6 max-w-5xl space-y-4">

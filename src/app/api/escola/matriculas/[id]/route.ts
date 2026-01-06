@@ -57,6 +57,13 @@ type TurmaVinculadaResumo = {
   nome: string | null;
 };
 
+type ItemMatriculaResumo = {
+  turma_id: number;
+  turma_nome: string | null;
+  ue_id: number | null;
+  ue_label: string | null;
+};
+
 function isSchemaMissing(err: unknown): boolean {
   const e = err as PostgrestError | null;
   return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
@@ -328,6 +335,49 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
       })
       .filter((row): row is TurmaVinculadaResumo => !!row);
 
+    const turmaIdsVinculados = turmasVinculadas.map((t) => t.turma_id);
+    const { data: uesVinculadas, error: uesVincErr } =
+      turmaIdsVinculados.length > 0
+        ? await admin
+            .from("escola_unidades_execucao")
+            .select("unidade_execucao_id,denominacao,nome,origem_id,origem_tipo")
+            .eq("origem_tipo", "TURMA")
+            .in("origem_id", turmaIdsVinculados)
+        : { data: null, error: null };
+
+    if (uesVincErr && !isSchemaMissing(uesVincErr)) {
+      return errJson("server_error", "Falha ao buscar unidades de execucao das turmas.", 500, { uesVincErr });
+    }
+
+    const ueByTurma = new Map<number, UnidadeExecucaoRow>();
+    (uesVinculadas ?? []).forEach((row) => {
+      const record = row as UnidadeExecucaoRow;
+      const turmaId = toPositiveNumber(record.origem_id);
+      if (!turmaId) return;
+      ueByTurma.set(turmaId, record);
+    });
+
+    const itensMatricula: ItemMatriculaResumo[] = turmasVinculadas.map((turma) => {
+      const ue = ueByTurma.get(turma.turma_id) ?? null;
+      const ueLabel = ue
+        ? formatUnidadeExecucaoLabel({
+            unidadeExecucaoId: toPositiveNumber(ue.unidade_execucao_id),
+            origemTipo: ue.origem_tipo,
+            turmaId: turma.turma_id,
+            turmaNome: turma.nome,
+            unidadeDenominacao: ue.denominacao,
+            unidadeNome: ue.nome,
+          })
+        : null;
+
+      return {
+        turma_id: turma.turma_id,
+        turma_nome: turma.nome ?? null,
+        ue_id: ue ? toPositiveNumber(ue.unidade_execucao_id) : null,
+        ue_label: ueLabel,
+      };
+    });
+
     const ueRow = unidadeExecucao as UnidadeExecucaoRow | null;
     const unidadeExecucaoLabel = ueRow
       ? formatUnidadeExecucaoLabel({
@@ -356,6 +406,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
         resumo_financeiro_cartao_conexao: resumoCartao,
         documentos_emitidos: (emitidos ?? []) as DocumentoEmitidoResumo[],
         turmas_vinculadas: turmasVinculadas,
+        itens_matricula: itensMatricula,
         historico: [],
       },
       200,
