@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -111,7 +111,8 @@ export default function MatriculaDetalhePage() {
   const parcelasProximas = resumoCartao?.parcelas_proximas ?? [];
   const parcelasVisiveis = parcelasProximas.slice(0, 4);
   const documentosEmitidos = data?.documentos_emitidos ?? [];
-  const documentosHref = `/escola/matriculas/${id}/documentos`;
+  const verDocs = `/escola/matriculas/${id}/documentos`;
+  const emitirDocs = `/escola/matriculas/${id}/documentos/emitir`;
 
   return (
     <div className="p-4 space-y-6">
@@ -225,13 +226,13 @@ export default function MatriculaDetalhePage() {
             </p>
             <div className="flex flex-wrap gap-2">
               <Link
-                href={documentosHref}
+                href={verDocs}
                 className="rounded-md border px-3 py-2 text-sm text-muted-foreground hover:underline"
               >
                 Ver documentos
               </Link>
               <Link
-                href={`${documentosHref}?emitir=1`}
+                href={emitirDocs}
                 className="rounded-md border border-slate-800 px-3 py-2 text-sm font-medium"
               >
                 Emitir documento
@@ -251,7 +252,7 @@ export default function MatriculaDetalhePage() {
                   >
                     <div className="font-semibold">Documento #{doc.id}</div>
                     <div className="mt-1 text-muted-foreground">
-                      Modelo: {doc.contrato_modelo_id ?? "-"} • Status: {doc.status_assinatura ?? "-"} • Criado em:{" "}
+                      Modelo: {doc.contrato_modelo_id ?? "-"} | Status: {doc.status_assinatura ?? "-"} | Criado em:{" "}
                       {doc.created_at ? formatDateTimeISO(doc.created_at) : "-"}
                     </div>
                   </Link>
