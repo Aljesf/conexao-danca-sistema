@@ -323,17 +323,6 @@ export async function POST(req: Request) {
       );
     }
 
-    const { error: legacyErr } = await admin
-      .from("credito_conexao_lancamentos")
-      .update({ status: "CANCELADO" })
-      .eq("conta_conexao_id", contaConexaoId)
-      .ilike("descricao", `%Mensalidade%${competencia}%`)
-      .is("competencia", null);
-
-    if (legacyErr) {
-      return errJson("server_error", "falha_cancelar_lancamentos_legados", 500, { legacyErr });
-    }
-
     return NextResponse.json(
       {
         ok: true,
