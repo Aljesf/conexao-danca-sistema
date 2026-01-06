@@ -1,545 +1,230 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
-type Fatura = {
-  id?: number;
-  conta_conexao_id?: number;
-  periodo_referencia?: string | null;
-  data_fechamento?: string | null;
-  data_vencimento?: string | null;
-  valor_total_centavos?: number | null;
-  valor_taxas_centavos?: number | null;
-  status?: string;
-  cobranca?: {
-    id?: number;
-    status?: string | null;
-    neofin_charge_id?: string | null;
-    link_pagamento?: string | null;
-    linha_digitavel?: string | null;
-  };
+type FaturaRow = {
+  id: number;
+  conta_conexao_id: number | null;
+  periodo_referencia: string | null;
+  data_fechamento: string | null;
+  data_vencimento: string | null;
+  status: string | null;
+  valor_total_centavos: number | null;
 };
 
-type LancamentoFatura = {
-  id?: number;
-  origem_sistema?: string | null;
-  origem_id?: number | null;
-  descricao?: string | null;
-  valor_centavos?: number | null;
-  numero_parcelas?: number | null;
-  status?: string | null;
-  composicao_json?: unknown;
+type ContaRow = {
+  id: number;
+  tipo_conta: string | null;
+  pessoa_titular_id: number | null;
+  descricao_exibicao: string | null;
 };
 
-type ComposicaoItemView = {
-  posicao: number;
-  label: string;
+type PessoaRow = {
+  id: number;
+  nome: string | null;
+  cpf: string | null;
+  email: string | null;
+};
+
+type LancamentoRow = {
+  id: number;
+  conta_conexao_id: number | null;
+  origem_sistema: string | null;
+  origem_id: number | null;
+  descricao: string | null;
   valor_centavos: number | null;
-  valor_brl: string | null;
-};
-
-type ComposicaoView = {
   competencia: string | null;
-  total_centavos: number | null;
-  total_brl: string | null;
-  itens: ComposicaoItemView[];
+  referencia_item: string | null;
+  status: string | null;
+  composicao_json: Record<string, unknown> | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
-function parseComposicao(raw: unknown): ComposicaoView | null {
-  if (!raw || typeof raw !== "object") return null;
-  const record = raw as Record<string, unknown>;
-  const itensRaw = Array.isArray(record.itens) ? record.itens : [];
-  if (itensRaw.length === 0) return null;
+type FaturaDetalheData = {
+  fatura: FaturaRow;
+  conta: ContaRow | null;
+  pessoa: PessoaRow | null;
+  pivot: Array<{ lancamento_id: number; created_at: string | null }>;
+  lancamentos: LancamentoRow[];
+};
 
-  const itens = itensRaw.map((itemRaw, index) => {
-    const item = itemRaw as Record<string, unknown>;
-    const label = typeof item.label === "string" && item.label.trim() ? item.label.trim() : `Item ${index + 1}`;
-    const posicao =
-      typeof item.posicao === "number" && Number.isFinite(item.posicao) ? item.posicao : index + 1;
-    const valorCentavos =
-      typeof item.valor_centavos === "number" && Number.isFinite(item.valor_centavos)
-        ? item.valor_centavos
-        : null;
-    const valorBrl =
-      typeof item.valor_brl === "string" && item.valor_brl.trim() ? item.valor_brl.trim() : null;
-    return { posicao, label, valor_centavos: valorCentavos, valor_brl: valorBrl };
-  });
+type FaturaDetalheResponse = {
+  ok: boolean;
+  data?: FaturaDetalheData;
+  error?: string;
+};
 
-  const totalCentavos =
-    typeof record.total_centavos === "number" && Number.isFinite(record.total_centavos)
-      ? record.total_centavos
-      : null;
-  const totalBrl =
-    typeof record.total_brl === "string" && record.total_brl.trim() ? record.total_brl.trim() : null;
-  const competencia =
-    typeof record.competencia === "string" && record.competencia.trim() ? record.competencia.trim() : null;
+const EMPTY_LANCAMENTOS: LancamentoRow[] = [];
 
-  return { competencia, total_centavos: totalCentavos, total_brl: totalBrl, itens };
+function brlFromCentavos(v: number): string {
+  return (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export default function DetalheFaturaCreditoConexaoPage() {
-  const params = useParams();
-  const faturaId = Number(params?.id);
+export default function FaturaDetalhePage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const id = Number(params?.id);
 
-  const [fatura, setFatura] = useState<Fatura | null>(null);
-  const [lancamentos, setLancamentos] = useState<LancamentoFatura[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [fechando, setFechando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
-  const [showPagamentoModal, setShowPagamentoModal] = useState(false);
-  const [pagamentoData, setPagamentoData] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
-  const [pagamentoMetodo, setPagamentoMetodo] = useState<"PIX" | "DINHEIRO">("PIX");
-  const [pagamentoObs, setPagamentoObs] = useState("");
-  const [salvandoPagamento, setSalvandoPagamento] = useState(false);
-
-  function fmtMoney(centavos: number) {
-    return (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  }
-
-  function fmtDate(d: string | null) {
-    if (!d) return "—";
-    const dt = new Date(d);
-    if (Number.isNaN(dt.getTime())) return d;
-    return dt.toLocaleDateString("pt-BR");
-  }
-
-  const comprasCentavos = useMemo(() => {
-    if (!fatura) return 0;
-    const total = Number(fatura.valor_total_centavos ?? 0);
-    const taxas = Number(fatura.valor_taxas_centavos ?? 0);
-    return Math.max(0, total - taxas);
-  }, [fatura]);
-  const composicoes = useMemo(() => {
-    return lancamentos
-      .map((l) => parseComposicao(l.composicao_json))
-      .filter((item): item is ComposicaoView => !!item);
-  }, [lancamentos]);
-
-  async function carregar() {
-    try {
-      setLoading(true);
-      setErro(null);
-      setAviso(null);
-
-      const [fRes, lRes] = await Promise.all([
-        fetch(`/api/financeiro/credito-conexao/faturas/${faturaId}`),
-        fetch(`/api/financeiro/credito-conexao/faturas/${faturaId}/lancamentos`),
-      ]);
-
-      if (!fRes.ok) throw new Error(await fRes.text());
-      if (!lRes.ok) throw new Error(await lRes.text());
-
-      const fJson = await fRes.json();
-      const lJson = await lRes.json();
-
-      setFatura((fJson?.fatura as Fatura | null) ?? null);
-      setLancamentos((lJson?.lancamentos as LancamentoFatura[] | null | undefined) ?? []);
-    } catch (e: unknown) {
-      console.error(e);
-      setErro("Erro ao carregar detalhe da fatura.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<FaturaDetalheData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [openIds, setOpenIds] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
-    if (!faturaId || Number.isNaN(faturaId)) return;
-    carregar();
-  }, [faturaId]);
-
-  async function syncBoleto() {
-    if (!fatura?.cobranca?.id) return;
-    try {
-      setSyncing(true);
-      const res = await fetch("/api/integracoes/neofin/cobrancas/sync-boleto", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cobranca_id: fatura.cobranca.id }),
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        console.error(json);
-        setErro(json?.details || json?.error || "Falha ao sincronizar boleto.");
-        return;
-      }
-
-      await carregar();
-    } catch (e) {
-      console.error(e);
-      setErro("Falha ao sincronizar boleto.");
-    } finally {
-      setSyncing(false);
+    if (!Number.isFinite(id)) {
+      setError("fatura_id_invalido");
+      setLoading(false);
+      return;
     }
-  }
 
-  async function fecharFatura() {
-    try {
-      setFechando(true);
-      setErro(null);
-      setAviso(null);
-
-      const res = await fetch(`/api/financeiro/credito-conexao/faturas/${faturaId}/fechar`, {
-        method: "POST",
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        if (json?.error === "fatura_sem_lancamentos") {
-          setErro("Nao e possivel fechar a fatura sem lancamentos de consumo.");
-        } else {
-          setErro("Falha ao fechar fatura.");
+    void (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/credito-conexao/faturas/${id}`);
+        const json = (await res.json()) as FaturaDetalheResponse;
+        if (!res.ok || !json?.ok) {
+          setError(json?.error ?? "falha_carregar_fatura");
+          setData(null);
+          return;
         }
-        console.error("Fechar fatura erro:", json);
-        return;
+        setData(json.data ?? null);
+      } catch {
+        setError("falha_inesperada");
+        setData(null);
+      } finally {
+        setLoading(false);
       }
+    })();
+  }, [id]);
 
-      await carregar();
-    } catch (e) {
-      console.error(e);
-      setErro("Falha ao fechar fatura.");
-    } finally {
-      setFechando(false);
-    }
-  }
+  const fatura = data?.fatura ?? null;
+  const lancamentos = data?.lancamentos ?? EMPTY_LANCAMENTOS;
 
-  async function registrarPagamentoPresencial() {
-    if (!fatura?.cobranca?.id) return;
-    try {
-      setSalvandoPagamento(true);
-      setErro(null);
-      setAviso(null);
-
-      const res = await fetch("/api/financeiro/cobrancas/registrar-pagamento-presencial", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cobranca_id: fatura.cobranca.id,
-          data_pagamento: pagamentoData,
-          metodo_pagamento: pagamentoMetodo,
-          observacao: pagamentoObs,
-        }),
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        console.error(json);
-        setErro("Falha ao registrar pagamento presencial.");
-        return;
-      }
-
-      if (json.neofin_ok === false) {
-        setAviso("Pagamento registrado localmente, mas falhou ao marcar como pago na Neofin.");
-      }
-
-      setShowPagamentoModal(false);
-      await carregar();
-    } catch (e) {
-      console.error(e);
-      setErro("Falha ao registrar pagamento presencial.");
-    } finally {
-      setSalvandoPagamento(false);
-    }
-  }
-
-  async function copiar(texto: string) {
-    try {
-      await navigator.clipboard.writeText(texto);
-    } catch {
-      // ignore
-    }
-  }
-
-  if (!faturaId || Number.isNaN(faturaId)) {
-    return <div className="p-6">ID inválido.</div>;
-  }
+  const somaLancamentos = useMemo(
+    () => lancamentos.reduce((acc, l) => acc + (typeof l.valor_centavos === "number" ? l.valor_centavos : 0), 0),
+    [lancamentos],
+  );
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Crédito Conexão — Fatura #{faturaId}</h1>
-        <p className="text-sm text-gray-600">Detalhe da fatura, cobrança e lançamentos vinculados.</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white p-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Fatura do Cartao Conexao</CardTitle>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => router.back()}>
+                Voltar
+              </Button>
+              <Button variant="secondary" onClick={() => window.location.reload()}>
+                Recarregar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Carregando...</div>
+            ) : error ? (
+              <div className="text-sm text-red-700">{error}</div>
+            ) : !fatura ? (
+              <div className="text-sm text-muted-foreground">Fatura nao encontrada.</div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1 text-sm">
+                  <div>
+                    <span className="font-medium">Fatura ID:</span> {fatura.id}
+                  </div>
+                  <div>
+                    <span className="font-medium">Conta:</span>{" "}
+                    {data?.conta?.descricao_exibicao ?? `#${fatura.conta_conexao_id ?? "-"}`}
+                  </div>
+                  <div>
+                    <span className="font-medium">Titular:</span> {data?.pessoa?.nome ?? "-"}
+                  </div>
+                  <div>
+                    <span className="font-medium">Periodo:</span> {fatura.periodo_referencia ?? "-"}
+                  </div>
+                  <div>
+                    <span className="font-medium">Fechamento:</span> {fatura.data_fechamento ?? "-"}
+                  </div>
+                  <div>
+                    <span className="font-medium">Vencimento:</span> {fatura.data_vencimento ?? "-"}
+                  </div>
+                  <div>
+                    <span className="font-medium">Status:</span> {fatura.status ?? "-"}
+                  </div>
+                </div>
+
+                <div className="space-y-1 text-sm">
+                  <div>
+                    <span className="font-medium">Total da fatura (registro):</span>{" "}
+                    {brlFromCentavos(Number(fatura.valor_total_centavos ?? 0))}
+                  </div>
+                  <div>
+                    <span className="font-medium">Soma dos lancamentos vinculados:</span>{" "}
+                    {brlFromCentavos(somaLancamentos)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Se os valores divergirem, o problema esta na pivot (itens vinculados) ou no recalculo.
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Lancamentos vinculados a fatura</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Carregando...</div>
+            ) : lancamentos.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nenhum lancamento vinculado a esta fatura.</div>
+            ) : (
+              <div className="space-y-3">
+                {lancamentos.map((l) => (
+                  <div key={l.id} className="rounded-lg border bg-white p-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-semibold">{l.descricao ?? "Lancamento"}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          ID: {l.id} • Competencia: {l.competencia ?? "-"} • Ref: {l.referencia_item ?? "-"} • Status:{" "}
+                          {l.status ?? "-"}
+                        </div>
+                      </div>
+                      <div className="text-sm font-semibold">{brlFromCentavos(Number(l.valor_centavos ?? 0))}</div>
+                    </div>
+
+                    {l.composicao_json ? (
+                      <div className="mt-3">
+                        <Button
+                          variant="secondary"
+                          onClick={() => setOpenIds((p) => ({ ...p, [l.id]: !p[l.id] }))}
+                        >
+                          {openIds[l.id] ? "Ocultar composicao" : "Ver composicao"}
+                        </Button>
+                        {openIds[l.id] && (
+                          <pre className="mt-3 max-h-72 overflow-auto rounded-md bg-slate-50 p-3 text-xs">
+{JSON.stringify(l.composicao_json, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-muted-foreground">Sem composicao_json neste lancamento.</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
-
-      {erro && <div className="text-sm text-red-600">{erro}</div>}
-      {aviso && <div className="text-sm text-amber-700">{aviso}</div>}
-
-      {loading || !fatura ? (
-        <div className="text-sm text-gray-600">Carregando...</div>
-      ) : (
-        <>
-          {/* Cabeçalho */}
-          <div className="border rounded-xl bg-white shadow-sm p-4 grid md:grid-cols-4 gap-3 text-sm">
-            <div>
-              <div className="text-xs text-gray-500">Conta</div>
-              <div className="font-medium">#{fatura.conta_conexao_id}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Período</div>
-              <div className="font-medium">{fatura.periodo_referencia}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Fechamento</div>
-              <div className="font-medium">{fmtDate(fatura.data_fechamento)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Vencimento</div>
-              <div className="font-medium">{fmtDate(fatura.data_vencimento)}</div>
-            </div>
-
-            <div>
-              <div className="text-xs text-gray-500">Compras</div>
-              <div className="font-medium">{fmtMoney(comprasCentavos)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Taxas</div>
-              <div className="font-medium">
-                {fmtMoney(Number(fatura.valor_taxas_centavos ?? 0))}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Total</div>
-              <div className="font-medium">
-                {fmtMoney(Number(fatura.valor_total_centavos ?? 0))}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Status</div>
-              <div className="font-medium">{fatura.status}</div>
-            </div>
-          </div>
-
-          {/* Cobrança */}
-          <div className="border rounded-xl bg-white shadow-sm p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Cobrança (Neofin)</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPagamentoModal(true);
-                    setPagamentoData(new Date().toISOString().slice(0, 10));
-                    setPagamentoObs("");
-                  }}
-                  disabled={!fatura.cobranca?.id}
-                  className="text-xs px-3 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 disabled:opacity-50"
-                >
-                  Registrar pagamento presencial
-                </button>
-                <button
-                  type="button"
-                  onClick={syncBoleto}
-                  disabled={!fatura.cobranca?.id || syncing}
-                  className="text-xs px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
-                >
-                  {syncing ? "Sincronizando..." : "Sync boleto"}
-                </button>
-                {fatura.status !== "PAGA" && (
-                  <button
-                    type="button"
-                    onClick={fecharFatura}
-                    disabled={fechando}
-                    className="text-xs px-3 py-1 rounded-full bg-amber-100 hover:bg-amber-200 disabled:opacity-50"
-                  >
-                    {fechando ? "Fechando..." : "Fechar fatura"}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {!fatura.cobranca ? (
-              <p className="text-sm text-gray-600">Sem cobrança vinculada.</p>
-            ) : (
-              <div className="grid md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <div className="text-xs text-gray-500">Cobrança ID</div>
-                  <div className="font-medium">{fatura.cobranca.id}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Status</div>
-                  <div className="font-medium">{fatura.cobranca.status}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500">Neofin charge</div>
-                  <div className="font-medium">{fatura.cobranca.neofin_charge_id ?? "—"}</div>
-                </div>
-
-                <div className="md:col-span-2">
-                  <div className="text-xs text-gray-500">Link do boleto</div>
-                  {fatura.cobranca.link_pagamento ? (
-                    <a
-                      className="text-indigo-600 hover:underline break-all"
-                      href={fatura.cobranca.link_pagamento}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {fatura.cobranca.link_pagamento}
-                    </a>
-                  ) : (
-                    <div className="text-gray-600">—</div>
-                  )}
-                </div>
-
-                <div>
-                  <div className="text-xs text-gray-500">Linha digitável</div>
-                  {fatura.cobranca.linha_digitavel ? (
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{fatura.cobranca.linha_digitavel}</span>
-                      <button
-                        type="button"
-                        onClick={() => copiar(fatura.cobranca.linha_digitavel)}
-                        className="text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200"
-                      >
-                        Copiar
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-gray-600">—</div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Lançamentos */}
-          <div className="border rounded-xl bg-white shadow-sm">
-            <div className="px-4 py-3 border-b">
-              <h2 className="text-sm font-semibold">Lançamentos vinculados</h2>
-            </div>
-            {composicoes.length > 0 ? (
-              <div className="p-4 border-b bg-slate-50/60">
-                {composicoes.map((comp, index) => {
-                  const totalLabel =
-                    comp.total_brl ??
-                    (typeof comp.total_centavos === "number" ? fmtMoney(comp.total_centavos) : "N/A");
-                  return (
-                    <div key={`comp-${index}`} className="space-y-2">
-                      <div className="text-sm font-semibold">Composicao da mensalidade</div>
-                      <div className="text-xs text-gray-600">
-                        Competencia: {comp.competencia ?? "N/A"} | Total: {totalLabel}
-                      </div>
-                      <div className="space-y-1 text-sm">
-                        {comp.itens.map((item) => {
-                          const valorLabel =
-                            item.valor_brl ??
-                            (typeof item.valor_centavos === "number" ? fmtMoney(item.valor_centavos) : "N/A");
-                          return (
-                            <div key={`${item.label}-${item.posicao}`} className="flex justify-between gap-3">
-                              <span>
-                                {item.label} ({item.posicao}a)
-                              </span>
-                              <span className="text-gray-600">{valorLabel}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-            {lancamentos.length === 0 ? (
-              <div className="p-4 text-sm text-gray-600">Nenhum lançamento encontrado.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 text-xs text-gray-500">
-                    <tr>
-                      <th className="px-3 py-2 text-left">ID</th>
-                      <th className="px-3 py-2 text-left">Origem</th>
-                      <th className="px-3 py-2 text-left">Origem ID</th>
-                      <th className="px-3 py-2 text-left">Descrição</th>
-                      <th className="px-3 py-2 text-right">Valor</th>
-                      <th className="px-3 py-2 text-right">Parcelas</th>
-                      <th className="px-3 py-2 text-left">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lancamentos.map((l) => (
-                      <tr key={l.id} className="border-t">
-                        <td className="px-3 py-2">{l.id}</td>
-                        <td className="px-3 py-2">{l.origem_sistema}</td>
-                        <td className="px-3 py-2">{l.origem_id ?? "—"}</td>
-                        <td className="px-3 py-2">{l.descricao ?? "—"}</td>
-                        <td className="px-3 py-2 text-right">{fmtMoney(Number(l.valor_centavos ?? 0))}</td>
-                        <td className="px-3 py-2 text-right">{l.numero_parcelas ?? 1}x</td>
-                        <td className="px-3 py-2">{l.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {showPagamentoModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-5 space-y-4">
-            <h3 className="text-lg font-semibold">Pagamento presencial</h3>
-
-            <div className="space-y-3 text-sm">
-              <div className="space-y-1">
-                <label className="text-xs text-gray-600">Data do pagamento</label>
-                <input
-                  type="date"
-                  value={pagamentoData}
-                  onChange={(e) => setPagamentoData(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs text-gray-600">Método</label>
-                <select
-                  value={pagamentoMetodo}
-                  onChange={(e) => setPagamentoMetodo(e.target.value as "PIX" | "DINHEIRO")}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                >
-                  <option value="PIX">PIX</option>
-                  <option value="DINHEIRO">Dinheiro</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs text-gray-600">Observação</label>
-                <textarea
-                  value={pagamentoObs}
-                  onChange={(e) => setPagamentoObs(e.target.value)}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                  rows={3}
-                  placeholder="Opcional"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 text-sm">
-              <button
-                type="button"
-                onClick={() => setShowPagamentoModal(false)}
-                className="px-4 py-2 rounded border bg-white"
-                disabled={salvandoPagamento}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={registrarPagamentoPresencial}
-                disabled={salvandoPagamento}
-                className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {salvandoPagamento ? "Salvando..." : "Confirmar pagamento"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
