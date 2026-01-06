@@ -52,15 +52,15 @@ export const escolaSidebar: SidebarSection[] = [
     id: "escola-academico",
     title: "Acadêmico",
     items: [
-      { label: "🚧 📚 Cursos", href: "/academico/cursos" },
-      { label: "🚧 📚 Níveis", href: "/academico/niveis" },
-      { label: "🚧 📚 Módulos", href: "/academico/modulos" },
-      { label: "🚧 📚 Avaliações", href: "/academico/avaliacoes" },
+      { label: "🚧 📚 Cursos", href: "/escola/academico/cursos" },
+      { label: "🚧 📚 Níveis", href: "/escola/academico/niveis" },
+      { label: "🚧 📚 Módulos", href: "/escola/academico/modulos" },
+      { label: "🚧 📚 Avaliações", href: "/escola/academico/avaliacoes" },
       { label: "🚧 📚 Professores", href: "/escola/academico/professores" }, // TODO(migracao): rota ainda não existe
       { label: "📚 Nova turma", href: "/escola/academico/turmas/nova" },
       { label: "📚 Turmas", href: "/escola/academico/turmas" },
-      { label: "🚧 📚 Grade", href: "/academico/turmas/grade" },
-      { label: "🚧 📚 Frequência", href: "/academico/frequencia" },
+      { label: "🚧 📚 Grade", href: "/escola/academico/turmas/grade" },
+      { label: "🚧 📚 Frequência", href: "/escola/academico/frequencia" },
     ],
   },
   {

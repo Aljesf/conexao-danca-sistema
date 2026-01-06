@@ -57,7 +57,7 @@ export default async function LancamentoPage({
 
         <div className="flex justify-end">
           <Link
-            href={`/academico/turmas/${avaliacao.turma_id}#avaliacoes`}
+            href={`/escola/academico/turmas/${avaliacao.turma_id}#avaliacoes`}
             className="text-sm text-slate-600 hover:underline"
           >
             ← Voltar para a turma

@@ -28,13 +28,13 @@ export default function AdicionarProfessorNaTurmaPage({ params }: PageProps) {
       <div className="flex gap-3">
         <Link
           className="inline-flex items-center rounded-md border px-3 py-2 text-sm hover:bg-accent"
-          href={`/academico/turmas/${turmaId}`}
+          href={`/escola/academico/turmas/${turmaId}`}
         >
           Voltar para a turma
         </Link>
         <Link
           className="inline-flex items-center rounded-md border px-3 py-2 text-sm hover:bg-accent"
-          href={`/academico/turmas/${turmaId}/professores`}
+          href={`/escola/academico/turmas/${turmaId}/professores`}
         >
           Ver professores da turma
         </Link>

@@ -113,7 +113,7 @@ export default async function AvaliacaoDetalhePage({
               Lançar / editar notas
             </Link>
             <Link
-              href={`/academico/turmas/${turmaId}`}
+              href={`/escola/academico/turmas/${turmaId}`}
               className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
               Voltar para a turma

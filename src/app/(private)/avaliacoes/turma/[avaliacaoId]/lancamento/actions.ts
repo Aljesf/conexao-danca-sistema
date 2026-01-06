@@ -38,7 +38,7 @@ export async function salvarLancamentoAction(
     );
 
     revalidatePath(`/avaliacoes/turma/${avaliacaoId}/lancamento`);
-    redirect(`/academico/turmas/${await getTurmaIdByAvaliacao(avaliacaoId)}#avaliacoes`);
+    redirect(`/escola/academico/turmas/${await getTurmaIdByAvaliacao(avaliacaoId)}#avaliacoes`);
   } catch (error: any) {
     console.error("Erro ao salvar lançamento:", error);
     return { error: error?.message ?? "Erro ao salvar resultados." };

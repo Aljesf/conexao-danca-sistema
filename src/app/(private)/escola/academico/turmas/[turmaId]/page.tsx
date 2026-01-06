@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EditarTurmaDialog } from "./_components/EditarTurmaDialog";
@@ -5,9 +6,9 @@ import { NovaAvaliacaoDialog } from "./_components/NovaAvaliacaoDialog";
 import { VincularProfessorDialog } from "./_components/VincularProfessorDialog";
 import { listarAvaliacoesDaTurma } from "@/lib/academico/turmaAvaliacoesServer";
 import { listarProfessoresDaTurma, type TurmaProfessor } from "@/lib/academico/turmaProfessoresServer";
-import { obterTurmaPorId } from "@/lib/academico/turmasServer";
+import { listarHorariosDaTurma, obterTurmaPorId } from "@/lib/academico/turmasServer";
 import { getSupabaseServer } from "@/lib/supabaseServer";
-import type { Turma } from "@/types/turmas";
+import type { Turma, TurmaHorario } from "@/types/turmas";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,17 @@ type TurmaHistoricoItem = {
   diff: Record<string, unknown> | null;
   snapshot: Record<string, unknown> | null;
 };
+
+function diaSemanaLabel(dia: number) {
+  const labels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+  return labels[dia] ?? `Dia ${dia}`;
+}
+
+function formatHorario(horario: TurmaHorario) {
+  const inicio = horario.inicio?.slice(0, 5) ?? "--:--";
+  const fim = horario.fim?.slice(0, 5) ?? "--:--";
+  return `${diaSemanaLabel(horario.day_of_week)} ${inicio} - ${fim}`;
+}
 
 async function carregarAlunosMatriculados(turmaId: number): Promise<AlunoMatriculado[]> {
   const supabase = await getSupabaseServer();
@@ -160,12 +172,13 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
     notFound();
   }
 
-  const [turma, professoresBase, avaliacoes, alunos, historico] = await Promise.all([
+  const [turma, professoresBase, avaliacoes, alunos, historico, horarios] = await Promise.all([
     obterTurmaPorId(turmaId),
     listarProfessoresDaTurma(turmaId),
     listarAvaliacoesDaTurma(turmaId),
     carregarAlunosMatriculados(turmaId),
     carregarHistoricoTurma(turmaId),
+    listarHorariosDaTurma(turmaId),
   ]);
 
   if (!turma) {
@@ -180,6 +193,8 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
       funcao_nome: p.funcao_nome ?? "Professor",
     })) ?? [];
   const cursoNivel = [turma.curso, turma.nivel].filter(Boolean).join(" / ") || "Curso nao informado";
+  const localNome = turma.espaco?.local?.nome ?? "-";
+  const espacoNome = turma.espaco?.nome ?? (turma.espaco_id ? `Espaco #${turma.espaco_id}` : "-");
 
   return (
     <main className="p-8 space-y-10">
@@ -191,7 +206,21 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
           </h1>
           <p className="text-sm text-slate-500">{cursoNivel}</p>
         </div>
-        <EditarTurmaDialog turma={turma as Turma} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/escola/academico/turmas"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-300"
+          >
+            Voltar
+          </Link>
+          <Link
+            href={`/escola/turmas/${turmaKey}/servicos`}
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-300"
+          >
+            Servicos
+          </Link>
+          <EditarTurmaDialog turma={turma as Turma} />
+        </div>
       </header>
 
       <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
@@ -200,6 +229,8 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Status</p>
             <p className="mt-1 text-base font-semibold text-slate-900">{turma.status ?? "Sem status"}</p>
             <p className="text-xs text-slate-500">Tipo: {turma.tipo_turma ?? "REGULAR"}</p>
+            <p className="text-xs text-slate-500">Local: {localNome}</p>
+            <p className="text-xs text-slate-500">Espaco: {espacoNome}</p>
           </div>
           <div className="rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Calendario</p>
@@ -222,6 +253,29 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
             {turma.observacoes}
           </p>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <header>
+          <h2 className="text-xl font-semibold text-slate-900">Horarios definidos</h2>
+          <p className="text-sm text-slate-500">Horarios cadastrados para a turma.</p>
+        </header>
+        <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
+          {horarios.length === 0 ? (
+            <p className="text-sm text-slate-500">Nenhum horario registrado.</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {horarios.map((h) => (
+                <div
+                  key={h.id}
+                  className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 text-sm text-slate-700"
+                >
+                  {formatHorario(h)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="space-y-3">

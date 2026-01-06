@@ -50,13 +50,13 @@ export default async function AvaliacoesDashboardPage() {
           <CardResumo
             titulo="Modelos ativos"
             valor={metricas.modelos}
-            linkHref="/academico/avaliacoes/modelos"
+            linkHref="/escola/academico/avaliacoes/modelos"
             linkLabel="Ver modelos"
           />
           <CardResumo
             titulo="Conceitos disponíveis"
             valor={metricas.conceitos}
-            linkHref="/academico/avaliacoes/conceitos"
+            linkHref="/escola/academico/avaliacoes/conceitos"
             linkLabel="Ver conceitos"
           />
           <CardResumo

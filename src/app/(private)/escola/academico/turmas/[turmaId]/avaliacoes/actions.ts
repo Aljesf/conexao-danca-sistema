@@ -37,8 +37,8 @@ export async function criarTurmaAvaliacaoAction(turmaId: number, formData: FormD
 
     await criarAvaliacaoParaTurma(payload);
 
-    revalidatePath(`/academico/turmas/${turmaId}`);
-    redirect(`/academico/turmas/${turmaId}#avaliacoes`);
+    revalidatePath(`/escola/academico/turmas/${turmaId}`);
+    redirect(`/escola/academico/turmas/${turmaId}#avaliacoes`);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erro ao salvar avaliação.";
     console.error("Erro ao criar avaliação da turma:", error);

@@ -37,8 +37,8 @@ export async function criarModeloAction(data: ModeloFormInput) {
   try {
     const payload = modeloSchema.parse(data);
     await criarModelo(payload);
-    revalidatePath("/academico/avaliacoes/modelos");
-    redirect("/academico/avaliacoes/modelos");
+    revalidatePath("/escola/academico/avaliacoes/modelos");
+    redirect("/escola/academico/avaliacoes/modelos");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erro ao criar modelo.";
     console.error("Erro ao criar modelo:", error);
@@ -50,8 +50,8 @@ export async function atualizarModeloAction(id: number, data: ModeloFormInput) {
   try {
     const payload = modeloSchema.parse(data);
     await atualizarModelo(id, payload);
-    revalidatePath("/academico/avaliacoes/modelos");
-    redirect("/academico/avaliacoes/modelos");
+    revalidatePath("/escola/academico/avaliacoes/modelos");
+    redirect("/escola/academico/avaliacoes/modelos");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erro ao atualizar modelo.";
     console.error("Erro ao atualizar modelo:", error);

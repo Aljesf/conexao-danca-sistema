@@ -322,7 +322,7 @@ export function ModeloForm({
 
       <div className="flex justify-end gap-2">
         <Link
-          href="/academico/avaliacoes/modelos"
+          href="/escola/academico/avaliacoes/modelos"
           className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
         >
           Cancelar

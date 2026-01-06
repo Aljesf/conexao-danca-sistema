@@ -17,8 +17,8 @@ type ConceitoPayload = Pick<
 export async function criarConceitoAction(data: ConceitoPayload) {
   try {
     await criarConceito(normalizePayload(data));
-    revalidatePath("/academico/avaliacoes/conceitos");
-    redirect("/academico/avaliacoes/conceitos");
+    revalidatePath("/escola/academico/avaliacoes/conceitos");
+    redirect("/escola/academico/avaliacoes/conceitos");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erro ao criar conceito.";
     console.error("Erro ao criar conceito:", error);
@@ -32,8 +32,8 @@ export async function atualizarConceitoAction(
 ) {
   try {
     await atualizarConceito(id, normalizePayload(data));
-    revalidatePath("/academico/avaliacoes/conceitos");
-    redirect("/academico/avaliacoes/conceitos");
+    revalidatePath("/escola/academico/avaliacoes/conceitos");
+    redirect("/escola/academico/avaliacoes/conceitos");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Erro ao atualizar conceito.";
     console.error("Erro ao atualizar conceito:", error);

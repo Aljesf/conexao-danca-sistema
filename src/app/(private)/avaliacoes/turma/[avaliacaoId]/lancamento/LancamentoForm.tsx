@@ -278,7 +278,7 @@ export default function LancamentoForm(props: LancamentoFormProps) {
 
       <div className="flex justify-end gap-2">
         <Link
-          href={`/academico/turmas/${avaliacao.turma_id}#avaliacoes`}
+          href={`/escola/academico/turmas/${avaliacao.turma_id}#avaliacoes`}
           className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
         >
           Voltar

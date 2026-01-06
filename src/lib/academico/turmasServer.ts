@@ -144,7 +144,9 @@ export async function obterTurmaPorId(turmaId: number) {
         frequencia_minima_percentual,
         contexto_matricula_id,
         observacoes,
-        professor_id
+        professor_id,
+        espaco_id,
+        espaco:espacos ( id, nome, tipo, capacidade, local_id, local:locais ( id, nome, tipo ) )
       `,
     )
     .eq("turma_id", turmaId)

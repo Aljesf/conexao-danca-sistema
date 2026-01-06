@@ -29,7 +29,7 @@ export default async function ModelosPage() {
             </p>
           </div>
           <Link
-            href="/academico/avaliacoes/modelos/novo"
+            href="/escola/academico/avaliacoes/modelos/novo"
             className="inline-flex items-center rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-700"
           >
             + Novo modelo
@@ -76,7 +76,7 @@ export default async function ModelosPage() {
                       </td>
                       <td className="px-3 py-2 text-right text-xs">
                         <Link
-                          href={`/academico/avaliacoes/modelos/${m.id}/editar`}
+                          href={`/escola/academico/avaliacoes/modelos/${m.id}/editar`}
                           className="text-violet-600 hover:underline"
                         >
                           Editar

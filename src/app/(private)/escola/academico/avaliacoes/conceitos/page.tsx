@@ -26,7 +26,7 @@ export default async function ConceitosPage() {
             </p>
           </div>
           <Link
-            href="/academico/avaliacoes/conceitos/novo"
+            href="/escola/academico/avaliacoes/conceitos/novo"
             className="inline-flex items-center rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-700"
           >
             + Novo conceito
@@ -78,7 +78,7 @@ export default async function ConceitosPage() {
                     </td>
                     <td className="px-3 py-2 text-right text-xs">
                       <Link
-                        href={`/academico/avaliacoes/conceitos/${c.id}/editar`}
+                        href={`/escola/academico/avaliacoes/conceitos/${c.id}/editar`}
                         className="text-violet-600 hover:underline"
                       >
                         Editar

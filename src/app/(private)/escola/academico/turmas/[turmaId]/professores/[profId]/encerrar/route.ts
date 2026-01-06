@@ -21,5 +21,5 @@ export async function POST(
     console.error("Erro ao encerrar professor da turma:", error);
   }
 
-  redirect(`/academico/turmas/${params.turmaId}`);
+  redirect(`/escola/academico/turmas/${params.turmaId}`);
 }

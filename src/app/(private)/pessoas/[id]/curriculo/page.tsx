@@ -284,7 +284,7 @@ function ListaAvaliacoes({ itens }: { itens: ResultadoAvaliacaoAluno[] }) {
               </span>
             )}
             <Link
-              href={`/academico/turmas/${item.turma_avaliacoes?.turma_id ?? item.turma_avaliacao_id}/avaliacoes/${item.turma_avaliacao_id}`}
+              href={`/escola/academico/turmas/${item.turma_avaliacoes?.turma_id ?? item.turma_avaliacao_id}/avaliacoes/${item.turma_avaliacao_id}`}
               className="text-xs text-violet-600 hover:underline"
             >
               Ver detalhes
