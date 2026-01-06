@@ -38,10 +38,177 @@ type LedgerInsert = {
 
 type SupabaseAdminClient = ReturnType<typeof getSupabaseAdmin>;
 
+type TurmaAlunoRow = {
+  turma_id: number | null;
+  status?: string | null;
+  dt_inicio?: string | null;
+  dt_fim?: string | null;
+};
+
+type TurmaVinculada = {
+  turma_id: number;
+  status: string | null;
+  dt_inicio: string | null;
+  dt_fim: string | null;
+};
+
+type ComposicaoItem = {
+  turma_id: number;
+  ue_id: number | null;
+  descricao: string;
+  valor_centavos: number;
+};
+
+type ResolverResp = {
+  ok: boolean;
+  data?: {
+    valor_final_centavos?: number | null;
+    item_aplicado?: { valor_centavos: number; descricao?: string | null };
+  };
+  message?: string;
+  error?: string;
+};
+
 function asInt(n: unknown): number | null {
   if (typeof n === "number" && Number.isFinite(n)) return Math.trunc(n);
   if (typeof n === "string" && n.trim() !== "" && !Number.isNaN(Number(n))) return Math.trunc(Number(n));
   return null;
+}
+
+async function resolverMensalidadePorTurma(params: {
+  req: Request;
+  cookieHeader: string;
+  alunoId: number;
+  turmaId: number;
+  anoRef: number;
+  tierOrdemOverride: number;
+}): Promise<{ valor_centavos: number; descricao: string | null }> {
+  const { req, cookieHeader, alunoId, turmaId, anoRef, tierOrdemOverride } = params;
+  const resolveUrl = new URL("/api/matriculas/precos/resolver", req.url);
+  resolveUrl.searchParams.set("aluno_id", String(alunoId));
+  resolveUrl.searchParams.set("alvo_tipo", "TURMA");
+  resolveUrl.searchParams.set("alvo_id", String(turmaId));
+  resolveUrl.searchParams.set("ano", String(anoRef));
+  resolveUrl.searchParams.set("tier_ordem_override", String(tierOrdemOverride));
+
+  const resolveRes = await fetch(resolveUrl.toString(), { headers: { cookie: cookieHeader } });
+  let payload: ResolverResp | null = null;
+  try {
+    payload = (await resolveRes.json()) as ResolverResp;
+  } catch {
+    payload = null;
+  }
+
+  if (!resolveRes.ok || !payload?.ok) {
+    const message = payload?.message || payload?.error || "Falha ao resolver precificacao.";
+    throw new Error(message);
+  }
+
+  const item = payload.data?.item_aplicado;
+  const valor = Number(payload.data?.valor_final_centavos ?? item?.valor_centavos);
+  if (!Number.isFinite(valor) || valor <= 0) {
+    throw new Error("valor_mensal_invalido");
+  }
+  return {
+    valor_centavos: valor,
+    descricao: item?.descricao ?? null,
+  };
+}
+
+async function montarComposicaoMensalidade(params: {
+  supabase: SupabaseAdminClient;
+  req: Request;
+  cookieHeader: string;
+  matriculaId: number;
+  alunoId: number;
+  anoRef: number;
+}): Promise<{ itens: ComposicaoItem[]; totalCentavos: number }> {
+  const { supabase, req, cookieHeader, matriculaId, alunoId, anoRef } = params;
+
+  const { data: taRows, error: taErr } = await supabase
+    .from("turma_aluno")
+    .select("turma_id,status,dt_inicio,dt_fim")
+    .eq("matricula_id", matriculaId);
+
+  if (taErr) {
+    throw new Error(`falha_buscar_turma_aluno: ${taErr.message}`);
+  }
+
+  const turmaRows: TurmaVinculada[] = (taRows ?? [])
+    .map((row) => {
+      const record = row as TurmaAlunoRow;
+      const turmaId = asInt(record.turma_id);
+      if (!turmaId) return null;
+      const statusRaw = record.status;
+      return {
+        turma_id: turmaId,
+        status: typeof statusRaw === "string" ? statusRaw : statusRaw ? String(statusRaw) : null,
+        dt_inicio: record.dt_inicio ? String(record.dt_inicio) : null,
+        dt_fim: record.dt_fim ? String(record.dt_fim) : null,
+      };
+    })
+    .filter((row): row is TurmaVinculada => !!row)
+    .filter((row) => {
+      const statusNorm = row.status ? row.status.trim().toUpperCase() : null;
+      return !statusNorm || statusNorm === "ATIVO" || statusNorm === "ATIVA";
+    });
+
+  if (turmaRows.length === 0) {
+    throw new Error("sem_turmas_ativas_para_matricula");
+  }
+
+  turmaRows.sort((a, b) => {
+    const da = a.dt_inicio ? String(a.dt_inicio) : "";
+    const db = b.dt_inicio ? String(b.dt_inicio) : "";
+    if (da < db) return -1;
+    if (da > db) return 1;
+    return a.turma_id - b.turma_id;
+  });
+
+  const itens: ComposicaoItem[] = [];
+  let totalCentavos = 0;
+
+  for (let i = 0; i < turmaRows.length; i++) {
+    const turmaId = turmaRows[i].turma_id;
+    const { data: ue } = await supabase
+      .from("escola_unidades_execucao")
+      .select("unidade_execucao_id, nome, denominacao")
+      .eq("origem_tipo", "TURMA")
+      .eq("origem_id", turmaId)
+      .maybeSingle();
+
+    const { data: turma } = await supabase
+      .from("turmas")
+      .select("nome")
+      .eq("turma_id", turmaId)
+      .maybeSingle();
+
+    const ueId = ue?.unidade_execucao_id ? Number(ue.unidade_execucao_id) : null;
+    const descricao =
+      (typeof ue?.denominacao === "string" && ue.denominacao.trim()) ||
+      (typeof ue?.nome === "string" && ue.nome.trim()) ||
+      (typeof turma?.nome === "string" && turma.nome.trim()) ||
+      `Turma ${turmaId}`;
+
+    const resolved = await resolverMensalidadePorTurma({
+      req,
+      cookieHeader,
+      alunoId,
+      turmaId,
+      anoRef,
+      tierOrdemOverride: i + 1,
+    });
+
+    totalCentavos += resolved.valor_centavos;
+    itens.push({
+      turma_id: turmaId,
+      ue_id: ueId,
+      descricao,
+      valor_centavos: resolved.valor_centavos,
+    });
+  }
+
+  return { itens, totalCentavos };
 }
 
 async function ensureCobrancaCartaoConexao(params: {
@@ -336,6 +503,7 @@ export async function POST(req: Request) {
   // Next.js 15: cookies() is async
   const cookieStore = await cookies();
   const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
+  const cookieHeader = cookieStore.toString();
 
   const { data: auth } = await supabaseAuth.auth.getUser();
   if (!auth?.user) {
@@ -368,7 +536,7 @@ export async function POST(req: Request) {
   const { data: matricula, error: errMat } = await supabase
     .from("matriculas")
     .select(
-      "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos, ano_referencia, data_inicio_vinculo",
+      "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos, total_mensalidade_centavos, ano_referencia, data_inicio_vinculo",
     )
     .eq("id", matriculaId)
     .single();
@@ -384,6 +552,8 @@ export async function POST(req: Request) {
     data_inicio_vinculo?: string | null;
     periodo_inicio?: string | null;
     periodo_fim?: string | null;
+    total_mensalidade_centavos?: number;
+    itens?: ComposicaoItem[];
     created_lancamentos: number;
     linked_faturas: number;
     erro?: string;
@@ -546,11 +716,27 @@ export async function POST(req: Request) {
         debugCartao.periodo_inicio = buildPeriodo(anoRef, mesPrimeiraMensalidadeCheia);
         debugCartao.periodo_fim = buildPeriodo(anoRef, 12);
 
-        const valorMensalidadeCheia = Number(matricula.primeira_cobranca_valor_centavos) || null;
+        const alunoId = asInt(matricula.pessoa_id);
+        if (!alunoId) {
+          throw new Error("aluno_id_invalido");
+        }
 
-        if (!valorMensalidadeCheia || valorMensalidadeCheia <= 0) {
+        const composicao = await montarComposicaoMensalidade({
+          supabase,
+          req,
+          cookieHeader,
+          matriculaId: matricula.id,
+          alunoId,
+          anoRef,
+        });
+
+        const totalMensalidade = composicao.totalCentavos;
+        debugCartao.total_mensalidade_centavos = totalMensalidade;
+        debugCartao.itens = composicao.itens;
+
+        if (!totalMensalidade || totalMensalidade <= 0) {
           console.warn(
-            "[matriculas/liquidacao] valorMensalidadeCheia ausente para lancamento no cartao. Matricula:",
+            "[matriculas/liquidacao] totalMensalidade ausente para lancamento no cartao. Matricula:",
             matricula.id,
           );
         } else {
@@ -569,6 +755,15 @@ export async function POST(req: Request) {
             diaVencimento: conta.dia_vencimento ?? 12,
           });
 
+          const composicaoBase = {
+            fonte: "MATRICULA_MULTIPLA_UE",
+            aluno_pessoa_id: alunoId,
+            responsavel_financeiro_id: matricula.responsavel_financeiro_id,
+            ano_referencia: anoRef,
+            total_centavos: totalMensalidade,
+            itens: composicao.itens,
+          };
+
           for (let mes = mesPrimeiraMensalidadeCheia; mes <= 12; mes++) {
             const periodo = buildPeriodo(anoRef, mes);
             const dataEvento = buildDateFromYMD(anoRef, mes, 1);
@@ -580,7 +775,7 @@ export async function POST(req: Request) {
               pessoaId: matricula.responsavel_financeiro_id,
               matriculaId: matricula.id,
               competencia: periodo,
-              valorCentavos: valorMensalidadeCheia,
+              valorCentavos: totalMensalidade,
               vencimento,
               descricao,
             });
@@ -589,10 +784,11 @@ export async function POST(req: Request) {
               cobrancaId,
               contaConexaoId: Number(conta.id),
               competencia: periodo,
-              valorCentavos: valorMensalidadeCheia,
+              valorCentavos: totalMensalidade,
               descricao,
               origemSistema: "MATRICULA",
               origemId: matricula.id,
+              composicaoJson: { ...composicaoBase, competencia: periodo },
             });
 
             debugCartao.created_lancamentos += 1;
@@ -602,7 +798,7 @@ export async function POST(req: Request) {
               contaConexaoId: conta.id,
               periodoReferencia: periodo,
               lancamentoId: lancamento.id,
-              valorCentavos: valorMensalidadeCheia,
+              valorCentavos: totalMensalidade,
             });
 
             debugCartao.linked_faturas += 1;
@@ -611,7 +807,7 @@ export async function POST(req: Request) {
               matricula_id: matricula.id,
               tipo: "LANCAMENTO_CREDITO",
               descricao,
-              valor_centavos: valorMensalidadeCheia,
+              valor_centavos: totalMensalidade,
               vencimento: null,
               data_evento: dataEvento,
               status: "PENDENTE_FATURA",
@@ -644,10 +840,6 @@ export async function POST(req: Request) {
   }
 
   if (body.modo === "LANCAR_NO_CARTAO") {
-    if (!valorFinal) {
-      return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
-    }
-
     const conta = await ensureContaCreditoConexaoAluno({
       supabase,
       pessoaTitularId: matricula.responsavel_financeiro_id,
@@ -662,47 +854,92 @@ export async function POST(req: Request) {
       diaVencimento: conta.dia_vencimento ?? 12,
     });
 
-    const { data: lanc, error: errLanc } = await supabase
-      .from("credito_conexao_lancamentos")
-      .insert({
-        conta_conexao_id: conta.id,
-        origem_sistema: "MATRICULA",
-        origem_id: matricula.id,
-        descricao: "Mensalidade cheia - matricula",
-        valor_centavos: valorFinal,
-        status: "PENDENTE_FATURA",
-      })
-      .select("id")
-      .single();
-
-    if (errLanc || !lanc) {
-      return NextResponse.json(
-        { error: "falha_criar_lancamento_cartao", details: errLanc?.message ?? "erro_desconhecido" },
-        { status: 500 },
-      );
+    const alunoId = asInt(matricula.pessoa_id);
+    if (!alunoId) {
+      return NextResponse.json({ error: "aluno_id_invalido" }, { status: 400 });
     }
 
     const periodo =
       typeof matricula.data_inicio_vinculo === "string" ? ymFromDate(matricula.data_inicio_vinculo) : `${anoRef}-01`;
 
+    const anoPeriodo = Number(periodo.slice(0, 4));
+    const mesPeriodo = Number(periodo.slice(5, 7));
+    const vencimento = buildDateFromYMD(anoPeriodo, mesPeriodo, conta.dia_vencimento ?? 12);
+
+    let composicao;
+    try {
+      composicao = await montarComposicaoMensalidade({
+        supabase,
+        req,
+        cookieHeader,
+        matriculaId: matricula.id,
+        alunoId,
+        anoRef,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "erro_desconhecido";
+      return NextResponse.json({ error: "falha_composicao_cartao", details: msg }, { status: 500 });
+    }
+
+    const totalMensalidade = composicao.totalCentavos;
+    if (!totalMensalidade || totalMensalidade <= 0) {
+      return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
+    }
+
+    const cobrancaId = await ensureCobrancaCartaoConexao({
+      supabase,
+      pessoaId: matricula.responsavel_financeiro_id,
+      matriculaId: matricula.id,
+      competencia: periodo,
+      valorCentavos: totalMensalidade,
+      vencimento,
+      descricao: "Mensalidade cheia - matricula",
+    });
+
+    let lancamentoId: number;
+    try {
+      const lancamento = await upsertLancamentoPorCobranca({
+        cobrancaId,
+        contaConexaoId: Number(conta.id),
+        competencia: periodo,
+        valorCentavos: totalMensalidade,
+        descricao: "Mensalidade cheia - matricula",
+        origemSistema: "MATRICULA",
+        origemId: matricula.id,
+        composicaoJson: {
+          fonte: "MATRICULA_MULTIPLA_UE",
+          aluno_pessoa_id: alunoId,
+          responsavel_financeiro_id: matricula.responsavel_financeiro_id,
+          ano_referencia: anoRef,
+          competencia: periodo,
+          total_centavos: totalMensalidade,
+          itens: composicao.itens,
+        },
+      });
+      lancamentoId = lancamento.id;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "erro_desconhecido";
+      return NextResponse.json({ error: "falha_criar_lancamento_cartao", details: msg }, { status: 500 });
+    }
+
     await vincularLancamentoNaFatura({
       supabase,
       contaConexaoId: conta.id,
       periodoReferencia: periodo,
-      lancamentoId: lanc.id,
-      valorCentavos: valorFinal,
+      lancamentoId,
+      valorCentavos: totalMensalidade,
     });
 
     const ledgerLinha: LedgerInsert = {
       matricula_id: matricula.id,
       tipo: "LANCAMENTO_CREDITO",
       descricao: "Mensalidade cheia - matricula",
-      valor_centavos: valorFinal,
+      valor_centavos: totalMensalidade,
       vencimento: null,
       data_evento: dateFromPeriodo(periodo),
       status: "PENDENTE_FATURA",
       origem_tabela: "credito_conexao_lancamentos",
-      origem_id: lanc.id,
+      origem_id: lancamentoId,
     };
 
     const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
@@ -718,7 +955,7 @@ export async function POST(req: Request) {
       .update({
         primeira_cobranca_tipo: body.tipo_primeira_cobranca,
         primeira_cobranca_status: "LANCADA_CARTAO",
-        primeira_cobranca_valor_centavos: valorFinal,
+        primeira_cobranca_valor_centavos: totalMensalidade,
         primeira_cobranca_data_pagamento: null,
       })
       .eq("id", matricula.id);
@@ -727,7 +964,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, status: "LANCADA_CARTAO", lancamento_cartao_id: lanc.id });
+    return NextResponse.json({ ok: true, status: "LANCADA_CARTAO", lancamento_cartao_id: lancamentoId });
   }
 
   if (body.modo === "ADIAR_EXCECAO") {
