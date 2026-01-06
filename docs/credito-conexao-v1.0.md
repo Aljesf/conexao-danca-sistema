@@ -1,5 +1,8 @@
 ﻿# Cartao Conexao - Especificacao Funcional & Tecnica v1.0
 
+> Padrão operacional atual: [Cartão Conexão — Cobranças, Lançamentos e Faturas](./financeiro/cartao-conexao-cobrancas.md)
+
+
 > Nome do produto (para o usuario):
 > - **Cartao Conexao Aluno**
 > - **Cartao Conexao Colaborador**

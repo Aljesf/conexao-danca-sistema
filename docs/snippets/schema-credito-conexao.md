@@ -1,4 +1,7 @@
-# Recorte do Schema - Credito Conexao
+﻿# Recorte do Schema - Credito Conexao
+
+> Padrão operacional atual: [Cartão Conexão — Cobranças, Lançamentos e Faturas](../financeiro/cartao-conexao-cobrancas.md)
+
 
 Fonte: `schema-supabase.sql` (snapshot atualizado)
 

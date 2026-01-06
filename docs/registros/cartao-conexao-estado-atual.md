@@ -1,4 +1,7 @@
-# Estado Atual - Cartao Conexao
+﻿# Estado Atual - Cartao Conexao
+
+> Padrão operacional atual: [Cartão Conexão — Cobranças, Lançamentos e Faturas](../financeiro/cartao-conexao-cobrancas.md)
+
 
 Gerado em: 2025-12-23T18:02:54.5787618-03:00
 

@@ -1,43 +1,46 @@
-# 📘 Regras de Parcelamento — Cartão Conexão
-Documento oficial descrevendo o modelo de parcelamento do **Cartão Conexão**, incluindo regras, valores mínimos e taxas por quantidade de parcelas.
+﻿# ðŸ“˜ Regras de Parcelamento â€” CartÃ£o ConexÃ£o
+
+> Padrão operacional atual: [Cartão Conexão — Cobranças, Lançamentos e Faturas](./financeiro/cartao-conexao-cobrancas.md)
+
+Documento oficial descrevendo o modelo de parcelamento do **CartÃ£o ConexÃ£o**, incluindo regras, valores mÃ­nimos e taxas por quantidade de parcelas.
 
 ---
 
-# ✅ 1. Objetivo
-Permitir que o Cartão Conexão (ALUNO e COLABORADOR) ofereça parcelamento com:
+# âœ… 1. Objetivo
+Permitir que o CartÃ£o ConexÃ£o (ALUNO e COLABORADOR) ofereÃ§a parcelamento com:
 
-- Número máximo de parcelas configurável.
-- Taxas variáveis por faixa de parcelas.
-- Valor mínimo por parcela (ex.: “2x a partir de R$ 100,00”, “3x a partir de R$ 50,00”).
+- NÃºmero mÃ¡ximo de parcelas configurÃ¡vel.
+- Taxas variÃ¡veis por faixa de parcelas.
+- Valor mÃ­nimo por parcela (ex.: â€œ2x a partir de R$ 100,00â€, â€œ3x a partir de R$ 50,00â€).
 - Tratamento financeiro para cobrar taxas como **receita interna**.
 
-Essas regras serão aplicadas na venda (opcional) ou no fechamento da fatura.
+Essas regras serÃ£o aplicadas na venda (opcional) ou no fechamento da fatura.
 
 ---
 
-# 🧱 2. Estrutura da Tabela — `credito_conexao_regras_parcelas`
+# ðŸ§± 2. Estrutura da Tabela â€” `credito_conexao_regras_parcelas`
 
 A tabela armazena **regras de parcelamento por tipo de conta**:
 
-| Campo | Tipo | Descrição |
+| Campo | Tipo | DescriÃ§Ã£o |
 |-------|------|-----------|
 | **id** | bigserial | PK |
 | **tipo_conta** | text | `"ALUNO"` ou `"COLABORADOR"` |
 | **numero_parcelas_min** | integer | Menor quantidade de parcelas da faixa |
 | **numero_parcelas_max** | integer | Maior quantidade de parcelas da faixa |
-| **valor_minimo_centavos** | integer | Valor mínimo para liberar essa faixa de parcelamento |
+| **valor_minimo_centavos** | integer | Valor mÃ­nimo para liberar essa faixa de parcelamento |
 | **taxa_percentual** | numeric | Percentual de taxa aplicado sobre o valor base |
 | **taxa_fixa_centavos** | integer | Taxa fixa adicionada ao parcelamento |
 | **centro_custo_id** | integer | Onde entra a receita desta taxa |
 | **categoria_financeira_id** | integer | Categoria financeira da taxa |
-| **ativo** | boolean | Se a regra está ativa no sistema |
+| **ativo** | boolean | Se a regra estÃ¡ ativa no sistema |
 | **created_at / updated_at** | timestamps | Auditoria |
 
 ---
 
-# 📌 3. Exemplos de Regras
+# ðŸ“Œ 3. Exemplos de Regras
 
-### Exemplo 1 — 2 vezes (ALUNO)
+### Exemplo 1 â€” 2 vezes (ALUNO)
 numero_parcelas_min = 2
 numero_parcelas_max = 2
 valor_minimo_centavos = 10000 (R$ 100,00)
@@ -45,12 +48,12 @@ taxa_percentual = 3.0
 taxa_fixa_centavos = 0
 
 ```yaml
-→ “**2x a partir de R$ 100,00 com taxa de 3%**”.
+â†’ â€œ**2x a partir de R$ 100,00 com taxa de 3%**â€.
 ```
 
 ---
 
-### Exemplo 2 — 3 vezes (ALUNO)
+### Exemplo 2 â€” 3 vezes (ALUNO)
 numero_parcelas_min = 3
 numero_parcelas_max = 3
 valor_minimo_centavos = 5000 (R$ 50,00)
@@ -58,12 +61,12 @@ taxa_percentual = 4.0
 taxa_fixa_centavos = 0
 
 ```yaml
-→ “**3x a partir de R$ 50,00 com taxa de 4%**”.
+â†’ â€œ**3x a partir de R$ 50,00 com taxa de 4%**â€.
 ```
 
 ---
 
-### Exemplo 3 — 2–4 vezes (COLABORADOR)
+### Exemplo 3 â€” 2â€“4 vezes (COLABORADOR)
 numero_parcelas_min = 2
 numero_parcelas_max = 4
 valor_minimo_centavos = 2000 (R$ 20,00)
@@ -71,12 +74,12 @@ taxa_percentual = 0
 taxa_fixa_centavos = 0
 
 ```yaml
-→ “**Colaborador pode parcelar de 2 a 4x sem taxa**”.
+â†’ â€œ**Colaborador pode parcelar de 2 a 4x sem taxa**â€.
 ```
 
 ---
 
-# ⚙️ 4. Como o sistema aplica essas regras
+# âš™ï¸ 4. Como o sistema aplica essas regras
 
 ## 4.1 Durante a venda (opcional)
 Se a venda permitir escolher quantidade de parcelas:
@@ -84,25 +87,25 @@ Se a venda permitir escolher quantidade de parcelas:
 1. Sistema pega o valor total da venda.
 2. Filtra regras por:
    - tipo_conta (ALUNO/COLABORADOR),
-   - valor mínimo,
-   - número de parcelas solicitado.
-3. Se não atingir o valor mínimo → parcela não aparece na lista.
+   - valor mÃ­nimo,
+   - nÃºmero de parcelas solicitado.
+3. Se nÃ£o atingir o valor mÃ­nimo â†’ parcela nÃ£o aparece na lista.
 4. Se regra encontrada:
-   - taxa é aplicada
-   - lançamento é criado na conta de Crédito Conexão
-   - taxa pode virar **lançamento separado** como receita interna.
+   - taxa Ã© aplicada
+   - lanÃ§amento Ã© criado na conta de CrÃ©dito ConexÃ£o
+   - taxa pode virar **lanÃ§amento separado** como receita interna.
 
 ---
 
 ## 4.2 No fechamento da fatura (recomendado)
 A taxa pode ser aplicada:
 
-### **✓ A) Embutida no valor da fatura**
-Total da fatura = soma dos lançamentos + taxa
+### **âœ“ A) Embutida no valor da fatura**
+Total da fatura = soma dos lanÃ§amentos + taxa
 
 ou
 
-### **✓ B) Como lançamento separado**
+### **âœ“ B) Como lanÃ§amento separado**
 Criar em `credito_conexao_lancamentos`:
 
 origem_sistema = 'TAXA_PARCELAMENTO'
@@ -111,29 +114,29 @@ valor_centavos = (taxa_percentual + taxa_fixa)
 status = PENDENTE_FATURA
 
 ```yaml
-→ Transparência total no extrato do titular.
+â†’ TransparÃªncia total no extrato do titular.
 ```
 
 ---
 
-# 🎨 5. Telas relacionadas
+# ðŸŽ¨ 5. Telas relacionadas
 
-## 5.1 Configuração Geral do Cartão Conexão
+## 5.1 ConfiguraÃ§Ã£o Geral do CartÃ£o ConexÃ£o
 Nova rota no Admin:
 
 /admin/financeiro/credito-conexao/configuracoes
 
 ```yaml
-Terá:
+TerÃ¡:
 
-- Definições globais por tipo de conta  
-- Configurações de parcelamento  
+- DefiniÃ§Ãµes globais por tipo de conta  
+- ConfiguraÃ§Ãµes de parcelamento  
 - CRUD da tabela `credito_conexao_regras_parcelas`
 ```
 
 ---
 
-# 🔜 6. Próxima Etapa de Implementação
+# ðŸ”œ 6. PrÃ³xima Etapa de ImplementaÃ§Ã£o
 
 Agora que o fluxo principal funciona:
 
@@ -141,20 +144,20 @@ Agora que o fluxo principal funciona:
 2. Criar rota CRUD (API).  
 3. Criar tela Admin para cadastrar:
    - quantidade de parcelas  
-   - valor mínimo  
+   - valor mÃ­nimo  
    - taxa %  
    - taxa fixa  
    - centro de custo e categoria  
    - ativo/inativo  
 4. Ajustar fechamento de fatura para aplicar taxa.  
-5. Ajustar frente de caixa para permitir seleção opcional de parcelas.
+5. Ajustar frente de caixa para permitir seleÃ§Ã£o opcional de parcelas.
 
 ---
 
-# 📌 7. Observações
+# ðŸ“Œ 7. ObservaÃ§Ãµes
 
-- As regras **não interferem** nas contas (titulares).  
-- Parcelamento **não afeta limite do cartão**, mas taxa sim deve ser contabilizada.  
-- Taxas são receitas internas e precisam ir para o módulo financeiro.
+- As regras **nÃ£o interferem** nas contas (titulares).  
+- Parcelamento **nÃ£o afeta limite do cartÃ£o**, mas taxa sim deve ser contabilizada.  
+- Taxas sÃ£o receitas internas e precisam ir para o mÃ³dulo financeiro.
 
 ---

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,7 +88,66 @@ function addDaysISODate(days: number): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function competenciaFromDate(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return value.slice(0, 7);
+}
+
+function addCompetencia(base: string, offset: number): string {
+  const [anoStr, mesStr] = base.split("-");
+  const ano = Number(anoStr);
+  const mes = Number(mesStr);
+  if (!Number.isFinite(ano) || !Number.isFinite(mes)) return base;
+  const d = new Date(Date.UTC(ano, mes - 1 + offset, 1));
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${yyyy}-${mm}`;
+}
+
+function buildVencimentoFromCompetencia(
+  competencia: string,
+  diaVencimento: number | null
+): string {
+  const [anoStr, mesStr] = competencia.split("-");
+  const ano = Number(anoStr);
+  const mes = Number(mesStr);
+  const maxDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const diaRaw =
+    diaVencimento && Number.isFinite(diaVencimento) ? Math.trunc(diaVencimento) : 12;
+  const dia = Math.min(Math.max(diaRaw, 1), maxDia);
+  const mm = String(mes).padStart(2, "0");
+  const dd = String(dia).padStart(2, "0");
+  return `${ano}-${mm}-${dd}`;
+}
+
+function distribuirCentavos(total: number, parcelas: number): number[] {
+  const n = Math.max(1, Math.trunc(parcelas));
+  const base = Math.floor(total / n);
+  let resto = total - base * n;
+  const valores = new Array<number>(n).fill(base);
+  for (let i = 0; i < n && resto > 0; i++) {
+    valores[i] += 1;
+    resto -= 1;
+  }
+  return valores;
+}
+
+function isCartaoConexaoForma(
+  formaPagamento: string | null,
+  formaPagamentoCodigo: string | null
+): boolean {
+  const forma = (formaPagamento ?? "").toUpperCase();
+  const codigo = (formaPagamentoCodigo ?? "").toUpperCase();
+  return forma === "CARTAO_CONEXAO" || codigo.includes("CARTAO_CONEXAO");
+}
+
 type CartaoTipoTransacao = "CREDITO_AVISTA" | "CREDITO_PARCELADO";
+
+type ContaConexaoResumo = {
+  id: number;
+  pessoa_titular_id: number;
+  dia_vencimento: number | null;
+};
 
 type VendaItemInsert = {
   venda_id: number;
@@ -168,6 +228,14 @@ export async function POST(req: Request) {
       bodyUnknown.forma_pagamento_codigo ?? bodyUnknown.formaPagamentoCodigo
     );
     const statusPagamento = asString(bodyUnknown.status_pagamento ?? bodyUnknown.statusPagamento) ?? "PAGO";
+    const taxaCartaoConexaoCentavos =
+      asInt(
+        bodyUnknown.taxa_cartao_conexao_centavos ?? bodyUnknown.taxaCartaoConexaoCentavos
+      ) ?? 0;
+    const cartaoConexaoTipoConta = asString(
+      bodyUnknown.cartao_conexao_tipo_conta ?? bodyUnknown.cartaoConexaoTipoConta
+    );
+    const isCartaoConexao = isCartaoConexaoForma(formaPagamento, formaPagamentoCodigo);
 
     if (!clientePessoaId || !tipoVenda || !valorTotalCentavos || !formaPagamento) {
       return NextResponse.json(
@@ -193,6 +261,19 @@ export async function POST(req: Request) {
 
     const contaConexaoId = asInt(bodyUnknown.conta_conexao_id ?? bodyUnknown.contaConexaoId);
     const numeroParcelas = asInt(bodyUnknown.numero_parcelas ?? bodyUnknown.numeroParcelas) ?? 1;
+
+    if (isCartaoConexao && (!contaConexaoId || contaConexaoId <= 0)) {
+      return NextResponse.json(
+        { ok: false, error: "conta_conexao_id_obrigatorio" },
+        { status: 400 }
+      );
+    }
+    if (isCartaoConexao && numeroParcelas < 1) {
+      return NextResponse.json(
+        { ok: false, error: "numero_parcelas_invalido" },
+        { status: 400 }
+      );
+    }
 
     const itensUnknown = bodyUnknown.itens;
 
@@ -552,6 +633,139 @@ export async function POST(req: Request) {
           { ok: false, error: "falha_insert_cartao_recebivel", details: recErr.message },
           { status: 500 }
         );
+      }
+    }
+
+    if (isCartaoConexao && contaConexaoId && valorTotalCentavos > 0) {
+      const { data: contaRow, error: contaErr } = await supabase
+        .from("credito_conexao_contas")
+        .select("id, pessoa_titular_id, dia_vencimento")
+        .eq("id", contaConexaoId)
+        .maybeSingle();
+
+      if (contaErr || !contaRow) {
+        await rollbackVenda();
+        return NextResponse.json(
+          { ok: false, error: "conta_conexao_invalida", details: contaErr?.message ?? null },
+          { status: 400 }
+        );
+      }
+
+      const conta = contaRow as ContaConexaoResumo;
+      const pessoaTitularId = Number(conta.pessoa_titular_id);
+      const pessoaCobrancaId =
+        Number.isFinite(pessoaTitularId) && pessoaTitularId > 0
+          ? pessoaTitularId
+          : clientePessoaId;
+      const competenciaBase = competenciaFromDate(todayISODate()) ?? new Date().toISOString().slice(0, 7);
+      const parcelas = Math.max(1, numeroParcelas);
+      const totalVendaCentavos = Math.max(0, valorTotalCentavos);
+      const taxaTotalCentavos = Math.max(0, taxaCartaoConexaoCentavos);
+      const baseTotalCentavos = Math.max(0, totalVendaCentavos - taxaTotalCentavos);
+      const parcelasBase = distribuirCentavos(baseTotalCentavos, parcelas);
+      const parcelasTaxa = distribuirCentavos(taxaTotalCentavos, parcelas);
+      const cobrancasCriadas: number[] = [];
+
+      const rollbackCartaoConexao = async () => {
+        if (cobrancasCriadas.length === 0) return;
+        await supabase.from("credito_conexao_lancamentos").delete().in("cobranca_id", cobrancasCriadas);
+        await supabase.from("cobrancas").delete().in("id", cobrancasCriadas);
+      };
+
+      for (let i = 0; i < parcelas; i++) {
+        const competencia = addCompetencia(competenciaBase, i);
+        const valorBase = parcelasBase[i] ?? 0;
+        const valorTaxa = parcelasTaxa[i] ?? 0;
+        const valorParcela = valorBase + valorTaxa;
+        const vencimento = buildVencimentoFromCompetencia(
+          competencia,
+          conta.dia_vencimento ?? null
+        );
+
+        const descricao =
+          parcelas > 1 ? `Venda Loja #${vendaId} (${i + 1}/${parcelas})` : `Venda Loja #${vendaId}`;
+
+        const { data: cobranca, error: cobrErr } = await supabase
+          .from("cobrancas")
+          .insert({
+            pessoa_id: pessoaCobrancaId,
+            descricao,
+            valor_centavos: valorParcela,
+            vencimento,
+            status: "PENDENTE",
+            origem_tipo: "LOJA_VENDA",
+            origem_id: vendaId,
+            origem_subtipo: "CARTAO_CONEXAO",
+            competencia_ano_mes: competencia,
+          })
+          .select("id")
+          .single();
+
+        if (cobrErr || !cobranca) {
+          await rollbackCartaoConexao();
+          await rollbackVenda();
+          return NextResponse.json(
+            { ok: false, error: "falha_criar_cobranca_cartao_conexao", details: cobrErr?.message ?? null },
+            { status: 500 }
+          );
+        }
+
+        const cobrancaId = Number((cobranca as { id?: number }).id);
+        if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) {
+          await rollbackCartaoConexao();
+          await rollbackVenda();
+          return NextResponse.json(
+            { ok: false, error: "cobranca_id_invalido" },
+            { status: 500 }
+          );
+        }
+
+        cobrancasCriadas.push(cobrancaId);
+
+        const composicaoJson: Record<string, unknown> = {
+          origem: "LOJA_PARCELADO",
+          venda_id: vendaId,
+          parcela_numero: i + 1,
+          total_parcelas: parcelas,
+          competencia,
+          valor_parcela_centavos: valorParcela,
+          valor_parcela_brl: (valorParcela / 100).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }),
+          valor_base_centavos: valorBase,
+          taxa_centavos: valorTaxa,
+          valor_total_venda_centavos: totalVendaCentavos,
+          taxa_total_centavos: taxaTotalCentavos,
+          cartao_conexao_tipo_conta: cartaoConexaoTipoConta ?? null,
+          itens: itensInseridos.map((item) => ({
+            produto_id: item.produto_id,
+            variante_id: item.variante_id,
+            quantidade: item.quantidade,
+            total_centavos: item.total_centavos,
+          })),
+        };
+
+        try {
+          await upsertLancamentoPorCobranca({
+            cobrancaId,
+            contaConexaoId,
+            competencia,
+            valorCentavos: valorParcela,
+            descricao,
+            origemSistema: "LOJA",
+            origemId: vendaId,
+            composicaoJson,
+          });
+        } catch (err) {
+          await rollbackCartaoConexao();
+          await rollbackVenda();
+          const msg = err instanceof Error ? err.message : "erro_desconhecido";
+          return NextResponse.json(
+            { ok: false, error: "falha_upsert_lancamento_cartao_conexao", details: msg },
+            { status: 500 }
+          );
+        }
       }
     }
 
