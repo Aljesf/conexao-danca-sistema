@@ -35,6 +35,9 @@ export default function EscolaCalendarioLayout({
               <Link className={pillNeutral} href="/escola/calendario/feriados">
                 Feriados
               </Link>
+              <Link className={pillNeutral} href="/escola/academico/periodos-letivos">
+                Periodo letivo
+              </Link>
               <Link className={pillAccent} href="/admin/config/escola">
                 Configuracao da escola
               </Link>

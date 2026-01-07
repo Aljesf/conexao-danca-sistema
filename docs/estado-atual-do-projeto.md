@@ -111,3 +111,23 @@ Paginas:
 Pendencias:
 - Aplicar migrations no Supabase e validar feed/grade na UI.
 - Rodar npm run lint e npm run build.
+
+---
+
+## Atualizacoes recentes (Academico - Periodos Letivos - 2026-01-06)
+
+SQL concluido:
+- 20260106_0004_periodos_letivos_faixas_e_excecoes.sql (periodos_letivos_faixas)
+
+APIs concluidas:
+- GET/POST /api/academico/periodos-letivos
+- GET/PUT /api/academico/periodos-letivos/:id
+- POST /api/academico/periodos-letivos/:id/faixas
+- POST /api/academico/periodos-letivos/:id/excecoes
+
+Paginas:
+- /escola/academico/periodos-letivos
+- /escola/academico/periodos-letivos/[id]
+
+Navegacao:
+- Link no calendario: /escola/academico/periodos-letivos
