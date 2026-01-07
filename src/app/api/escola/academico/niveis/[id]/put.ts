@@ -4,13 +4,13 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
 import { resolveParamsId } from "../../_helpers/params";
 
-const PayloadSchema = z.object({
-  nome: z.string().min(1),
-  faixa_etaria_sugerida: z.string().nullable().optional(),
-  pre_requisito_nivel_id: z.coerce.number().int().nullable().optional(),
+const UpdateNivelSchema = z.object({
+  nome: z.string().min(2).optional(),
   observacoes: z.string().nullable().optional(),
-  idade_minima: z.coerce.number().int().nullable().optional(),
-  idade_maxima: z.coerce.number().int().nullable().optional(),
+  faixa_etaria_sugerida: z.string().nullable().optional(),
+  idade_minima: z.number().int().nonnegative().nullable().optional(),
+  idade_maxima: z.number().int().nonnegative().nullable().optional(),
+  pre_requisito_nivel_id: z.number().int().positive().nullable().optional(),
 });
 
 async function requireAdmin() {
@@ -46,18 +46,13 @@ export async function handlePut(req: Request, params: { id: string } | Promise<{
   }
 
   const body = await req.json().catch(() => null);
-  const parsed = PayloadSchema.safeParse(body);
+  const parsed = UpdateNivelSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "PAYLOAD_INVALIDO", issues: parsed.error.issues }, { status: 400 });
   }
 
-  const updatePayload = {
-    nome: parsed.data.nome,
-    faixa_etaria_sugerida: parsed.data.faixa_etaria_sugerida ?? null,
-    pre_requisito_nivel_id: parsed.data.pre_requisito_nivel_id ?? null,
-    observacoes: parsed.data.observacoes ?? null,
-    idade_minima: parsed.data.idade_minima ?? null,
-    idade_maxima: parsed.data.idade_maxima ?? null,
+  const updatePayload: Record<string, unknown> = {
+    ...parsed.data,
     updated_at: new Date().toISOString(),
   };
 

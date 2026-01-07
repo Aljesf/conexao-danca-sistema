@@ -4,15 +4,12 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
 import { resolveParamsId } from "../../_helpers/params";
 
-const PayloadSchema = z.object(
-  {
-    nome: z.string().min(1),
-    descricao: z.string().nullable().optional(),
-    ordem: z.coerce.number().int().optional(),
-    obrigatorio: z.coerce.boolean().optional(),
-  },
-  { strict: true }
-);
+const UpdateModuloSchema = z.object({
+  nome: z.string().min(2).optional(),
+  descricao: z.string().nullable().optional(),
+  ordem: z.number().int().nonnegative().optional(),
+  obrigatorio: z.boolean().optional(),
+});
 
 async function requireAdmin() {
   const supabase = await getSupabaseRoute();
@@ -42,19 +39,15 @@ export async function handlePut(req: Request, params: { id: string } | Promise<{
   }
 
   const body = await req.json().catch(() => null);
-  const parsed = PayloadSchema.safeParse(body);
+  const parsed = UpdateModuloSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "PAYLOAD_INVALIDO", issues: parsed.error.issues }, { status: 400 });
   }
 
   const updatePayload: Record<string, unknown> = {
-    nome: parsed.data.nome,
-    descricao: parsed.data.descricao ?? null,
+    ...parsed.data,
     updated_at: new Date().toISOString(),
   };
-
-  if (typeof parsed.data.ordem === "number") updatePayload.ordem = parsed.data.ordem;
-  if (typeof parsed.data.obrigatorio === "boolean") updatePayload.obrigatorio = parsed.data.obrigatorio;
 
   let adminClient;
   try {

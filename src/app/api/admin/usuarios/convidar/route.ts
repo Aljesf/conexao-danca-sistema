@@ -125,32 +125,54 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: authExistente, error: authExistenteErr } = await admin.auth.admin.getUserByEmail(email);
-    if (authExistenteErr) {
-      const status = (authExistenteErr as { status?: number } | null)?.status;
-      if (!status || status !== 404) {
+    const { data: pessoaPorEmail, error: pessoaEmailErr } = await admin
+      .from("pessoas")
+      .select("id")
+      .ilike("email", email)
+      .maybeSingle();
+
+    if (pessoaEmailErr) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "FALHA_DUP_EMAIL",
+          message: "Falha ao checar duplicidade por email.",
+          details: pessoaEmailErr,
+        },
+        { status: 500 },
+      );
+    }
+
+    if (pessoaPorEmail?.id && pessoaPorEmail.id !== pessoaId) {
+      const { data: profilePorEmail, error: dupEmailErr } = await admin
+        .from("profiles")
+        .select("user_id, pessoa_id")
+        .eq("pessoa_id", pessoaPorEmail.id)
+        .maybeSingle();
+
+      if (dupEmailErr) {
         return NextResponse.json(
           {
             ok: false,
             code: "FALHA_DUP_EMAIL",
             message: "Falha ao checar duplicidade por email.",
-            details: authExistenteErr,
+            details: dupEmailErr,
           },
           { status: 500 },
         );
       }
-    }
 
-    if (authExistente?.user) {
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "USUARIO_JA_EXISTE",
-          message: "Ja existe usuario cadastrado com este email.",
-          details: { user_id: authExistente.user.id, email },
-        },
-        { status: 409 },
-      );
+      if (profilePorEmail?.user_id) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "USUARIO_JA_EXISTE",
+            message: "Ja existe usuario cadastrado com este email.",
+            details: { user_id: profilePorEmail.user_id, pessoa_id: profilePorEmail.pessoa_id },
+          },
+          { status: 409 },
+        );
+      }
     }
 
     const fallbackSiteUrl =
@@ -165,13 +187,15 @@ export async function POST(req: Request) {
     // 4) Criar convite no Supabase Auth (SERVICE ROLE)
     try {
       admin = getSupabaseAdmin();
-    } catch (e) {
+    } catch (e: unknown) {
+      console.error("SERVICE ROLE NAO CONFIGURADA:", e);
       return NextResponse.json(
         {
           ok: false,
           code: "SERVICE_ROLE_NAO_CONFIGURADA",
-          message: "SUPABASE_SERVICE_ROLE_KEY nao configurada no ambiente. Convite nao pode ser enviado.",
-          details: String(e),
+          message:
+            "SUPABASE_SERVICE_ROLE_KEY nao configurada no ambiente. Nao e possivel enviar convite pelo Supabase Auth.",
+          details: e instanceof Error ? { message: e.message, stack: e.stack } : String(e),
         },
         { status: 500 },
       );
@@ -180,7 +204,29 @@ export async function POST(req: Request) {
     const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email);
 
     if (inviteErr) {
+      const msg = (inviteErr as { message?: string } | null)?.message?.toLowerCase?.() ?? "";
+      const status = (inviteErr as { status?: number } | null)?.status;
+
+      const pareceDuplicado =
+        msg.includes("already registered") ||
+        msg.includes("already exists") ||
+        msg.includes("user exists") ||
+        msg.includes("duplicate") ||
+        status === 422;
+
       console.error("ERRO SUPABASE INVITE:", inviteErr);
+
+      if (pareceDuplicado) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: "USUARIO_JA_EXISTE_AUTH",
+            message: "Ja existe usuario no Supabase Auth com este email.",
+            details: inviteErr,
+          },
+          { status: 409 },
+        );
+      }
 
       return NextResponse.json(
         {
@@ -196,6 +242,7 @@ export async function POST(req: Request) {
     const authUserId = invited?.user?.id;
 
     if (!authUserId) {
+      console.error("INVITE SEM USER.ID:", invited);
       return NextResponse.json(
         {
           ok: false,

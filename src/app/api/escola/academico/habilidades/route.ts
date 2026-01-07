@@ -7,7 +7,7 @@ const CreateHabilidadeSchema = z.object({
   curso_id: z.number().int().positive(),
   nivel_id: z.number().int().positive(),
   modulo_id: z.number().int().positive(),
-  nome: z.string().trim().min(1),
+  nome: z.string().trim().min(2),
   tipo: z.string().optional().nullable(),
   descricao: z.string().optional().nullable(),
   criterio_avaliacao: z.string().optional().nullable(),
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     tipo: asText(parsed.data.tipo),
     descricao: asText(parsed.data.descricao),
     criterio_avaliacao: asText(parsed.data.criterio_avaliacao),
-    ordem: parsed.data.ordem ?? 1,
+    ordem: parsed.data.ordem ?? 0,
     updated_at: new Date().toISOString(),
   };
 

@@ -5,7 +5,7 @@ import { getSupabaseRoute } from "@/lib/supabaseRoute";
 
 const CreateNivelSchema = z.object({
   curso_id: z.number().int().positive(),
-  nome: z.string().trim().min(1),
+  nome: z.string().trim().min(2),
   faixa_etaria_sugerida: z.string().optional().nullable(),
   pre_requisito_nivel_id: z.number().int().positive().nullable().optional(),
   observacoes: z.string().optional().nullable(),

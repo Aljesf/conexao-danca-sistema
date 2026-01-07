@@ -6,7 +6,7 @@ import { getSupabaseRoute } from "@/lib/supabaseRoute";
 const CreateModuloSchema = z.object({
   curso_id: z.number().int().positive(),
   nivel_id: z.number().int().positive(),
-  nome: z.string().trim().min(1),
+  nome: z.string().trim().min(2),
   descricao: z.string().optional().nullable(),
   ordem: z.number().int().nonnegative().optional(),
   obrigatorio: z.boolean().optional(),
@@ -76,8 +76,8 @@ export async function POST(req: Request) {
     nivel_id: parsed.data.nivel_id,
     nome: parsed.data.nome.trim(),
     descricao: asText(parsed.data.descricao),
-    ordem: parsed.data.ordem ?? 1,
-    obrigatorio: parsed.data.obrigatorio ?? true,
+    ordem: parsed.data.ordem ?? 0,
+    obrigatorio: parsed.data.obrigatorio ?? false,
     updated_at: new Date().toISOString(),
   };
 

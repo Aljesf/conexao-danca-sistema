@@ -4,16 +4,13 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
 import { resolveParamsId } from "../../_helpers/params";
 
-const PayloadSchema = z.object(
-  {
-    nome: z.string().min(1),
-    tipo: z.string().nullable().optional(),
-    descricao: z.string().nullable().optional(),
-    criterio_avaliacao: z.string().nullable().optional(),
-    ordem: z.coerce.number().int().optional(),
-  },
-  { strict: true }
-);
+const UpdateHabilidadeSchema = z.object({
+  nome: z.string().min(2).optional(),
+  descricao: z.string().nullable().optional(),
+  criterio_avaliacao: z.string().nullable().optional(),
+  ordem: z.number().int().nonnegative().optional(),
+  tipo: z.string().nullable().optional(),
+});
 
 async function requireAdmin() {
   const supabase = await getSupabaseRoute();
@@ -43,20 +40,15 @@ export async function handlePut(req: Request, params: { id: string } | Promise<{
   }
 
   const body = await req.json().catch(() => null);
-  const parsed = PayloadSchema.safeParse(body);
+  const parsed = UpdateHabilidadeSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "PAYLOAD_INVALIDO", issues: parsed.error.issues }, { status: 400 });
   }
 
   const updatePayload: Record<string, unknown> = {
-    nome: parsed.data.nome,
-    tipo: parsed.data.tipo ?? null,
-    descricao: parsed.data.descricao ?? null,
-    criterio_avaliacao: parsed.data.criterio_avaliacao ?? null,
+    ...parsed.data,
     updated_at: new Date().toISOString(),
   };
-
-  if (typeof parsed.data.ordem === "number") updatePayload.ordem = parsed.data.ordem;
 
   let adminClient;
   try {

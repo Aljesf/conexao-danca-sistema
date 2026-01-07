@@ -746,7 +746,7 @@ export default function CursosPage() {
             {filtradas.map((curso) => {
               const niveisDoCurso = niveis.filter((n) => n.cursoId === curso.id);
               return (
-                <div key={curso.id} className="rounded-lg border border-slate-100 bg-white p-4 shadow-sm">
+                <div key={`curso-${curso.id}`} className="rounded-lg border border-slate-100 bg-white p-4 shadow-sm">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="text-lg font-semibold text-slate-900">{curso.nome}</div>
@@ -825,7 +825,7 @@ export default function CursosPage() {
                             {niveisDoCurso
                               .filter((n) => n.id !== nivelEditingId)
                               .map((n) => (
-                                <option key={n.id} value={n.id}>
+                                <option key={`nivel-${n.id}`} value={n.id}>
                                   {n.nome}
                                 </option>
                               ))}
@@ -869,7 +869,7 @@ export default function CursosPage() {
                         : "Nenhum";
 
                       return (
-                        <div key={nivel.id} className="rounded-md bg-slate-50 p-3 shadow-sm">
+                        <div key={`nivel-${nivel.id}`} className="rounded-md bg-slate-50 p-3 shadow-sm">
                           <div className="flex items-start justify-between">
                             <div>
                               <div className="font-semibold text-slate-900">{nivel.nome}</div>
@@ -977,7 +977,7 @@ export default function CursosPage() {
                             {conteudosDoNivel.map((ct) => {
                               const habs = habilidades.filter((h) => h.conteudoId === ct.id);
                               return (
-                                <div key={ct.id} className="rounded-md bg-white p-3 shadow border border-slate-100">
+                                <div key={`conteudo-${ct.id}`} className="rounded-md bg-white p-3 shadow border border-slate-100">
                                   <div className="flex items-start justify-between">
                                     <div>
                                       <div className="font-semibold text-slate-900">{ct.nome}</div>
@@ -1081,7 +1081,7 @@ export default function CursosPage() {
                                   <div className="mt-2 space-y-1">
                                     {habs.length === 0 && <div className="text-sm text-slate-500">Nenhuma habilidade cadastrada.</div>}
                                     {habs.map((h) => (
-                                      <div key={h.id} className="text-sm text-slate-800 flex items-center justify-between">
+                                      <div key={`habilidade-${h.id}`} className="text-sm text-slate-800 flex items-center justify-between">
                                         <div>
                                           <div className="font-semibold">{h.nome}</div>
                                           <div className="text-xs text-slate-500">
