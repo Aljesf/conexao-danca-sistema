@@ -28,13 +28,16 @@ async function requireAdmin() {
   return { ok: true as const, status: 200, supabase };
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const admin = await requireAdmin();
   if (!admin.ok) {
     return NextResponse.json({ ok: false, error: "NAO_AUTORIZADO" }, { status: admin.status });
   }
 
-  const habilidadeId = Number(ctx.params.id);
+  const rawParams = (ctx as { params: Promise<{ id: string }> }).params;
+  const params = rawParams instanceof Promise ? await rawParams : (ctx as { params: { id: string } }).params;
+
+  const habilidadeId = Number(params.id);
   if (!Number.isFinite(habilidadeId)) {
     return NextResponse.json({ ok: false, error: "ID_INVALIDO" }, { status: 400 });
   }
