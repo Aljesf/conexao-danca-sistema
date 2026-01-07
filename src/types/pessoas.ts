@@ -28,6 +28,8 @@ export type EnderecoPessoa = {
   uf: string | null;
   cep: string | null;
   referencia: string | null;
+  cidade_id?: number | null;
+  bairro_id?: number | null;
 };
 
 // ---------------------------------------------

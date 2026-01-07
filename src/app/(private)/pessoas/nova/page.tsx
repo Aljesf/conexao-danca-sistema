@@ -8,6 +8,8 @@ import { AbaMedidasDeclaradas } from "@/components/pessoas/AbaMedidasDeclaradas"
 import { AbaObservacoesGerais } from "@/components/pessoas/AbaObservacoesGerais";
 import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPedagogicas";
 import { AbaVinculos } from "@/components/pessoas/AbaVinculos";
+import { BairroPicker } from "@/components/enderecos/BairroPicker";
+import { CidadePicker } from "@/components/enderecos/CidadePicker";
 
 type Pessoa = {
   id: number;
@@ -60,8 +62,10 @@ export default function NovaPessoaPage() {
   const [logradouro, setLogradouro] = useState("");
   const [numero, setNumero] = useState("");
   const [complemento, setComplemento] = useState("");
-  const [bairro, setBairro] = useState("");
-  const [cidade, setCidade] = useState("");
+  const [cidadeId, setCidadeId] = useState<number | null>(null);
+  const [bairroId, setBairroId] = useState<number | null>(null);
+  const [cidadeSelecionada, setCidadeSelecionada] = useState<{ id: number; nome: string; uf: string } | null>(null);
+  const [bairroSelecionado, setBairroSelecionado] = useState<{ id: number; nome: string; cidade_id: number } | null>(null);
   const [uf, setUf] = useState("");
   const [cep, setCep] = useState("");
   const [referencia, setReferencia] = useState("");
@@ -84,8 +88,10 @@ export default function NovaPessoaPage() {
     setLogradouro("");
     setNumero("");
     setComplemento("");
-    setBairro("");
-    setCidade("");
+    setCidadeId(null);
+    setBairroId(null);
+    setCidadeSelecionada(null);
+    setBairroSelecionado(null);
     setUf("");
     setCep("");
     setReferencia("");
@@ -106,12 +112,11 @@ export default function NovaPessoaPage() {
 
     try {
       const logradouroTrim = logradouro.trim();
-      const bairroTrim = bairro.trim();
-      const cidadeTrim = cidade.trim();
       const ufTrim = uf.trim().toUpperCase();
+      const ufValue = cidadeSelecionada?.uf ?? ufTrim;
 
-      if (!logradouroTrim || !bairroTrim || !cidadeTrim || !ufTrim) {
-        setError("Endereco incompleto. Informe logradouro, bairro, cidade e UF.");
+      if (!logradouroTrim || !cidadeId || !bairroId) {
+        setError("Endereco incompleto. Informe logradouro, cidade e bairro.");
         setSaving(false);
         return;
       }
@@ -157,9 +162,9 @@ export default function NovaPessoaPage() {
           logradouro: logradouroTrim,
           numero: numero.trim() || null,
           complemento: complemento.trim() || null,
-          bairro: bairroTrim,
-          cidade: cidadeTrim,
-          uf: ufTrim,
+          cidade_id: cidadeId,
+          bairro_id: bairroId,
+          uf: ufValue,
           cep: cep.trim() || null,
           referencia: referencia.trim() || null,
         }),
@@ -473,25 +478,33 @@ export default function NovaPessoaPage() {
 
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Bairro *
+                  Cidade *
                 </label>
-                <input
-                  type="text"
-                  value={bairro}
-                  onChange={(e) => setBairro(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                <CidadePicker
+                  valueId={cidadeId}
+                  valueItem={cidadeSelecionada}
+                  onChange={(id, item) => {
+                    setCidadeId(id);
+                    setCidadeSelecionada(item ?? null);
+                    setBairroId(null);
+                    setBairroSelecionado(null);
+                    setUf(item?.uf ?? "");
+                  }}
                 />
               </div>
 
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Cidade *
+                  Bairro *
                 </label>
-                <input
-                  type="text"
-                  value={cidade}
-                  onChange={(e) => setCidade(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                <BairroPicker
+                  cidadeId={cidadeId}
+                  valueId={bairroId}
+                  valueItem={bairroSelecionado}
+                  onChange={(id, item) => {
+                    setBairroId(id);
+                    setBairroSelecionado(item ?? null);
+                  }}
                 />
               </div>
 
@@ -504,6 +517,7 @@ export default function NovaPessoaPage() {
                   value={uf}
                   maxLength={2}
                   onChange={(e) => setUf(e.target.value.toUpperCase())}
+                  readOnly={Boolean(cidadeId)}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm uppercase text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
                 />
               </div>

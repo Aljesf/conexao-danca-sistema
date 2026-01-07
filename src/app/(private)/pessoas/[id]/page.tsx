@@ -10,6 +10,8 @@ import { AbaCuidadosAluno } from "@/components/pessoas/AbaCuidadosAluno";
 import { AbaMedidasDeclaradas } from "@/components/pessoas/AbaMedidasDeclaradas";
 import { AbaObservacoesGerais } from "@/components/pessoas/AbaObservacoesGerais";
 import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPedagogicas";
+import { BairroPicker } from "@/components/enderecos/BairroPicker";
+import { CidadePicker } from "@/components/enderecos/CidadePicker";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import type { EnderecoPessoa, Pessoa } from "@/types/pessoas";
 
@@ -93,6 +95,8 @@ export default function PessoaDetalhesPage() {
 
   const [pessoa, setPessoa] = useState<Pessoa | null>(null);
   const [endereco, setEndereco] = useState<LocalEndereco>(null);
+  const [cidadeSelecionada, setCidadeSelecionada] = useState<{ id: number; nome: string; uf: string } | null>(null);
+  const [bairroSelecionado, setBairroSelecionado] = useState<{ id: number; nome: string; cidade_id: number } | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -120,6 +124,24 @@ export default function PessoaDetalhesPage() {
 
   const [abaAtiva, setAbaAtiva] = useState<AbaId>("dados");
   const [openFoto, setOpenFoto] = useState(false);
+
+  const applyEndereco = (value: LocalEndereco) => {
+    setEndereco(value);
+    const cidadeId = value?.cidade_id ?? null;
+    const bairroId = value?.bairro_id ?? null;
+    const cidadeNome = value?.cidade ?? null;
+    const bairroNome = value?.bairro ?? null;
+    const ufValue = value?.uf ?? "";
+
+    setCidadeSelecionada(
+      cidadeId && cidadeNome ? { id: cidadeId, nome: cidadeNome, uf: ufValue } : null
+    );
+    setBairroSelecionado(
+      bairroId && bairroNome
+        ? { id: bairroId, nome: bairroNome, cidade_id: cidadeId ?? 0 }
+        : null
+    );
+  };
 
   const podeEditar = true;
   useEffect(() => {
@@ -163,7 +185,7 @@ export default function PessoaDetalhesPage() {
         setObservacoes(data.observacoes ?? "");
 
         // endereço vindo da API
-        setEndereco(data.endereco ?? null);
+        applyEndereco(data.endereco ?? null);
       } catch (err: unknown) {
         const msg =
           err instanceof Error
@@ -289,6 +311,28 @@ export default function PessoaDetalhesPage() {
         updatedBy = userData?.user?.id ?? null;
       }
 
+      const enderecoAtivo = Boolean(
+        endereco?.logradouro ||
+          endereco?.numero ||
+          endereco?.complemento ||
+          endereco?.bairro ||
+          endereco?.cidade ||
+          endereco?.uf ||
+          endereco?.cep ||
+          endereco?.referencia ||
+          endereco?.cidade_id ||
+          endereco?.bairro_id
+      );
+
+      if (enderecoAtivo) {
+        const logradouroValue = String(endereco?.logradouro ?? "").trim();
+        if (!logradouroValue || !endereco?.cidade_id || !endereco?.bairro_id) {
+          setErro("Endereco incompleto. Informe logradouro, cidade e bairro.");
+          setSaving(false);
+          return;
+        }
+      }
+
       const res = await fetch(`/api/pessoas/${pessoa.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -305,7 +349,6 @@ export default function PessoaDetalhesPage() {
           naturalidade: naturalidade || null,
           cpf,
           observacoes,
-          endereco,
           updated_by: updatedBy,
         }),
       });
@@ -313,12 +356,42 @@ export default function PessoaDetalhesPage() {
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "Falha ao salvar alterações.");
+        throw new Error(json.error || "Falha ao salvar alteracoes.");
       }
 
       const data = json.data as Pessoa;
       setPessoa(data);
-      setEndereco(data.endereco ?? null);
+      applyEndereco(data.endereco ?? null);
+
+      if (enderecoAtivo) {
+        const logradouroValue = String(endereco?.logradouro ?? "").trim();
+        const ufValue = String(endereco?.uf ?? cidadeSelecionada?.uf ?? "").trim();
+        const enderecoRes = await fetch(`/api/pessoas/${pessoa.id}/endereco`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            logradouro: logradouroValue,
+            numero: endereco?.numero ?? null,
+            complemento: endereco?.complemento ?? null,
+            cidade_id: endereco?.cidade_id ?? null,
+            bairro_id: endereco?.bairro_id ?? null,
+            uf: ufValue,
+            cep: endereco?.cep ?? null,
+            referencia: endereco?.referencia ?? null,
+          }),
+        });
+        const enderecoJson = (await enderecoRes.json().catch(() => null)) as
+          | { endereco?: EnderecoPessoa | null; error?: string; details?: string }
+          | null;
+        if (!enderecoRes.ok) {
+          throw new Error(enderecoJson?.details ?? enderecoJson?.error ?? "Erro ao salvar endereco.");
+        }
+        if (enderecoJson?.endereco) {
+          applyEndereco(enderecoJson.endereco);
+          setPessoa((prev) => (prev ? { ...prev, endereco: enderecoJson.endereco } : prev));
+        }
+      }
+
       setEditMode(false);
     } catch (err: unknown) {
       const msg =
@@ -330,7 +403,6 @@ export default function PessoaDetalhesPage() {
       setSaving(false);
     }
   }
-
   const abas: { id: AbaId; label: string; icon: string }[] = [
     { id: "dados", label: "Dados da pessoa", icon: "" },
     { id: "escolar", label: "Dados escolares", icon: "" },
@@ -469,7 +541,7 @@ export default function PessoaDetalhesPage() {
                           setNacionalidade(pessoa.nacionalidade ?? "");
                           setNaturalidade(pessoa.naturalidade ?? "");
                           setObservacoes(pessoa.observacoes ?? "");
-                          setEndereco(pessoa.endereco ?? null);
+                          applyEndereco(pessoa.endereco ?? null);
                           setEditMode(false);
                         }}
                         className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 md:text-sm"
@@ -952,15 +1024,18 @@ export default function PessoaDetalhesPage() {
                       <div>
                         <p className="text-sm text-slate-400">Bairro</p>
                         {editMode ? (
-                          <input
-                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-                            value={endereco?.bairro ?? ""}
-                            onChange={(e) =>
+                          <BairroPicker
+                            cidadeId={endereco?.cidade_id ?? null}
+                            valueId={endereco?.bairro_id ?? null}
+                            valueItem={bairroSelecionado}
+                            onChange={(id, item) => {
+                              setBairroSelecionado(item ?? null);
                               setEndereco((old) => ({
                                 ...(old ?? { pessoa_id: pessoa.id }),
-                                bairro: e.target.value || null,
-                              }))
-                            }
+                                bairro_id: id,
+                                bairro: item?.nome ?? null,
+                              }));
+                            }}
                           />
                         ) : (
                           <p className="mt-1">{endereco?.bairro || "-"}</p>
@@ -1010,15 +1085,21 @@ export default function PessoaDetalhesPage() {
                       <div>
                         <p className="text-sm text-slate-400">Cidade</p>
                         {editMode ? (
-                          <input
-                            className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-                            value={endereco?.cidade ?? ""}
-                            onChange={(e) =>
+                          <CidadePicker
+                            valueId={endereco?.cidade_id ?? null}
+                            valueItem={cidadeSelecionada}
+                            onChange={(id, item) => {
+                              setCidadeSelecionada(item ?? null);
+                              setBairroSelecionado(null);
                               setEndereco((old) => ({
                                 ...(old ?? { pessoa_id: pessoa.id }),
-                                cidade: e.target.value || null,
-                              }))
-                            }
+                                cidade_id: id,
+                                cidade: item?.nome ?? null,
+                                uf: item?.uf ?? old?.uf ?? null,
+                                bairro_id: null,
+                                bairro: null,
+                              }));
+                            }}
                           />
                         ) : (
                           <p className="mt-1">{endereco?.cidade || "-"}</p>
@@ -1032,6 +1113,7 @@ export default function PessoaDetalhesPage() {
                             <input
                               className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
                               value={endereco?.uf ?? ""}
+                              readOnly={Boolean(endereco?.cidade_id)}
                               onChange={(e) =>
                                 setEndereco((old) => ({
                                   ...(old ?? { pessoa_id: pessoa.id }),
@@ -1168,6 +1250,7 @@ export default function PessoaDetalhesPage() {
     </div>
   );
 }
+
 
 
 
