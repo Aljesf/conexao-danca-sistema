@@ -5,6 +5,25 @@ import PessoaLookup, { PessoaLookupItem } from "@/components/PessoaLookup";
 
 type RoleSistema = { id: string; codigo: string; nome: string; ativo: boolean };
 
+type ConviteResponse =
+  | { ok: true; message?: string; invite?: { redirectTo?: string } }
+  | { ok: false; code?: string; message?: string; error?: string; details?: unknown };
+
+function toIntOrNull(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  if (typeof value === "string") {
+    const n = Number(value.trim());
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function asText(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
 export default function NovoUsuarioPage() {
   const [pessoa, setPessoa] = useState<PessoaLookupItem | null>(null);
   const [email, setEmail] = useState<string>("");
@@ -17,6 +36,15 @@ export default function NovoUsuarioPage() {
   const [redirectTo, setRedirectTo] = useState<string | null>(null);
 
   const rolesAtivas = useMemo(() => roles.filter((r) => r.ativo), [roles]);
+  const pessoaLabel = useMemo(() => {
+    if (!pessoa) return null;
+    const parts: string[] = [`ID: ${pessoa.id}`];
+    const cpf = asText(pessoa.cpf);
+    const emailValue = asText(pessoa.email);
+    if (cpf) parts.push(`CPF: ${cpf}`);
+    if (emailValue) parts.push(`Email: ${emailValue}`);
+    return parts.join(" | ");
+  }, [pessoa]);
 
   useEffect(() => {
     async function carregarRoles() {
@@ -44,12 +72,14 @@ export default function NovoUsuarioPage() {
     setMensagem(null);
     setRedirectTo(null);
 
-    if (!pessoa) {
-      setErro("Selecione a pessoa.");
+    const pessoaId = toIntOrNull(pessoa?.id);
+    if (!pessoaId) {
+      setErro("Selecione uma pessoa valida antes de enviar o convite.");
       return;
     }
-    if (!email.trim()) {
-      setErro("Informe o email do usuário.");
+    const emailNorm = email.trim().toLowerCase();
+    if (!emailNorm || !emailNorm.includes("@")) {
+      setErro("Informe um email valido.");
       return;
     }
     if (selecionadas.length === 0) {
@@ -63,22 +93,28 @@ export default function NovoUsuarioPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pessoa_id: pessoa.id,
-          email: email.trim(),
+          pessoa_id: pessoaId,
+          email: emailNorm,
           roles_ids: selecionadas,
           is_admin: isAdmin,
         }),
       });
 
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || json?.ok === false) {
-        const msg = json?.error || json?.details || `Falha ao enviar convite (status ${res.status})`;
-        setErro(msg);
+      const json = (await res.json().catch(() => null)) as ConviteResponse | null;
+      if (!res.ok || !json || json.ok === false) {
+        const code = json && "code" in json && json.code ? json.code : "ERRO";
+        const message =
+          json && "message" in json && json.message
+            ? json.message
+            : json && "error" in json && json.error
+              ? json.error
+              : `Falha ao enviar convite (status ${res.status})`;
+        setErro(`${code}: ${message}`);
         return;
       }
 
-      setMensagem("Convite enviado para o e-mail. A pessoa deve abrir o link e definir a senha.");
-      setRedirectTo(json?.invite?.redirectTo || null);
+      setMensagem(json.message ?? "Convite enviado para o e-mail. A pessoa deve abrir o link e definir a senha.");
+      setRedirectTo(json.invite?.redirectTo || null);
       setPessoa(null);
       setEmail("");
       setIsAdmin(false);
@@ -112,6 +148,7 @@ export default function NovoUsuarioPage() {
           onChange={setPessoa}
           ctaNovaPessoaHref="/pessoas/nova"
         />
+        {pessoaLabel ? <div style={{ fontSize: 13, opacity: 0.75 }}>{pessoaLabel}</div> : null}
 
         <div>
           <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
@@ -215,3 +252,4 @@ export default function NovoUsuarioPage() {
     </div>
   );
 }
+

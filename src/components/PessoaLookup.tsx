@@ -12,6 +12,25 @@ export type PessoaLookupItem = {
   ativo: boolean | null;
 };
 
+function asText(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function formatPessoaInfo(pessoa: PessoaLookupItem): string {
+  const parts: string[] = [`ID: ${pessoa.id}`];
+  const email = asText(pessoa.email);
+  const cpf = asText(pessoa.cpf);
+  const telefone = asText(pessoa.telefone);
+
+  if (email) parts.push(`Email: ${email}`);
+  if (cpf) parts.push(`CPF: ${cpf}`);
+  if (telefone) parts.push(`Tel: ${telefone}`);
+
+  return parts.join(" | ");
+}
+
 type Props = {
   label?: string;
   placeholder?: string;
@@ -125,9 +144,7 @@ export default function PessoaLookup({
           }}
         >
           <div style={{ fontWeight: 700 }}>{value.nome}</div>
-          <div style={{ fontSize: 13, opacity: 0.8 }}>
-            ID {value.id} â€¢ {value.email ?? "sem e-mail"} â€¢ {value.cpf ?? "sem CPF"}
-          </div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>{formatPessoaInfo(value)}</div>
           <button
             onClick={() => onChange(null)}
             style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(0,0,0,0.12)" }}
@@ -152,9 +169,7 @@ export default function PessoaLookup({
               }}
             >
               <div style={{ fontWeight: 650 }}>{p.nome}</div>
-              <div style={{ fontSize: 13, opacity: 0.8 }}>
-                ID {p.id} â€¢ {p.email ?? "sem e-mail"} â€¢ {p.cpf ?? "sem CPF"} â€¢ {p.telefone ?? "sem telefone"}
-              </div>
+              <div style={{ fontSize: 13, opacity: 0.8 }}>{formatPessoaInfo(p)}</div>
             </button>
           ))}
         </div>
