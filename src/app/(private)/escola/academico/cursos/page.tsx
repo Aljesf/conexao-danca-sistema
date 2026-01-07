@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import FormCard from "@/components/FormCard";
 import FormInput from "@/components/FormInput";
 import PrimaryButton from "@/components/PrimaryButton";
@@ -12,6 +12,14 @@ type Curso = {
   metodologia: string;
   descricao: string;
   ativo: boolean;
+};
+
+type CursoApi = {
+  id: number;
+  nome: string;
+  metodologia: string | null;
+  observacoes: string | null;
+  situacao: string | null;
 };
 
 type Nivel = {
@@ -45,11 +53,6 @@ type Habilidade = {
   ordem?: number;
 };
 
-const seedsCursos: Curso[] = [
-  { id: 1, nome: "Ballet", metodologia: "Vaganova", descricao: "Base classica com progressao tecnica estruturada.", ativo: true },
-  { id: 2, nome: "Jazz", metodologia: "Jazz for Fun", descricao: "Estilo moderno com foco em expressao corporal.", ativo: true },
-];
-
 const seedsNiveis: Nivel[] = [
   { id: 1, cursoId: 1, nome: "Nivel 1", idadeMinima: 6, idadeMaxima: 8, faixaEtariaSugerida: "6-8 anos" },
   { id: 2, cursoId: 1, nome: "Nivel 2", idadeMinima: 8, idadeMaxima: 10, faixaEtariaSugerida: "8-10 anos" },
@@ -80,10 +83,14 @@ function nextId<T extends { id: number }>(items: T[]) {
 }
 
 export default function CursosPage() {
-  const [cursos, setCursos] = useState<Curso[]>(seedsCursos);
+  const [cursos, setCursos] = useState<Curso[]>([]);
   const [niveis, setNiveis] = useState<Nivel[]>(seedsNiveis);
   const [conteudos, setConteudos] = useState<Conteudo[]>(seedsConteudos);
   const [habilidades, setHabilidades] = useState<Habilidade[]>(seedsHabilidades);
+
+  const [cursosLoading, setCursosLoading] = useState(true);
+  const [cursosErro, setCursosErro] = useState<string | null>(null);
+  const [cursosMsg, setCursosMsg] = useState<string | null>(null);
 
   const [filtro, setFiltro] = useState("");
   const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
@@ -116,36 +123,120 @@ export default function CursosPage() {
     return cursos.filter((c) => [c.nome, c.metodologia, c.descricao].some((v) => (v || "").toLowerCase().includes(q)));
   }, [cursos, filtro]);
 
+  function mapCurso(row: CursoApi): Curso {
+    return {
+      id: row.id,
+      nome: row.nome,
+      metodologia: row.metodologia ?? "",
+      descricao: row.observacoes ?? "",
+      ativo: (row.situacao ?? "Ativo") === "Ativo",
+    };
+  }
+
+  async function carregarCursos() {
+    setCursosLoading(true);
+    setCursosErro(null);
+    try {
+      const res = await fetch("/api/escola/academico/cursos");
+      const json = (await res.json()) as { ok?: boolean; data?: CursoApi[]; error?: string; message?: string };
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.message ?? json?.error ?? "Falha ao carregar cursos");
+      }
+      const lista = Array.isArray(json.data) ? json.data : [];
+      setCursos(lista.map(mapCurso));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Erro ao carregar cursos";
+      setCursosErro(msg);
+    } finally {
+      setCursosLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void carregarCursos();
+  }, []);
+
   function resetCursoForm() {
     setCursoForm({ nome: "", metodologia: "", descricao: "", ativo: true });
     setEditingCurso(null);
     setShowCursoForm(false);
   }
-  function salvarCurso(e: React.FormEvent) {
+  async function salvarCurso(e: React.FormEvent) {
     e.preventDefault();
-    if (editingCurso) {
-      setCursos((prev) => prev.map((c) => (c.id === editingCurso.id ? { ...c, ...cursoForm } : c)));
-    } else {
-      const novo: Curso = {
-        id: nextId(cursos),
-        nome: cursoForm.nome,
-        metodologia: cursoForm.metodologia,
-        descricao: cursoForm.descricao,
-        ativo: cursoForm.ativo,
-      };
-      setCursos((prev) => [novo, ...prev]);
+    if (!cursoForm.nome.trim()) {
+      setCursosErro("Nome do curso e obrigatorio.");
+      return;
     }
-    resetCursoForm();
+
+    setCursosErro(null);
+    setCursosMsg(null);
+
+    const payload = {
+      nome: cursoForm.nome.trim(),
+      metodologia: cursoForm.metodologia.trim() || null,
+      observacoes: cursoForm.descricao.trim() || null,
+      situacao: cursoForm.ativo ? "Ativo" : "Inativo",
+    };
+
+    try {
+      const url = editingCurso
+        ? `/api/escola/academico/cursos/${editingCurso.id}`
+        : "/api/escola/academico/cursos";
+      const method = editingCurso ? "PATCH" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.message ?? json?.error ?? "Falha ao salvar curso");
+      }
+
+      await carregarCursos();
+      setCursosMsg(editingCurso ? "Curso atualizado com sucesso." : "Curso criado com sucesso.");
+      resetCursoForm();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Erro ao salvar curso";
+      setCursosErro(msg);
+    }
   }
 
   function editarCurso(curso: Curso) {
+    setCursosErro(null);
+    setCursosMsg(null);
     setEditingCurso(curso);
     setCursoForm({ nome: curso.nome, metodologia: curso.metodologia, descricao: curso.descricao, ativo: curso.ativo });
     setShowCursoForm(true);
   }
 
-  function alternarCurso(id: number) {
-    setCursos((prev) => prev.map((c) => (c.id === id ? { ...c, ativo: !c.ativo } : c)));
+  async function alternarCurso(id: number) {
+    const alvo = cursos.find((c) => c.id === id);
+    if (!alvo) return;
+
+    setCursosErro(null);
+    setCursosMsg(null);
+
+    try {
+      const res = await fetch(`/api/escola/academico/cursos/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ situacao: alvo.ativo ? "Inativo" : "Ativo" }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.message ?? json?.error ?? "Falha ao atualizar situacao");
+      }
+
+      await carregarCursos();
+      setCursosMsg(alvo.ativo ? "Curso inativado." : "Curso ativado.");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Erro ao atualizar situacao";
+      setCursosErro(msg);
+    }
   }
 
   function salvarNivel(cursoId: number) {
@@ -316,6 +407,13 @@ export default function CursosPage() {
             </div>
           }
         >
+          {cursosErro ? <div className="text-sm text-red-600">{cursosErro}</div> : null}
+          {cursosMsg ? <div className="text-sm text-emerald-700">{cursosMsg}</div> : null}
+          {cursosLoading ? <div className="text-sm text-slate-600">Carregando cursos...</div> : null}
+          {!cursosLoading && filtradas.length === 0 ? (
+            <div className="text-sm text-slate-600">Nenhum curso cadastrado.</div>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             {filtradas.map((curso) => {
               const niveisDoCurso = niveis.filter((n) => n.cursoId === curso.id);
@@ -706,3 +804,5 @@ export default function CursosPage() {
     </div>
   );
 }
+
+
