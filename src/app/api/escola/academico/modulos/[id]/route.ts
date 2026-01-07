@@ -27,6 +27,13 @@ async function requireAdmin() {
   return { ok: true as const, status: 200, supabase };
 }
 
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+  const rawParams = (ctx as { params: Promise<{ id: string }> }).params;
+  const params = rawParams instanceof Promise ? await rawParams : (ctx as { params: { id: string } }).params;
+
+  return NextResponse.json({ ok: true, ping: "modulos/[id] OK", id: params.id }, { status: 200 });
+}
+
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
   const admin = await requireAdmin();
   if (!admin.ok) {
