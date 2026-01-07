@@ -49,9 +49,10 @@ export async function GET(_: Request, ctx: { params: { id: string } }) {
   }
 }
 
-export async function PATCH(req: Request, ctx: { params: { id: string } }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const id = asId(ctx.params.id);
+    const { id: idStr } = await ctx.params;
+    const id = asId(idStr);
     if (!id) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }

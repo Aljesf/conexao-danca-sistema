@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import { resolveParamsId } from "../../_helpers/params";
 
 const PayloadSchema = z.object(
   {
@@ -29,13 +30,14 @@ async function requireAdmin() {
   return { ok: true as const, status: 200 };
 }
 
-export async function handlePut(req: Request, params: { id: string }) {
+export async function handlePut(req: Request, params: { id: string } | Promise<{ id: string }>) {
   const auth = await requireAdmin();
   if (!auth.ok) {
     return NextResponse.json({ ok: false, error: "NAO_AUTORIZADO" }, { status: auth.status });
   }
 
-  const habilidadeId = Number(params.id);
+  const idStr = await resolveParamsId(params);
+  const habilidadeId = Number(idStr);
   if (!Number.isFinite(habilidadeId)) {
     return NextResponse.json({ ok: false, error: "ID_INVALIDO" }, { status: 400 });
   }
