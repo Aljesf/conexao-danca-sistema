@@ -1,27 +1,10 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { getCookieStore } from "@/lib/nextCookies";
 
-function supabaseServer() {
-  const cookieStore = cookies();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !anonKey) throw new Error("ENV_MISSING_SUPABASE_PUBLIC");
-
-  return createServerClient(url, anonKey, {
-    cookies: {
-      get(name) {
-        return cookieStore.get(name)?.value;
-      },
-      set() {
-        // nao necessario em route handlers para este fluxo
-      },
-      remove() {
-        // nao necessario em route handlers para este fluxo
-      },
-    },
-  });
+async function supabaseServer() {
+  const cookieStore = await getCookieStore();
+  return createRouteHandlerClient({ cookies: () => cookieStore });
 }
 
 function asText(value: unknown): string | null {
@@ -42,9 +25,12 @@ export async function GET(_: Request, ctx: { params: { id: string } }) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
 
-    const supabase = supabaseServer();
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    if (authError || !userData?.user) {
+    const supabase = await supabaseServer();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
     }
     const { data, error } = await supabase.from("cursos").select("*").eq("id", id).maybeSingle();
@@ -70,9 +56,12 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
 
-    const supabase = supabaseServer();
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    if (authError || !userData?.user) {
+    const supabase = await supabaseServer();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
     }
 
@@ -116,9 +105,12 @@ export async function DELETE(_: Request, ctx: { params: { id: string } }) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
 
-    const supabase = supabaseServer();
-    const { data: userData, error: authError } = await supabase.auth.getUser();
-    if (authError || !userData?.user) {
+    const supabase = await supabaseServer();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
       return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
     }
     const { data, error } = await supabase
