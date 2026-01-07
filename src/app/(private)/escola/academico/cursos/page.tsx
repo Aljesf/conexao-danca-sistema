@@ -27,6 +27,25 @@ async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promi
   return data as T;
 }
 
+async function apiPostJson<T>(url: string, payload: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  const json = (await res.json().catch(() => null)) as
+    | { ok?: boolean; code?: string; message?: string; error?: string }
+    | null;
+  if (!res.ok || !json?.ok) {
+    const code = json?.code ?? json?.error ?? "ERRO_API";
+    const msg = json?.message ?? `Falha HTTP ${res.status}`;
+    throw new Error(`${code}: ${msg}`);
+  }
+
+  return json as T;
+}
+
 type Curso = {
   id: number;
   nome: string;
@@ -122,6 +141,10 @@ type PutHabilidadeResponse =
     }
   | { ok: false; error: string; details?: string };
 
+type PostNivelResponse = Extract<PutNivelResponse, { ok: true }>;
+type PostModuloResponse = Extract<PutModuloResponse, { ok: true }>;
+type PostHabilidadeResponse = Extract<PutHabilidadeResponse, { ok: true }>;
+
 const seedsNiveis: Nivel[] = [
   { id: 1, cursoId: 1, nome: "Nivel 1", idadeMinima: 6, idadeMaxima: 8, faixaEtariaSugerida: "6-8 anos" },
   { id: 2, cursoId: 1, nome: "Nivel 2", idadeMinima: 8, idadeMaxima: 10, faixaEtariaSugerida: "8-10 anos" },
@@ -147,8 +170,67 @@ function formatFaixa(min: number | null, max: number | null) {
   return "";
 }
 
-function nextId<T extends { id: number }>(items: T[]) {
-  return items.length ? Math.max(...items.map((i) => i.id)) + 1 : 1;
+async function criarNivelNoBanco(params: {
+  cursoId: number;
+  nome: string;
+  faixaEtariaSugerida?: string | null;
+  preRequisitoNivelId?: number | null;
+  observacoes?: string | null;
+  idadeMinima?: number | null;
+  idadeMaxima?: number | null;
+}) {
+  const res = await apiPostJson<PostNivelResponse>("/api/escola/academico/niveis", {
+    curso_id: params.cursoId,
+    nome: params.nome,
+    faixa_etaria_sugerida: params.faixaEtariaSugerida ?? null,
+    pre_requisito_nivel_id: params.preRequisitoNivelId ?? null,
+    observacoes: params.observacoes ?? null,
+    idade_minima: params.idadeMinima ?? null,
+    idade_maxima: params.idadeMaxima ?? null,
+  });
+  return res.nivel;
+}
+
+async function criarModuloNoBanco(params: {
+  cursoId: number;
+  nivelId: number;
+  nome: string;
+  descricao?: string | null;
+  ordem?: number;
+  obrigatorio?: boolean;
+}) {
+  const res = await apiPostJson<PostModuloResponse>("/api/escola/academico/modulos", {
+    curso_id: params.cursoId,
+    nivel_id: params.nivelId,
+    nome: params.nome,
+    descricao: params.descricao ?? null,
+    ordem: params.ordem,
+    obrigatorio: params.obrigatorio,
+  });
+  return res.modulo;
+}
+
+async function criarHabilidadeNoBanco(params: {
+  cursoId: number;
+  nivelId: number;
+  moduloId: number;
+  nome: string;
+  tipo?: string | null;
+  descricao?: string | null;
+  criterioAvaliacao?: string | null;
+  ordem?: number;
+}) {
+  const res = await apiPostJson<PostHabilidadeResponse>("/api/escola/academico/habilidades", {
+    curso_id: params.cursoId,
+    nivel_id: params.nivelId,
+    modulo_id: params.moduloId,
+    nome: params.nome,
+    tipo: params.tipo ?? null,
+    descricao: params.descricao ?? null,
+    criterio_avaliacao: params.criterioAvaliacao ?? null,
+    ordem: params.ordem,
+  });
+  return res.habilidade;
 }
 
 export default function CursosPage() {
@@ -371,19 +453,35 @@ export default function CursosPage() {
         return;
       }
     } else {
-      const novo: Nivel = {
-        id: nextId(niveis),
-        cursoId,
-        nome: nivelForm.nome,
-        idadeMinima: nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
-        idadeMaxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
-        faixaEtariaSugerida: faixa || "",
-        observacoes: nivelForm.observacoes,
-        prerequisito: nivelForm.prerequisito || null,
-      };
-      setNiveis((prev) => [novo, ...prev]);
-      await carregarCursos();
-      setCursosMsg("Nivel criado localmente.");
+      try {
+        const created = await criarNivelNoBanco({
+          cursoId,
+          nome: nivelForm.nome,
+          faixaEtariaSugerida: faixa || null,
+          preRequisitoNivelId: nivelForm.prerequisito ?? null,
+          observacoes: nivelForm.observacoes || null,
+          idadeMinima: nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
+          idadeMaxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
+        });
+
+        const novo: Nivel = {
+          id: created.id,
+          cursoId: created.curso_id,
+          nome: created.nome,
+          idadeMinima: created.idade_minima,
+          idadeMaxima: created.idade_maxima,
+          faixaEtariaSugerida: created.faixa_etaria_sugerida ?? "",
+          observacoes: created.observacoes ?? "",
+          prerequisito: created.pre_requisito_nivel_id ?? null,
+        };
+        setNiveis((prev) => [novo, ...prev]);
+        await carregarCursos();
+        setCursosMsg("Nivel criado.");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Falha ao criar nivel.";
+        setCursosErro(msg);
+        return;
+      }
     }
     setNivelForm({ nome: "", idadeMinima: "", idadeMaxima: "", observacoes: "", prerequisito: null });
     setNivelFormOpenFor(null);
@@ -440,18 +538,39 @@ export default function CursosPage() {
         return;
       }
     } else {
-      const novo: Conteudo = {
-        id: nextId(conteudos),
-        nivelId,
-        nome: conteudoForm.nome,
-        ordem: conteudoForm.ordem,
-        obrigatorio: conteudoForm.obrigatorio,
-        descricao: conteudoForm.descricao,
-        categoria: conteudoForm.categoria,
-      };
-      setConteudos((prev) => [novo, ...prev]);
-      await carregarCursos();
-      setCursosMsg("Modulo criado localmente.");
+      const nivel = niveis.find((n) => n.id === nivelId);
+      if (!nivel) {
+        setCursosErro("Nivel nao encontrado.");
+        return;
+      }
+
+      try {
+        const created = await criarModuloNoBanco({
+          cursoId: nivel.cursoId,
+          nivelId,
+          nome: conteudoForm.nome,
+          descricao: conteudoForm.descricao || null,
+          ordem: conteudoForm.ordem,
+          obrigatorio: conteudoForm.obrigatorio,
+        });
+
+        const novo: Conteudo = {
+          id: created.id,
+          nivelId: created.nivel_id,
+          nome: created.nome,
+          ordem: created.ordem,
+          obrigatorio: created.obrigatorio,
+          descricao: created.descricao ?? "",
+          categoria: conteudoForm.categoria,
+        };
+        setConteudos((prev) => [novo, ...prev]);
+        await carregarCursos();
+        setCursosMsg("Modulo criado.");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Falha ao criar modulo.";
+        setCursosErro(msg);
+        return;
+      }
     }
     setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "", categoria: "" });
     setConteudoFormOpenFor(null);
@@ -509,18 +628,47 @@ export default function CursosPage() {
         return;
       }
     } else {
-      const nova: Habilidade = {
-        id: nextId(habilidades),
-        conteudoId,
-        nome: habilidadeForm.nome,
-        tipo: habilidadeForm.tipo,
-        descricao: habilidadeForm.descricao,
-        criterio: habilidadeForm.criterio,
-        ordem: habilidadeForm.ordem,
-      };
-      setHabilidades((prev) => [nova, ...prev]);
-      await carregarCursos();
-      setCursosMsg("Habilidade criada localmente.");
+      const conteudo = conteudos.find((c) => c.id === conteudoId);
+      if (!conteudo) {
+        setCursosErro("Conteudo nao encontrado.");
+        return;
+      }
+
+      const nivel = niveis.find((n) => n.id === conteudo.nivelId);
+      if (!nivel) {
+        setCursosErro("Nivel nao encontrado.");
+        return;
+      }
+
+      try {
+        const created = await criarHabilidadeNoBanco({
+          cursoId: nivel.cursoId,
+          nivelId: nivel.id,
+          moduloId: conteudoId,
+          nome: habilidadeForm.nome,
+          tipo: habilidadeForm.tipo || null,
+          descricao: habilidadeForm.descricao || null,
+          criterioAvaliacao: habilidadeForm.criterio || null,
+          ordem: habilidadeForm.ordem,
+        });
+
+        const nova: Habilidade = {
+          id: created.id,
+          conteudoId: created.modulo_id,
+          nome: created.nome,
+          tipo: created.tipo ?? "",
+          descricao: created.descricao ?? "",
+          criterio: created.criterio_avaliacao ?? "",
+          ordem: created.ordem,
+        };
+        setHabilidades((prev) => [nova, ...prev]);
+        await carregarCursos();
+        setCursosMsg("Habilidade criada.");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Falha ao criar habilidade.";
+        setCursosErro(msg);
+        return;
+      }
     }
     setHabilidadeForm({ nome: "", tipo: "", descricao: "", criterio: "", ordem: 1 });
     setHabilidadeFormOpenFor(null);

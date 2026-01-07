@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseRoute } from "@/lib/supabaseRoute";
 
 const PayloadSchema = z.object(
   {
@@ -14,9 +15,9 @@ const PayloadSchema = z.object(
 );
 
 async function requireAdmin() {
-  const supabase = await createClient();
+  const supabase = await getSupabaseRoute();
   const { data, error } = await supabase.auth.getUser();
-  if (error || !data?.user) return { ok: false as const, status: 401, supabase };
+  if (error || !data?.user) return { ok: false as const, status: 401 };
 
   const { data: profile, error: e2 } = await supabase
     .from("profiles")
@@ -24,14 +25,14 @@ async function requireAdmin() {
     .eq("user_id", data.user.id)
     .single();
 
-  if (e2 || !profile?.is_admin) return { ok: false as const, status: 403, supabase };
-  return { ok: true as const, status: 200, supabase };
+  if (e2 || !profile?.is_admin) return { ok: false as const, status: 403 };
+  return { ok: true as const, status: 200 };
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
-  const admin = await requireAdmin();
-  if (!admin.ok) {
-    return NextResponse.json({ ok: false, error: "NAO_AUTORIZADO" }, { status: admin.status });
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    return NextResponse.json({ ok: false, error: "NAO_AUTORIZADO" }, { status: auth.status });
   }
 
   const rawParams = (ctx as { params: Promise<{ id: string }> }).params;
@@ -58,9 +59,18 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> |
 
   if (typeof parsed.data.ordem === "number") updatePayload.ordem = parsed.data.ordem;
 
-  const { supabase } = admin;
+  let adminClient;
+  try {
+    adminClient = getSupabaseAdmin();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "ENV_NAO_CONFIGURADA";
+    return NextResponse.json(
+      { ok: false, error: "ENV_NAO_CONFIGURADA", details: msg },
+      { status: 500 }
+    );
+  }
 
-  const { data, error } = await supabase
+  const { data, error } = await adminClient
     .from("habilidades")
     .update(updatePayload)
     .eq("id", habilidadeId)
