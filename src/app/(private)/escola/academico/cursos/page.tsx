@@ -244,28 +244,54 @@ export default function CursosPage() {
     }
   }
 
-  function salvarNivel(cursoId: number) {
+  async function salvarNivel(cursoId: number) {
     if (!nivelForm.nome.trim()) return;
+    setCursosErro(null);
+    setCursosMsg(null);
     const faixa = formatFaixa(
       nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
       nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima)
     );
     if (nivelEditingId) {
-      setNiveis((prev) =>
-        prev.map((n) =>
-          n.id === nivelEditingId
-            ? {
-                ...n,
-                nome: nivelForm.nome,
-                idadeMinima: nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
-                idadeMaxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
-                faixaEtariaSugerida: faixa || "",
-                observacoes: nivelForm.observacoes,
-                prerequisito: nivelForm.prerequisito || null,
-              }
-            : n
-        )
-      );
+      try {
+        const res = await fetch(`/api/escola/academico/niveis/${nivelEditingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome: nivelForm.nome,
+            faixa_etaria_sugerida: faixa || null,
+            pre_requisito_nivel_id: nivelForm.prerequisito ?? null,
+            observacoes: nivelForm.observacoes || null,
+            idade_minima: nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
+            idade_maxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
+          }),
+        });
+        const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; details?: string } | null;
+        if (!res.ok || !json?.ok) {
+          const msg = json?.details ?? json?.error ?? "Falha ao salvar nivel.";
+          throw new Error(msg);
+        }
+        setNiveis((prev) =>
+          prev.map((n) =>
+            n.id === nivelEditingId
+              ? {
+                  ...n,
+                  nome: nivelForm.nome,
+                  idadeMinima: nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
+                  idadeMaxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
+                  faixaEtariaSugerida: faixa || "",
+                  observacoes: nivelForm.observacoes,
+                  prerequisito: nivelForm.prerequisito || null,
+                }
+              : n
+          )
+        );
+        setCursosMsg("Nivel atualizado.");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Falha ao salvar nivel.";
+        setCursosErro(msg);
+        return;
+      }
     } else {
       const novo: Nivel = {
         id: nextId(niveis),
@@ -278,29 +304,54 @@ export default function CursosPage() {
         prerequisito: nivelForm.prerequisito || null,
       };
       setNiveis((prev) => [novo, ...prev]);
+      setCursosMsg("Nivel criado localmente.");
     }
     setNivelForm({ nome: "", idadeMinima: "", idadeMaxima: "", observacoes: "", prerequisito: null });
     setNivelFormOpenFor(null);
     setNivelEditingId(null);
   }
 
-  function salvarConteudo(nivelId: number) {
+  async function salvarConteudo(nivelId: number) {
     if (!conteudoForm.nome.trim()) return;
+    setCursosErro(null);
+    setCursosMsg(null);
     if (conteudoEditingId) {
-      setConteudos((prev) =>
-        prev.map((c) =>
-          c.id === conteudoEditingId
-            ? {
-                ...c,
-                nome: conteudoForm.nome,
-                ordem: conteudoForm.ordem,
-                obrigatorio: conteudoForm.obrigatorio,
-                descricao: conteudoForm.descricao,
-                categoria: conteudoForm.categoria,
-              }
-            : c
-        )
-      );
+      try {
+        const res = await fetch(`/api/escola/academico/modulos/${conteudoEditingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome: conteudoForm.nome,
+            descricao: conteudoForm.descricao || null,
+            ordem: conteudoForm.ordem,
+            obrigatorio: conteudoForm.obrigatorio,
+          }),
+        });
+        const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; details?: string } | null;
+        if (!res.ok || !json?.ok) {
+          const msg = json?.details ?? json?.error ?? "Falha ao salvar modulo.";
+          throw new Error(msg);
+        }
+        setConteudos((prev) =>
+          prev.map((c) =>
+            c.id === conteudoEditingId
+              ? {
+                  ...c,
+                  nome: conteudoForm.nome,
+                  ordem: conteudoForm.ordem,
+                  obrigatorio: conteudoForm.obrigatorio,
+                  descricao: conteudoForm.descricao,
+                  categoria: conteudoForm.categoria,
+                }
+              : c
+          )
+        );
+        setCursosMsg("Modulo atualizado.");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Falha ao salvar modulo.";
+        setCursosErro(msg);
+        return;
+      }
     } else {
       const novo: Conteudo = {
         id: nextId(conteudos),
@@ -312,29 +363,55 @@ export default function CursosPage() {
         categoria: conteudoForm.categoria,
       };
       setConteudos((prev) => [novo, ...prev]);
+      setCursosMsg("Modulo criado localmente.");
     }
     setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "", categoria: "" });
     setConteudoFormOpenFor(null);
     setConteudoEditingId(null);
   }
 
-  function salvarHabilidade(conteudoId: number) {
+  async function salvarHabilidade(conteudoId: number) {
     if (!habilidadeForm.nome.trim()) return;
+    setCursosErro(null);
+    setCursosMsg(null);
     if (habilidadeEditingId) {
-      setHabilidades((prev) =>
-        prev.map((h) =>
-          h.id === habilidadeEditingId
-            ? {
-                ...h,
-                nome: habilidadeForm.nome,
-                tipo: habilidadeForm.tipo,
-                descricao: habilidadeForm.descricao,
-                criterio: habilidadeForm.criterio,
-                ordem: habilidadeForm.ordem,
-              }
-            : h
-        )
-      );
+      try {
+        const res = await fetch(`/api/escola/academico/habilidades/${habilidadeEditingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome: habilidadeForm.nome,
+            tipo: habilidadeForm.tipo || null,
+            descricao: habilidadeForm.descricao || null,
+            criterio_avaliacao: habilidadeForm.criterio || null,
+            ordem: habilidadeForm.ordem,
+          }),
+        });
+        const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; details?: string } | null;
+        if (!res.ok || !json?.ok) {
+          const msg = json?.details ?? json?.error ?? "Falha ao salvar habilidade.";
+          throw new Error(msg);
+        }
+        setHabilidades((prev) =>
+          prev.map((h) =>
+            h.id === habilidadeEditingId
+              ? {
+                  ...h,
+                  nome: habilidadeForm.nome,
+                  tipo: habilidadeForm.tipo,
+                  descricao: habilidadeForm.descricao,
+                  criterio: habilidadeForm.criterio,
+                  ordem: habilidadeForm.ordem,
+                }
+              : h
+          )
+        );
+        setCursosMsg("Habilidade atualizada.");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Falha ao salvar habilidade.";
+        setCursosErro(msg);
+        return;
+      }
     } else {
       const nova: Habilidade = {
         id: nextId(habilidades),
@@ -346,6 +423,7 @@ export default function CursosPage() {
         ordem: habilidadeForm.ordem,
       };
       setHabilidades((prev) => [nova, ...prev]);
+      setCursosMsg("Habilidade criada localmente.");
     }
     setHabilidadeForm({ nome: "", tipo: "", descricao: "", criterio: "", ordem: 1 });
     setHabilidadeFormOpenFor(null);
