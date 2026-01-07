@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent } from "react";
+import { AbaCuidadosAluno } from "@/components/pessoas/AbaCuidadosAluno";
+import { AbaMedidasDeclaradas } from "@/components/pessoas/AbaMedidasDeclaradas";
+import { AbaObservacoesGerais } from "@/components/pessoas/AbaObservacoesGerais";
+import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPedagogicas";
+import { AbaVinculos } from "@/components/pessoas/AbaVinculos";
 
 type Pessoa = {
   id: number;
@@ -30,8 +37,10 @@ type Pessoa = {
 };
 
 export default function NovaPessoaPage() {
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdPessoaId, setCreatedPessoaId] = useState<number | null>(null);
 
   const [nome, setNome] = useState("");
   const [nomeSocial, setNomeSocial] = useState("");
@@ -48,17 +57,36 @@ export default function NovaPessoaPage() {
   const [tipoPessoa, setTipoPessoa] = useState<"FISICA" | "JURIDICA">("FISICA");
   const [observacoes, setObservacoes] = useState("");
   const [ativo, setAtivo] = useState(true);
-  const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    setSuccess(false);
-  }, [nome, email, telefone, cpf]);
+  function resetFields() {
+    setNome("");
+    setNomeSocial("");
+    setEmail("");
+    setTelefone("");
+    setTelefoneSecundario("");
+    setNascimento("");
+    setCpf("");
+    setGenero("NAO_INFORMADO");
+    setEstadoCivil(null);
+    setNacionalidade("");
+    setNaturalidade("");
+    setTipoPessoa("FISICA");
+    setObservacoes("");
+    setAtivo(true);
+  }
+
+  function resetAll() {
+    resetFields();
+    setCreatedPessoaId(null);
+    setError(null);
+    setSaving(false);
+    router.refresh();
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    setSuccess(false);
 
     try {
       const res = await fetch("/api/pessoas", {
@@ -82,30 +110,24 @@ export default function NovaPessoaPage() {
         }),
       });
 
-      const json = await res.json();
+      const json = (await res.json().catch(() => null)) as
+        | { data?: { id?: number }; error?: string; details?: string }
+        | null;
 
       if (!res.ok) {
-        throw new Error(json.error || "Falha ao salvar pessoa.");
+        throw new Error(json?.details ?? json?.error ?? "Falha ao salvar pessoa.");
       }
 
-      setSuccess(true);
+      const pessoaId = Number(json?.data?.id);
+      if (!Number.isFinite(pessoaId) || pessoaId <= 0) {
+        throw new Error("Resposta invalida ao salvar pessoa.");
+      }
 
-      setNome("");
-      setNomeSocial("");
-      setEmail("");
-      setTelefone("");
-      setTelefoneSecundario("");
-      setNascimento("");
-      setCpf("");
-      setGenero("NAO_INFORMADO");
-      setEstadoCivil(null);
-      setNacionalidade("");
-      setNaturalidade("");
-      setTipoPessoa("FISICA");
-      setObservacoes("");
-      setAtivo(true);
-    } catch (err: any) {
-      setError(err.message || "Erro inesperado ao salvar pessoa.");
+      setCreatedPessoaId(pessoaId);
+      resetFields();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro inesperado ao salvar pessoa.";
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -121,37 +143,71 @@ export default function NovaPessoaPage() {
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-5 rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-5 shadow-sm backdrop-blur"
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Nova pessoa
-            </h2>
-            {error && (
-              <span className="text-sm font-medium text-rose-600">{error}</span>
-            )}
-            {success && !error && (
-              <span className="text-sm font-medium text-green-600">
-                Pessoa cadastrada com sucesso.
-              </span>
-            )}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Nome completo *
-              </label>
-              <input
-                type="text"
-                required
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
-              />
+        {createdPessoaId ? (
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-5 shadow-sm backdrop-blur">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Pessoa criada</h2>
+                  <p className="mt-1 text-sm text-slate-600">Pessoa criada com sucesso. Continue o cadastro abaixo.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href={`/pessoas/${createdPessoaId}`}
+                    className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
+                  >
+                    Abrir ficha
+                  </Link>
+                  <Link
+                    href={`/pessoas/${createdPessoaId}?tab=cuidados`}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Ir para cuidados
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={resetAll}
+                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Criar outro cadastro
+                  </button>
+                </div>
+              </div>
             </div>
+
+            <AbaVinculos pessoaId={createdPessoaId} />
+            <AbaCuidadosAluno pessoaId={createdPessoaId} />
+            <AbaMedidasDeclaradas pessoaId={createdPessoaId} />
+            <AbaObservacoesGerais pessoaId={createdPessoaId} />
+            <AbaObservacoesPedagogicas pessoaId={createdPessoaId} />
+          </div>
+        ) : (
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5 rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-5 shadow-sm backdrop-blur"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">
+                Nova pessoa
+              </h2>
+              {error && (
+                <span className="text-sm font-medium text-rose-600">{error}</span>
+              )}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Nome completo *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
 
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -338,19 +394,20 @@ export default function NovaPessoaPage() {
             />
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-full bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-60"
-            >
-              {saving ? "Salvando..." : "Salvar pessoa"}
-            </button>
-            {error && (
-              <span className="text-sm font-medium text-rose-600">{error}</span>
-            )}
-          </div>
-        </form>
+            <div className="flex items-center gap-3">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-full bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:opacity-60"
+              >
+                {saving ? "Salvando..." : "Salvar pessoa"}
+              </button>
+              {error && (
+                <span className="text-sm font-medium text-rose-600">{error}</span>
+              )}
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

@@ -56,7 +56,7 @@ function calcularIdade(dateStr: string | null): number | null {
   return idade;
 }
 
-// Formata o campo genero em texto legível
+// Formata o campo genero em texto legÃ­vel
 function formatGenero(
   genero: Pessoa["genero"] | null | undefined
 ): string | null {
@@ -68,7 +68,7 @@ function formatGenero(
     case "OUTRO":
       return "Outro";
     case "NAO_INFORMADO":
-      return "Não informado";
+      return "NÃ£o informado";
     default:
       return null;
   }
@@ -99,7 +99,7 @@ export default function PessoaDetalhesPage() {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // campos editáveis
+  // campos editÃ¡veis
   const [nome, setNome] = useState("");
   const [nomeSocial, setNomeSocial] = useState("");
   const [email, setEmail] = useState("");
@@ -162,7 +162,7 @@ export default function PessoaDetalhesPage() {
         setNaturalidade(data.naturalidade ?? "");
         setObservacoes(data.observacoes ?? "");
 
-        // endereço vindo da API
+        // endereÃ§o vindo da API
         setEndereco(data.endereco ?? null);
       } catch (err: unknown) {
         const msg =
@@ -224,7 +224,7 @@ export default function PessoaDetalhesPage() {
   }
 
   const tipoLabel =
-    pessoa?.tipo_pessoa === "JURIDICA" ? "Pessoa jurídica" : "Pessoa física";
+    pessoa?.tipo_pessoa === "JURIDICA" ? "Pessoa jurÃ­dica" : "Pessoa fÃ­sica";
 
   const idade = calcularIdade(pessoa?.nascimento ?? null);
   const generoLabel = pessoa ? formatGenero(pessoa.genero) : null;
@@ -232,7 +232,7 @@ export default function PessoaDetalhesPage() {
   const updatedByLabel = pessoa?.updated_by_name ?? "-";
 
   const enderecoTitulo = useMemo(
-    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "Endereço fiscal" : "Endereço"),
+    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "EndereÃ§o fiscal" : "EndereÃ§o"),
     [pessoa?.tipo_pessoa]
   );
   useEffect(() => {
@@ -313,7 +313,7 @@ export default function PessoaDetalhesPage() {
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "Falha ao salvar alterações.");
+        throw new Error(json.error || "Falha ao salvar alteraÃ§Ãµes.");
       }
 
       const data = json.data as Pessoa;
@@ -363,7 +363,7 @@ export default function PessoaDetalhesPage() {
               href={`/pessoas/${id}/curriculo`}
               className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm backdrop-blur hover:bg-slate-50 md:text-xs"
             >
-              Currículo
+              CurrÃ­culo
             </Link>
             <button
               type="button"
@@ -376,7 +376,7 @@ export default function PessoaDetalhesPage() {
           </div>
         </div>
 
-        {/* Cabeçalho com avatar grande e status */}
+        {/* CabeÃ§alho com avatar grande e status */}
         <header className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-6 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-1 flex-col items-center gap-4 md:flex-row md:items-center">
@@ -405,13 +405,13 @@ export default function PessoaDetalhesPage() {
 
                 {generoLabel && (
                   <p className="mt-0.5 text-sm text-slate-600">
-                    Gênero: {generoLabel}
+                    GÃªnero: {generoLabel}
                   </p>
                 )}
 
                 <p className="mt-2 max-w-xl text-[15px] text-slate-600">
-                  Visão geral deste cadastro. Aqui você pode consultar e, se
-                  tiver permissão, editar os dados da pessoa.
+                  VisÃ£o geral deste cadastro. Aqui vocÃª pode consultar e, se
+                  tiver permissÃ£o, editar os dados da pessoa.
                 </p>
 
                 {pessoa?.telefone && (
@@ -487,7 +487,7 @@ export default function PessoaDetalhesPage() {
                       {saving
                         ? "Salvando..."
                         : editMode
-                        ? "Salvar alterações"
+                        ? "Salvar alteraÃ§Ãµes"
                         : "Editar dados"}
                     </button>
                   </div>
@@ -513,7 +513,7 @@ export default function PessoaDetalhesPage() {
           </div>
         )}
 
-        {/* Conteúdo principal */}
+        {/* ConteÃºdo principal */}
         {!loading && pessoa && (
           <>
             {/* NAV de ABAS */}
@@ -538,7 +538,7 @@ export default function PessoaDetalhesPage() {
                 );
               })}
             </nav>
-            {/* Conteúdo das abas */}
+            {/* ConteÃºdo das abas */}
             <div className="rounded-3xl border border-violet-100 bg-white/95 p-6 text-[15px] text-slate-700 shadow-sm backdrop-blur-sm md:p-7">
               {/* Aba: Dados da pessoa */}
               {abaAtiva === "dados" && (
@@ -612,7 +612,7 @@ export default function PessoaDetalhesPage() {
 
                       <div className="grid gap-4 md:grid-cols-2">
                         <div>
-                          <p className="text-sm text-slate-400">Gênero</p>
+                          <p className="text-sm text-slate-400">GÃªnero</p>
                           {editMode ? (
                             <select
                               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
@@ -622,7 +622,7 @@ export default function PessoaDetalhesPage() {
                               }
                             >
                               <option value="NAO_INFORMADO">
-                                Não informado
+                                NÃ£o informado
                               </option>
                               <option value="MASCULINO">Masculino</option>
                               <option value="FEMININO">Feminino</option>
@@ -646,19 +646,19 @@ export default function PessoaDetalhesPage() {
                                 )
                               }
                             >
-                              <option value="">Não informado</option>
+                              <option value="">NÃ£o informado</option>
                               <option value="SOLTEIRO">Solteiro(a)</option>
                               <option value="CASADO">Casado(a)</option>
                               <option value="DIVORCIADO">Divorciado(a)</option>
-                              <option value="VIUVO">Viúvo(a)</option>
+                              <option value="VIUVO">ViÃºvo(a)</option>
                               <option value="UNIAO_ESTAVEL">
-                                União estável
+                                UniÃ£o estÃ¡vel
                               </option>
                               <option value="OUTRO">Outro</option>
                             </select>
                           ) : (
                             <p className="mt-1">
-                              {estadoCivil ? estadoCivil : "Não informado"}
+                              {estadoCivil ? estadoCivil : "NÃ£o informado"}
                             </p>
                           )}
                         </div>
@@ -696,14 +696,14 @@ export default function PessoaDetalhesPage() {
                         <p className="text-sm text-slate-400">Tipo de pessoa</p>
                         <p className="mt-1">
                           {pessoa.tipo_pessoa === "JURIDICA"
-                            ? "Pessoa jurídica"
-                            : "Pessoa física"}
+                            ? "Pessoa jurÃ­dica"
+                            : "Pessoa fÃ­sica"}
                         </p>
                       </div>
 
                       <div>
                         <p className="text-sm text-slate-400">Idade</p>
-                        <p className="mt-1">{idade ?? "Não informado"}</p>
+                        <p className="mt-1">{idade ?? "NÃ£o informado"}</p>
                       </div>
                     </div>
                   </div>
@@ -866,7 +866,7 @@ export default function PessoaDetalhesPage() {
               {abaAtiva === "contato" && (
                 <div className="space-y-6">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Informações de contato
+                    InformaÃ§Ãµes de contato
                   </h2>
 
                   <div className="grid gap-6 md:grid-cols-2">
@@ -904,7 +904,7 @@ export default function PessoaDetalhesPage() {
                     <div className="space-y-4">
                       <div>
                         <p className="text-sm text-slate-400">
-                          Telefone secundário
+                          Telefone secundÃ¡rio
                         </p>
                         {editMode ? (
                           <input
