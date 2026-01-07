@@ -28,14 +28,11 @@ async function requireAdmin() {
   return { ok: true as const, status: 200 };
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> | { id: string } }) {
+export async function handlePut(req: Request, params: { id: string }) {
   const auth = await requireAdmin();
   if (!auth.ok) {
     return NextResponse.json({ ok: false, error: "NAO_AUTORIZADO" }, { status: auth.status });
   }
-
-  const rawParams = (ctx as { params: Promise<{ id: string }> }).params;
-  const params = rawParams instanceof Promise ? await rawParams : (ctx as { params: { id: string } }).params;
 
   const moduloId = Number(params.id);
   if (!Number.isFinite(moduloId)) {
