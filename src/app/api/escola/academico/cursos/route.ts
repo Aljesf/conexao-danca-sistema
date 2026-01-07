@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
 type CursoRow = {
   id: number;
@@ -11,6 +12,28 @@ type CursoRow = {
   updated_at: string;
 };
 
+function supabaseServer() {
+  const cookieStore = cookies();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) throw new Error("ENV_MISSING_SUPABASE_PUBLIC");
+
+  return createServerClient(url, anonKey, {
+    cookies: {
+      get(name) {
+        return cookieStore.get(name)?.value;
+      },
+      set() {
+        // nao necessario em route handlers para este fluxo
+      },
+      remove() {
+        // nao necessario em route handlers para este fluxo
+      },
+    },
+  });
+}
+
 function asText(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -19,7 +42,7 @@ function asText(value: unknown): string | null {
 
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const supabase = supabaseServer();
 
     const { data, error } = await supabase
       .from("cursos")
@@ -39,7 +62,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = supabaseServer();
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
 
     if (!body) {

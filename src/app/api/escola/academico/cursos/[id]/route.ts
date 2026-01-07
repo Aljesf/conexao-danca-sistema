@@ -1,5 +1,28 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+
+function supabaseServer() {
+  const cookieStore = cookies();
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) throw new Error("ENV_MISSING_SUPABASE_PUBLIC");
+
+  return createServerClient(url, anonKey, {
+    cookies: {
+      get(name) {
+        return cookieStore.get(name)?.value;
+      },
+      set() {
+        // nao necessario em route handlers para este fluxo
+      },
+      remove() {
+        // nao necessario em route handlers para este fluxo
+      },
+    },
+  });
+}
 
 function asText(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -19,7 +42,7 @@ export async function GET(_: Request, ctx: { params: { id: string } }) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = supabaseServer();
     const { data, error } = await supabase.from("cursos").select("*").eq("id", id).maybeSingle();
 
     if (error) {
@@ -60,7 +83,7 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
 
     patch.updated_at = new Date().toISOString();
 
-    const supabase = await createClient();
+    const supabase = supabaseServer();
     const { data, error } = await supabase.from("cursos").update(patch).eq("id", id).select("*").single();
 
     if (error) {
@@ -81,7 +104,7 @@ export async function DELETE(_: Request, ctx: { params: { id: string } }) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = supabaseServer();
     const { data, error } = await supabase
       .from("cursos")
       .update({ situacao: "Inativo", updated_at: new Date().toISOString() })

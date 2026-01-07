@@ -138,11 +138,14 @@ export default function CursosPage() {
     setCursosErro(null);
     try {
       const res = await fetch("/api/escola/academico/cursos");
-      const json = (await res.json()) as { ok?: boolean; data?: CursoApi[]; error?: string; message?: string };
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; data?: CursoApi[]; error?: string; message?: string }
+        | null;
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.message ?? json?.error ?? "Falha ao carregar cursos");
+        const msg = json?.message ?? json?.error ?? "Falha ao carregar cursos";
+        throw new Error(`${res.status} - ${msg}`);
       }
-      const lista = Array.isArray(json.data) ? json.data : [];
+      const lista = Array.isArray(json?.data) ? json.data : [];
       setCursos(lista.map(mapCurso));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erro ao carregar cursos";
@@ -189,10 +192,11 @@ export default function CursosPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; message?: string } | null;
 
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.message ?? json?.error ?? "Falha ao salvar curso");
+        const msg = json?.message ?? json?.error ?? "Falha ao salvar curso";
+        throw new Error(`${res.status} - ${msg}`);
       }
 
       await carregarCursos();
@@ -225,10 +229,11 @@ export default function CursosPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ situacao: alvo.ativo ? "Inativo" : "Ativo" }),
       });
-      const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; message?: string } | null;
 
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.message ?? json?.error ?? "Falha ao atualizar situacao");
+        const msg = json?.message ?? json?.error ?? "Falha ao atualizar situacao";
+        throw new Error(`${res.status} - ${msg}`);
       }
 
       await carregarCursos();
