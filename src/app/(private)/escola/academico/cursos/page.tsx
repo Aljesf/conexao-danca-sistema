@@ -6,6 +6,27 @@ import FormCard from "@/components/FormCard";
 import FormInput from "@/components/FormInput";
 import PrimaryButton from "@/components/PrimaryButton";
 
+async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const res = await fetch(input, {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
+    cache: "no-store",
+  });
+
+  const data = (await res.json().catch(() => null)) as unknown;
+
+  if (!res.ok) {
+    console.error("ERRO fetchJson:", { input, status: res.status, data });
+    throw new Error(`Falha na requisicao (${res.status}).`);
+  }
+
+  return data as T;
+}
+
 type Curso = {
   id: number;
   nome: string;
@@ -52,6 +73,54 @@ type Habilidade = {
   criterio?: string;
   ordem?: number;
 };
+
+type PutNivelResponse =
+  | {
+      ok: true;
+      nivel: {
+        id: number;
+        curso_id: number;
+        nome: string;
+        idade_minima: number | null;
+        idade_maxima: number | null;
+        faixa_etaria_sugerida: string | null;
+        pre_requisito_nivel_id: number | null;
+        observacoes: string | null;
+      };
+    }
+  | { ok: false; error: string; details?: string };
+
+type PutModuloResponse =
+  | {
+      ok: true;
+      modulo: {
+        id: number;
+        curso_id: number;
+        nivel_id: number;
+        nome: string;
+        descricao: string | null;
+        ordem: number;
+        obrigatorio: boolean;
+      };
+    }
+  | { ok: false; error: string; details?: string };
+
+type PutHabilidadeResponse =
+  | {
+      ok: true;
+      habilidade: {
+        id: number;
+        curso_id: number;
+        nivel_id: number;
+        modulo_id: number;
+        nome: string;
+        tipo: string | null;
+        descricao: string | null;
+        criterio_avaliacao: string | null;
+        ordem: number;
+      };
+    }
+  | { ok: false; error: string; details?: string };
 
 const seedsNiveis: Nivel[] = [
   { id: 1, cursoId: 1, nome: "Nivel 1", idadeMinima: 6, idadeMaxima: 8, faixaEtariaSugerida: "6-8 anos" },
@@ -253,39 +322,48 @@ export default function CursosPage() {
       nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima)
     );
     if (nivelEditingId) {
+      const editingId = nivelEditingId;
       try {
-        const res = await fetch(`/api/escola/academico/niveis/${nivelEditingId}`, {
+        const payload = {
+          nome: nivelForm.nome,
+          faixa_etaria_sugerida: faixa || null,
+          pre_requisito_nivel_id: nivelForm.prerequisito ?? null,
+          observacoes: nivelForm.observacoes || null,
+          idade_minima: nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
+          idade_maxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
+        };
+
+        const data = await fetchJson<PutNivelResponse>(`/api/escola/academico/niveis/${editingId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nome: nivelForm.nome,
-            faixa_etaria_sugerida: faixa || null,
-            pre_requisito_nivel_id: nivelForm.prerequisito ?? null,
-            observacoes: nivelForm.observacoes || null,
-            idade_minima: nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
-            idade_maxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
-          }),
+          body: JSON.stringify(payload),
         });
-        const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; details?: string } | null;
-        if (!res.ok || !json?.ok) {
-          const msg = json?.details ?? json?.error ?? "Falha ao salvar nivel.";
-          throw new Error(msg);
+
+        if (!data.ok) {
+          throw new Error(data.details || data.error || "Falha ao salvar nivel.");
         }
+
+        if (!data.nivel?.id || data.nivel.nome !== payload.nome) {
+          console.error("RETORNO INCONSISTENTE salvar nivel:", { esperado: payload.nome, retornou: data });
+          throw new Error("Salvamento inconsistente. Verifique permissoes/atualizacao.");
+        }
+
         setNiveis((prev) =>
           prev.map((n) =>
-            n.id === nivelEditingId
+            n.id === editingId
               ? {
                   ...n,
-                  nome: nivelForm.nome,
-                  idadeMinima: nivelForm.idadeMinima === "" ? null : Number(nivelForm.idadeMinima),
-                  idadeMaxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
-                  faixaEtariaSugerida: faixa || "",
-                  observacoes: nivelForm.observacoes,
-                  prerequisito: nivelForm.prerequisito || null,
+                  cursoId: data.nivel.curso_id,
+                  nome: data.nivel.nome,
+                  idadeMinima: data.nivel.idade_minima,
+                  idadeMaxima: data.nivel.idade_maxima,
+                  faixaEtariaSugerida: data.nivel.faixa_etaria_sugerida ?? "",
+                  observacoes: data.nivel.observacoes ?? "",
+                  prerequisito: data.nivel.pre_requisito_nivel_id ?? null,
                 }
               : n
           )
         );
+        await carregarCursos();
         setCursosMsg("Nivel atualizado.");
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Falha ao salvar nivel.";
@@ -304,6 +382,7 @@ export default function CursosPage() {
         prerequisito: nivelForm.prerequisito || null,
       };
       setNiveis((prev) => [novo, ...prev]);
+      await carregarCursos();
       setCursosMsg("Nivel criado localmente.");
     }
     setNivelForm({ nome: "", idadeMinima: "", idadeMaxima: "", observacoes: "", prerequisito: null });
@@ -316,36 +395,44 @@ export default function CursosPage() {
     setCursosErro(null);
     setCursosMsg(null);
     if (conteudoEditingId) {
+      const editingId = conteudoEditingId;
       try {
-        const res = await fetch(`/api/escola/academico/modulos/${conteudoEditingId}`, {
+        const payload = {
+          nome: conteudoForm.nome,
+          descricao: conteudoForm.descricao || null,
+          ordem: conteudoForm.ordem,
+          obrigatorio: conteudoForm.obrigatorio,
+        };
+
+        const data = await fetchJson<PutModuloResponse>(`/api/escola/academico/modulos/${editingId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nome: conteudoForm.nome,
-            descricao: conteudoForm.descricao || null,
-            ordem: conteudoForm.ordem,
-            obrigatorio: conteudoForm.obrigatorio,
-          }),
+          body: JSON.stringify(payload),
         });
-        const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; details?: string } | null;
-        if (!res.ok || !json?.ok) {
-          const msg = json?.details ?? json?.error ?? "Falha ao salvar modulo.";
-          throw new Error(msg);
+
+        if (!data.ok) {
+          throw new Error(data.details || data.error || "Falha ao salvar modulo.");
         }
+
+        if (!data.modulo?.id || data.modulo.nome !== payload.nome) {
+          console.error("RETORNO INCONSISTENTE salvar modulo:", { esperado: payload.nome, retornou: data });
+          throw new Error("Salvamento inconsistente. Verifique permissoes/atualizacao.");
+        }
+
         setConteudos((prev) =>
           prev.map((c) =>
-            c.id === conteudoEditingId
+            c.id === editingId
               ? {
                   ...c,
-                  nome: conteudoForm.nome,
-                  ordem: conteudoForm.ordem,
-                  obrigatorio: conteudoForm.obrigatorio,
-                  descricao: conteudoForm.descricao,
+                  nome: data.modulo.nome,
+                  ordem: data.modulo.ordem,
+                  obrigatorio: data.modulo.obrigatorio,
+                  descricao: data.modulo.descricao ?? "",
                   categoria: conteudoForm.categoria,
                 }
               : c
           )
         );
+        await carregarCursos();
         setCursosMsg("Modulo atualizado.");
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Falha ao salvar modulo.";
@@ -363,6 +450,7 @@ export default function CursosPage() {
         categoria: conteudoForm.categoria,
       };
       setConteudos((prev) => [novo, ...prev]);
+      await carregarCursos();
       setCursosMsg("Modulo criado localmente.");
     }
     setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "", categoria: "" });
@@ -375,37 +463,45 @@ export default function CursosPage() {
     setCursosErro(null);
     setCursosMsg(null);
     if (habilidadeEditingId) {
+      const editingId = habilidadeEditingId;
       try {
-        const res = await fetch(`/api/escola/academico/habilidades/${habilidadeEditingId}`, {
+        const payload = {
+          nome: habilidadeForm.nome,
+          tipo: habilidadeForm.tipo || null,
+          descricao: habilidadeForm.descricao || null,
+          criterio_avaliacao: habilidadeForm.criterio || null,
+          ordem: habilidadeForm.ordem,
+        };
+
+        const data = await fetchJson<PutHabilidadeResponse>(`/api/escola/academico/habilidades/${editingId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nome: habilidadeForm.nome,
-            tipo: habilidadeForm.tipo || null,
-            descricao: habilidadeForm.descricao || null,
-            criterio_avaliacao: habilidadeForm.criterio || null,
-            ordem: habilidadeForm.ordem,
-          }),
+          body: JSON.stringify(payload),
         });
-        const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; details?: string } | null;
-        if (!res.ok || !json?.ok) {
-          const msg = json?.details ?? json?.error ?? "Falha ao salvar habilidade.";
-          throw new Error(msg);
+
+        if (!data.ok) {
+          throw new Error(data.details || data.error || "Falha ao salvar habilidade.");
         }
+
+        if (!data.habilidade?.id || data.habilidade.nome !== payload.nome) {
+          console.error("RETORNO INCONSISTENTE salvar habilidade:", { esperado: payload.nome, retornou: data });
+          throw new Error("Salvamento inconsistente. Verifique permissoes/atualizacao.");
+        }
+
         setHabilidades((prev) =>
           prev.map((h) =>
-            h.id === habilidadeEditingId
+            h.id === editingId
               ? {
                   ...h,
-                  nome: habilidadeForm.nome,
-                  tipo: habilidadeForm.tipo,
-                  descricao: habilidadeForm.descricao,
-                  criterio: habilidadeForm.criterio,
-                  ordem: habilidadeForm.ordem,
+                  nome: data.habilidade.nome,
+                  tipo: data.habilidade.tipo ?? "",
+                  descricao: data.habilidade.descricao ?? "",
+                  criterio: data.habilidade.criterio_avaliacao ?? "",
+                  ordem: data.habilidade.ordem,
                 }
               : h
           )
         );
+        await carregarCursos();
         setCursosMsg("Habilidade atualizada.");
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Falha ao salvar habilidade.";
@@ -423,6 +519,7 @@ export default function CursosPage() {
         ordem: habilidadeForm.ordem,
       };
       setHabilidades((prev) => [nova, ...prev]);
+      await carregarCursos();
       setCursosMsg("Habilidade criada localmente.");
     }
     setHabilidadeForm({ nome: "", tipo: "", descricao: "", criterio: "", ordem: 1 });

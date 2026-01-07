@@ -46,22 +46,30 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
 
   const { supabase } = admin;
 
+  const updatePayload: Record<string, unknown> = {
+    nome: parsed.data.nome,
+    descricao: parsed.data.descricao ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (typeof parsed.data.ordem === "number") updatePayload.ordem = parsed.data.ordem;
+  if (typeof parsed.data.obrigatorio === "boolean") updatePayload.obrigatorio = parsed.data.obrigatorio;
+
   const { data, error } = await supabase
     .from("modulos")
-    .update({
-      nome: parsed.data.nome,
-      descricao: parsed.data.descricao ?? null,
-      ordem: typeof parsed.data.ordem === "number" ? parsed.data.ordem : undefined,
-      obrigatorio: typeof parsed.data.obrigatorio === "boolean" ? parsed.data.obrigatorio : undefined,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", moduloId)
-    .select("*")
-    .single();
+    .select("id, curso_id, nivel_id, nome, descricao, ordem, obrigatorio, updated_at")
+    .maybeSingle();
 
   if (error) {
-    console.error("ERRO UPDATE MODULO:", { moduloId, error });
+    console.error("ERRO UPDATE MODULO:", { moduloId, updatePayload, error });
     return NextResponse.json({ ok: false, error: "FALHA_UPDATE_MODULO", details: error.message }, { status: 500 });
+  }
+
+  if (!data) {
+    console.error("UPDATE MODULO SEM RETORNO (0 linhas ou RLS):", { moduloId, updatePayload });
+    return NextResponse.json({ ok: false, error: "MODULO_NAO_ATUALIZADO_OU_SEM_PERMISSAO" }, { status: 404 });
   }
 
   return NextResponse.json({ ok: true, modulo: data }, { status: 200 });

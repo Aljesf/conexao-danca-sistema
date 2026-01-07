@@ -50,24 +50,33 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
 
   const { supabase } = admin;
 
+  const updatePayload = {
+    nome: parsed.data.nome,
+    faixa_etaria_sugerida: parsed.data.faixa_etaria_sugerida ?? null,
+    pre_requisito_nivel_id: parsed.data.pre_requisito_nivel_id ?? null,
+    observacoes: parsed.data.observacoes ?? null,
+    idade_minima: parsed.data.idade_minima ?? null,
+    idade_maxima: parsed.data.idade_maxima ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
   const { data, error } = await supabase
     .from("niveis")
-    .update({
-      nome: parsed.data.nome,
-      faixa_etaria_sugerida: parsed.data.faixa_etaria_sugerida ?? null,
-      pre_requisito_nivel_id: parsed.data.pre_requisito_nivel_id ?? null,
-      observacoes: parsed.data.observacoes ?? null,
-      idade_minima: parsed.data.idade_minima ?? null,
-      idade_maxima: parsed.data.idade_maxima ?? null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", nivelId)
-    .select("*")
-    .single();
+    .select(
+      "id, curso_id, nome, idade_minima, idade_maxima, faixa_etaria_sugerida, pre_requisito_nivel_id, observacoes, updated_at"
+    )
+    .maybeSingle();
 
   if (error) {
-    console.error("ERRO UPDATE NIVEL:", { nivelId, error });
+    console.error("ERRO UPDATE NIVEL:", { nivelId, updatePayload, error });
     return NextResponse.json({ ok: false, error: "FALHA_UPDATE_NIVEL", details: error.message }, { status: 500 });
+  }
+
+  if (!data) {
+    console.error("UPDATE NIVEL SEM RETORNO (0 linhas ou RLS):", { nivelId, updatePayload });
+    return NextResponse.json({ ok: false, error: "NIVEL_NAO_ATUALIZADO_OU_SEM_PERMISSAO" }, { status: 404 });
   }
 
   return NextResponse.json({ ok: true, nivel: data }, { status: 200 });

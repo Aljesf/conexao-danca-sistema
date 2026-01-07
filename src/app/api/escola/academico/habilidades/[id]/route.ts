@@ -47,23 +47,31 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
 
   const { supabase } = admin;
 
+  const updatePayload: Record<string, unknown> = {
+    nome: parsed.data.nome,
+    tipo: parsed.data.tipo ?? null,
+    descricao: parsed.data.descricao ?? null,
+    criterio_avaliacao: parsed.data.criterio_avaliacao ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (typeof parsed.data.ordem === "number") updatePayload.ordem = parsed.data.ordem;
+
   const { data, error } = await supabase
     .from("habilidades")
-    .update({
-      nome: parsed.data.nome,
-      tipo: parsed.data.tipo ?? null,
-      descricao: parsed.data.descricao ?? null,
-      criterio_avaliacao: parsed.data.criterio_avaliacao ?? null,
-      ordem: typeof parsed.data.ordem === "number" ? parsed.data.ordem : undefined,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updatePayload)
     .eq("id", habilidadeId)
-    .select("*")
-    .single();
+    .select("id, curso_id, nivel_id, modulo_id, nome, tipo, descricao, criterio_avaliacao, ordem, updated_at")
+    .maybeSingle();
 
   if (error) {
-    console.error("ERRO UPDATE HABILIDADE:", { habilidadeId, error });
+    console.error("ERRO UPDATE HABILIDADE:", { habilidadeId, updatePayload, error });
     return NextResponse.json({ ok: false, error: "FALHA_UPDATE_HABILIDADE", details: error.message }, { status: 500 });
+  }
+
+  if (!data) {
+    console.error("UPDATE HABILIDADE SEM RETORNO (0 linhas ou RLS):", { habilidadeId, updatePayload });
+    return NextResponse.json({ ok: false, error: "HABILIDADE_NAO_ATUALIZADA_OU_SEM_PERMISSAO" }, { status: 404 });
   }
 
   return NextResponse.json({ ok: true, habilidade: data }, { status: 200 });
