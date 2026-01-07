@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export type PessoaSearchItem = {
@@ -17,6 +18,8 @@ type PessoaSearchBoxProps = {
   valueId: number | null;
   onChange: (pessoa: PessoaSearchItem | null) => void;
   disabled?: boolean;
+  allowCreate?: boolean;
+  createHref?: string;
 };
 
 export default function PessoaSearchBox({
@@ -25,6 +28,8 @@ export default function PessoaSearchBox({
   valueId,
   onChange,
   disabled = false,
+  allowCreate = false,
+  createHref = "/pessoas/nova",
 }: PessoaSearchBoxProps) {
   const [busca, setBusca] = useState("");
   const [resultados, setResultados] = useState<PessoaSearchItem[]>([]);
@@ -79,7 +84,7 @@ export default function PessoaSearchBox({
         }
         const data = (await resp.json()) as { ok: boolean; pessoas: PessoaSearchItem[] };
         setResultados(data.pessoas ?? []);
-      } catch (e) {
+      } catch {
         if (!controller.signal.aborted) {
           setResultados([]);
         }
@@ -146,9 +151,15 @@ export default function PessoaSearchBox({
         ))}
         {!buscando && resultados.length === 0 && busca.trim().length >= 2 ? (
           <div className="p-2">
-            <button type="button" className="text-xs text-muted-foreground" disabled>
-              Cadastrar nova pessoa (em breve)
-            </button>
+            {allowCreate ? (
+              <Link className="text-xs text-indigo-600 hover:underline" href={createHref}>
+                Criar nova pessoa
+              </Link>
+            ) : (
+              <button type="button" className="text-xs text-muted-foreground" disabled>
+                Cadastrar nova pessoa (em breve)
+              </button>
+            )}
           </div>
         ) : null}
       </div>

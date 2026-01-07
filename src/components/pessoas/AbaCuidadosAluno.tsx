@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiJson } from "./pessoasApi";
+import { PessoaPicker } from "./PessoaPicker";
 
 type Cuidados = {
   id: number;
@@ -341,24 +342,15 @@ export function AbaCuidadosAluno({ pessoaId }: { pessoaId: number }) {
           </select>
         </label>
 
-        <label className="text-sm">
-          <div className="mb-1 font-medium">Contato emergencia (pessoa_id)</div>
-          <input
-            type="number"
-            className="w-full border rounded-xl px-3 py-2"
-            value={cuidados.contato_emergencia_pessoa_id ?? ""}
-            onChange={(e) => {
-              const value = e.target.value;
-              const parsed = value === "" ? null : Number(value);
-              setCuidados({
-                ...cuidados,
-                contato_emergencia_pessoa_id: parsed !== null && Number.isFinite(parsed) ? parsed : null,
-              });
-            }}
-            placeholder="Ex: 123"
+        <div className="text-sm">
+          <PessoaPicker
+            label="Contato de emergencia"
+            valueId={cuidados.contato_emergencia_pessoa_id ?? null}
+            onChangeId={(id) => setCuidados({ ...cuidados, contato_emergencia_pessoa_id: id })}
+            allowCreate={true}
+            placeholder="Digite o nome, CPF ou telefone"
           />
-          <div className="text-xs text-slate-500 mt-1">Curto prazo: informe o ID. Depois colocamos busca por pessoa.</div>
-        </label>
+        </div>
 
         <label className="text-sm">
           <div className="mb-1 font-medium">Relacao</div>
@@ -400,7 +392,7 @@ export function AbaCuidadosAluno({ pessoaId }: { pessoaId: number }) {
                     {a.pessoa_autorizada?.nome ?? `Pessoa #${a.pessoa_autorizada_id}`}
                   </div>
                   <div className="text-xs text-slate-600">
-                    {a.pessoa_autorizada?.telefone ?? ""} {a.pessoa_autorizada?.email ? `• ${a.pessoa_autorizada.email}` : ""}
+                    {a.pessoa_autorizada?.telefone ?? ""} {a.pessoa_autorizada?.email ? `- ${a.pessoa_autorizada.email}` : ""}
                   </div>
 
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
@@ -452,24 +444,24 @@ export function AbaCuidadosAluno({ pessoaId }: { pessoaId: number }) {
 }
 
 function AdicionarAutorizado({ onAdd }: { onAdd: (id: number) => void }) {
-  const [value, setValue] = useState<string>("");
+  const [selecionadoId, setSelecionadoId] = useState<number | null>(null);
+
   return (
-    <div className="flex items-center gap-2">
-      <input
-        type="number"
-        className="w-28 border rounded-xl px-3 py-2 text-sm"
-        placeholder="pessoa_id"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
+    <div className="grid gap-2">
+      <PessoaPicker
+        label="Pessoa autorizada"
+        valueId={selecionadoId}
+        onChangeId={(id) => setSelecionadoId(id)}
+        allowCreate={true}
+        placeholder="Digite o nome, CPF ou telefone"
       />
       <button
-        className="px-3 py-2 rounded-xl bg-violet-600 text-white text-sm"
+        className="px-3 py-2 rounded-xl bg-violet-600 text-white text-sm disabled:opacity-60"
+        disabled={!selecionadoId}
         onClick={() => {
-          const n = Number(value);
-          if (Number.isFinite(n) && n > 0) {
-            onAdd(n);
-            setValue("");
-          }
+          if (!selecionadoId) return;
+          onAdd(selecionadoId);
+          setSelecionadoId(null);
         }}
       >
         Adicionar

@@ -1,7 +1,8 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiJson } from "./pessoasApi";
+import { PessoaPicker } from "./PessoaPicker";
 
 type Item = {
   id: number;
@@ -25,10 +26,10 @@ export function AbaObservacoesPedagogicas({ pessoaId }: { pessoaId: number }) {
     descricao: "",
   });
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const out = await apiJson<{ items: Item[] }>(`/api/pessoas/${pessoaId}/observacoes-pedagogicas`);
     setItems(out.items ?? []);
-  }
+  }, [pessoaId]);
 
   useEffect(() => {
     let mounted = true;
@@ -48,7 +49,7 @@ export function AbaObservacoesPedagogicas({ pessoaId }: { pessoaId: number }) {
     return () => {
       mounted = false;
     };
-  }, [pessoaId]);
+  }, [reload]);
 
   async function add() {
     setMsg(null);
@@ -104,17 +105,15 @@ export function AbaObservacoesPedagogicas({ pessoaId }: { pessoaId: number }) {
             onChange={(e) => setNovo({ ...novo, observado_em: e.target.value })}
           />
         </label>
-        <label className="text-sm">
-          <div className="mb-1 font-medium">Professor (pessoa_id)</div>
-          <input
-            type="number"
-            className="w-full border rounded-xl px-3 py-2"
-            value={novo.professor_pessoa_id}
-            onChange={(e) => setNovo({ ...novo, professor_pessoa_id: e.target.value })}
-            placeholder="Ex: 45"
+        <div className="text-sm md:col-span-2">
+          <PessoaPicker
+            label="Professor"
+            valueId={novo.professor_pessoa_id ? Number(novo.professor_pessoa_id) : null}
+            onChangeId={(id) => setNovo((p) => ({ ...p, professor_pessoa_id: id ? String(id) : "" }))}
+            allowCreate={true}
+            placeholder="Digite o nome, CPF ou telefone"
           />
-          <div className="text-xs text-slate-500 mt-1">Curto prazo: informe o ID.</div>
-        </label>
+        </div>
         <label className="text-sm md:col-span-2">
           <div className="mb-1 font-medium">Titulo</div>
           <input
@@ -150,7 +149,7 @@ export function AbaObservacoesPedagogicas({ pessoaId }: { pessoaId: number }) {
             <div key={x.id} className="border rounded-xl p-4 flex items-start justify-between gap-3">
               <div>
                 <div className="font-medium">
-                  {x.titulo ?? "Observacao"} {x.professor?.nome ? `• ${x.professor.nome}` : x.professor_pessoa_id ? `• Professor #${x.professor_pessoa_id}` : ""}
+                  {x.titulo ?? "Observacao"} {x.professor?.nome ? `- ${x.professor.nome}` : x.professor_pessoa_id ? `- Professor #${x.professor_pessoa_id}` : ""}
                 </div>
                 <div className="text-xs text-slate-600">{x.observado_em}</div>
                 <div className="text-sm text-slate-700 mt-2 whitespace-pre-wrap">{x.descricao}</div>

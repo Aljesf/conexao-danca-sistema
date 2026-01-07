@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiJson } from "./pessoasApi";
+import { PessoaPicker } from "./PessoaPicker";
 
 type Vinculo = {
   id: number;
@@ -17,9 +18,16 @@ export function AbaVinculos({ pessoaId }: { pessoaId: number }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Vinculo[]>([]);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
-  const [novo, setNovo] = useState<{ responsavel_id: string; parentesco: string }>({
-    responsavel_id: "",
+  const [novo, setNovo] = useState<{
+    responsavel_id: number | null;
+    parentesco: string;
+    is_responsavel_financeiro: boolean;
+    is_responsavel_principal: boolean;
+  }>({
+    responsavel_id: null,
     parentesco: "",
+    is_responsavel_financeiro: false,
+    is_responsavel_principal: false,
   });
 
   const reload = useCallback(async () => {
@@ -50,20 +58,24 @@ export function AbaVinculos({ pessoaId }: { pessoaId: number }) {
   async function add() {
     setMsg(null);
     try {
-      const rid = Number(novo.responsavel_id);
-      if (!Number.isFinite(rid) || rid <= 0) throw new Error("Informe um responsavel_id valido");
+      if (!novo.responsavel_id) throw new Error("Selecione um responsavel.");
 
       await apiJson(`/api/pessoas/${pessoaId}/responsaveis`, {
         method: "POST",
         body: JSON.stringify({
-          responsavel_id: rid,
+          responsavel_id: novo.responsavel_id,
           parentesco: novo.parentesco || null,
-          is_responsavel_financeiro: false,
-          is_responsavel_principal: false,
+          is_responsavel_financeiro: novo.is_responsavel_financeiro,
+          is_responsavel_principal: novo.is_responsavel_principal,
         }),
       });
 
-      setNovo({ responsavel_id: "", parentesco: "" });
+      setNovo({
+        responsavel_id: null,
+        parentesco: "",
+        is_responsavel_financeiro: false,
+        is_responsavel_principal: false,
+      });
       await reload();
       setMsg({ type: "ok", text: "Vinculo adicionado." });
     } catch (e: unknown) {
@@ -114,16 +126,15 @@ export function AbaVinculos({ pessoaId }: { pessoaId: number }) {
       {msg ? <div className={`mt-3 text-sm ${msg.type === "ok" ? "text-emerald-700" : "text-red-700"}`}>{msg.text}</div> : null}
 
       <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-        <label className="text-sm">
-          <div className="mb-1 font-medium">responsavel_id</div>
-          <input
-            className="w-full border rounded-xl px-3 py-2"
-            value={novo.responsavel_id}
-            onChange={(e) => setNovo({ ...novo, responsavel_id: e.target.value })}
-            placeholder="Ex: 123"
+        <div className="md:col-span-2">
+          <PessoaPicker
+            label="Responsavel"
+            valueId={novo.responsavel_id}
+            onChangeId={(id) => setNovo((prev) => ({ ...prev, responsavel_id: id }))}
+            allowCreate={true}
+            placeholder="Digite o nome, CPF ou telefone"
           />
-          <div className="text-xs text-slate-500 mt-1">Curto prazo: informe o ID.</div>
-        </label>
+        </div>
 
         <label className="text-sm">
           <div className="mb-1 font-medium">Parentesco</div>
@@ -135,7 +146,31 @@ export function AbaVinculos({ pessoaId }: { pessoaId: number }) {
           />
         </label>
 
-        <button className="px-4 py-2 rounded-xl bg-violet-600 text-white text-sm" onClick={add}>
+        <div className="md:col-span-3 flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={novo.is_responsavel_financeiro}
+              onChange={(e) => setNovo({ ...novo, is_responsavel_financeiro: e.target.checked })}
+            />
+            Responsavel financeiro (contrato)
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={novo.is_responsavel_principal}
+              onChange={(e) => setNovo({ ...novo, is_responsavel_principal: e.target.checked })}
+            />
+            Responsavel principal
+          </label>
+        </div>
+
+        <button
+          className="px-4 py-2 rounded-xl bg-violet-600 text-white text-sm md:col-span-3 disabled:opacity-60"
+          onClick={add}
+          disabled={!novo.responsavel_id}
+        >
           Adicionar vinculo
         </button>
       </div>
@@ -174,7 +209,7 @@ export function AbaVinculos({ pessoaId }: { pessoaId: number }) {
                         )
                       }
                     />
-                    Financeiro padrao
+                    Responsavel financeiro (contrato)
                   </label>
 
                   <label className="flex items-center gap-2">

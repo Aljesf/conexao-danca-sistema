@@ -57,6 +57,14 @@ export default function NovaPessoaPage() {
   const [tipoPessoa, setTipoPessoa] = useState<"FISICA" | "JURIDICA">("FISICA");
   const [observacoes, setObservacoes] = useState("");
   const [ativo, setAtivo] = useState(true);
+  const [logradouro, setLogradouro] = useState("");
+  const [numero, setNumero] = useState("");
+  const [complemento, setComplemento] = useState("");
+  const [bairro, setBairro] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [uf, setUf] = useState("");
+  const [cep, setCep] = useState("");
+  const [referencia, setReferencia] = useState("");
 
   function resetFields() {
     setNome("");
@@ -73,6 +81,14 @@ export default function NovaPessoaPage() {
     setTipoPessoa("FISICA");
     setObservacoes("");
     setAtivo(true);
+    setLogradouro("");
+    setNumero("");
+    setComplemento("");
+    setBairro("");
+    setCidade("");
+    setUf("");
+    setCep("");
+    setReferencia("");
   }
 
   function resetAll() {
@@ -89,6 +105,17 @@ export default function NovaPessoaPage() {
     setError(null);
 
     try {
+      const logradouroTrim = logradouro.trim();
+      const bairroTrim = bairro.trim();
+      const cidadeTrim = cidade.trim();
+      const ufTrim = uf.trim().toUpperCase();
+
+      if (!logradouroTrim || !bairroTrim || !cidadeTrim || !ufTrim) {
+        setError("Endereco incompleto. Informe logradouro, bairro, cidade e UF.");
+        setSaving(false);
+        return;
+      }
+
       const res = await fetch("/api/pessoas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -123,6 +150,26 @@ export default function NovaPessoaPage() {
         throw new Error("Resposta invalida ao salvar pessoa.");
       }
 
+      const enderecoRes = await fetch(`/api/pessoas/${pessoaId}/endereco`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          logradouro: logradouroTrim,
+          numero: numero.trim() || null,
+          complemento: complemento.trim() || null,
+          bairro: bairroTrim,
+          cidade: cidadeTrim,
+          uf: ufTrim,
+          cep: cep.trim() || null,
+          referencia: referencia.trim() || null,
+        }),
+      });
+
+      if (!enderecoRes.ok) {
+        const enderecoJson = (await enderecoRes.json().catch(() => null)) as { error?: string; details?: string } | null;
+        setError(enderecoJson?.details ?? enderecoJson?.error ?? "Erro ao salvar endereco.");
+      }
+
       setCreatedPessoaId(pessoaId);
       resetFields();
     } catch (err: unknown) {
@@ -145,6 +192,9 @@ export default function NovaPessoaPage() {
 
         {createdPessoaId ? (
           <div className="space-y-6">
+            {error ? (
+              <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</div>
+            ) : null}
             <div className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-5 shadow-sm backdrop-blur">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
@@ -379,6 +429,108 @@ export default function NovaPessoaPage() {
               >
                 Cadastro ativo
               </label>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+            <h3 className="text-sm font-semibold text-slate-700">Endereco</h3>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Logradouro *
+                </label>
+                <input
+                  type="text"
+                  value={logradouro}
+                  onChange={(e) => setLogradouro(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Numero
+                </label>
+                <input
+                  type="text"
+                  value={numero}
+                  onChange={(e) => setNumero(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Complemento
+                </label>
+                <input
+                  type="text"
+                  value={complemento}
+                  onChange={(e) => setComplemento(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Bairro *
+                </label>
+                <input
+                  type="text"
+                  value={bairro}
+                  onChange={(e) => setBairro(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Cidade *
+                </label>
+                <input
+                  type="text"
+                  value={cidade}
+                  onChange={(e) => setCidade(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  UF *
+                </label>
+                <input
+                  type="text"
+                  value={uf}
+                  maxLength={2}
+                  onChange={(e) => setUf(e.target.value.toUpperCase())}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm uppercase text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  CEP
+                </label>
+                <input
+                  type="text"
+                  value={cep}
+                  onChange={(e) => setCep(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Referencia
+                </label>
+                <input
+                  type="text"
+                  value={referencia}
+                  onChange={(e) => setReferencia(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
+                />
+              </div>
             </div>
           </div>
 
