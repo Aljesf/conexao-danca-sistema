@@ -43,6 +43,10 @@ export async function GET(_: Request, ctx: { params: { id: string } }) {
     }
 
     const supabase = supabaseServer();
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
+      return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
+    }
     const { data, error } = await supabase.from("cursos").select("*").eq("id", id).maybeSingle();
 
     if (error) {
@@ -66,6 +70,12 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
 
+    const supabase = supabaseServer();
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
+      return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
+    }
+
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) {
       return NextResponse.json({ ok: false, error: "body_required" }, { status: 400 });
@@ -80,10 +90,12 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
     if (Object.prototype.hasOwnProperty.call(body, "metodologia")) patch.metodologia = asText(body.metodologia);
     if (Object.prototype.hasOwnProperty.call(body, "observacoes")) patch.observacoes = asText(body.observacoes);
     if (Object.prototype.hasOwnProperty.call(body, "situacao")) patch.situacao = asText(body.situacao);
+    if (Object.prototype.hasOwnProperty.call(body, "ativo") && typeof body.ativo === "boolean") {
+      patch.situacao = body.ativo ? "Ativo" : "Inativo";
+    }
 
     patch.updated_at = new Date().toISOString();
 
-    const supabase = supabaseServer();
     const { data, error } = await supabase.from("cursos").update(patch).eq("id", id).select("*").single();
 
     if (error) {
@@ -105,6 +117,10 @@ export async function DELETE(_: Request, ctx: { params: { id: string } }) {
     }
 
     const supabase = supabaseServer();
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
+      return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
+    }
     const { data, error } = await supabase
       .from("cursos")
       .update({ situacao: "Inativo", updated_at: new Date().toISOString() })

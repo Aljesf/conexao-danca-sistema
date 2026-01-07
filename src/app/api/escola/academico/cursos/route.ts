@@ -43,11 +43,15 @@ function asText(value: unknown): string | null {
 export async function GET() {
   try {
     const supabase = supabaseServer();
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
+      return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
+    }
 
     const { data, error } = await supabase
       .from("cursos")
       .select("id,nome,metodologia,situacao,observacoes,created_at,updated_at")
-      .order("nome", { ascending: true });
+      .order("id", { ascending: true });
 
     if (error) {
       return NextResponse.json({ ok: false, error: "falha_listar_cursos", message: error.message }, { status: 500 });
@@ -63,6 +67,10 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const supabase = supabaseServer();
+    const { data: userData, error: authError } = await supabase.auth.getUser();
+    if (authError || !userData?.user) {
+      return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
+    }
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
 
     if (!body) {
@@ -74,11 +82,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "nome_obrigatorio" }, { status: 400 });
     }
 
+    let situacao = asText(body.situacao);
+    if (!situacao && typeof body.ativo === "boolean") {
+      situacao = body.ativo ? "Ativo" : "Inativo";
+    }
+
     const payload = {
       nome,
       metodologia: asText(body.metodologia),
       observacoes: asText(body.observacoes),
-      situacao: asText(body.situacao) ?? "Ativo",
+      situacao: situacao ?? "Ativo",
       updated_at: new Date().toISOString(),
     };
 
