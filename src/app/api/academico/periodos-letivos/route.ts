@@ -16,14 +16,22 @@ function bad(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const includeInativos = searchParams.get("include_inativos") === "1";
+
   const supabase = await getSupabaseServer();
-  const { data, error } = await supabase
+
+  let q = supabase
     .from("periodos_letivos")
     .select("id,codigo,titulo,ano_referencia,data_inicio,data_fim,inicio_letivo_janeiro,ativo,observacoes")
     .order("ano_referencia", { ascending: false });
 
+  if (!includeInativos) q = q.eq("ativo", true);
+
+  const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
   return NextResponse.json({ items: data ?? [] });
 }
 
