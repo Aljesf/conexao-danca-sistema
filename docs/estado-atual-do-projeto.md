@@ -126,8 +126,9 @@ APIs concluidas:
 - POST /api/academico/periodos-letivos/:id/excecoes
 
 Paginas:
-- /escola/academico/periodos-letivos
-- /escola/academico/periodos-letivos/[id]
+- /escola/academico/periodos-letivos (dashboard/lista)
+- /escola/academico/periodos-letivos/novo (criacao)
+- /escola/academico/periodos-letivos/[id] (construtor: faixas + excecoes)
 
 Navegacao:
 - Link no calendario: /escola/academico/periodos-letivos
