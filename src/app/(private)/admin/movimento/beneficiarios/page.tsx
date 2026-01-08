@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  PessoaAutocomplete,
+  type PessoaSugestao,
+} from "@/components/movimento/PessoaAutocomplete";
 
 type Beneficiario = {
   id: string;
@@ -31,8 +35,8 @@ export default function MovimentoBeneficiariosPage() {
   const [items, setItems] = useState<Beneficiario[]>([]);
   const [q, setQ] = useState("");
 
-  const [pessoaId, setPessoaId] = useState("");
-  const [relatorio, setRelatorio] = useState("");
+  const [pessoa, setPessoa] = useState<PessoaSugestao | null>(null);
+  const [resumo, setResumo] = useState("");
   const [obs, setObs] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -61,9 +65,13 @@ export default function MovimentoBeneficiariosPage() {
 
   async function criarBeneficiario() {
     setMsg(null);
+    if (!pessoa) {
+      setMsg("Selecione uma pessoa antes de criar o beneficiario.");
+      return;
+    }
     const payload = {
-      pessoa_id: pessoaId.trim(),
-      relatorio_socioeconomico: relatorio.trim(),
+      pessoa_id: pessoa.id,
+      resumo_institucional: resumo.trim() || undefined,
       observacoes: obs.trim() || undefined,
     };
 
@@ -78,8 +86,8 @@ export default function MovimentoBeneficiariosPage() {
     }
     if (r.data) {
       setItems((prev) => [r.data, ...prev]);
-      setPessoaId("");
-      setRelatorio("");
+      setPessoa(null);
+      setResumo("");
       setObs("");
       setMsg("Beneficiario criado com sucesso.");
     }
@@ -111,23 +119,22 @@ export default function MovimentoBeneficiariosPage() {
           <h2 className="text-lg font-semibold text-slate-800">Novo beneficiario</h2>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div>
-              <label className="text-sm">Pessoa ID (bigint)</label>
-              <input
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={pessoaId}
-                onChange={(e) => setPessoaId(e.target.value)}
-                placeholder="Ex.: 123"
+            <div className="md:col-span-2">
+              <PessoaAutocomplete
+                label="Pessoa"
+                value={pessoa}
+                onChange={setPessoa}
+                placeholder="Digite nome, CPF ou email"
               />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="text-sm">Relatorio socioeconomico (obrigatorio)</label>
+            <div>
+              <label className="text-sm">Resumo institucional</label>
               <input
                 className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={relatorio}
-                onChange={(e) => setRelatorio(e.target.value)}
-                placeholder="Resumo institucional (min. 10 caracteres)"
+                value={resumo}
+                onChange={(e) => setResumo(e.target.value)}
+                placeholder="Opcional"
               />
             </div>
 

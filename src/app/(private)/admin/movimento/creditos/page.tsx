@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import {
+  BeneficiarioAutocomplete,
+  type BeneficiarioSugestao,
+} from "@/components/movimento/BeneficiarioAutocomplete";
 
 async function apiPost<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -13,7 +17,7 @@ async function apiPost<T>(url: string, body: unknown): Promise<T> {
 }
 
 export default function MovimentoCreditosPage() {
-  const [beneficiarioId, setBeneficiarioId] = useState("");
+  const [beneficiario, setBeneficiario] = useState<BeneficiarioSugestao | null>(null);
   const [loteId, setLoteId] = useState("");
   const [permitirDeficit, setPermitirDeficit] = useState(false);
   const [tipo, setTipo] = useState<"CR_REGULAR" | "CR_LIVRE" | "CR_PROJETO">("CR_REGULAR");
@@ -26,8 +30,17 @@ export default function MovimentoCreditosPage() {
 
   async function conceder() {
     setMsg(null);
+    if (!beneficiario) {
+      setMsg("Selecione um beneficiario aprovado antes de conceder creditos.");
+      return;
+    }
+    if (beneficiario.status !== "APROVADO") {
+      setMsg("Beneficiario nao aprovado. Status atual: " + beneficiario.status);
+      return;
+    }
+
     const payload = {
-      beneficiario_id: beneficiarioId.trim(),
+      beneficiario_id: beneficiario.beneficiario_id,
       lote_id: loteId.trim() || undefined,
       permitir_deficit: permitirDeficit,
       tipo,
@@ -70,33 +83,35 @@ export default function MovimentoCreditosPage() {
         </div>
 
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="text-sm">Beneficiario ID (uuid)</label>
-            <input
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-              value={beneficiarioId}
-              onChange={(e) => setBeneficiarioId(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-sm">Lote ID (opcional)</label>
-            <input
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-              value={loteId}
-              onChange={(e) => setLoteId(e.target.value)}
-            />
-          </div>
-          <div className="flex items-end gap-2">
-            <label className="text-sm flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={permitirDeficit}
-                onChange={(e) => setPermitirDeficit(e.target.checked)}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="md:col-span-2">
+              <BeneficiarioAutocomplete
+                value={beneficiario}
+                onChange={(item) => {
+                  setBeneficiario(item);
+                  setMsg(null);
+                }}
+                criarBeneficiarioHref="/admin/movimento/beneficiarios"
               />
-              Permitir deficit
-            </label>
-          </div>
+            </div>
+            <div>
+              <label className="text-sm">Lote ID (opcional)</label>
+              <input
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                value={loteId}
+                onChange={(e) => setLoteId(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <label className="text-sm flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={permitirDeficit}
+                  onChange={(e) => setPermitirDeficit(e.target.checked)}
+                />
+                Permitir deficit
+              </label>
+            </div>
 
           <div>
             <label className="text-sm">Tipo</label>
@@ -159,15 +174,18 @@ export default function MovimentoCreditosPage() {
               placeholder="YYYY-MM"
             />
           </div>
-        </div>
+          </div>
 
-        <div className="flex items-center gap-3">
-          <button className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50" onClick={conceder}>
-            Conceder
-          </button>
-          {msg ? <span className="text-sm text-slate-600">{msg}</span> : null}
-        </div>
-      </section>
+          <div className="flex items-center gap-3">
+            <button
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              onClick={conceder}
+            >
+              Conceder
+            </button>
+            {msg ? <span className="text-sm text-slate-600">{msg}</span> : null}
+          </div>
+        </section>
       </div>
     </div>
   );
