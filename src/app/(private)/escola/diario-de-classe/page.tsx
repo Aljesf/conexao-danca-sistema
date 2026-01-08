@@ -934,6 +934,13 @@ export default function DiarioDeClassePage() {
                   onChange={(e) => setAnotacaoDataHora(e.target.value)}
                 />
               </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">Professor</div>
+                <div className="mt-1 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+                  auto do usuario
+                </div>
+              </div>
             </div>
 
             {anotacaoErro ? (
