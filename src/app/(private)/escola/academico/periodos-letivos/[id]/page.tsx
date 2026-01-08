@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { SectionCard, StatCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
 
 type Periodo = {
   id: number;
@@ -41,10 +42,6 @@ type Excecao = {
   ponto_facultativo: boolean;
   em_avaliacao: boolean;
 };
-
-function cardClass() {
-  return "rounded-2xl border bg-white/60 backdrop-blur shadow-sm";
-}
 
 export default function PeriodoLetivoConstrutorPage() {
   const params = useParams<{ id: string }>();
@@ -177,72 +174,71 @@ export default function PeriodoLetivoConstrutorPage() {
   }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className={cardClass() + " p-5"}>
-        <div className="text-xs tracking-widest text-muted-foreground uppercase">Construtor</div>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold">Período letivo</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Construa o ano letivo com faixas (semestres/férias) e exceções (feriados, ponto facultativo, sem aula).
-            </p>
-          </div>
-          <Link
-            className="px-4 py-2 rounded-full border text-sm bg-white/70 shadow-sm"
-            href="/escola/academico/periodos-letivos"
-          >
+    <div className="space-y-6">
+      <SectionCard
+        title="Período letivo"
+        subtitle="Construtor"
+        description="Construa o ano letivo com faixas (semestres/férias) e exceções (feriados, ponto facultativo, sem aula)."
+        actions={
+          <Link className={pillNeutral} href="/escola/academico/periodos-letivos">
             Voltar
           </Link>
+        }
+      >
+        <div className="text-xs text-slate-500">
+          Use este painel para publicar as faixas e exceções que abastecem o calendário institucional.
         </div>
-      </div>
+      </SectionCard>
 
-      {loading ? <div className={cardClass() + " p-4 text-sm"}>Carregando…</div> : null}
-      {err ? <div className={cardClass() + " p-4 text-sm text-red-600"}>{err}</div> : null}
-      {msg ? <div className={cardClass() + " p-4 text-sm"}>{msg}</div> : null}
+      {loading ? (
+        <SectionCard title="Carregando" subtitle="Status" description="Buscando dados do período letivo.">
+          <div className="text-sm text-slate-600">Carregando…</div>
+        </SectionCard>
+      ) : null}
+      {err ? (
+        <SectionCard title="Falha" subtitle="Status" description="Não foi possível carregar o período letivo." className="border-rose-200 bg-rose-50/70">
+          <div className="text-sm text-rose-700">{err}</div>
+        </SectionCard>
+      ) : null}
+      {msg ? (
+        <SectionCard title="Atualização" subtitle="Status">
+          <div className="text-sm text-slate-700">{msg}</div>
+        </SectionCard>
+      ) : null}
 
       {periodo ? (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-          <div className={cardClass() + " p-4 lg:col-span-2"}>
-            <div className="text-xs text-muted-foreground">Período</div>
+          <SectionCard
+            title="Período"
+            subtitle="Resumo"
+            className="lg:col-span-2"
+            description={`${periodo.codigo} • ${periodo.ano_referencia} • ${periodo.data_inicio} → ${periodo.data_fim}`}
+          >
             <div className="text-lg font-semibold">{periodo.titulo}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {periodo.codigo} • {periodo.ano_referencia} • {periodo.data_inicio} → {periodo.data_fim} •{" "}
-              {periodo.ativo ? "ativo" : "inativo"}
+            <div className="text-xs text-slate-500 mt-2">
+              Início letivo de janeiro (pró-rata): {periodo.inicio_letivo_janeiro ?? "—"} • {periodo.ativo ? "ativo" : "inativo"}
             </div>
-            <div className="text-xs text-muted-foreground mt-2">
-              Início letivo de janeiro (pró-rata): {periodo.inicio_letivo_janeiro ?? "—"}
-            </div>
-          </div>
+          </SectionCard>
 
-          <div className={cardClass() + " p-4"}>
-            <div className="text-xs text-muted-foreground">Faixas</div>
-            <div className="text-2xl font-semibold">{counts.faixas}</div>
-            <div className="text-xs text-muted-foreground mt-1">semestres / férias</div>
-          </div>
-
-          <div className={cardClass() + " p-4"}>
-            <div className="text-xs text-muted-foreground">Exceções</div>
-            <div className="text-2xl font-semibold">{counts.excecoes}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              sem aula: {counts.semAula} • PF: {counts.pontoFacultativo}
-            </div>
-          </div>
+          <StatCard label="Faixas" value={counts.faixas} description="semestres / férias" tone="violet" />
+          <StatCard
+            label="Exceções"
+            value={counts.excecoes}
+            description={`sem aula: ${counts.semAula} • PF: ${counts.pontoFacultativo}`}
+            tone="amber"
+          />
         </div>
       ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className={cardClass() + " p-5 space-y-4"}>
-          <div>
-            <div className="text-xs tracking-widest text-muted-foreground uppercase">Faixas</div>
-            <div className="text-lg font-semibold">Semestres, férias e blocos oficiais</div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Ex.: 1º semestre, férias (sem aula), 2º semestre, avaliações finais.
-            </div>
-          </div>
-
+        <SectionCard
+          title="Semestres, férias e blocos oficiais"
+          subtitle="Faixas"
+          description="Ex.: 1º semestre, férias (sem aula), 2º semestre, avaliações finais."
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <div className="text-xs text-muted-foreground">Categoria</div>
+              <div className="text-xs text-slate-500">Categoria</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 value={fxCategoria}
@@ -250,7 +246,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Subcategoria</div>
+              <div className="text-xs text-slate-500">Subcategoria</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 value={fxSub}
@@ -259,7 +255,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground">Título</div>
+              <div className="text-xs text-slate-500">Título</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 value={fxTitulo}
@@ -267,7 +263,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Início</div>
+              <div className="text-xs text-slate-500">Início</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 type="date"
@@ -276,7 +272,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Fim</div>
+              <div className="text-xs text-slate-500">Fim</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 type="date"
@@ -286,7 +282,7 @@ export default function PeriodoLetivoConstrutorPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 mt-4">
             <label className="text-sm flex items-center gap-2">
               <input type="checkbox" checked={fxSemAula} onChange={(e) => setFxSemAula(e.target.checked)} />
               Sem aula (férias/recesso)
@@ -296,15 +292,12 @@ export default function PeriodoLetivoConstrutorPage() {
               Avaliações
             </label>
 
-            <button
-              className="ml-auto px-4 py-2 rounded-full border text-sm bg-white/70 shadow-sm"
-              onClick={() => void criarFaixa()}
-            >
+            <button className={`${pillAccent} ml-auto`} onClick={() => void criarFaixa()}>
               Adicionar faixa
             </button>
           </div>
 
-          <div className="rounded-xl border overflow-hidden">
+          <div className="rounded-xl border overflow-hidden mt-4">
             <div className="p-3 border-b text-sm font-semibold">Faixas cadastradas</div>
             {faixas.length === 0 ? (
               <div className="p-3 text-sm text-muted-foreground">Nenhuma faixa cadastrada.</div>
@@ -323,20 +316,16 @@ export default function PeriodoLetivoConstrutorPage() {
               </div>
             )}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className={cardClass() + " p-5 space-y-4"}>
-          <div>
-            <div className="text-xs tracking-widest text-muted-foreground uppercase">Exceções</div>
-            <div className="text-lg font-semibold">Feriados, ponto facultativo, sem aula</div>
-            <div className="text-sm text-muted-foreground mt-1">
-              Exceções são dias (ou intervalos) que alteram a rotina do ano letivo.
-            </div>
-          </div>
-
+        <SectionCard
+          title="Feriados, ponto facultativo, sem aula"
+          subtitle="Exceções"
+          description="Exceções são dias (ou intervalos) que alteram a rotina do ano letivo."
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <div className="text-xs text-muted-foreground">Domínio</div>
+              <div className="text-xs text-slate-500">Domínio</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 value={exDominio}
@@ -344,7 +333,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Categoria</div>
+              <div className="text-xs text-slate-500">Categoria</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 value={exCategoria}
@@ -353,7 +342,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground">Subcategoria (opcional)</div>
+              <div className="text-xs text-slate-500">Subcategoria (opcional)</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 value={exSub}
@@ -362,7 +351,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground">Título</div>
+              <div className="text-xs text-slate-500">Título</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 value={exTitulo}
@@ -370,7 +359,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Data início</div>
+              <div className="text-xs text-slate-500">Data início</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 type="date"
@@ -379,7 +368,7 @@ export default function PeriodoLetivoConstrutorPage() {
               />
             </div>
             <div>
-              <div className="text-xs text-muted-foreground">Data fim (opcional)</div>
+              <div className="text-xs text-slate-500">Data fim (opcional)</div>
               <input
                 className="w-full border rounded-xl px-3 py-2 text-sm"
                 type="date"
@@ -389,7 +378,7 @@ export default function PeriodoLetivoConstrutorPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 mt-4">
             <label className="text-sm flex items-center gap-2">
               <input type="checkbox" checked={exSemAula} onChange={(e) => setExSemAula(e.target.checked)} />
               Sem aula
@@ -403,15 +392,12 @@ export default function PeriodoLetivoConstrutorPage() {
               Em avaliação
             </label>
 
-            <button
-              className="ml-auto px-4 py-2 rounded-full border text-sm bg-white/70 shadow-sm"
-              onClick={() => void criarExcecao()}
-            >
+            <button className={`${pillAccent} ml-auto`} onClick={() => void criarExcecao()}>
               Adicionar exceção
             </button>
           </div>
 
-          <div className="rounded-xl border overflow-hidden">
+          <div className="rounded-xl border overflow-hidden mt-4">
             <div className="p-3 border-b text-sm font-semibold">Exceções cadastradas</div>
             {excecoes.length === 0 ? (
               <div className="p-3 text-sm text-muted-foreground">Nenhuma exceção cadastrada.</div>
@@ -421,8 +407,7 @@ export default function PeriodoLetivoConstrutorPage() {
                   <div key={e.id} className="p-3">
                     <div className="text-sm font-semibold">{e.titulo}</div>
                     <div className="text-xs text-muted-foreground">
-                      {e.dominio}/{e.categoria}/{e.subcategoria ?? "—"} • {e.data_inicio}
-                      {e.data_fim ? ` → ${e.data_fim}` : ""}
+                      {e.dominio}/{e.categoria}/{e.subcategoria ?? "—"} • {e.data_inicio}{e.data_fim ? ` → ${e.data_fim}` : ""}
                       {e.sem_aula ? " • sem aula" : ""}
                       {e.ponto_facultativo ? " • ponto facultativo" : ""}
                       {e.em_avaliacao ? " • em avaliação" : ""}
@@ -433,11 +418,10 @@ export default function PeriodoLetivoConstrutorPage() {
             )}
           </div>
 
-          <div className="text-xs text-muted-foreground">
-            Dica: carnaval pode ser uma exceção de intervalo (data_inicio e data_fim), e “quarta de cinzas” outra exceção
-            de 1 dia.
+          <div className="text-xs text-muted-foreground mt-4">
+            Dica: carnaval pode ser uma exceção de intervalo (data_inicio e data_fim), e &quot;quarta de cinzas&quot; outra exceção de 1 dia.
           </div>
-        </div>
+        </SectionCard>
       </div>
     </div>
   );
