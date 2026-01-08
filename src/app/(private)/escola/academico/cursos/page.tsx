@@ -46,51 +46,55 @@ async function apiPostJson<T>(url: string, payload: unknown): Promise<T> {
   return json as T;
 }
 
-type Curso = {
+type Habilidade = {
   id: number;
+  modulo_id: number;
   nome: string;
-  metodologia: string;
-  descricao: string;
-  ativo: boolean;
+  descricao: string | null;
+  criterio_avaliacao: string | null;
+  ordem: number | null;
+  tipo: string | null;
 };
 
-type CursoApi = {
+type Modulo = {
   id: number;
+  nivel_id: number;
   nome: string;
-  metodologia: string | null;
-  observacoes: string | null;
-  situacao: string | null;
+  descricao: string | null;
+  ordem: number | null;
+  obrigatorio: boolean | null;
+  habilidades: Habilidade[];
 };
 
 type Nivel = {
   id: number;
-  cursoId: number;
+  curso_id: number;
   nome: string;
-  idadeMinima: number | null;
-  idadeMaxima: number | null;
-  faixaEtariaSugerida?: string | null;
-  observacoes?: string;
-  prerequisito?: number | null;
+  observacoes: string | null;
+  faixa_etaria_sugerida: string | null;
+  idade_minima: number | null;
+  idade_maxima: number | null;
+  ordem?: number | null;
+  pre_requisito_nivel_id?: number | null;
+  modulos: Modulo[];
 };
 
-type Conteudo = {
+type CursoTree = {
   id: number;
-  nivelId: number;
   nome: string;
-  ordem: number;
-  obrigatorio: boolean;
-  descricao?: string;
-  categoria?: string;
+  metodologia: string | null;
+  situacao: string | null;
+  observacoes: string | null;
+  created_at?: string;
+  updated_at?: string;
+  niveis: Nivel[];
 };
 
-type Habilidade = {
-  id: number;
-  conteudoId: number;
-  nome: string;
-  tipo: string;
-  descricao?: string;
-  criterio?: string;
-  ordem?: number;
+type CursosApiResponse = {
+  ok: boolean;
+  data: CursoTree[];
+  code?: string;
+  message?: string;
 };
 
 type PutNivelResponse =
@@ -144,24 +148,6 @@ type PutHabilidadeResponse =
 type PostNivelResponse = Extract<PutNivelResponse, { ok: true }>;
 type PostModuloResponse = Extract<PutModuloResponse, { ok: true }>;
 type PostHabilidadeResponse = Extract<PutHabilidadeResponse, { ok: true }>;
-
-const seedsNiveis: Nivel[] = [
-  { id: 1, cursoId: 1, nome: "Nivel 1", idadeMinima: 6, idadeMaxima: 8, faixaEtariaSugerida: "6-8 anos" },
-  { id: 2, cursoId: 1, nome: "Nivel 2", idadeMinima: 8, idadeMaxima: 10, faixaEtariaSugerida: "8-10 anos" },
-  { id: 3, cursoId: 2, nome: "Iniciante", idadeMinima: null, idadeMaxima: null, faixaEtariaSugerida: "Livre" },
-];
-
-const seedsConteudos: Conteudo[] = [
-  { id: 1, nivelId: 1, nome: "Plies basicos", ordem: 1, obrigatorio: true, descricao: "Fundamentos" },
-  { id: 2, nivelId: 1, nome: "Port de bras", ordem: 2, obrigatorio: false, descricao: "Alongamento e fluidez" },
-  { id: 3, nivelId: 3, nome: "Isolamentos", ordem: 1, obrigatorio: true, descricao: "Coordenacao" },
-];
-
-const seedsHabilidades: Habilidade[] = [
-  { id: 1, conteudoId: 1, nome: "Plie em 1a", tipo: "Tecnica", ordem: 1, descricao: "Alinhamento", criterio: "Postura" },
-  { id: 2, conteudoId: 1, nome: "Plie em 2a", tipo: "Tecnica", ordem: 2, descricao: "Amplitude", criterio: "Controle" },
-  { id: 3, conteudoId: 3, nome: "Isolamento de cabeca", tipo: "Tecnica", ordem: 1, descricao: "Mobilidade", criterio: "Precisao" },
-];
 
 function formatFaixa(min: number | null, max: number | null) {
   if (min != null && max != null) return `${min}-${max} anos`;
@@ -234,17 +220,14 @@ async function criarHabilidadeNoBanco(params: {
 }
 
 export default function CursosPage() {
-  const [cursos, setCursos] = useState<Curso[]>([]);
-  const [niveis, setNiveis] = useState<Nivel[]>(seedsNiveis);
-  const [conteudos, setConteudos] = useState<Conteudo[]>(seedsConteudos);
-  const [habilidades, setHabilidades] = useState<Habilidade[]>(seedsHabilidades);
+  const [cursos, setCursos] = useState<CursoTree[]>([]);
 
   const [cursosLoading, setCursosLoading] = useState(true);
   const [cursosErro, setCursosErro] = useState<string | null>(null);
   const [cursosMsg, setCursosMsg] = useState<string | null>(null);
 
   const [filtro, setFiltro] = useState("");
-  const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
+  const [editingCurso, setEditingCurso] = useState<CursoTree | null>(null);
   const [showCursoForm, setShowCursoForm] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -262,7 +245,7 @@ export default function CursosPage() {
 
   const [conteudoFormOpenFor, setConteudoFormOpenFor] = useState<number | null>(null);
   const [conteudoEditingId, setConteudoEditingId] = useState<number | null>(null);
-  const [conteudoForm, setConteudoForm] = useState({ nome: "", ordem: 1, obrigatorio: true, descricao: "", categoria: "" });
+  const [conteudoForm, setConteudoForm] = useState({ nome: "", ordem: 1, obrigatorio: true, descricao: "" });
 
   const [habilidadeFormOpenFor, setHabilidadeFormOpenFor] = useState<number | null>(null);
   const [habilidadeEditingId, setHabilidadeEditingId] = useState<number | null>(null);
@@ -271,33 +254,46 @@ export default function CursosPage() {
   const filtradas = useMemo(() => {
     const q = filtro.toLowerCase().trim();
     if (!q) return cursos;
-    return cursos.filter((c) => [c.nome, c.metodologia, c.descricao].some((v) => (v || "").toLowerCase().includes(q)));
+    return cursos.filter((c) =>
+      [c.nome, c.metodologia, c.observacoes].some((v) => (v || "").toLowerCase().includes(q))
+    );
   }, [cursos, filtro]);
 
-  function mapCurso(row: CursoApi): Curso {
-    return {
-      id: row.id,
-      nome: row.nome,
-      metodologia: row.metodologia ?? "",
-      descricao: row.observacoes ?? "",
-      ativo: (row.situacao ?? "Ativo") === "Ativo",
-    };
+  function isCursoAtivo(curso: CursoTree) {
+    return (curso.situacao ?? "Ativo") === "Ativo";
+  }
+
+  function findCursoByNivelId(nivelId: number) {
+    for (const curso of cursos) {
+      if (curso.niveis.some((nivel) => nivel.id === nivelId)) return curso;
+    }
+    return null;
+  }
+
+  function findCursoNivelByModuloId(moduloId: number) {
+    for (const curso of cursos) {
+      for (const nivel of curso.niveis) {
+        if (nivel.modulos.some((modulo) => modulo.id === moduloId)) {
+          return { cursoId: curso.id, nivelId: nivel.id };
+        }
+      }
+    }
+    return null;
   }
 
   async function carregarCursos() {
     setCursosLoading(true);
     setCursosErro(null);
     try {
-      const res = await fetch("/api/escola/academico/cursos");
-      const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; data?: CursoApi[]; error?: string; message?: string }
-        | null;
-      if (!res.ok || !json?.ok) {
-        const msg = json?.message ?? json?.error ?? "Falha ao carregar cursos";
-        throw new Error(`${res.status} - ${msg}`);
+      const json = await fetchJson<CursosApiResponse>("/api/escola/academico/cursos", {
+        method: "GET",
+      });
+
+      if (!json?.ok) {
+        throw new Error(json?.message ?? "Falha ao carregar cursos.");
       }
-      const lista = Array.isArray(json?.data) ? json.data : [];
-      setCursos(lista.map(mapCurso));
+
+      setCursos(Array.isArray(json.data) ? json.data : []);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erro ao carregar cursos";
       setCursosErro(msg);
@@ -307,7 +303,36 @@ export default function CursosPage() {
   }
 
   useEffect(() => {
-    void carregarCursos();
+    let alive = true;
+    setCursosLoading(true);
+    setCursosErro(null);
+
+    (async () => {
+      try {
+        const json = await fetchJson<CursosApiResponse>("/api/escola/academico/cursos", {
+          method: "GET",
+        });
+
+        if (!json?.ok) {
+          throw new Error(json?.message ?? "Falha ao carregar cursos.");
+        }
+
+        if (!alive) return;
+        setCursos(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        console.error("ERRO carregar cursos:", e);
+        if (!alive) return;
+        setCursos([]);
+        setCursosErro(e instanceof Error ? e.message : "Erro ao carregar cursos.");
+      } finally {
+        if (!alive) return;
+        setCursosLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   function resetCursoForm() {
@@ -359,11 +384,16 @@ export default function CursosPage() {
     }
   }
 
-  function editarCurso(curso: Curso) {
+  function editarCurso(curso: CursoTree) {
     setCursosErro(null);
     setCursosMsg(null);
     setEditingCurso(curso);
-    setCursoForm({ nome: curso.nome, metodologia: curso.metodologia, descricao: curso.descricao, ativo: curso.ativo });
+    setCursoForm({
+      nome: curso.nome,
+      metodologia: curso.metodologia ?? "",
+      descricao: curso.observacoes ?? "",
+      ativo: isCursoAtivo(curso),
+    });
     setShowCursoForm(true);
   }
 
@@ -378,7 +408,7 @@ export default function CursosPage() {
       const res = await fetch(`/api/escola/academico/cursos/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ situacao: alvo.ativo ? "Inativo" : "Ativo" }),
+        body: JSON.stringify({ situacao: isCursoAtivo(alvo) ? "Inativo" : "Ativo" }),
       });
       const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; message?: string } | null;
 
@@ -388,7 +418,7 @@ export default function CursosPage() {
       }
 
       await carregarCursos();
-      setCursosMsg(alvo.ativo ? "Curso inativado." : "Curso ativado.");
+      setCursosMsg(isCursoAtivo(alvo) ? "Curso inativado." : "Curso ativado.");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erro ao atualizar situacao";
       setCursosErro(msg);
@@ -429,22 +459,6 @@ export default function CursosPage() {
           throw new Error("Salvamento inconsistente. Verifique permissoes/atualizacao.");
         }
 
-        setNiveis((prev) =>
-          prev.map((n) =>
-            n.id === editingId
-              ? {
-                  ...n,
-                  cursoId: data.nivel.curso_id,
-                  nome: data.nivel.nome,
-                  idadeMinima: data.nivel.idade_minima,
-                  idadeMaxima: data.nivel.idade_maxima,
-                  faixaEtariaSugerida: data.nivel.faixa_etaria_sugerida ?? "",
-                  observacoes: data.nivel.observacoes ?? "",
-                  prerequisito: data.nivel.pre_requisito_nivel_id ?? null,
-                }
-              : n
-          )
-        );
         await carregarCursos();
         setCursosMsg("Nivel atualizado.");
       } catch (e: unknown) {
@@ -454,7 +468,7 @@ export default function CursosPage() {
       }
     } else {
       try {
-        const created = await criarNivelNoBanco({
+        await criarNivelNoBanco({
           cursoId,
           nome: nivelForm.nome,
           faixaEtariaSugerida: faixa || null,
@@ -464,17 +478,6 @@ export default function CursosPage() {
           idadeMaxima: nivelForm.idadeMaxima === "" ? null : Number(nivelForm.idadeMaxima),
         });
 
-        const novo: Nivel = {
-          id: created.id,
-          cursoId: created.curso_id,
-          nome: created.nome,
-          idadeMinima: created.idade_minima,
-          idadeMaxima: created.idade_maxima,
-          faixaEtariaSugerida: created.faixa_etaria_sugerida ?? "",
-          observacoes: created.observacoes ?? "",
-          prerequisito: created.pre_requisito_nivel_id ?? null,
-        };
-        setNiveis((prev) => [novo, ...prev]);
         await carregarCursos();
         setCursosMsg("Nivel criado.");
       } catch (e: unknown) {
@@ -516,20 +519,6 @@ export default function CursosPage() {
           throw new Error("Salvamento inconsistente. Verifique permissoes/atualizacao.");
         }
 
-        setConteudos((prev) =>
-          prev.map((c) =>
-            c.id === editingId
-              ? {
-                  ...c,
-                  nome: data.modulo.nome,
-                  ordem: data.modulo.ordem,
-                  obrigatorio: data.modulo.obrigatorio,
-                  descricao: data.modulo.descricao ?? "",
-                  categoria: conteudoForm.categoria,
-                }
-              : c
-          )
-        );
         await carregarCursos();
         setCursosMsg("Modulo atualizado.");
       } catch (e: unknown) {
@@ -538,32 +527,22 @@ export default function CursosPage() {
         return;
       }
     } else {
-      const nivel = niveis.find((n) => n.id === nivelId);
-      if (!nivel) {
+      const curso = findCursoByNivelId(nivelId);
+      const nivel = curso?.niveis.find((n) => n.id === nivelId) ?? null;
+      if (!curso || !nivel) {
         setCursosErro("Nivel nao encontrado.");
         return;
       }
 
       try {
-        const created = await criarModuloNoBanco({
-          cursoId: nivel.cursoId,
+        await criarModuloNoBanco({
+          cursoId: curso.id,
           nivelId,
           nome: conteudoForm.nome,
           descricao: conteudoForm.descricao || null,
           ordem: conteudoForm.ordem,
           obrigatorio: conteudoForm.obrigatorio,
         });
-
-        const novo: Conteudo = {
-          id: created.id,
-          nivelId: created.nivel_id,
-          nome: created.nome,
-          ordem: created.ordem,
-          obrigatorio: created.obrigatorio,
-          descricao: created.descricao ?? "",
-          categoria: conteudoForm.categoria,
-        };
-        setConteudos((prev) => [novo, ...prev]);
         await carregarCursos();
         setCursosMsg("Modulo criado.");
       } catch (e: unknown) {
@@ -572,7 +551,7 @@ export default function CursosPage() {
         return;
       }
     }
-    setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "", categoria: "" });
+    setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "" });
     setConteudoFormOpenFor(null);
     setConteudoEditingId(null);
   }
@@ -606,20 +585,6 @@ export default function CursosPage() {
           throw new Error("Salvamento inconsistente. Verifique permissoes/atualizacao.");
         }
 
-        setHabilidades((prev) =>
-          prev.map((h) =>
-            h.id === editingId
-              ? {
-                  ...h,
-                  nome: data.habilidade.nome,
-                  tipo: data.habilidade.tipo ?? "",
-                  descricao: data.habilidade.descricao ?? "",
-                  criterio: data.habilidade.criterio_avaliacao ?? "",
-                  ordem: data.habilidade.ordem,
-                }
-              : h
-          )
-        );
         await carregarCursos();
         setCursosMsg("Habilidade atualizada.");
       } catch (e: unknown) {
@@ -628,22 +593,16 @@ export default function CursosPage() {
         return;
       }
     } else {
-      const conteudo = conteudos.find((c) => c.id === conteudoId);
-      if (!conteudo) {
+      const contexto = findCursoNivelByModuloId(conteudoId);
+      if (!contexto) {
         setCursosErro("Conteudo nao encontrado.");
         return;
       }
 
-      const nivel = niveis.find((n) => n.id === conteudo.nivelId);
-      if (!nivel) {
-        setCursosErro("Nivel nao encontrado.");
-        return;
-      }
-
       try {
-        const created = await criarHabilidadeNoBanco({
-          cursoId: nivel.cursoId,
-          nivelId: nivel.id,
+        await criarHabilidadeNoBanco({
+          cursoId: contexto.cursoId,
+          nivelId: contexto.nivelId,
           moduloId: conteudoId,
           nome: habilidadeForm.nome,
           tipo: habilidadeForm.tipo || null,
@@ -651,17 +610,6 @@ export default function CursosPage() {
           criterioAvaliacao: habilidadeForm.criterio || null,
           ordem: habilidadeForm.ordem,
         });
-
-        const nova: Habilidade = {
-          id: created.id,
-          conteudoId: created.modulo_id,
-          nome: created.nome,
-          tipo: created.tipo ?? "",
-          descricao: created.descricao ?? "",
-          criterio: created.criterio_avaliacao ?? "",
-          ordem: created.ordem,
-        };
-        setHabilidades((prev) => [nova, ...prev]);
         await carregarCursos();
         setCursosMsg("Habilidade criada.");
       } catch (e: unknown) {
@@ -744,7 +692,7 @@ export default function CursosPage() {
 
           <div className="grid gap-4 md:grid-cols-2">
             {filtradas.map((curso) => {
-              const niveisDoCurso = niveis.filter((n) => n.cursoId === curso.id);
+              const niveisDoCurso = curso.niveis ?? [];
               return (
                 <div key={`curso-${curso.id}`} className="rounded-lg border border-slate-100 bg-white p-4 shadow-sm">
                   <div className="flex items-start justify-between">
@@ -759,7 +707,7 @@ export default function CursosPage() {
                           Editar
                         </PrimaryButton>
                         <PrimaryButton variant="outline" onClick={() => alternarCurso(curso.id)}>
-                          {curso.ativo ? "Inativar" : "Ativar"}
+                          {isCursoAtivo(curso) ? "Inativar" : "Ativar"}
                         </PrimaryButton>
                         <PrimaryButton
                           variant="outline"
@@ -862,10 +810,11 @@ export default function CursosPage() {
                     )}
 
                     {niveisDoCurso.map((nivel) => {
-                      const conteudosDoNivel = conteudos.filter((c) => c.nivelId === nivel.id);
-                      const faixa = nivel.faixaEtariaSugerida || formatFaixa(nivel.idadeMinima, nivel.idadeMaxima);
-                      const prereqNome = nivel.prerequisito
-                        ? niveisDoCurso.find((n) => n.id === nivel.prerequisito)?.nome
+                      const conteudosDoNivel = nivel.modulos ?? [];
+                      const faixa =
+                        nivel.faixa_etaria_sugerida || formatFaixa(nivel.idade_minima, nivel.idade_maxima);
+                      const prereqNome = nivel.pre_requisito_nivel_id
+                        ? niveisDoCurso.find((n) => n.id === nivel.pre_requisito_nivel_id)?.nome
                         : "Nenhum";
 
                       return (
@@ -885,7 +834,7 @@ export default function CursosPage() {
                                   onClick={() => {
                                     setConteudoFormOpenFor(nivel.id);
                                     setConteudoEditingId(null);
-                                    setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "", categoria: "" });
+                                    setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "" });
                                   }}
                                 >
                                   + Novo conteudo
@@ -896,17 +845,28 @@ export default function CursosPage() {
                                     setNivelEditingId(nivel.id);
                                     setNivelForm({
                                       nome: nivel.nome,
-                                      idadeMinima: nivel.idadeMinima ?? "",
-                                      idadeMaxima: nivel.idadeMaxima ?? "",
+                                      idadeMinima: nivel.idade_minima ?? "",
+                                      idadeMaxima: nivel.idade_maxima ?? "",
                                       observacoes: nivel.observacoes || "",
-                                      prerequisito: nivel.prerequisito ?? null,
+                                      prerequisito: nivel.pre_requisito_nivel_id ?? null,
                                     });
                                     setNivelFormOpenFor(curso.id);
                                   }}
                                 >
                                   Editar nivel
                                 </PrimaryButton>
-                                <PrimaryButton variant="outline" onClick={() => setNiveis((prev) => prev.filter((n) => n.id !== nivel.id))}>
+                                <PrimaryButton
+                                  variant="outline"
+                                  onClick={() =>
+                                    setCursos((prev) =>
+                                      prev.map((item) =>
+                                        item.id === curso.id
+                                          ? { ...item, niveis: item.niveis.filter((n) => n.id !== nivel.id) }
+                                          : item
+                                      )
+                                    )
+                                  }
+                                >
                                   Remover nivel
                                 </PrimaryButton>
                               </div>
@@ -929,11 +889,6 @@ export default function CursosPage() {
                                   type="number"
                                   value={conteudoForm.ordem}
                                   onChange={(e) => setConteudoForm({ ...conteudoForm, ordem: Number(e.target.value) })}
-                                />
-                                <FormInput
-                                  label="Categoria (opcional)"
-                                  value={conteudoForm.categoria}
-                                  onChange={(e) => setConteudoForm({ ...conteudoForm, categoria: e.target.value })}
                                 />
                                 <FormInput
                                   className="md:col-span-2"
@@ -961,7 +916,7 @@ export default function CursosPage() {
                                   onClick={() => {
                                     setConteudoFormOpenFor(null);
                                     setConteudoEditingId(null);
-                                    setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "", categoria: "" });
+                                    setConteudoForm({ nome: "", ordem: 1, obrigatorio: true, descricao: "" });
                                   }}
                                 >
                                   Cancelar
@@ -975,14 +930,14 @@ export default function CursosPage() {
                               <div className="text-sm text-slate-600">Nenhum conteudo cadastrado.</div>
                             )}
                             {conteudosDoNivel.map((ct) => {
-                              const habs = habilidades.filter((h) => h.conteudoId === ct.id);
+                              const habs = ct.habilidades ?? [];
                               return (
                                 <div key={`conteudo-${ct.id}`} className="rounded-md bg-white p-3 shadow border border-slate-100">
                                   <div className="flex items-start justify-between">
                                     <div>
                                       <div className="font-semibold text-slate-900">{ct.nome}</div>
                                       <div className="text-xs text-slate-600">
-                                        Ordem {ct.ordem} | {ct.obrigatorio ? "Obrigatorio" : "Opcional"}
+                                        Ordem {ct.ordem ?? "-"} | {ct.obrigatorio ? "Obrigatorio" : "Opcional"}
                                       </div>
                                       <div className="text-xs text-slate-500">{ct.descricao || "Sem descricao"}</div>
                                     </div>
@@ -1004,17 +959,34 @@ export default function CursosPage() {
                                             setConteudoEditingId(ct.id);
                                             setConteudoForm({
                                               nome: ct.nome,
-                                              ordem: ct.ordem,
-                                              obrigatorio: ct.obrigatorio,
+                                              ordem: ct.ordem ?? 1,
+                                              obrigatorio: ct.obrigatorio ?? false,
                                               descricao: ct.descricao || "",
-                                              categoria: ct.categoria || "",
                                             });
                                             setConteudoFormOpenFor(nivel.id);
                                           }}
                                         >
                                           Editar conteudo
                                         </PrimaryButton>
-                                        <PrimaryButton variant="outline" onClick={() => setConteudos((prev) => prev.filter((p) => p.id !== ct.id))}>
+                                        <PrimaryButton
+                                          variant="outline"
+                                          onClick={() =>
+                                            setCursos((prev) =>
+                                              prev.map((item) =>
+                                                item.id === curso.id
+                                                  ? {
+                                                      ...item,
+                                                      niveis: item.niveis.map((n) =>
+                                                        n.id === nivel.id
+                                                          ? { ...n, modulos: n.modulos.filter((m) => m.id !== ct.id) }
+                                                          : n
+                                                      ),
+                                                    }
+                                                  : item
+                                              )
+                                            )
+                                          }
+                                        >
                                           Remover conteudo
                                         </PrimaryButton>
                                       </div>
@@ -1085,7 +1057,7 @@ export default function CursosPage() {
                                         <div>
                                           <div className="font-semibold">{h.nome}</div>
                                           <div className="text-xs text-slate-500">
-                                            {h.tipo} | {h.criterio || "-"} | Ordem {h.ordem ?? "-"}
+                                            {h.tipo || "-"} | {h.criterio_avaliacao || "-"} | Ordem {h.ordem ?? "-"}
                                           </div>
                                           <div className="text-xs text-slate-500">{h.descricao || ""}</div>
                                         </div>
@@ -1097,17 +1069,45 @@ export default function CursosPage() {
                                                 setHabilidadeEditingId(h.id);
                                                 setHabilidadeForm({
                                                   nome: h.nome,
-                                                  tipo: h.tipo,
+                                                  tipo: h.tipo ?? "",
                                                   descricao: h.descricao || "",
-                                                  criterio: h.criterio || "",
-                                                  ordem: h.ordem || 1,
+                                                  criterio: h.criterio_avaliacao || "",
+                                                  ordem: h.ordem ?? 1,
                                                 });
                                                 setHabilidadeFormOpenFor(ct.id);
                                               }}
                                             >
                                               Editar
                                             </PrimaryButton>
-                                            <PrimaryButton variant="outline" onClick={() => setHabilidades((prev) => prev.filter((x) => x.id !== h.id))}>
+                                            <PrimaryButton
+                                              variant="outline"
+                                              onClick={() =>
+                                                setCursos((prev) =>
+                                                  prev.map((item) =>
+                                                    item.id === curso.id
+                                                      ? {
+                                                          ...item,
+                                                          niveis: item.niveis.map((n) =>
+                                                            n.id === nivel.id
+                                                              ? {
+                                                                  ...n,
+                                                                  modulos: n.modulos.map((m) =>
+                                                                    m.id === ct.id
+                                                                      ? {
+                                                                          ...m,
+                                                                          habilidades: m.habilidades.filter((x) => x.id !== h.id),
+                                                                        }
+                                                                      : m
+                                                                  ),
+                                                                }
+                                                              : n
+                                                          ),
+                                                        }
+                                                      : item
+                                                  )
+                                                )
+                                              }
+                                            >
                                               Remover
                                             </PrimaryButton>
                                           </div>
