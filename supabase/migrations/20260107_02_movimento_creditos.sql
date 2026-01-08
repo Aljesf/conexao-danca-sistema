@@ -49,60 +49,70 @@ BEGIN
   ) THEN
     CREATE TYPE public.movimento_execucao_status AS ENUM ('PENDENTE', 'EXECUTADO', 'ERRO');
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE t.typname = 'movimento_regra_geracao_base' AND n.nspname = 'public'
+  ) THEN
+    CREATE TYPE public.movimento_regra_geracao_base AS ENUM ('VALOR_RECEBIDO_CONFIRMADO');
+  END IF;
 END $$;
 
 CREATE TABLE IF NOT EXISTS public.movimento_creditos (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  aluno_id bigint NOT NULL,
+  aluno_id uuid NOT NULL,
   tipo public.movimento_credito_tipo NOT NULL,
   origem public.movimento_credito_origem NOT NULL,
   proposito text NOT NULL,
-  curso_id bigint NULL,
-  projeto_id bigint NULL,
+  curso_id uuid NULL,
+  projeto_id uuid NULL,
   competencia_inicio text NOT NULL,
   competencia_fim text NOT NULL,
   quantidade_total integer NOT NULL CHECK (quantidade_total > 0),
   quantidade_consumida integer NOT NULL DEFAULT 0,
   status public.movimento_credito_status NOT NULL DEFAULT 'ATIVO',
   observacoes text,
-  criado_em timestamptz NOT NULL DEFAULT now(),
+  criado_em timestamptz DEFAULT now(),
   criado_por uuid NULL
 );
 
 CREATE TABLE IF NOT EXISTS public.movimento_creditos_consumo (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   credito_id uuid NOT NULL REFERENCES public.movimento_creditos(id) ON DELETE CASCADE,
-  aluno_id bigint NOT NULL,
+  aluno_id uuid NOT NULL,
   competencia text NOT NULL,
   operacao_tipo text NOT NULL,
-  operacao_id bigint NOT NULL,
-  consumido_em timestamptz NOT NULL DEFAULT now(),
-  criado_em timestamptz NOT NULL DEFAULT now()
+  operacao_id uuid NOT NULL,
+  consumido_em timestamptz DEFAULT now(),
+  criado_em timestamptz DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.movimento_creditos_compromissos (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   credito_id uuid NOT NULL REFERENCES public.movimento_creditos(id) ON DELETE CASCADE,
-  aluno_id bigint NOT NULL,
+  aluno_id uuid NOT NULL,
   competencia text NOT NULL,
   operacao_tipo text NOT NULL,
-  operacao_id bigint NOT NULL,
+  operacao_id uuid NOT NULL,
   status public.movimento_compromisso_status NOT NULL DEFAULT 'ATIVO',
-  criado_em timestamptz NOT NULL DEFAULT now()
+  criado_em timestamptz DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.movimento_regras_geracao (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   descricao text NOT NULL,
-  criterio_pagante text NOT NULL,
-  proporcao_pagantes integer NOT NULL CHECK (proporcao_pagantes > 0),
-  creditos_gerados integer NOT NULL CHECK (creditos_gerados > 0),
-  limite_mensal integer NULL,
+  base_calculo public.movimento_regra_geracao_base NOT NULL DEFAULT 'VALOR_RECEBIDO_CONFIRMADO',
+  origem_recurso text NOT NULL,
+  reais_por_credito numeric(14,2) NOT NULL CHECK (reais_por_credito > 0),
+  tipo_credito_gerado public.movimento_credito_tipo NOT NULL DEFAULT 'CR_REGULAR',
+  limite_mensal integer NULL CHECK (limite_mensal IS NULL OR limite_mensal > 0),
   reserva_percentual integer NULL CHECK (reserva_percentual BETWEEN 0 AND 100),
   vigencia_inicio text NOT NULL,
   vigencia_fim text NULL,
   ativa boolean NOT NULL DEFAULT true,
-  criado_em timestamptz NOT NULL DEFAULT now()
+  criado_em timestamptz DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.movimento_fontes_externas (
@@ -110,7 +120,7 @@ CREATE TABLE IF NOT EXISTS public.movimento_fontes_externas (
   nome text NOT NULL,
   tipo text NOT NULL,
   observacoes text,
-  criado_em timestamptz NOT NULL DEFAULT now()
+  criado_em timestamptz DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.movimento_fontes_externas_cronograma (
@@ -119,7 +129,7 @@ CREATE TABLE IF NOT EXISTS public.movimento_fontes_externas_cronograma (
   competencia text NOT NULL,
   quantidade_creditos integer NOT NULL CHECK (quantidade_creditos > 0),
   confirmado boolean NOT NULL DEFAULT false,
-  criado_em timestamptz NOT NULL DEFAULT now()
+  criado_em timestamptz DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.movimento_execucoes_mensais (
@@ -128,7 +138,7 @@ CREATE TABLE IF NOT EXISTS public.movimento_execucoes_mensais (
   status public.movimento_execucao_status NOT NULL DEFAULT 'PENDENTE',
   log_execucao text,
   executado_em timestamptz NULL,
-  criado_em timestamptz NOT NULL DEFAULT now()
+  criado_em timestamptz DEFAULT now()
 );
 
 COMMIT;
