@@ -27,6 +27,8 @@ function asText(value: string | null | undefined): string | null {
 export default function NovoUsuarioPage() {
   const [pessoa, setPessoa] = useState<PessoaLookupItem | null>(null);
   const [email, setEmail] = useState<string>("");
+  const [senha, setSenha] = useState<string>("");
+  const [confirmarSenha, setConfirmarSenha] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [roles, setRoles] = useState<RoleSistema[]>([]);
   const [selecionadas, setSelecionadas] = useState<string[]>([]);
@@ -82,6 +84,14 @@ export default function NovoUsuarioPage() {
       setErro("Informe um email valido.");
       return;
     }
+    if (!senha || senha.length < 6) {
+      setErro("SENHA_INVALIDA: a senha deve ter no minimo 6 caracteres.");
+      return;
+    }
+    if (senha !== confirmarSenha) {
+      setErro("SENHA_NAO_CONFERE: confirme a senha corretamente.");
+      return;
+    }
     if (selecionadas.length === 0) {
       setErro("Selecione ao menos um papel (role).");
       return;
@@ -95,6 +105,7 @@ export default function NovoUsuarioPage() {
         body: JSON.stringify({
           pessoa_id: pessoaId,
           email: emailNorm,
+          senha,
           roles_ids: selecionadas,
           is_admin: isAdmin,
         }),
@@ -108,19 +119,21 @@ export default function NovoUsuarioPage() {
             ? json.message
             : json && "error" in json && json.error
               ? json.error
-              : `Falha ao enviar convite (status ${res.status})`;
+              : `Falha ao criar usuario (status ${res.status})`;
         setErro(`${code}: ${message}`);
         return;
       }
 
-      setMensagem(json.message ?? "Convite enviado para o e-mail. A pessoa deve abrir o link e definir a senha.");
+      setMensagem(json.message ?? "Usuario criado com senha definida pelo administrador.");
       setRedirectTo(json.invite?.redirectTo || null);
       setPessoa(null);
       setEmail("");
+      setSenha("");
+      setConfirmarSenha("");
       setIsAdmin(false);
       setSelecionadas([]);
     } catch (e: unknown) {
-      setErro(e instanceof Error ? e.message : "Erro inesperado ao enviar convite.");
+      setErro(e instanceof Error ? e.message : "Erro inesperado ao criar usuario.");
     } finally {
       setLoading(false);
     }
@@ -136,8 +149,8 @@ export default function NovoUsuarioPage() {
     <div style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Cadastrar novo usuário</h1>
       <p style={{ color: "rgba(0,0,0,0.65)", fontSize: 14, marginTop: 0 }}>
-        O cadastro de usuários é feito a partir de uma pessoa existente. Envie um convite e peça
-        para a pessoa definir a senha pelo link recebido.
+        O cadastro de usuarios e feito a partir de uma pessoa existente. Defina a senha aqui e
+        crie o usuario diretamente.
       </p>
 
       <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
@@ -161,6 +174,34 @@ export default function NovoUsuarioPage() {
             placeholder="usuario@exemplo.com"
             style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
           />
+        </div>
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+              Senha
+            </label>
+            <input
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              placeholder="min. 6 caracteres"
+              autoComplete="new-password"
+              style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+            />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+              Confirmar senha
+            </label>
+            <input
+              type="password"
+              value={confirmarSenha}
+              onChange={(e) => setConfirmarSenha(e.target.value)}
+              placeholder="repita a senha"
+              autoComplete="new-password"
+              style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
+            />
+          </div>
         </div>
 
         <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -246,10 +287,14 @@ export default function NovoUsuarioPage() {
             boxShadow: "0 10px 30px rgba(37,99,235,0.25)",
           }}
         >
-          {loading ? "Enviando convite..." : "Enviar convite"}
+          {loading ? "Criando usuario..." : "Criar usuario"}
         </button>
       </div>
     </div>
   );
 }
+
+
+
+
 
