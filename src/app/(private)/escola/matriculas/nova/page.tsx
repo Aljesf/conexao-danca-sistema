@@ -20,6 +20,17 @@ type ContextoMatricula = {
   status: string;
 };
 
+type PeriodoLetivo = {
+  id: number;
+  codigo: string;
+  titulo: string;
+  ano_referencia: number;
+  data_inicio: string;
+  data_fim: string;
+  inicio_letivo_janeiro: string | null;
+  ativo: boolean;
+};
+
 type UnidadeExecucaoOpcao = {
   id: number;
   unidade_execucao_id: number;
@@ -124,9 +135,9 @@ function labelTipo(tipo: TipoMatricula): string {
   return "Projeto artístico";
 }
 
-function labelContexto(contexto: ContextoMatricula): string {
-  const ano = contexto.ano_referencia ? ` (${contexto.ano_referencia})` : "";
-  return `${contexto.titulo}${ano}`;
+function labelPeriodo(periodo: PeriodoLetivo): string {
+  const ano = periodo.ano_referencia ? ` (${periodo.ano_referencia})` : "";
+  return `${periodo.titulo}${ano}`;
 }
 
 function labelUnidadeExecucao(unidade: UnidadeExecucaoOpcao): string {
@@ -184,6 +195,10 @@ export default function NovaMatriculaPage() {
   const [contextoId, setContextoId] = useState<number | null>(null);
   const [contextosErro, setContextosErro] = useState<string | null>(null);
   const [contextosLoading, setContextosLoading] = useState(false);
+  const [periodos, setPeriodos] = useState<PeriodoLetivo[]>([]);
+  const [periodoLetivoId, setPeriodoLetivoId] = useState<number | null>(null);
+  const [periodosErro, setPeriodosErro] = useState<string | null>(null);
+  const [periodosLoading, setPeriodosLoading] = useState(false);
   const [servicos, setServicos] = useState<ServicoOpcao[]>([]);
   const [itensCarrinho, setItensCarrinho] = useState<MatriculaCarrinhoItem[]>(() => [createCarrinhoItem()]);
   const [uesPorServico, setUesPorServico] = useState<Record<number, UnidadeExecucaoOpcao[]>>({});
@@ -215,9 +230,9 @@ export default function NovaMatriculaPage() {
     () => uesDisponiveis.find((t) => t.turma_id === turmaPrincipalId) ?? null,
     [uesDisponiveis, turmaPrincipalId],
   );
-  const contextoSelecionado = useMemo(
-    () => contextos.find((c) => c.id === contextoId) ?? null,
-    [contextos, contextoId],
+  const periodoSelecionado = useMemo(
+    () => periodos.find((p) => p.id === periodoLetivoId) ?? null,
+    [periodos, periodoLetivoId],
   );
   const itensResumo = useMemo(
     () =>
@@ -302,6 +317,8 @@ export default function NovaMatriculaPage() {
     setUesErro(null);
     setContextoId(null);
     setContextos([]);
+    setPeriodoLetivoId(null);
+    setPeriodos([]);
   }, [tipo]);
 
   useEffect(() => {
@@ -310,6 +327,10 @@ export default function NovaMatriculaPage() {
       setContextoId(null);
       setContextosErro(null);
       setContextosLoading(false);
+      setPeriodos([]);
+      setPeriodoLetivoId(null);
+      setPeriodosErro(null);
+      setPeriodosLoading(false);
       return;
     }
 
@@ -350,6 +371,40 @@ export default function NovaMatriculaPage() {
       ativo = false;
     };
   }, [contextoObrigatorio, anoReferencia, contextoId]);
+
+  useEffect(() => {
+    if (!contextoObrigatorio) return;
+    let ativo = true;
+    (async () => {
+      try {
+        setPeriodosErro(null);
+        setPeriodosLoading(true);
+        const res = await fetch("/api/academico/periodos-letivos");
+        const json = (await res.json()) as { items?: PeriodoLetivo[]; error?: string };
+        if (!res.ok) throw new Error(json.error ?? "Falha ao carregar periodos letivos.");
+        if (!ativo) return;
+        const lista = Array.isArray(json.items) ? json.items : [];
+        setPeriodos(lista);
+        if (!periodoLetivoId) {
+          const matchAno = Number.isFinite(anoReferencia)
+            ? lista.find((p) => p.ano_referencia === anoReferencia) ?? null
+            : null;
+          const padrao = matchAno ?? lista[0] ?? null;
+          setPeriodoLetivoId(padrao ? padrao.id : null);
+          if (padrao?.ano_referencia) setAnoReferencia(padrao.ano_referencia);
+        }
+      } catch (e: unknown) {
+        if (!ativo) return;
+        setPeriodosErro(e instanceof Error ? e.message : "Falha ao carregar periodos letivos.");
+        setPeriodos([]);
+      } finally {
+        if (ativo) setPeriodosLoading(false);
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [contextoObrigatorio, anoReferencia, periodoLetivoId]);
 
   useEffect(() => {
     if (!contextoObrigatorio) return;
@@ -773,28 +828,32 @@ export default function NovaMatriculaPage() {
                 <label className="text-sm font-medium">Periodo letivo</label>
                 <select
                   className="w-full rounded-md border px-3 py-2 text-sm"
-                  value={contextoId ?? ""}
+                  value={periodoLetivoId ?? ""}
                   onChange={(e) => {
                     const nextId = e.target.value ? Number(e.target.value) : null;
-                    setContextoId(nextId);
-                    const encontrado = contextos.find((c) => c.id === nextId) ?? null;
+                    setPeriodoLetivoId(nextId);
+                    const encontrado = periodos.find((p) => p.id === nextId) ?? null;
                     if (encontrado?.ano_referencia) setAnoReferencia(encontrado.ano_referencia);
                   }}
-                  disabled={contextosLoading}
+                  disabled={periodosLoading}
                 >
                   <option value="">Selecione...</option>
-                  {contextos.map((contexto) => (
-                    <option key={contexto.id} value={contexto.id}>
-                      {labelContexto(contexto)}
+                  {periodos.map((periodo) => (
+                    <option key={periodo.id} value={periodo.id}>
+                      {labelPeriodo(periodo)}
                     </option>
                   ))}
                 </select>
-                {contextosLoading ? (
-                  <p className="text-xs text-muted-foreground">Carregando contextos...</p>
+                {periodosLoading ? (
+                  <p className="text-xs text-muted-foreground">Carregando periodos...</p>
+                ) : null}
+                {periodosErro ? <p className="text-xs text-red-600">{periodosErro}</p> : null}
+                {!periodosLoading && periodos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhum periodo ativo encontrado.</p>
                 ) : null}
                 {contextosErro ? <p className="text-xs text-red-600">{contextosErro}</p> : null}
-                {!contextosLoading && contextos.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Nenhum contexto ativo encontrado.</p>
+                {!contextosLoading && contextoObrigatorio && !contextoId ? (
+                  <p className="text-xs text-red-600">Contexto da matricula nao encontrado para o periodo selecionado.</p>
                 ) : null}
               </div>
             ) : (
@@ -964,12 +1023,8 @@ export default function NovaMatriculaPage() {
             <div>Responsavel: {responsavel?.nome ?? "Nao selecionado"}</div>
             <div>Tipo: {labelTipo(tipo)}</div>
             <div>
-              Contexto:{" "}
-              {contextoObrigatorio
-                ? contextoSelecionado
-                  ? labelContexto(contextoSelecionado)
-                  : "-"
-                : "Definido pelo curso/projeto"}
+              Periodo letivo:{" "}
+              {contextoObrigatorio ? (periodoSelecionado ? labelPeriodo(periodoSelecionado) : "-") : "Nao aplicavel"}
             </div>
             <div>Cursos/UEs: {itensResumo.length > 0 ? itensResumo.join(" | ") : "-"}</div>
             <div>UE principal: {turmaSelecionada ? labelUnidadeExecucao(turmaSelecionada) : "-"}</div>
