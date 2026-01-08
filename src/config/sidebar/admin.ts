@@ -24,6 +24,18 @@ export const adminSidebar: SidebarSection[] = [
     ],
   },
   {
+    id: "admin-movimento-conexao",
+    title: "Movimento Conexao Danca (Admin)",
+    items: [
+      { label: "Painel do Movimento", href: "/administracao/movimento" },
+      { label: "Beneficiarios", href: "/administracao/movimento/beneficiarios" },
+      { label: "Conceder creditos", href: "/administracao/movimento/creditos" },
+      { label: "Lotes", href: "/administracao/movimento/lotes" },
+      { label: "Saldos", href: "/administracao/movimento/saldos" },
+      { label: "Deficit institucional", href: "/administracao/movimento/deficit" },
+    ],
+  },
+  {
     id: "admin-cartoes",
     title: "Cartoes (Admin)",
     items: [
