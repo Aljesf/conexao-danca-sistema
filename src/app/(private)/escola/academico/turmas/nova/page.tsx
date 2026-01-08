@@ -24,6 +24,16 @@ type ContextoMatricula = {
   ano_referencia: number | null;
   status: string;
 };
+type PeriodoLetivo = {
+  id: number;
+  codigo: string;
+  titulo: string;
+  ano_referencia: number;
+  data_inicio: string;
+  data_fim: string;
+  inicio_letivo_janeiro: string | null;
+  ativo: boolean;
+};
 
 const TIPOS_TURMA: TipoTurma[] = ["REGULAR", "CURSO_LIVRE", "ENSAIO"];
 const TURNOS: TurnoTurma[] = ["MANHA", "TARDE", "NOITE", "INTEGRAL"];
@@ -94,6 +104,11 @@ function compactarNiveis(resumo: string | null): string {
 
   const primeiros = abreviados.slice(0, 2).join("/");
   return `${primeiros}/+${abreviados.length - 2}`;
+}
+
+function labelPeriodo(periodo: PeriodoLetivo): string {
+  const ano = periodo.ano_referencia ? ` (${periodo.ano_referencia})` : "";
+  return `${periodo.titulo}${ano}`;
 }
 
 function mapContextoTipo(tipo: TipoTurma): ContextoTipo {
@@ -171,6 +186,10 @@ export default function NovaTurmaPage() {
   const anoAtual = new Date().getFullYear();
   const anosReferencia = Array.from({ length: 4 }, (_, i) => anoAtual - 1 + i);
   const [anoReferencia, setAnoReferencia] = useState<number>(anoAtual);
+  const [periodos, setPeriodos] = useState<PeriodoLetivo[]>([]);
+  const [periodoLetivoId, setPeriodoLetivoId] = useState<string>("");
+  const [periodosErro, setPeriodosErro] = useState<string | null>(null);
+  const [periodosLoading, setPeriodosLoading] = useState(false);
   const [contextos, setContextos] = useState<ContextoMatricula[]>([]);
   const [contextoId, setContextoId] = useState<string>("");
   const [contextosErro, setContextosErro] = useState<string | null>(null);
@@ -208,6 +227,54 @@ export default function NovaTurmaPage() {
   }, [supabase]);
 
   useEffect(() => {
+    if (tipoTurma !== "REGULAR") {
+      setPeriodos([]);
+      setPeriodoLetivoId("");
+      setPeriodosErro(null);
+      setPeriodosLoading(false);
+      return;
+    }
+
+    let active = true;
+    async function carregarPeriodos() {
+      setPeriodosErro(null);
+      setPeriodosLoading(true);
+      try {
+        const resp = await fetch("/api/academico/periodos-letivos");
+        const json = (await resp.json()) as { items?: PeriodoLetivo[]; error?: string };
+        if (!resp.ok) throw new Error(json.error ?? "Falha ao carregar periodos letivos.");
+        if (!active) return;
+        const lista = Array.isArray(json.items) ? json.items : [];
+        setPeriodos(lista);
+
+        const periodoAtual = Number(periodoLetivoId);
+        const periodoExiste = lista.some((p) => p.id === periodoAtual);
+        const matchAno =
+          Number.isFinite(anoReferencia) ? lista.find((p) => p.ano_referencia === anoReferencia) ?? null : null;
+        const padrao = matchAno ?? lista[0] ?? null;
+
+        if (!periodoExiste) {
+          setPeriodoLetivoId(padrao ? String(padrao.id) : "");
+        }
+        if (padrao?.ano_referencia) {
+          setAnoReferencia(padrao.ano_referencia);
+        }
+      } catch (e) {
+        if (!active) return;
+        setPeriodosErro(e instanceof Error ? e.message : "Falha ao carregar periodos letivos.");
+        setPeriodos([]);
+      } finally {
+        if (active) setPeriodosLoading(false);
+      }
+    }
+
+    void carregarPeriodos();
+    return () => {
+      active = false;
+    };
+  }, [tipoTurma, anoReferencia, periodoLetivoId]);
+
+  useEffect(() => {
     let active = true;
 
     async function carregarContextos() {
@@ -236,11 +303,11 @@ export default function NovaTurmaPage() {
             : null;
         const padrao = matchAno ?? lista[0] ?? null;
 
-        if (!contextoExiste) {
-          setContextoId(padrao ? String(padrao.id) : "");
-        }
-      } catch (e) {
-        if (!active) return;
+      if (!contextoExiste) {
+        setContextoId(padrao ? String(padrao.id) : "");
+      }
+    } catch (e) {
+      if (!active) return;
         setContextosErro(e instanceof Error ? e.message : "Falha ao carregar contextos.");
         setContextos([]);
       } finally {
@@ -461,6 +528,12 @@ export default function NovaTurmaPage() {
       const freqStr = formData.get("frequencia_minima") as string | null;
       const contextoIdNum = contextoId ? Number(contextoId) : null;
 
+      if (tipoTurmaSelecionado === "REGULAR" && !periodoLetivoId) {
+        setErro("Selecione o periodo letivo.");
+        setSaving(false);
+        return;
+      }
+
       if (!contextoIdNum || !Number.isFinite(contextoIdNum)) {
         setErro("Selecione o contexto da matricula.");
         setSaving(false);
@@ -497,6 +570,9 @@ export default function NovaTurmaPage() {
         professor_id: professorPrincipalId ? Number(professorPrincipalId) : null,
         observacoes: (formData.get("observacoes") as string) || null,
         contexto_matricula_id: contextoIdNum,
+        ...(tipoTurmaSelecionado === "REGULAR" && periodoLetivoId
+          ? { periodo_letivo_id: Number(periodoLetivoId) }
+          : {}),
       };
       const horariosPorDiaPayload: { day_of_week: number; inicio: string; fim: string }[] = [];
       for (const dia of DIAS_SEMANA) {
@@ -735,41 +811,70 @@ export default function NovaTurmaPage() {
               </div>
             </div>
             <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ano de referencia</label>
-                <select
-                  name="ano_referencia"
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                  value={anoReferencia}
-                  onChange={(e) => setAnoReferencia(Number(e.target.value))}
-                >
-                  {anosReferencia.map((ano) => (
-                    <option key={`ano-${ano}`} value={ano}>
-                      {ano}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contexto da matricula</label>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                  value={contextoId}
-                  onChange={(e) => setContextoId(e.target.value)}
-                  disabled={contextosLoading}
-                >
-                  <option value="">
-                    {contextosLoading ? "Carregando..." : "Selecione..."}
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ano de referencia</label>
+              <select
+                name="ano_referencia"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                value={anoReferencia}
+                onChange={(e) => setAnoReferencia(Number(e.target.value))}
+              >
+                {anosReferencia.map((ano) => (
+                  <option key={`ano-${ano}`} value={ano}>
+                    {ano}
                   </option>
-                  {contextos.map((c) => (
-                    <option key={`contexto-${c.id}`} value={c.id}>
-                      {c.titulo}
-                      {c.ano_referencia ? ` (${c.ano_referencia})` : ""}
-                    </option>
-                  ))}
-                </select>
-                {contextosErro ? <p className="mt-1 text-[11px] text-rose-600">{contextosErro}</p> : null}
-              </div>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {tipoTurma === "REGULAR" ? "Periodo letivo" : "Contexto da matricula"}
+              </label>
+              {tipoTurma === "REGULAR" ? (
+                <>
+                  <select
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={periodoLetivoId}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      setPeriodoLetivoId(nextId);
+                      const encontrado = periodos.find((p) => p.id === Number(nextId)) ?? null;
+                      if (encontrado?.ano_referencia) setAnoReferencia(encontrado.ano_referencia);
+                    }}
+                    disabled={periodosLoading}
+                  >
+                    <option value="">{periodosLoading ? "Carregando..." : "Selecione..."}</option>
+                    {periodos.map((periodo) => (
+                      <option key={`periodo-${periodo.id}`} value={periodo.id}>
+                        {labelPeriodo(periodo)}
+                      </option>
+                    ))}
+                  </select>
+                  {periodosErro ? <p className="mt-1 text-[11px] text-rose-600">{periodosErro}</p> : null}
+                  {!contextosLoading && !contextoId ? (
+                    <p className="mt-1 text-[11px] text-rose-600">Contexto da matricula nao encontrado para o periodo.</p>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <select
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                    value={contextoId}
+                    onChange={(e) => setContextoId(e.target.value)}
+                    disabled={contextosLoading}
+                  >
+                    <option value="">{contextosLoading ? "Carregando..." : "Selecione..."}</option>
+                    {contextos.map((c) => (
+                      <option key={`contexto-${c.id}`} value={c.id}>
+                        {c.titulo}
+                        {c.ano_referencia ? ` (${c.ano_referencia})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {contextosErro ? <p className="mt-1 text-[11px] text-rose-600">{contextosErro}</p> : null}
+                </>
+              )}
+            </div>
             </div>
             <div>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Capacidade (opcional)</label>
