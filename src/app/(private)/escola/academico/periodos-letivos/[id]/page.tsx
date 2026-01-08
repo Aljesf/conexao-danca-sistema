@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 
 type Periodo = {
   id: number;
@@ -38,8 +39,9 @@ type Excecao = {
   em_avaliacao: boolean;
 };
 
-export default function PeriodoLetivoDetalhePage({ params }: { params: { id: string } }) {
-  const periodoId = params.id;
+export default function PeriodoLetivoDetalhePage() {
+  const params = useParams<{ id: string }>();
+  const periodoId = params?.id;
 
   const [periodo, setPeriodo] = useState<Periodo | null>(null);
   const [faixas, setFaixas] = useState<Faixa[]>([]);
@@ -65,6 +67,7 @@ export default function PeriodoLetivoDetalhePage({ params }: { params: { id: str
   }
 
   useEffect(() => {
+    if (!periodoId) return;
     void load();
   }, [periodoId]);
 
