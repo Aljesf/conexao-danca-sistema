@@ -491,6 +491,41 @@ export default function CursosPage() {
     setNivelEditingId(null);
   }
 
+  async function handleRemoverNivel(nivelId: number) {
+    setCursosErro(null);
+    setCursosMsg(null);
+
+    try {
+      const resp = await fetch(`/api/admin/academico/niveis/${nivelId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const json = (await resp.json().catch(() => null)) as
+        | { ok?: boolean; code?: string; message?: string; error?: string }
+        | null;
+
+      if (resp.ok) {
+        await carregarCursos();
+        setCursosMsg("Nivel apagado.");
+        return;
+      }
+
+      if (resp.status === 409 && json?.code === "NIVEL_COM_TURMAS") {
+        setCursosErro(
+          json?.message ?? "Nao e possivel apagar este nivel porque existem turmas vinculadas a ele."
+        );
+        return;
+      }
+
+      const msg = json?.message ?? json?.error ?? "Falha ao apagar nivel.";
+      throw new Error(msg);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Falha ao apagar nivel.";
+      setCursosErro(msg);
+    }
+  }
+
   async function salvarConteudo(nivelId: number) {
     if (!conteudoForm.nome.trim()) return;
     setCursosErro(null);
@@ -857,15 +892,7 @@ export default function CursosPage() {
                                 </PrimaryButton>
                                 <PrimaryButton
                                   variant="outline"
-                                  onClick={() =>
-                                    setCursos((prev) =>
-                                      prev.map((item) =>
-                                        item.id === curso.id
-                                          ? { ...item, niveis: item.niveis.filter((n) => n.id !== nivel.id) }
-                                          : item
-                                      )
-                                    )
-                                  }
+                                  onClick={() => void handleRemoverNivel(nivel.id)}
                                 >
                                   Remover nivel
                                 </PrimaryButton>

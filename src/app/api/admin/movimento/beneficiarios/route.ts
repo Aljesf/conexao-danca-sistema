@@ -5,7 +5,9 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { jsonError, zodToValidationError } from "@/lib/http/api-errors";
 
 const BeneficiarioCreateSchema = z.object({
-  pessoa_id: z.string().uuid(),
+  pessoa_id: z
+    .string()
+    .regex(/^\d+$/, "pessoa_id deve ser bigint em string numerica"),
   relatorio_socioeconomico: z.string().min(10),
   dados_complementares: z.record(z.unknown()).optional(),
   observacoes: z.string().optional(),
