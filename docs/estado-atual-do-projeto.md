@@ -132,3 +132,26 @@ Paginas:
 
 Navegacao:
 - Link no calendario: /escola/academico/periodos-letivos
+
+---
+
+## Atualizacoes recentes (Pessoas - CPF - 2026-01-08)
+
+SQL concluido:
+- 20260108_0001_pessoas_cpf_validacao.sql (normalizacao de cpf + check 11 digitos + indice unico parcial)
+
+APIs concluidas:
+- Validador compartilhado de CPF (src/lib/validators/cpf.ts).
+- Upsert de pessoa: CPF opcional, mas validado quando preenchido.
+- Roles: bloqueio para atribuir RESPONSAVEL_FINANCEIRO sem CPF valido.
+
+Paginas:
+- /pessoas/novo e /pessoas/[id] com mascara de CPF, feedback de validade e envio normalizado.
+
+Pendencias:
+- Validar por prints:
+  1) salvar pessoa com CPF vazio (ok)
+  2) salvar pessoa com CPF invalido (bloqueia)
+  3) atribuir RESPONSAVEL_FINANCEIRO sem CPF (bloqueia)
+  4) atribuir RESPONSAVEL_FINANCEIRO com CPF valido (ok)
+- Rodar npm run lint e npm run build sem erros.

@@ -13,6 +13,7 @@ import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPe
 import { BairroPicker } from "@/components/enderecos/BairroPicker";
 import { CidadePicker } from "@/components/enderecos/CidadePicker";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
+import { formatCpf, normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 import type { EnderecoPessoa, Pessoa } from "@/types/pessoas";
 
 type AbaId =
@@ -110,13 +111,20 @@ export default function PessoaDetalhesPage() {
   const [telefone, setTelefone] = useState("");
   const [telefoneSecundario, setTelefoneSecundario] = useState("");
   const [nascimento, setNascimento] = useState("");
-  const [cpf, setCpf] = useState("");
+  const [cpfUi, setCpfUi] = useState("");
   const [genero, setGenero] = useState<Pessoa["genero"]>("NAO_INFORMADO");
   const [estadoCivil, setEstadoCivil] =
     useState<Pessoa["estado_civil"] | null>(null);
   const [nacionalidade, setNacionalidade] = useState("");
   const [naturalidade, setNaturalidade] = useState("");
   const [observacoes, setObservacoes] = useState("");
+
+  const cpfStatus = useMemo(() => {
+    const cleaned = normalizeCpf(cpfUi);
+    if (!cleaned) return { kind: "empty" as const };
+    const v = validateCpf(cleaned);
+    return v.ok ? { kind: "ok" as const } : { kind: "bad" as const, reason: v.reason };
+  }, [cpfUi]);
 
   const [matriculas, setMatriculas] = useState<MatriculaPessoaItem[]>([]);
   const [matriculasLoading, setMatriculasLoading] = useState(false);
@@ -177,7 +185,7 @@ export default function PessoaDetalhesPage() {
         setTelefone(data.telefone ?? "");
         setTelefoneSecundario(data.telefone_secundario ?? "");
         setNascimento(data.nascimento ?? "");
-        setCpf(data.cpf ?? "");
+        setCpfUi(formatCpf(data.cpf ?? ""));
         setGenero(data.genero ?? "NAO_INFORMADO");
         setEstadoCivil(data.estado_civil ?? null);
         setNacionalidade(data.nacionalidade ?? "");
@@ -333,21 +341,31 @@ export default function PessoaDetalhesPage() {
         }
       }
 
+      const cpfParaApi = normalizeCpf(cpfUi);
+      if (cpfParaApi) {
+        const v = validateCpf(cpfParaApi);
+        if (!v.ok) {
+          setErro(`CPF invalido (${v.reason}).`);
+          setSaving(false);
+          return;
+        }
+      }
+
       const res = await fetch(`/api/pessoas/${pessoa.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nome,
           nome_social: nomeSocial || null,
-          email,
-          telefone,
+          email: email || null,
+          telefone: telefone || null,
           telefone_secundario: telefoneSecundario || null,
           nascimento: nascimento || null,
           genero,
           estado_civil: estadoCivil,
           nacionalidade: nacionalidade || null,
           naturalidade: naturalidade || null,
-          cpf,
+          cpf: cpfParaApi.length ? cpfParaApi : null,
           observacoes,
           updated_by: updatedBy,
         }),
@@ -535,7 +553,7 @@ export default function PessoaDetalhesPage() {
                             pessoa.telefone_secundario ?? ""
                           );
                           setNascimento(pessoa.nascimento ?? "");
-                          setCpf(pessoa.cpf ?? "");
+                          setCpfUi(formatCpf(pessoa.cpf ?? ""));
                           setGenero(pessoa.genero ?? "NAO_INFORMADO");
                           setEstadoCivil(pessoa.estado_civil ?? null);
                           setNacionalidade(pessoa.nacionalidade ?? "");
@@ -653,13 +671,26 @@ export default function PessoaDetalhesPage() {
                         <div>
                           <p className="text-sm text-slate-400">CPF</p>
                           {editMode ? (
-                            <input
-                              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
-                              value={cpf}
-                              onChange={(e) => setCpf(e.target.value)}
-                            />
+                            <div>
+                              <input
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
+                                value={cpfUi}
+                                onChange={(e) => setCpfUi(formatCpf(e.target.value))}
+                                inputMode="numeric"
+                                placeholder="000.000.000-00"
+                              />
+                              {cpfStatus.kind === "bad" ? (
+                                <p className="mt-1 text-xs text-red-600">
+                                  CPF invalido ({cpfStatus.reason}). Corrija ou deixe em branco.
+                                </p>
+                              ) : cpfStatus.kind === "ok" ? (
+                                <p className="mt-1 text-xs text-emerald-700">CPF valido.</p>
+                              ) : (
+                                <p className="mt-1 text-xs text-slate-500">Preencha apenas se necessario.</p>
+                              )}
+                            </div>
                           ) : (
-                            <p className="mt-1">{cpf || "-"}</p>
+                            <p className="mt-1">{cpfUi || "-"}</p>
                           )}
                         </div>
 

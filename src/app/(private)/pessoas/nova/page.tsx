@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { AbaCuidadosAluno } from "@/components/pessoas/AbaCuidadosAluno";
 import { AbaMedidasDeclaradas } from "@/components/pessoas/AbaMedidasDeclaradas";
 import { AbaObservacoesGerais } from "@/components/pessoas/AbaObservacoesGerais";
@@ -10,6 +10,7 @@ import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPe
 import { AbaVinculos } from "@/components/pessoas/AbaVinculos";
 import { BairroPicker } from "@/components/enderecos/BairroPicker";
 import { CidadePicker } from "@/components/enderecos/CidadePicker";
+import { formatCpf, normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 
 type Pessoa = {
   id: number;
@@ -50,7 +51,7 @@ export default function NovaPessoaPage() {
   const [telefone, setTelefone] = useState("");
   const [telefoneSecundario, setTelefoneSecundario] = useState("");
   const [nascimento, setNascimento] = useState("");
-  const [cpf, setCpf] = useState("");
+  const [cpfUi, setCpfUi] = useState("");
   const [genero, setGenero] = useState<Pessoa["genero"]>("NAO_INFORMADO");
   const [estadoCivil, setEstadoCivil] =
     useState<Pessoa["estado_civil"] | null>(null);
@@ -70,6 +71,13 @@ export default function NovaPessoaPage() {
   const [cep, setCep] = useState("");
   const [referencia, setReferencia] = useState("");
 
+  const cpfStatus = useMemo(() => {
+    const cleaned = normalizeCpf(cpfUi);
+    if (!cleaned) return { kind: "empty" as const };
+    const v = validateCpf(cleaned);
+    return v.ok ? { kind: "ok" as const } : { kind: "bad" as const, reason: v.reason };
+  }, [cpfUi]);
+
   function resetFields() {
     setNome("");
     setNomeSocial("");
@@ -77,7 +85,7 @@ export default function NovaPessoaPage() {
     setTelefone("");
     setTelefoneSecundario("");
     setNascimento("");
-    setCpf("");
+    setCpfUi("");
     setGenero("NAO_INFORMADO");
     setEstadoCivil(null);
     setNacionalidade("");
@@ -121,6 +129,16 @@ export default function NovaPessoaPage() {
         return;
       }
 
+      const cpfClean = normalizeCpf(cpfUi);
+      if (cpfClean) {
+        const v = validateCpf(cpfClean);
+        if (!v.ok) {
+          setError(`CPF invalido (${v.reason}).`);
+          setSaving(false);
+          return;
+        }
+      }
+
       const res = await fetch("/api/pessoas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -135,7 +153,7 @@ export default function NovaPessoaPage() {
           estado_civil: estadoCivil,
           nacionalidade: nacionalidade || null,
           naturalidade: naturalidade || null,
-          cpf: cpf.trim() === "" ? null : cpf,
+          cpf: cpfClean.length ? cpfClean : null,
           tipo_pessoa: tipoPessoa,
           observacoes: observacoes || null,
           ativo,
@@ -300,11 +318,21 @@ export default function NovaPessoaPage() {
               </label>
               <input
                 type="text"
-                value={cpf}
-                onChange={(e) => setCpf(e.target.value)}
-                placeholder="Opcional (salva como NULL se vazio)"
+                value={cpfUi}
+                onChange={(e) => setCpfUi(formatCpf(e.target.value))}
+                inputMode="numeric"
+                placeholder="000.000.000-00 (opcional)"
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-200"
               />
+              {cpfStatus.kind === "bad" ? (
+                <p className="mt-1 text-xs text-red-600">
+                  CPF invalido ({cpfStatus.reason}). Corrija ou deixe em branco.
+                </p>
+              ) : cpfStatus.kind === "ok" ? (
+                <p className="mt-1 text-xs text-emerald-700">CPF valido.</p>
+              ) : (
+                <p className="mt-1 text-xs text-slate-500">Preencha apenas se necessario.</p>
+              )}
             </div>
 
             <div>

@@ -1,14 +1,37 @@
 ﻿// src/app/api/pessoas/[id]/route.ts
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
+import { normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 import type { Pessoa } from "@/types/pessoas";
 
 type RouteParams = {
   params: Promise<{ id?: string }>;
 };
 
+const PessoaUpdateSchema = z
+  .object({
+    nome: z.string().min(2),
+    nome_social: z.string().optional().nullable(),
+    email: z.string().email().optional().nullable(),
+    telefone: z.string().optional().nullable(),
+    telefone_secundario: z.string().optional().nullable(),
+    nascimento: z.string().optional().nullable(),
+    genero: z.string().optional().nullable(),
+    estado_civil: z.string().optional().nullable(),
+    nacionalidade: z.string().optional().nullable(),
+    naturalidade: z.string().optional().nullable(),
+    cpf: z.string().optional().nullable(),
+    observacoes: z.string().optional().nullable(),
+  })
+  .passthrough();
+
+function sanitizeCpfForDb(cpfRaw: string | null | undefined): string | null {
+  const cleaned = normalizeCpf(cpfRaw ?? "");
+  return cleaned.length === 0 ? null : cleaned;
+}
 // SELECT padrão da tabela pessoas
 const pessoaSelect = `
   id,
@@ -178,7 +201,15 @@ export async function PUT(req: Request, ctx: RouteParams) {
       );
     }
 
-    const body = await req.json();
+    const bodyUnknown = await req.json().catch(() => null);
+    const parsed = PessoaUpdateSchema.safeParse(bodyUnknown);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "PAYLOAD_INVALIDO", issues: parsed.error.issues },
+        { status: 400 }
+      );
+    }
+    const body = parsed.data;
 
     const supabase = await getSupabaseServer();
     const {
@@ -191,10 +222,16 @@ export async function PUT(req: Request, ctx: RouteParams) {
       );
     }
     const updatedBy = user.id;
-    const cpfValue =
-      body.cpf && typeof body.cpf === "string" && body.cpf.trim() !== ""
-        ? body.cpf.trim()
-        : null;
+    const cpfValue = sanitizeCpfForDb(body.cpf);
+    if (cpfValue) {
+      const v = validateCpf(cpfValue);
+      if (!v.ok) {
+        return NextResponse.json(
+          { error: "CPF_INVALIDO", reason: v.reason },
+          { status: 400 }
+        );
+      }
+    }
 
     // captura dados anteriores para log
     const { data: antigaPessoa } = await supabase
@@ -273,3 +310,5 @@ export async function PUT(req: Request, ctx: RouteParams) {
     );
   }
 }
+
+

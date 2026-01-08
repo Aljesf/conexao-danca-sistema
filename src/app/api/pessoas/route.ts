@@ -1,15 +1,41 @@
 // src/app/api/pessoas/route.ts
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { getCookieStore } from "@/lib/nextCookies";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
-import type { Pessoa } from "@/types/pessoas";
+import { normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function errorJson(status: number, payload: any) {
   return NextResponse.json(payload, { status });
+}
+
+const PessoaUpsertSchema = z
+  .object({
+    nome: z.string().min(2),
+    nome_social: z.string().optional().nullable(),
+    email: z.string().email().optional().nullable(),
+    telefone: z.string().optional().nullable(),
+    telefone_secundario: z.string().optional().nullable(),
+    nascimento: z.string().optional().nullable(),
+    genero: z.string().optional().nullable(),
+    estado_civil: z.string().optional().nullable(),
+    nacionalidade: z.string().optional().nullable(),
+    naturalidade: z.string().optional().nullable(),
+    cpf: z.string().optional().nullable(),
+    cnpj: z.string().optional().nullable(),
+    tipo_pessoa: z.string().optional().nullable(),
+    observacoes: z.string().optional().nullable(),
+    ativo: z.boolean().optional(),
+  })
+  .passthrough();
+
+function sanitizeCpfForDb(cpfRaw: string | null | undefined): string | null {
+  const cleaned = normalizeCpf(cpfRaw ?? "");
+  return cleaned.length === 0 ? null : cleaned;
 }
 
 export async function GET(req: Request) {
@@ -99,8 +125,9 @@ export async function POST(req: Request) {
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
 
     const body = await req.json().catch(() => null);
-    if (!body || !body.nome) {
-      return errorJson(400, { error: "Dados invalidos: nome e obrigatorio." });
+    const parsed = PessoaUpsertSchema.safeParse(body);
+    if (!parsed.success) {
+      return errorJson(400, { error: "PAYLOAD_INVALIDO", issues: parsed.error.issues });
     }
 
     const {
@@ -119,7 +146,7 @@ export async function POST(req: Request) {
       tipo_pessoa,
       observacoes,
       ativo,
-    } = body as Partial<Pessoa>;
+    } = parsed.data;
 
     const {
       data: { user },
@@ -132,8 +159,15 @@ export async function POST(req: Request) {
     const createdBy = user.id;
     const updatedBy = createdBy;
     const onlyDigits = (v: string) => (v || "").replace(/\D/g, "");
-    const cpfValue = cpf && (cpf as string).trim() !== "" ? onlyDigits(cpf as string) : null;
-    const cnpjValue = cnpj && (cnpj as any).trim ? onlyDigits(cnpj as any) : null;
+    const cpfValue = sanitizeCpfForDb(cpf);
+    const cnpjValue = cnpj && (cnpj as string).trim() !== "" ? onlyDigits(cnpj as string) : null;
+
+    if (cpfValue) {
+      const v = validateCpf(cpfValue);
+      if (!v.ok) {
+        return errorJson(400, { error: "CPF_INVALIDO", reason: v.reason });
+      }
+    }
 
     if (cpfValue) {
       const { data: pessoaCpf } = await supabase
