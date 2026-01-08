@@ -7,6 +7,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 const PayloadSchema = z.object({
   pessoa_id: z.union([z.number().int().positive(), z.string().min(1)]),
   email: z.string().trim().email(),
+  senha: z.string().min(6),
   roles_ids: z.array(z.union([z.string().min(1), z.number().int().positive()])).default([]),
   is_admin: z.boolean().optional(),
 });
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
     }
 
     const email = normalizeEmail(parsed.data.email);
+    const senha = parsed.data.senha;
     const rolesIdsRaw = parsed.data.roles_ids ?? [];
     const rolesIds = rolesIdsRaw
       .map((value) => (typeof value === "number" ? String(value) : value.trim()))
@@ -175,83 +177,51 @@ export async function POST(req: Request) {
       }
     }
 
-    const fallbackSiteUrl =
-      process.env.NODE_ENV === "production"
-        ? process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : "http://localhost:3000"
-        : "http://localhost:3000";
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.SITE_URL ?? fallbackSiteUrl;
-    const redirectTo = `${siteUrl}/auth/definir-senha`;
+    const { data: created, error: createErr } = await admin.auth.admin.createUser({
+      email,
+      password: senha,
+      email_confirm: true,
+    });
 
-    // 4) Criar convite no Supabase Auth (SERVICE ROLE)
-    try {
-      admin = getSupabaseAdmin();
-    } catch (e: unknown) {
-      console.error("SERVICE ROLE NAO CONFIGURADA:", e);
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "SERVICE_ROLE_NAO_CONFIGURADA",
-          message:
-            "SUPABASE_SERVICE_ROLE_KEY nao configurada no ambiente. Nao e possivel enviar convite pelo Supabase Auth.",
-          details: e instanceof Error ? { message: e.message, stack: e.stack } : String(e),
-        },
-        { status: 500 },
-      );
-    }
+    if (createErr) {
+      const msg = createErr.message.toLowerCase();
+      const jaExiste =
+        msg.includes("already") ||
+        msg.includes("registered") ||
+        msg.includes("exists") ||
+        msg.includes("user already");
 
-    const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email);
-
-    if (inviteErr) {
-      const msg = (inviteErr as { message?: string } | null)?.message?.toLowerCase?.() ?? "";
-      const status = (inviteErr as { status?: number } | null)?.status;
-
-      const pareceDuplicado =
-        msg.includes("already registered") ||
-        msg.includes("already exists") ||
-        msg.includes("user exists") ||
-        msg.includes("duplicate") ||
-        status === 422;
-
-      console.error("ERRO SUPABASE INVITE:", inviteErr);
-
-      if (pareceDuplicado) {
+      if (jaExiste) {
         return NextResponse.json(
-          {
-            ok: false,
-            code: "USUARIO_JA_EXISTE_AUTH",
-            message: "Ja existe usuario no Supabase Auth com este email.",
-            details: inviteErr,
-          },
+          { ok: false, code: "USUARIO_JA_EXISTE", message: createErr.message },
           { status: 409 },
         );
       }
 
       return NextResponse.json(
-        {
-          ok: false,
-          code: "FALHA_INVITE_AUTH",
-          message: "Falha ao convidar usuario no Supabase Auth.",
-          details: inviteErr,
-        },
+        { ok: false, code: "ERRO_CRIAR_USUARIO", message: createErr.message },
+        { status: 400 },
+      );
+    }
+
+    const authUserId = created?.user?.id;
+    if (!authUserId) {
+      return NextResponse.json(
+        { ok: false, code: "ERRO_CRIAR_USUARIO_SEM_ID", message: "Usuario criado sem retorno de ID." },
         { status: 500 },
       );
     }
 
-    const authUserId = invited?.user?.id;
-
-    if (!authUserId) {
-      console.error("INVITE SEM USER.ID:", invited);
-      return NextResponse.json(
-        {
-          ok: false,
-          code: "AUTH_USER_ID_NULO",
-          message: "Convite criado, mas o Supabase nao retornou o ID do usuario.",
-          details: invited,
-        },
-        { status: 500 },
-      );
+    let pessoaWarning: { code: string; message: string } | null = null;
+    const { error: pessoaLinkErr } = await admin
+      .from("pessoas")
+      .update({ user_id: authUserId })
+      .eq("id", pessoaId);
+    if (pessoaLinkErr) {
+      pessoaWarning = {
+        code: "USUARIO_CRIADO_MAS_NAO_VINCULOU_PESSOA",
+        message: pessoaLinkErr.message,
+      };
     }
 
     const profilePayload: Record<string, unknown> = {
@@ -307,13 +277,13 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         ok: true,
-        message: "Convite enviado e usuario registrado com sucesso.",
+        message: "Usuario criado e registrado com sucesso.",
         user: { id: authUserId, email },
         pessoa: { id: pessoa.id, nome: pessoa.nome },
-        invite: { sent: true, redirectTo },
         data: {
           roles_ids: rolesIdsValid,
         },
+        warning: pessoaWarning,
       },
       { status: 201 },
     );
