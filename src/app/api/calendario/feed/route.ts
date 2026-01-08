@@ -3,7 +3,7 @@ import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 
 type CalendarOrigin = { tipo: string; id: string };
 
-type CalendarItemKind = "PERIODO_LETIVO" | "INSTITUCIONAL" | "EVENTO_INTERNO";
+type CalendarItemKind = "PERIODO_LETIVO" | "FAIXA_LETIVA" | "INSTITUCIONAL" | "EVENTO_INTERNO";
 
 type CalendarItem = {
   kind: CalendarItemKind;
@@ -96,6 +96,38 @@ export async function GET(req: Request) {
   }
 
   // 2) Itens institucionais (DATE) que intersectam o range
+  let faixasQ = supabase
+    .from("periodos_letivos_faixas")
+    .select(
+      "id,dominio,categoria,subcategoria,titulo,descricao,data_inicio,data_fim,sem_aula,em_avaliacao,periodo_letivo_id"
+    )
+    .lte("data_inicio", end)
+    .gte("data_fim", start)
+    .order("data_inicio", { ascending: true });
+
+  if (periodoLetivoId) faixasQ = faixasQ.eq("periodo_letivo_id", Number(periodoLetivoId));
+
+  const { data: faixas, error: fxErr } = await faixasQ;
+  if (fxErr) return NextResponse.json({ error: fxErr.message }, { status: 500 });
+
+  for (const row of faixas ?? []) {
+    items.push({
+      kind: "FAIXA_LETIVA",
+      id: String(row.id),
+      titulo: row.titulo,
+      descricao: row.descricao,
+      dominio: row.dominio,
+      categoria: row.categoria,
+      subcategoria: row.subcategoria,
+      inicio: toISODateOnly(row.data_inicio),
+      fim: toISODateOnly(row.data_fim),
+      sem_aula: Boolean(row.sem_aula),
+      em_avaliacao: Boolean(row.em_avaliacao),
+      origem: { tipo: "periodos_letivos_faixas", id: String(row.id) },
+    });
+  }
+
+  // 3) Itens institucionais (DATE) que intersectam o range
   let instQ = supabase
     .from("calendario_itens_institucionais")
     .select(
@@ -128,7 +160,7 @@ export async function GET(req: Request) {
     });
   }
 
-  // 3) Eventos internos (TIMESTAMPTZ) no range
+  // 4) Eventos internos (TIMESTAMPTZ) no range
   const startIso = `${start}T00:00:00.000Z`;
   const endIso = `${end}T23:59:59.999Z`;
 

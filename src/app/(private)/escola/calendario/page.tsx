@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-type FeedItemKind = "PERIODO_LETIVO" | "INSTITUCIONAL" | "EVENTO_INTERNO";
+type FeedItemKind = "PERIODO_LETIVO" | "FAIXA_LETIVA" | "INSTITUCIONAL" | "EVENTO_INTERNO";
 
 type FeedItem = {
   kind: FeedItemKind;
@@ -139,7 +139,7 @@ function groupCounts(items: FeedItem[]) {
   let semAula = 0;
 
   for (const it of items) {
-    if (it.kind === "INSTITUCIONAL") {
+    if (it.kind === "INSTITUCIONAL" || it.kind === "FAIXA_LETIVA") {
       institucionais += 1;
       if (it.sem_aula) semAula += 1;
     }
@@ -352,8 +352,10 @@ export default function EscolaCalendarioDashboard() {
                 const isSelected = dayISO === selectedISO;
 
                 const hasInterno = its.some((x) => x.kind === "EVENTO_INTERNO");
-                const hasInstitucional = its.some((x) => x.kind === "INSTITUCIONAL");
-                const hasSemAula = its.some((x) => x.kind === "INSTITUCIONAL" && x.sem_aula);
+                const hasInstitucional = its.some((x) => x.kind === "INSTITUCIONAL" || x.kind === "FAIXA_LETIVA");
+                const hasSemAula = its.some(
+                  (x) => (x.kind === "INSTITUCIONAL" || x.kind === "FAIXA_LETIVA") && x.sem_aula
+                );
 
                 return (
                   <button

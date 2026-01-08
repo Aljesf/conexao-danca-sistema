@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 function cardClass() {
   return "rounded-2xl border bg-white/60 backdrop-blur shadow-sm";
 }
 
 export default function PeriodoLetivoNovoPage() {
+  const router = useRouter();
   const [codigo, setCodigo] = useState("2026");
   const [titulo, setTitulo] = useState("Período Letivo 2026");
   const [ano, setAno] = useState(2026);
@@ -42,7 +44,11 @@ export default function PeriodoLetivoNovoPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? "Falha ao criar período letivo");
 
-      setOk(`Período criado com sucesso (id: ${json.id}).`);
+      const id = json?.id;
+      if (!id) {
+        throw new Error("Resposta inválida: período criado sem id.");
+      }
+      router.push(`/escola/academico/periodos-letivos/${id}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro inesperado");
     } finally {
