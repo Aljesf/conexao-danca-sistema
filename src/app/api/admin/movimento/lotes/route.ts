@@ -1,0 +1,30 @@
+﻿import { NextResponse } from "next/server";
+import { requireMovimentoAdmin } from "@/lib/auth/movimento-guard";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { jsonError } from "@/lib/http/api-errors";
+
+export async function GET(req: Request) {
+  try {
+    await requireMovimentoAdmin();
+    const supabase = getSupabaseServiceClient();
+
+    const url = new URL(req.url);
+    const competencia = url.searchParams.get("competencia");
+    const status = url.searchParams.get("status");
+
+    let q = supabase
+      .from("movimento_creditos_lotes")
+      .select("*")
+      .order("criado_em", { ascending: false });
+
+    if (competencia) q = q.eq("competencia", competencia);
+    if (status) q = q.eq("status", status);
+
+    const { data, error } = await q;
+    if (error) throw error;
+
+    return NextResponse.json({ ok: true, data });
+  } catch (err) {
+    return jsonError(err);
+  }
+}
