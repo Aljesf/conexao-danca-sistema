@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type DiarioStatus = "PENDENTE" | "PRONTO" | "ERRO";
+type PresencaBaseStatus = "PRESENTE" | "FALTA";
 type PresencaStatus = "PRESENTE" | "FALTA" | "JUSTIFICADA" | "ATRASO";
 
 type Turma = {
@@ -22,6 +23,7 @@ type Aula = {
   id: number;
   turma_id: number;
   data_aula: string;
+  hora_inicio?: string | null;
 };
 
 type PresencaDb = {
@@ -41,9 +43,11 @@ type ItemPresenca = {
 type LinhaChamada = {
   aluno_pessoa_id: number;
   nome: string;
-  status: PresencaStatus;
+  base_status: PresencaBaseStatus;
+  atraso_ativo: boolean;
   minutos_atraso: number | null;
-  observacao: string;
+  justificativa_ativa: boolean;
+  justificativa_texto: string;
 };
 
 function todayYYYYMMDD(): string {
@@ -52,6 +56,88 @@ function todayYYYYMMDD(): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function toHHmm(d: Date): string {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function normalizeHora(value?: string | null): string | null {
+  if (!value) return null;
+  if (value.length >= 5) return value.slice(0, 5);
+  return null;
+}
+
+function defaultObservadoEm(dataAula: string, horaInicio?: string | null): string {
+  const hora = normalizeHora(horaInicio);
+  if (hora) return `${dataAula}T${hora}`;
+  return `${dataAula}T${toHHmm(new Date())}`;
+}
+
+function mapPresencaToLinha(aluno: Aluno, presenca?: PresencaDb): LinhaChamada {
+  const nome = (aluno.nome ?? "").trim() || `Aluno ${aluno.aluno_pessoa_id}`;
+
+  if (presenca?.status === "ATRASO") {
+    return {
+      aluno_pessoa_id: aluno.aluno_pessoa_id,
+      nome,
+      base_status: "PRESENTE",
+      atraso_ativo: true,
+      minutos_atraso: presenca.minutos_atraso ?? 1,
+      justificativa_ativa: false,
+      justificativa_texto: "",
+    };
+  }
+
+  if (presenca?.status === "JUSTIFICADA") {
+    return {
+      aluno_pessoa_id: aluno.aluno_pessoa_id,
+      nome,
+      base_status: "FALTA",
+      atraso_ativo: false,
+      minutos_atraso: null,
+      justificativa_ativa: true,
+      justificativa_texto: presenca.observacao ?? "",
+    };
+  }
+
+  if (presenca?.status === "FALTA") {
+    return {
+      aluno_pessoa_id: aluno.aluno_pessoa_id,
+      nome,
+      base_status: "FALTA",
+      atraso_ativo: false,
+      minutos_atraso: null,
+      justificativa_ativa: false,
+      justificativa_texto: "",
+    };
+  }
+
+  return {
+    aluno_pessoa_id: aluno.aluno_pessoa_id,
+    nome,
+    base_status: "PRESENTE",
+    atraso_ativo: false,
+    minutos_atraso: null,
+    justificativa_ativa: false,
+    justificativa_texto: "",
+  };
+}
+
+function serializeLinhas(linhas: LinhaChamada[]): string {
+  const payload = [...linhas]
+    .sort((a, b) => a.aluno_pessoa_id - b.aluno_pessoa_id)
+    .map((l) => ({
+      aluno_pessoa_id: l.aluno_pessoa_id,
+      base_status: l.base_status,
+      atraso_ativo: l.atraso_ativo,
+      minutos_atraso: l.minutos_atraso ?? null,
+      justificativa_ativa: l.justificativa_ativa,
+      justificativa_texto: l.justificativa_texto ?? "",
+    }));
+  return JSON.stringify(payload);
 }
 
 async function fetchJson<T>(
@@ -67,16 +153,30 @@ async function fetchJson<T>(
   });
 
   const text = await res.text();
-  const json = text ? (JSON.parse(text) as unknown) : null;
+  let json: unknown = null;
+  if (text) {
+    try {
+      json = JSON.parse(text) as unknown;
+    } catch {
+      json = null;
+    }
+  }
 
   if (!res.ok) {
     const msg =
       json &&
       typeof json === "object" &&
-      "message" in json &&
       typeof (json as { message?: unknown }).message === "string"
         ? (json as { message: string }).message
-        : `Erro HTTP ${res.status}`;
+        : json &&
+            typeof json === "object" &&
+            typeof (json as { error?: unknown }).error === "string"
+          ? (json as { error: string }).error
+          : json &&
+              typeof json === "object" &&
+              typeof (json as { code?: unknown }).code === "string"
+            ? (json as { code: string }).code
+            : `Erro HTTP ${res.status}`;
     return { ok: false, status: res.status, message: msg };
   }
 
@@ -100,28 +200,41 @@ export default function DiarioDeClassePage() {
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [linhas, setLinhas] = useState<LinhaChamada[]>([]);
 
-  const [dirty, setDirty] = useState<boolean>(false);
   const [salvando, setSalvando] = useState<boolean>(false);
   const [salvoOk, setSalvoOk] = useState<boolean>(false);
+
+  const baselineRef = useRef<string | null>(null);
+  const linhasSignature = useMemo(() => serializeLinhas(linhas), [linhas]);
+  const dirty = useMemo(() => {
+    if (!baselineRef.current) return false;
+    return linhasSignature !== baselineRef.current;
+  }, [linhasSignature]);
+
+  const [anotacaoOpen, setAnotacaoOpen] = useState(false);
+  const [anotacaoAluno, setAnotacaoAluno] = useState<LinhaChamada | null>(null);
+  const [anotacaoTitulo, setAnotacaoTitulo] = useState("");
+  const [anotacaoDescricao, setAnotacaoDescricao] = useState("");
+  const [anotacaoDataHora, setAnotacaoDataHora] = useState("");
+  const [anotacaoErro, setAnotacaoErro] = useState("");
+  const [anotacaoSalvando, setAnotacaoSalvando] = useState(false);
 
   const tituloAba = useMemo(() => {
     switch (aba) {
       case "frequencia":
-        return "Frequência";
+        return "Frequencia";
       case "plano":
         return "Plano de aula";
       case "conteudo":
-        return "Conteúdo do curso";
+        return "Conteudo do curso";
       case "observacoes":
-        return "Observações pedagógicas";
+        return "Observacoes pedagogicas";
       case "avaliacoes":
-        return "Avaliações";
+        return "Avaliacoes";
       default:
-        return "Diário de classe";
+        return "Diario de classe";
     }
   }, [aba]);
 
-  // Carregar turmas
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -143,7 +256,7 @@ export default function DiarioDeClassePage() {
     })().catch((e: unknown) => {
       if (!alive) return;
       setStatus("ERRO");
-      setErroMsg(e instanceof Error ? e.message : "Erro inesperado ao carregar turmas.");
+      setErroMsg(e instanceof Error ? e.message : "Erro ao carregar turmas.");
     });
 
     return () => {
@@ -151,16 +264,15 @@ export default function DiarioDeClassePage() {
     };
   }, []);
 
-  // Quando selecionar turma: carregar alunos e abrir aula
   useEffect(() => {
     let alive = true;
 
     (async () => {
       setSalvoOk(false);
-      setDirty(false);
       setAula(null);
       setLinhas([]);
       setAlunos([]);
+      baselineRef.current = null;
 
       if (!turmaId) return;
 
@@ -201,7 +313,6 @@ export default function DiarioDeClassePage() {
 
       setAula(abrirRes.data.aula);
 
-      // Buscar presenças já salvas
       const presRes = await fetchJson<{ ok: boolean; presencas: PresencaDb[] }>(
         `/api/professor/diario-de-classe/aulas/${abrirRes.data.aula.id}/presencas`
       );
@@ -220,25 +331,17 @@ export default function DiarioDeClassePage() {
       const mapPres = new Map<number, PresencaDb>();
       for (const p of presencas) mapPres.set(p.aluno_pessoa_id, p);
 
-      // Montar linhas com padrão PRESENTE para quem não tem registro
-      const linhasMontadas: LinhaChamada[] = listaAlunos.map((a) => {
-        const nome = (a.nome ?? "").trim() || `Aluno ${a.aluno_pessoa_id}`;
-        const p = mapPres.get(a.aluno_pessoa_id);
-        return {
-          aluno_pessoa_id: a.aluno_pessoa_id,
-          nome,
-          status: p?.status ?? "PRESENTE",
-          minutos_atraso: p?.minutos_atraso ?? null,
-          observacao: p?.observacao ?? "",
-        };
-      });
+      const linhasMontadas = listaAlunos.map((a) =>
+        mapPresencaToLinha(a, mapPres.get(a.aluno_pessoa_id))
+      );
 
       setLinhas(linhasMontadas);
+      baselineRef.current = serializeLinhas(linhasMontadas);
       setStatus("PRONTO");
     })().catch((e: unknown) => {
       if (!alive) return;
       setStatus("ERRO");
-      setErroMsg(e instanceof Error ? e.message : "Erro inesperado ao carregar diário.");
+      setErroMsg(e instanceof Error ? e.message : "Erro ao carregar diario.");
     });
 
     return () => {
@@ -246,18 +349,58 @@ export default function DiarioDeClassePage() {
     };
   }, [turmaId, dataAula]);
 
-  function setStatusLinha(alunoId: number, novo: PresencaStatus) {
+  function setBaseStatus(alunoId: number, novo: PresencaBaseStatus) {
     setLinhas((prev) =>
       prev.map((l) => {
         if (l.aluno_pessoa_id !== alunoId) return l;
+        if (novo === "PRESENTE") {
+          return {
+            ...l,
+            base_status: "PRESENTE",
+            justificativa_ativa: false,
+            justificativa_texto: "",
+          };
+        }
         return {
           ...l,
-          status: novo,
-          minutos_atraso: novo === "ATRASO" ? (l.minutos_atraso ?? 1) : null,
+          base_status: "FALTA",
+          atraso_ativo: false,
+          minutos_atraso: null,
         };
       })
     );
-    setDirty(true);
+    setSalvoOk(false);
+  }
+
+  function toggleAtraso(alunoId: number) {
+    setLinhas((prev) =>
+      prev.map((l) => {
+        if (l.aluno_pessoa_id !== alunoId) return l;
+        if (l.base_status !== "PRESENTE") return l;
+        const ativo = !l.atraso_ativo;
+        return {
+          ...l,
+          atraso_ativo: ativo,
+          minutos_atraso: ativo ? l.minutos_atraso ?? 1 : null,
+        };
+      })
+    );
+    setSalvoOk(false);
+  }
+
+  function toggleJustificativa(alunoId: number) {
+    setLinhas((prev) =>
+      prev.map((l) => {
+        if (l.aluno_pessoa_id !== alunoId) return l;
+        if (l.base_status !== "FALTA") return l;
+        const ativo = !l.justificativa_ativa;
+        return {
+          ...l,
+          justificativa_ativa: ativo,
+          justificativa_texto: ativo ? l.justificativa_texto : "",
+        };
+      })
+    );
     setSalvoOk(false);
   }
 
@@ -265,39 +408,159 @@ export default function DiarioDeClassePage() {
     setLinhas((prev) =>
       prev.map((l) => {
         if (l.aluno_pessoa_id !== alunoId) return l;
+        if (l.base_status !== "PRESENTE") return l;
         return { ...l, minutos_atraso: Math.max(1, mins) };
       })
     );
-    setDirty(true);
     setSalvoOk(false);
   }
 
-  function setObservacao(alunoId: number, obs: string) {
+  function setJustificativaTexto(alunoId: number, texto: string) {
     setLinhas((prev) =>
       prev.map((l) => {
         if (l.aluno_pessoa_id !== alunoId) return l;
-        return { ...l, observacao: obs };
+        if (l.base_status !== "FALTA") return l;
+        return { ...l, justificativa_texto: texto };
       })
     );
-    setDirty(true);
     setSalvoOk(false);
+  }
+
+  function limparLinha(alunoId: number) {
+    setLinhas((prev) =>
+      prev.map((l) =>
+        l.aluno_pessoa_id === alunoId
+          ? {
+              ...l,
+              base_status: "PRESENTE",
+              atraso_ativo: false,
+              minutos_atraso: null,
+              justificativa_ativa: false,
+              justificativa_texto: "",
+            }
+          : l
+      )
+    );
+    setSalvoOk(false);
+  }
+
+  function abrirAnotacao(linha: LinhaChamada) {
+    const observadoEm = defaultObservadoEm(dataAula, aula?.hora_inicio ?? null);
+    setAnotacaoAluno(linha);
+    setAnotacaoTitulo("");
+    setAnotacaoDescricao("");
+    setAnotacaoDataHora(observadoEm);
+    setAnotacaoErro("");
+    setAnotacaoOpen(true);
+  }
+
+  function fecharAnotacao() {
+    setAnotacaoOpen(false);
+    setAnotacaoAluno(null);
+    setAnotacaoTitulo("");
+    setAnotacaoDescricao("");
+    setAnotacaoDataHora("");
+    setAnotacaoErro("");
+  }
+
+  async function salvarAnotacao() {
+    if (!anotacaoAluno) return;
+    if (!anotacaoDescricao.trim()) {
+      setAnotacaoErro("Descricao obrigatoria.");
+      return;
+    }
+
+    if (Number.isNaN(Date.parse(anotacaoDataHora))) {
+      setAnotacaoErro("Data/hora invalida.");
+      return;
+    }
+
+    setAnotacaoSalvando(true);
+    setAnotacaoErro("");
+
+    const payload = {
+      observado_em: new Date(anotacaoDataHora).toISOString(),
+      titulo: anotacaoTitulo.trim() ? anotacaoTitulo.trim() : null,
+      descricao: anotacaoDescricao.trim(),
+      professor_pessoa_id: null,
+    };
+
+    const r = await fetchJson<{ item: unknown }>(
+      `/api/pessoas/${anotacaoAluno.aluno_pessoa_id}/observacoes-pedagogicas`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!r.ok) {
+      setAnotacaoErro(r.message);
+      setAnotacaoSalvando(false);
+      return;
+    }
+
+    setAnotacaoSalvando(false);
+    fecharAnotacao();
   }
 
   async function salvarFrequencia() {
     if (!aula) return;
     if (salvando) return;
 
+    const faltaSemMotivo = linhas.find(
+      (l) => l.base_status === "FALTA" && l.justificativa_ativa && !l.justificativa_texto.trim()
+    );
+    if (faltaSemMotivo) {
+      setStatus("ERRO");
+      setErroMsg(`Justificativa obrigatoria para ${faltaSemMotivo.nome}.`);
+      return;
+    }
+
+    const atrasoSemMinutos = linhas.find(
+      (l) =>
+        l.base_status === "PRESENTE" &&
+        l.atraso_ativo &&
+        (!l.minutos_atraso || l.minutos_atraso < 1)
+    );
+    if (atrasoSemMinutos) {
+      setStatus("ERRO");
+      setErroMsg(`Minutos de atraso obrigatorios para ${atrasoSemMinutos.nome}.`);
+      return;
+    }
+
     setSalvando(true);
     setErroMsg("");
     setStatus("PENDENTE");
 
     try {
-      const itens: ItemPresenca[] = linhas.map((l) => ({
-        alunoPessoaId: l.aluno_pessoa_id,
-        status: l.status,
-        minutosAtraso: l.status === "ATRASO" ? (l.minutos_atraso ?? 1) : undefined,
-        observacao: l.observacao.trim() ? l.observacao.trim() : undefined,
-      }));
+      const itens: ItemPresenca[] = linhas.map((l) => {
+        if (l.base_status === "FALTA") {
+          if (l.justificativa_ativa) {
+            return {
+              alunoPessoaId: l.aluno_pessoa_id,
+              status: "JUSTIFICADA",
+              observacao: l.justificativa_texto.trim(),
+            };
+          }
+          return {
+            alunoPessoaId: l.aluno_pessoa_id,
+            status: "FALTA",
+          };
+        }
+
+        if (l.atraso_ativo) {
+          return {
+            alunoPessoaId: l.aluno_pessoa_id,
+            status: "ATRASO",
+            minutosAtraso: l.minutos_atraso ?? 1,
+          };
+        }
+
+        return {
+          alunoPessoaId: l.aluno_pessoa_id,
+          status: "PRESENTE",
+        };
+      });
 
       const r = await fetchJson<{ ok: boolean; presencas: PresencaDb[] }>(
         `/api/professor/diario-de-classe/aulas/${aula.id}/presencas`,
@@ -313,30 +576,22 @@ export default function DiarioDeClassePage() {
         return;
       }
 
-      // Reconciliar com retorno do backend
       const presencas = Array.isArray(r.data.presencas) ? r.data.presencas : [];
       const mapPres = new Map<number, PresencaDb>();
       for (const p of presencas) mapPres.set(p.aluno_pessoa_id, p);
 
-      setLinhas((prev) =>
-        prev.map((l) => {
-          const p = mapPres.get(l.aluno_pessoa_id);
-          if (!p) return l;
-          return {
-            ...l,
-            status: p.status,
-            minutos_atraso: p.minutos_atraso ?? null,
-            observacao: p.observacao ?? "",
-          };
-        })
-      );
+      const reconciliado = linhas.map((l) => {
+        const p = mapPres.get(l.aluno_pessoa_id);
+        return p ? mapPresencaToLinha({ aluno_pessoa_id: l.aluno_pessoa_id, nome: l.nome }, p) : l;
+      });
 
-      setDirty(false);
+      setLinhas(reconciliado);
+      baselineRef.current = serializeLinhas(reconciliado);
       setSalvoOk(true);
       setStatus("PRONTO");
     } catch (e: unknown) {
       setStatus("ERRO");
-      setErroMsg(e instanceof Error ? e.message : "Erro inesperado ao salvar frequência.");
+      setErroMsg(e instanceof Error ? e.message : "Erro ao salvar frequencia.");
     } finally {
       setSalvando(false);
     }
@@ -347,15 +602,26 @@ export default function DiarioDeClassePage() {
     [turmas, turmaId]
   );
 
+  const statusLabel =
+    status === "PRONTO"
+      ? dirty
+        ? "Alteracoes pendentes"
+        : salvoOk
+          ? "Salvo"
+          : "Pronto"
+      : status === "ERRO"
+        ? "Erro"
+        : "Pendente";
+
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="text-xs tracking-widest text-muted-foreground">ACADÊMICO</div>
-            <h1 className="text-2xl font-semibold">Diário de classe</h1>
+            <div className="text-xs tracking-widest text-muted-foreground">ACADEMICO</div>
+            <h1 className="text-2xl font-semibold">Diario de classe</h1>
             <p className="text-sm text-muted-foreground">
-              Selecione a turma e registre a aula do dia: frequência, plano, observações e avaliações.
+              Selecione a turma e registre a aula do dia: frequencia, plano, observacoes e avaliacoes.
             </p>
           </div>
 
@@ -375,39 +641,24 @@ export default function DiarioDeClassePage() {
           </div>
         </div>
 
-        {/* STATUS CARDS */}
         <section className="grid gap-3 md:grid-cols-4">
-          <Card
-            title="Status"
-            value={
-              status === "PRONTO"
-                ? dirty
-                  ? "Alterações pendentes"
-                  : salvoOk
-                    ? "Salvo"
-                    : "Pronto"
-                : status === "ERRO"
-                  ? "Erro"
-                  : "Pendente"
-            }
-          />
-          <Card title="Professor" value="—" subtitle="fase API (futuro: auto do usuário)" />
+          <Card title="Status" value={statusLabel} />
+          <Card title="Professor" value="-" subtitle="fase API (futuro: auto do usuario)" />
           <Card
             title="Turma"
-            value={turmaSelecionada?.nome ?? turmaSelecionada?.titulo ?? "—"}
+            value={turmaSelecionada?.nome ?? turmaSelecionada?.titulo ?? "-"}
             subtitle={turmaId ? `ID ${turmaId}` : "selecione uma turma"}
           />
           <Card title="Data" value={dataAula} subtitle="aula do dia" />
         </section>
       </header>
 
-      {/* CONTEXTO */}
       <section className="rounded-2xl border bg-card p-4">
         <div className="mb-2">
-          <div className="text-xs tracking-widest text-muted-foreground">SELEÇÃO</div>
+          <div className="text-xs tracking-widest text-muted-foreground">SELECAO</div>
           <div className="text-sm font-medium">Contexto da aula</div>
           <div className="text-xs text-muted-foreground">
-            Selecione a turma e a data. Depois, registre a frequência.
+            Selecione a turma e a data. Depois, registre a frequencia.
           </div>
         </div>
 
@@ -461,23 +712,22 @@ export default function DiarioDeClassePage() {
         )}
       </section>
 
-      {/* ABAS */}
       <section className="rounded-2xl border bg-card">
         <div className="flex flex-wrap gap-2 border-b p-3">
           <BotaoAba ativo={aba === "frequencia"} onClick={() => setAba("frequencia")}>
-            Frequência
+            Frequencia
           </BotaoAba>
           <BotaoAba ativo={aba === "plano"} onClick={() => setAba("plano")}>
             Plano de aula
           </BotaoAba>
           <BotaoAba ativo={aba === "conteudo"} onClick={() => setAba("conteudo")}>
-            Conteúdo do curso
+            Conteudo do curso
           </BotaoAba>
           <BotaoAba ativo={aba === "observacoes"} onClick={() => setAba("observacoes")}>
-            Observações
+            Observacoes
           </BotaoAba>
           <BotaoAba ativo={aba === "avaliacoes"} onClick={() => setAba("avaliacoes")}>
-            Avaliações
+            Avaliacoes
           </BotaoAba>
         </div>
 
@@ -489,85 +739,122 @@ export default function DiarioDeClassePage() {
               <div className="rounded-xl border p-4">
                 <div className="text-sm font-medium">Chamada</div>
                 <div className="text-xs text-muted-foreground">
-                  Padrão inicial: <span className="font-medium">PRESENTE</span>. Ajuste apenas exceções e salve no botão.
+                  Padrao inicial: <span className="font-medium">PRESENTE</span>. Ajuste excecoes e salve no botao.
                 </div>
 
                 <div className="mt-4 flex flex-col gap-2">
                   {!turmaId ? (
-                    <div className="text-sm text-muted-foreground">Selecione uma turma para carregar a chamada.</div>
+                    <div className="text-sm text-muted-foreground">
+                      Selecione uma turma para carregar a chamada.
+                    </div>
                   ) : alunos.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">Nenhum aluno encontrado para esta turma.</div>
+                    <div className="text-sm text-muted-foreground">
+                      Nenhum aluno encontrado para esta turma.
+                    </div>
                   ) : (
                     <div className="overflow-hidden rounded-xl border">
                       <div className="grid grid-cols-12 gap-2 border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
-                        <div className="col-span-5">Aluno</div>
-                        <div className="col-span-5">Status</div>
-                        <div className="col-span-2 text-right">Ações</div>
+                        <div className="col-span-4">Aluno</div>
+                        <div className="col-span-3">Presenca</div>
+                        <div className="col-span-3">Marcadores</div>
+                        <div className="col-span-2 text-right">Acoes</div>
                       </div>
 
                       {linhas.map((l) => (
-                        <div key={l.aluno_pessoa_id} className="border-b px-3 py-3">
-                          <div className="grid grid-cols-12 gap-2 items-start">
-                            <div className="col-span-5">
-                              <div className="text-sm font-medium">{l.nome}</div>
-                              {l.status === "ATRASO" && (
+                        <div key={l.aluno_pessoa_id} className="border-b px-3 py-4">
+                          <div className="grid grid-cols-12 gap-3 items-start">
+                            <div className="col-span-12 md:col-span-4">
+                              <div className="flex items-center gap-2">
+                                <div className="text-sm font-medium">{l.nome}</div>
+                                <span
+                                  className={[
+                                    "rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase",
+                                    l.base_status === "PRESENTE"
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-rose-600 text-white",
+                                  ].join(" ")}
+                                >
+                                  {l.base_status}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="col-span-12 md:col-span-3 flex flex-wrap gap-2">
+                              <StatusMainButton
+                                ativo={l.base_status === "PRESENTE"}
+                                tone="present"
+                                onClick={() => setBaseStatus(l.aluno_pessoa_id, "PRESENTE")}
+                              >
+                                Presente
+                              </StatusMainButton>
+                              <StatusMainButton
+                                ativo={l.base_status === "FALTA"}
+                                tone="absent"
+                                onClick={() => setBaseStatus(l.aluno_pessoa_id, "FALTA")}
+                              >
+                                Falta
+                              </StatusMainButton>
+                            </div>
+
+                            <div className="col-span-12 md:col-span-3">
+                              <div className="flex flex-wrap gap-2">
+                                <ToggleChip
+                                  ativo={l.atraso_ativo}
+                                  disabled={l.base_status !== "PRESENTE"}
+                                  onClick={() => toggleAtraso(l.aluno_pessoa_id)}
+                                >
+                                  Atraso
+                                </ToggleChip>
+                                <ToggleChip
+                                  ativo={l.justificativa_ativa}
+                                  disabled={l.base_status !== "FALTA"}
+                                  onClick={() => toggleJustificativa(l.aluno_pessoa_id)}
+                                >
+                                  Justificar
+                                </ToggleChip>
+                              </div>
+
+                              {l.atraso_ativo ? (
                                 <div className="mt-2 flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground">Minutos:</span>
+                                  <span className="text-xs text-muted-foreground">Minutos</span>
                                   <input
                                     type="number"
                                     min={1}
                                     className="w-24 rounded-lg border bg-background px-2 py-1 text-sm"
                                     value={l.minutos_atraso ?? 1}
-                                    onChange={(e) => setMinutosAtraso(l.aluno_pessoa_id, Number(e.target.value))}
+                                    onChange={(e) =>
+                                      setMinutosAtraso(l.aluno_pessoa_id, Number(e.target.value))
+                                    }
                                   />
                                 </div>
-                              )}
+                              ) : null}
 
-                              <div className="mt-2">
-                                <input
-                                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                                  placeholder="Observação (opcional)"
-                                  value={l.observacao}
-                                  onChange={(e) => setObservacao(l.aluno_pessoa_id, e.target.value)}
-                                />
-                              </div>
+                              {l.justificativa_ativa ? (
+                                <div className="mt-2">
+                                  <input
+                                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                                    placeholder="Motivo obrigatorio"
+                                    value={l.justificativa_texto}
+                                    onChange={(e) =>
+                                      setJustificativaTexto(l.aluno_pessoa_id, e.target.value)
+                                    }
+                                  />
+                                </div>
+                              ) : null}
                             </div>
 
-                            <div className="col-span-5 flex flex-wrap gap-2">
-                              <StatusPill
-                                ativo={l.status === "PRESENTE"}
-                                onClick={() => setStatusLinha(l.aluno_pessoa_id, "PRESENTE")}
-                              >
-                                Presente
-                              </StatusPill>
-                              <StatusPill
-                                ativo={l.status === "FALTA"}
-                                onClick={() => setStatusLinha(l.aluno_pessoa_id, "FALTA")}
-                              >
-                                Falta
-                              </StatusPill>
-                              <StatusPill
-                                ativo={l.status === "JUSTIFICADA"}
-                                onClick={() => setStatusLinha(l.aluno_pessoa_id, "JUSTIFICADA")}
-                              >
-                                Justificada
-                              </StatusPill>
-                              <StatusPill
-                                ativo={l.status === "ATRASO"}
-                                onClick={() => setStatusLinha(l.aluno_pessoa_id, "ATRASO")}
-                              >
-                                Atraso
-                              </StatusPill>
-                            </div>
-
-                            <div className="col-span-2 flex justify-end">
+                            <div className="col-span-12 md:col-span-2 flex justify-end gap-2">
                               <button
                                 type="button"
                                 className="rounded-lg border px-3 py-2 text-sm hover:bg-muted"
-                                onClick={() => {
-                                  setStatusLinha(l.aluno_pessoa_id, "PRESENTE");
-                                  setObservacao(l.aluno_pessoa_id, "");
-                                }}
+                                onClick={() => abrirAnotacao(l)}
+                              >
+                                Anotacao
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-lg border px-3 py-2 text-sm hover:bg-muted"
+                                onClick={() => limparLinha(l.aluno_pessoa_id)}
                               >
                                 Limpar
                               </button>
@@ -581,7 +868,7 @@ export default function DiarioDeClassePage() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs text-muted-foreground">
-                    {dirty ? "Alterações pendentes." : salvoOk ? "Salvo." : "Sem alterações."}
+                    {dirty ? "Alteracoes pendentes." : salvoOk ? "Salvo." : "Sem alteracoes."}
                   </div>
 
                   <button
@@ -590,7 +877,7 @@ export default function DiarioDeClassePage() {
                     disabled={!aula || !turmaId || alunos.length === 0 || salvando || !dirty}
                     onClick={() => void salvarFrequencia()}
                   >
-                    {salvando ? "Salvando..." : "Salvar frequência"}
+                    {salvando ? "Salvando..." : "Salvar frequencia"}
                   </button>
                 </div>
               </div>
@@ -598,12 +885,78 @@ export default function DiarioDeClassePage() {
           ) : (
             <div className="mt-3 rounded-xl border p-4">
               <p className="text-sm text-muted-foreground">
-                Em construção. Este item faz parte do Diário de classe do professor.
+                Em construcao. Este item faz parte do Diario de classe do professor.
               </p>
             </div>
           )}
         </div>
       </section>
+
+      {anotacaoOpen && anotacaoAluno ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-2xl border bg-white p-6 shadow-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-muted-foreground">Anotacao pedagogica</div>
+                <div className="text-lg font-semibold">{anotacaoAluno.nome}</div>
+              </div>
+              <button className="rounded-lg border px-3 py-2 text-sm" onClick={fecharAnotacao}>
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <div>
+                <div className="text-xs text-muted-foreground">Titulo (opcional)</div>
+                <input
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  value={anotacaoTitulo}
+                  onChange={(e) => setAnotacaoTitulo(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">Descricao</div>
+                <textarea
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  rows={4}
+                  value={anotacaoDescricao}
+                  onChange={(e) => setAnotacaoDescricao(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">Data/hora</div>
+                <input
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  type="datetime-local"
+                  value={anotacaoDataHora}
+                  onChange={(e) => setAnotacaoDataHora(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {anotacaoErro ? (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+                {anotacaoErro}
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button className="rounded-lg border px-4 py-2 text-sm" onClick={fecharAnotacao}>
+                Cancelar
+              </button>
+              <button
+                className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
+                onClick={() => void salvarAnotacao()}
+                disabled={anotacaoSalvando}
+              >
+                {anotacaoSalvando ? "Salvando..." : "Salvar anotacao"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -629,12 +982,44 @@ function BotaoAba(props: { ativo: boolean; onClick: () => void; children: React.
   );
 }
 
-function StatusPill(props: { ativo: boolean; onClick: () => void; children: React.ReactNode }) {
+function StatusMainButton(props: {
+  ativo: boolean;
+  tone: "present" | "absent";
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   const base = "rounded-full border px-4 py-2 text-sm transition";
-  const ativo = "bg-primary text-primary-foreground border-primary";
+  const ativo =
+    props.tone === "present"
+      ? "bg-emerald-600 text-white border-emerald-600"
+      : "bg-rose-600 text-white border-rose-600";
   const inativo = "bg-background hover:bg-muted border-border";
   return (
     <button type="button" className={`${base} ${props.ativo ? ativo : inativo}`} onClick={props.onClick}>
+      {props.children}
+    </button>
+  );
+}
+
+function ToggleChip(props: {
+  ativo: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const base = "rounded-full border px-3 py-1 text-xs transition";
+  const ativo = "bg-slate-900 text-white border-slate-900";
+  const inativo = "bg-background hover:bg-muted border-border";
+  const disabled = "opacity-50 cursor-not-allowed";
+  return (
+    <button
+      type="button"
+      className={`${base} ${props.ativo ? ativo : inativo} ${props.disabled ? disabled : ""}`}
+      onClick={() => {
+        if (props.disabled) return;
+        props.onClick();
+      }}
+    >
       {props.children}
     </button>
   );
