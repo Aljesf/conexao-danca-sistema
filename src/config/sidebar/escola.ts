@@ -61,7 +61,7 @@ export const escolaSidebar: SidebarSection[] = [
       { label: "📚 Nova turma", href: "/escola/academico/turmas/nova" },
       { label: "📚 Turmas", href: "/escola/academico/turmas" },
       { label: "🚧 📚 Grade", href: "/escola/academico/turmas/grade" },
-      { label: "🚧 📚 Frequência", href: "/escola/academico/frequencia" },
+      { label: "Diário de classe", href: "/escola/diario-de-classe" },
     ],
   },
   {

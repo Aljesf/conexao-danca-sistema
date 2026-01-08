@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { SectionCard, StatCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
 
@@ -156,9 +157,9 @@ export default function TurmasGradePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <a className={pillNeutral} href="/escola/academico/turmas/nova">
+            <Link className={pillNeutral} href="/escola/academico/turmas/nova">
               Nova turma
-            </a>
+            </Link>
             <button className={pillAccent} onClick={() => setEspacoId("ALL")}>
               Ver todas as salas
             </button>
