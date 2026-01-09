@@ -108,11 +108,33 @@ export default function AdminUsuariosPage() {
   const [modalRolesUser, setModalRolesUser] = useState<RoleSistema[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string>("");
+  const [modalSaving, setModalSaving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [modalSuccess, setModalSuccess] = useState<string | null>(null);
+
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetUser, setResetUser] = useState<UsuarioRow | null>(null);
+  const [resetSenha, setResetSenha] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
   const shortUserId = (id: string) => {
     if (!id) return "";
     if (id.length <= 8) return id;
     return `${id.slice(0, 4)}...${id.slice(-4)}`;
+  };
+
+  const getErrorMessage = (err: unknown, fallback: string) => {
+    if (!err) return fallback;
+    if (typeof err === "string") return err;
+    if (err instanceof Error) return err.message || fallback;
+    if (typeof err === "object") {
+      const payload = (err as { payload?: { message?: string; error?: string; details?: string } }).payload;
+      return payload?.message || payload?.details || payload?.error || fallback;
+    }
+    return fallback;
   };
 
   const rolesAtivos = useMemo(() => rolesSistema.filter((r) => r.ativo), [rolesSistema]);
