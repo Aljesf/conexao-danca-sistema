@@ -1,79 +1,68 @@
 import { NextResponse } from "next/server";
 import { assertAdmin } from "@/lib/auth/assertAdmin";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
 export async function GET(req: Request) {
-  const auth = await assertAdmin();
-  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+  const supabase = await getSupabaseServer();
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  const user = authData?.user;
+  if (authErr || !user) {
+    return NextResponse.json({ ok: false, error: "nao_autenticado" }, { status: 401 });
+  }
+
+  const { data: adminRole, error: adminErr } = await supabase
+    .from("usuario_roles")
+    .select("role_id, roles_sistema!inner(codigo)")
+    .eq("user_id", user.id)
+    .eq("roles_sistema.codigo", "ADMIN")
+    .maybeSingle();
+
+  if (adminErr) {
+    return NextResponse.json(
+      { ok: false, error: "erro_admin_roles", details: adminErr.message },
+      { status: 500 }
+    );
+  }
+
+  if (!adminRole) {
+    return NextResponse.json({ ok: false, error: "nao_admin" }, { status: 403 });
+  }
 
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") || "").trim();
   const limit = clamp(Number(searchParams.get("limit") || 50), 1, 200);
   const offset = clamp(Number(searchParams.get("offset") || 0), 0, 100000);
 
-  const profQuery = auth.supabase
+  const { data: rows, error } = await supabase
     .from("profiles")
-    .select("user_id, full_name, is_admin, pessoa_id, created_at")
+    .select(
+      "user_id, full_name, pessoa_id, pessoas:pessoa_id ( id, nome, email, cpf ), usuario_roles:user_id ( role_id, roles_sistema:role_id ( id, codigo, nome, ativo ) )"
+    )
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
-  const { data: profiles, error: profErr } = await profQuery;
-  if (profErr) {
-    return NextResponse.json({ ok: false, error: "erro_profiles", details: profErr.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ ok: false, error: "erro_listar_usuarios", details: error.message }, { status: 500 });
   }
 
-  const pessoaIds = (profiles || []).map((p) => p.pessoa_id).filter(Boolean) as number[];
-  const userIds = (profiles || []).map((p) => p.user_id);
-
-  const { data: pessoas, error: pesErr } = await auth.supabase
-    .from("pessoas")
-    .select("id, nome, email, cpf")
-    .in("id", pessoaIds.length ? pessoaIds : [0]);
-  if (pesErr) {
-    return NextResponse.json({ ok: false, error: "erro_pessoas", details: pesErr.message }, { status: 500 });
-  }
-
-  const pessoasById = new Map<number, any>();
-  (pessoas || []).forEach((p) => pessoasById.set(p.id, p));
-
-  const { data: userRoles, error: urErr } = await auth.supabase
-    .from("usuario_roles")
-    .select("user_id, role_id")
-    .in("user_id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
-  if (urErr) {
-    return NextResponse.json({ ok: false, error: "erro_usuario_roles", details: urErr.message }, { status: 500 });
-  }
-
-  const roleIds = Array.from(new Set((userRoles || []).map((r) => r.role_id)));
-  const { data: roles, error: rolesErr } = await auth.supabase
-    .from("roles_sistema")
-    .select("id, codigo, nome, ativo")
-    .in("id", roleIds.length ? roleIds : ["00000000-0000-0000-0000-000000000000"]);
-  if (rolesErr) {
-    return NextResponse.json({ ok: false, error: "erro_roles_sistema", details: rolesErr.message }, { status: 500 });
-  }
-
-  const rolesById = new Map<string, any>();
-  (roles || []).forEach((r) => rolesById.set(r.id, r));
-
-  const rolesByUser = new Map<string, any[]>();
-  (userRoles || []).forEach((ur) => {
-    const arr = rolesByUser.get(ur.user_id) || [];
-    const role = rolesById.get(ur.role_id);
-    if (role) arr.push(role);
-    rolesByUser.set(ur.user_id, arr);
+  let users = (rows ?? []).map((row) => {
+    const rolesRaw = Array.isArray(row.usuario_roles) ? row.usuario_roles : [];
+    const roles = rolesRaw
+      .map((r) => r.roles_sistema)
+      .filter((r): r is { id: string; codigo: string; nome: string; ativo?: boolean } => Boolean(r));
+    const is_admin = roles.some((r) => r.codigo === "ADMIN");
+    return {
+      user_id: row.user_id,
+      full_name: row.full_name ?? null,
+      is_admin,
+      pessoa: row.pessoas ?? null,
+      roles,
+    };
   });
-
-  let users = (profiles || []).map((p) => ({
-    user_id: p.user_id,
-    full_name: p.full_name,
-    is_admin: p.is_admin,
-    pessoa: p.pessoa_id ? pessoasById.get(p.pessoa_id) || null : null,
-    roles: rolesByUser.get(p.user_id) || [],
-  }));
 
   if (q) {
     const qlc = q.toLowerCase();
@@ -84,7 +73,7 @@ export async function GET(req: Request) {
     });
   }
 
-  return NextResponse.json({ ok: true, users });
+  return NextResponse.json({ ok: true, users, usuarios: users, total: users.length });
 }
 
 export async function PATCH(req: Request) {
