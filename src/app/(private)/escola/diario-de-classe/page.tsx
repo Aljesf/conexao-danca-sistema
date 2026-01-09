@@ -12,6 +12,9 @@ type Turma = {
   nome?: string | null;
   titulo?: string | null;
   descricao?: string | null;
+  dias_semana?: string[] | null;
+  hora_inicio?: string | null;
+  hora_fim?: string | null;
 };
 
 type Aluno = {
@@ -34,6 +37,12 @@ type PresencaDb = {
   status: PresencaStatus;
   minutos_atraso: number | null;
   observacao: string | null;
+};
+
+type ProfessorOption = {
+  colaborador_id: number;
+  pessoa_id: number | null;
+  nome: string | null;
 };
 
 type ItemPresenca = {
@@ -71,6 +80,12 @@ function normalizeHora(value?: string | null): string | null {
   if (!value) return null;
   if (value.length >= 5) return value.slice(0, 5);
   return null;
+}
+
+function weekdayLabelFromISO(dateISO: string): string {
+  const d = new Date(`${dateISO}T00:00:00`);
+  const wd = d.getDay();
+  return ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][wd] ?? "";
 }
 
 function defaultObservadoEm(dataAula: string, horaInicio?: string | null): string {
@@ -196,11 +211,15 @@ export default function DiarioDeClassePage() {
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState<number | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [professores, setProfessores] = useState<ProfessorOption[]>([]);
+  const [professorFiltro, setProfessorFiltro] = useState<number | null>(null);
 
   const [dataAula, setDataAula] = useState<string>(todayYYYYMMDD());
   const [aula, setAula] = useState<Aula | null>(null);
 
   const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [presencasRegistradas, setPresencasRegistradas] = useState(0);
   const [linhas, setLinhas] = useState<LinhaChamada[]>([]);
 
   const [salvando, setSalvando] = useState<boolean>(false);
@@ -246,8 +265,11 @@ export default function DiarioDeClassePage() {
     (async () => {
       setStatus("PENDENTE");
       setErroMsg("");
+      const params = new URLSearchParams();
+      if (dataAula) params.set("date", dataAula);
+      if (professorFiltro) params.set("professorColaboradorId", String(professorFiltro));
       const r = await fetchJson<{ ok: boolean; turmas: Turma[] }>(
-        "/api/professor/diario-de-classe/turmas"
+        `/api/professor/diario-de-classe/turmas?${params.toString()}`
       );
       if (!alive) return;
 
@@ -268,6 +290,35 @@ export default function DiarioDeClassePage() {
     return () => {
       alive = false;
     };
+  }, [dataAula, professorFiltro]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const r = await fetchJson<{ ok: boolean; professores: ProfessorOption[] }>(
+        "/api/professor/diario-de-classe/professores"
+      );
+      if (!alive) return;
+
+      if (!r.ok) {
+        if (r.status === 403) {
+          setIsAdmin(false);
+          setProfessores([]);
+          setProfessorFiltro(null);
+          return;
+        }
+        return;
+      }
+
+      setIsAdmin(true);
+      setProfessores(Array.isArray(r.data.professores) ? r.data.professores : []);
+    })().catch(() => {
+      if (!alive) return;
+    });
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -278,6 +329,7 @@ export default function DiarioDeClassePage() {
       setAula(null);
       setLinhas([]);
       setAlunos([]);
+      setPresencasRegistradas(0);
       baselineRef.current = null;
 
       if (!turmaId) return;
@@ -336,6 +388,7 @@ export default function DiarioDeClassePage() {
       const presencas = Array.isArray(presRes.data.presencas)
         ? presRes.data.presencas
         : [];
+      setPresencasRegistradas(presencas.length);
       const mapPres = new Map<number, PresencaDb>();
       for (const p of presencas) mapPres.set(p.aluno_pessoa_id, p);
 
@@ -598,6 +651,7 @@ export default function DiarioDeClassePage() {
       setLinhas(reconciliado);
       baselineRef.current = serializeLinhas(reconciliado);
       setSalvoOk(true);
+      setPresencasRegistradas(presencas.length);
       setStatus("PRONTO");
     } catch (e: unknown) {
       setStatus("ERRO");
@@ -651,6 +705,8 @@ export default function DiarioDeClassePage() {
   const statusSubtitle = aulaFechada
     ? `Fechada em ${aula?.fechada_em ? new Date(aula.fechada_em).toLocaleString() : "--"}`
     : "A chamada precisa ser fechada para validar presencas.";
+  const dataSemana = weekdayLabelFromISO(dataAula);
+  const pendentesCount = Math.max(0, alunos.length - presencasRegistradas);
 
   return (
     <div className="flex flex-col gap-4">
@@ -683,12 +739,15 @@ export default function DiarioDeClassePage() {
         <section className="grid gap-3 md:grid-cols-4">
           <Card title="Status" value={statusLabel} subtitle={statusSubtitle} />
           <Card title="Professor" value="-" subtitle="fase API (futuro: auto do usuario)" />
-          <Card
-            title="Turma"
-            value={turmaSelecionada?.nome ?? turmaSelecionada?.titulo ?? "-"}
-            subtitle={turmaId ? `ID ${turmaId}` : "selecione uma turma"}
+          <TurmaPanel
+            turma={turmaSelecionada}
+            turmaId={turmaId}
+            alunosTotal={alunos.length}
+            presencasRegistradas={presencasRegistradas}
+            pendentesCount={pendentesCount}
+            aulaFechada={aulaFechada}
           />
-          <Card title="Data" value={dataAula} subtitle="aula do dia" />
+          <Card title="Data" value={dataAula} subtitle={`aula do dia • ${dataSemana}`} />
         </section>
       </header>
 
@@ -710,24 +769,30 @@ export default function DiarioDeClassePage() {
           <div className="text-sm text-muted-foreground">Nenhuma turma disponivel.</div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {turmas.map((t) => (
-              <div key={t.turma_id} className="rounded-xl border bg-background p-3">
-                <div className="text-sm font-medium">
-                  {t.nome ?? t.titulo ?? `Turma ${t.turma_id}`}
+            {turmas.map((t) => {
+              const diasLabel = Array.isArray(t.dias_semana) ? t.dias_semana.join(", ") : "--";
+              const horaInicio = normalizeHora(t.hora_inicio);
+              const horaFim = normalizeHora(t.hora_fim);
+              const horario = horaInicio && horaFim ? `${horaInicio} - ${horaFim}` : horaInicio ?? horaFim ?? "--";
+              return (
+                <div key={t.turma_id} className="rounded-xl border bg-background p-3">
+                  <div className="text-sm font-medium">
+                    {t.nome ?? t.titulo ?? `Turma ${t.turma_id}`}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Dias: {diasLabel}</div>
+                  <div className="text-xs text-muted-foreground">Horario: {horario}</div>
+                  <button
+                    type="button"
+                    className="mt-2 rounded-full border px-3 py-1 text-xs hover:bg-muted"
+                    onClick={() => {
+                      setTurmaId(t.turma_id);
+                    }}
+                  >
+                    Abrir chamada
+                  </button>
                 </div>
-                <div className="text-xs text-muted-foreground">ID {t.turma_id}</div>
-                <button
-                  type="button"
-                  className="mt-2 rounded-full border px-3 py-1 text-xs hover:bg-muted"
-                  onClick={() => {
-                    setDataAula(todayYYYYMMDD());
-                    setTurmaId(t.turma_id);
-                  }}
-                >
-                  Abrir chamada
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
@@ -741,7 +806,7 @@ export default function DiarioDeClassePage() {
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Turma</span>
             <select
@@ -770,6 +835,27 @@ export default function DiarioDeClassePage() {
               onChange={(e) => setDataAula(e.target.value)}
             />
           </div>
+
+          {isAdmin ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">Professor</span>
+              <select
+                className="rounded-lg border bg-background px-3 py-2 text-sm"
+                value={professorFiltro ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value ? Number(e.target.value) : null;
+                  setProfessorFiltro(v);
+                }}
+              >
+                <option value="">Todos</option>
+                {professores.map((p) => (
+                  <option key={p.colaborador_id} value={p.colaborador_id}>
+                    {p.nome ?? `Colaborador ${p.colaborador_id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Aula</span>
@@ -1091,6 +1177,39 @@ function Card(props: { title: string; value: string; subtitle?: string }) {
       <div className="text-xs tracking-widest text-muted-foreground">{props.title.toUpperCase()}</div>
       <div className="mt-1 text-lg font-semibold">{props.value}</div>
       {props.subtitle ? <div className="text-xs text-muted-foreground">{props.subtitle}</div> : null}
+    </div>
+  );
+}
+
+function TurmaPanel(props: {
+  turma: Turma | null;
+  turmaId: number | null;
+  alunosTotal: number;
+  presencasRegistradas: number;
+  pendentesCount: number;
+  aulaFechada: boolean;
+}) {
+  const dias = props.turma?.dias_semana;
+  const diasLabel = Array.isArray(dias) && dias.length > 0 ? dias.join(", ") : "--";
+  const horaInicio = normalizeHora(props.turma?.hora_inicio);
+  const horaFim = normalizeHora(props.turma?.hora_fim);
+  const horario = horaInicio && horaFim ? `${horaInicio} - ${horaFim}` : horaInicio ?? horaFim ?? "--";
+
+  return (
+    <div className="rounded-2xl border bg-card p-4">
+      <div className="text-xs tracking-widest text-muted-foreground">TURMA</div>
+      <div className="mt-1 text-lg font-semibold">
+        {props.turma?.nome ?? props.turma?.titulo ?? (props.turmaId ? `Turma ${props.turmaId}` : "-")}
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">
+        Dias: {diasLabel} • Horario: {horario}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span>Total alunos: {props.alunosTotal}</span>
+        <span>Marcados: {props.presencasRegistradas}</span>
+        <span>Pendentes: {props.pendentesCount}</span>
+        <span>Status: {props.aulaFechada ? "FECHADA" : "PENDENTE"}</span>
+      </div>
     </div>
   );
 }
