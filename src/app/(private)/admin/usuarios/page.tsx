@@ -53,7 +53,7 @@ function Modal({
   children,
 }: {
   open: boolean;
-  title: string;
+  title: React.ReactNode;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -84,9 +84,12 @@ function Modal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{title}</div>
-          <button onClick={onClose} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd" }}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1">{title}</div>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+          >
             Fechar
           </button>
         </div>
@@ -169,7 +172,7 @@ export default function AdminUsuariosPage() {
       setUsers(body?.users || body?.usuarios || []);
     } catch (e) {
       setUsers([]);
-      setErro(e?.message || "Erro ao carregar usuarios.");
+      setErro(getErrorMessage(e, "Erro ao carregar usuários."));
     } finally {
       setLoading(false);
     }
@@ -178,13 +181,16 @@ export default function AdminUsuariosPage() {
     setModalUser(u);
     setModalOpen(true);
     setModalLoading(true);
+    setModalSaving(false);
     setSelectedRoleId("");
+    setModalError(null);
+    setModalSuccess(null);
     try {
       const data = await apiJson<{ ok: true; roles: RoleSistema[] }>(`/api/admin/usuarios/${u.user_id}/roles`);
       setModalRolesUser(data.roles || []);
-    } catch (e: any) {
-      alert(e?.payload?.details || e?.message || "Erro ao carregar roles do usuÃ¡rio.");
+    } catch (e) {
       setModalRolesUser([]);
+      setModalError(getErrorMessage(e, "Erro ao carregar papéis do usuário."));
     } finally {
       setModalLoading(false);
     }
@@ -206,8 +212,11 @@ export default function AdminUsuariosPage() {
   }
 
   async function adicionarRole() {
-    if (!modalUser || !selectedRoleId) return;
+    if (!modalUser || !selectedRoleId || modalSaving) return;
 
+    setModalSaving(true);
+    setModalError(null);
+    setModalSuccess(null);
     try {
       await apiJson<{ ok: true }>(`/api/admin/usuarios/${modalUser.user_id}/roles`, {
         method: "POST",
@@ -222,16 +231,22 @@ export default function AdminUsuariosPage() {
         });
       }
       setSelectedRoleId("");
+      setModalSuccess("Papel adicionado.");
       await carregarUsuarios(); // reflete badges na tabela
-    } catch (e: any) {
-      alert(e?.payload?.details || e?.message || "Erro ao adicionar role.");
+    } catch (e) {
+      setModalError(getErrorMessage(e, "Erro ao adicionar papel."));
+    } finally {
+      setModalSaving(false);
     }
   }
 
   async function removerRole(roleId: string) {
-    if (!modalUser) return;
-    if (!confirm("Remover este papel do usuÃ¡rio?")) return;
+    if (!modalUser || modalSaving) return;
+    if (!confirm("Remover este papel do usuário?")) return;
 
+    setModalSaving(true);
+    setModalError(null);
+    setModalSuccess(null);
     try {
       await apiJson<{ ok: true }>(`/api/admin/usuarios/${modalUser.user_id}/roles`, {
         method: "DELETE",
@@ -239,9 +254,65 @@ export default function AdminUsuariosPage() {
       });
 
       setModalRolesUser((prev) => prev.filter((r) => r.id !== roleId));
+      setModalSuccess("Papel removido.");
       await carregarUsuarios();
-    } catch (e: any) {
-      alert(e?.payload?.details || e?.message || "Erro ao remover role.");
+    } catch (e) {
+      setModalError(getErrorMessage(e, "Erro ao remover papel."));
+    } finally {
+      setModalSaving(false);
+    }
+  }
+
+  function abrirResetSenha(u: UsuarioRow) {
+    setResetUser(u);
+    setResetOpen(true);
+    setResetSenha("");
+    setResetConfirm("");
+    setResetError(null);
+    setResetSuccess(null);
+  }
+
+  function fecharResetSenha() {
+    setResetOpen(false);
+    setResetUser(null);
+    setResetSenha("");
+    setResetConfirm("");
+    setResetError(null);
+    setResetSuccess(null);
+  }
+
+  async function confirmarResetSenha() {
+    if (!resetUser || resetLoading) return;
+    setResetError(null);
+    setResetSuccess(null);
+
+    const senha = resetSenha.trim();
+    const confirmacao = resetConfirm.trim();
+
+    if (senha.length < 6) {
+      setResetError("A senha precisa ter ao menos 6 caracteres.");
+      return;
+    }
+
+    if (senha !== confirmacao) {
+      setResetError("As senhas não conferem.");
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await apiJson<{ ok: true }>("/api/admin/usuarios/resetar-senha", {
+        method: "POST",
+        body: JSON.stringify({ user_id: resetUser.user_id, senha }),
+      });
+      setResetSuccess("Senha redefinida com sucesso.");
+      setTimeout(() => {
+        fecharResetSenha();
+      }, 800);
+    } catch (e) {
+      setResetError(getErrorMessage(e, "Erro ao redefinir senha."));
+    } finally {
+      setResetLoading(false);
     }
   }
 
@@ -250,7 +321,7 @@ export default function AdminUsuariosPage() {
       try {
         await carregarRolesSistema();
       } catch (e) {
-        // silent: roles Ã© secundÃ¡rio na primeira renderizaÃ§Ã£o
+        // silent: roles é secundário na primeira renderização
       }
       await carregarUsuarios();
     })();
@@ -258,14 +329,14 @@ export default function AdminUsuariosPage() {
   }, []);
 
   async function criarUsuarioFromPessoa(pessoaIdPrefill?: number) {
-    const pessoaIdStr = window.prompt("Informe o ID da pessoa para criar o usuÃ¡rio", pessoaIdPrefill ? String(pessoaIdPrefill) : "");
+    const pessoaIdStr = window.prompt("Informe o ID da pessoa para criar o usuário", pessoaIdPrefill ? String(pessoaIdPrefill) : "");
     if (!pessoaIdStr) return;
     const pessoaId = Number(pessoaIdStr);
     if (!pessoaId || Number.isNaN(pessoaId)) return;
 
-    const email = window.prompt("Email do usuÃ¡rio (obrigatÃ³rio):") || "";
+    const email = window.prompt("Email do usuário (obrigatório):") || "";
     if (!email.trim()) return;
-    const senha = window.prompt("Senha inicial (obrigatÃ³ria):") || "";
+    const senha = window.prompt("Senha inicial (obrigatória):") || "";
     if (!senha.trim()) return;
 
     try {
@@ -274,9 +345,9 @@ export default function AdminUsuariosPage() {
         body: JSON.stringify({ pessoaId, email: email.trim(), senha: senha.trim() }),
       });
       await carregarUsuarios();
-      alert("UsuÃ¡rio criado e vinculado Ã  pessoa.");
+      alert("Usuário criado e vinculado à pessoa.");
     } catch (e: any) {
-      alert(e?.payload?.error || e?.payload?.details || e?.message || "Erro ao criar usuÃ¡rio a partir da pessoa.");
+      alert(e?.payload?.error || e?.payload?.details || e?.message || "Erro ao criar usuário a partir da pessoa.");
     }
   }
 
@@ -420,6 +491,13 @@ export default function AdminUsuariosPage() {
                             >
                               Gerenciar roles
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => abrirResetSenha(u)}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                            >
+                              Redefinir senha
+                            </button>
                             {!u.pessoa_id ? (
                               <button
                                 type="button"
@@ -452,107 +530,207 @@ export default function AdminUsuariosPage() {
       <Modal
         open={modalOpen}
         title={
-          modalUser
-            ? modalUser.nome
-              ? `Papéis do usuário: ${modalUser.nome}`
-              : `Papéis do usuário: Sem vínculo (${shortUserId(modalUser.user_id)})`
-            : "Papéis do usuário"
+          modalUser ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-base font-semibold text-slate-900">Papéis do usuário</span>
+              <span className="text-xs text-slate-500">UID: {shortUserId(modalUser.user_id)}</span>
+            </div>
+          ) : (
+            <span className="text-base font-semibold text-slate-900">Papéis do usuário</span>
+          )
         }
         onClose={() => {
           setModalOpen(false);
           setModalUser(null);
           setModalRolesUser([]);
           setSelectedRoleId("");
+          setModalError(null);
+          setModalSuccess(null);
+          setModalSaving(false);
+          setModalLoading(false);
         }}
       >
         {!modalUser ? null : (
-          <div>
-            <div style={{ marginBottom: 10, color: "rgba(0,0,0,0.65)" }}>
-              User ID: <code>{modalUser.user_id}</code>
-            </div>
-            <div style={{ marginBottom: 12, color: "rgba(0,0,0,0.8)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <strong>Pessoa:</strong>
-              {typeof modalUser.pessoa_id === "number" ? (
-                <span>
-                  <a href={`/pessoas/${modalUser.pessoa_id}`} style={{ color: "#2563eb", textDecoration: "underline" }}>
-                    Pessoa #{modalUser.pessoa_id}
-                  </a>
-                  {modalUser.nome ? ` - ${modalUser.nome}` : ""}
-                </span>
-              ) : (
-                <span>
-                  Sem vínculo.{" "}
-                  <button
-                    onClick={() => criarUsuarioFromPessoa()}
-                    style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}
-                  >
-                    Vincular...
-                  </button>
-                </span>
-              )}
-            </div>
-<div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <select
-                value={selectedRoleId}
-                onChange={(e) => setSelectedRoleId(e.target.value)}
-                style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", minWidth: 320 }}
-              >
-                <option value="">Selecionar papel para adicionar...</option>
-                {rolesAtivos.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.nome} ({r.codigo})
-                  </option>
-                ))}
-              </select>
+          <div className="space-y-4">
+            {modalError ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                {modalError}
+              </div>
+            ) : null}
+            {modalSuccess ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                {modalSuccess}
+              </div>
+            ) : null}
 
-              <button
-                onClick={adicionarRole}
-                disabled={!selectedRoleId}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #ddd",
-                  background: selectedRoleId ? "#fff" : "rgba(0,0,0,0.05)",
-                  cursor: selectedRoleId ? "pointer" : "not-allowed",
-                }}
-              >
-                Adicionar papel
-              </button>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pessoa</div>
+              <div className="mt-1 text-sm text-slate-700">
+                {typeof modalUser.pessoa_id === "number" ? (
+                  <span className="inline-flex flex-wrap items-center gap-2">
+                    <Link className="text-sky-700 hover:underline" href={`/pessoas/${modalUser.pessoa_id}`}>
+                      Pessoa #{modalUser.pessoa_id}
+                    </Link>
+                    {modalUser.nome ? <span className="text-slate-600">- {modalUser.nome}</span> : null}
+                  </span>
+                ) : (
+                  <span className="inline-flex flex-wrap items-center gap-2 text-slate-600">
+                    <span>Sem vínculo.</span>
+                    <button
+                      type="button"
+                      onClick={() => criarUsuarioFromPessoa()}
+                      className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-white"
+                    >
+                      Vincular...
+                    </button>
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div style={{ marginTop: 14, fontWeight: 700 }}>PapÃ©is atribuÃ­dos</div>
+            <div className="rounded-xl border border-slate-200 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Adicionar papel</div>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <select
+                  value={selectedRoleId}
+                  onChange={(e) => setSelectedRoleId(e.target.value)}
+                  disabled={modalLoading || modalSaving}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200 sm:w-80"
+                >
+                  <option value="">Selecionar papel para adicionar...</option>
+                  {rolesAtivos.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.nome} ({r.codigo})
+                    </option>
+                  ))}
+                </select>
 
-            {modalLoading ? (
-              <div style={{ marginTop: 10, color: "rgba(0,0,0,0.65)" }}>Carregando papÃ©is...</div>
-            ) : (
-              <div style={{ marginTop: 10 }}>
-                {modalRolesUser.length ? (
-                  <div style={{ display: "flex", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={adicionarRole}
+                  disabled={!selectedRoleId || modalLoading || modalSaving}
+                  className="inline-flex items-center justify-center rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  {modalSaving ? "Salvando..." : "Adicionar papel"}
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Papéis atribuídos</div>
+              <div className="mt-3">
+                {modalLoading ? (
+                  <div className="text-sm text-slate-500">Carregando papéis...</div>
+                ) : modalRolesUser.length ? (
+                  <div className="flex flex-wrap gap-2">
                     {modalRolesUser.map((r) => (
-                      <span key={r.id} style={{ display: "inline-flex", alignItems: "center", marginRight: 8, marginBottom: 8 }}>
+                      <div key={r.id} className="inline-flex items-center gap-2">
                         <Badge>{r.nome}</Badge>
                         <button
+                          type="button"
                           onClick={() => removerRole(r.id)}
-                          title="Remover"
-                          style={{
-                            marginLeft: 6,
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            border: "1px solid #ddd",
-                            background: "#fff",
-                            cursor: "pointer",
-                          }}
+                          disabled={modalSaving}
+                          className="rounded-full border border-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Remover
                         </button>
-                      </span>
+                      </div>
                     ))}
                   </div>
                 ) : (
-                  <div style={{ color: "rgba(0,0,0,0.6)" }}>Nenhum papel atribuÃ­do.</div>
+                  <div className="text-sm text-slate-500">Nenhum papel atribuído.</div>
                 )}
               </div>
-            )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={resetOpen}
+        title={
+          resetUser ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-base font-semibold text-slate-900">Redefinir senha</span>
+              <span className="text-xs text-slate-500">UID: {shortUserId(resetUser.user_id)}</span>
+            </div>
+          ) : (
+            <span className="text-base font-semibold text-slate-900">Redefinir senha</span>
+          )
+        }
+        onClose={fecharResetSenha}
+      >
+        {!resetUser ? null : (
+          <div className="space-y-4">
+            {resetError ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                {resetError}
+              </div>
+            ) : null}
+            {resetSuccess ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                {resetSuccess}
+              </div>
+            ) : null}
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Usuário</div>
+              <div className="mt-1 text-sm text-slate-700">
+                <div className="font-semibold text-slate-900">{resetUser.nome ?? "Sem vínculo"}</div>
+                <div className="text-xs text-slate-500">{resetUser.email ?? "Sem email"}</div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="reset-senha">
+                  Nova senha
+                </label>
+                <input
+                  id="reset-senha"
+                  type="password"
+                  value={resetSenha}
+                  onChange={(e) => setResetSenha(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  placeholder="Digite a nova senha"
+                  autoComplete="new-password"
+                />
+                <div className="mt-1 text-xs text-slate-500">Mínimo 6 caracteres.</div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="reset-confirm">
+                  Confirmar senha
+                </label>
+                <input
+                  id="reset-confirm"
+                  type="password"
+                  value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  placeholder="Repita a nova senha"
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={fecharResetSenha}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                disabled={resetLoading}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarResetSenha}
+                disabled={resetLoading}
+                className="inline-flex items-center justify-center rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {resetLoading ? "Salvando..." : "Redefinir senha"}
+              </button>
+            </div>
           </div>
         )}
       </Modal>
