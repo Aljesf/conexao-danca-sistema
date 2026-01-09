@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import PessoaLookup, { PessoaLookupItem } from "@/components/PessoaLookup";
 
 type RoleSistema = { id: string; codigo: string; nome: string; ativo: boolean };
@@ -56,7 +57,7 @@ export default function NovoUsuarioPage() {
         if (res.ok && Array.isArray(json?.roles)) {
           setRoles(json.roles);
         }
-      } catch (e) {
+      } catch {
         // silencioso
       }
     }
@@ -124,7 +125,7 @@ export default function NovoUsuarioPage() {
         return;
       }
 
-      setMensagem(json.message ?? "Usuario criado com senha definida pelo administrador.");
+      setMensagem(json.message ?? "Usuario criado e registrado com sucesso.");
       setRedirectTo(json.invite?.redirectTo || null);
       setPessoa(null);
       setEmail("");
@@ -145,156 +146,219 @@ export default function NovoUsuarioPage() {
     }
   }, [pessoa, email]);
 
+  const senhaNaoConfere = erro?.includes("SENHA_NAO_CONFERE");
+  const senhaInvalida = erro?.includes("SENHA_INVALIDA");
+  const senhaErro =
+    senhaNaoConfere
+      ? "As senhas nao conferem."
+      : senhaInvalida
+      ? "A senha deve ter no minimo 6 caracteres."
+      : null;
+  const erroGeral = erro && !senhaNaoConfere && !senhaInvalida ? erro : null;
+
   return (
-    <div style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Cadastrar novo usuário</h1>
-      <p style={{ color: "rgba(0,0,0,0.65)", fontSize: 14, marginTop: 0 }}>
-        O cadastro de usuarios e feito a partir de uma pessoa existente. Defina a senha aqui e
-        crie o usuario diretamente.
-      </p>
-
-      <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-        <PessoaLookup
-          label="Pessoa (cadastro existente)"
-          placeholder="Buscar por nome, e-mail ou CPF (2+ caracteres)"
-          value={pessoa}
-          onChange={setPessoa}
-          ctaNovaPessoaHref="/pessoas/nova"
-        />
-        {pessoaLabel ? <div style={{ fontSize: 13, opacity: 0.75 }}>{pessoaLabel}</div> : null}
-
-        <div>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-            E-mail do usuário
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="usuario@exemplo.com"
-            style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-          />
-        </div>
-        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-          <div>
-            <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-              Senha
-            </label>
-            <input
-              type="password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              placeholder="min. 6 caracteres"
-              autoComplete="new-password"
-              style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-              Confirmar senha
-            </label>
-            <input
-              type="password"
-              value={confirmarSenha}
-              onChange={(e) => setConfirmarSenha(e.target.value)}
-              placeholder="repita a senha"
-              autoComplete="new-password"
-              style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ddd" }}
-            />
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-4 py-6">
+      <div className="mx-auto flex max-w-5xl flex-col gap-6">
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-slate-800">Cadastrar novo usuario</h1>
+              <p className="text-sm text-slate-600">
+                O cadastro de usuarios e feito a partir de uma pessoa existente. Defina a senha e
+                os papeis antes de criar o usuario.
+              </p>
+            </div>
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Fluxo: pessoa -&gt; email -&gt; senha -&gt; roles -&gt; criar
+            </div>
           </div>
         </div>
 
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
-          Administrador do sistema
-        </label>
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">Dados do usuario</h2>
+            <p className="text-sm text-slate-600">
+              Selecione uma pessoa cadastrada e confirme o email de acesso.
+            </p>
+          </div>
 
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Papéis (roles)</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {rolesAtivas.length === 0 && (
-              <span style={{ color: "rgba(0,0,0,0.55)" }}>Nenhum papel ativo encontrado.</span>
-            )}
-            {rolesAtivas.map((r) => (
-              <label
-                key={r.id}
-                style={{
-                  border: "1px solid #ddd",
-                  borderRadius: 10,
-                  padding: "6px 10px",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  cursor: "pointer",
-                  background: selecionadas.includes(r.id) ? "rgba(37,99,235,0.08)" : "#fff",
-                }}
-              >
+          <div className="mt-4 grid gap-4">
+            <div className="grid gap-3">
+              <PessoaLookup
+                label="Pessoa (cadastro existente)"
+                placeholder="Buscar por nome, e-mail ou CPF (2+ caracteres)"
+                value={pessoa}
+                onChange={setPessoa}
+                ctaNovaPessoaHref="/pessoas/nova"
+              />
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Pessoa selecionada
+                    </p>
+                    <p className="text-sm text-slate-700">
+                      {pessoaLabel ?? "Nenhuma pessoa selecionada."}
+                    </p>
+                  </div>
+                  {pessoa ? (
+                    <button
+                      type="button"
+                      onClick={() => setPessoa(null)}
+                      className="rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                    >
+                      Trocar pessoa
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700">E-mail do usuario</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="usuario@exemplo.com"
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+              />
+              <p className="mt-1 text-xs text-slate-500">Sera o login do usuario.</p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium text-slate-700">Senha</label>
+                <input
+                  type="password"
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
+                  placeholder="min. 6 caracteres"
+                  autoComplete="new-password"
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                />
+                <p className="mt-1 text-xs text-slate-500">Minimo 6 caracteres.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Confirmar senha</label>
+                <input
+                  type="password"
+                  value={confirmarSenha}
+                  onChange={(e) => setConfirmarSenha(e.target.value)}
+                  placeholder="repita a senha"
+                  autoComplete="new-password"
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-200"
+                />
+                <p className="mt-1 text-xs text-slate-500">Confirme para evitar erros.</p>
+              </div>
+            </div>
+
+            {senhaErro ? <p className="text-sm text-rose-600">{senhaErro}</p> : null}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">Permissoes e criacao</h2>
+              <p className="text-sm text-slate-600">
+                Defina o perfil de acesso e os papeis vinculados ao usuario.
+              </p>
+            </div>
+            {loading ? <span className="text-xs text-slate-500">Enviando...</span> : null}
+          </div>
+
+          <div className="mt-4 grid gap-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+              <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
                 <input
                   type="checkbox"
-                  checked={selecionadas.includes(r.id)}
-                  onChange={() => toggleRole(r.id)}
+                  checked={isAdmin}
+                  onChange={(e) => setIsAdmin(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                 />
-                {r.nome} ({r.codigo})
+                Administrador do sistema
               </label>
-            ))}
-          </div>
-        </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Libera acesso completo ao painel administrativo.
+              </p>
+            </div>
 
-        {erro && (
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 10,
-              border: "1px solid rgba(255,0,0,0.25)",
-              background: "rgba(255,0,0,0.06)",
-              color: "#b91c1c",
-            }}
-          >
-            {erro}
-          </div>
-        )}
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-700">Papeis (roles)</div>
+                <span className="text-xs text-slate-500">
+                  {selecionadas.length} selecionado{selecionadas.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="mt-2 grid gap-3 md:grid-cols-2">
+                {rolesAtivas.length === 0 ? (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 md:col-span-2">
+                    Nenhum papel ativo encontrado.
+                  </div>
+                ) : null}
+                {rolesAtivas.map((r) => {
+                  const selecionada = selecionadas.includes(r.id);
+                  return (
+                    <label
+                      key={r.id}
+                      className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm transition ${
+                        selecionada
+                          ? "border-purple-200 bg-purple-50 text-purple-700"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selecionada}
+                        onChange={() => toggleRole(r.id)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                      />
+                      <span className="flex flex-col">
+                        <span className="font-medium">{r.nome}</span>
+                        <span className="text-xs text-slate-500">{r.codigo}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
 
-        {mensagem && (
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 10,
-              border: "1px solid rgba(16,185,129,0.25)",
-              background: "rgba(16,185,129,0.08)",
-              color: "#065f46",
-            }}
-          >
-            {mensagem}
-            {redirectTo ? (
-              <div style={{ marginTop: 6, fontSize: 12, color: "#0f172a" }}>
-                Link de definição de senha: {redirectTo}
+            {erroGeral ? (
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                {erroGeral}
               </div>
             ) : null}
-          </div>
-        )}
 
-        <button
-          onClick={enviarConvite}
-          disabled={loading}
-          style={{
-            padding: "12px 14px",
-            borderRadius: 12,
-            border: "1px solid #2563eb",
-            background: loading ? "rgba(37,99,235,0.65)" : "#2563eb",
-            color: "#fff",
-            fontWeight: 700,
-            cursor: loading ? "not-allowed" : "pointer",
-            boxShadow: "0 10px 30px rgba(37,99,235,0.25)",
-          }}
-        >
-          {loading ? "Criando usuario..." : "Criar usuario"}
-        </button>
+            {mensagem ? (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {mensagem}
+                {redirectTo ? (
+                  <div className="mt-2 text-xs text-slate-600">
+                    Link de definicao de senha: {redirectTo}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <Link
+                href="/admin/usuarios"
+                className="rounded-md border border-slate-200 px-4 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Voltar
+              </Link>
+              <button
+                onClick={enviarConvite}
+                disabled={loading}
+                className="rounded-md bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? "Criando usuario..." : "Criar usuario"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-
-
-
-
-
