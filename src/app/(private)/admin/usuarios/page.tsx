@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -12,10 +12,11 @@ type RoleSistema = {
 
 type UsuarioRow = {
   user_id: string;
-  full_name: string | null;
+  pessoa_id: number | null;
+  nome: string | null;
+  email: string | null;
   is_admin: boolean;
-  pessoa: { id: number; nome: string; email: string | null; cpf: string | null } | null;
-  roles: Array<{ id: string; codigo: string; nome: string; ativo: boolean }>;
+  papeis: Array<{ codigo: string; nome: string }>;
 };
 
 async function apiJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
@@ -39,19 +40,7 @@ async function apiJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "2px 8px",
-        borderRadius: 999,
-        border: "1px solid rgba(0,0,0,0.12)",
-        fontSize: 12,
-        marginRight: 6,
-        marginBottom: 6,
-        background: "rgba(0,0,0,0.02)",
-      }}
-    >
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700">
       {children}
     </span>
   );
@@ -120,8 +109,11 @@ export default function AdminUsuariosPage() {
   const [modalLoading, setModalLoading] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string>("");
 
-  const nomeExibicao = (u: UsuarioRow) => u.pessoa?.nome || u.full_name || u.user_id;
-  const emailExibicao = (u: UsuarioRow) => u.pessoa?.email || "—";
+  const shortUserId = (id: string) => {
+    if (!id) return "";
+    if (id.length <= 8) return id;
+    return `${id.slice(0, 4)}...${id.slice(-4)}`;
+  };
 
   const rolesAtivos = useMemo(() => rolesSistema.filter((r) => r.ativo), [rolesSistema]);
 
@@ -169,7 +161,7 @@ export default function AdminUsuariosPage() {
       const data = await apiJson<{ ok: true; roles: RoleSistema[] }>(`/api/admin/usuarios/${u.user_id}/roles`);
       setModalRolesUser(data.roles || []);
     } catch (e: any) {
-      alert(e?.payload?.details || e?.message || "Erro ao carregar roles do usuário.");
+      alert(e?.payload?.details || e?.message || "Erro ao carregar roles do usuÃ¡rio.");
       setModalRolesUser([]);
     } finally {
       setModalLoading(false);
@@ -216,7 +208,7 @@ export default function AdminUsuariosPage() {
 
   async function removerRole(roleId: string) {
     if (!modalUser) return;
-    if (!confirm("Remover este papel do usuário?")) return;
+    if (!confirm("Remover este papel do usuÃ¡rio?")) return;
 
     try {
       await apiJson<{ ok: true }>(`/api/admin/usuarios/${modalUser.user_id}/roles`, {
@@ -236,7 +228,7 @@ export default function AdminUsuariosPage() {
       try {
         await carregarRolesSistema();
       } catch (e) {
-        // silent: roles é secundário na primeira renderização
+        // silent: roles Ã© secundÃ¡rio na primeira renderizaÃ§Ã£o
       }
       await carregarUsuarios();
     })();
@@ -244,14 +236,14 @@ export default function AdminUsuariosPage() {
   }, []);
 
   async function criarUsuarioFromPessoa(pessoaIdPrefill?: number) {
-    const pessoaIdStr = window.prompt("Informe o ID da pessoa para criar o usuário", pessoaIdPrefill ? String(pessoaIdPrefill) : "");
+    const pessoaIdStr = window.prompt("Informe o ID da pessoa para criar o usuÃ¡rio", pessoaIdPrefill ? String(pessoaIdPrefill) : "");
     if (!pessoaIdStr) return;
     const pessoaId = Number(pessoaIdStr);
     if (!pessoaId || Number.isNaN(pessoaId)) return;
 
-    const email = window.prompt("Email do usuário (obrigatório):") || "";
+    const email = window.prompt("Email do usuÃ¡rio (obrigatÃ³rio):") || "";
     if (!email.trim()) return;
-    const senha = window.prompt("Senha inicial (obrigatória):") || "";
+    const senha = window.prompt("Senha inicial (obrigatÃ³ria):") || "";
     if (!senha.trim()) return;
 
     try {
@@ -260,199 +252,190 @@ export default function AdminUsuariosPage() {
         body: JSON.stringify({ pessoaId, email: email.trim(), senha: senha.trim() }),
       });
       await carregarUsuarios();
-      alert("Usuário criado e vinculado à pessoa.");
+      alert("UsuÃ¡rio criado e vinculado Ã  pessoa.");
     } catch (e: any) {
-      alert(e?.payload?.error || e?.payload?.details || e?.message || "Erro ao criar usuário a partir da pessoa.");
+      alert(e?.payload?.error || e?.payload?.details || e?.message || "Erro ao criar usuÃ¡rio a partir da pessoa.");
     }
   }
 
 
-  return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Usuários</h1>
-          <div style={{ color: "rgba(0,0,0,0.6)", marginTop: 4 }}>Controle de admin e papéis (roles) por usuário.</div>
+    return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-6 px-4">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-slate-900">Usuários</h1>
+              <p className="mt-1 text-sm text-slate-600">Controle de admin e papéis (roles) por usuário.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/admin/usuarios/novo"
+                className="inline-flex items-center rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+              >
+                Novo usuário
+              </Link>
+            </div>
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <Link
-            href="/admin/usuarios/novo"
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              background: "#2563eb",
-              color: "#fff",
-              fontWeight: 700,
-              textDecoration: "none",
-              boxShadow: "0 6px 20px rgba(37,99,235,0.18)",
-            }}
-          >
-            Novo usuário
-          </Link>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por nome ou email..."
-            style={{
-              width: 340,
-              maxWidth: "70vw",
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #ddd",
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") carregarUsuarios();
-            }}
-          />
-          <button
-            onClick={carregarUsuarios}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #ddd",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            Buscar
-          </button>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Filtros</div>
+              <div className="text-xs text-slate-500">Busque por nome ou email.</div>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por nome ou email..."
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200 sm:w-72"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") carregarUsuarios();
+                }}
+              />
+              <button
+                onClick={carregarUsuarios}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+              >
+                Buscar
+              </button>
+            </div>
+          </div>
         </div>
+
+        {loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="text-sm font-semibold text-slate-800">Carregando usuários...</div>
+            <div className="mt-4 h-2 w-2/3 rounded-full bg-slate-200" />
+          </div>
+        ) : erro ? (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-900 shadow-sm">
+            <div className="text-sm font-semibold">Erro ao carregar usuários</div>
+            <div className="mt-1 text-sm">{erro}</div>
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-col gap-2 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Lista de usuários</div>
+                <div className="text-xs text-slate-500">{users.length} usuário(s)</div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-6 py-3">Nome</th>
+                    <th className="px-6 py-3">Email</th>
+                    <th className="px-6 py-3">Pessoa</th>
+                    <th className="px-6 py-3">Admin</th>
+                    <th className="px-6 py-3">Papéis</th>
+                    <th className="px-6 py-3">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {users.map((u) => {
+                    const papeis = Array.isArray(u.papeis) ? u.papeis : [];
+                    const visiveis = papeis.slice(0, 2);
+                    const extras = papeis.length - visiveis.length;
+                    return (
+                      <tr key={u.user_id} className="hover:bg-slate-50/60">
+                        <td className="px-6 py-4">
+                          {u.nome ? (
+                            <div className="font-semibold text-slate-900">{u.nome}</div>
+                          ) : (
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-slate-700">Sem vínculo</span>
+                              <span className="text-xs text-slate-500">UID: {shortUserId(u.user_id)}</span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-slate-600">{u.email ? u.email : "Sem vínculo"}</td>
+                        <td className="px-6 py-4">
+                          {typeof u.pessoa_id === "number" ? (
+                            <a className="text-sky-700 hover:underline" href={`/pessoas/${u.pessoa_id}`}>
+                              Pessoa #{u.pessoa_id}
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => criarUsuarioFromPessoa()}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                            >
+                              Vincular...
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            type="button"
+                            onClick={() => toggleAdmin(u, !u.is_admin)}
+                            title="Clique para alternar admin"
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              u.is_admin ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {u.is_admin ? "SIM" : "NÃO"}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            {visiveis.map((r) => (
+                              <Badge key={r.codigo}>{r.nome}</Badge>
+                            ))}
+                            {extras > 0 ? <Badge>+{extras}</Badge> : null}
+                            {papeis.length === 0 ? <span className="text-slate-400">—</span> : null}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => abrirModalRoles(u)}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                            >
+                              Gerenciar roles
+                            </button>
+                            {!u.pessoa_id ? (
+                              <button
+                                type="button"
+                                onClick={() => criarUsuarioFromPessoa()}
+                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                              >
+                                Vincular...
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {!users.length ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-slate-500">
+                        <div className="text-sm font-semibold">Nenhum usuário encontrado.</div>
+                        <div className="mt-1 text-xs text-slate-400">Tente ajustar os filtros ou recarregar.</div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
-
-      {loading ? (
-        <div
-          style={{
-            marginTop: 16,
-            padding: 16,
-            borderRadius: 12,
-            border: "1px solid #e6e6e6",
-            background: "rgba(0,0,0,0.02)",
-          }}
-        >
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Carregando usuarios...</div>
-          <div style={{ height: 12, width: "60%", background: "rgba(0,0,0,0.08)", borderRadius: 999 }} />
-        </div>
-      ) : erro ? (
-        <div
-          style={{
-            marginTop: 16,
-            padding: 12,
-            borderRadius: 10,
-            background: "rgba(255,0,0,0.06)",
-            border: "1px solid rgba(255,0,0,0.18)",
-          }}
-        >
-          <b>Erro:</b> {erro}
-        </div>
-      ) : (
-        <div style={{ marginTop: 16, border: "1px solid #e6e6e6", borderRadius: 12, overflow: "hidden" }}>
-        <div
-          style={{
-            padding: 12,
-            borderBottom: "1px solid #eee",
-            background: "rgba(0,0,0,0.02)",
-            display: "flex",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ fontWeight: 700 }}>Lista de usuários</div>
-          <div style={{ color: "rgba(0,0,0,0.6)" }}>{loading ? "Carregando..." : `${users.length} usuário(s)`}</div>
-        </div>
-
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", background: "rgba(0,0,0,0.01)" }}>
-                <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Nome</th>
-                <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Email</th>
-                <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Pessoa</th>
-                <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Admin</th>
-                <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Papéis</th>
-                <th style={{ padding: 12, borderBottom: "1px solid #eee" }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.user_id}>
-                  <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0", fontWeight: 650 }}>{nomeExibicao(u)}</td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0" }}>{emailExibicao(u)}</td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0" }}>
-                    {u.pessoa ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                        <a href={`/pessoas/${u.pessoa.id}`} style={{ color: "#2563eb", textDecoration: "underline" }}>
-                          Pessoa #{u.pessoa.id}
-                        </a>
-                        <div style={{ fontSize: 12, color: "rgba(0,0,0,0.6)" }}>
-                          {u.pessoa.nome || "Sem nome"} {u.pessoa.cpf ? `• CPF: ${u.pessoa.cpf}` : ""}
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        <div style={{ color: "rgba(0,0,0,0.6)" }}>Sem vínculo</div>
-                        <button
-                          onClick={() => criarUsuarioFromPessoa()}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: 10,
-                            border: "1px solid #ddd",
-                            background: "#fff",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Vincular…
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0" }}>
-                    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <input type="checkbox" checked={!!u.is_admin} onChange={(e) => toggleAdmin(u, e.target.checked)} />
-                      {u.is_admin ? "Sim" : "Não"}
-                    </label>
-                  </td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0" }}>
-                    <div style={{ display: "flex", flexWrap: "wrap" }}>
-                      {(u.roles || []).length ? (
-                        u.roles.map((r) => <Badge key={r.id}>{r.nome}</Badge>)
-                      ) : (
-                        <span style={{ color: "rgba(0,0,0,0.5)" }}>—</span>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ padding: 12, borderBottom: "1px solid #f0f0f0" }}>
-                    <button
-                      onClick={() => abrirModalRoles(u)}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: "1px solid #ddd",
-                        background: "#fff",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Gerenciar roles
-                    </button>
-                  </td>
-                </tr>
-              ))}
-
-              {!loading && users.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ padding: 16, color: "rgba(0,0,0,0.6)" }}>
-                    Nenhum usuário encontrado.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      )}
-
       <Modal
         open={modalOpen}
-        title={modalUser ? `Papéis do usuário: ${nomeExibicao(modalUser)}` : "Papéis do usuário"}
+        title={
+          modalUser
+            ? modalUser.nome
+              ? `Papéis do usuário: ${modalUser.nome}`
+              : `Papéis do usuário: Sem vínculo (${shortUserId(modalUser.user_id)})`
+            : "Papéis do usuário"
+        }
         onClose={() => {
           setModalOpen(false);
           setModalUser(null);
@@ -467,12 +450,12 @@ export default function AdminUsuariosPage() {
             </div>
             <div style={{ marginBottom: 12, color: "rgba(0,0,0,0.8)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <strong>Pessoa:</strong>
-              {modalUser.pessoa ? (
+              {typeof modalUser.pessoa_id === "number" ? (
                 <span>
-                  <a href={`/pessoas/${modalUser.pessoa.id}`} style={{ color: "#2563eb", textDecoration: "underline" }}>
-                    #{modalUser.pessoa.id}
-                  </a>{" "}
-                  — {modalUser.pessoa.nome || "Sem nome"} {modalUser.pessoa.cpf ? `• CPF: ${modalUser.pessoa.cpf}` : ""}
+                  <a href={`/pessoas/${modalUser.pessoa_id}`} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                    Pessoa #{modalUser.pessoa_id}
+                  </a>
+                  {modalUser.nome ? ` - ${modalUser.nome}` : ""}
                 </span>
               ) : (
                 <span>
@@ -481,13 +464,12 @@ export default function AdminUsuariosPage() {
                     onClick={() => criarUsuarioFromPessoa()}
                     style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #ddd", background: "#fff", cursor: "pointer" }}
                   >
-                    Vincular…
+                    Vincular...
                   </button>
                 </span>
               )}
             </div>
-
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+<div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <select
                 value={selectedRoleId}
                 onChange={(e) => setSelectedRoleId(e.target.value)}
@@ -516,10 +498,10 @@ export default function AdminUsuariosPage() {
               </button>
             </div>
 
-            <div style={{ marginTop: 14, fontWeight: 700 }}>Papéis atribuídos</div>
+            <div style={{ marginTop: 14, fontWeight: 700 }}>PapÃ©is atribuÃ­dos</div>
 
             {modalLoading ? (
-              <div style={{ marginTop: 10, color: "rgba(0,0,0,0.65)" }}>Carregando papéis...</div>
+              <div style={{ marginTop: 10, color: "rgba(0,0,0,0.65)" }}>Carregando papÃ©is...</div>
             ) : (
               <div style={{ marginTop: 10 }}>
                 {modalRolesUser.length ? (
@@ -545,7 +527,7 @@ export default function AdminUsuariosPage() {
                     ))}
                   </div>
                 ) : (
-                  <div style={{ color: "rgba(0,0,0,0.6)" }}>Nenhum papel atribuído.</div>
+                  <div style={{ color: "rgba(0,0,0,0.6)" }}>Nenhum papel atribuÃ­do.</div>
                 )}
               </div>
             )}
@@ -555,4 +537,9 @@ export default function AdminUsuariosPage() {
     </div>
   );
 }
+
+
+
+
+
 
