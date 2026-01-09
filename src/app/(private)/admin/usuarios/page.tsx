@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import PlaceholderPage from "@/components/PlaceholderPage";
 
 type RoleSistema = {
   id: string;
@@ -110,7 +109,7 @@ function Modal({
 
 export default function AdminUsuariosPage() {
   const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [users, setUsers] = useState<UsuarioRow[]>([]);
   const [rolesSistema, setRolesSistema] = useState<RoleSistema[]>([]);
@@ -140,16 +139,27 @@ export default function AdminUsuariosPage() {
       params.set("limit", "100");
       params.set("offset", "0");
 
-      const data = await apiJson<{ ok: true; users: UsuarioRow[] }>(`/api/admin/usuarios?${params.toString()}`);
-      setUsers(data.users || []);
-    } catch (e: any) {
-      if (e?.status === 401 || e?.status === 403) setErro("Acesso negado. Você precisa estar logado como admin.");
-      else setErro(e?.payload?.details || e?.message || "Erro ao carregar usuários.");
+      const endpoint = `/api/admin/usuarios?${params.toString()}`;
+      const res = await fetch(endpoint, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      const body = await res.json().catch(() => ({}));
+      console.debug("[admin/usuarios] fetch", { endpoint, status: res.status, body });
+      if (!res.ok) {
+        setUsers([]);
+        setErro(`${res.status} ${body?.code || body?.message || "ERRO"}`);
+        return;
+      }
+      setUsers(body?.users || body?.usuarios || []);
+    } catch (e) {
+      setUsers([]);
+      setErro(e?.message || "Erro ao carregar usuarios.");
     } finally {
       setLoading(false);
     }
   }
-
   async function abrirModalRoles(u: UsuarioRow) {
     setModalUser(u);
     setModalOpen(true);
@@ -256,10 +266,6 @@ export default function AdminUsuariosPage() {
     }
   }
 
-  // Se não carregou nada e houve erro de auth, exibe placeholder
-  if (erro && !users.length) {
-    return <PlaceholderPage title="Usuários" description={erro} />;
-  }
 
   return (
     <div style={{ padding: 24 }}>
@@ -314,7 +320,20 @@ export default function AdminUsuariosPage() {
         </div>
       </div>
 
-      {erro ? (
+      {loading ? (
+        <div
+          style={{
+            marginTop: 16,
+            padding: 16,
+            borderRadius: 12,
+            border: "1px solid #e6e6e6",
+            background: "rgba(0,0,0,0.02)",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Carregando usuarios...</div>
+          <div style={{ height: 12, width: "60%", background: "rgba(0,0,0,0.08)", borderRadius: 999 }} />
+        </div>
+      ) : erro ? (
         <div
           style={{
             marginTop: 16,
@@ -326,9 +345,8 @@ export default function AdminUsuariosPage() {
         >
           <b>Erro:</b> {erro}
         </div>
-      ) : null}
-
-      <div style={{ marginTop: 16, border: "1px solid #e6e6e6", borderRadius: 12, overflow: "hidden" }}>
+      ) : (
+        <div style={{ marginTop: 16, border: "1px solid #e6e6e6", borderRadius: 12, overflow: "hidden" }}>
         <div
           style={{
             padding: 12,
@@ -430,6 +448,7 @@ export default function AdminUsuariosPage() {
           </table>
         </div>
       </div>
+      )}
 
       <Modal
         open={modalOpen}
@@ -536,3 +555,4 @@ export default function AdminUsuariosPage() {
     </div>
   );
 }
+
