@@ -52,6 +52,13 @@ export async function POST(req: Request) {
       .map((value) => (typeof value === "number" ? String(value) : value.trim()))
       .filter((value) => value.length > 0);
     const rolesIdsValid = Array.from(new Set(rolesIds));
+    const rolesCodigosRaw = Array.isArray((raw as { roles?: unknown })?.roles)
+      ? (raw as { roles?: unknown }).roles
+      : [];
+    const rolesCodigos = rolesCodigosRaw
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter((value) => value.length > 0);
+    const rolesCodigosValid = Array.from(new Set(rolesCodigos));
     const isAdmin = Boolean(parsed.data.is_admin);
 
     const cookieStore = await cookies();
@@ -254,8 +261,20 @@ export async function POST(req: Request) {
       return errorResponse(500, "FALHA_LIMPAR_ROLES", "Falha ao limpar roles antigas.", clearRolesErr.message);
     }
 
-    if (rolesIdsValid.length > 0) {
-      const rolesPayload = rolesIdsValid.map((roleId) => ({
+    let rolesParaSalvar = rolesIdsValid;
+    if (rolesParaSalvar.length === 0 && rolesCodigosValid.length > 0) {
+      const { data: rolesPorCodigo, error: rolesCodigoErr } = await admin
+        .from("roles_sistema")
+        .select("id, codigo")
+        .in("codigo", rolesCodigosValid);
+      if (rolesCodigoErr) {
+        return errorResponse(500, "FALHA_MAPEAR_ROLES", "Falha ao mapear roles por codigo.", rolesCodigoErr.message);
+      }
+      rolesParaSalvar = (rolesPorCodigo || []).map((role) => role.id);
+    }
+
+    if (rolesParaSalvar.length > 0) {
+      const rolesPayload = rolesParaSalvar.map((roleId) => ({
         user_id: authUserId,
         role_id: roleId,
       }));
@@ -264,12 +283,36 @@ export async function POST(req: Request) {
       if (rolesErr) {
         return NextResponse.json(
           {
-            ok: false,
-            code: "FALHA_SALVAR_ROLES",
-            message: "Usuario criado, mas falha ao salvar roles.",
-            details: rolesErr,
+            ok: true,
+            message: "Usuario criado e registrado com sucesso.",
+            user: { id: authUserId, email },
+            pessoa: { id: pessoa.id, nome: pessoa.nome },
+            data: {
+              roles_ids: rolesParaSalvar,
+            },
+            warning: "USUARIO_CRIADO_MAS_NAO_GRAVOU_ROLES",
+            warning_detail: rolesErr.message,
           },
-          { status: 500 },
+          { status: 200 },
+        );
+      }
+    } else if (rolesCodigosValid.length > 0) {
+      const rolesPayload = rolesCodigosValid.map((codigo) => ({
+        user_id: authUserId,
+        role_codigo: codigo,
+      }));
+      const { error: rolesErr } = await admin.from("usuario_roles").insert(rolesPayload);
+      if (rolesErr) {
+        return NextResponse.json(
+          {
+            ok: true,
+            message: "Usuario criado e registrado com sucesso.",
+            user: { id: authUserId, email },
+            pessoa: { id: pessoa.id, nome: pessoa.nome },
+            warning: "USUARIO_CRIADO_MAS_NAO_GRAVOU_ROLES",
+            warning_detail: rolesErr.message,
+          },
+          { status: 200 },
         );
       }
     }
