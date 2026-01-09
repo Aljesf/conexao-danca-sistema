@@ -906,17 +906,31 @@ export default function DiarioDeClassePage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Diario de classe</h1>
             <p className="mt-1 text-sm text-slate-600">
               Selecione a turma e registre a aula do dia: frequencia, plano, observacoes e avaliacoes.
             </p>
           </div>
-          <div
-            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeTone}`}
-          >
-            {statusBadgeLabel}
+          <div className="flex flex-col gap-3 md:items-end">
+            <div
+              className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeTone}`}
+            >
+              {statusBadgeLabel}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-xs font-semibold text-slate-700">Contexto do dia letivo</div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                  type="date"
+                  value={dataAula}
+                  onChange={(e) => setDataAula(e.target.value)}
+                />
+                <span className="text-xs text-slate-500">Dia da semana: {dataSemana}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -952,7 +966,7 @@ export default function DiarioDeClassePage() {
           />
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="flex flex-col gap-1">
             <span className="text-xs text-slate-500">Turma</span>
             <select
@@ -970,16 +984,6 @@ export default function DiarioDeClassePage() {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <span className="text-xs text-slate-500">Data</span>
-            <input
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
-              type="date"
-              value={dataAula}
-              onChange={(e) => setDataAula(e.target.value)}
-            />
           </div>
 
           {isAdmin ? (

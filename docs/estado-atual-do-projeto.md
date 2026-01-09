@@ -175,3 +175,9 @@ Pendencias:
 - Aplicar migration no Supabase.
 - Gerar prints obrigatorios do fluxo de chamada pendente/fechada.
 - Plano executavel: docs/execucao/plano-executavel-diario-de-classe.md.
+
+---
+
+## Documentos normativos
+
+- Modulo Alunos - reestruturacao conceitual e plano de implementacao: docs/modulos/modulo-alunos-reestruturacao-conceito-e-implementacao.md

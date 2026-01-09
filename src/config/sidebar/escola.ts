@@ -1,4 +1,4 @@
-import type { SidebarSection } from "./types";
+﻿import type { SidebarSection } from "./types";
 
 export const escolaSidebar: SidebarSection[] = [
   {
@@ -55,6 +55,7 @@ export const escolaSidebar: SidebarSection[] = [
       { label: "🚧 📚 Cursos", href: "/escola/academico/cursos" },
       { label: "🚧 📚 Níveis", href: "/escola/academico/niveis" },
       { label: "🚧 📚 Módulos", href: "/escola/academico/modulos" },
+      { label: "🚧 📚 Plano de aula", href: "/academico/planejamento" },
       { label: "Periodos letivos", href: "/escola/academico/periodos-letivos" },
       { label: "🚧 📚 Avaliações", href: "/escola/academico/avaliacoes" },
       { label: "🚧 📚 Professores", href: "/escola/academico/professores" }, // TODO(migracao): rota ainda não existe
