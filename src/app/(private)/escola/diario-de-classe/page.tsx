@@ -24,6 +24,9 @@ type Aula = {
   turma_id: number;
   data_aula: string;
   hora_inicio?: string | null;
+  hora_fim?: string | null;
+  fechada_em?: string | null;
+  fechada_por?: string | null;
 };
 
 type PresencaDb = {
@@ -143,7 +146,7 @@ function serializeLinhas(linhas: LinhaChamada[]): string {
 async function fetchJson<T>(
   url: string,
   init?: RequestInit
-): Promise<{ ok: true; data: T } | { ok: false; status: number; message: string }> {
+): Promise<{ ok: true; data: T } | { ok: false; status: number; message: string; data?: unknown }> {
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -177,7 +180,7 @@ async function fetchJson<T>(
               typeof (json as { code?: unknown }).code === "string"
             ? (json as { code: string }).code
             : `Erro HTTP ${res.status}`;
-    return { ok: false, status: res.status, message: msg };
+    return { ok: false, status: res.status, message: msg, data: json };
   }
 
   return { ok: true, data: json as T };
@@ -202,6 +205,9 @@ export default function DiarioDeClassePage() {
 
   const [salvando, setSalvando] = useState<boolean>(false);
   const [salvoOk, setSalvoOk] = useState<boolean>(false);
+  const [fechando, setFechando] = useState<boolean>(false);
+  const [fecharErro, setFecharErro] = useState<string>("");
+  const [fecharPendentes, setFecharPendentes] = useState<number[]>([]);
 
   const baselineRef = useRef<string | null>(null);
   const linhasSignature = useMemo(() => serializeLinhas(linhas), [linhas]);
@@ -312,6 +318,8 @@ export default function DiarioDeClassePage() {
       }
 
       setAula(abrirRes.data.aula);
+      setFecharErro("");
+      setFecharPendentes([]);
 
       const presRes = await fetchJson<{ ok: boolean; presencas: PresencaDb[] }>(
         `/api/professor/diario-de-classe/aulas/${abrirRes.data.aula.id}/presencas`
@@ -530,6 +538,8 @@ export default function DiarioDeClassePage() {
 
     setSalvando(true);
     setErroMsg("");
+    setFecharErro("");
+    setFecharPendentes([]);
     setStatus("PENDENTE");
 
     try {
@@ -597,21 +607,50 @@ export default function DiarioDeClassePage() {
     }
   }
 
+  async function fecharChamada() {
+    if (!aula) return;
+    if (fechando) return;
+    if (dirty) {
+      setFecharErro("Salve as alteracoes antes de fechar a chamada.");
+      return;
+    }
+
+    setFechando(true);
+    setFecharErro("");
+    setFecharPendentes([]);
+
+    const r = await fetchJson<{ ok: boolean; aula: Aula; pendentes?: number[] }>(
+      `/api/professor/diario-de-classe/aulas/${aula.id}/fechar`,
+      { method: "POST" }
+    );
+
+    if (!r.ok) {
+      if (r.status === 422) {
+        const raw = r.data as { pendentes?: unknown } | undefined;
+        const pendentes = Array.isArray(raw?.pendentes) ? raw?.pendentes : [];
+        setFecharPendentes(pendentes);
+        setFecharErro(r.message || "Ha alunos pendentes na chamada.");
+      } else {
+        setFecharErro(r.message || "Erro ao fechar chamada.");
+      }
+      setFechando(false);
+      return;
+    }
+
+    setAula(r.data.aula);
+    setFechando(false);
+  }
+
   const turmaSelecionada = useMemo(
     () => turmas.find((t) => t.turma_id === turmaId) ?? null,
     [turmas, turmaId]
   );
 
-  const statusLabel =
-    status === "PRONTO"
-      ? dirty
-        ? "Alteracoes pendentes"
-        : salvoOk
-          ? "Salvo"
-          : "Pronto"
-      : status === "ERRO"
-        ? "Erro"
-        : "Pendente";
+  const aulaFechada = Boolean(aula?.fechada_em);
+  const statusLabel = status === "ERRO" ? "Erro" : aulaFechada ? "Chamada FECHADA" : "Chamada PENDENTE";
+  const statusSubtitle = aulaFechada
+    ? `Fechada em ${aula?.fechada_em ? new Date(aula.fechada_em).toLocaleString() : "--"}`
+    : "A chamada precisa ser fechada para validar presencas.";
 
   return (
     <div className="flex flex-col gap-4">
@@ -642,7 +681,7 @@ export default function DiarioDeClassePage() {
         </div>
 
         <section className="grid gap-3 md:grid-cols-4">
-          <Card title="Status" value={statusLabel} />
+          <Card title="Status" value={statusLabel} subtitle={statusSubtitle} />
           <Card title="Professor" value="-" subtitle="fase API (futuro: auto do usuario)" />
           <Card
             title="Turma"
@@ -652,6 +691,46 @@ export default function DiarioDeClassePage() {
           <Card title="Data" value={dataAula} subtitle="aula do dia" />
         </section>
       </header>
+
+      <section className="rounded-2xl border bg-card p-4">
+        <div className="mb-2">
+          <div className="text-xs tracking-widest text-muted-foreground">PENDENCIAS DE HOJE</div>
+          <div className="text-sm font-medium">Agenda rapida</div>
+          <div className="text-xs text-muted-foreground">
+            Abra a chamada da turma e registre a frequencia antes de fechar.
+          </div>
+        </div>
+
+        {status === "ERRO" ? (
+          <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm">
+            <div className="font-medium">Falha ao carregar turmas</div>
+            <div className="text-muted-foreground">{erroMsg || "Erro inesperado."}</div>
+          </div>
+        ) : turmas.length === 0 ? (
+          <div className="text-sm text-muted-foreground">Nenhuma turma disponivel.</div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {turmas.map((t) => (
+              <div key={t.turma_id} className="rounded-xl border bg-background p-3">
+                <div className="text-sm font-medium">
+                  {t.nome ?? t.titulo ?? `Turma ${t.turma_id}`}
+                </div>
+                <div className="text-xs text-muted-foreground">ID {t.turma_id}</div>
+                <button
+                  type="button"
+                  className="mt-2 rounded-full border px-3 py-1 text-xs hover:bg-muted"
+                  onClick={() => {
+                    setDataAula(todayYYYYMMDD());
+                    setTurmaId(t.turma_id);
+                  }}
+                >
+                  Abrir chamada
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="rounded-2xl border bg-card p-4">
         <div className="mb-2">
@@ -739,8 +818,18 @@ export default function DiarioDeClassePage() {
               <div className="rounded-xl border p-4">
                 <div className="text-sm font-medium">Chamada</div>
                 <div className="text-xs text-muted-foreground">
-                  Padrao inicial: <span className="font-medium">PRESENTE</span>. Ajuste excecoes e salve no botao.
+                  Registre as presencas e feche a chamada para validar.
                 </div>
+
+                {!aulaFechada ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Status pendente: a chamada so sera valida apos o fechamento.
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                    Chamada fechada. Fechada por: {aula?.fechada_por ?? "nao informado"}.
+                  </div>
+                )}
 
                 <div className="mt-4 flex flex-col gap-2">
                   {!turmaId ? (
@@ -868,18 +957,46 @@ export default function DiarioDeClassePage() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs text-muted-foreground">
-                    {dirty ? "Alteracoes pendentes." : salvoOk ? "Salvo." : "Sem alteracoes."}
+                    {dirty
+                      ? "Alteracoes pendentes."
+                      : salvoOk
+                        ? "Presencas salvas. Falta fechar a chamada."
+                        : "Sem alteracoes."}
                   </div>
 
-                  <button
-                    type="button"
-                    className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                    disabled={!aula || !turmaId || alunos.length === 0 || salvando || !dirty}
-                    onClick={() => void salvarFrequencia()}
-                  >
-                    {salvando ? "Salvando..." : "Salvar frequencia"}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border px-5 py-2 text-sm font-medium disabled:opacity-50"
+                      disabled={!aula || !turmaId || alunos.length === 0 || fechando || aulaFechada || dirty}
+                      onClick={() => void fecharChamada()}
+                    >
+                      {fechando ? "Fechando..." : aulaFechada ? "Chamada fechada" : "Fechar chamada"}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                      disabled={!aula || !turmaId || alunos.length === 0 || salvando || !dirty || aulaFechada}
+                      onClick={() => void salvarFrequencia()}
+                    >
+                      {salvando ? "Salvando..." : "Salvar frequencia"}
+                    </button>
+                  </div>
                 </div>
+
+                {fecharErro ? (
+                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+                    {fecharErro}
+                    {fecharPendentes.length > 0 ? (
+                      <div className="mt-2 text-xs text-rose-700">
+                        Pendentes:{" "}
+                        {fecharPendentes
+                          .map((id) => alunos.find((a) => a.aluno_pessoa_id === id)?.nome ?? `ID ${id}`)
+                          .join(", ")}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : (

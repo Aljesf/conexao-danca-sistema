@@ -14,15 +14,11 @@ export async function GET(req: Request) {
   const limit = clamp(Number(searchParams.get("limit") || 50), 1, 200);
   const offset = clamp(Number(searchParams.get("offset") || 0), 0, 100000);
 
-  let profQuery = auth.supabase
+  const profQuery = auth.supabase
     .from("profiles")
     .select("user_id, full_name, is_admin, pessoa_id, created_at")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
-
-  if (q) {
-    profQuery = profQuery.ilike("full_name", `%${q}%`);
-  }
 
   const { data: profiles, error: profErr } = await profQuery;
   if (profErr) {

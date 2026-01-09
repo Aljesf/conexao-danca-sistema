@@ -155,3 +155,22 @@ Pendencias:
   3) atribuir RESPONSAVEL_FINANCEIRO sem CPF (bloqueia)
   4) atribuir RESPONSAVEL_FINANCEIRO com CPF valido (ok)
 - Rodar npm run lint e npm run build sem erros.
+
+---
+
+## Atualizacoes recentes (Diario de classe - chamada obrigatoria - 2026-01-08)
+
+SQL concluido:
+- 2026-01-08__frequencia__aula-fechamento.sql (colunas fechada_em e fechada_por em turma_aulas)
+
+APIs concluidas:
+- GET /api/professor/diario-de-classe/aulas/:aulaId
+- POST /api/professor/diario-de-classe/aulas/:aulaId/fechar (valida pendencias)
+- POST /api/professor/diario-de-classe/aulas/:aulaId/reabrir (admin)
+
+Paginas:
+- /escola/diario-de-classe: status PENDENTE/FECHADA, botao Fechar chamada e pendencias de hoje
+
+Pendencias:
+- Aplicar migration no Supabase.
+- Gerar prints obrigatorios do fluxo de chamada pendente/fechada.
