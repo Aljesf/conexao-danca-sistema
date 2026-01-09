@@ -862,6 +862,14 @@ export default function DiarioDeClassePage() {
   const statusSubtitle = aulaFechada
     ? `Fechada em ${aula?.fechada_em ? new Date(aula.fechada_em).toLocaleString() : "--"}`
     : "A chamada precisa ser fechada para validar presencas.";
+  const statusBadgeLabel = status === "ERRO" ? "ERRO" : aulaFechada ? "FECHADA" : "PENDENTE";
+  const statusBadgeTone =
+    status === "ERRO"
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : aulaFechada
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-amber-200 bg-amber-50 text-amber-800";
+  const aulaNumeroLabel = typeof aula?.aula_numero === "number" ? `#${aula.aula_numero}` : "--";
   const dataSemana = weekdayLabelFromISO(dataAula);
   const pendentesCount = Math.max(0, alunos.length - presencasRegistradas);
   const blocosOrdenados = useMemo(() => {
@@ -870,36 +878,70 @@ export default function DiarioDeClassePage() {
   }, [plano]);
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-4 py-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="text-xs tracking-widest text-muted-foreground">ACADEMICO</div>
-            <h1 className="text-2xl font-semibold">Diario de classe</h1>
-            <p className="text-sm text-muted-foreground">
-              Selecione a turma e registre a aula do dia: frequencia, plano, observacoes e avaliacoes.
-            </p>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Contexto ativo
+            </div>
+            <div className="mt-1 text-sm text-slate-600">Academico / Diario de classe</div>
           </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/escola/academico/turmas"
-              className="rounded-full border px-4 py-2 text-sm hover:bg-muted"
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Turmas
             </Link>
             <Link
               href="/escola/academico/turmas/grade"
-              className="rounded-full border px-4 py-2 text-sm hover:bg-muted"
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Grade
             </Link>
           </div>
         </div>
+      </div>
 
-        <section className="grid gap-3 md:grid-cols-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Diario de classe</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Selecione a turma e registre a aula do dia: frequencia, plano, observacoes e avaliacoes.
+            </p>
+          </div>
+          <div
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${statusBadgeTone}`}
+          >
+            {statusBadgeLabel}
+          </div>
+        </div>
+      </div>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">Sessao pedagogica</div>
+            <div className="text-xs text-slate-500">Turma, data e status da aula em andamento.</div>
+          </div>
+          <div className="text-xs text-slate-500">{statusSubtitle}</div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
           <Card title="Status" value={statusLabel} subtitle={statusSubtitle} />
+          <Card title="Data" value={dataAula} subtitle={`Dia da semana: ${dataSemana}`} />
+          <Card
+            title="Aula #"
+            value={aulaNumeroLabel}
+            subtitle={aula ? `Turma ${aula.turma_id}` : "Selecione uma turma"}
+          />
           <Card title="Professor" value="-" subtitle="fase API (futuro: auto do usuario)" />
+        </div>
+
+        <div className="mt-3">
           <TurmaPanel
             turma={turmaSelecionada}
             turmaId={turmaId}
@@ -908,70 +950,13 @@ export default function DiarioDeClassePage() {
             pendentesCount={pendentesCount}
             aulaFechada={aulaFechada}
           />
-          <Card title="Data" value={dataAula} subtitle={`aula do dia • ${dataSemana}`} />
-        </section>
-      </header>
-
-      <section className="rounded-2xl border bg-card p-4">
-        <div className="mb-2">
-          <div className="text-xs tracking-widest text-muted-foreground">PENDENCIAS DE HOJE</div>
-          <div className="text-sm font-medium">Agenda rapida</div>
-          <div className="text-xs text-muted-foreground">
-            Abra a chamada da turma e registre a frequencia antes de fechar.
-          </div>
         </div>
 
-        {status === "ERRO" ? (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm">
-            <div className="font-medium">Falha ao carregar turmas</div>
-            <div className="text-muted-foreground">{erroMsg || "Erro inesperado."}</div>
-          </div>
-        ) : turmas.length === 0 ? (
-          <div className="text-sm text-muted-foreground">Nenhuma turma disponivel.</div>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {turmas.map((t) => {
-              const diasLabel = Array.isArray(t.dias_semana) ? t.dias_semana.join(", ") : "--";
-              const horaInicio = normalizeHora(t.hora_inicio);
-              const horaFim = normalizeHora(t.hora_fim);
-              const horario = horaInicio && horaFim ? `${horaInicio} - ${horaFim}` : horaInicio ?? horaFim ?? "--";
-              return (
-                <div key={t.turma_id} className="rounded-xl border bg-background p-3">
-                  <div className="text-sm font-medium">
-                    {t.nome ?? t.titulo ?? `Turma ${t.turma_id}`}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Dias: {diasLabel}</div>
-                  <div className="text-xs text-muted-foreground">Horario: {horario}</div>
-                  <button
-                    type="button"
-                    className="mt-2 rounded-full border px-3 py-1 text-xs hover:bg-muted"
-                    onClick={() => {
-                      setTurmaId(t.turma_id);
-                    }}
-                  >
-                    Abrir chamada
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-2xl border bg-card p-4">
-        <div className="mb-2">
-          <div className="text-xs tracking-widest text-muted-foreground">SELECAO</div>
-          <div className="text-sm font-medium">Contexto da aula</div>
-          <div className="text-xs text-muted-foreground">
-            Selecione a turma e a data. Depois, registre a frequencia.
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">Turma</span>
+            <span className="text-xs text-slate-500">Turma</span>
             <select
-              className="rounded-lg border bg-background px-3 py-2 text-sm"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
               value={turmaId ?? ""}
               onChange={(e) => {
                 const v = e.target.value ? Number(e.target.value) : null;
@@ -988,9 +973,9 @@ export default function DiarioDeClassePage() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">Data</span>
+            <span className="text-xs text-slate-500">Data</span>
             <input
-              className="rounded-lg border bg-background px-3 py-2 text-sm"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
               type="date"
               value={dataAula}
               onChange={(e) => setDataAula(e.target.value)}
@@ -999,9 +984,9 @@ export default function DiarioDeClassePage() {
 
           {isAdmin ? (
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">Professor</span>
+              <span className="text-xs text-slate-500">Professor</span>
               <select
-                className="rounded-lg border bg-background px-3 py-2 text-sm"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
                 value={professorFiltro ?? ""}
                 onChange={(e) => {
                   const v = e.target.value ? Number(e.target.value) : null;
@@ -1019,10 +1004,10 @@ export default function DiarioDeClassePage() {
           ) : null}
 
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">Aula</span>
-            <div className="rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">
+            <span className="text-xs text-slate-500">Aula</span>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
               {aula
-                ? `Aula #${aula.id} (turma ${aula.turma_id})`
+                ? `Aula ${aulaNumeroLabel} (turma ${aula.turma_id})`
                 : turmaId
                   ? "Abrindo aula..."
                   : "Selecione uma turma"}
@@ -1030,16 +1015,62 @@ export default function DiarioDeClassePage() {
           </div>
         </div>
 
-        {status === "ERRO" && (
-          <div className="mt-3 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-sm">
-            <div className="font-medium">Falha</div>
-            <div className="text-muted-foreground">{erroMsg || "Erro inesperado."}</div>
+        {status === "ERRO" ? (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            <div className="font-semibold">Falha</div>
+            <div className="text-rose-600">{erroMsg || "Erro inesperado."}</div>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mb-3">
+          <div className="text-sm font-semibold text-slate-900">Pendencias e acoes</div>
+          <div className="text-xs text-slate-500">
+            Abra a chamada da turma e registre a frequencia antes de fechar.
+          </div>
+        </div>
+
+        {status === "ERRO" ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            <div className="font-semibold">Falha ao carregar turmas</div>
+            <div className="text-rose-600">{erroMsg || "Erro inesperado."}</div>
+          </div>
+        ) : turmas.length === 0 ? (
+          <div className="text-sm text-slate-500">Nenhuma turma disponivel.</div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {turmas.map((t) => {
+              const diasLabel = Array.isArray(t.dias_semana) ? t.dias_semana.join(", ") : "--";
+              const horaInicio = normalizeHora(t.hora_inicio);
+              const horaFim = normalizeHora(t.hora_fim);
+              const horario =
+                horaInicio && horaFim ? `${horaInicio} - ${horaFim}` : horaInicio ?? horaFim ?? "--";
+              return (
+                <div key={t.turma_id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="text-sm font-semibold text-slate-900">
+                    {t.nome ?? t.titulo ?? `Turma ${t.turma_id}`}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">Dias: {diasLabel}</div>
+                  <div className="text-xs text-slate-500">Horario: {horario}</div>
+                  <button
+                    type="button"
+                    className="mt-3 inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={() => {
+                      setTurmaId(t.turma_id);
+                    }}
+                  >
+                    Abrir chamada
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
 
-      <section className="rounded-2xl border bg-card">
-        <div className="flex flex-wrap gap-2 border-b p-3">
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap gap-2 border-b border-slate-200 p-3">
           <BotaoAba ativo={aba === "frequencia"} onClick={() => setAba("frequencia")}>
             Frequencia
           </BotaoAba>
@@ -1058,11 +1089,11 @@ export default function DiarioDeClassePage() {
         </div>
 
         <div className="p-4">
-          <h2 className="text-lg font-semibold">{tituloAba}</h2>
+          <h2 className="text-lg font-semibold text-slate-900">{tituloAba}</h2>
 
           {aba === "frequencia" ? (
-            <div className="mt-3 flex flex-col gap-3">
-              <div className="rounded-xl border p-4">
+            <div className="mt-4 flex flex-col gap-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="text-sm font-medium">Chamada</div>
                 <div className="text-xs text-muted-foreground">
                   Registre as presencas e feche a chamada para validar.
@@ -1232,7 +1263,7 @@ export default function DiarioDeClassePage() {
                 </div>
 
                 {fecharErro ? (
-                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
                     {fecharErro}
                     {fecharPendentes.length > 0 ? (
                       <div className="mt-2 text-xs text-rose-700">
@@ -1249,95 +1280,91 @@ export default function DiarioDeClassePage() {
           ) : null}
 
           {aba === "plano" ? (
-            <div className="mt-3 flex flex-col gap-3">
-              <div className="rounded-xl border p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="mt-4 grid gap-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div>
-                    <div className="text-sm font-medium">Plano da sessao</div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-sm font-semibold text-slate-900">
+                      Plano previsto para Aula {aulaNumeroLabel}
+                    </div>
+                    <div className="text-xs text-slate-500">
                       {aula
-                        ? `Aula #${aula.aula_numero ?? "--"} • ${dataAula}`
+                        ? `Data ${dataAula} (${dataSemana})`
                         : "Selecione uma turma para carregar o plano."}
                     </div>
-                    {planoInstancia ? (
-                      <div className="mt-2 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                        {planoInstancia.status === "CONCLUIDO"
-                          ? "Plano concluido"
-                          : "Plano em execucao"}
-                      </div>
-                    ) : plano ? (
-                      <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                        Plano nao aplicado
-                      </div>
-                    ) : null}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="rounded-full border px-5 py-2 text-sm font-medium disabled:opacity-50"
-                      disabled={!plano || planoAplicando || Boolean(planoInstancia)}
-                      onClick={() => void aplicarPlanoSessao()}
-                    >
-                      {planoAplicando ? "Aplicando..." : "Aplicar plano"}
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                      disabled={
-                        !plano ||
-                        !planoInstancia ||
-                        planoInstancia.status === "CONCLUIDO" ||
-                        planoConcluindo ||
-                        !aulaFechada
-                      }
-                      onClick={() => void concluirPlanoSessao()}
-                    >
-                      {planoConcluindo ? "Concluindo..." : "Concluir plano"}
-                    </button>
-                  </div>
+                  {planoInstancia ? (
+                    <div className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      {planoInstancia.status === "CONCLUIDO"
+                        ? "Plano concluido"
+                        : "Plano em execucao"}
+                    </div>
+                  ) : plano ? (
+                    <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                      Plano nao aplicado
+                    </div>
+                  ) : null}
                 </div>
 
                 {planoErro ? (
-                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
                     {planoErro}
                   </div>
                 ) : null}
 
                 {planoLoading ? (
-                  <div className="mt-3 text-sm text-muted-foreground">Carregando plano...</div>
+                  <div className="mt-3 text-sm text-slate-500">Carregando plano...</div>
                 ) : null}
 
                 {!planoLoading && aula && !plano ? (
-                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                    Nenhum plano encontrado para esta aula.
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                    <div className="font-semibold text-slate-700">
+                      Nenhum plano encontrado para esta aula.
+                    </div>
+                    {isAdmin ? (
+                      <div className="mt-2">
+                        {turmaId ? (
+                          <Link
+                            href={`/academico/planejamento/turmas/${turmaId}`}
+                            className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            Ir para planejamento
+                          </Link>
+                        ) : (
+                          <div className="text-xs text-slate-500">
+                            Selecione uma turma para acessar o planejamento.
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-slate-500">Aguardando coordenacao.</div>
+                    )}
                   </div>
                 ) : null}
-              </div>
 
-              {plano ? (
-                <div className="grid gap-3">
-                  <div className="rounded-xl border bg-muted/20 p-4">
-                    <div className="text-xs font-semibold text-muted-foreground">
-                      Intencao pedagogica
+                {plano ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                      <div className="text-xs font-semibold text-slate-500">Intencao pedagogica</div>
+                      <div className="mt-1 text-sm text-slate-800">
+                        {plano.intencao_pedagogica?.trim()
+                          ? plano.intencao_pedagogica
+                          : "Nao informado."}
+                      </div>
                     </div>
-                    <div className="mt-1 text-sm">
-                      {plano.intencao_pedagogica?.trim()
-                        ? plano.intencao_pedagogica
-                        : "Nao informado."}
-                    </div>
-                    <div className="mt-3 text-xs font-semibold text-muted-foreground">
-                      Observacoes gerais
-                    </div>
-                    <div className="mt-1 text-sm">
-                      {plano.observacoes_gerais?.trim()
-                        ? plano.observacoes_gerais
-                        : "Nenhuma observacao."}
+                    <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                      <div className="text-xs font-semibold text-slate-500">Observacoes gerais</div>
+                      <div className="mt-1 text-sm text-slate-800">
+                        {plano.observacoes_gerais?.trim()
+                          ? plano.observacoes_gerais
+                          : "Nenhuma observacao."}
+                      </div>
                     </div>
                     {plano.playlist_url ? (
-                      <div className="mt-3 text-xs text-muted-foreground">
-                        Playlist:{" "}
+                      <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50/50 p-3">
+                        <div className="text-xs font-semibold text-slate-500">Playlist sugerida</div>
                         <a
-                          className="text-sky-700 underline"
+                          className="mt-1 inline-flex text-xs font-semibold text-sky-700 underline"
                           href={plano.playlist_url}
                           target="_blank"
                           rel="noreferrer"
@@ -1347,106 +1374,160 @@ export default function DiarioDeClassePage() {
                       </div>
                     ) : null}
                   </div>
+                ) : null}
+              </div>
 
-                  <div className="rounded-xl border p-4">
-                    <div className="text-sm font-medium">Blocos do plano</div>
-                    {blocosOrdenados.length === 0 ? (
-                      <div className="mt-3 text-sm text-muted-foreground">
-                        Nenhum bloco cadastrado.
-                      </div>
-                    ) : (
-                      <div className="mt-3 flex flex-col gap-3">
-                        {blocosOrdenados.map((bloco) => {
-                          const subblocos = [...(bloco.plano_aula_subblocos ?? [])].sort(
-                            (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)
-                          );
-                          const minutos = [bloco.minutos_min, bloco.minutos_ideal, bloco.minutos_max]
-                            .filter((v): v is number => typeof v === "number");
-                          const minutosLabel = minutos.length ? minutos.join(" / ") + " min" : null;
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="text-sm font-semibold text-slate-900">Blocos da aula</div>
+                {plano ? (
+                  blocosOrdenados.length === 0 ? (
+                    <div className="mt-3 text-sm text-slate-500">Nenhum bloco cadastrado.</div>
+                  ) : (
+                    <div className="mt-3 flex flex-col gap-3">
+                      {blocosOrdenados.map((bloco) => {
+                        const subblocos = [...(bloco.plano_aula_subblocos ?? [])].sort(
+                          (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)
+                        );
+                        const minutos = [bloco.minutos_min, bloco.minutos_ideal, bloco.minutos_max]
+                          .filter((v): v is number => typeof v === "number");
+                        const minutosLabel = minutos.length ? minutos.join(" / ") + " min" : null;
 
-                          return (
-                            <div key={bloco.id} className="rounded-xl border bg-card p-4">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="text-sm font-semibold">
-                                  {bloco.ordem}. {bloco.titulo}
-                                </div>
-                                {minutosLabel ? (
-                                  <span className="text-xs text-muted-foreground">{minutosLabel}</span>
-                                ) : null}
+                        return (
+                          <div key={bloco.id} className="rounded-xl border border-slate-200 bg-slate-50/40 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="text-sm font-semibold">
+                                {bloco.ordem}. {bloco.titulo}
                               </div>
-                              {bloco.objetivo ? (
-                                <div className="mt-2 text-xs text-muted-foreground">
-                                  Objetivo: {bloco.objetivo}
-                                </div>
+                              {minutosLabel ? (
+                                <span className="text-xs text-slate-500">{minutosLabel}</span>
                               ) : null}
+                            </div>
+                            {bloco.objetivo ? (
+                              <div className="mt-2 text-xs text-slate-500">
+                                Objetivo: {bloco.objetivo}
+                              </div>
+                            ) : null}
 
-                              {subblocos.length ? (
-                                <div className="mt-3 grid gap-2">
-                                  {subblocos.map((sb) => {
-                                    const sbMin = [sb.minutos_min, sb.minutos_ideal, sb.minutos_max]
-                                      .filter((v): v is number => typeof v === "number");
-                                    const sbLabel = sbMin.length ? sbMin.join(" / ") + " min" : null;
-                                    return (
-                                      <div
-                                        key={sb.id}
-                                        className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-sm"
-                                      >
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                          <div className="font-medium">
-                                            {sb.ordem}. {sb.titulo}
-                                          </div>
-                                          {sbLabel ? (
-                                            <span className="text-xs text-muted-foreground">
-                                              {sbLabel}
-                                            </span>
-                                          ) : null}
+                            {subblocos.length ? (
+                              <div className="mt-3 grid gap-2">
+                                {subblocos.map((sb) => {
+                                  const sbMin = [sb.minutos_min, sb.minutos_ideal, sb.minutos_max]
+                                    .filter((v): v is number => typeof v === "number");
+                                  const sbLabel = sbMin.length ? sbMin.join(" / ") + " min" : null;
+                                  return (
+                                    <div
+                                      key={sb.id}
+                                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="font-medium">
+                                          {sb.ordem}. {sb.titulo}
                                         </div>
-                                        {sb.instrucoes ? (
-                                          <div className="mt-1 text-xs text-muted-foreground">
-                                            {sb.instrucoes}
-                                          </div>
+                                        {sbLabel ? (
+                                          <span className="text-xs text-slate-500">{sbLabel}</span>
                                         ) : null}
                                       </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <div className="mt-2 text-xs text-muted-foreground">
-                                  Sem sub-blocos.
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                                      {sb.instrucoes ? (
+                                        <div className="mt-1 text-xs text-slate-500">
+                                          {sb.instrucoes}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="mt-2 text-xs text-slate-500">Sem sub-blocos.</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : (
+                  <div className="mt-3 text-sm text-slate-500">Plano ainda nao aplicado.</div>
+                )}
+              </div>
 
-                  <div className="rounded-xl border p-4">
-                    <div className="text-sm font-medium">Notas pos-aula</div>
-                    <textarea
-                      className="mt-2 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                      rows={4}
-                      value={notasPosAula}
-                      onChange={(e) => setNotasPosAula(e.target.value)}
-                      disabled={planoInstancia?.status === "CONCLUIDO"}
-                      placeholder="Registre observacoes da execucao."
-                    />
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Execucao</div>
+                    <div className="text-xs text-slate-500">
+                      {planoInstancia
+                        ? `Status: ${
+                            planoInstancia.status === "CONCLUIDO" ? "CONCLUIDO" : "EM EXECUCAO"
+                          }`
+                        : "Plano ainda nao aplicado."}
+                    </div>
                   </div>
+                  {planoInstancia ? (
+                    <div className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      {planoInstancia.status === "CONCLUIDO" ? "CONCLUIDO" : "EM EXECUCAO"}
+                    </div>
+                  ) : (
+                    <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                      NAO APLICADO
+                    </div>
+                  )}
                 </div>
-              ) : null}
+
+                {!aulaFechada && plano ? (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    A chamada precisa estar fechada para concluir o plano da sessao.
+                  </div>
+                ) : null}
+
+                <div className="mt-4">
+                  <div className="text-xs text-slate-500">Notas pos-aula</div>
+                  <textarea
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    rows={4}
+                    value={notasPosAula}
+                    onChange={(e) => setNotasPosAula(e.target.value)}
+                    disabled={!plano || planoInstancia?.status === "CONCLUIDO"}
+                    placeholder="Registre observacoes da execucao."
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    disabled={!plano || planoAplicando || Boolean(planoInstancia)}
+                    onClick={() => void aplicarPlanoSessao()}
+                  >
+                    {planoAplicando ? "Aplicando..." : "Aplicar plano na sessao"}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                    disabled={
+                      !plano ||
+                      !planoInstancia ||
+                      planoInstancia.status === "CONCLUIDO" ||
+                      planoConcluindo ||
+                      !aulaFechada
+                    }
+                    onClick={() => void concluirPlanoSessao()}
+                  >
+                    {planoConcluindo ? "Concluindo..." : "Concluir plano"}
+                  </button>
+                </div>
+              </div>
             </div>
           ) : null}
-
           {aba !== "frequencia" && aba !== "plano" ? (
-            <div className="mt-3 rounded-xl border p-4">
-              <p className="text-sm text-muted-foreground">
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm text-slate-600">
                 Em construcao. Este item faz parte do Diario de classe do professor.
               </p>
             </div>
           ) : null}
         </div>
       </section>
+
+      </div>
 
       {anotacaoOpen && anotacaoAluno ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1500,7 +1581,7 @@ export default function DiarioDeClassePage() {
             </div>
 
             {anotacaoErro ? (
-              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
                 {anotacaoErro}
               </div>
             ) : null}
@@ -1526,10 +1607,12 @@ export default function DiarioDeClassePage() {
 
 function Card(props: { title: string; value: string; subtitle?: string }) {
   return (
-    <div className="rounded-2xl border bg-card p-4">
-      <div className="text-xs tracking-widest text-muted-foreground">{props.title.toUpperCase()}</div>
-      <div className="mt-1 text-lg font-semibold">{props.value}</div>
-      {props.subtitle ? <div className="text-xs text-muted-foreground">{props.subtitle}</div> : null}
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+        {props.title}
+      </div>
+      <div className="mt-1 text-lg font-semibold text-slate-900">{props.value}</div>
+      {props.subtitle ? <div className="text-xs text-slate-500">{props.subtitle}</div> : null}
     </div>
   );
 }
@@ -1549,15 +1632,13 @@ function TurmaPanel(props: {
   const horario = horaInicio && horaFim ? `${horaInicio} - ${horaFim}` : horaInicio ?? horaFim ?? "--";
 
   return (
-    <div className="rounded-2xl border bg-card p-4">
-      <div className="text-xs tracking-widest text-muted-foreground">TURMA</div>
-      <div className="mt-1 text-lg font-semibold">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-widest text-slate-400">Turma</div>
+      <div className="mt-1 text-lg font-semibold text-slate-900">
         {props.turma?.nome ?? props.turma?.titulo ?? (props.turmaId ? `Turma ${props.turmaId}` : "-")}
       </div>
-      <div className="mt-2 text-xs text-muted-foreground">
-        Dias: {diasLabel} • Horario: {horario}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+      <div className="mt-2 text-xs text-slate-500">Dias: {diasLabel} - Horario: {horario}</div>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
         <span>Total alunos: {props.alunosTotal}</span>
         <span>Marcados: {props.presencasRegistradas}</span>
         <span>Pendentes: {props.pendentesCount}</span>
@@ -1620,3 +1701,8 @@ function ToggleChip(props: {
     </button>
   );
 }
+
+
+
+
+

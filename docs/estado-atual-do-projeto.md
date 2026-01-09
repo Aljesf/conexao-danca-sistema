@@ -174,5 +174,4 @@ Paginas:
 Pendencias:
 - Aplicar migration no Supabase.
 - Gerar prints obrigatorios do fluxo de chamada pendente/fechada.
-- Criei o plano executavel conforme solicitado em docs/execucao/plano-executavel-diario-de-classe.md.
-- Sugestao de proximo passo: se quiser, adiciono um link de referencia aqui para este plano.
+- Plano executavel: docs/execucao/plano-executavel-diario-de-classe.md.
