@@ -15,7 +15,7 @@ export async function POST(_req: Request, ctx: { params: { aulaId: string } }) {
 
   const { data: aula, error: aulaErr } = await supabase
     .from("turma_aulas")
-    .select("id, turma_id, data_aula, fechada_em")
+    .select("id, turma_id, data_aula, fechada_em, aula_numero")
     .eq("id", aulaId.data)
     .single();
 
@@ -77,11 +77,38 @@ export async function POST(_req: Request, ctx: { params: { aulaId: string } }) {
     );
   }
 
+  // Se aula_numero ainda nao existir, atribuir no fechamento (Aula # validada)
+  let aulaNumero: number | null = (aula as { aula_numero?: number | null }).aula_numero ?? null;
+
+  if (!aulaNumero) {
+    const { data: maxRow, error: maxErr } = await supabase
+      .from("turma_aulas")
+      .select("aula_numero")
+      .eq("turma_id", aula.turma_id)
+      .not("fechada_em", "is", null)
+      .order("aula_numero", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (maxErr) {
+      return NextResponse.json(
+        { ok: false, code: "ERRO_CALCULAR_AULA_NUMERO", message: maxErr.message },
+        { status: 500 }
+      );
+    }
+
+    const maxVal =
+      (maxRow && typeof maxRow === "object" && "aula_numero" in maxRow
+        ? (maxRow as { aula_numero?: number | null }).aula_numero
+        : null) ?? null;
+    aulaNumero = (typeof maxVal === "number" && Number.isFinite(maxVal) ? maxVal : 0) + 1;
+  }
+
   const { data: aulaUpd, error: updErr } = await supabase
     .from("turma_aulas")
-    .update({ fechada_em: new Date().toISOString(), fechada_por: user.id })
+    .update({ fechada_em: new Date().toISOString(), fechada_por: user.id, aula_numero: aulaNumero })
     .eq("id", aula.id)
-    .select("id, turma_id, data_aula, fechada_em, fechada_por")
+    .select("id, turma_id, data_aula, aula_numero, fechada_em, fechada_por")
     .single();
 
   if (updErr || !aulaUpd) {

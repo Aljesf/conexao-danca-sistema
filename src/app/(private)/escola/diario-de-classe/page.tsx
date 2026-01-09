@@ -30,6 +30,55 @@ type Aula = {
   hora_fim?: string | null;
   fechada_em?: string | null;
   fechada_por?: string | null;
+  aula_numero?: number | null;
+};
+
+type PlanoSubbloco = {
+  id: number;
+  bloco_id: number;
+  ordem: number;
+  titulo: string;
+  minutos_min?: number | null;
+  minutos_ideal?: number | null;
+  minutos_max?: number | null;
+  habilidade_id?: number | null;
+  nivel_abordagem?: string | null;
+  instrucoes?: string | null;
+  musica_sugestao?: string | null;
+};
+
+type PlanoBloco = {
+  id: number;
+  plano_aula_id: number;
+  ordem: number;
+  titulo: string;
+  objetivo?: string | null;
+  minutos_min?: number | null;
+  minutos_ideal?: number | null;
+  minutos_max?: number | null;
+  musica_sugestao?: string | null;
+  observacoes?: string | null;
+  plano_aula_subblocos?: PlanoSubbloco[] | null;
+};
+
+type PlanoAula = {
+  id: number;
+  ciclo_id: number;
+  aula_numero: number;
+  intencao_pedagogica?: string | null;
+  observacoes_gerais?: string | null;
+  playlist_url?: string | null;
+  plano_aula_blocos?: PlanoBloco[] | null;
+};
+
+type PlanoInstancia = {
+  id: number;
+  turma_aula_id: number;
+  plano_aula_id: number;
+  status: "EM_EXECUCAO" | "CONCLUIDO";
+  notas_pos_aula?: string | null;
+  concluido_por?: string | null;
+  concluido_em?: string | null;
 };
 
 type PresencaDb = {
@@ -217,6 +266,13 @@ export default function DiarioDeClassePage() {
 
   const [dataAula, setDataAula] = useState<string>(todayYYYYMMDD());
   const [aula, setAula] = useState<Aula | null>(null);
+  const [plano, setPlano] = useState<PlanoAula | null>(null);
+  const [planoInstancia, setPlanoInstancia] = useState<PlanoInstancia | null>(null);
+  const [planoLoading, setPlanoLoading] = useState(false);
+  const [planoErro, setPlanoErro] = useState("");
+  const [planoAplicando, setPlanoAplicando] = useState(false);
+  const [planoConcluindo, setPlanoConcluindo] = useState(false);
+  const [notasPosAula, setNotasPosAula] = useState("");
 
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [presencasRegistradas, setPresencasRegistradas] = useState(0);
@@ -327,6 +383,11 @@ export default function DiarioDeClassePage() {
     (async () => {
       setSalvoOk(false);
       setAula(null);
+      setPlano(null);
+      setPlanoInstancia(null);
+      setPlanoErro("");
+      setPlanoLoading(false);
+      setNotasPosAula("");
       setLinhas([]);
       setAlunos([]);
       setPresencasRegistradas(0);
@@ -409,6 +470,19 @@ export default function DiarioDeClassePage() {
       alive = false;
     };
   }, [turmaId, dataAula]);
+
+  useEffect(() => {
+    if (!aula) {
+      setPlano(null);
+      setPlanoInstancia(null);
+      setPlanoErro("");
+      setNotasPosAula("");
+      return;
+    }
+
+    void carregarPlanoSessao();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aula?.id]);
 
   function setBaseStatus(alunoId: number, novo: PresencaBaseStatus) {
     setLinhas((prev) =>
@@ -695,6 +769,89 @@ export default function DiarioDeClassePage() {
     setFechando(false);
   }
 
+  async function carregarPlanoSessao() {
+    if (!aula) {
+      setPlano(null);
+      setPlanoInstancia(null);
+      setPlanoErro("");
+      setPlanoLoading(false);
+      setNotasPosAula("");
+      return;
+    }
+
+    setPlanoLoading(true);
+    setPlanoErro("");
+
+    const r = await fetchJson<{
+      ok: boolean;
+      aula: Aula;
+      plano: PlanoAula | null;
+      instancia: PlanoInstancia | null;
+    }>(`/api/professor/diario-de-classe/aulas/${aula.id}/plano`);
+
+    if (!r.ok) {
+      setPlanoErro(r.message);
+      setPlano(null);
+      setPlanoInstancia(null);
+      setPlanoLoading(false);
+      return;
+    }
+
+    setPlano(r.data.plano ?? null);
+    setPlanoInstancia(r.data.instancia ?? null);
+    setNotasPosAula(r.data.instancia?.notas_pos_aula ?? "");
+    setPlanoLoading(false);
+  }
+
+  async function aplicarPlanoSessao() {
+    if (!aula || planoAplicando) return;
+    setPlanoAplicando(true);
+    setPlanoErro("");
+
+    const r = await fetchJson<{ ok: boolean; instancia: PlanoInstancia }>(
+      `/api/professor/diario-de-classe/aulas/${aula.id}/plano/aplicar`,
+      { method: "POST" }
+    );
+
+    if (!r.ok) {
+      setPlanoErro(r.message);
+      setPlanoAplicando(false);
+      return;
+    }
+
+    setPlanoInstancia(r.data.instancia);
+    setPlanoAplicando(false);
+  }
+
+  async function concluirPlanoSessao() {
+    if (!aula || planoConcluindo) return;
+
+    if (!aula.fechada_em) {
+      setPlanoErro("Feche a chamada antes de concluir o plano.");
+      return;
+    }
+
+    setPlanoConcluindo(true);
+    setPlanoErro("");
+
+    const r = await fetchJson<{ ok: boolean; instancia: PlanoInstancia }>(
+      `/api/professor/diario-de-classe/aulas/${aula.id}/plano/concluir`,
+      {
+        method: "POST",
+        body: JSON.stringify({ notas_pos_aula: notasPosAula.trim() || null }),
+      }
+    );
+
+    if (!r.ok) {
+      setPlanoErro(r.message);
+      setPlanoConcluindo(false);
+      return;
+    }
+
+    setPlanoInstancia(r.data.instancia);
+    setPlanoConcluindo(false);
+  }
+
   const turmaSelecionada = useMemo(
     () => turmas.find((t) => t.turma_id === turmaId) ?? null,
     [turmas, turmaId]
@@ -707,6 +864,10 @@ export default function DiarioDeClassePage() {
     : "A chamada precisa ser fechada para validar presencas.";
   const dataSemana = weekdayLabelFromISO(dataAula);
   const pendentesCount = Math.max(0, alunos.length - presencasRegistradas);
+  const blocosOrdenados = useMemo(() => {
+    const blocos = plano?.plano_aula_blocos ?? [];
+    return [...blocos].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+  }, [plano]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -1085,13 +1246,205 @@ export default function DiarioDeClassePage() {
                 ) : null}
               </div>
             </div>
-          ) : (
+          ) : null}
+
+          {aba === "plano" ? (
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="rounded-xl border p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <div className="text-sm font-medium">Plano da sessao</div>
+                    <div className="text-xs text-muted-foreground">
+                      {aula
+                        ? `Aula #${aula.aula_numero ?? "--"} • ${dataAula}`
+                        : "Selecione uma turma para carregar o plano."}
+                    </div>
+                    {planoInstancia ? (
+                      <div className="mt-2 inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        {planoInstancia.status === "CONCLUIDO"
+                          ? "Plano concluido"
+                          : "Plano em execucao"}
+                      </div>
+                    ) : plano ? (
+                      <div className="mt-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                        Plano nao aplicado
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border px-5 py-2 text-sm font-medium disabled:opacity-50"
+                      disabled={!plano || planoAplicando || Boolean(planoInstancia)}
+                      onClick={() => void aplicarPlanoSessao()}
+                    >
+                      {planoAplicando ? "Aplicando..." : "Aplicar plano"}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                      disabled={
+                        !plano ||
+                        !planoInstancia ||
+                        planoInstancia.status === "CONCLUIDO" ||
+                        planoConcluindo ||
+                        !aulaFechada
+                      }
+                      onClick={() => void concluirPlanoSessao()}
+                    >
+                      {planoConcluindo ? "Concluindo..." : "Concluir plano"}
+                    </button>
+                  </div>
+                </div>
+
+                {planoErro ? (
+                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+                    {planoErro}
+                  </div>
+                ) : null}
+
+                {planoLoading ? (
+                  <div className="mt-3 text-sm text-muted-foreground">Carregando plano...</div>
+                ) : null}
+
+                {!planoLoading && aula && !plano ? (
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    Nenhum plano encontrado para esta aula.
+                  </div>
+                ) : null}
+              </div>
+
+              {plano ? (
+                <div className="grid gap-3">
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <div className="text-xs font-semibold text-muted-foreground">
+                      Intencao pedagogica
+                    </div>
+                    <div className="mt-1 text-sm">
+                      {plano.intencao_pedagogica?.trim()
+                        ? plano.intencao_pedagogica
+                        : "Nao informado."}
+                    </div>
+                    <div className="mt-3 text-xs font-semibold text-muted-foreground">
+                      Observacoes gerais
+                    </div>
+                    <div className="mt-1 text-sm">
+                      {plano.observacoes_gerais?.trim()
+                        ? plano.observacoes_gerais
+                        : "Nenhuma observacao."}
+                    </div>
+                    {plano.playlist_url ? (
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        Playlist:{" "}
+                        <a
+                          className="text-sky-700 underline"
+                          href={plano.playlist_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {plano.playlist_url}
+                        </a>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border p-4">
+                    <div className="text-sm font-medium">Blocos do plano</div>
+                    {blocosOrdenados.length === 0 ? (
+                      <div className="mt-3 text-sm text-muted-foreground">
+                        Nenhum bloco cadastrado.
+                      </div>
+                    ) : (
+                      <div className="mt-3 flex flex-col gap-3">
+                        {blocosOrdenados.map((bloco) => {
+                          const subblocos = [...(bloco.plano_aula_subblocos ?? [])].sort(
+                            (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0)
+                          );
+                          const minutos = [bloco.minutos_min, bloco.minutos_ideal, bloco.minutos_max]
+                            .filter((v): v is number => typeof v === "number");
+                          const minutosLabel = minutos.length ? minutos.join(" / ") + " min" : null;
+
+                          return (
+                            <div key={bloco.id} className="rounded-xl border bg-card p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="text-sm font-semibold">
+                                  {bloco.ordem}. {bloco.titulo}
+                                </div>
+                                {minutosLabel ? (
+                                  <span className="text-xs text-muted-foreground">{minutosLabel}</span>
+                                ) : null}
+                              </div>
+                              {bloco.objetivo ? (
+                                <div className="mt-2 text-xs text-muted-foreground">
+                                  Objetivo: {bloco.objetivo}
+                                </div>
+                              ) : null}
+
+                              {subblocos.length ? (
+                                <div className="mt-3 grid gap-2">
+                                  {subblocos.map((sb) => {
+                                    const sbMin = [sb.minutos_min, sb.minutos_ideal, sb.minutos_max]
+                                      .filter((v): v is number => typeof v === "number");
+                                    const sbLabel = sbMin.length ? sbMin.join(" / ") + " min" : null;
+                                    return (
+                                      <div
+                                        key={sb.id}
+                                        className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-sm"
+                                      >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <div className="font-medium">
+                                            {sb.ordem}. {sb.titulo}
+                                          </div>
+                                          {sbLabel ? (
+                                            <span className="text-xs text-muted-foreground">
+                                              {sbLabel}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        {sb.instrucoes ? (
+                                          <div className="mt-1 text-xs text-muted-foreground">
+                                            {sb.instrucoes}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="mt-2 text-xs text-muted-foreground">
+                                  Sem sub-blocos.
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border p-4">
+                    <div className="text-sm font-medium">Notas pos-aula</div>
+                    <textarea
+                      className="mt-2 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                      rows={4}
+                      value={notasPosAula}
+                      onChange={(e) => setNotasPosAula(e.target.value)}
+                      disabled={planoInstancia?.status === "CONCLUIDO"}
+                      placeholder="Registre observacoes da execucao."
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {aba !== "frequencia" && aba !== "plano" ? (
             <div className="mt-3 rounded-xl border p-4">
               <p className="text-sm text-muted-foreground">
                 Em construcao. Este item faz parte do Diario de classe do professor.
               </p>
             </div>
-          )}
+          ) : null}
         </div>
       </section>
 
