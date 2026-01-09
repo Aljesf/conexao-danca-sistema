@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { Pool } from "pg";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,8 @@ function parseId(param: string | undefined): number | null {
 }
 
 export async function GET(_req: Request, ctx: { params: { id?: string } }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   const id = parseId(ctx.params.id);
   if (!id) return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
 
@@ -34,6 +37,8 @@ export async function GET(_req: Request, ctx: { params: { id?: string } }) {
 }
 
 export async function PATCH(req: Request, ctx: { params: { id?: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const id = parseId(ctx.params.id);
   if (!id) return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
 

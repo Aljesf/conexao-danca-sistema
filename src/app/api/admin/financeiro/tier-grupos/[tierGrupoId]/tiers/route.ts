@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -30,6 +31,8 @@ function serverError(message: string, details?: Record<string, unknown>) {
 }
 
 export async function POST(req: Request, ctx: { params: { tierGrupoId?: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const tierGrupoId = parseId(ctx.params.tierGrupoId);
     if (!tierGrupoId) return badRequest("tier_grupo_id invalido.");

@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type CicloCobranca = "COBRANCA_UNICA" | "COBRANCA_EM_PARCELAS" | "COBRANCA_MENSAL";
 type TerminoCobranca = "FIM_TURMA_CURSO" | "FIM_PROJETO" | "FIM_ANO_LETIVO" | "DATA_ESPECIFICA";
@@ -58,6 +59,8 @@ function safeErrorDetails(e: unknown): Record<string, unknown> {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     let supabaseAuth;
     try {

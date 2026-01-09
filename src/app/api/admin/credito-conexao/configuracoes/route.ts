@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type TipoConta = "ALUNO" | "COLABORADOR";
 
@@ -33,6 +34,8 @@ function toNum(v: unknown): number | null {
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
   const tipo = searchParams.get("tipo_conta");
@@ -58,6 +61,8 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = getSupabaseAdmin();
   const body = (await req.json()) as unknown;
 

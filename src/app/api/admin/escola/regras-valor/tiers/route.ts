@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type TierRow = {
   tier_id: number;
@@ -49,6 +50,8 @@ function selectCols(politicaCol: "politica_id" | "politica_preco_id") {
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const url = new URL(req.url);
   const grupoId = toInt(url.searchParams.get("grupo_id"));
@@ -92,6 +95,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
 

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 import {
   ensureFaturaAberta,
   getPeriodoReferencia,
@@ -16,6 +17,8 @@ type IncluirPendenciasPayload = {
 const DEFAULT_ORIGENS = ["LOJA"];
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = await getSupabaseServer();
     const {

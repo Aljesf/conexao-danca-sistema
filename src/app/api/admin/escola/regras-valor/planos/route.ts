@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const PK = "politica_preco_id";
 
@@ -12,6 +13,8 @@ function mapPlano(row: Record<string, unknown>) {
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const url = new URL(req.url);
   const onlyAtivo = url.searchParams.get("ativo");
@@ -30,6 +33,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const body = (await req.json().catch(() => null)) as
     | { nome?: unknown; descricao?: unknown; ativo?: unknown }

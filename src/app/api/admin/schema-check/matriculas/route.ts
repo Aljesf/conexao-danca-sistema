@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type CheckItem = {
   key: string;
@@ -19,7 +20,9 @@ function getSupabaseAdminClient() {
   return createClient(url, serviceRole, { auth: { persistSession: false } });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdminClient();
 

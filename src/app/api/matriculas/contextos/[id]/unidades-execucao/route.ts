@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type TipoTurma = "REGULAR" | "CURSO_LIVRE" | "ENSAIO" | "PROJETO_ARTISTICO";
@@ -32,6 +33,8 @@ function mapTipoTurmaPorContexto(tipo: ContextoTipo): TipoTurma[] {
 }
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const contextoId = Number(params.id);
   if (!Number.isFinite(contextoId) || contextoId <= 0) {
     return NextResponse.json({ ok: false, error: "contexto_id_invalido" }, { status: 400 });

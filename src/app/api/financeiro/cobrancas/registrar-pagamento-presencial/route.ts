@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { markNeofinBillingAsPaid } from "@/lib/neofinClient";
 import { processarClassificacaoFinanceira } from "@/lib/financeiro/processarClassificacaoFinanceira";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type RequestPayload = {
   cobranca_id?: number;
@@ -62,6 +63,8 @@ async function contarLancamentosDaFatura(
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServer();
   const {
     data: { user },

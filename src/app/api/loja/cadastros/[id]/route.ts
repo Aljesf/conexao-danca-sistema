@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type TipoCadastro = "marcas" | "cores" | "numeracoes" | "tamanhos" | "modelos";
 
@@ -63,6 +64,8 @@ function getTipoFromUrl(req: NextRequest): TipoCadastro | null {
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, { ok: false, error: "supabase_config_missing" });
   }

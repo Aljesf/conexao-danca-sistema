@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type MatriculaPlano = {
   id: number;
@@ -178,6 +179,8 @@ async function getById(id: number) {
 }
 
 export async function PUT(req: Request, ctx: { params: { id: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const idNum = parseIntStrict(ctx.params.id);
   if (idNum === null || idNum <= 0) return badRequest("ID invalido.");
 
@@ -231,6 +234,8 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
 }
 
 export async function DELETE(_req: Request, ctx: { params: { id: string } }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   const idNum = parseIntStrict(ctx.params.id);
   if (idNum === null || idNum <= 0) return badRequest("ID invalido.");
 

@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type FormaPagamentoContextoPayload = {
   id?: number;
@@ -29,6 +30,8 @@ const supabaseAdmin =
 
 // GET /api/financeiro/formas-pagamento?centro_custo_id=...
 export async function GET(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return NextResponse.json(
       { ok: false, error: "Configuracao do Supabase ausente." },
@@ -93,6 +96,8 @@ export async function GET(req: NextRequest) {
 // POST /api/financeiro/formas-pagamento
 // Body: FormaPagamentoContextoPayload (criar/atualizar linha de contexto)
 export async function POST(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return NextResponse.json(
       { ok: false, error: "Configuracao do Supabase ausente." },

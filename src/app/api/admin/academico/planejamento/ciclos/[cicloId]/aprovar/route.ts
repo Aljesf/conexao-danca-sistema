@@ -1,10 +1,13 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminContext } from "../../../_lib/auth";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const zId = z.coerce.number().int().positive();
 
 export async function POST(_req: Request, ctx: { params: { cicloId: string } }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   const admin = await getAdminContext();
   if (!admin.ok) return NextResponse.json(admin.body, { status: admin.status });
 

@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ContaConexaoRow = {
   id: number;
@@ -86,6 +87,8 @@ function buildComposicaoResumo(raw: unknown): string | null {
 }
 
 export async function GET(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const sp = req.nextUrl.searchParams;
 

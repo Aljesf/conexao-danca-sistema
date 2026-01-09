@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,6 +18,8 @@ function parseId(value: string | undefined): number | null {
 }
 
 export async function GET(_req: Request, ctx: { params: { itemId?: string } }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdmin();
     const itemId = parseId(ctx.params.itemId);
@@ -42,6 +45,8 @@ export async function GET(_req: Request, ctx: { params: { itemId?: string } }) {
 }
 
 export async function POST(req: Request, ctx: { params: { itemId?: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdmin();
     const itemId = parseId(ctx.params.itemId);

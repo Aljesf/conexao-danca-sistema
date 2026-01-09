@@ -1,5 +1,6 @@
 ﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ServicoRow = {
   id: number;
@@ -47,7 +48,9 @@ function getSupabaseAdminClient() {
   });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdminClient();
 
@@ -149,6 +152,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdminClient();
     const body = (await req.json().catch(() => null)) as ServicoPayload | null;

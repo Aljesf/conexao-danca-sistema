@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 type ServicoTipo = "CURSO_REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
@@ -362,7 +363,9 @@ async function resolveLegacyPayload(admin: ReturnType<typeof createClient>, alvo
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const cookieStore = await cookies();
     const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
@@ -389,6 +392,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const cookieStore = await cookies();
     const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
@@ -534,6 +539,8 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const cookieStore = await cookies();
     const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const PK = "politica_preco_id";
 
@@ -13,6 +14,8 @@ function mapPlano(row: Record<string, unknown>) {
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ planoId: string }> }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const { planoId } = await ctx.params;
   const pid = toInt(planoId);

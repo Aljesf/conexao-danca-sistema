@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ServicoRow = {
   id: number;
@@ -31,7 +32,9 @@ function serverError(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "server_error", message, details: details ?? null }, { status: 500 });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -57,6 +60,8 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdmin();
     const body = (await req.json().catch(() => null)) as { servico_id?: number; tier_grupo_id?: number | null } | null;

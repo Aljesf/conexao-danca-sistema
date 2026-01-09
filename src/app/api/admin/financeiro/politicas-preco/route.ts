@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type PoliticaPrecoRow = {
   id: number;
@@ -28,6 +29,8 @@ async function resolvePoliticaPk(supabase: Awaited<ReturnType<typeof getSupabase
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const url = new URL(req.url);
   const ativoParam = url.searchParams.get("ativo");
@@ -65,6 +68,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const pk = await resolvePoliticaPk(supabase);
 

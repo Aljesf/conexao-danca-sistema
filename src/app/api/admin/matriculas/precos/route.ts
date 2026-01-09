@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type MatriculaPrecoTurma = {
   id: number;
@@ -66,6 +67,8 @@ async function existsTurma(supabase: SupabaseRouteClient, turmaId: number) {
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const { searchParams } = new URL(req.url);
   const ano = parseIntStrict(searchParams.get("ano"));
   const turmaId = parseIntStrict(searchParams.get("turma_id"));
@@ -91,6 +94,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   let payload: unknown;
   try {
     payload = await req.json();
@@ -187,6 +192,8 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   let payload: unknown;
   try {
     payload = await req.json();

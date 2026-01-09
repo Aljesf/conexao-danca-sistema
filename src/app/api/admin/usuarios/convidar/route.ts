@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const PayloadSchema = z.object({
   pessoa_id: z.union([z.number().int().positive(), z.string().min(1)]),
@@ -32,6 +33,8 @@ function errorResponse(status: number, code: string, message: string, details?: 
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const raw = await req.json().catch(() => null);
     const parsed = PayloadSchema.safeParse(raw);

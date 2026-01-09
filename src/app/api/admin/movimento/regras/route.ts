@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireMovimentoAdmin } from "@/lib/auth/movimento-guard";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -25,7 +26,9 @@ const RegraCreateSchema = z.object({
   observacoes: z.string().optional(),
 });
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const supabase = getServiceClient();
@@ -45,6 +48,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const supabase = getServiceClient();

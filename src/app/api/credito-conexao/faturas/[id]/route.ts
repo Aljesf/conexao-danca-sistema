@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type FaturaRow = {
   id: number;
@@ -41,6 +42,8 @@ type PessoaRow = {
 };
 
 export async function GET(_: Request, ctx: { params: { id: string } }) {
+  const denied = await guardApiByRole(_ as any);
+  if (denied) return denied as any;
   const supabase = getSupabaseAdmin();
   const faturaId = Number(ctx.params.id);
 

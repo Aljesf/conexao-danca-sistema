@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 type AlvoOption = {
@@ -48,6 +49,8 @@ function isMissingRelation(err: unknown): boolean {
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const cookieStore = await cookies();
     const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });

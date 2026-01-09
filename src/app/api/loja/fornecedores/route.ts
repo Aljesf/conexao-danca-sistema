@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ApiResponse<T = any> = {
   ok: boolean;
@@ -42,6 +43,8 @@ function json<T>(status: number, payload: ApiResponse<T>) {
 // Lista fornecedores (opcional filtro q)
 // ==============================
 export async function GET(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, {
       ok: false,
@@ -112,6 +115,8 @@ export async function GET(req: NextRequest) {
 // Cria fornecedor
 // ==============================
 export async function POST(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, {
       ok: false,
@@ -185,6 +190,8 @@ export async function POST(req: NextRequest) {
 // Atualiza dados basicos (codigo_interno, ativo, observacoes)
 // ==============================
 export async function PUT(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, {
       ok: false,

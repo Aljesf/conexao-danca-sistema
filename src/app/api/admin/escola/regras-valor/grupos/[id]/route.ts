@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 function parseId(param: string): number | null {
   const n = Number(param);
@@ -8,6 +9,8 @@ function parseId(param: string): number | null {
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const { id } = await ctx.params;
   const grupoId = parseId(id);

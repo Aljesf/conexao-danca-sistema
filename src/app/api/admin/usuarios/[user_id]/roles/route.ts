@@ -1,7 +1,10 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { assertAdmin } from "@/lib/auth/assertAdmin";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export async function GET(_req: Request, ctx: { params: { user_id: string } }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   const auth = await assertAdmin();
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
@@ -20,6 +23,8 @@ export async function GET(_req: Request, ctx: { params: { user_id: string } }) {
 }
 
 export async function POST(req: Request, ctx: { params: { user_id: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const auth = await assertAdmin();
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
@@ -38,6 +43,8 @@ export async function POST(req: Request, ctx: { params: { user_id: string } }) {
 }
 
 export async function DELETE(req: Request, ctx: { params: { user_id: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const auth = await assertAdmin();
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 

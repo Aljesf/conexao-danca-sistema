@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -16,6 +17,8 @@ function parseNumber(value: string | null): number | null {
 }
 
 export async function GET(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return NextResponse.json(
       { ok: false, error: "Configuracao do Supabase ausente." },
@@ -129,6 +132,8 @@ export async function GET(req: NextRequest) {
  *   que ja resolve centro de custo, categoria e pessoa automaticamente.
  */
 export async function POST(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return NextResponse.json(
       { ok: false, error: "Configuracao do Supabase ausente." },

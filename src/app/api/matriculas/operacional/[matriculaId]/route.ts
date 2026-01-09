@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { Pool, type PoolClient } from "pg";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const runtime = "nodejs";
 
@@ -51,6 +52,8 @@ async function qMany(
 }
 
 export async function GET(_req: Request, ctx: { params: { matriculaId?: string } }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   if (!process.env.SUPABASE_DB_URL) {
     return NextResponse.json({ error: "env_invalida", message: "SUPABASE_DB_URL nao configurada." }, { status: 500 });
   }

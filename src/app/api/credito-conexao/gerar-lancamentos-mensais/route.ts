@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type GerarMensalBody = {
   matricula_id?: number;
@@ -125,6 +126,8 @@ async function resolverMensalidadePorTurma(
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const cookieStore = await cookies();
     const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });

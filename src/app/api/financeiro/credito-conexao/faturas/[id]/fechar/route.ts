@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type RouteContext = { params: { id: string } };
 
@@ -153,6 +154,8 @@ function nextDateForDay(day: number | null | undefined, from: Date): string {
 }
 
 export async function POST(req: Request, { params }: RouteContext) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServer();
   const {
     data: { user },

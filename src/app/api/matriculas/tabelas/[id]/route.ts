@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const dynamic = "force-dynamic";
 
@@ -382,6 +383,8 @@ async function resolveLegacyPayload(admin: ReturnType<typeof createClient>, alvo
 }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const params = await ctx.params;
   console.log("[PUT /api/matriculas/tabelas/:id] start", { id: params.id, method: req.method });
 

@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ApiResponse<T = any> = {
   ok: boolean;
@@ -29,6 +30,8 @@ function json<T>(status: number, payload: ApiResponse<T>) {
 
 // PUT /api/loja/categorias/[id]
 export async function PUT(request: NextRequest, context: { params: { id: string } }) {
+  const denied = await guardApiByRole(request as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, {
       ok: false,

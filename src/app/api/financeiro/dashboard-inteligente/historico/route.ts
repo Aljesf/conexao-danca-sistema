@@ -1,10 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 import {
   supabaseAdmin,
   obterSnapshotPorData,
 } from "@/lib/financeiro/dashboardInteligente";
 
 export async function GET(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return NextResponse.json(
       { ok: false, error: "Configuracao do Supabase ausente." },

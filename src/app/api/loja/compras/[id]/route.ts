@@ -1,7 +1,8 @@
-import { getCentroCustoLojaId } from "@/lib/financeiro/centrosCusto";
+﻿import { getCentroCustoLojaId } from "@/lib/financeiro/centrosCusto";
 import { registrarEntradaEstoque } from "@/lib/loja/estoque";
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ApiResponse<T = any> = {
   ok: boolean;
@@ -266,10 +267,9 @@ async function carregarDetalhe(pedidoId: number): Promise<PedidoCompraDetalhe | 
 // ==============================
 // GET /api/loja/compras/[id]
 // ==============================
-export async function GET(
-  _req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, {
       ok: false,
@@ -301,10 +301,9 @@ export async function GET(
 // POST /api/loja/compras/[id]
 // Registrar recebimento parcial
 // ==============================
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, {
       ok: false,

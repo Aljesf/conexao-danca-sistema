@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ApiResponse<T = any> = {
   ok: boolean;
@@ -101,6 +102,8 @@ function json<T>(status: number, payload: ApiResponse<T>) {
 // GET /api/loja/estoque
 // Lista produtos com saldo atual
 export async function GET(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const cookieStore = await cookies();
     const supabase = supabaseAdmin ?? createRouteHandlerClient({ cookies: () => cookieStore });
@@ -177,6 +180,8 @@ export async function GET(req: NextRequest) {
 // POST /api/loja/estoque
 // Ajuste manual de estoque por VARIANTE
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, {
       ok: false,

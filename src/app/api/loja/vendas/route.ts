@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -188,7 +189,9 @@ function inferTipoTransacao(parcelas: number): CartaoTipoTransacao {
 }
 
 // GET de diagnostico simples
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     return json({ ok: true, route: "/api/loja/vendas", ts: new Date().toISOString() });
   } catch (err: any) {
@@ -200,6 +203,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = await getSupabaseServerSSR();
     const { data: authData } = await supabase.auth.getUser();

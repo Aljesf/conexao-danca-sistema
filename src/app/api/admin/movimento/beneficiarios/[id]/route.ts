@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireMovimentoAdmin } from "@/lib/auth/movimento-guard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { jsonError, zodToValidationError } from "@/lib/http/api-errors";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const BeneficiarioUpdateSchema = z.object({
   relatorio_socioeconomico: z.string().min(10).optional(),
@@ -15,6 +16,8 @@ const BeneficiarioUpdateSchema = z.object({
 });
 
 export async function GET(_: Request, ctx: { params: { id: string } }) {
+  const denied = await guardApiByRole(_ as any);
+  if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
@@ -35,6 +38,8 @@ export async function GET(_: Request, ctx: { params: { id: string } }) {
 }
 
 export async function PUT(req: Request, ctx: { params: { id: string } }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();

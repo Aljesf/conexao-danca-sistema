@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { processarClassificacaoFinanceira } from "@/lib/financeiro/processarClassificacaoFinanceira";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type Cobranca = {
   id: number;
@@ -12,6 +13,8 @@ type Cobranca = {
 };
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServer();
   const {
     data: { user },

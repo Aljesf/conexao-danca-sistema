@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 // GET /api/financeiro/credito-conexao/faturas
 // Lista faturas de Crédito Conexão (sem join complexo por enquanto).
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = await getSupabaseServer();
     const { searchParams } = new URL(req.url);

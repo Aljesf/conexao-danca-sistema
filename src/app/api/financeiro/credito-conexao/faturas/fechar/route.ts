@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { criarCobrancaLocalEEnviarNeofin } from "@/lib/cobrancasNeofin";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 /**
  * POST /api/financeiro/credito-conexao/faturas/fechar
@@ -19,6 +20,8 @@ import { criarCobrancaLocalEEnviarNeofin } from "@/lib/cobrancasNeofin";
  * - Atualiza lancamentos para status = 'FATURADO'.
  */
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = await getSupabaseServer();
     const body = await req.json().catch(() => ({}));

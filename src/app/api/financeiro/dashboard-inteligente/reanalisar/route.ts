@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { supabaseAdmin, gerarESalvarSnapshot } from "@/lib/financeiro/dashboardInteligente";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type GptStatus = "OK" | "SEM_CHAVE" | "ERRO" | "PARSER";
 
@@ -67,7 +68,9 @@ function buildDiagnostico(
   };
 }
 
-export async function POST() {
+export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return NextResponse.json(
       { ok: false, error: "Configuracao do Supabase ausente." },

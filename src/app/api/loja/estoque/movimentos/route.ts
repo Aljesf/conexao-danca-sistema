@@ -1,4 +1,5 @@
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,8 @@ function json(data: any, status = 200) {
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const url = new URL(req.url);
     const produto_id = Number(url.searchParams.get("produto_id"));

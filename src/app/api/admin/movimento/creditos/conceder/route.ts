@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireMovimentoAdmin } from "@/lib/auth/movimento-guard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { jsonError, zodToValidationError } from "@/lib/http/api-errors";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const ConcederSchema = z.object({
   beneficiario_id: z.string().uuid(),
@@ -29,6 +30,8 @@ const ConcederSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const { userId } = await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();

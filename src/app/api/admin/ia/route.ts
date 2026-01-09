@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { adminAskAi, type AdminAiMessage } from "@/lib/openaiClient";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type RequestBody = {
   messages: AdminAiMessage[];
@@ -7,6 +8,8 @@ type RequestBody = {
 };
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const body = (await req.json()) as RequestBody;
 

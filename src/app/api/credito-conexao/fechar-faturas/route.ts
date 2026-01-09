@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { fecharFaturaPorCompetencia, isCompetencia } from "@/lib/creditoConexao/fechamento";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type Payload = {
   competencia: string;
@@ -15,6 +16,8 @@ type ResultadoItem = {
 };
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   let raw: unknown;
   try {
     raw = await req.json();

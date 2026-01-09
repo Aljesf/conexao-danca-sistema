@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type PreviewBody = {
   matricula_id?: number;
@@ -112,6 +113,8 @@ async function resolverMensalidadePorTurma(
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const cookieStore = await cookies();
     const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });

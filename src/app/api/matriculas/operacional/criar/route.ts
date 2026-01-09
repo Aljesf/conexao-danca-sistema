@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { Pool } from "pg";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const runtime = "nodejs";
 
@@ -237,6 +238,8 @@ async function ensureContaConexaoAluno(
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!process.env.SUPABASE_DB_URL) {
     return NextResponse.json({ error: "config_incompleta" }, { status: 500 });
   }

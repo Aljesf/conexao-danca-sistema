@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 // GET /api/financeiro/credito-conexao/contas
 // Lista todas as contas de Crédito Conexão (sem joins por enquanto).
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = await getSupabaseServer();
     const { searchParams } = new URL(req.url);
@@ -63,6 +66,8 @@ export async function GET(req: Request) {
 // POST /api/financeiro/credito-conexao/contas
 // Cria ou atualiza uma conta de Crédito Conexão.
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = await getSupabaseServer();
     const body = await req.json();

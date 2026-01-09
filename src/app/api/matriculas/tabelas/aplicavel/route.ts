@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
@@ -61,6 +62,8 @@ async function buscarTabelaIdsLegado(admin: ReturnType<typeof createClient>, alv
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const cookieStore = await cookies();
     const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });

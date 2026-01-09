@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireMovimentoAdmin } from "@/lib/auth/movimento-guard";
 import { executarMotorMensalMovimento } from "@/lib/movimento/motor";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const ExecSchema = z.object({
   competencia: z.string().min(7), // YYYY-MM
@@ -9,6 +10,8 @@ const ExecSchema = z.object({
 });
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const payloadUnknown = await req.json();

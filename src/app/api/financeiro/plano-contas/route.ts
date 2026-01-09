@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type PlanoContaPayload = {
   id?: number;
@@ -27,7 +28,9 @@ function json(status: number, payload: any) {
   return NextResponse.json(payload, { status });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, { ok: false, error: "Configuracao do Supabase ausente." });
   }
@@ -49,6 +52,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, { ok: false, error: "Configuracao do Supabase ausente." });
   }
@@ -80,6 +85,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   if (!supabaseAdmin) {
     return json(500, { ok: false, error: "Configuracao do Supabase ausente." });
   }

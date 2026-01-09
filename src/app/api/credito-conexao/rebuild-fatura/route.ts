@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type Payload = {
   conta_conexao_id?: number;
@@ -16,6 +17,8 @@ function toPositiveNumber(value: unknown): number | null {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = getSupabaseAdmin();
   let body: Payload;
 

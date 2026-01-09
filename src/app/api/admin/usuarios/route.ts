@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { assertAdmin } from "@/lib/auth/assertAdmin";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = await getSupabaseServer();
     const { data: userData, error: userErr } = await supabase.auth.getUser();
@@ -223,6 +226,8 @@ export async function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const auth = await assertAdmin();
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { Pool } from "pg";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,9 @@ type PrecoServicoPayload = {
   ativo?: boolean;
 };
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
@@ -34,6 +37,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const body = (await req.json().catch(() => null)) as PrecoServicoPayload | null;
   if (!body?.servico_id || !body?.ano_referencia || !body?.plano_id) {
     return NextResponse.json({ ok: false, error: "servico_id_ano_plano_obrigatorios" }, { status: 400 });

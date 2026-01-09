@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ErrorLike = { code?: string; message?: string } | null;
 
@@ -31,6 +32,8 @@ async function fetchTiers(
 }
 
 export async function GET(req: Request, ctx: { params: Promise<{ planoId: string }> }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const { planoId } = await ctx.params;
   const pid = toInt(planoId);
@@ -49,6 +52,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ planoId: string
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ planoId: string }> }) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServerSSR();
   const { planoId } = await ctx.params;
   const pid = toInt(planoId);

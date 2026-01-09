@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type MatriculaConfiguracao = {
   id: number;
@@ -126,7 +127,9 @@ async function fetchAtiva(supabase: SupabaseRouteClient) {
   return { ok: true as const, data: data as MatriculaConfiguracao | null };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseRoute();
   const active = await fetchAtiva(supabase);
   if (!active.ok) {
@@ -144,6 +147,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   let payload: unknown;
   try {
     payload = await req.json();

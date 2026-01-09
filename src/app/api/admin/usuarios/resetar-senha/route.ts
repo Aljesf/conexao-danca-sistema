@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   try {
     const supabase = await getSupabaseServer();
     const { data: userData, error: userErr } = await supabase.auth.getUser();

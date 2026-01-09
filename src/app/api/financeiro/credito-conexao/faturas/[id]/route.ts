@@ -1,7 +1,10 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   const supabase = await getSupabaseServer();
   const id = Number(params.id);
 

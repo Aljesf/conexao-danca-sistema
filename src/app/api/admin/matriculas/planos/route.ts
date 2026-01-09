@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type MatriculaPlano = {
   id: number;
@@ -139,6 +140,8 @@ function validatePayload(input: unknown): ValidationResult {
 }
 
 export async function GET(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   const { searchParams } = new URL(req.url);
   const includeInativos = searchParams.get("include_inativos") === "1";
 
@@ -156,6 +159,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const denied = await guardApiByRole(req as any);
+  if (denied) return denied as any;
   let payload: unknown;
   try {
     payload = await req.json();

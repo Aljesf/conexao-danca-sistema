@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const ParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -28,6 +29,8 @@ async function requireAdmin() {
 }
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
   const auth = await requireAdmin();
   if (!auth.ok) {
     return NextResponse.json({ ok: false, code: "NAO_AUTORIZADO" }, { status: auth.status });
