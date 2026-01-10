@@ -59,6 +59,30 @@ export async function GET(req: Request) {
     const tipo = tipoRaw as ServicoTipo;
     const admin = getAdmin();
 
+    if (tipo === "CURSO_LIVRE") {
+      const { data, error } = await admin.from("cursos_livres").select("id, nome").order("nome", { ascending: true });
+
+      if (error) {
+        if (isMissingRelation(error)) {
+          return NextResponse.json(
+            {
+              ok: true,
+              data: [],
+              warning: "Tabela cursos_livres nao existe (migracao pendente).",
+            } satisfies ApiOk<unknown[]>,
+            { status: 200 },
+          );
+        }
+        return NextResponse.json(
+          { ok: false, error: "server_error", message: "Falha ao listar cursos livres.", details: { error } } satisfies ApiErr,
+          { status: 500 },
+        );
+      }
+
+      const mapped = (data ?? []).map((x: any) => ({ id: Number(x.id), label: String(x.nome) }));
+      return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<typeof mapped>, { status: 200 });
+    }
+
     const { data, error } = await admin
       .from("escola_produtos_educacionais")
       .select("id, titulo")

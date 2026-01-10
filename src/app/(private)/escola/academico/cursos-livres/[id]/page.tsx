@@ -138,7 +138,7 @@ export default function CursoLivreDetalhePage({ params }: { params: { id: string
                 {curso.classificacao} • {curso.status} • {faixa(curso.idade_minima, curso.idade_maxima)}
               </p>
             </div>
-            <Link className="rounded-md border px-3 py-2 text-sm" href="/academico/cursos-livres">
+            <Link className="rounded-md border px-3 py-2 text-sm" href="/escola/academico/cursos-livres">
               Voltar
             </Link>
           </div>

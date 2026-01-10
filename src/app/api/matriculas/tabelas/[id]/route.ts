@@ -133,6 +133,57 @@ async function fetchServicoTipo(admin: ReturnType<typeof createClient>, servicoI
   return parseServicoTipo(tipoRaw);
 }
 
+async function isCursoLivreId(admin: ReturnType<typeof createClient>, servicoId: number): Promise<boolean> {
+  const { data, error } = await admin.from("cursos_livres").select("id").eq("id", servicoId).maybeSingle();
+  if (error) {
+    if (isMissingRelation(error)) return false;
+    throw error;
+  }
+  return !!data?.id;
+}
+
+async function ensureUnidadesBelongToCursoLivre(
+  admin: ReturnType<typeof createClient>,
+  cursoLivreId: number,
+  unidadeExecucaoIds: number[],
+) {
+  if (!unidadeExecucaoIds.length) return { ok: true as const, missing: [] as number[] };
+
+  const { data, error } = await admin
+    .from("escola_unidades_execucao")
+    .select("unidade_execucao_id, origem_id")
+    .eq("origem_tipo", "TURMA")
+    .in("unidade_execucao_id", unidadeExecucaoIds);
+
+  if (error) return { ok: false as const, error };
+
+  const rows = (data ?? []) as Array<{ unidade_execucao_id: number; origem_id: number }>;
+  const foundIds = new Set(rows.map((r) => Number(r.unidade_execucao_id)));
+  const missingIds = unidadeExecucaoIds.filter((id) => !foundIds.has(id));
+
+  const turmaIds = rows.map((r) => Number(r.origem_id)).filter((id) => Number.isFinite(id) && id > 0);
+  if (turmaIds.length === 0) {
+    return { ok: true as const, missing: missingIds };
+  }
+
+  const { data: turmas, error: turmasErr } = await admin
+    .from("turmas")
+    .select("turma_id")
+    .eq("tipo_turma", "CURSO_LIVRE")
+    .eq("curso_livre_id", cursoLivreId)
+    .in("turma_id", turmaIds);
+
+  if (turmasErr) return { ok: false as const, error: turmasErr };
+
+  const turmasOk = new Set((turmas ?? []).map((t) => Number((t as { turma_id?: number }).turma_id)));
+  const invalidIds = rows
+    .filter((row) => !turmasOk.has(Number(row.origem_id)))
+    .map((row) => Number(row.unidade_execucao_id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  return { ok: true as const, missing: Array.from(new Set([...missingIds, ...invalidIds])) };
+}
+
 async function resolveUnidadesFromTurmas(
   admin: ReturnType<typeof createClient>,
   servicoId: number,
@@ -460,10 +511,26 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
         return badRequest("servico_tipo ou produto_tipo invalido.");
       }
 
-      const unidadesCheck = await ensureUnidadesBelongToServico(admin, servicoId, unidadeExecucaoIds);
-      if (!unidadesCheck.ok) return serverError("Falha ao validar unidades de execucao.", { error: unidadesCheck.error });
-      if (unidadesCheck.missing.length) {
-        return badRequest("Unidades de execucao nao pertencem ao servico.", { unidade_execucao_ids: unidadesCheck.missing });
+      if (servicoTipo === "CURSO_LIVRE" && (await isCursoLivreId(admin, servicoId))) {
+        const unidadesCheck = await ensureUnidadesBelongToCursoLivre(admin, servicoId, unidadeExecucaoIds);
+        if (!unidadesCheck.ok) {
+          return serverError("Falha ao validar unidades de execucao.", { error: unidadesCheck.error });
+        }
+        if (unidadesCheck.missing.length) {
+          return badRequest("Unidades de execucao nao pertencem ao curso livre.", {
+            unidade_execucao_ids: unidadesCheck.missing,
+          });
+        }
+      } else {
+        const unidadesCheck = await ensureUnidadesBelongToServico(admin, servicoId, unidadeExecucaoIds);
+        if (!unidadesCheck.ok) {
+          return serverError("Falha ao validar unidades de execucao.", { error: unidadesCheck.error });
+        }
+        if (unidadesCheck.missing.length) {
+          return badRequest("Unidades de execucao nao pertencem ao servico.", {
+            unidade_execucao_ids: unidadesCheck.missing,
+          });
+        }
       }
     }
 

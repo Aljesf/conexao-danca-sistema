@@ -69,7 +69,7 @@ export default function CursosLivresPage() {
       if (!res.ok) {
         throw new Error(json.message ?? json.error ?? "Falha ao criar curso livre.");
       }
-      window.location.href = `/academico/cursos-livres/${json.id}`;
+      window.location.href = `/escola/academico/cursos-livres/${json.id}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao criar curso livre.");
     }
@@ -136,7 +136,7 @@ export default function CursosLivresPage() {
               {items.map((c) => (
                 <Link
                   key={c.id}
-                  href={`/academico/cursos-livres/${c.id}`}
+                  href={`/escola/academico/cursos-livres/${c.id}`}
                   className="rounded-xl border p-4 transition hover:bg-slate-50"
                 >
                   <div className="flex items-start justify-between gap-3">

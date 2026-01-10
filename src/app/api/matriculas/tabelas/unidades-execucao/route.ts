@@ -62,13 +62,69 @@ export async function GET(req: Request) {
 
     const admin = getAdmin();
 
+    let servicoTipo = "";
+    let servicoContextoId = 0;
+    let isCursoLivre = false;
+
     const { data: servico, error: servicoErr } = await admin
       .from("escola_produtos_educacionais")
       .select("id,tipo,contexto_matricula_id")
       .eq("id", servicoId)
       .maybeSingle();
 
-    if (servicoErr || !servico) {
+    if (servicoErr && !isMissingRelation(servicoErr)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "server_error",
+          message: "Falha ao carregar servico.",
+          details: { error: servicoErr },
+        } satisfies ApiErr,
+        { status: 500 },
+      );
+    }
+
+    if (servico) {
+      servicoTipo = String((servico as { tipo?: string }).tipo || "").toUpperCase();
+      servicoContextoId = Number(
+        (servico as { contexto_matricula_id?: number | null }).contexto_matricula_id ?? 0,
+      );
+    } else {
+      const { data: cursoLivre, error: cursoLivreErr } = await admin
+        .from("cursos_livres")
+        .select("id")
+        .eq("id", servicoId)
+        .maybeSingle();
+
+      if (cursoLivreErr) {
+        if (isMissingRelation(cursoLivreErr)) {
+          return NextResponse.json(
+            {
+              ok: true,
+              data: [],
+              warning: "Tabela cursos_livres nao existe (migracao pendente).",
+            } satisfies ApiOk<unknown[]>,
+            { status: 200 },
+          );
+        }
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "server_error",
+            message: "Falha ao carregar curso livre.",
+            details: { error: cursoLivreErr },
+          } satisfies ApiErr,
+          { status: 500 },
+        );
+      }
+
+      if (cursoLivre) {
+        servicoTipo = "CURSO_LIVRE";
+        isCursoLivre = true;
+      }
+    }
+
+    if (!servico && !isCursoLivre) {
       return NextResponse.json(
         {
           ok: false,
@@ -79,11 +135,6 @@ export async function GET(req: Request) {
         { status: 404 },
       );
     }
-
-    const servicoTipo = String((servico as { tipo?: string }).tipo || "").toUpperCase();
-    const servicoContextoId = Number(
-      (servico as { contexto_matricula_id?: number | null }).contexto_matricula_id ?? 0,
-    );
     const deveFiltrarPorContextoNaTurma = servicoTipo === "CURSO_REGULAR" || servicoTipo === "REGULAR";
     let turmaIds: number[] | null = null;
     if (deveFiltrarPorContextoNaTurma && Number.isFinite(contextoId) && contextoId > 0) {
@@ -122,18 +173,64 @@ export async function GET(req: Request) {
       }
     }
 
-    let query = admin
-      .from("escola_unidades_execucao")
-      .select("unidade_execucao_id, denominacao, nome, origem_tipo, origem_id")
-      .eq("servico_id", servicoId)
-      .eq("ativo", true)
-      .eq("origem_tipo", "TURMA");
+    let data: unknown[] | null = null;
+    let error: PostgrestError | null = null;
+    let turmasCursoLivre: Array<{ turma_id: number; nome: string | null; ano_referencia: number | null; curso: string | null }> = [];
 
-    if (turmaIds) {
-      query = query.in("origem_id", turmaIds);
+    if (isCursoLivre) {
+      const { data: turmasData, error: turmasErr } = await admin
+        .from("turmas")
+        .select("turma_id,nome,ano_referencia,curso")
+        .eq("tipo_turma", "CURSO_LIVRE")
+        .eq("curso_livre_id", servicoId);
+
+      if (turmasErr) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "server_error",
+            message: "Falha ao listar turmas do curso livre.",
+            details: { error: turmasErr },
+          } satisfies ApiErr,
+          { status: 500 },
+        );
+      }
+
+      turmasCursoLivre = (turmasData ?? []) as Array<{
+        turma_id: number;
+        nome: string | null;
+        ano_referencia: number | null;
+        curso: string | null;
+      }>;
+      const turmaIdsCursoLivre = turmasCursoLivre
+        .map((t) => Number(t.turma_id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+
+      if (turmaIdsCursoLivre.length === 0) {
+        return NextResponse.json({ ok: true, data: [] } satisfies ApiOk<unknown[]>, { status: 200 });
+      }
+
+      ({ data, error } = await admin
+        .from("escola_unidades_execucao")
+        .select("unidade_execucao_id, denominacao, nome, origem_tipo, origem_id")
+        .eq("ativo", true)
+        .eq("origem_tipo", "TURMA")
+        .in("origem_id", turmaIdsCursoLivre)
+        .order("nome", { ascending: true }));
+    } else {
+      let query = admin
+        .from("escola_unidades_execucao")
+        .select("unidade_execucao_id, denominacao, nome, origem_tipo, origem_id")
+        .eq("servico_id", servicoId)
+        .eq("ativo", true)
+        .eq("origem_tipo", "TURMA");
+
+      if (turmaIds) {
+        query = query.in("origem_id", turmaIds);
+      }
+
+      ({ data, error } = await query.order("nome", { ascending: true }));
     }
-
-    const { data, error } = await query.order("nome", { ascending: true });
 
     if (error) {
       if (isMissingRelation(error)) {
@@ -162,7 +259,17 @@ export async function GET(req: Request) {
       .filter((id) => Number.isFinite(id) && id > 0);
 
     const turmaById = new Map<number, { nome: string | null; ano_referencia: number | null; curso: string | null }>();
-    if (origemTurmaIds.length > 0) {
+    if (isCursoLivre) {
+      turmasCursoLivre.forEach((t) => {
+        const turmaId = Number(t.turma_id);
+        if (!Number.isFinite(turmaId) || turmaId <= 0) return;
+        turmaById.set(turmaId, {
+          nome: t.nome ?? null,
+          ano_referencia: t.ano_referencia ?? null,
+          curso: t.curso ?? null,
+        });
+      });
+    } else if (origemTurmaIds.length > 0) {
       const { data: turmas, error: turmasErr } = await admin
         .from("turmas")
         .select("turma_id,nome,ano_referencia,curso")
