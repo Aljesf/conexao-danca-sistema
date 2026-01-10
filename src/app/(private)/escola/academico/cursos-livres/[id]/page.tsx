@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -42,8 +42,12 @@ export default function CursoLivreDetalhePage({ params }: { params: { id: string
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [novaTurmaNome, setNovaTurmaNome] = useState("");
-  const canCreateTurma = useMemo(() => novaTurmaNome.trim().length >= 3, [novaTurmaNome]);
+  const [modalidadeNome, setModalidadeNome] = useState("");
+  const [area, setArea] = useState("");
+  const [turno, setTurno] = useState("");
+  const [professorId, setProfessorId] = useState("");
+
+  const canCreateTurma = useMemo(() => modalidadeNome.trim().length >= 3, [modalidadeNome]);
 
   useEffect(() => {
     async function load() {
@@ -81,11 +85,20 @@ export default function CursoLivreDetalhePage({ params }: { params: { id: string
   async function onCreateModalidade() {
     if (!canCreateTurma) return;
     setError(null);
+
+    const professorIdValue = professorId ? Number(professorId) : null;
+    const payload = {
+      modalidade_nome: modalidadeNome.trim(),
+      area: area.trim() || null,
+      turno: turno || null,
+      professor_id: Number.isFinite(professorIdValue) ? professorIdValue : null,
+    };
+
     try {
       const res = await fetch(`/api/academico/cursos-livres/${cursoId}/turmas`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: novaTurmaNome }),
+        body: JSON.stringify(payload),
       });
       const json = (await res.json()) as { turma_id?: number; error?: string; message?: string };
       if (!res.ok) throw new Error(json.message ?? json.error ?? "Falha ao criar modalidade.");
@@ -135,7 +148,7 @@ export default function CursoLivreDetalhePage({ params }: { params: { id: string
             <div>
               <h1 className="text-xl font-semibold">{curso.nome}</h1>
               <p className="mt-1 text-sm text-slate-600">
-                {curso.classificacao} • {curso.status} • {faixa(curso.idade_minima, curso.idade_maxima)}
+                {curso.classificacao} - {curso.status} - {faixa(curso.idade_minima, curso.idade_maxima)}
               </p>
             </div>
             <Link className="rounded-md border px-3 py-2 text-sm" href="/escola/academico/cursos-livres">
@@ -154,15 +167,59 @@ export default function CursoLivreDetalhePage({ params }: { params: { id: string
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div className="rounded-xl border p-4">
               <div className="text-sm font-semibold">Adicionar modalidade</div>
-              <div className="mt-3 space-y-1">
-                <label className="text-sm font-medium">Nome da modalidade</label>
-                <input
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  value={novaTurmaNome}
-                  onChange={(e) => setNovaTurmaNome(e.target.value)}
-                  placeholder="Ex.: Jazz avancado"
-                />
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-sm font-medium">Modalidade</label>
+                  <input
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    value={modalidadeNome}
+                    onChange={(e) => setModalidadeNome(e.target.value)}
+                    placeholder="Ex.: Jazz avancado"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Area/Curso (opcional)</label>
+                  <input
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    value={area}
+                    onChange={(e) => setArea(e.target.value)}
+                    placeholder="Ex.: Jazz"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Turno (opcional)</label>
+                  <select
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    value={turno}
+                    onChange={(e) => setTurno(e.target.value)}
+                  >
+                    <option value="">Selecione...</option>
+                    <option value="MANHA">Manha</option>
+                    <option value="TARDE">Tarde</option>
+                    <option value="NOITE">Noite</option>
+                    <option value="INTEGRAL">Integral</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Professor ID (opcional)</label>
+                  <input
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    value={professorId}
+                    onChange={(e) => setProfessorId(e.target.value)}
+                    placeholder="Ex.: 12"
+                    inputMode="numeric"
+                  />
+                </div>
+
               </div>
+
+              <div className="mt-3 text-xs text-slate-500">
+                Datas dos encontros sao cadastradas dentro da turma.
+              </div>
+
               <div className="mt-4 flex justify-end">
                 <button
                   className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
@@ -191,11 +248,11 @@ export default function CursoLivreDetalhePage({ params }: { params: { id: string
                   <div>
                     <div className="font-semibold">{t.nome}</div>
                     <div className="text-sm text-slate-600">
-                      {t.status ?? "-"} • {t.turno ?? "-"} • {t.data_inicio ?? "-"} → {t.data_fim ?? "-"}
+                      {t.status ?? "-"} - {t.turno ?? "-"} - {t.data_inicio ?? "-"}{" -> "}{t.data_fim ?? "-"}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Link className="rounded-md border px-3 py-2 text-sm" href={`/turmas/${t.turma_id}`}>
+                    <Link className="rounded-md border px-3 py-2 text-sm" href={`/escola/academico/turmas/${t.turma_id}`}>
                       Abrir turma
                     </Link>
                     <button className="rounded-md border px-3 py-2 text-sm" onClick={() => onDesvincular(t.turma_id)}>

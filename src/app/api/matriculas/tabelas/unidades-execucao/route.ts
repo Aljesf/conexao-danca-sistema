@@ -48,6 +48,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const servicoId = Number(url.searchParams.get("servico_id") || 0);
     const contextoId = Number(url.searchParams.get("contexto_id") || 0);
+    const servicoTipoParam = String(url.searchParams.get("servico_tipo") || "").toUpperCase();
     if (!Number.isFinite(servicoId) || servicoId <= 0) {
       return NextResponse.json(
         {
@@ -65,31 +66,9 @@ export async function GET(req: Request) {
     let servicoTipo = "";
     let servicoContextoId = 0;
     let isCursoLivre = false;
+    let servicoEncontrado = false;
 
-    const { data: servico, error: servicoErr } = await admin
-      .from("escola_produtos_educacionais")
-      .select("id,tipo,contexto_matricula_id")
-      .eq("id", servicoId)
-      .maybeSingle();
-
-    if (servicoErr && !isMissingRelation(servicoErr)) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "server_error",
-          message: "Falha ao carregar servico.",
-          details: { error: servicoErr },
-        } satisfies ApiErr,
-        { status: 500 },
-      );
-    }
-
-    if (servico) {
-      servicoTipo = String((servico as { tipo?: string }).tipo || "").toUpperCase();
-      servicoContextoId = Number(
-        (servico as { contexto_matricula_id?: number | null }).contexto_matricula_id ?? 0,
-      );
-    } else {
+    if (servicoTipoParam === "CURSO_LIVRE") {
       const { data: cursoLivre, error: cursoLivreErr } = await admin
         .from("cursos_livres")
         .select("id")
@@ -121,10 +100,71 @@ export async function GET(req: Request) {
       if (cursoLivre) {
         servicoTipo = "CURSO_LIVRE";
         isCursoLivre = true;
+        servicoEncontrado = true;
+      }
+    } else {
+      const { data: servico, error: servicoErr } = await admin
+        .from("escola_produtos_educacionais")
+        .select("id,tipo,contexto_matricula_id")
+        .eq("id", servicoId)
+        .maybeSingle();
+
+      if (servicoErr && !isMissingRelation(servicoErr)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "server_error",
+            message: "Falha ao carregar servico.",
+            details: { error: servicoErr },
+          } satisfies ApiErr,
+          { status: 500 },
+        );
+      }
+
+      if (servico) {
+        servicoTipo = String((servico as { tipo?: string }).tipo || "").toUpperCase();
+        servicoContextoId = Number(
+          (servico as { contexto_matricula_id?: number | null }).contexto_matricula_id ?? 0,
+        );
+        servicoEncontrado = true;
+      } else if (!servicoTipoParam) {
+        const { data: cursoLivre, error: cursoLivreErr } = await admin
+          .from("cursos_livres")
+          .select("id")
+          .eq("id", servicoId)
+          .maybeSingle();
+
+        if (cursoLivreErr) {
+          if (isMissingRelation(cursoLivreErr)) {
+            return NextResponse.json(
+              {
+                ok: true,
+                data: [],
+                warning: "Tabela cursos_livres nao existe (migracao pendente).",
+              } satisfies ApiOk<unknown[]>,
+              { status: 200 },
+            );
+          }
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "server_error",
+              message: "Falha ao carregar curso livre.",
+              details: { error: cursoLivreErr },
+            } satisfies ApiErr,
+            { status: 500 },
+          );
+        }
+
+        if (cursoLivre) {
+          servicoTipo = "CURSO_LIVRE";
+          isCursoLivre = true;
+          servicoEncontrado = true;
+        }
       }
     }
 
-    if (!servico && !isCursoLivre) {
+    if (!servicoEncontrado) {
       return NextResponse.json(
         {
           ok: false,

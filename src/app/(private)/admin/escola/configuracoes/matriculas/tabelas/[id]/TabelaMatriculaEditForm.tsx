@@ -122,7 +122,9 @@ export default function TabelaMatriculaEditForm({
       try {
         setUnidadesErro(null);
         setUnidadesLoading(true);
-        const res = await fetch(`/api/matriculas/tabelas/unidades-execucao?servico_id=${servicoId}`);
+        const res = await fetch(
+          `/api/matriculas/tabelas/unidades-execucao?servico_id=${servicoId}&servico_tipo=${categoria}`,
+        );
         const json = (await res.json()) as { ok?: boolean; data?: UnidadeExecucaoItem[]; message?: string };
         if (!ativoFlag) return;
         if (!res.ok || !json.ok) {

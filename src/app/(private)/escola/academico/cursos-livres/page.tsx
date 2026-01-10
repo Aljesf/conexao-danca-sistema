@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -143,7 +143,7 @@ export default function CursosLivresPage() {
                     <div>
                       <div className="font-semibold">{c.nome}</div>
                       <div className="text-sm text-slate-600">
-                        {c.classificacao} • {c.status}
+                        {c.classificacao} - {c.status}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
                         {formatFaixaEtaria(c.idade_minima, c.idade_maxima)}

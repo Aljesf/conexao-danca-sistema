@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EditarTurmaDialog } from "./_components/EditarTurmaDialog";
+import { EncontrosCard } from "./_components/EncontrosCard";
 import { NovaAvaliacaoDialog } from "./_components/NovaAvaliacaoDialog";
 import { VincularProfessorDialog } from "./_components/VincularProfessorDialog";
 import { listarAvaliacoesDaTurma } from "@/lib/academico/turmaAvaliacoesServer";
@@ -253,6 +254,14 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
             {turma.observacoes}
           </p>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <header>
+          <h2 className="text-xl font-semibold text-slate-900">Encontros (datas especificas)</h2>
+          <p className="text-sm text-slate-500">Cadastre encontros por data, sem depender do horario semanal.</p>
+        </header>
+        <EncontrosCard turmaId={turmaKey} />
       </section>
 
       <section className="space-y-3">

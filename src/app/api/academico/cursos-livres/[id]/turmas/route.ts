@@ -88,21 +88,58 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 
-  const nome = typeof p.nome === "string" ? p.nome.trim() : "";
-  if (!nome) {
-    return NextResponse.json({ error: "nome_turma_obrigatorio" }, { status: 400 });
+  const { data: cursoLivre, error: cursoLivreError } = await supabase
+    .from("cursos_livres")
+    .select("id,nome,data_inicio,data_fim")
+    .eq("id", cursoLivreId)
+    .single();
+
+  if (cursoLivreError || !cursoLivre) {
+    return NextResponse.json(
+      {
+        error: "curso_livre_nao_encontrado",
+        message: cursoLivreError?.message ?? "Curso livre nao encontrado.",
+      },
+      { status: 404 },
+    );
   }
 
+  const modalidadeNome =
+    typeof p.modalidade_nome === "string"
+      ? p.modalidade_nome.trim()
+      : typeof p.nome === "string"
+        ? p.nome.trim()
+        : "";
+
+  if (!modalidadeNome) {
+    return NextResponse.json({ error: "modalidade_nome_obrigatorio" }, { status: 400 });
+  }
+
+  const area = typeof p.area === "string" ? p.area.trim() : "";
+  const turno = typeof p.turno === "string" ? p.turno.trim() : "";
+  const professorId = typeof p.professor_id === "number" ? p.professor_id : null;
+
+  const dataInicio =
+    typeof p.data_inicio === "string" && p.data_inicio.trim()
+      ? p.data_inicio
+      : cursoLivre.data_inicio ?? null;
+  const dataFim =
+    typeof p.data_fim === "string" && p.data_fim.trim() ? p.data_fim : cursoLivre.data_fim ?? null;
+
+  const nomeFinalParts = [cursoLivre.nome, modalidadeNome];
+  if (turno) nomeFinalParts.push(turno);
+  const nomeFinal = nomeFinalParts.join(" - ");
+
   const insertData = {
-    nome,
+    nome: nomeFinal,
     tipo_turma: "CURSO_LIVRE",
     curso_livre_id: cursoLivreId,
-    curso: typeof p.curso === "string" ? p.curso : null,
-    nivel: typeof p.nivel === "string" ? p.nivel : null,
-    turno: typeof p.turno === "string" ? p.turno : null,
+    curso: area || null,
+    turno: turno || null,
+    professor_id: professorId,
     status: typeof p.status === "string" ? p.status : "EM_PREPARACAO",
-    data_inicio: typeof p.data_inicio === "string" ? p.data_inicio : null,
-    data_fim: typeof p.data_fim === "string" ? p.data_fim : null,
+    data_inicio: dataInicio,
+    data_fim: dataFim,
     capacidade: typeof p.capacidade === "number" ? p.capacidade : null,
     observacoes: typeof p.observacoes === "string" ? p.observacoes : null,
   };

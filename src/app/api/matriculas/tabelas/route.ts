@@ -674,10 +674,26 @@ export async function PUT(req: Request) {
         return badRequest("servico_tipo ou produto_tipo invalido.");
       }
 
-      const unidadesCheck = await ensureUnidadesBelongToServico(admin, servicoId, unidadeExecucaoIds);
-      if (!unidadesCheck.ok) return serverError("Falha ao validar unidades de execucao.", { error: unidadesCheck.error });
-      if (unidadesCheck.missing.length) {
-        return badRequest("Unidades de execucao nao pertencem ao servico.", { unidade_execucao_ids: unidadesCheck.missing });
+      if (servicoTipo === "CURSO_LIVRE" && (await isCursoLivreId(admin, servicoId))) {
+        const unidadesCheck = await ensureUnidadesBelongToCursoLivre(admin, servicoId, unidadeExecucaoIds);
+        if (!unidadesCheck.ok) {
+          return serverError("Falha ao validar unidades de execucao.", { error: unidadesCheck.error });
+        }
+        if (unidadesCheck.missing.length) {
+          return badRequest("Unidades de execucao nao pertencem ao curso livre.", {
+            unidade_execucao_ids: unidadesCheck.missing,
+          });
+        }
+      } else {
+        const unidadesCheck = await ensureUnidadesBelongToServico(admin, servicoId, unidadeExecucaoIds);
+        if (!unidadesCheck.ok) {
+          return serverError("Falha ao validar unidades de execucao.", { error: unidadesCheck.error });
+        }
+        if (unidadesCheck.missing.length) {
+          return badRequest("Unidades de execucao nao pertencem ao servico.", {
+            unidade_execucao_ids: unidadesCheck.missing,
+          });
+        }
       }
     }
 
