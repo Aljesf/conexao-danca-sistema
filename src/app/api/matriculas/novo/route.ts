@@ -23,6 +23,7 @@ type BodyNovo = {
   responsavel_financeiro_id: number;
   tipo_matricula: TipoMatricula;
   vinculo_id: number;
+  nivel_id?: number | null;
   vinculos_ids?: number[] | null;
   itens?: MatriculaItemIn[] | null;
   ano_referencia?: number | null;
@@ -200,6 +201,12 @@ export async function POST(req: Request) {
     }
   }
 
+  const nivelIdRaw = body.nivel_id ?? null;
+  const nivelId = nivelIdRaw === null ? null : Number(nivelIdRaw);
+  if (nivelIdRaw !== null && (!Number.isInteger(nivelId) || nivelId <= 0)) {
+    return badRequest("nivel_id invalido.");
+  }
+
   if (!pessoaId || !respFinId || !tipoMatricula || !Number.isFinite(vinculoId) || vinculoId <= 0) {
     return badRequest(
       "Campos obrigatorios ausentes: pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id (ou itens/vinculos_ids).",
@@ -250,6 +257,22 @@ export async function POST(req: Request) {
   const missingIds = vinculosIds.filter((id) => !foundIds.has(id));
   if (missingIds.length > 0) {
     return badRequest("vinculo_id (turma) nao encontrado.", { missing_ids: missingIds });
+  }
+
+  const { data: turmaNiveis, error: turmaNiveisError } = await supabase
+    .from("turma_niveis")
+    .select("nivel_id")
+    .eq("turma_id", vinculoId);
+
+  if (turmaNiveisError) {
+    return serverError("Falha ao validar niveis da turma.", { turmaNiveisError, turma_id: vinculoId });
+  }
+
+  const turmaPossuiNiveis = (turmaNiveis?.length ?? 0) > 0;
+  if (turmaPossuiNiveis) {
+    if (!nivelId) return badRequest("nivel_id_obrigatorio.");
+    const nivelOk = (turmaNiveis ?? []).some((row) => Number(row.nivel_id) === nivelId);
+    if (!nivelOk) return badRequest("nivel_id_nao_pertence_a_turma.");
   }
 
   if (anoRef !== null) {
@@ -432,15 +455,22 @@ export async function POST(req: Request) {
             matricula_id: (matriculaCriada as { id: number }).id,
             dt_inicio: dtInicio,
             status: "ativo",
+            nivel_id: turmaId === vinculoId ? nivelId : null,
           });
 
         if (taInsErr) return serverError("Falha ao criar vinculo turma_aluno.", { taInsErr, turmaId });
       } else {
         const current = taExist[0];
         if (!current.matricula_id) {
+          const updatePayload: Record<string, unknown> = {
+            matricula_id: (matriculaCriada as { id: number }).id,
+          };
+          if (turmaId === vinculoId && nivelId) {
+            updatePayload.nivel_id = nivelId;
+          }
           const { error: taUpdErr } = await supabase
             .from("turma_aluno")
-            .update({ matricula_id: (matriculaCriada as { id: number }).id })
+            .update(updatePayload)
             .eq("turma_aluno_id", current.turma_aluno_id);
 
           if (taUpdErr) return serverError("Falha ao atualizar matricula_id em turma_aluno.", { taUpdErr, turmaId });

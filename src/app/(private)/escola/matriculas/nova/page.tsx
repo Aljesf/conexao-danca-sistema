@@ -200,6 +200,10 @@ export default function NovaMatriculaPage() {
   const [cursos, setCursos] = useState<CursoOpcao[]>([]);
   const [itensCarrinho, setItensCarrinho] = useState<MatriculaCarrinhoItem[]>(() => [createCarrinhoItem()]);
   const [turmasPorCurso, setTurmasPorCurso] = useState<Record<string, TurmaOpcao[]>>({});
+  const [niveisDaTurma, setNiveisDaTurma] = useState<Array<{ id: number; nome: string; ordem?: number | null }>>([]);
+  const [nivelId, setNivelId] = useState<number | null>(null);
+  const [niveisLoading, setNiveisLoading] = useState(false);
+  const [niveisLoadError, setNiveisLoadError] = useState<string | null>(null);
   const [anoReferencia, setAnoReferencia] = useState<number>(() => new Date().getFullYear());
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [dataInicioVinculo, setDataInicioVinculo] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -281,6 +285,8 @@ export default function NovaMatriculaPage() {
     (!contextoObrigatorio || Number.isFinite(contextoId ?? NaN)) &&
     itensCompletosOk &&
     principalCompleto &&
+    (niveisDaTurma.length === 0 || !!nivelId) &&
+    !niveisLoadError &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
     (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0) &&
     precoOk;
@@ -475,6 +481,39 @@ export default function NovaMatriculaPage() {
   }, [contextoObrigatorio, contextoId, periodoLetivoId, cursosSelecionados, turmasPorCurso, cursosById]);
 
   useEffect(() => {
+    let ativo = true;
+    setNiveisDaTurma([]);
+    setNivelId(null);
+    setNiveisLoadError(null);
+
+    if (!turmaPrincipalId) {
+      setNiveisLoading(false);
+      return () => {
+        ativo = false;
+      };
+    }
+
+    (async () => {
+      try {
+        setNiveisLoading(true);
+        const data = await fetchJSON<{ niveis?: Array<{ id: number; nome: string; ordem?: number | null }> }>(
+          `/api/academico/turmas/niveis?turma_id=${turmaPrincipalId}`,
+        );
+        if (!ativo) return;
+        setNiveisDaTurma(data.niveis ?? []);
+      } catch (e: unknown) {
+        if (ativo) setNiveisLoadError("Falha ao carregar niveis desta turma.");
+      } finally {
+        if (ativo) setNiveisLoading(false);
+      }
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [turmaPrincipalId]);
+
+  useEffect(() => {
     if (tipo === "REGULAR" && turmaSelecionada?.ano_referencia) {
       setAnoReferencia(turmaSelecionada.ano_referencia);
     }
@@ -625,6 +664,16 @@ export default function NovaMatriculaPage() {
       return;
     }
 
+    if (niveisDaTurma.length > 0 && !nivelId) {
+      setErro("Selecione o nivel desta matricula.");
+      return;
+    }
+
+    if (niveisLoadError) {
+      setErro(niveisLoadError);
+      return;
+    }
+
     if (tipo === "REGULAR" && !anoReferencia) {
       setErro("Ano referencia obrigatorio para turma regular.");
       return;
@@ -667,6 +716,7 @@ export default function NovaMatriculaPage() {
         responsavel_financeiro_id: responsavel.id,
         tipo_matricula: tipo,
         vinculo_id: vinculoPrincipalId,
+        nivel_id: nivelId,
         ...(vinculosIds.length > 1 ? { vinculos_ids: vinculosIds } : {}),
         itens: itensPayload,
         ...(unidadeExecucaoIds.length > 0 ? { unidade_execucao_ids: unidadeExecucaoIds } : {}),
@@ -997,6 +1047,34 @@ export default function NovaMatriculaPage() {
                   </div>
                 );
               })}
+
+              {turmaPrincipalId ? (
+                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-sm font-medium">Nivel nesta matricula</div>
+                  <div className="mt-2 space-y-1">
+                    {niveisLoading ? (
+                      <p className="text-xs text-muted-foreground">Carregando niveis...</p>
+                    ) : niveisLoadError ? (
+                      <p className="text-xs text-red-600">{niveisLoadError}</p>
+                    ) : niveisDaTurma.length > 0 ? (
+                      <select
+                        className="w-full rounded-md border px-3 py-2 text-sm"
+                        value={nivelId ?? ""}
+                        onChange={(e) => setNivelId(e.target.value ? Number(e.target.value) : null)}
+                      >
+                        <option value="">Selecione...</option>
+                        {niveisDaTurma.map((nivel) => (
+                          <option key={nivel.id} value={nivel.id}>
+                            {nivel.nome}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Esta turma nao possui niveis cadastrados.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
 
               {carregandoTurmas ? <p className="text-xs text-muted-foreground">Carregando turmas...</p> : null}
               {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}

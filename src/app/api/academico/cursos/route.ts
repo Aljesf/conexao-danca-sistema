@@ -4,9 +4,6 @@ import { getSupabaseServer } from "@/lib/supabaseServer";
 type CursoRow = {
   id: number;
   nome: string;
-  ativo: boolean | null;
-  ordem: number | null;
-  created_at?: string | null;
 };
 
 export async function GET() {
@@ -21,8 +18,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("cursos")
-    .select("id,nome,ativo,ordem,created_at")
-    .order("ordem", { ascending: true, nullsFirst: false })
+    .select("id,nome")
     .order("nome", { ascending: true });
 
   if (error) {
@@ -35,8 +31,6 @@ export async function GET() {
   const cursos = (data ?? []).map((curso: CursoRow) => ({
     id: curso.id,
     nome: curso.nome,
-    ativo: curso.ativo ?? true,
-    ordem: curso.ordem ?? null,
   }));
 
   return NextResponse.json({ cursos }, { status: 200 });
