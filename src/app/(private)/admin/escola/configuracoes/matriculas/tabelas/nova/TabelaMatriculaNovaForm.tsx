@@ -127,15 +127,19 @@ export default function TabelaMatriculaNovaForm() {
       try {
         setServicosErro(null);
         setServicosLoading(true);
-        const res = await fetch(`/api/matriculas/tabelas/servicos?tipo=${categoria}`);
-        const json = (await res.json()) as { ok?: boolean; data?: ServicoItem[]; message?: string };
+        const res = await fetch(`/api/admin/escola/tabelas-precos/servicos?servico_tipo=${categoria}`);
+        const json = (await res.json()) as {
+          servicos?: Array<{ id: number; nome: string }>;
+          error?: string;
+          details?: string;
+        };
         if (!ativoFlag) return;
-        if (!res.ok || !json.ok) {
-          throw new Error(json.message || "Falha ao carregar servicos.");
+        if (!res.ok) {
+          throw new Error(json.details ?? json.error ?? "Falha ao carregar servicos.");
         }
-        const items = (json.data ?? []).map((row) => ({
+        const items = (json.servicos ?? []).map((row) => ({
           id: Number(row.id),
-          label: String(row.label),
+          label: String(row.nome),
         }));
         setServicos(items);
         if (!items.some((s) => s.id === servicoId)) {
@@ -165,14 +169,18 @@ export default function TabelaMatriculaNovaForm() {
         setUnidadesErro(null);
         setUnidadesLoading(true);
         const res = await fetch(
-          `/api/matriculas/tabelas/unidades-execucao?servico_id=${servicoId}&servico_tipo=${categoria}`,
+          `/api/admin/escola/tabelas-precos/unidades?servico_id=${servicoId}&servico_tipo=${categoria}`,
         );
-        const json = (await res.json()) as { ok?: boolean; data?: UnidadeExecucaoItem[]; message?: string };
+        const json = (await res.json()) as {
+          unidades?: UnidadeExecucaoItem[];
+          error?: string;
+          details?: string;
+        };
         if (!ativoFlag) return;
-        if (!res.ok || !json.ok) {
-          throw new Error(json.message || "Falha ao carregar unidades de execucao.");
+        if (!res.ok) {
+          throw new Error(json.details ?? json.error ?? "Falha ao carregar unidades de execucao.");
         }
-        const items = (json.data ?? []).map((row) => ({
+        const items = (json.unidades ?? []).map((row) => ({
           id: Number(row.id),
           label: String(row.label),
         }));
