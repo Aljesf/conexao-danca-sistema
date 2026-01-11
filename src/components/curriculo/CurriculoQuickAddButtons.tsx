@@ -1,9 +1,18 @@
-"use client";
+﻿"use client";
 
 import type { ReactNode } from "react";
 import { useState } from "react";
 
 type ApiResp<T> = { ok: boolean; error?: string; data?: T };
+
+type UploadResp = {
+  bucket: string;
+  path: string;
+  public_url: string;
+  filename: string;
+  size: number;
+  mime: string;
+};
 
 function Modal({
   title,
@@ -17,26 +26,115 @@ function Modal({
   children: ReactNode;
 }) {
   if (!open) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
+      <div className="w-full max-w-3xl rounded-2xl border bg-white shadow-sm">
+        <div className="flex items-start justify-between gap-3 border-b p-6">
           <div>
             <div className="text-sm text-slate-500">CURRÍCULO</div>
-            <h3 className="text-lg font-semibold">{title}</h3>
+            <h3 className="text-xl font-semibold">{title}</h3>
           </div>
           <button className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50" onClick={onClose}>
             Fechar
           </button>
         </div>
-        <div className="mt-4">{children}</div>
+
+        <div className="p-6">{children}</div>
       </div>
     </div>
   );
 }
 
-const primaryBtn = "rounded-xl border px-3 py-2 text-sm hover:bg-slate-50";
-const ghostPurple = "rounded-full bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50";
+function UploadBox({
+  pessoaId,
+  tipo,
+  label,
+  valueUrl,
+  onUploaded,
+}: {
+  pessoaId: number;
+  tipo: "FORMACAO_EXTERNA" | "EXPERIENCIA_ARTISTICA";
+  label: string;
+  valueUrl: string;
+  onUploaded: (url: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function doUpload(file: File) {
+    setUploading(true);
+    setError(null);
+
+    try {
+      const fd = new FormData();
+      fd.append("pessoa_id", String(pessoaId));
+      fd.append("tipo", tipo);
+      fd.append("file", file);
+
+      const res = await fetch("/api/pessoas/curriculo/upload", {
+        method: "POST",
+        body: fd,
+      });
+
+      const json = (await res.json()) as ApiResp<UploadResp>;
+      if (!json.ok) throw new Error(json.error ?? "Falha ao fazer upload.");
+      onUploaded(json.data?.public_url ?? "");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erro ao fazer upload.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium text-slate-700">{label}</div>
+          <div className="text-xs text-slate-500">PDF, PNG, JPG (máx. 10MB)</div>
+        </div>
+
+        <label className="cursor-pointer rounded-full bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700">
+          {uploading ? "Enviando..." : "Enviar arquivo"}
+          <input
+            type="file"
+            className="hidden"
+            accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void doUpload(f);
+              e.currentTarget.value = "";
+            }}
+          />
+        </label>
+      </div>
+
+      {valueUrl ? (
+        <div className="mt-3 flex items-center justify-between rounded-xl border bg-slate-50 px-3 py-2 text-sm">
+          <div className="truncate pr-3">
+            <span className="font-medium">Arquivo anexado:</span> {valueUrl}
+          </div>
+          <a className="rounded-xl border px-3 py-2 text-xs hover:bg-white" href={valueUrl} target="_blank" rel="noreferrer">
+            Abrir
+          </a>
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Nenhum arquivo anexado ainda.
+        </div>
+      )}
+
+      {error ? (
+        <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const secondaryBtn = "rounded-xl border px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50";
 
 export function CurriculoQuickAddFormacaoExternaButton({
   pessoaId,
@@ -112,7 +210,10 @@ export function CurriculoQuickAddFormacaoExternaButton({
 
   return (
     <>
-      <button className={ghostPurple} onClick={() => setOpen(true)}>
+      <button
+        className="rounded-full bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+        onClick={() => setOpen(true)}
+      >
         Cadastrar formação externa
       </button>
 
@@ -176,12 +277,12 @@ export function CurriculoQuickAddFormacaoExternaButton({
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-sm font-medium">URL do certificado (PDF/PNG)</label>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="https://..."
-              value={form.certificado_url}
-              onChange={(e) => setForm((v) => ({ ...v, certificado_url: e.target.value }))}
+            <UploadBox
+              pessoaId={pessoaId}
+              tipo="FORMACAO_EXTERNA"
+              label="Certificado"
+              valueUrl={form.certificado_url}
+              onUploaded={(url) => setForm((v) => ({ ...v, certificado_url: url }))}
             />
           </div>
 
@@ -196,11 +297,11 @@ export function CurriculoQuickAddFormacaoExternaButton({
         </div>
 
         {error ? (
-          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
         ) : null}
 
-        <div className="mt-4 flex justify-end">
-          <button disabled={saving} className={primaryBtn} onClick={() => void salvar()}>
+        <div className="mt-6 flex justify-end">
+          <button disabled={saving} className={secondaryBtn} onClick={() => void salvar()}>
             {saving ? "Salvando..." : "Salvar"}
           </button>
         </div>
@@ -225,8 +326,8 @@ export function CurriculoQuickAddExperienciaArtisticaButton({
     papel: "",
     organizacao: "",
     data_evento: "",
-    descricao: "",
     comprovante_url: "",
+    descricao: "",
   });
 
   const handleSaved = () => {
@@ -250,8 +351,8 @@ export function CurriculoQuickAddExperienciaArtisticaButton({
           papel: form.papel || null,
           organizacao: form.organizacao || null,
           data_evento: form.data_evento || null,
-          descricao: form.descricao || null,
           comprovante_url: form.comprovante_url || null,
+          descricao: form.descricao || null,
         }),
       });
 
@@ -259,7 +360,7 @@ export function CurriculoQuickAddExperienciaArtisticaButton({
       if (!json.ok) throw new Error(json.error ?? "Falha ao salvar experiência artística.");
 
       setOpen(false);
-      setForm({ titulo: "", papel: "", organizacao: "", data_evento: "", descricao: "", comprovante_url: "" });
+      setForm({ titulo: "", papel: "", organizacao: "", data_evento: "", comprovante_url: "", descricao: "" });
       handleSaved();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erro ao salvar experiência artística.");
@@ -270,7 +371,10 @@ export function CurriculoQuickAddExperienciaArtisticaButton({
 
   return (
     <>
-      <button className={ghostPurple} onClick={() => setOpen(true)}>
+      <button
+        className="rounded-full bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700"
+        onClick={() => setOpen(true)}
+      >
         Cadastrar experiência artística
       </button>
 
@@ -314,12 +418,12 @@ export function CurriculoQuickAddExperienciaArtisticaButton({
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-sm font-medium">URL do comprovante (PDF/PNG)</label>
-            <input
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="https://..."
-              value={form.comprovante_url}
-              onChange={(e) => setForm((v) => ({ ...v, comprovante_url: e.target.value }))}
+            <UploadBox
+              pessoaId={pessoaId}
+              tipo="EXPERIENCIA_ARTISTICA"
+              label="Comprovante (termo/certificado/imagem)"
+              valueUrl={form.comprovante_url}
+              onUploaded={(url) => setForm((v) => ({ ...v, comprovante_url: url }))}
             />
           </div>
 
@@ -334,11 +438,11 @@ export function CurriculoQuickAddExperienciaArtisticaButton({
         </div>
 
         {error ? (
-          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
         ) : null}
 
-        <div className="mt-4 flex justify-end">
-          <button disabled={saving} className={primaryBtn} onClick={() => void salvar()}>
+        <div className="mt-6 flex justify-end">
+          <button disabled={saving} className={secondaryBtn} onClick={() => void salvar()}>
             {saving ? "Salvando..." : "Salvar"}
           </button>
         </div>
