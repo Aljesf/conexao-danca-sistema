@@ -18,17 +18,10 @@ type ServicoRow = {
 };
 
 type PrecoRow = {
+  id: number;
   servico_id: number;
   ano_referencia: number;
-  plano_id: number;
-  ativo: boolean;
-  plano: {
-    id: number;
-    codigo: string;
-    nome: string;
-    valor_mensal_base_centavos: number;
-    valor_anuidade_centavos: number;
-  } | null;
+  valor_centavos: number;
 };
 
 function sbAdmin() {
@@ -49,10 +42,11 @@ function tipoServicoPorTurma(tipoTurma: string | null): string {
   return "REGULAR";
 }
 
-export async function GET(req: Request, ctx: { params: { turmaId?: string } }) {
+export async function GET(req: Request, ctx: { params: Promise<{ turmaId: string }> }) {
   try {
     const supabase = sbAdmin();
-    const turmaId = parseId(ctx.params.turmaId);
+    const { turmaId: turmaIdRaw } = await ctx.params;
+    const turmaId = parseId(turmaIdRaw);
     if (!turmaId) {
       return NextResponse.json({ ok: false, error: "turma_id_invalido" }, { status: 400 });
     }
@@ -96,17 +90,29 @@ export async function GET(req: Request, ctx: { params: { turmaId?: string } }) {
     if (servicoIds.length > 0 && Number.isInteger(anoReferencia)) {
       const { data: precosData, error: precosErr } = await supabase
         .from("matricula_precos_servico")
-        .select(
-          "servico_id,ano_referencia,plano_id,ativo,plano:matricula_planos(id,codigo,nome,valor_mensal_base_centavos,valor_anuidade_centavos)",
-        )
+        .select("id,servico_id,ano_referencia,valor_centavos")
         .in("servico_id", servicoIds)
         .eq("ano_referencia", Number(anoReferencia))
         .eq("ativo", true);
 
       if (precosErr) {
-        return NextResponse.json({ ok: false, error: "erro_listar_precos", message: precosErr.message }, { status: 500 });
+        return NextResponse.json(
+          { ok: false, error: "falha_ao_buscar_precos", details: precosErr.message },
+          { status: 500 },
+        );
       }
-      precos = (precosData ?? []) as PrecoRow[];
+      const precosBase = (precosData ?? []) as Array<{
+        id: number;
+        servico_id: number;
+        ano_referencia: number;
+        valor_centavos: number;
+      }>;
+      precos = precosBase.map((p) => ({
+        id: p.id,
+        servico_id: p.servico_id,
+        ano_referencia: p.ano_referencia,
+        valor_centavos: p.valor_centavos,
+      }));
     }
 
     const precoByServico = new Map<number, PrecoRow>();
@@ -134,10 +140,11 @@ export async function GET(req: Request, ctx: { params: { turmaId?: string } }) {
   }
 }
 
-export async function PATCH(req: Request, ctx: { params: { turmaId?: string } }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ turmaId: string }> }) {
   try {
     const supabase = sbAdmin();
-    const turmaId = parseId(ctx.params.turmaId);
+    const { turmaId: turmaIdRaw } = await ctx.params;
+    const turmaId = parseId(turmaIdRaw);
     if (!turmaId) {
       return NextResponse.json({ ok: false, error: "turma_id_invalido" }, { status: 400 });
     }
