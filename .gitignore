@@ -8,3 +8,10 @@ dist/
 .turbo/
 .vscode/
 dev-servicos*.log
+
+# Temporarios locais
+/tmp-encoding-test.txt
+*.tmp
+*.temp
+.tmp/
+tmp/
