@@ -1,7 +1,14 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import * as React from "react";
+import Link from "next/link";
+import { FinancePageShell } from "@/components/financeiro/FinancePageShell";
 import { PessoaAutocomplete } from "@/components/pessoas/PessoaAutocomplete";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+type ContaTipo = "ALUNO" | "COLABORADOR";
 
 type PessoaTitular = {
   id: number;
@@ -9,16 +16,13 @@ type PessoaTitular = {
   cpf: string | null;
 };
 
-type ContaConexao = {
-  id?: number;
+type ContaConexaoRow = {
+  id: number;
   pessoa_titular_id: number;
-  tipo_conta: "ALUNO" | "COLABORADOR";
+  tipo_conta: ContaTipo;
   descricao_exibicao?: string | null;
-  dia_fechamento: number;
+  dia_fechamento: number | null;
   dia_vencimento?: number | null;
-  centro_custo_principal_id?: number | null;
-  conta_financeira_origem_id?: number | null;
-  conta_financeira_destino_id?: number | null;
   limite_maximo_centavos?: number | null;
   limite_autorizado_centavos?: number | null;
   ativo: boolean;
@@ -26,112 +30,96 @@ type ContaConexao = {
   titular?: PessoaTitular | null;
 };
 
-export default function ContasCreditoConexaoPage() {
-  const [contas, setContas] = useState<ContaConexao[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const [editandoId, setEditandoId] = useState<number | null>(null);
-
-  const [form, setForm] = useState<ContaConexao>({
-    pessoa_titular_id: 0,
-    tipo_conta: "ALUNO",
-    descricao_exibicao: "",
-    dia_fechamento: 10,
-    dia_vencimento: 15,
-    centro_custo_principal_id: undefined,
-    conta_financeira_origem_id: undefined,
-    conta_financeira_destino_id: undefined,
-    limite_maximo_centavos: null,
-    limite_autorizado_centavos: null,
-    ativo: true,
+function formatDatePtBr(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("pt-BR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
+}
 
-  async function carregarContas() {
+function formatCpf(cpf: string | null | undefined): string | null {
+  if (!cpf) return null;
+  const digits = cpf.replace(/\D/g, "");
+  if (digits.length !== 11) return cpf;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+}
+
+function formatMoneyFromCentavos(v: number | null | undefined): string {
+  if (v === null || v === undefined) return "-";
+  return (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function toCentavos(value: string): number | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/\./g, "").replace(",", ".");
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100);
+}
+
+export default function CreditoConexaoContasPage(): React.JSX.Element {
+  const [contas, setContas] = React.useState<ContaConexaoRow[]>([]);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [saving, setSaving] = React.useState<boolean>(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const [pessoaTitularId, setPessoaTitularId] = React.useState<number | null>(null);
+  const [tipoConta, setTipoConta] = React.useState<ContaTipo>("ALUNO");
+  const [descricao, setDescricao] = React.useState<string>("");
+  const [diaFechamento, setDiaFechamento] = React.useState<number>(10);
+  const [diaVencimento, setDiaVencimento] = React.useState<number>(15);
+  const [limiteMax, setLimiteMax] = React.useState<string>("");
+  const [limiteAut, setLimiteAut] = React.useState<string>("");
+  const [ativa, setAtiva] = React.useState<boolean>(true);
+
+  const loadContas = React.useCallback(async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setErro(null);
-      const res = await fetch("/api/financeiro/credito-conexao/contas");
-      if (!res.ok) {
-        throw new Error(await res.text());
+      const res = await fetch("/api/financeiro/credito-conexao/contas", { method: "GET" });
+      const json = (await res.json()) as { ok?: boolean; contas?: ContaConexaoRow[]; error?: string };
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error ?? "Erro ao carregar contas.");
       }
-      const json = await res.json();
-      setContas(json.contas ?? []);
-    } catch (e: unknown) {
-      console.error("Erro ao carregar contas de Crédito Conexão", e);
-      setErro("Erro ao carregar contas de Crédito Conexão.");
+      setContas(Array.isArray(json.contas) ? json.contas : []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro inesperado ao carregar contas.");
     } finally {
       setLoading(false);
     }
-  }
-
-  useEffect(() => {
-    carregarContas();
   }, []);
 
-  function resetForm() {
-    setForm({
-      pessoa_titular_id: 0,
-      tipo_conta: "ALUNO",
-      descricao_exibicao: "",
-      dia_fechamento: 10,
-      dia_vencimento: 15,
-      centro_custo_principal_id: undefined,
-      conta_financeira_origem_id: undefined,
-      conta_financeira_destino_id: undefined,
-      limite_maximo_centavos: null,
-      limite_autorizado_centavos: null,
-      ativo: true,
-    });
-    setEditandoId(null);
-  }
+  React.useEffect(() => {
+    void loadContas();
+  }, [loadContas]);
 
-  function editarConta(conta: ContaConexao) {
-    setEditandoId(conta.id ?? null);
-    setForm({
-      id: conta.id,
-      pessoa_titular_id: conta.pessoa_titular_id,
-      tipo_conta: conta.tipo_conta,
-      descricao_exibicao: conta.descricao_exibicao ?? "",
-      dia_fechamento: conta.dia_fechamento,
-      dia_vencimento: conta.dia_vencimento ?? undefined,
-      centro_custo_principal_id: conta.centro_custo_principal_id ?? undefined,
-      conta_financeira_origem_id: conta.conta_financeira_origem_id ?? undefined,
-      conta_financeira_destino_id: conta.conta_financeira_destino_id ?? undefined,
-      limite_maximo_centavos: conta.limite_maximo_centavos ?? null,
-      limite_autorizado_centavos: conta.limite_autorizado_centavos ?? null,
-      ativo: conta.ativo,
-    });
-  }
-
-  async function salvarConta(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
+    if (!pessoaTitularId) {
+      setError("Selecione a pessoa titular.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
     try {
-      setSaving(true);
-      setErro(null);
-
-      if (!form.pessoa_titular_id || form.pessoa_titular_id <= 0) {
-        setErro("Informe o ID da pessoa titular.");
-        return;
-      }
-
       const payload = {
-        id: editandoId ?? undefined,
-        pessoa_titular_id: Number(form.pessoa_titular_id),
-        tipo_conta: form.tipo_conta,
-        descricao_exibicao: form.descricao_exibicao?.trim() || null,
-        dia_fechamento: form.dia_fechamento,
-        dia_vencimento: form.dia_vencimento ?? null,
-        centro_custo_principal_id: form.centro_custo_principal_id ?? null,
-        conta_financeira_origem_id: form.conta_financeira_origem_id ?? null,
-        conta_financeira_destino_id: form.conta_financeira_destino_id ?? null,
-        limite_maximo_centavos:
-          form.limite_maximo_centavos != null ? Number(form.limite_maximo_centavos) : null,
-        limite_autorizado_centavos:
-          form.limite_autorizado_centavos != null
-            ? Number(form.limite_autorizado_centavos)
-            : null,
-        ativo: form.ativo,
+        pessoa_titular_id: pessoaTitularId,
+        tipo_conta: tipoConta,
+        descricao_exibicao: descricao.trim() ? descricao.trim() : null,
+        dia_fechamento: diaFechamento,
+        dia_vencimento: tipoConta === "ALUNO" ? diaVencimento : null,
+        limite_maximo_centavos: toCentavos(limiteMax),
+        limite_autorizado_centavos: toCentavos(limiteAut),
+        ativo: ativa,
       };
 
       const res = await fetch("/api/financeiro/credito-conexao/contas", {
@@ -141,346 +129,244 @@ export default function ContasCreditoConexaoPage() {
       });
 
       if (!res.ok) {
-        console.error("Erro ao salvar conta Crédito Conexão", await res.text());
-        setErro("Erro ao salvar conta de Crédito Conexão.");
-        return;
+        const txt = await res.text();
+        throw new Error(txt || "Erro ao salvar conta.");
       }
 
-      await carregarContas();
-      resetForm();
-    } catch (e: unknown) {
-      console.error("Erro ao salvar conta Crédito Conexão", e);
-      setErro("Erro ao salvar conta de Crédito Conexão.");
+      setPessoaTitularId(null);
+      setTipoConta("ALUNO");
+      setDescricao("");
+      setDiaFechamento(10);
+      setDiaVencimento(15);
+      setLimiteMax("");
+      setLimiteAut("");
+      setAtiva(true);
+
+      await loadContas();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao salvar conta.");
     } finally {
       setSaving(false);
     }
   }
 
-  function formatCurrency(centavos?: number | null) {
-    if (centavos == null) return "-";
-    return (centavos / 100).toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
-  }
-
-  function formatDatePtBr(iso?: string | null) {
-    if (!iso) return "-";
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString("pt-BR", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  function formatCpf(cpf?: string | null) {
-    if (!cpf) return null;
-    const digits = cpf.replace(/\D/g, "");
-    if (digits.length !== 11) return cpf;
-    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
-  }
-
-  const pessoaTitularId = form.pessoa_titular_id > 0 ? form.pessoa_titular_id : null;
-
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Crédito Conexão — Contas</h1>
-        <p className="text-sm text-gray-600">
-          Cadastre aqui as contas de Cartão Conexão Aluno/Colaborador. Cada conta representa um
-          titular (responsável ou colaborador) com limites e datas de fatura.
-        </p>
-      </div>
-
-      {erro && <div className="text-sm text-red-600">{erro}</div>}
-
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-6">
-        {/* Lista de contas */}
-        <div className="border rounded-xl bg-white shadow-sm">
-          <div className="px-4 py-3 border-b">
-            <h2 className="text-sm font-semibold">Contas cadastradas</h2>
-          </div>
-          {loading ? (
-            <div className="p-4 text-sm text-gray-600">Carregando...</div>
-          ) : contas.length === 0 ? (
-            <div className="p-4 text-sm text-gray-600">Nenhuma conta cadastrada.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50">
-  <tr>
-    <th className="px-3 py-2 text-left">ID</th>
-    <th className="px-3 py-2 text-left">Titular</th>
-    <th className="px-3 py-2 text-left">Tipo</th>
-    <th className="px-3 py-2 text-left">Fechamento</th>
-    <th className="px-3 py-2 text-left">Vencimento</th>
-    <th className="px-3 py-2 text-left">Limite max.</th>
-    <th className="px-3 py-2 text-left">Limite aut.</th>
-    <th className="px-3 py-2 text-left">Criada em</th>
-    <th className="px-3 py-2 text-left">Status</th>
-    <th className="px-3 py-2 text-center">Acoes</th>
-  </tr>
-</thead>
-                <tbody>
-  {contas.map((c) => {
-    const nomeTitular = c.titular?.nome?.trim() || "(Sem nome)";
-    const cpfFmt = formatCpf(c.titular?.cpf ?? null);
-
-    return (
-      <tr key={c.id} className="border-t">
-        <td className="px-3 py-2">{c.id}</td>
-        <td className="px-3 py-2">
-          <div className="flex flex-col">
-            <span className="font-medium">{nomeTitular}</span>
-            <span className="text-xs text-gray-500">
-              Pessoa ID: {c.pessoa_titular_id}
-              {cpfFmt ? ` - CPF: ${cpfFmt}` : ""}
-            </span>
-          </div>
-        </td>
-        <td className="px-3 py-2">{c.tipo_conta}</td>
-        <td className="px-3 py-2">dia {c.dia_fechamento}</td>
-        <td className="px-3 py-2">
-          {c.dia_vencimento ? `dia ${c.dia_vencimento}` : "-"}
-        </td>
-        <td className="px-3 py-2">
-          {formatCurrency(c.limite_maximo_centavos ?? null)}
-        </td>
-        <td className="px-3 py-2">
-          {formatCurrency(c.limite_autorizado_centavos ?? null)}
-        </td>
-        <td className="px-3 py-2">{formatDatePtBr(c.created_at ?? null)}</td>
-        <td className="px-3 py-2">
-          <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-              c.ativo
-                ? "bg-emerald-50 text-emerald-700"
-                : "bg-gray-100 text-gray-600"
-            }`}
-          >
-            {c.ativo ? "Ativa" : "Inativa"}
-          </span>
-        </td>
-        <td className="px-3 py-2 text-center">
-          <button
-            type="button"
-            className="text-xs px-3 py-1 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
-            onClick={() => editarConta(c)}
-          >
-            Editar
-          </button>
-        </td>
-      </tr>
-    );
-  })}
-</tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Formulário */}
-        <div className="border rounded-xl bg-white shadow-sm p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">
-              {editandoId ? `Editar conta #${editandoId}` : "Nova conta de Crédito Conexão"}
-            </h2>
-            {editandoId && (
-              <button
-                type="button"
-                className="text-xs text-gray-500 hover:text-gray-700"
-                onClick={resetForm}
-              >
-                Limpar / Nova
-              </button>
-            )}
-          </div>
-
-          <form className="space-y-3" onSubmit={salvarConta}>
+    <FinancePageShell
+      title="Cr\u00e9dito Conex\u00e3o - Contas"
+      subtitle="Cadastre e gerencie contas do Cart\u00e3o Conex\u00e3o (Aluno/Colaborador). Contas s\u00e3o criadas na matr\u00edcula ou manualmente."
+      actions={
+        <>
+          <Button type="button" variant="secondary" onClick={() => void loadContas()} disabled={loading}>
+            Atualizar
+          </Button>
+          <Link href="/admin/pessoas" className="text-sm font-medium text-purple-700 hover:underline">
+            Pessoas
+          </Link>
+        </>
+      }
+    >
+      <Card className="border-slate-200 bg-white shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700">
-                Pessoa titular *
-              </label>
-              <div className="mt-1">
-                <PessoaAutocomplete
-                  valuePessoaId={pessoaTitularId}
-                  onChangePessoaId={(id) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      pessoa_titular_id: id ?? 0,
-                    }))
-                  }
-                  createHref="/admin/pessoas/nova"
-                />
-              </div>
-              <p className="mt-1 text-[11px] text-gray-500">
-                Busque pelo nome ou CPF. Se nao existir, crie a pessoa antes de cadastrar a conta.
+              <CardTitle className="text-base text-slate-800">Contas cadastradas</CardTitle>
+              <p className="text-sm text-slate-600">
+                {loading ? "Carregando..." : `${contas.length} conta(s)`}
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {error ? (
+            <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="overflow-x-auto rounded-md border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">ID</th>
+                  <th className="px-3 py-2 text-left">Titular</th>
+                  <th className="px-3 py-2 text-left">Tipo</th>
+                  <th className="px-3 py-2 text-left">Fechamento</th>
+                  <th className="px-3 py-2 text-left">Vencimento</th>
+                  <th className="px-3 py-2 text-left">Limite m\u00e1x.</th>
+                  <th className="px-3 py-2 text-left">Limite aut.</th>
+                  <th className="px-3 py-2 text-left">Criada em</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-right">A\u00e7\u00f5es</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                      Carregando...
+                    </td>
+                  </tr>
+                ) : contas.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                      Nenhuma conta encontrada.
+                    </td>
+                  </tr>
+                ) : (
+                  contas.map((c) => {
+                    const nome = c.titular?.nome?.trim() || "(Sem nome)";
+                    const cpfFmt = formatCpf(c.titular?.cpf ?? null);
+
+                    return (
+                      <tr key={c.id} className="border-t">
+                        <td className="px-3 py-2 font-medium">{c.id}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-800">{nome}</span>
+                            <span className="text-xs text-slate-500">
+                              Pessoa ID: {c.pessoa_titular_id}
+                              {cpfFmt ? ` \u2022 CPF: ${cpfFmt}` : ""}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">{c.tipo_conta}</td>
+                        <td className="px-3 py-2">
+                          {c.dia_fechamento ? `dia ${c.dia_fechamento}` : "-"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {c.dia_vencimento ? `dia ${c.dia_vencimento}` : "-"}
+                        </td>
+                        <td className="px-3 py-2">{formatMoneyFromCentavos(c.limite_maximo_centavos)}</td>
+                        <td className="px-3 py-2">
+                          {formatMoneyFromCentavos(c.limite_autorizado_centavos)}
+                        </td>
+                        <td className="px-3 py-2">{formatDatePtBr(c.created_at)}</td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              c.ativo
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {c.ativo ? "Ativa" : "Inativa"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Link
+                            className="text-sm font-medium text-purple-700 hover:underline"
+                            href={`/admin/financeiro/credito-conexao/contas/${c.id}`}
+                          >
+                            Editar
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-slate-800">Nova conta de Cr\u00e9dito Conex\u00e3o</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={(e) => void onSubmit(e)} className="grid gap-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-slate-700">Pessoa titular</label>
+              <PessoaAutocomplete
+                valuePessoaId={pessoaTitularId}
+                onChangePessoaId={setPessoaTitularId}
+                createHref="/admin/pessoas/nova"
+              />
+              <p className="text-xs text-slate-500">
+                Busque pelo nome ou CPF. Se n\u00e3o existir, crie a pessoa antes de cadastrar a conta.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700">Tipo de conta *</label>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Tipo de conta</label>
                 <select
-                  className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
-                  value={form.tipo_conta}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      tipo_conta: e.target.value as "ALUNO" | "COLABORADOR",
-                    }))
-                  }
+                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  value={tipoConta}
+                  onChange={(e) => setTipoConta(e.target.value as ContaTipo)}
                 >
-                  <option value="ALUNO">Cartão Conexão Aluno</option>
-                  <option value="COLABORADOR">Cartão Conexão Colaborador</option>
+                  <option value="ALUNO">Cart\u00e3o Conex\u00e3o Aluno</option>
+                  <option value="COLABORADOR">Cart\u00e3o Conex\u00e3o Colaborador</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700">
-                  Descrição exibida (opcional)
-                </label>
-                <input
-                  className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
-                  value={form.descricao_exibicao ?? ""}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      descricao_exibicao: e.target.value,
-                    }))
-                  }
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Descri\u00e7\u00e3o exibida (opcional)</label>
+                <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Dia de fechamento</label>
+                <Input
+                  inputMode="numeric"
+                  value={String(diaFechamento)}
+                  onChange={(e) => setDiaFechamento(Number(e.target.value || "0"))}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Dia de vencimento (Aluno)</label>
+                <Input
+                  inputMode="numeric"
+                  value={String(diaVencimento)}
+                  onChange={(e) => setDiaVencimento(Number(e.target.value || "0"))}
+                  disabled={tipoConta !== "ALUNO"}
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700">
-                  Dia de fechamento *
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
-                  value={form.dia_fechamento}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      dia_fechamento: Number(e.target.value || 1),
-                    }))
-                  }
-                />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Limite m\u00e1ximo (R$)</label>
+                <Input value={limiteMax} onChange={(e) => setLimiteMax(e.target.value)} placeholder="Ex.: 500,00" />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700">
-                  Dia de vencimento (Aluno)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
-                  value={form.dia_vencimento ?? ""}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      dia_vencimento: e.target.value
-                        ? Number(e.target.value)
-                        : undefined,
-                    }))
-                  }
-                />
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Limite autorizado (R$)</label>
+                <Input value={limiteAut} onChange={(e) => setLimiteAut(e.target.value)} placeholder="Ex.: 500,00" />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700">
-                  Limite máximo (R$)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
-                  value={
-                    form.limite_maximo_centavos != null
-                      ? form.limite_maximo_centavos / 100
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      limite_maximo_centavos: e.target.value
-                        ? Math.round(Number(e.target.value) * 100)
-                        : null,
-                    }))
-                  }
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700">
-                  Limite autorizado (R$)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
-                  value={
-                    form.limite_autorizado_centavos != null
-                      ? form.limite_autorizado_centavos / 100
-                      : ""
-                  }
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      limite_autorizado_centavos: e.target.value
-                        ? Math.round(Number(e.target.value) * 100)
-                        : null,
-                    }))
-                  }
-                />
-              </div>
-            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={ativa} onChange={(e) => setAtiva(e.target.checked)} />
+              Conta ativa
+            </label>
 
-            <div className="flex items-center gap-2">
-              <input
-                id="conta-ativa"
-                type="checkbox"
-                className="h-4 w-4"
-                checked={form.ativo}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    ativo: e.target.checked,
-                  }))
-                }
-              />
-              <label htmlFor="conta-ativa" className="text-xs text-gray-700">
-                Conta ativa
-              </label>
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex items-center rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
+            <div className="flex gap-2">
+              <Button type="submit" disabled={saving}>
                 {saving ? "Salvando..." : "Salvar conta"}
-              </button>
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={saving}
+                onClick={() => {
+                  setPessoaTitularId(null);
+                  setDescricao("");
+                  setLimiteMax("");
+                  setLimiteAut("");
+                  setAtiva(true);
+                }}
+              >
+                Limpar
+              </Button>
             </div>
           </form>
-        </div>
-      </div>
-    </div>
+        </CardContent>
+      </Card>
+    </FinancePageShell>
   );
 }
-
-
-
-
-

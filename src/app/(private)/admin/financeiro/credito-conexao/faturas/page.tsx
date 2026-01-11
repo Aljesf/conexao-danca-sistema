@@ -2,7 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { FinancePageShell } from "@/components/financeiro/FinancePageShell";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type ApiConta = {
   id: number;
@@ -48,7 +51,7 @@ function monthLabel(periodo: string): string {
   const months = [
     "janeiro",
     "fevereiro",
-    "marÃ§o",
+    "mar\u00e7o",
     "abril",
     "maio",
     "junho",
@@ -86,17 +89,24 @@ export default function AdminCreditoConexaoFaturasPage() {
   const [error, setError] = useState<string | null>(null);
   const [contas, setContas] = useState<ApiConta[]>([]);
   const [rows, setRows] = useState<ApiRow[]>([]);
+  const queryRef = React.useRef(q);
 
   const periodoHuman = useMemo(() => monthLabel(periodo), [periodo]);
 
-  async function carregar() {
+  useEffect(() => {
+    queryRef.current = q;
+  }, [q]);
+
+  const carregar = React.useCallback(async (overrideQ?: string) => {
+    const searchValue =
+      typeof overrideQ === "string" ? overrideQ : queryRef.current;
     setLoading(true);
     setError(null);
 
     try {
       const sp = new URLSearchParams();
       sp.set("periodo", periodo);
-      if (q.trim()) sp.set("q", q.trim());
+      if (searchValue.trim()) sp.set("q", searchValue.trim());
       if (contaId.trim()) sp.set("conta_id", contaId.trim());
 
       const res = await fetch(`/api/credito-conexao/faturas?${sp.toString()}`, {
@@ -107,7 +117,7 @@ export default function AdminCreditoConexaoFaturasPage() {
       const data = (await res.json()) as ApiResp;
 
       if (!data.ok) {
-        setError(data.error ?? "Erro ao carregar faturas do CartÃ£o ConexÃ£o.");
+        setError(data.error ?? "Erro ao carregar faturas do Cart\u00e3o Conex\u00e3o.");
         setContas([]);
         setRows([]);
         return;
@@ -116,223 +126,194 @@ export default function AdminCreditoConexaoFaturasPage() {
       setContas(data.contas ?? []);
       setRows(data.rows ?? []);
     } catch {
-      setError("Erro ao carregar faturas do CartÃ£o ConexÃ£o.");
+      setError("Erro ao carregar faturas do Cart\u00e3o Conex\u00e3o.");
       setContas([]);
       setRows([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, [periodo, contaId]);
 
   useEffect(() => {
     void carregar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodo, contaId]);
+  }, [carregar]);
 
   function onBuscar() {
-    void carregar();
+    void carregar(q);
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>CrÃ©dito ConexÃ£o â€” Faturas</h1>
-      <p style={{ marginTop: 6, color: "#555" }}>
-        Visualize as faturas geradas do CartÃ£o ConexÃ£o (Aluno/Colaborador), com valores de compras, taxas e total consolidado.
-      </p>
-
-      {error ? (
-        <div style={{ marginTop: 12, color: "#b00020", fontWeight: 600 }}>
-          {error}
-        </div>
-      ) : null}
-
-      <div
-        style={{
-          marginTop: 16,
-          border: "1px solid #ddd",
-          borderRadius: 8,
-          padding: 12,
-          display: "flex",
-          gap: 10,
-          alignItems: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <button
-          type="button"
-          onClick={carregar}
-          disabled={loading}
-          style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
-        >
+    <FinancePageShell
+      title="Cr\u00e9dito Conex\u00e3o - Faturas"
+      subtitle="Visualize as faturas do Cart\u00e3o Conex\u00e3o (Aluno/Colaborador), com valores de compras, taxas e total consolidado."
+      actions={
+        <Button type="button" variant="secondary" onClick={carregar} disabled={loading}>
           Atualizar
-        </button>
+        </Button>
+      }
+    >
+      <Card className="border-slate-200 bg-white shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-slate-800">Filtros</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {error ? (
+            <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
 
-        <button
-          type="button"
-          onClick={() => setPeriodo(addMonths(periodo, -1))}
-          disabled={loading}
-          style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
-        >
-          mÃªs anterior
-        </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="secondary" onClick={() => setPeriodo(addMonths(periodo, -1))} disabled={loading}>
+              m\u00eas anterior
+            </Button>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: "#333" }}>{periodoHuman}</span>
-          <select
-            value={periodo}
-            onChange={(e) => setPeriodo(e.target.value)}
-            disabled={loading}
-            style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
-          >
-            {Array.from({ length: 25 }).map((_, i) => {
-              const p = addMonths(currentPeriodo(), i - 12);
-              return (
-                <option key={p} value={p}>
-                  {monthLabel(p)}
-                </option>
-              );
-            })}
-          </select>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setPeriodo(addMonths(periodo, 1))}
-          disabled={loading}
-          style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
-        >
-          mÃªs seguinte
-        </button>
-
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <select
-            value={contaId}
-            onChange={(e) => setContaId(e.target.value)}
-            disabled={loading}
-            style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6, minWidth: 220 }}
-          >
-            <option value="">Todas as contas</option>
-            {contas.map((c) => {
-              const label =
-                (c.descricao_exibicao?.trim() ? c.descricao_exibicao.trim() : `CartÃ£o ConexÃ£o ${c.tipo_conta}`) +
-                ` â€” ${c.pessoa_nome}`;
-              return (
-                <option key={c.id} value={String(c.id)}>
-                  {label}
-                </option>
-              );
-            })}
-          </select>
-
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por pessoa (nome/CPF)"
-            disabled={loading}
-            style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6, minWidth: 240 }}
-          />
-
-          <button
-            type="button"
-            onClick={onBuscar}
-            disabled={loading}
-            style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
-          >
-            Buscar
-          </button>
-        </div>
-      </div>
-
-      <div style={{ marginTop: 14, border: "1px solid #ddd", borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: "#fafafa" }}>
-                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>ID</th>
-                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Conta</th>
-                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>PerÃ­odo</th>
-                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Fechamento</th>
-                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Vencimento</th>
-                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Compras</th>
-                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Taxas</th>
-                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Total</th>
-                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Status</th>
-                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>AÃ§Ãµes</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={10} style={{ padding: 12 }}>
-                    Carregando...
-                  </td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={10} style={{ padding: 12 }}>
-                    Nenhuma fatura para este filtro.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => {
-                  const contaLinha = (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                      <div style={{ fontWeight: 700 }}>{r.titulo_conta}</div>
-                      <div style={{ color: "#555" }}>
-                        {r.pessoa_nome}
-                        {r.pessoa_cpf ? ` â€” CPF ${r.pessoa_cpf}` : ""}
-                      </div>
-                    </div>
-                  );
-
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-600">{periodoHuman}</span>
+              <select
+                value={periodo}
+                onChange={(e) => setPeriodo(e.target.value)}
+                disabled={loading}
+                className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              >
+                {Array.from({ length: 25 }).map((_, i) => {
+                  const p = addMonths(currentPeriodo(), i - 12);
                   return (
-                    <tr key={r.id}>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>
-                        <Link href={`/admin/financeiro/credito-conexao/faturas/${r.id}`}>{r.id}</Link>
-                      </td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{contaLinha}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.periodo_referencia}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.data_fechamento}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.data_vencimento ?? "â€”"}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
-                        {formatBRLFromCentavos(r.compras_centavos)}
-                      </td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
-                        {formatBRLFromCentavos(r.taxas_centavos)}
-                      </td>
-                      <td
-                        style={{
-                          padding: 10,
-                          borderBottom: "1px solid #eee",
-                          textAlign: "right",
-                          cursor: r.composicao_resumo ? "help" : "default",
-                        }}
-                        title={r.composicao_resumo?.trim() || undefined}
-                      >
-                        {formatBRLFromCentavos(r.total_centavos)}
-                      </td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.status}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
-                        <Link href={`/admin/financeiro/credito-conexao/faturas/${r.id}`}>
-                          <Button variant="secondary" size="sm">
-                            Ver fatura
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
+                    <option key={p} value={p}>
+                      {monthLabel(p)}
+                    </option>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                })}
+              </select>
+            </div>
 
-      <div style={{ marginTop: 12, color: "#666", fontSize: 12 }}>
-        Observacao: a lista exibe apenas faturas existentes. Faturas sao criadas somente quando ha lancamentos.
+            <Button type="button" variant="secondary" onClick={() => setPeriodo(addMonths(periodo, 1))} disabled={loading}>
+              m\u00eas seguinte
+            </Button>
+
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <select
+                value={contaId}
+                onChange={(e) => setContaId(e.target.value)}
+                disabled={loading}
+                className="h-10 min-w-[220px] rounded-md border border-slate-200 bg-white px-3 text-sm"
+              >
+                <option value="">Todas as contas</option>
+                {contas.map((c) => {
+                  const label =
+                    (c.descricao_exibicao?.trim()
+                      ? c.descricao_exibicao.trim()
+                      : `Cart\u00e3o Conex\u00e3o ${c.tipo_conta}`) + ` - ${c.pessoa_nome}`;
+                  return (
+                    <option key={c.id} value={String(c.id)}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar por pessoa (nome/CPF)"
+                disabled={loading}
+              />
+
+              <Button type="button" variant="secondary" onClick={onBuscar} disabled={loading}>
+                Buscar
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-base text-slate-800">Faturas</CardTitle>
+            {loading ? <span className="text-xs text-slate-500">Carregando...</span> : null}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto rounded-md border border-slate-200">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">ID</th>
+                  <th className="px-3 py-2 text-left">Conta</th>
+                  <th className="px-3 py-2 text-left">Per\u00edodo</th>
+                  <th className="px-3 py-2 text-left">Fechamento</th>
+                  <th className="px-3 py-2 text-left">Vencimento</th>
+                  <th className="px-3 py-2 text-right">Compras</th>
+                  <th className="px-3 py-2 text-right">Taxas</th>
+                  <th className="px-3 py-2 text-right">Total</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-right">A\u00e7\u00f5es</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                      Carregando...
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                      Nenhuma fatura para este filtro.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r) => {
+                    const contaLinha = (
+                      <div className="flex flex-col gap-1">
+                        <div className="font-semibold text-slate-800">{r.titulo_conta}</div>
+                        <div className="text-xs text-slate-500">
+                          {r.pessoa_nome}
+                          {r.pessoa_cpf ? ` - CPF ${r.pessoa_cpf}` : ""}
+                        </div>
+                      </div>
+                    );
+
+                    return (
+                      <tr key={r.id} className="border-t">
+                        <td className="px-3 py-2">
+                          <Link href={`/admin/financeiro/credito-conexao/faturas/${r.id}`} className="text-purple-700 hover:underline">
+                            {r.id}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-2">{contaLinha}</td>
+                        <td className="px-3 py-2">{r.periodo_referencia}</td>
+                        <td className="px-3 py-2">{r.data_fechamento}</td>
+                        <td className="px-3 py-2">{r.data_vencimento ?? "-"}</td>
+                        <td className="px-3 py-2 text-right">{formatBRLFromCentavos(r.compras_centavos)}</td>
+                        <td className="px-3 py-2 text-right">{formatBRLFromCentavos(r.taxas_centavos)}</td>
+                        <td
+                          className="px-3 py-2 text-right"
+                          title={r.composicao_resumo?.trim() || undefined}
+                        >
+                          {formatBRLFromCentavos(r.total_centavos)}
+                        </td>
+                        <td className="px-3 py-2">{r.status}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Link href={`/admin/financeiro/credito-conexao/faturas/${r.id}`}>
+                            <Button variant="secondary">Ver fatura</Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="text-xs text-slate-500">
+        Observa\u00e7\u00e3o: a lista exibe apenas faturas existentes. Faturas s\u00e3o criadas somente quando h\u00e1 lan\u00e7amentos.
       </div>
-    </div>
+    </FinancePageShell>
   );
 }
-
