@@ -15,3 +15,9 @@ dev-servicos*.log
 *.temp
 .tmp/
 tmp/
+# Arquivos temporarios locais
+/tmp-encoding-test.txt
+*.tmp
+*.temp
+.tmp/
+tmp/
