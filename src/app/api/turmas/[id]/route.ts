@@ -238,9 +238,25 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
       delete turmaPayload[key];
     }
   }
-  for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by", "local_id"]) {
+  for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by"]) {
     if (key in turmaPayload) {
       delete turmaPayload[key];
+    }
+  }
+
+  if ("local_id" in turmaPayload) {
+    const rawLocal = turmaPayload.local_id;
+    if (rawLocal === null || rawLocal === undefined || rawLocal === "") {
+      turmaPayload.local_id = null;
+    } else {
+      const localId = Number(rawLocal);
+      if (!Number.isInteger(localId) || localId <= 0) {
+        return NextResponse.json(
+          { error: "local_id_invalido", message: "Informe um local valido para a turma." },
+          { status: 400 },
+        );
+      }
+      turmaPayload.local_id = localId;
     }
   }
 
@@ -310,12 +326,19 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
     turmaPayload.contexto_matricula_id = contextoRes.contextoId;
   }
 
-  const { data, error } = await supabase
-    .from("turmas")
-    .update(turmaPayload)
-    .eq("turma_id", id)
-    .select("*")
-    .single();
+  let { data, error } = await supabase.from("turmas").update(turmaPayload).eq("turma_id", id).select("*").single();
+
+  if (error && "local_id" in turmaPayload) {
+    const msg = error.message.toLowerCase();
+    const missingLocal =
+      msg.includes("local_id") && msg.includes("column") && (msg.includes("does not exist") || msg.includes("nao existe"));
+    if (missingLocal) {
+      delete turmaPayload.local_id;
+      const retry = await supabase.from("turmas").update(turmaPayload).eq("turma_id", id).select("*").single();
+      data = retry.data;
+      error = retry.error;
+    }
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

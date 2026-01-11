@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EditarTurmaDialog } from "./_components/EditarTurmaDialog";
+import { EditarGradeHorariosDialog } from "./_components/EditarGradeHorariosDialog";
 import { EncontrosCard } from "./_components/EncontrosCard";
 import { NovaAvaliacaoDialog } from "./_components/NovaAvaliacaoDialog";
 import { VincularProfessorDialog } from "./_components/VincularProfessorDialog";
@@ -265,9 +266,12 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
       </section>
 
       <section className="space-y-3">
-        <header>
-          <h2 className="text-xl font-semibold text-slate-900">Horarios definidos</h2>
-          <p className="text-sm text-slate-500">Horarios cadastrados para a turma.</p>
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">Horarios definidos</h2>
+            <p className="text-sm text-slate-500">Horarios cadastrados para a turma.</p>
+          </div>
+          <EditarGradeHorariosDialog turmaId={turmaKey} />
         </header>
         <div className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
           {horarios.length === 0 ? (

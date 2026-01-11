@@ -17,6 +17,9 @@ type ContextoMatricula = {
   status: string;
 };
 
+type Local = { id: number; nome: string; tipo: string };
+type Espaco = { id: number; local_id: number; nome: string; tipo: string; capacidade: number | null };
+
 function mapContextoTipo(tipoTurma: string | null | undefined): ContextoTipo {
   const tipo = (tipoTurma ?? "REGULAR").toUpperCase();
   if (tipo === "CURSO_LIVRE") return "CURSO_LIVRE";
@@ -41,6 +44,10 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
   );
   const [contextosErro, setContextosErro] = useState<string | null>(null);
   const [contextosLoading, setContextosLoading] = useState(false);
+  const [locais, setLocais] = useState<Local[]>([]);
+  const [localId, setLocalId] = useState<string>(turma.espaco?.local_id ? String(turma.espaco.local_id) : "");
+  const [espacos, setEspacos] = useState<Espaco[]>([]);
+  const [espacoId, setEspacoId] = useState<string>(turma.espaco_id ? String(turma.espaco_id) : "");
 
   useEffect(() => {
     let active = true;
@@ -85,6 +92,64 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
     };
   }, [tipoTurma, contextoId, turma.ano_referencia]);
 
+  useEffect(() => {
+    let active = true;
+
+    async function carregarLocais() {
+      try {
+        const resp = await fetch("/api/locais");
+        if (!resp.ok) {
+          if (active) setLocais([]);
+          return;
+        }
+        const json = (await resp.json()) as { locais?: Local[] };
+        if (!active) return;
+        setLocais(json.locais ?? []);
+      } catch {
+        if (active) setLocais([]);
+      }
+    }
+
+    void carregarLocais();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function carregarEspacos() {
+      if (!localId) {
+        if (active) {
+          setEspacos([]);
+          setEspacoId("");
+        }
+        return;
+      }
+
+      try {
+        const resp = await fetch(`/api/locais/${localId}/espacos`);
+        if (!resp.ok) {
+          if (active) setEspacos([]);
+          return;
+        }
+        const json = (await resp.json()) as { espacos?: Espaco[] };
+        if (!active) return;
+        const lista = json.espacos ?? [];
+        setEspacos(lista);
+        setEspacoId((prev) => (prev && lista.some((e) => String(e.id) === prev) ? prev : ""));
+      } catch {
+        if (active) setEspacos([]);
+      }
+    }
+
+    void carregarEspacos();
+    return () => {
+      active = false;
+    };
+  }, [localId]);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const supabase = getSupabaseBrowser();
@@ -106,12 +171,14 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
     setSaving(true);
     setErro(null);
 
+    const espacoIdNum = espacoId ? Number(espacoId) : null;
     const payload = {
       nome,
       curso: (formData.get("curso") as string) || null,
       nivel: (formData.get("nivel") as string) || null,
       tipo_turma: tipoTurma || null,
       turno: (formData.get("turno") as string) || null,
+      espaco_id: Number.isFinite(espacoIdNum) ? espacoIdNum : null,
       ano_referencia: formData.get("ano_referencia") ? Number(formData.get("ano_referencia")) : null,
       status: (formData.get("status") as string) || turma.status || null,
       data_inicio: (formData.get("data_inicio") as string) || null,
@@ -169,6 +236,46 @@ export function EditarTurmaDialog({ turma, onUpdated }: Props) {
                 defaultValue={turma.curso ?? ""}
                 className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
               />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Local</label>
+              <select
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={localId}
+                onChange={(e) => {
+                  setLocalId(e.target.value);
+                  setEspacoId("");
+                }}
+              >
+                <option value="">-</option>
+                {locais.map((local) => (
+                  <option key={`local-${local.id}`} value={local.id}>
+                    {local.nome} ({local.tipo})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Espaco</label>
+              <select
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                value={espacoId}
+                onChange={(e) => setEspacoId(e.target.value)}
+                disabled={!localId}
+              >
+                <option value="">{localId ? "-" : "Selecione um local"}</option>
+                {espacos.map((espaco) => (
+                  <option key={`espaco-${espaco.id}`} value={espaco.id}>
+                    {espaco.nome} ({espaco.tipo})
+                  </option>
+                ))}
+              </select>
+              {localId && espacos.length === 0 ? (
+                <p className="mt-1 text-[11px] text-slate-500">Nenhum espaco cadastrado para este local.</p>
+              ) : null}
             </div>
           </div>
 
