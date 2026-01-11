@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import {
   CurriculoQuickAddExperienciaArtisticaButton,
   CurriculoQuickAddFormacaoExternaButton,
+  CurriculoExperienciaArtisticaItemActions,
+  CurriculoFormacaoExternaItemActions,
 } from "@/components/curriculo/CurriculoQuickAddButtons";
 import {
   buscarDadosBasicosPessoa,
@@ -165,84 +167,93 @@ function ListaInterna({ itens }: { itens: CurriculoFormacaoInterna[] }) {
   );
 }
 
-function ListaExterna({ itens }: { itens: CurriculoFormacaoExterna[] }) {
+function ListaExterna({ itens, pessoaId }: { itens: CurriculoFormacaoExterna[]; pessoaId: number }) {
   if (!itens.length) {
-    return (
-      <p className="text-sm text-slate-500">
-        Nenhuma formação externa cadastrada ainda.
-      </p>
-    );
+    return <p className="text-sm text-slate-500">Nenhuma formacao externa cadastrada ainda.</p>;
   }
 
   return (
     <div className="space-y-3">
-      {itens.map((item) => (
-        <div
-          key={item.id}
-          className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
-        >
-          <p className="text-sm font-semibold text-slate-900">
-            {item.nome_formacao || "Formação externa"}
-          </p>
-          <p className="text-xs text-slate-600">
-            {[item.instituicao, item.cidade_pais, item.tipo_formacao]
-              .filter(Boolean)
-              .join(" • ")}
-          </p>
-          <div className="mt-2 grid gap-2 text-[11px] text-slate-600 md:grid-cols-3">
-            <span>
-              Carga horária: {item.carga_horaria ?? "—"}{" "}
-              {item.carga_horaria ? "h" : ""}
-            </span>
-            <span>
-              Período:{" "}
-              {[item.data_inicio, item.data_fim].filter(Boolean).join(" — ") ||
-                "—"}
-            </span>
-            <span>
-              Certificado: {item.certificado_existe ? "Sim" : "Não informado"}
-            </span>
+      {itens.map((item) => {
+        const periodo = [item.data_inicio, item.data_fim].filter(Boolean).join(" - ") || "-";
+        const detalhes = [item.organizacao, item.local].filter(Boolean).join(" - ");
+
+        return (
+          <div key={item.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-900">{item.nome_curso || "Formacao externa"}</p>
+                <p className="text-xs text-slate-600">{detalhes || "Organizacao nao informada"}</p>
+              </div>
+              <CurriculoFormacaoExternaItemActions pessoaId={pessoaId} item={item} />
+            </div>
+
+            <div className="mt-2 grid gap-2 text-[11px] text-slate-600 md:grid-cols-3">
+              <span>Carga horaria: {item.carga_horaria ?? "-"}</span>
+              <span>Periodo: {periodo}</span>
+              <span>
+                Certificado:{" "}
+                {item.certificado_url ? (
+                  <a
+                    className="text-violet-600 hover:underline"
+                    href={item.certificado_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Abrir
+                  </a>
+                ) : (
+                  "-"
+                )}
+              </span>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 function ListaExperiencias({
   itens,
+  pessoaId,
 }: {
   itens: CurriculoExperienciaArtistica[];
+  pessoaId: number;
 }) {
   if (!itens.length) {
-    return (
-      <p className="text-sm text-slate-500">
-        Nenhuma experiência artística cadastrada ainda.
-      </p>
-    );
+    return <p className="text-sm text-slate-500">Nenhuma experiencia artistica cadastrada ainda.</p>;
   }
 
   return (
     <div className="space-y-3">
-      {itens.map((item) => (
-        <div
-          key={item.id}
-          className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
-        >
-          <p className="text-sm font-semibold text-slate-900">
-            {item.nome_evento || "Experiência artística"}
-          </p>
-          <p className="text-xs text-slate-600">
-            {[item.tipo, item.papel, item.local].filter(Boolean).join(" • ")}
-          </p>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Data: {item.data_evento || "—"}
-          </p>
-          {item.descricao && (
-            <p className="mt-1 text-sm text-slate-700">{item.descricao}</p>
-          )}
-        </div>
-      ))}
+      {itens.map((item) => {
+        const detalhes = [item.organizacao, item.papel].filter(Boolean).join(" - ");
+
+        return (
+          <div key={item.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-900">{item.titulo || "Experiencia artistica"}</p>
+                <p className="text-xs text-slate-600">{detalhes || "Detalhes nao informados"}</p>
+              </div>
+              <CurriculoExperienciaArtisticaItemActions pessoaId={pessoaId} item={item} />
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">Data: {item.data_evento || "-"}</p>
+            {item.comprovante_url ? (
+              <a
+                className="mt-2 inline-flex text-xs text-violet-600 hover:underline"
+                href={item.comprovante_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Abrir comprovante
+              </a>
+            ) : null}
+            {item.descricao ? <p className="mt-1 text-sm text-slate-700">{item.descricao}</p> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -502,26 +513,24 @@ export default async function CurriculoPage({
               </div>
             )}
           </Section>
-          <Section title="Formações internas">
+          <Section title="Formacoes internas">
             <ListaInterna itens={(internas ?? []) as CurriculoFormacaoInterna[]} />
           </Section>
 
           <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-base font-semibold">Formações externas</h3>
+              <h3 className="text-base font-semibold">Formacoes externas</h3>
               <CurriculoQuickAddFormacaoExternaButton pessoaId={pessoaId} />
             </div>
-            <ListaExterna itens={(externas ?? []) as CurriculoFormacaoExterna[]} />
+            <ListaExterna itens={(externas ?? []) as CurriculoFormacaoExterna[]} pessoaId={pessoaId} />
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <h3 className="text-base font-semibold">Experiências artísticas</h3>
+              <h3 className="text-base font-semibold">Experiencias artisticas</h3>
               <CurriculoQuickAddExperienciaArtisticaButton pessoaId={pessoaId} />
             </div>
-            <ListaExperiencias
-              itens={(experiencias ?? []) as CurriculoExperienciaArtistica[]}
-            />
+            <ListaExperiencias itens={(experiencias ?? []) as CurriculoExperienciaArtistica[]} pessoaId={pessoaId} />
           </section>
 
           <Section title="Avaliações e progresso">
@@ -534,6 +543,9 @@ export default async function CurriculoPage({
     </div>
   );
 }
+
+
+
 
 
 

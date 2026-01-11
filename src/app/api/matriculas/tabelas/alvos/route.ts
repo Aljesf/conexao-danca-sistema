@@ -187,12 +187,38 @@ export async function GET(req: Request) {
       );
     }
 
-    const produtoTipo = tipo === "CURSO_LIVRE" ? "CURSO_LIVRE" : "PROJETO_ARTISTICO";
+    if (tipo === "CURSO_LIVRE") {
+      const { data, error } = await admin
+        .from("cursos_livres")
+        .select("id, nome")
+        .order("nome", { ascending: true });
+
+      if (error) {
+        if (isMissingRelation(error)) {
+          return NextResponse.json(
+            {
+              ok: true,
+              data: [],
+              warning: "Tabela cursos_livres nao encontrada (migracao pendente).",
+            } satisfies ApiOk<unknown[]>,
+            { status: 200 },
+          );
+        }
+        return serverError("Falha ao listar cursos livres.", { error });
+      }
+
+      const mapped: AlvoOption[] = (data ?? []).map((x: { id: number; nome: string | null }) => {
+        const id = Number(x.id);
+        const nome = typeof x.nome === "string" && x.nome.trim() ? x.nome.trim() : `Curso ${id}`;
+        return { id, alvo_label: nome, servico_nome: nome };
+      });
+      return NextResponse.json({ ok: true, data: mapped } satisfies ApiOk<AlvoOption[]>, { status: 200 });
+    }
 
     const { data, error } = await admin
       .from("escola_produtos_educacionais")
       .select("id, titulo")
-      .eq("tipo", produtoTipo)
+      .eq("tipo", "PROJETO_ARTISTICO")
       .eq("ativo", true)
       .order("titulo", { ascending: true });
 

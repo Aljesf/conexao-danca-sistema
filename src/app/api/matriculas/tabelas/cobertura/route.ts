@@ -37,15 +37,29 @@ export async function GET(req: Request) {
 
     const admin = getAdmin();
 
-    const { data: cobertura, error: cobErr } = await admin
+    const { data: coberturaRaw, error: cobErr } = await admin
       .from("matricula_tabelas_alvos")
-      .select("alvo_tipo,alvo_id,matricula_tabelas:tabela_id ( id, ano_referencia, ativo, titulo )")
-      .eq("matricula_tabelas.ano_referencia", ano)
+      .select("alvo_tipo,alvo_id,matricula_tabelas:tabela_id ( id, ano_referencia, ativo, titulo, produto_tipo )")
       .eq("matricula_tabelas.ativo", true);
 
     if (cobErr) return serverError("Falha ao montar cobertura.", { cobErr });
 
-    return NextResponse.json({ ok: true, data: cobertura ?? [] }, { status: 200 });
+    const cobertura = (coberturaRaw ?? []).filter((row) => {
+      const tabela = row.matricula_tabelas as {
+        ano_referencia?: number | null;
+        produto_tipo?: string | null;
+      } | null;
+      if (!tabela) return false;
+      const produtoTipo = String(tabela.produto_tipo ?? "").toUpperCase();
+      const alvoTipo = String(row.alvo_tipo ?? "").toUpperCase();
+      const isRegular = produtoTipo === "REGULAR" || (!produtoTipo && alvoTipo === "TURMA");
+      if (isRegular) {
+        return tabela.ano_referencia === ano;
+      }
+      return true;
+    });
+
+    return NextResponse.json({ ok: true, data: cobertura }, { status: 200 });
   } catch (e: unknown) {
     return serverError("Erro inesperado ao montar cobertura.", { message: e instanceof Error ? e.message : String(e) });
   }

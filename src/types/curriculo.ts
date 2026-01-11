@@ -32,26 +32,27 @@ export interface CurriculoFormacaoInterna {
 export interface CurriculoFormacaoExterna {
   id: number;
   pessoa_id: number;
-  tipo_formacao: string | null;
-  instituicao: string | null;
-  nome_formacao: string | null;
-  carga_horaria: number | null;
-  cidade_pais: string | null;
+  nome_curso: string | null;
+  organizacao: string | null;
+  local: string | null;
+  carga_horaria: string | null;
   data_inicio: string | null;
   data_fim: string | null;
-  certificado_existe: boolean | null;
-  certificado_arquivo?: string | null;
+  certificado_url: string | null;
   observacoes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface CurriculoExperienciaArtistica {
   id: number;
   pessoa_id: number;
-  tipo: string | null;
-  nome_evento: string | null;
+  titulo: string | null;
   papel: string | null;
+  organizacao: string | null;
   descricao: string | null;
   data_evento: string | null;
-  local: string | null;
-  arquivo_midia_id?: string | null;
+  comprovante_url: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
