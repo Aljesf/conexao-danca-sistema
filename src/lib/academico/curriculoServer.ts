@@ -1,3 +1,4 @@
+﻿import { createAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import type {
   CurriculoExperienciaArtistica,
@@ -42,61 +43,64 @@ export async function buscarDadosBasicosPessoa(
 export async function listarFormacoesInternas(
   pessoaId: number
 ): Promise<CurriculoFormacaoInterna[]> {
-  const supabase = await getSupabaseServer();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("historico_academico")
-    .select("*")
+    .select(
+      "id,pessoa_id,turma_id,titulo,nivel,ano_referencia,data_inicio,data_fim,status,observacoes,created_at,updated_at"
+    )
     .eq("pessoa_id", pessoaId)
-    .order("data_conclusao", { ascending: false });
+    .order("data_fim", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Erro ao listar formações internas:", error);
-    // TODO: criar tabela historico_academico conforme especificação caso ainda não exista.
     return [];
   }
 
-  return (data ?? []) as CurriculoFormacaoInterna[];
+  return data ?? [];
 }
 
 export async function listarFormacoesExternas(
   pessoaId: number
 ): Promise<CurriculoFormacaoExterna[]> {
-  const supabase = await getSupabaseServer();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
     .from("curriculo_formacoes_externas")
-    .select("*")
+    .select(
+      "id,pessoa_id,nome_curso,organizacao,local,carga_horaria,data_inicio,data_fim,certificado_url,observacoes,created_at,updated_at"
+    )
     .eq("pessoa_id", pessoaId)
-    .order("data_inicio", { ascending: false });
+    .order("data_fim", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Erro ao listar formações externas:", error);
-    // TODO: criar tabela curriculo_formacoes_externas conforme especificação caso ainda não exista.
     return [];
   }
 
-  return (data ?? []) as CurriculoFormacaoExterna[];
+  return data ?? [];
 }
 
 export async function listarExperienciasArtisticas(
   pessoaId: number
 ): Promise<CurriculoExperienciaArtistica[]> {
-  const supabase = await getSupabaseServer();
+  const supabase = createAdminClient();
 
   const { data, error } = await supabase
-    .from("curriculo_experiencias")
-    .select("*")
+    .from("curriculo_experiencias_artisticas")
+    .select(
+      "id,pessoa_id,titulo,papel,organizacao,data_evento,descricao,comprovante_url,created_at,updated_at"
+    )
     .eq("pessoa_id", pessoaId)
-    .order("data_evento", { ascending: false });
+    .order("data_evento", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Erro ao listar experiências artísticas:", error);
-    // TODO: criar tabela curriculo_experiencias conforme especificação caso ainda não exista.
     return [];
   }
 
-  return (data ?? []) as CurriculoExperienciaArtistica[];
+  return data ?? [];
 }
 
 export async function listarAvaliacoesDoAluno(
@@ -138,9 +142,10 @@ export async function listarAvaliacoesDoAluno(
     .eq("pessoa_id", pessoaId);
 
   if (error) {
-    console.error("Erro ao listar avaliações do aluno:", error);
+    console.error("Erro ao listar avaliaÃ§Ãµes do aluno:", error);
     return [];
   }
 
   return (data ?? []) as ResultadoAvaliacaoAluno[];
 }
+
