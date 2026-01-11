@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type Params = { params: { id: string } };
 
@@ -15,7 +15,7 @@ type GrupoUpdate = {
 };
 
 export async function GET(_req: Request, { params }: Params): Promise<Response> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const id = Number(params.id);
 
   if (!Number.isFinite(id)) {
@@ -36,7 +36,7 @@ export async function GET(_req: Request, { params }: Params): Promise<Response> 
 }
 
 export async function PUT(req: Request, { params }: Params): Promise<Response> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const id = Number(params.id);
 
   if (!Number.isFinite(id)) {
@@ -78,7 +78,7 @@ export async function PUT(req: Request, { params }: Params): Promise<Response> {
 }
 
 export async function DELETE(_req: Request, { params }: Params): Promise<Response> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const id = Number(params.id);
 
   if (!Number.isFinite(id)) {

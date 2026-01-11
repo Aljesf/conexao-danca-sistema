@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function toBool(value: string | null, fallback: boolean): boolean {
   if (value === null) return fallback;
@@ -19,7 +19,7 @@ export async function GET(req: Request): Promise<Response> {
   const limit = Math.min(toInt(url.searchParams.get("limit"), 30), 200);
   const offset = Math.max(toInt(url.searchParams.get("offset"), 0), 0);
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: alunosCanon, error: alunosErr } = await supabase
     .from("vw_alunos_canonico")

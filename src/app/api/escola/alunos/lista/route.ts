@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function toInt(value: string | null, fallback: number): number {
   const n = Number(value);
@@ -12,7 +12,7 @@ export async function GET(req: Request): Promise<Response> {
   const limit = Math.min(toInt(url.searchParams.get("limit"), 50), 200);
   const offset = Math.max(toInt(url.searchParams.get("offset"), 0), 0);
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   let query = supabase
     .from("vw_alunos_canonico")

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import type { ReactNode } from "react";
 
+import { createClient } from "@/lib/supabase/server";
 import {
   buscarDadosBasicosPessoa,
   listarAvaliacoesDoAluno,
@@ -304,6 +305,47 @@ export default async function CurriculoPage({
   const pessoaId = Number(params.id);
   if (Number.isNaN(pessoaId)) {
     notFound();
+  }
+
+  const supabase = await createClient();
+
+  const { data: alunoCanon } = await supabase
+    .from("vw_alunos_canonico")
+    .select("pessoa_id")
+    .eq("pessoa_id", pessoaId)
+    .maybeSingle();
+
+  const isAluno = Boolean(alunoCanon?.pessoa_id);
+
+  const { data: curr } = await supabase
+    .from("curriculos_institucionais")
+    .select("habilitado")
+    .eq("pessoa_id", pessoaId)
+    .maybeSingle();
+
+  const habilitado = Boolean(curr?.habilitado);
+
+  if (!isAluno && !habilitado) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-pink-50 to-white px-4 py-6">
+        <div className="mx-auto max-w-4xl space-y-6">
+          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            <div className="text-sm text-slate-500">CURRICULO</div>
+            <h1 className="text-2xl font-semibold">Curriculo nao habilitado</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Esta pessoa nao e aluna e nao possui curriculo institucional habilitado.
+              Para criar e alimentar um curriculo, habilite na pagina da pessoa.
+            </p>
+
+            <div className="mt-4 flex gap-2">
+              <Link href={`/pessoas/${pessoaId}`} className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50">
+                Voltar para a pessoa
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const headersList = headers();

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type GrupoCreate = {
   nome: string;
@@ -16,7 +16,7 @@ export async function GET(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const search = (url.searchParams.get("search") ?? "").trim();
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   let q = supabase
     .from("aluno_grupos")
@@ -40,7 +40,7 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   let body: GrupoCreate;
   try {

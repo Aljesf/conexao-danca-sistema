@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type Body = {
   pessoa_id: number;
@@ -9,7 +9,7 @@ type Body = {
 };
 
 export async function POST(req: Request): Promise<Response> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   let body: Body;
   try {

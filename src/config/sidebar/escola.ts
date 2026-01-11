@@ -42,10 +42,9 @@ export const escolaSidebar: SidebarSection[] = [
     title: "Alunos",
     items: [
       { label: "Matrículas", href: "/escola/matriculas" },
-      { label: "Novo aluno", href: "/alunos/novo" },
-      { label: "Lista de alunos", href: "/alunos" },
-      { label: "Currículo", href: "/alunos/curriculo" },
-      { label: "Grupos de alunos", href: "/escola/alunos/grupos" }, // TODO(migracao): rota ainda nao existe
+      { label: "Lista de alunos", href: "/escola/alunos/lista" },
+      { label: "Currículo", href: "/escola/alunos/curriculos" },
+      { label: "Grupos de alunos", href: "/escola/alunos/grupos" },
     ],
   },
   {
@@ -92,3 +91,4 @@ export const escolaSidebar: SidebarSection[] = [
     ],
   },
 ];
+

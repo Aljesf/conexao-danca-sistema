@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type Params = { params: { id: string } };
 
@@ -9,7 +9,7 @@ type AddMembroBody = {
 };
 
 export async function POST(req: Request, { params }: Params): Promise<Response> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const grupoId = Number(params.id);
 
   if (!Number.isFinite(grupoId)) {
@@ -51,7 +51,7 @@ export async function POST(req: Request, { params }: Params): Promise<Response> 
 export async function DELETE(req: Request, { params }: Params): Promise<Response> {
   const url = new URL(req.url);
   const pessoaId = Number(url.searchParams.get("pessoa_id"));
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const grupoId = Number(params.id);
 
   if (!Number.isFinite(grupoId)) {

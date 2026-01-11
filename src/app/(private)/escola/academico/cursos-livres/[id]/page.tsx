@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 
 type CursoLivre = {
   id: number;
@@ -27,6 +27,8 @@ type Turma = {
   data_fim: string | null;
 };
 
+type Params = { id: string };
+
 function faixa(min: number | null, max: number | null) {
   if (min == null && max == null) return "Sem faixa definida";
   if (min != null && max == null) return `A partir de ${min} anos`;
@@ -34,8 +36,9 @@ function faixa(min: number | null, max: number | null) {
   return "Sem faixa definida";
 }
 
-export default function CursoLivreDetalhePage({ params }: { params: { id: string } }) {
-  const cursoId = Number(params.id);
+export default function CursoLivreDetalhePage({ params }: { params: Promise<Params> }) {
+  const { id } = use(params);
+  const cursoId = Number(id);
 
   const [curso, setCurso] = useState<CursoLivre | null>(null);
   const [turmas, setTurmas] = useState<Turma[]>([]);

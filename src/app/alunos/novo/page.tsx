@@ -1,5 +1,5 @@
-import PlaceholderPage from "@/components/PlaceholderPage";
+﻿import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <PlaceholderPage title="Novo aluno" />;
+export default function AlunosNovoLegacyRedirectPage() {
+  redirect("/escola/matriculas");
 }
