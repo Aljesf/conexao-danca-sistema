@@ -32,6 +32,7 @@ type Body = {
   carga_horaria?: string | null;
   data_inicio?: string | null;
   data_fim?: string | null;
+  certificado_url?: string | null;
   observacoes?: string | null;
 };
 
@@ -61,6 +62,7 @@ export async function POST(req: Request): Promise<Response> {
     carga_horaria: body.carga_horaria?.trim() ?? null,
     data_inicio: body.data_inicio ?? null,
     data_fim: body.data_fim ?? null,
+    certificado_url: body.certificado_url?.trim() ?? null,
     observacoes: body.observacoes?.trim() ?? null,
     updated_at: new Date().toISOString(),
   };

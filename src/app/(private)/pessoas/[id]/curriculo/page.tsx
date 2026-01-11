@@ -4,7 +4,10 @@ import { cookies, headers } from "next/headers";
 import type { ReactNode } from "react";
 
 import { createClient } from "@/lib/supabase/server";
-import { CurriculoAcoesCards } from "@/components/curriculo/CurriculoAcoesCards";
+import {
+  CurriculoQuickAddExperienciaArtisticaButton,
+  CurriculoQuickAddFormacaoExternaButton,
+} from "@/components/curriculo/CurriculoQuickAddButtons";
 import {
   buscarDadosBasicosPessoa,
   listarAvaliacoesDoAluno,
@@ -106,7 +109,7 @@ function ListaInterna({ itens }: { itens: CurriculoFormacaoInterna[] }) {
   if (!itens.length) {
     return (
       <p className="text-sm text-slate-500">
-        Nenhuma formaÃ§Ã£o interna cadastrada ainda.
+        Nenhuma formação interna cadastrada ainda.
       </p>
     );
   }
@@ -116,7 +119,7 @@ function ListaInterna({ itens }: { itens: CurriculoFormacaoInterna[] }) {
       {itens.map((item) => {
         const periodo =
           item.data_inicio && item.data_fim
-            ? `${item.data_inicio} â€” ${item.data_fim}`
+            ? `${item.data_inicio} — ${item.data_fim}`
             : item.data_inicio || item.data_fim || null;
 
         return (
@@ -127,31 +130,31 @@ function ListaInterna({ itens }: { itens: CurriculoFormacaoInterna[] }) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-slate-900">
-                  {[item.curso, item.nivel].filter(Boolean).join(" â€¢ ") ||
-                    "FormaÃ§Ã£o interna"}
+                  {[item.curso, item.nivel].filter(Boolean).join(" • ") ||
+                    "Formação interna"}
                 </p>
                 <p className="text-xs text-slate-600">
-                  {[item.tipo_turma, periodo].filter(Boolean).join(" â€¢ ") ||
-                    "PerÃ­odo nÃ£o informado"}
+                  {[item.tipo_turma, periodo].filter(Boolean).join(" • ") ||
+                    "Período não informado"}
                 </p>
               </div>
               <p className="text-xs text-slate-600">
                 {item.status_conclusao
                   ? `Status: ${item.status_conclusao}`
-                  : "Status nÃ£o informado"}
+                  : "Status não informado"}
               </p>
             </div>
 
             <div className="mt-2 grid gap-2 text-[11px] text-slate-600 md:grid-cols-3">
               <span>
-                Carga horÃ¡ria: {item.carga_horaria ?? "â€”"}{" "}
+                Carga horária: {item.carga_horaria ?? "—"}{" "}
                 {item.carga_horaria ? "h" : ""}
               </span>
               <span>
-                FrequÃªncia:{" "}
+                Frequência:{" "}
                 {item.frequencia_percentual
                   ? `${item.frequencia_percentual}%`
-                  : "â€”"}
+                  : "—"}
               </span>
               <span>{item.avaliacoes_concluidas ?? ""}</span>
             </div>
@@ -166,7 +169,7 @@ function ListaExterna({ itens }: { itens: CurriculoFormacaoExterna[] }) {
   if (!itens.length) {
     return (
       <p className="text-sm text-slate-500">
-        Nenhuma formaÃ§Ã£o externa cadastrada ainda.
+        Nenhuma formação externa cadastrada ainda.
       </p>
     );
   }
@@ -179,25 +182,25 @@ function ListaExterna({ itens }: { itens: CurriculoFormacaoExterna[] }) {
           className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
         >
           <p className="text-sm font-semibold text-slate-900">
-            {item.nome_formacao || "FormaÃ§Ã£o externa"}
+            {item.nome_formacao || "Formação externa"}
           </p>
           <p className="text-xs text-slate-600">
             {[item.instituicao, item.cidade_pais, item.tipo_formacao]
               .filter(Boolean)
-              .join(" â€¢ ")}
+              .join(" • ")}
           </p>
           <div className="mt-2 grid gap-2 text-[11px] text-slate-600 md:grid-cols-3">
             <span>
-              Carga horÃ¡ria: {item.carga_horaria ?? "â€”"}{" "}
+              Carga horária: {item.carga_horaria ?? "—"}{" "}
               {item.carga_horaria ? "h" : ""}
             </span>
             <span>
-              PerÃ­odo:{" "}
-              {[item.data_inicio, item.data_fim].filter(Boolean).join(" â€” ") ||
-                "â€”"}
+              Período:{" "}
+              {[item.data_inicio, item.data_fim].filter(Boolean).join(" — ") ||
+                "—"}
             </span>
             <span>
-              Certificado: {item.certificado_existe ? "Sim" : "NÃ£o informado"}
+              Certificado: {item.certificado_existe ? "Sim" : "Não informado"}
             </span>
           </div>
         </div>
@@ -214,7 +217,7 @@ function ListaExperiencias({
   if (!itens.length) {
     return (
       <p className="text-sm text-slate-500">
-        Nenhuma experiÃªncia artÃ­stica cadastrada ainda.
+        Nenhuma experiência artística cadastrada ainda.
       </p>
     );
   }
@@ -227,13 +230,13 @@ function ListaExperiencias({
           className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3"
         >
           <p className="text-sm font-semibold text-slate-900">
-            {item.nome_evento || "ExperiÃªncia artÃ­stica"}
+            {item.nome_evento || "Experiência artística"}
           </p>
           <p className="text-xs text-slate-600">
-            {[item.tipo, item.papel, item.local].filter(Boolean).join(" â€¢ ")}
+            {[item.tipo, item.papel, item.local].filter(Boolean).join(" • ")}
           </p>
           <p className="text-[11px] text-slate-500 mt-1">
-            Data: {item.data_evento || "â€”"}
+            Data: {item.data_evento || "—"}
           </p>
           {item.descricao && (
             <p className="mt-1 text-sm text-slate-700">{item.descricao}</p>
@@ -248,7 +251,7 @@ function ListaAvaliacoes({ itens }: { itens: ResultadoAvaliacaoAluno[] }) {
   if (!itens.length) {
     return (
       <p className="text-sm text-slate-500">
-        Nenhuma avaliaÃ§Ã£o registrada.
+        Nenhuma avaliação registrada.
       </p>
     );
   }
@@ -262,15 +265,15 @@ function ListaAvaliacoes({ itens }: { itens: ResultadoAvaliacaoAluno[] }) {
         >
           <div className="space-y-1">
             <p className="text-sm font-semibold text-slate-900">
-              {item.turma_avaliacoes?.avaliacoes_modelo?.nome ?? "AvaliaÃ§Ã£o"}
+              {item.turma_avaliacoes?.avaliacoes_modelo?.nome ?? "Avaliação"}
             </p>
             <p className="text-xs text-slate-600">
-              {item.turma_avaliacoes?.turmas?.nome ?? "Turma"} â€¢{" "}
-              {item.turma_avaliacoes?.turmas?.curso ?? "Curso"} â€¢{" "}
-              {item.turma_avaliacoes?.turmas?.nivel ?? "NÃ­vel"}
+              {item.turma_avaliacoes?.turmas?.nome ?? "Turma"} •{" "}
+              {item.turma_avaliacoes?.turmas?.curso ?? "Curso"} •{" "}
+              {item.turma_avaliacoes?.turmas?.nivel ?? "Nível"}
             </p>
             <p className="text-[11px] text-slate-500">
-              Data: {item.turma_avaliacoes?.data_realizada ?? "â€”"}
+              Data: {item.turma_avaliacoes?.data_realizada ?? "—"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -392,7 +395,7 @@ export default async function CurriculoPage({
 
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                CurrÃ­culo
+                Currículo
               </p>
               <h1 className="text-2xl font-semibold text-slate-900">
                 {pessoa?.nome}
@@ -400,7 +403,7 @@ export default async function CurriculoPage({
               <p className="text-sm text-slate-600">
                 {[idade ? `${idade} anos` : null, pessoa?.email, pessoa?.telefone]
                   .filter(Boolean)
-                  .join(" â€¢ ")}
+                  .join(" • ")}
               </p>
             </div>
           </div>
@@ -414,9 +417,6 @@ export default async function CurriculoPage({
           </Link>
         </header>
 
-        <CurriculoAcoesCards pessoaId={pessoaId} />
-
-
         <div className="grid gap-4 md:grid-cols-2">
           <Section title="Dados pessoais">
             <dl className="grid grid-cols-1 gap-3 text-sm text-slate-700 md:grid-cols-2">
@@ -425,26 +425,26 @@ export default async function CurriculoPage({
                   Nome
                 </dt>
                 <dd className="font-medium text-slate-900">
-                  {pessoa?.nome ?? "â€”"}
+                  {pessoa?.nome ?? "—"}
                 </dd>
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-wide text-slate-500">
                   CPF
                 </dt>
-                <dd>{pessoa?.cpf ?? "â€”"}</dd>
+                <dd>{pessoa?.cpf ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-wide text-slate-500">
                   Email
                 </dt>
-                <dd>{pessoa?.email ?? "â€”"}</dd>
+                <dd>{pessoa?.email ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs uppercase tracking-wide text-slate-500">
                   Telefone
                 </dt>
-                <dd>{pessoa?.telefone ?? "â€”"}</dd>
+                <dd>{pessoa?.telefone ?? "—"}</dd>
               </div>
             </dl>
           </Section>
@@ -502,21 +502,29 @@ export default async function CurriculoPage({
               </div>
             )}
           </Section>
-          <Section title="FormaÃ§Ãµes internas">
+          <Section title="Formações internas">
             <ListaInterna itens={(internas ?? []) as CurriculoFormacaoInterna[]} />
           </Section>
 
-          <Section title="FormaÃ§Ãµes externas">
+          <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-base font-semibold">Formações externas</h3>
+              <CurriculoQuickAddFormacaoExternaButton pessoaId={pessoaId} />
+            </div>
             <ListaExterna itens={(externas ?? []) as CurriculoFormacaoExterna[]} />
-          </Section>
+          </section>
 
-          <Section title="ExperiÃªncias artÃ­sticas">
+          <section className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-base font-semibold">Experiências artísticas</h3>
+              <CurriculoQuickAddExperienciaArtisticaButton pessoaId={pessoaId} />
+            </div>
             <ListaExperiencias
               itens={(experiencias ?? []) as CurriculoExperienciaArtistica[]}
             />
-          </Section>
+          </section>
 
-          <Section title="AvaliaÃ§Ãµes e progresso">
+          <Section title="Avaliações e progresso">
             <ListaAvaliacoes
               itens={(avaliacoes ?? []) as ResultadoAvaliacaoAluno[]}
             />

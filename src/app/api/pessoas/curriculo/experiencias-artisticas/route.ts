@@ -29,6 +29,7 @@ type Body = {
   organizacao?: string | null;
   data_evento?: string | null;
   descricao?: string | null;
+  comprovante_url?: string | null;
 };
 
 export async function POST(req: Request): Promise<Response> {
@@ -56,6 +57,7 @@ export async function POST(req: Request): Promise<Response> {
     organizacao: body.organizacao?.trim() ?? null,
     data_evento: body.data_evento ?? null,
     descricao: body.descricao?.trim() ?? null,
+    comprovante_url: body.comprovante_url?.trim() ?? null,
     updated_at: new Date().toISOString(),
   };
 
