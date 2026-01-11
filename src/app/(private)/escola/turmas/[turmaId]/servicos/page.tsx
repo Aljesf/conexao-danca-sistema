@@ -106,6 +106,14 @@ export default function EscolaTurmaServicosPage() {
   const tipoEsperado = tipoServicoEsperado(turma?.tipo_turma);
   const anoReferencia = turma?.ano_referencia ?? null;
 
+  const configHref = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("turmaId", String(turmaId));
+    params.set("tipo", tipoEsperado);
+    if (Number.isInteger(anoReferencia)) params.set("ano", String(anoReferencia));
+    return `/escola/configuracoes/servicos?${params.toString()}`;
+  }, [turmaId, tipoEsperado, anoReferencia]);
+
   const precoVigente = useMemo(() => {
     if (!selecionadoId) return null;
     const vinculo = vinculados.find((v) => v.id === selecionadoId);
@@ -130,10 +138,9 @@ export default function EscolaTurmaServicosPage() {
           throw new Error(dataServicos.message ?? "Falha ao carregar servicos.");
         }
         const lista = (dataServicos.servicos ?? []).filter((s) => s.ativo && s.tipo === tipoEsperado);
-        const filtrados = lista.filter((s) => {
-          if (!s.referencia_tipo && !s.referencia_id) return true;
-          return s.referencia_tipo === "TURMA" && s.referencia_id === turmaId;
-        });
+        const filtrados = lista.filter(
+          (s) => String(s.referencia_tipo).toUpperCase() === "TURMA" && Number(s.referencia_id) === turmaId,
+        );
         setServicos(filtrados);
 
         const params = new URLSearchParams();
@@ -158,10 +165,14 @@ export default function EscolaTurmaServicosPage() {
 
   async function salvarVinculo() {
     if (!Number.isInteger(turmaId)) return;
+    if (!selecionadoId) {
+      setErro("Selecione um servico para vincular a turma.");
+      return;
+    }
     setErro(null);
     setLoading(true);
     try {
-      const payload = { servico_ids: selecionadoId ? [selecionadoId] : [] };
+      const payload = { servico_ids: [selecionadoId] };
       const data = await fetchJSON<{ ok: boolean; message?: string }>(
         `/api/escola/turmas/${turmaId}/servicos`,
         {
@@ -214,7 +225,7 @@ export default function EscolaTurmaServicosPage() {
               Voltar
             </button>
             <Link
-              href="/escola/configuracoes/servicos"
+              href={configHref}
               className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-violet-700"
             >
               Configurar servicos
@@ -257,22 +268,31 @@ export default function EscolaTurmaServicosPage() {
                   <div>
                     <div className="font-medium text-slate-900">{labelServico(s)}</div>
                     <div className="text-xs text-slate-500">
-                      {s.referencia_tipo === "TURMA" && s.referencia_id
-                        ? `Vinculado a turma ${s.referencia_id}`
-                        : "Sem vinculo"}
+                      Vinculado a turma {turmaId}
                     </div>
                   </div>
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="servico-turma"
                     checked={checked}
-                    onChange={(e) => setSelecionadoId(e.target.checked ? s.id : null)}
+                    onChange={() => setSelecionadoId(s.id)}
                     disabled={loading}
                   />
                 </label>
               );
             })}
             {servicos.length === 0 ? (
-              <p className="text-sm text-slate-500">Nenhum servico disponivel para este tipo.</p>
+              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
+                Nenhum servico cadastrado para esta turma.
+                <div className="mt-2">
+                  <Link
+                    className="text-sm font-medium text-violet-700 hover:underline"
+                    href={configHref}
+                  >
+                    Criar servico para esta turma
+                  </Link>
+                </div>
+              </div>
             ) : null}
           </div>
 

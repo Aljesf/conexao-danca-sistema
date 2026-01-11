@@ -166,6 +166,16 @@ export async function PATCH(req: Request, ctx: { params: { turmaId?: string } })
         { status: 400 },
       );
     }
+    if (servicoIds.length === 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "servico_obrigatorio",
+          message: "Selecione um servico para vincular a turma.",
+        },
+        { status: 400 },
+      );
+    }
 
     const { data: turma, error: turmaErr } = await supabase
       .from("turmas")
@@ -185,7 +195,7 @@ export async function PATCH(req: Request, ctx: { params: { turmaId?: string } })
 
     const { data: servicosValidos, error: servicosErr } = await supabase
       .from("servicos")
-      .select("id,tipo")
+      .select("id,tipo,referencia_tipo,referencia_id")
       .in("id", servicoIds.length > 0 ? servicoIds : [0]);
 
     if (servicosErr) {
@@ -206,53 +216,38 @@ export async function PATCH(req: Request, ctx: { params: { turmaId?: string } })
       }
     }
 
-    const { data: vinculadosAtuais, error: vincErr } = await supabase
-      .from("servicos")
-      .select("id")
-      .eq("referencia_tipo", "TURMA")
-      .eq("referencia_id", turmaId)
-      .eq("tipo", tipoEsperado);
+    const vinculoInvalido = (servicosValidos ?? []).some((s) => {
+      const row = s as { referencia_tipo?: string | null; referencia_id?: number | null };
+      if (!row.referencia_tipo) return false;
+      if (row.referencia_tipo !== "TURMA") return true;
+      return Number(row.referencia_id) !== turmaId;
+    });
 
-    if (vincErr) {
+    if (vinculoInvalido) {
       return NextResponse.json(
-        { ok: false, error: "erro_servicos_vinculados", message: vincErr.message },
-        { status: 500 },
+        {
+          ok: false,
+          error: "servico_ja_vinculado",
+          message: "O servico selecionado ja pertence a outra referencia.",
+        },
+        { status: 409 },
       );
     }
 
-    const idsAtuais = (vinculadosAtuais ?? []).map((s) => Number((s as { id?: number }).id));
-    const idsParaDesvincular = idsAtuais.filter((id) => !servicoIds.includes(id));
+    const { error: vinculaErr } = await supabase
+      .from("servicos")
+      .update({
+        referencia_tipo: "TURMA",
+        referencia_id: turmaId,
+        ano_referencia: Number.isInteger(anoRef) ? Number(anoRef) : null,
+      })
+      .in("id", servicoIds);
 
-    if (idsParaDesvincular.length > 0) {
-      const { error: desvErr } = await supabase
-        .from("servicos")
-        .update({ referencia_tipo: null, referencia_id: null })
-        .in("id", idsParaDesvincular);
-
-      if (desvErr) {
-        return NextResponse.json(
-          { ok: false, error: "erro_desvincular", message: desvErr.message },
-          { status: 500 },
-        );
-      }
-    }
-
-    if (servicoIds.length > 0) {
-      const { error: vinculaErr } = await supabase
-        .from("servicos")
-        .update({
-          referencia_tipo: "TURMA",
-          referencia_id: turmaId,
-          ano_referencia: Number.isInteger(anoRef) ? Number(anoRef) : null,
-        })
-        .in("id", servicoIds);
-
-      if (vinculaErr) {
-        return NextResponse.json(
-          { ok: false, error: "erro_vincular", message: vinculaErr.message },
-          { status: 500 },
-        );
-      }
+    if (vinculaErr) {
+      return NextResponse.json(
+        { ok: false, error: "erro_vincular", message: vinculaErr.message },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({ ok: true, servico_ids: servicoIds }, { status: 200 });

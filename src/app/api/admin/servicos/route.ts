@@ -28,7 +28,28 @@ type ServicoPayload = {
   ativo?: boolean | null;
   referencia_tipo?: string | null;
   referencia_id?: number | null;
+  turma_id?: number | null;
 };
+
+type ReferenciaTipo = "TURMA" | "CURSO" | "PRODUTO" | "OUTRO";
+
+function normalizeReferenciaTipo(input: unknown): ReferenciaTipo | null {
+  if (typeof input !== "string") return null;
+  const v = input.trim().toUpperCase();
+  if (v === "TURMA" || v === "CURSO" || v === "PRODUTO" || v === "OUTRO") {
+    return v as ReferenciaTipo;
+  }
+  return null;
+}
+
+function parseReferenciaId(input: unknown): number | null {
+  if (typeof input === "number" && Number.isInteger(input) && input > 0) return input;
+  if (typeof input === "string" && input.trim()) {
+    const n = Number(input);
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  return null;
+}
 
 // Observacao:
 // - Esta rota e ADMIN: usar SERVICE_ROLE para leitura e evitar travas de RLS.
@@ -161,8 +182,9 @@ export async function POST(req: Request) {
     const tipo = body?.tipo?.toString().trim() ?? "";
     const titulo = body?.titulo?.toString().trim() ?? "";
     const ano = body?.ano_referencia ?? null;
-    const referenciaTipo = body?.referencia_tipo ?? null;
-    const referenciaIdRaw = body?.referencia_id ?? null;
+    let referenciaTipo = normalizeReferenciaTipo(body?.referencia_tipo);
+    let referenciaId = parseReferenciaId(body?.referencia_id ?? null);
+    const turmaId = parseReferenciaId(body?.turma_id ?? null);
 
     if (!tipo) {
       return NextResponse.json({ ok: false, error: "tipo_obrigatorio" }, { status: 400 });
@@ -171,16 +193,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "titulo_obrigatorio" }, { status: 400 });
     }
 
-    const anoRef =
-      typeof ano === "number" && Number.isInteger(ano)
-        ? ano
-        : ano === null || ano === undefined
-          ? null
-          : null;
-    const referenciaId =
-      typeof referenciaIdRaw === "number" && Number.isInteger(referenciaIdRaw) && referenciaIdRaw > 0
-        ? referenciaIdRaw
-        : null;
+    if (!referenciaTipo && turmaId) referenciaTipo = "TURMA";
+    if (!referenciaId && turmaId) referenciaId = turmaId;
+
+    if (!referenciaTipo) {
+      return NextResponse.json(
+        { ok: false, error: "referencia_tipo_obrigatorio", message: "Selecione a referencia do servico." },
+        { status: 400 },
+      );
+    }
+    if (!referenciaId) {
+      return NextResponse.json(
+        { ok: false, error: "referencia_id_obrigatorio", message: "Selecione a referencia do servico." },
+        { status: 400 },
+      );
+    }
+
+    if (referenciaTipo === "TURMA" && !referenciaId) {
+      return NextResponse.json(
+        { ok: false, error: "turma_id_obrigatorio", message: "Selecione a turma vinculada." },
+        { status: 400 },
+      );
+    }
+
+    const anoRef = typeof ano === "number" && Number.isInteger(ano) ? ano : null;
 
     const { data, error } = await supabase
       .from("servicos")

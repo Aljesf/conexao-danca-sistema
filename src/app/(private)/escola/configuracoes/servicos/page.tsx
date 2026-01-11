@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 type Servico = {
   id: number;
@@ -18,6 +19,8 @@ type NovoServicoInput = {
   titulo: string;
   ano_referencia: number | null;
   ativo: boolean;
+  referencia_tipo?: string | null;
+  referencia_id?: number | null;
 };
 
 type EditState = {
@@ -37,6 +40,12 @@ function extractErrorMessage(data: unknown, status: number): string {
   return `HTTP ${status}`;
 }
 
+function parseNumber(value: string | null): number | null {
+  if (!value) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const text = await res.text();
@@ -53,6 +62,7 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export default function EscolaConfiguracoesServicosPage() {
+  const searchParams = useSearchParams();
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [edits, setEdits] = useState<Record<number, EditState>>({});
   const [novoServico, setNovoServico] = useState<NovoServicoInput>({
@@ -60,10 +70,28 @@ export default function EscolaConfiguracoesServicosPage() {
     titulo: "",
     ano_referencia: null,
     ativo: true,
+    referencia_tipo: "TURMA",
+    referencia_id: null,
   });
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [salvandoId, setSalvandoId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const turmaId = parseNumber(searchParams.get("turmaId"));
+    const tipo = searchParams.get("tipo");
+    const ano = parseNumber(searchParams.get("ano"));
+
+    if (!turmaId && !tipo && !Number.isFinite(ano)) return;
+
+    setNovoServico((prev) => ({
+      ...prev,
+      tipo: tipo ? tipo.toUpperCase() : prev.tipo,
+      ano_referencia: Number.isFinite(ano) ? ano : prev.ano_referencia,
+      referencia_tipo: "TURMA",
+      referencia_id: turmaId ?? prev.referencia_id,
+    }));
+  }, [searchParams]);
 
   async function carregarServicos() {
     setErro(null);
@@ -97,6 +125,15 @@ export default function EscolaConfiguracoesServicosPage() {
       setErro("Titulo e obrigatorio.");
       return;
     }
+    const referenciaTipo = novoServico.referencia_tipo ?? "TURMA";
+    if (!novoServico.referencia_id) {
+      setErro("Referencia do servico e obrigatoria.");
+      return;
+    }
+    if (referenciaTipo === "TURMA" && !novoServico.referencia_id) {
+      setErro("Turma vinculada e obrigatoria.");
+      return;
+    }
     setLoading(true);
     try {
       const payload = {
@@ -104,6 +141,8 @@ export default function EscolaConfiguracoesServicosPage() {
         titulo: novoServico.titulo.trim(),
         ano_referencia: novoServico.ano_referencia,
         ativo: novoServico.ativo,
+        referencia_tipo: referenciaTipo,
+        referencia_id: novoServico.referencia_id,
       };
       const data = await fetchJSON<{ ok: boolean; servico?: Servico; message?: string }>(
         "/api/admin/servicos",
@@ -121,7 +160,14 @@ export default function EscolaConfiguracoesServicosPage() {
         ...prev,
         [data.servico!.id]: { titulo: data.servico!.titulo ?? "", ativo: data.servico!.ativo },
       }));
-      setNovoServico({ tipo: "REGULAR", titulo: "", ano_referencia: null, ativo: true });
+      setNovoServico({
+        tipo: "REGULAR",
+        titulo: "",
+        ano_referencia: null,
+        ativo: true,
+        referencia_tipo: "TURMA",
+        referencia_id: null,
+      });
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Falha ao criar servico.");
     } finally {
@@ -218,6 +264,46 @@ export default function EscolaConfiguracoesServicosPage() {
             />
           </div>
         </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-4">
+          <div>
+            <label className="text-xs font-medium">Referencia do servico</label>
+            <select
+              className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+              value={novoServico.referencia_tipo ?? "TURMA"}
+              onChange={(e) =>
+                setNovoServico((prev) => ({
+                  ...prev,
+                  referencia_tipo: e.target.value,
+                  referencia_id: null,
+                }))
+              }
+              disabled={loading}
+            >
+              <option value="TURMA">Turma</option>
+              <option value="CURSO">Curso</option>
+              <option value="PRODUTO">Produto</option>
+              <option value="OUTRO">Outro</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium">Turma vinculada</label>
+            <input
+              className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+              value={novoServico.referencia_id ?? ""}
+              onChange={(e) =>
+                setNovoServico((prev) => ({
+                  ...prev,
+                  referencia_id: e.target.value ? Number(e.target.value) : null,
+                }))
+              }
+              placeholder="ID da turma"
+              disabled={loading || (novoServico.referencia_tipo ?? "TURMA") !== "TURMA"}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Para TURMA, o ID e obrigatorio. Depois trocamos por um seletor completo.
+            </p>
+          </div>
+        </div>
         <div className="mt-4 flex items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <input
@@ -263,7 +349,9 @@ export default function EscolaConfiguracoesServicosPage() {
             <tbody>
               {servicos.map((s) => {
                 const edit = edits[s.id] ?? { titulo: s.titulo ?? "", ativo: s.ativo };
-                const vinculo = s.referencia_tipo === "TURMA" ? `Turma ${s.referencia_id ?? "-"}` : "-";
+                const vinculo = s.referencia_tipo
+                  ? `${s.referencia_tipo} ${s.referencia_id ?? "-"}`
+                  : "-";
                 return (
                   <tr key={s.id} className="border-t">
                     <td className="px-3 py-2">
