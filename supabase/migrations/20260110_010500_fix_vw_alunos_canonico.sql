@@ -18,17 +18,17 @@ BEGIN
   IF has_pessoas_roles THEN
     parts := array_append(
       parts,
-      $$SELECT DISTINCT
-          p.id AS pessoa_id,
-          p.nome,
-          p.email,
-          p.telefone,
-          p.ativo
-        FROM public.pessoas p
-        JOIN public.pessoas_roles pr
-          ON pr.pessoa_id = p.id
-         AND pr.role = 'ALUNO'
-        WHERE p.ativo = true$$
+      'SELECT DISTINCT
+         p.id AS pessoa_id,
+         p.nome,
+         p.email,
+         p.telefone,
+         p.ativo
+       FROM public.pessoas p
+       JOIN public.pessoas_roles pr
+         ON pr.pessoa_id = p.id
+        AND pr.role = ''ALUNO''
+       WHERE p.ativo = true'
     );
   END IF;
 
@@ -52,16 +52,16 @@ BEGIN
       parts := array_append(
         parts,
         format(
-          $$SELECT DISTINCT
-              p.id AS pessoa_id,
-              p.nome,
-              p.email,
-              p.telefone,
-              p.ativo
-            FROM public.matriculas m
-            JOIN public.pessoas p
-              ON p.id = m.%I
-            WHERE p.ativo = true$$,
+          'SELECT DISTINCT
+             p.id AS pessoa_id,
+             p.nome,
+             p.email,
+             p.telefone,
+             p.ativo
+           FROM public.matriculas m
+           JOIN public.pessoas p
+             ON p.id = m.%I
+           WHERE p.ativo = true',
           col_matriculas_pessoa
         )
       );
@@ -88,16 +88,16 @@ BEGIN
       parts := array_append(
         parts,
         format(
-          $$SELECT DISTINCT
-              p.id AS pessoa_id,
-              p.nome,
-              p.email,
-              p.telefone,
-              p.ativo
-            FROM public.turma_aluno ta
-            JOIN public.pessoas p
-              ON p.id = ta.%I
-            WHERE p.ativo = true$$,
+          'SELECT DISTINCT
+             p.id AS pessoa_id,
+             p.nome,
+             p.email,
+             p.telefone,
+             p.ativo
+           FROM public.turma_aluno ta
+           JOIN public.pessoas p
+             ON p.id = ta.%I
+           WHERE p.ativo = true',
           col_turma_aluno_pessoa
         )
       );
