@@ -203,15 +203,15 @@ export default function EscolaAlunosCurriculosPage() {
                         <div className="text-xs text-slate-500">{r.telefone ?? "-"}</div>
                       </td>
                       <td className="py-2 text-right">
-                        <button
-                          type="button"
-                          className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                          onClick={() => {
-                            alert("Abrir curriculo: implementar pagina de detalhe na proxima iteracao.");
-                          }}
-                        >
-                          Abrir
-                        </button>
+                    <button
+                      type="button"
+                      className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                      onClick={() => {
+                        window.location.href = `/pessoas/${r.pessoa_id}/curriculo`;
+                      }}
+                    >
+                      Abrir
+                    </button>
                       </td>
                     </tr>
                   );
