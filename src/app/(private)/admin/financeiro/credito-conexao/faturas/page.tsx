@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -48,7 +48,7 @@ function monthLabel(periodo: string): string {
   const months = [
     "janeiro",
     "fevereiro",
-    "março",
+    "marÃ§o",
     "abril",
     "maio",
     "junho",
@@ -107,7 +107,7 @@ export default function AdminCreditoConexaoFaturasPage() {
       const data = (await res.json()) as ApiResp;
 
       if (!data.ok) {
-        setError(data.error ?? "Erro ao carregar faturas do Cartão Conexão.");
+        setError(data.error ?? "Erro ao carregar faturas do CartÃ£o ConexÃ£o.");
         setContas([]);
         setRows([]);
         return;
@@ -116,7 +116,7 @@ export default function AdminCreditoConexaoFaturasPage() {
       setContas(data.contas ?? []);
       setRows(data.rows ?? []);
     } catch {
-      setError("Erro ao carregar faturas do Cartão Conexão.");
+      setError("Erro ao carregar faturas do CartÃ£o ConexÃ£o.");
       setContas([]);
       setRows([]);
     } finally {
@@ -135,9 +135,9 @@ export default function AdminCreditoConexaoFaturasPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Crédito Conexão — Faturas</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>CrÃ©dito ConexÃ£o â€” Faturas</h1>
       <p style={{ marginTop: 6, color: "#555" }}>
-        Visualize as faturas geradas do Cartão Conexão (Aluno/Colaborador), com valores de compras, taxas e total consolidado.
+        Visualize as faturas geradas do CartÃ£o ConexÃ£o (Aluno/Colaborador), com valores de compras, taxas e total consolidado.
       </p>
 
       {error ? (
@@ -173,7 +173,7 @@ export default function AdminCreditoConexaoFaturasPage() {
           disabled={loading}
           style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
         >
-          mês anterior
+          mÃªs anterior
         </button>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -201,7 +201,7 @@ export default function AdminCreditoConexaoFaturasPage() {
           disabled={loading}
           style={{ padding: "6px 10px", border: "1px solid #aaa", borderRadius: 6 }}
         >
-          mês seguinte
+          mÃªs seguinte
         </button>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -214,8 +214,8 @@ export default function AdminCreditoConexaoFaturasPage() {
             <option value="">Todas as contas</option>
             {contas.map((c) => {
               const label =
-                (c.descricao_exibicao?.trim() ? c.descricao_exibicao.trim() : `Cartão Conexão ${c.tipo_conta}`) +
-                ` — ${c.pessoa_nome}`;
+                (c.descricao_exibicao?.trim() ? c.descricao_exibicao.trim() : `CartÃ£o ConexÃ£o ${c.tipo_conta}`) +
+                ` â€” ${c.pessoa_nome}`;
               return (
                 <option key={c.id} value={String(c.id)}>
                   {label}
@@ -250,14 +250,14 @@ export default function AdminCreditoConexaoFaturasPage() {
               <tr style={{ background: "#fafafa" }}>
                 <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>ID</th>
                 <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Conta</th>
-                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Período</th>
+                <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>PerÃ­odo</th>
                 <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Fechamento</th>
                 <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Vencimento</th>
                 <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Compras</th>
                 <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Taxas</th>
                 <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Total</th>
                 <th style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #ddd" }}>Status</th>
-                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>Ações</th>
+                <th style={{ textAlign: "right", padding: 10, borderBottom: "1px solid #ddd" }}>AÃ§Ãµes</th>
               </tr>
             </thead>
 
@@ -281,7 +281,7 @@ export default function AdminCreditoConexaoFaturasPage() {
                       <div style={{ fontWeight: 700 }}>{r.titulo_conta}</div>
                       <div style={{ color: "#555" }}>
                         {r.pessoa_nome}
-                        {r.pessoa_cpf ? ` — CPF ${r.pessoa_cpf}` : ""}
+                        {r.pessoa_cpf ? ` â€” CPF ${r.pessoa_cpf}` : ""}
                       </div>
                     </div>
                   );
@@ -294,7 +294,7 @@ export default function AdminCreditoConexaoFaturasPage() {
                       <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{contaLinha}</td>
                       <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.periodo_referencia}</td>
                       <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.data_fechamento}</td>
-                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.data_vencimento ?? "—"}</td>
+                      <td style={{ padding: 10, borderBottom: "1px solid #eee" }}>{r.data_vencimento ?? "â€”"}</td>
                       <td style={{ padding: 10, borderBottom: "1px solid #eee", textAlign: "right" }}>
                         {formatBRLFromCentavos(r.compras_centavos)}
                       </td>
@@ -330,8 +330,9 @@ export default function AdminCreditoConexaoFaturasPage() {
       </div>
 
       <div style={{ marginTop: 12, color: "#666", fontSize: 12 }}>
-        Observação: o sistema garante (cria) as faturas do mês selecionado para as contas ativas, evitando erro em meses sem compras.
+        Observacao: a lista exibe apenas faturas existentes. Faturas sao criadas somente quando ha lancamentos.
       </div>
     </div>
   );
 }
+

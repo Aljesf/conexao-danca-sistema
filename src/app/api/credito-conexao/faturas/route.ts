@@ -46,21 +46,6 @@ function parsePeriodo(periodo: string): { year: number; month: number } {
   return { year, month };
 }
 
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function toISODate(year: number, month: number, day: number): string {
-  return `${year}-${pad2(month)}-${pad2(day)}`;
-}
-
-function clampDay(year: number, month: number, day: number): number {
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  if (day < 1) return 1;
-  if (day > last) return last;
-  return day;
-}
-
 function buildComposicaoResumo(raw: unknown): string | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
@@ -96,7 +81,7 @@ export async function GET(req: NextRequest) {
     const q = (sp.get("q") ?? "").trim();
     const contaIdParam = (sp.get("conta_id") ?? "").trim();
 
-    const { year, month } = parsePeriodo(periodo);
+    parsePeriodo(periodo);
     const contaId = contaIdParam ? Number(contaIdParam) : null;
 
     const supabase = getAdminSupabase();
@@ -130,28 +115,6 @@ export async function GET(req: NextRequest) {
 
     const contas = (contasRaw ?? []) as ContaConexaoRow[];
 
-    const inserts = contas.map((c) => {
-      const fechamentoDia = clampDay(year, month, c.dia_fechamento ?? 10);
-      const vencDia = c.dia_vencimento ? clampDay(year, month, c.dia_vencimento) : null;
-
-      return {
-        conta_conexao_id: c.id,
-        periodo_referencia: periodo,
-        data_fechamento: toISODate(year, month, fechamentoDia),
-        data_vencimento: vencDia ? toISODate(year, month, vencDia) : null,
-        valor_total_centavos: 0,
-        valor_taxas_centavos: 0,
-        status: "ABERTA",
-      };
-    });
-
-    if (inserts.length > 0) {
-      const { error: upsertErr } = await supabase
-        .from("credito_conexao_faturas")
-        .upsert(inserts, { onConflict: "conta_conexao_id,periodo_referencia", ignoreDuplicates: true });
-
-      if (upsertErr) throw upsertErr;
-    }
 
     let faturasQuery = supabase
       .from("credito_conexao_faturas")
