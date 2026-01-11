@@ -1,6 +1,13 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import { PessoaAutocomplete } from "@/components/pessoas/PessoaAutocomplete";
+
+type PessoaTitular = {
+  id: number;
+  nome: string | null;
+  cpf: string | null;
+};
 
 type ContaConexao = {
   id?: number;
@@ -15,7 +22,8 @@ type ContaConexao = {
   limite_maximo_centavos?: number | null;
   limite_autorizado_centavos?: number | null;
   ativo: boolean;
-  pessoas?: { id?: number; nome?: string | null } | null;
+  created_at?: string | null;
+  titular?: PessoaTitular | null;
 };
 
 export default function ContasCreditoConexaoPage() {
@@ -149,12 +157,34 @@ export default function ContasCreditoConexaoPage() {
   }
 
   function formatCurrency(centavos?: number | null) {
-    if (centavos == null) return "—";
+    if (centavos == null) return "-";
     return (centavos / 100).toLocaleString("pt-BR", {
       style: "currency",
       currency: "BRL",
     });
   }
+
+  function formatDatePtBr(iso?: string | null) {
+    if (!iso) return "-";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString("pt-BR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function formatCpf(cpf?: string | null) {
+    if (!cpf) return null;
+    const digits = cpf.replace(/\D/g, "");
+    if (digits.length !== 11) return cpf;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
+  }
+
+  const pessoaTitularId = form.pessoa_titular_id > 0 ? form.pessoa_titular_id : null;
 
   return (
     <div className="p-6 space-y-6">
@@ -182,59 +212,72 @@ export default function ContasCreditoConexaoPage() {
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left">ID</th>
-                    <th className="px-3 py-2 text-left">Titular</th>
-                    <th className="px-3 py-2 text-left">Tipo</th>
-                    <th className="px-3 py-2 text-left">Fechamento</th>
-                    <th className="px-3 py-2 text-left">Vencimento</th>
-                    <th className="px-3 py-2 text-left">Limite máx.</th>
-                    <th className="px-3 py-2 text-left">Limite aut.</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-center">Ações</th>
-                  </tr>
-                </thead>
+  <tr>
+    <th className="px-3 py-2 text-left">ID</th>
+    <th className="px-3 py-2 text-left">Titular</th>
+    <th className="px-3 py-2 text-left">Tipo</th>
+    <th className="px-3 py-2 text-left">Fechamento</th>
+    <th className="px-3 py-2 text-left">Vencimento</th>
+    <th className="px-3 py-2 text-left">Limite max.</th>
+    <th className="px-3 py-2 text-left">Limite aut.</th>
+    <th className="px-3 py-2 text-left">Criada em</th>
+    <th className="px-3 py-2 text-left">Status</th>
+    <th className="px-3 py-2 text-center">Acoes</th>
+  </tr>
+</thead>
                 <tbody>
-                  {contas.map((c) => (
-                    <tr key={c.id} className="border-t">
-                      <td className="px-3 py-2">{c.id}</td>
-                      <td className="px-3 py-2">
-                        {c.pessoas?.nome ?? `Pessoa #${c.pessoa_titular_id}`}
-                      </td>
-                      <td className="px-3 py-2">{c.tipo_conta}</td>
-                      <td className="px-3 py-2">dia {c.dia_fechamento}</td>
-                      <td className="px-3 py-2">
-                        {c.dia_vencimento ? `dia ${c.dia_vencimento}` : "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {formatCurrency(c.limite_maximo_centavos ?? null)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {formatCurrency(c.limite_autorizado_centavos ?? null)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            c.ativo
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-gray-100 text-gray-600"
-                          }`}
-                        >
-                          {c.ativo ? "Ativa" : "Inativa"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <button
-                          type="button"
-                          className="text-xs px-3 py-1 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
-                          onClick={() => editarConta(c)}
-                        >
-                          Editar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+  {contas.map((c) => {
+    const nomeTitular = c.titular?.nome?.trim() || "(Sem nome)";
+    const cpfFmt = formatCpf(c.titular?.cpf ?? null);
+
+    return (
+      <tr key={c.id} className="border-t">
+        <td className="px-3 py-2">{c.id}</td>
+        <td className="px-3 py-2">
+          <div className="flex flex-col">
+            <span className="font-medium">{nomeTitular}</span>
+            <span className="text-xs text-gray-500">
+              Pessoa ID: {c.pessoa_titular_id}
+              {cpfFmt ? ` - CPF: ${cpfFmt}` : ""}
+            </span>
+          </div>
+        </td>
+        <td className="px-3 py-2">{c.tipo_conta}</td>
+        <td className="px-3 py-2">dia {c.dia_fechamento}</td>
+        <td className="px-3 py-2">
+          {c.dia_vencimento ? `dia ${c.dia_vencimento}` : "-"}
+        </td>
+        <td className="px-3 py-2">
+          {formatCurrency(c.limite_maximo_centavos ?? null)}
+        </td>
+        <td className="px-3 py-2">
+          {formatCurrency(c.limite_autorizado_centavos ?? null)}
+        </td>
+        <td className="px-3 py-2">{formatDatePtBr(c.created_at ?? null)}</td>
+        <td className="px-3 py-2">
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+              c.ativo
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {c.ativo ? "Ativa" : "Inativa"}
+          </span>
+        </td>
+        <td className="px-3 py-2 text-center">
+          <button
+            type="button"
+            className="text-xs px-3 py-1 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
+            onClick={() => editarConta(c)}
+          >
+            Editar
+          </button>
+        </td>
+      </tr>
+    );
+  })}
+</tbody>
               </table>
             </div>
           )}
@@ -260,23 +303,22 @@ export default function ContasCreditoConexaoPage() {
           <form className="space-y-3" onSubmit={salvarConta}>
             <div>
               <label className="block text-xs font-medium text-gray-700">
-                ID da pessoa titular *
+                Pessoa titular *
               </label>
-              <input
-                type="number"
-                className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
-                value={form.pessoa_titular_id}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    pessoa_titular_id: Number(e.target.value || 0),
-                  }))
-                }
-                required
-              />
+              <div className="mt-1">
+                <PessoaAutocomplete
+                  valuePessoaId={pessoaTitularId}
+                  onChangePessoaId={(id) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      pessoa_titular_id: id ?? 0,
+                    }))
+                  }
+                  createHref="/admin/pessoas/nova"
+                />
+              </div>
               <p className="mt-1 text-[11px] text-gray-500">
-                Por enquanto, informe o ID da pessoa (responsável ou colaborador). Em uma etapa
-                futura vamos integrar este formulário direto à ficha da pessoa.
+                Busque pelo nome ou CPF. Se nao existir, crie a pessoa antes de cadastrar a conta.
               </p>
             </div>
 
@@ -437,4 +479,8 @@ export default function ContasCreditoConexaoPage() {
     </div>
   );
 }
+
+
+
+
 

@@ -111,15 +111,22 @@ export default function CursoLivreDetalhePage({ params }: { params: Promise<Para
     }
   }
 
-  async function onDesvincular(turmaId: number) {
+  async function onApagarTurma(turmaId: number) {
     setError(null);
+    const ok = window.confirm(
+      "Apagar esta turma (modalidade) ira remover a turma e registros dependentes (ex.: encontros). Esta acao nao pode ser desfeita.\n\nDeseja continuar?",
+    );
+    if (!ok) return;
     try {
       const res = await fetch(`/api/academico/cursos-livres/${cursoId}/turmas/${turmaId}`, { method: "DELETE" });
-      const json = (await res.json()) as { ok?: boolean; error?: string; message?: string };
-      if (!res.ok) throw new Error(json.message ?? json.error ?? "Falha ao desvincular.");
+      const json = (await res.json()) as { ok?: boolean; error?: string; details?: string; hint?: string };
+      if (!res.ok) {
+        const msg = [json.error, json.details, json.hint].filter(Boolean).join(" | ");
+        throw new Error(msg || "Falha ao apagar turma.");
+      }
       window.location.reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao desvincular.");
+      setError(err instanceof Error ? err.message : "Falha ao apagar turma.");
     }
   }
 
@@ -258,8 +265,8 @@ export default function CursoLivreDetalhePage({ params }: { params: Promise<Para
                     <Link className="rounded-md border px-3 py-2 text-sm" href={`/escola/academico/turmas/${t.turma_id}`}>
                       Abrir turma
                     </Link>
-                    <button className="rounded-md border px-3 py-2 text-sm" onClick={() => onDesvincular(t.turma_id)}>
-                      Desvincular
+                    <button className="rounded-md border px-3 py-2 text-sm" onClick={() => onApagarTurma(t.turma_id)}>
+                      Apagar turma
                     </button>
                   </div>
                 </div>

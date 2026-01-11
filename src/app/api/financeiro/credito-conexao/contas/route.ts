@@ -12,48 +12,99 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const tipoConta = searchParams.get("tipo_conta"); // ALUNO / COLABORADOR / null
 
-    let query = supabase
+    const baseSelect = `
+      id,
+      pessoa_titular_id,
+      tipo_conta,
+      descricao_exibicao,
+      dia_fechamento,
+      dia_vencimento,
+      centro_custo_principal_id,
+      conta_financeira_origem_id,
+      conta_financeira_destino_id,
+      limite_maximo_centavos,
+      limite_autorizado_centavos,
+      ativo,
+      created_at
+    `;
+
+    let joinQuery = supabase
       .from("credito_conexao_contas")
       .select(
         `
-        id,
-        pessoa_titular_id,
-        tipo_conta,
-        descricao_exibicao,
-        dia_fechamento,
-        dia_vencimento,
-        centro_custo_principal_id,
-        conta_financeira_origem_id,
-        conta_financeira_destino_id,
-        limite_maximo_centavos,
-        limite_autorizado_centavos,
-        ativo,
-        created_at,
-        updated_at
-      `,
+          ${baseSelect},
+          titular:pessoas!credito_conexao_contas_pessoa_titular_fkey (
+            id,
+            nome,
+            cpf
+          )
+        `,
       )
       .order("ativo", { ascending: false })
       .order("id", { ascending: true });
 
     if (tipoConta) {
-      query = query.eq("tipo_conta", tipoConta);
+      joinQuery = joinQuery.eq("tipo_conta", tipoConta);
     }
 
-    const { data, error } = await query;
+    const { data: contasJoin, error: joinError } = await joinQuery;
 
-    if (error) {
-      console.error("Erro ao listar credito_conexao_contas", error);
+    if (!joinError) {
+      return NextResponse.json({ ok: true, contas: contasJoin ?? [] });
+    }
+
+    let baseQuery = supabase
+      .from("credito_conexao_contas")
+      .select(baseSelect)
+      .order("ativo", { ascending: false })
+      .order("id", { ascending: true });
+
+    if (tipoConta) {
+      baseQuery = baseQuery.eq("tipo_conta", tipoConta);
+    }
+
+    const { data: contasBase, error: baseError } = await baseQuery;
+
+    if (baseError) {
+      console.error("Erro ao listar credito_conexao_contas", baseError);
       return NextResponse.json(
         {
           ok: false,
           error: "erro_listar_contas_credito_conexao",
-          details: error.message,
+          details: baseError.message,
         },
         { status: 500 },
       );
     }
 
-    return NextResponse.json({ ok: true, contas: data ?? [] });
+    const pessoaIds = Array.from(
+      new Set((contasBase ?? []).map((c) => c.pessoa_titular_id).filter(Boolean)),
+    ) as number[];
+
+    const { data: pessoas, error: pessoasError } = await supabase
+      .from("pessoas")
+      .select("id, nome, cpf")
+      .in("id", pessoaIds);
+
+    if (pessoasError) {
+      console.error("Erro ao listar pessoas (titulares)", pessoasError);
+      return NextResponse.json(
+        { ok: false, error: "erro_listar_titulares", details: pessoasError.message },
+        { status: 500 },
+      );
+    }
+
+    const pessoasMap = new Map<number, { id: number; nome: string | null; cpf: string | null }>();
+    for (const p of pessoas ?? []) {
+      pessoasMap.set(p.id, { id: p.id, nome: p.nome ?? null, cpf: (p as { cpf?: string | null }).cpf ?? null });
+    }
+
+    const contasOut = (contasBase ?? []).map((c) => ({
+      ...c,
+      titular: pessoasMap.get(c.pessoa_titular_id) ?? null,
+    }));
+
+    return NextResponse.json({ ok: true, contas: contasOut });
   } catch (err: any) {
     console.error("Erro inesperado em GET /credito-conexao/contas", err);
     return NextResponse.json(
@@ -169,3 +220,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+

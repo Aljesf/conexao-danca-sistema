@@ -24,16 +24,30 @@ export async function DELETE(_req: Request, ctx: { params: { id: string; turmaId
     return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
   }
 
-  const { error } = await supabase
+  const { data: turma, error: turmaError } = await supabase
     .from("turmas")
-    .update({ curso_livre_id: null })
+    .select("turma_id, curso_livre_id")
     .eq("turma_id", turmaId)
-    .eq("curso_livre_id", cursoLivreId);
+    .single();
+
+  if (turmaError || !turma) {
+    return NextResponse.json({ error: "turma_nao_encontrada" }, { status: 404 });
+  }
+
+  if (turma.curso_livre_id !== cursoLivreId) {
+    return NextResponse.json({ error: "turma_nao_pertence_ao_curso_livre" }, { status: 409 });
+  }
+
+  const { error } = await supabase.from("turmas").delete().eq("turma_id", turmaId);
 
   if (error) {
     return NextResponse.json(
-      { error: "falha_desvincular_turma", message: error.message },
-      { status: 500 },
+      {
+        error: "nao_foi_possivel_apagar_turma",
+        details: error.message,
+        hint: "Se esta turma ja possui vinculos (ex.: matriculas), cancele a turma em vez de apagar.",
+      },
+      { status: 409 },
     );
   }
 
