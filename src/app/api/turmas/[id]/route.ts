@@ -191,8 +191,9 @@ function parseHorariosPorDia(
   return itens.filter((item): item is { day_of_week: number; dia_label: string; inicio: string; fim: string } => !!item);
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const turmaId = Number(params.id);
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const turmaId = Number(id);
   if (!Number.isInteger(turmaId) || turmaId <= 0) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
@@ -224,8 +225,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({ turma, horarios_por_dia: horariosPorDia }, { status: 200 });
 }
 
-export async function PUT(_req: Request, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export async function PUT(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await ctx.params;
+  const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
@@ -362,8 +364,9 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({ data, horarios_por_dia: horariosParsed }, { status: 200 });
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await ctx.params;
+  const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }

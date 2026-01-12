@@ -212,6 +212,76 @@ async function montarComposicaoMensalidade(params: {
   return { itens, totalCentavos };
 }
 
+async function ensureTurmaAlunoVinculos(params: {
+  supabase: SupabaseAdminClient;
+  matriculaId: number;
+  alunoId: number;
+  vinculoId: number | null;
+  dataInicio: string | null;
+}) {
+  const { supabase, matriculaId, alunoId, vinculoId, dataInicio } = params;
+
+  const turmaIds = new Set<number>();
+
+  const { data: execRows, error: execErr } = await supabase
+    .from("matricula_execucao_valores")
+    .select("turma_id")
+    .eq("matricula_id", matriculaId)
+    .eq("ativo", true);
+
+  if (execErr) {
+    throw new Error(`falha_buscar_execucoes: ${execErr.message}`);
+  }
+
+  (execRows ?? []).forEach((row) => {
+    const turmaId = asInt((row as { turma_id?: unknown }).turma_id);
+    if (turmaId) turmaIds.add(turmaId);
+  });
+
+  if (turmaIds.size === 0 && vinculoId) {
+    turmaIds.add(vinculoId);
+  }
+
+  if (turmaIds.size === 0) return;
+
+  for (const turmaId of turmaIds) {
+    const { data: taExist, error: taErr } = await supabase
+      .from("turma_aluno")
+      .select("turma_aluno_id, matricula_id")
+      .eq("turma_id", turmaId)
+      .eq("aluno_pessoa_id", alunoId)
+      .is("dt_fim", null)
+      .limit(1);
+
+    if (taErr) {
+      throw new Error(`falha_buscar_turma_aluno: ${taErr.message}`);
+    }
+
+    if (!taExist || taExist.length === 0) {
+      const { error: taInsErr } = await supabase.from("turma_aluno").insert({
+        turma_id: turmaId,
+        aluno_pessoa_id: alunoId,
+        matricula_id: matriculaId,
+        dt_inicio: dataInicio,
+        status: "ativo",
+      });
+
+      if (taInsErr) {
+        throw new Error(`falha_inserir_turma_aluno: ${taInsErr.message}`);
+      }
+    } else if (!taExist[0]?.matricula_id) {
+      const { error: taUpdErr } = await supabase
+        .from("turma_aluno")
+        .update({ matricula_id: matriculaId })
+        .eq("turma_aluno_id", taExist[0].turma_aluno_id);
+
+      if (taUpdErr) {
+        throw new Error(`falha_atualizar_turma_aluno: ${taUpdErr.message}`);
+      }
+    }
+  }
+}
+
 async function ensureCobrancaCartaoConexao(params: {
   supabase: SupabaseAdminClient;
   pessoaId: number;
@@ -539,13 +609,18 @@ export async function POST(req: Request) {
   const { data: matricula, error: errMat } = await supabase
     .from("matriculas")
     .select(
-      "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos, total_mensalidade_centavos, ano_referencia, data_inicio_vinculo",
+      "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos, total_mensalidade_centavos, ano_referencia, data_inicio_vinculo, data_matricula, vinculo_id, status_fluxo",
     )
     .eq("id", matriculaId)
     .single();
 
   if (errMat || !matricula) {
     return NextResponse.json({ error: "matricula_nao_encontrada" }, { status: 404 });
+  }
+
+  const alunoId = asInt(matricula.pessoa_id);
+  if (!alunoId) {
+    return NextResponse.json({ error: "aluno_id_invalido" }, { status: 400 });
   }
 
   const debugCartao: {
@@ -574,6 +649,25 @@ export async function POST(req: Request) {
 
   if (matricula.primeira_cobranca_status === "PAGA" || matricula.primeira_cobranca_status === "LANCADA_CARTAO") {
     return NextResponse.json({ error: "matricula_ja_liquidada" }, { status: 409 });
+  }
+
+  const vinculoId = asInt((matricula as { vinculo_id?: unknown }).vinculo_id);
+  const dataInicio =
+    asDateStr((matricula as { data_inicio_vinculo?: unknown }).data_inicio_vinculo) ??
+    asDateStr((matricula as { data_matricula?: unknown }).data_matricula) ??
+    null;
+
+  try {
+    await ensureTurmaAlunoVinculos({
+      supabase,
+      matriculaId: matricula.id,
+      alunoId,
+      vinculoId,
+      dataInicio,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "erro_desconhecido";
+    return NextResponse.json({ error: "falha_criar_turma_aluno", details: msg }, { status: 500 });
   }
 
   const valorPayload = asInt(body.valor_centavos);
@@ -692,6 +786,7 @@ export async function POST(req: Request) {
         primeira_cobranca_recebimento_id: receb.id,
         primeira_cobranca_forma_pagamento_id: formaPagamentoId,
         primeira_cobranca_data_pagamento: dataPg,
+        status_fluxo: "ATIVA",
       })
       .eq("id", matricula.id);
 
@@ -718,11 +813,6 @@ export async function POST(req: Request) {
 
         debugCartao.periodo_inicio = buildPeriodo(anoRef, mesPrimeiraMensalidadeCheia);
         debugCartao.periodo_fim = buildPeriodo(anoRef, 12);
-
-        const alunoId = asInt(matricula.pessoa_id);
-        if (!alunoId) {
-          throw new Error("aluno_id_invalido");
-        }
 
         const composicao = await montarComposicaoMensalidade({
           supabase,
@@ -857,11 +947,6 @@ export async function POST(req: Request) {
       diaVencimento: conta.dia_vencimento ?? 12,
     });
 
-    const alunoId = asInt(matricula.pessoa_id);
-    if (!alunoId) {
-      return NextResponse.json({ error: "aluno_id_invalido" }, { status: 400 });
-    }
-
     const periodo =
       typeof matricula.data_inicio_vinculo === "string" ? ymFromDate(matricula.data_inicio_vinculo) : `${anoRef}-01`;
 
@@ -960,6 +1045,7 @@ export async function POST(req: Request) {
         primeira_cobranca_status: "LANCADA_CARTAO",
         primeira_cobranca_valor_centavos: totalMensalidade,
         primeira_cobranca_data_pagamento: null,
+        status_fluxo: "ATIVA",
       })
       .eq("id", matricula.id);
 
@@ -985,6 +1071,7 @@ export async function POST(req: Request) {
         motivo_excecao_primeiro_pagamento: motivo,
         excecao_autorizada_por: auth.user.id,
         excecao_criada_em: new Date().toISOString(),
+        status_fluxo: "ATIVA",
       })
       .eq("id", matricula.id);
 

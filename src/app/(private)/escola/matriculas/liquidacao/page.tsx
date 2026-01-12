@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 type FormaPagamento = {
@@ -23,10 +23,13 @@ type MatriculaResumo = {
 
 export default function Page() {
   const router = useRouter();
-  const params = useSearchParams();
+  const routeParams = useParams();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClientComponentClient(), []);
 
-  const matriculaId = params.get("matriculaId");
+  const routeIdRaw = routeParams?.id;
+  const matriculaIdFromRoute = Array.isArray(routeIdRaw) ? routeIdRaw[0] : routeIdRaw ?? null;
+  const matriculaId = matriculaIdFromRoute ?? searchParams.get("matriculaId");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -134,7 +137,7 @@ export default function Page() {
     try {
       setSaving(true);
 
-      const res = await fetch("/api/matriculas/liquidacao-primeira", {
+      const res = await fetch("/api/matriculas/liquidar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -183,19 +186,6 @@ export default function Page() {
 
       if (json?.status === "LANCADA_CARTAO") {
         alert("Lancado no Cartao Conexao. Verifique a fatura do periodo.");
-      }
-
-      const finalizeRes = await fetch(`/api/matriculas/${matricula.id}/finalizar`, { method: "POST" });
-      if (!finalizeRes.ok) {
-        let finalizeMessage = "Falha ao finalizar matricula.";
-        try {
-          const finalizeJson = (await finalizeRes.json()) as { error?: string; message?: string };
-          finalizeMessage = finalizeJson.message ?? finalizeJson.error ?? finalizeMessage;
-        } catch {
-          // mantem mensagem generica
-        }
-        setErro(finalizeMessage);
-        return;
       }
 
       router.push(`/escola/matriculas/${matricula.id}`);

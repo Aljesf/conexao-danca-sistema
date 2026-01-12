@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
-import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 
@@ -213,20 +212,6 @@ function lastDayOfMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-function buildPeriodo(ano: number, mes: number): string {
-  return `${ano}-${String(mes).padStart(2, "0")}`;
-}
-
-function buildDateFromYMD(year: number, month: number, day: number): string {
-  const mm = String(month).padStart(2, "0");
-  const dd = String(day).padStart(2, "0");
-  return `${year}-${mm}-${dd}`;
-}
-
-function yearFromDate(dateYYYYMMDD: string): number {
-  return Number(dateYYYYMMDD.slice(0, 4));
-}
-
 type PrimeiraCobrancaCalc = {
   tipo: "ENTRADA_PRORATA" | "MENSALIDADE_CHEIA_CARTAO";
   valor_centavos: number;
@@ -294,253 +279,6 @@ function calcularPrimeiraCobranca(params: {
     mes_base: month,
     mes_primeira_mensalidade: Math.min(12, month + 1),
   };
-}
-
-type SupabaseAdminClient = ReturnType<typeof getSupabaseAdmin>;
-
-type ComposicaoItemManual = {
-  turma_id: number;
-  ue_id: number | null;
-  descricao: string;
-  valor_centavos: number;
-};
-
-async function montarComposicaoManual(
-  supabase: SupabaseAdminClient,
-  execucoes: ExecucaoManual[],
-): Promise<ComposicaoItemManual[]> {
-  const turmaIds = execucoes.map((execucao) => execucao.turma_id);
-  const { data: ues } = await supabase
-    .from("escola_unidades_execucao")
-    .select("unidade_execucao_id, denominacao, nome, origem_id, origem_tipo")
-    .eq("origem_tipo", "TURMA")
-    .in("origem_id", turmaIds);
-
-  const { data: turmas } = await supabase.from("turmas").select("turma_id, nome").in("turma_id", turmaIds);
-
-  const ueByTurma = new Map<number, Record<string, unknown>>();
-  (ues ?? []).forEach((row) => {
-    const record = row as Record<string, unknown>;
-    const turmaId = Number(record.origem_id);
-    if (Number.isFinite(turmaId)) {
-      ueByTurma.set(turmaId, record);
-    }
-  });
-
-  const turmaById = new Map<number, Record<string, unknown>>();
-  (turmas ?? []).forEach((row) => {
-    const record = row as Record<string, unknown>;
-    const turmaId = Number(record.turma_id);
-    if (Number.isFinite(turmaId)) {
-      turmaById.set(turmaId, record);
-    }
-  });
-
-  return execucoes.map((execucao) => {
-    const ue = ueByTurma.get(execucao.turma_id) ?? null;
-    const turma = turmaById.get(execucao.turma_id) ?? null;
-    const descricao =
-      (typeof ue?.denominacao === "string" && ue.denominacao.trim()) ||
-      (typeof ue?.nome === "string" && ue.nome.trim()) ||
-      (typeof turma?.nome === "string" && turma.nome.trim()) ||
-      `Turma ${execucao.turma_id}`;
-    const ueId = ue?.unidade_execucao_id ? Number(ue.unidade_execucao_id) : null;
-
-    return {
-      turma_id: execucao.turma_id,
-      ue_id: Number.isFinite(ueId as number) ? (ueId as number) : null,
-      descricao,
-      valor_centavos: execucao.valor_mensal_centavos,
-    };
-  });
-}
-
-async function ensureContaCreditoConexaoAluno(params: { supabase: SupabaseAdminClient; pessoaTitularId: number }) {
-  const { supabase, pessoaTitularId } = params;
-
-  const { data: contaExistente } = await supabase
-    .from("credito_conexao_contas")
-    .select("id, dia_fechamento, dia_vencimento")
-    .eq("pessoa_titular_id", pessoaTitularId)
-    .eq("tipo_conta", "ALUNO")
-    .eq("ativo", true)
-    .maybeSingle();
-
-  if (contaExistente?.id) return contaExistente;
-
-  const { data: contaNova, error: errNova } = await supabase
-    .from("credito_conexao_contas")
-    .insert({
-      pessoa_titular_id: pessoaTitularId,
-      tipo_conta: "ALUNO",
-      descricao_exibicao: "Cartao Conexao ALUNO",
-      dia_fechamento: 10,
-      dia_vencimento: 12,
-      ativo: true,
-    })
-    .select("id, dia_fechamento, dia_vencimento")
-    .single();
-
-  if (errNova || !contaNova) {
-    throw new Error(`falha_criar_conta_credito_conexao: ${errNova?.message ?? "erro_desconhecido"}`);
-  }
-
-  return contaNova;
-}
-
-async function ensureFaturasAno(params: {
-  supabase: SupabaseAdminClient;
-  contaConexaoId: number;
-  ano: number;
-  diaFechamento: number;
-  diaVencimento: number | null;
-}) {
-  const { supabase, contaConexaoId, ano, diaFechamento, diaVencimento } = params;
-
-  for (let m = 1; m <= 12; m++) {
-    const periodo = `${ano}-${String(m).padStart(2, "0")}`;
-
-    const { data: jaExiste } = await supabase
-      .from("credito_conexao_faturas")
-      .select("id")
-      .eq("conta_conexao_id", contaConexaoId)
-      .eq("periodo_referencia", periodo)
-      .maybeSingle();
-
-    if (jaExiste?.id) continue;
-
-    const dataFechamento = buildDateFromYMD(ano, m, diaFechamento);
-    const dataVenc = diaVencimento ? buildDateFromYMD(ano, m, diaVencimento) : null;
-
-    const { error } = await supabase.from("credito_conexao_faturas").insert({
-      conta_conexao_id: contaConexaoId,
-      periodo_referencia: periodo,
-      data_fechamento: dataFechamento,
-      data_vencimento: dataVenc,
-      valor_total_centavos: 0,
-      status: "ABERTA",
-    });
-
-    if (error) {
-      throw new Error(`falha_criar_fatura_credito_conexao: ${error.message}`);
-    }
-  }
-}
-
-async function ensureCobrancaCartaoConexao(params: {
-  supabase: SupabaseAdminClient;
-  pessoaId: number;
-  matriculaId: number;
-  competencia: string;
-  valorCentavos: number;
-  vencimento: string;
-  descricao: string;
-}): Promise<number> {
-  const { supabase, pessoaId, matriculaId, competencia, valorCentavos, vencimento, descricao } = params;
-
-  const { data: existente, error: findErr } = await supabase
-    .from("cobrancas")
-    .select("id")
-    .eq("pessoa_id", pessoaId)
-    .eq("origem_tipo", "MATRICULA")
-    .eq("origem_id", matriculaId)
-    .eq("origem_subtipo", "CARTAO_CONEXAO")
-    .eq("competencia_ano_mes", competencia)
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (findErr) {
-    throw new Error(`falha_buscar_cobranca_cartao: ${findErr.message}`);
-  }
-
-  const existenteId = existente ? Number((existente as { id?: number }).id) : NaN;
-  if (Number.isFinite(existenteId) && existenteId > 0) {
-    const { error: updErr } = await supabase
-      .from("cobrancas")
-      .update({
-        descricao,
-        valor_centavos: valorCentavos,
-        vencimento,
-        origem_subtipo: "CARTAO_CONEXAO",
-        competencia_ano_mes: competencia,
-      })
-      .eq("id", existenteId);
-
-    if (updErr) {
-      throw new Error(`falha_atualizar_cobranca_cartao: ${updErr.message}`);
-    }
-
-    return existenteId;
-  }
-
-  const { data: cobranca, error: insErr } = await supabase
-    .from("cobrancas")
-    .insert({
-      pessoa_id: pessoaId,
-      descricao,
-      valor_centavos: valorCentavos,
-      vencimento,
-      status: "PENDENTE",
-      origem_tipo: "MATRICULA",
-      origem_id: matriculaId,
-      origem_subtipo: "CARTAO_CONEXAO",
-      competencia_ano_mes: competencia,
-    })
-    .select("id")
-    .single();
-
-  if (insErr || !cobranca) {
-    throw new Error(`falha_criar_cobranca_cartao: ${insErr?.message ?? "erro_desconhecido"}`);
-  }
-
-  const id = Number((cobranca as { id?: number }).id);
-  if (!Number.isFinite(id) || id <= 0) {
-    throw new Error("cobranca_id_invalido");
-  }
-
-  return id;
-}
-
-async function vincularLancamentoNaFatura(params: {
-  supabase: SupabaseAdminClient;
-  contaConexaoId: number;
-  periodoReferencia: string;
-  lancamentoId: number;
-  valorCentavos: number;
-}) {
-  const { supabase, contaConexaoId, periodoReferencia, lancamentoId, valorCentavos } = params;
-
-  const { data: fatura, error: errFat } = await supabase
-    .from("credito_conexao_faturas")
-    .select("id, valor_total_centavos")
-    .eq("conta_conexao_id", contaConexaoId)
-    .eq("periodo_referencia", periodoReferencia)
-    .single();
-
-  if (errFat || !fatura) {
-    throw new Error(`fatura_nao_encontrada_para_periodo: ${periodoReferencia}`);
-  }
-
-  const { error: errLink } = await supabase.from("credito_conexao_fatura_lancamentos").insert({
-    fatura_id: fatura.id,
-    lancamento_id: lancamentoId,
-  });
-
-  if (errLink) {
-    throw new Error(`falha_vincular_lancamento_fatura: ${errLink.message}`);
-  }
-
-  const novoTotal = (Number(fatura.valor_total_centavos) || 0) + valorCentavos;
-
-  const { error: errUpd } = await supabase
-    .from("credito_conexao_faturas")
-    .update({ valor_total_centavos: novoTotal })
-    .eq("id", fatura.id);
-
-  if (errUpd) {
-    throw new Error(`falha_atualizar_total_fatura: ${errUpd.message}`);
-  }
 }
 
 export async function POST(req: Request) {
@@ -747,7 +485,6 @@ export async function POST(req: Request) {
     return badRequest("vinculo_id (turma) nao encontrado.", { missing_ids: missingIds });
   }
 
-  const nivelIdByTurma = new Map<number, number | null>();
   let execucoesValidas: ExecucaoManual[] = execucoesIn;
 
   if (usarExecucoes) {
@@ -814,7 +551,6 @@ export async function POST(req: Request) {
       if (!nivelFinal) {
         return badRequest("nivel_obrigatorio.", { turma_id: execucao.turma_id });
       }
-      nivelIdByTurma.set(execucao.turma_id, execucao.nivel_id);
       execucoesValidas.push({ ...execucao, nivel: nivelFinal });
     }
   } else {
@@ -835,7 +571,6 @@ export async function POST(req: Request) {
       if (!nivelId) return badRequest("nivel_id_obrigatorio.");
       const nivelOk = (turmaNiveis ?? []).some((row) => Number(row.nivel_id) === nivelId);
       if (!nivelOk) return badRequest("nivel_id_nao_pertence_a_turma.");
-      nivelIdByTurma.set(vinculoId, nivelId);
     }
   }
 
@@ -996,8 +731,6 @@ export async function POST(req: Request) {
       excecaoAutorizadaPor = user.id;
       excecaoCriadaEm = new Date().toISOString();
       primeiraCobrancaStatus = "ADIADA_EXCECAO";
-    } else if (primeiraCobranca.tipo === "MENSALIDADE_CHEIA_CARTAO") {
-      primeiraCobrancaStatus = "LANCADA_CARTAO";
     } else {
       primeiraCobrancaStatus = "PENDENTE";
     }
@@ -1067,199 +800,6 @@ export async function POST(req: Request) {
         });
       }
       return jsonError("MANUAL_INSERT_EXECUCOES_FAIL", "Falha ao salvar valores manuais.", 500, { execErr });
-    }
-  }
-
-  if (tipoMatricula === "REGULAR" || tipoMatricula === "CURSO_LIVRE" || tipoMatricula === "PROJETO_ARTISTICO") {
-    const dtInicio = dataInicioVinculo ?? dataMatricula ?? null;
-
-    for (const turmaId of vinculosIds) {
-      const { data: taExist, error: taErr } = await supabase
-        .from("turma_aluno")
-        .select("turma_aluno_id, matricula_id")
-        .eq("turma_id", turmaId)
-        .eq("aluno_pessoa_id", pessoaId)
-        .is("dt_fim", null)
-        .limit(1);
-
-      if (taErr) {
-        return serverError("CHECAR_TURMA_ALUNO_FAIL", "Falha ao checar turma_aluno.", { taErr, turmaId });
-      }
-
-      if (!taExist || taExist.length === 0) {
-        const { error: taInsErr } = await supabase
-          .from("turma_aluno")
-          .insert({
-            turma_id: turmaId,
-            aluno_pessoa_id: pessoaId,
-            matricula_id: matriculaId,
-            dt_inicio: dtInicio,
-            status: "ativo",
-            nivel_id: nivelIdByTurma.get(turmaId) ?? null,
-          });
-
-        if (taInsErr) {
-          return serverError("CRIAR_TURMA_ALUNO_FAIL", "Falha ao criar vinculo turma_aluno.", { taInsErr, turmaId });
-        }
-      } else {
-        const current = taExist[0];
-        if (!current.matricula_id) {
-          const updatePayload: Record<string, unknown> = {
-            matricula_id: matriculaId,
-          };
-          const nivelAtual = nivelIdByTurma.get(turmaId) ?? null;
-          if (nivelAtual) {
-            updatePayload.nivel_id = nivelAtual;
-          }
-          const { error: taUpdErr } = await supabase
-            .from("turma_aluno")
-            .update(updatePayload)
-            .eq("turma_aluno_id", current.turma_aluno_id);
-
-          if (taUpdErr) {
-            return serverError("ATUALIZAR_TURMA_ALUNO_FAIL", "Falha ao atualizar matricula_id em turma_aluno.", {
-              taUpdErr,
-              turmaId,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  if (usarExecucoes && totalMensalidadeCentavos > 0 && primeiraCobranca) {
-    try {
-      const dataBase = dataInicioVinculo ?? dataMatricula ?? null;
-      const anoCartao =
-        typeof anoRef === "number"
-          ? anoRef
-          : dataBase
-            ? yearFromDate(dataBase)
-            : new Date().getFullYear();
-
-      const conta = await ensureContaCreditoConexaoAluno({
-        supabase: admin,
-        pessoaTitularId: respFinId,
-      });
-
-      await ensureFaturasAno({
-        supabase: admin,
-        contaConexaoId: Number(conta.id),
-        ano: anoCartao,
-        diaFechamento: conta.dia_fechamento ?? 10,
-        diaVencimento: conta.dia_vencimento ?? 12,
-      });
-
-      if (
-        primeiraCobranca.tipo === "ENTRADA_PRORATA" &&
-        primeiraCobranca.valor_centavos > 0 &&
-        primeiraCobrancaStatus === "PENDENTE"
-      ) {
-        const vencimentoEntrada =
-          dataMatricula ??
-          dataInicioVinculo ??
-          buildDateFromYMD(anoCartao, primeiraCobranca.mes_base, conta.dia_vencimento ?? 12);
-        const competenciaEntrada =
-          dataMatricula && dataMatricula.length >= 7
-            ? dataMatricula.slice(0, 7)
-            : dataInicioVinculo && dataInicioVinculo.length >= 7
-              ? dataInicioVinculo.slice(0, 7)
-              : buildPeriodo(anoCartao, primeiraCobranca.mes_base);
-        const descricaoEntrada = `Entrada / Pro-rata (matricula #${matriculaId})`;
-
-        const { error: entradaErr } = await admin.from("cobrancas").insert({
-          pessoa_id: respFinId,
-          descricao: descricaoEntrada,
-          valor_centavos: primeiraCobranca.valor_centavos,
-          vencimento: vencimentoEntrada,
-          status: "PENDENTE",
-          origem_tipo: "MATRICULA",
-          origem_id: matriculaId,
-          origem_subtipo: "ENTRADA_PRORATA",
-          competencia_ano_mes: competenciaEntrada,
-        });
-
-        if (entradaErr) {
-          return serverError("CRIAR_COBRANCA_PRORATA_FAIL", "Falha ao criar cobranca pro-rata.", { entradaErr });
-        }
-      }
-
-      const composicaoItens = await montarComposicaoManual(admin, execucoesValidas);
-      const composicaoBase = {
-        fonte: "MATRICULA_MANUAL_UE",
-        aluno_pessoa_id: pessoaId,
-        responsavel_financeiro_id: respFinId,
-        ano_referencia: anoCartao,
-        total_centavos: totalMensalidadeCentavos,
-        itens: composicaoItens,
-      };
-
-      const mesesParaGerar: number[] =
-        primeiraCobranca.tipo === "ENTRADA_PRORATA"
-          ? Array.from({ length: Math.max(0, 12 - primeiraCobranca.mes_primeira_mensalidade + 1) }, (_, idx) =>
-              primeiraCobranca.mes_primeira_mensalidade + idx,
-            )
-          : [primeiraCobranca.mes_base];
-
-      for (const mes of mesesParaGerar) {
-        if (mes < 1 || mes > 12) continue;
-        const periodo = buildPeriodo(anoCartao, mes);
-        const dataEvento = buildDateFromYMD(anoCartao, mes, 1);
-        const vencimento = buildDateFromYMD(anoCartao, mes, conta.dia_vencimento ?? 12);
-        const descricao = `Mensalidade ${periodo} - matricula`;
-
-        const cobrancaId = await ensureCobrancaCartaoConexao({
-          supabase: admin,
-          pessoaId: respFinId,
-          matriculaId,
-          competencia: periodo,
-          valorCentavos: totalMensalidadeCentavos,
-          vencimento,
-          descricao,
-        });
-
-        const lancamento = await upsertLancamentoPorCobranca({
-          cobrancaId,
-          contaConexaoId: Number(conta.id),
-          competencia: periodo,
-          valorCentavos: totalMensalidadeCentavos,
-          descricao,
-          origemSistema: "MATRICULA",
-          origemId: matriculaId,
-          composicaoJson: { ...composicaoBase, competencia: periodo },
-        });
-
-        if (lancamento.created) {
-          await vincularLancamentoNaFatura({
-            supabase: admin,
-            contaConexaoId: Number(conta.id),
-            periodoReferencia: periodo,
-            lancamentoId: lancamento.id,
-            valorCentavos: totalMensalidadeCentavos,
-          });
-        }
-
-        const ledgerLinha = {
-          matricula_id: matriculaId,
-          tipo: "LANCAMENTO_CREDITO",
-          descricao,
-          valor_centavos: totalMensalidadeCentavos,
-          vencimento: null,
-          data_evento: dataEvento,
-          status: "PENDENTE_FATURA",
-          origem_tabela: "credito_conexao_lancamentos",
-          origem_id: lancamento.id,
-        };
-
-        const { error: ledgerErr } = await admin.from("matriculas_financeiro_linhas").insert(ledgerLinha);
-        if (ledgerErr) {
-          return serverError("INSERIR_LEDGER_FAIL", "Falha ao inserir ledger.", { ledgerErr });
-        }
-      }
-    } catch (err) {
-      return serverError("CARTAO_CONEXAO_FAIL", "Falha ao gerar cobranca no cartao conexao.", {
-        message: err instanceof Error ? err.message : String(err),
-      });
     }
   }
   return NextResponse.json({ ok: true, matricula: matriculaCriada }, { status: 201 });
