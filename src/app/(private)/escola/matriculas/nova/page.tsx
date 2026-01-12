@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import PessoaSearchBox, { PessoaSearchItem } from "@/components/PessoaSearchBox";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
@@ -37,6 +36,9 @@ type MatriculaCarrinhoItem = {
   servico_id: number | null;
   unidade_execucao_id: number | null;
   turma_id: number | null;
+  nivel_id: number | null;
+  nivel_texto: string;
+  valor_mensal_reais: string;
 };
 
 type CursoOpcao = {
@@ -73,58 +75,10 @@ type MatriculaResp = {
   error?: string;
 };
 
-type TabelaAplicavel = {
+type NivelOpcao = {
   id: number;
-  titulo: string;
-  ano_referencia: number | null;
-};
-
-type ItemAplicado = {
-  id: number;
-  codigo_item: string;
-  tipo_item: string;
-  descricao?: string | null;
-  valor_centavos: number;
-  ativo: boolean;
-  ordem: number;
-};
-
-type PrecoResolverResp = {
-  ok: boolean;
-  data?: {
-    tabela: TabelaAplicavel;
-    qtd_modalidades: number | null;
-    tier?: { id: number; item_codigo: string; tipo_item: string } | null;
-    item_aplicado: ItemAplicado;
-    valor_final_centavos?: number | null;
-    valor_final_brl?: string | null;
-    alvo?: { tipo: string; id: number };
-    debug?: {
-      servico_id: number | null;
-      unidade_execucao_id: number | null;
-      tabela_id: number;
-      pivot_aplica: boolean;
-      tier_grupo_id: number | null;
-      qtd_modalidades_ativas: number | null;
-      tier_ordem_aplicada: number | null;
-      valor_base_centavos: number | null;
-      valor_final_centavos: number | null;
-      origem_valor: "BASE" | "TIER";
-    };
-  };
-  message?: string;
-  error?: string;
-};
-
-type PrecoDebug = NonNullable<PrecoResolverResp["data"]>["debug"];
-
-type PrecoItem = {
-  idx: number;
-  servico_id: number;
-  unidade_execucao_id: number;
-  turma_id: number;
-  valor_final_centavos: number;
-  valor_final_brl: string;
+  nome: string;
+  ordem?: number | null;
 };
 
 function labelTipo(tipo: TipoMatricula): string {
@@ -149,7 +103,16 @@ function createCarrinhoItem(): MatriculaCarrinhoItem {
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return { id, curso_id: null, servico_id: null, unidade_execucao_id: null, turma_id: null };
+  return {
+    id,
+    curso_id: null,
+    servico_id: null,
+    unidade_execucao_id: null,
+    turma_id: null,
+    nivel_id: null,
+    nivel_texto: "",
+    valor_mensal_reais: "",
+  };
 }
 
 function extractErrorMessage(data: unknown, status: number): string {
@@ -164,6 +127,15 @@ function extractErrorMessage(data: unknown, status: number): string {
 function formatCurrency(cents?: number | null): string {
   if (typeof cents !== "number" || Number.isNaN(cents)) return "-";
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+}
+
+function parseMoneyToCentavos(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+  const num = Number(normalized);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return Math.round(num * 100);
 }
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -183,8 +155,6 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 
 export default function NovaMatriculaPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClientComponentClient(), []);
-  const isDev = process.env.NODE_ENV !== "production";
 
   const [aluno, setAluno] = useState<PessoaSearchItem | null>(null);
   const [responsavel, setResponsavel] = useState<PessoaSearchItem | null>(null);
@@ -200,27 +170,23 @@ export default function NovaMatriculaPage() {
   const [cursos, setCursos] = useState<CursoOpcao[]>([]);
   const [itensCarrinho, setItensCarrinho] = useState<MatriculaCarrinhoItem[]>(() => [createCarrinhoItem()]);
   const [turmasPorCurso, setTurmasPorCurso] = useState<Record<string, TurmaOpcao[]>>({});
-  const [niveisDaTurma, setNiveisDaTurma] = useState<Array<{ id: number; nome: string; ordem?: number | null }>>([]);
-  const [nivelId, setNivelId] = useState<number | null>(null);
-  const [niveisLoading, setNiveisLoading] = useState(false);
-  const [niveisLoadError, setNiveisLoadError] = useState<string | null>(null);
+  const [niveisPorTurma, setNiveisPorTurma] = useState<Record<number, NivelOpcao[]>>({});
+  const [niveisLoading, setNiveisLoading] = useState<Record<number, boolean>>({});
+  const [niveisErro, setNiveisErro] = useState<Record<number, string | null>>({});
   const [anoReferencia, setAnoReferencia] = useState<number>(() => new Date().getFullYear());
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [dataInicioVinculo, setDataInicioVinculo] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [politicaModo, setPoliticaModo] = useState<"PADRAO" | "ADIAR_PARA_VENCIMENTO">("PADRAO");
   const [motivoExcecao, setMotivoExcecao] = useState<string>("");
   const [observacoes, setObservacoes] = useState<string>("");
+  const [modoManualValores, setModoManualValores] = useState(false);
+  const niveisRequestedRef = useRef<Set<number>>(new Set());
+  const niveisInFlightRef = useRef<Set<number>>(new Set());
 
   const [cursosErro, setCursosErro] = useState<string | null>(null);
   const [turmasErro, setTurmasErro] = useState<string | null>(null);
   const [carregandoCursos, setCarregandoCursos] = useState(false);
   const [carregandoTurmas, setCarregandoTurmas] = useState(false);
-  const [tabelaAplicavel, setTabelaAplicavel] = useState<TabelaAplicavel | null>(null);
-  const [itemAplicado, setItemAplicado] = useState<ItemAplicado | null>(null);
-  const [debugInfo, setDebugInfo] = useState<PrecoDebug | null>(null);
-  const [precosItens, setPrecosItens] = useState<PrecoItem[]>([]);
-  const [tabelaErro, setTabelaErro] = useState<string | null>(null);
-  const [tabelaLoading, setTabelaLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -252,8 +218,14 @@ export default function NovaMatriculaPage() {
     [itensCarrinho, cursosById, turmasDisponiveis],
   );
   const totalMensalidadeCentavos = useMemo(
-    () => precosItens.reduce((acc, item) => acc + item.valor_final_centavos, 0),
-    [precosItens],
+    () =>
+      modoManualValores
+        ? itensCarrinho.reduce((acc, item) => {
+            const centavos = parseMoneyToCentavos(item.valor_mensal_reais);
+            return centavos === null ? acc : acc + centavos;
+          }, 0)
+        : 0,
+    [itensCarrinho, modoManualValores],
   );
   const totalMensalidadeBRL = useMemo(
     () =>
@@ -263,21 +235,63 @@ export default function NovaMatriculaPage() {
       }),
     [totalMensalidadeCentavos],
   );
+  const execucoesResumo = useMemo(
+    () =>
+      itensCarrinho.map((item, idx) => {
+        const turma = item.turma_id
+          ? turmasDisponiveis.find((t) => t.turma_id === item.turma_id) ?? null
+          : null;
+        const turmaLabel = turma ? labelTurma(turma) : item.turma_id ? `Turma #${item.turma_id}` : "-";
+        const niveisTurma = item.turma_id ? niveisPorTurma[item.turma_id] ?? [] : [];
+        const nivelNome =
+          item.nivel_id && niveisTurma.length > 0
+            ? niveisTurma.find((nivel) => nivel.id === item.nivel_id)?.nome ?? item.nivel_texto
+            : item.nivel_texto;
+        const valorCentavos = parseMoneyToCentavos(item.valor_mensal_reais);
+        return {
+          id: item.id,
+          idx,
+          turmaLabel,
+          nivel: nivelNome.trim() || "-",
+          valor: valorCentavos === null ? "-" : formatCurrency(valorCentavos),
+        };
+      }),
+    [itensCarrinho, turmasDisponiveis, niveisPorTurma],
+  );
 
   const contextoObrigatorio = tipo === "REGULAR";
   const itensCompletosOk =
     itensCarrinho.length > 0 &&
-    itensCarrinho.every(
-      (item) =>
-        typeof item.servico_id === "number" &&
-        typeof item.unidade_execucao_id === "number" &&
-        typeof item.turma_id === "number",
+    itensCarrinho.every((item) => {
+      const okTurma = typeof item.turma_id === "number";
+      const okCurso = typeof item.curso_id === "number";
+      if (modoManualValores) return okTurma && okCurso;
+      return okTurma && typeof item.servico_id === "number" && typeof item.unidade_execucao_id === "number";
+    });
+  const valoresOk =
+    !modoManualValores ||
+    (itensCarrinho.length > 0 &&
+      itensCarrinho.every((item) => parseMoneyToCentavos(item.valor_mensal_reais) !== null));
+  const niveisOk =
+    itensCarrinho.length > 0 &&
+    itensCarrinho.every((item) => {
+      if (!item.turma_id) return false;
+      const niveis = niveisPorTurma[item.turma_id];
+      if (!niveis || niveis.length === 0) return false;
+      return Number.isFinite(item.nivel_id ?? NaN);
+    });
+  const niveisCarregando = Object.values(niveisLoading).some(Boolean);
+  const principalCompleto = (() => {
+    if (!principalItem) return false;
+    const okTurma = typeof principalItem.turma_id === "number";
+    const okCurso = typeof principalItem.curso_id === "number";
+    if (modoManualValores) return okTurma && okCurso;
+    return (
+      okTurma &&
+      typeof principalItem.servico_id === "number" &&
+      typeof principalItem.unidade_execucao_id === "number"
     );
-  const precosItensOk = itensCompletosOk && precosItens.length === itensCarrinho.length;
-  const precoOk = !tabelaLoading && !tabelaErro && !!tabelaAplicavel && !!itemAplicado && precosItensOk;
-  const principalCompleto = Boolean(
-    principalItem?.servico_id && principalItem?.unidade_execucao_id && principalItem?.turma_id,
-  );
+  })();
 
   const podeSalvar =
     !!aluno &&
@@ -285,11 +299,23 @@ export default function NovaMatriculaPage() {
     (!contextoObrigatorio || Number.isFinite(contextoId ?? NaN)) &&
     itensCompletosOk &&
     principalCompleto &&
-    (niveisDaTurma.length === 0 || !!nivelId) &&
-    !niveisLoadError &&
+    valoresOk &&
+    niveisOk &&
+    !niveisCarregando &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
-    (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0) &&
-    precoOk;
+    (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0);
+  const debugFlags = {
+    aluno: !!aluno,
+    responsavel: !!responsavel,
+    contextoOk: !contextoObrigatorio || Number.isFinite(contextoId ?? NaN),
+    itensCompletosOk,
+    principalCompleto,
+    niveisOk,
+    valoresOk: !modoManualValores || valoresOk,
+    niveisCarregando: !niveisCarregando,
+    anoOk: tipo !== "REGULAR" || !!anoReferencia,
+    excecaoOk: politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0,
+  };
 
   useEffect(() => {
     let ativo = true;
@@ -481,37 +507,86 @@ export default function NovaMatriculaPage() {
   }, [contextoObrigatorio, contextoId, periodoLetivoId, cursosSelecionados, turmasPorCurso, cursosById]);
 
   useEffect(() => {
-    let ativo = true;
-    setNiveisDaTurma([]);
-    setNivelId(null);
-    setNiveisLoadError(null);
+    const turmaIds = Array.from(
+      new Set(
+        itensCarrinho
+          .map((item) => item.turma_id)
+          .filter((id): id is number => Number.isFinite(id ?? NaN)),
+      ),
+    );
 
-    if (!turmaPrincipalId) {
-      setNiveisLoading(false);
-      return () => {
-        ativo = false;
-      };
-    }
+    if (turmaIds.length === 0) return;
+
+    const controller = new AbortController();
+    let ativo = true;
 
     (async () => {
-      try {
-        setNiveisLoading(true);
-        const data = await fetchJSON<{ niveis?: Array<{ id: number; nome: string; ordem?: number | null }> }>(
-          `/api/academico/turmas/niveis?turma_id=${turmaPrincipalId}`,
-        );
-        if (!ativo) return;
-        setNiveisDaTurma(data.niveis ?? []);
-      } catch (e: unknown) {
-        if (ativo) setNiveisLoadError("Falha ao carregar niveis desta turma.");
-      } finally {
-        if (ativo) setNiveisLoading(false);
+      for (const turmaId of turmaIds) {
+        if (Object.prototype.hasOwnProperty.call(niveisPorTurma, turmaId)) continue;
+        if (niveisRequestedRef.current.has(turmaId)) continue;
+        if (niveisInFlightRef.current.has(turmaId)) continue;
+
+        niveisRequestedRef.current.add(turmaId);
+        niveisInFlightRef.current.add(turmaId);
+
+        setNiveisLoading((prev) => ({ ...prev, [turmaId]: true }));
+        setNiveisErro((prev) => ({ ...prev, [turmaId]: null }));
+
+        try {
+          const params = new URLSearchParams();
+          params.set("turma_id", String(turmaId));
+          params.set("turmaId", String(turmaId));
+
+          const resp = await fetchJSON<{
+            ok?: boolean;
+            niveis?: NivelOpcao[];
+            items?: NivelOpcao[];
+            data?: NivelOpcao[];
+            error?: string;
+          }>(`/api/academico/turmas/niveis?${params.toString()}`, { signal: controller.signal });
+
+          if (!ativo) return;
+
+          const lista = resp.niveis ?? resp.items ?? resp.data ?? [];
+          setNiveisPorTurma((prev) => ({ ...prev, [turmaId]: Array.isArray(lista) ? lista : [] }));
+
+          if (resp.ok === false && resp.error) {
+            setNiveisErro((prev) => ({ ...prev, [turmaId]: resp.error }));
+            continue;
+          }
+
+          if (!Array.isArray(lista) || lista.length === 0) {
+            setNiveisErro((prev) => ({
+              ...prev,
+              [turmaId]: "Turma sem níveis vinculados. Configure em Acadêmico > Turmas.",
+            }));
+          }
+        } catch (e: unknown) {
+          if (!ativo) return;
+
+          if (e instanceof Error && (e.name === "AbortError" || e.message.toLowerCase().includes("aborted"))) {
+            niveisRequestedRef.current.delete(turmaId);
+            continue;
+          }
+
+          setNiveisPorTurma((prev) => ({ ...prev, [turmaId]: [] }));
+          setNiveisErro((prev) => ({
+            ...prev,
+            [turmaId]: e instanceof Error ? e.message : "Falha ao carregar níveis desta turma.",
+          }));
+        } finally {
+          niveisInFlightRef.current.delete(turmaId);
+          if (ativo) setNiveisLoading((prev) => ({ ...prev, [turmaId]: false }));
+        }
       }
     })();
 
     return () => {
       ativo = false;
+      controller.abort();
     };
-  }, [turmaPrincipalId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itensCarrinho]);
 
   useEffect(() => {
     if (tipo === "REGULAR" && turmaSelecionada?.ano_referencia) {
@@ -530,116 +605,6 @@ export default function NovaMatriculaPage() {
   function updateItemCarrinho(id: string, patch: Partial<MatriculaCarrinhoItem>) {
     setItensCarrinho((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
-
-  useEffect(() => {
-    setTabelaAplicavel(null);
-    setItemAplicado(null);
-    setDebugInfo(null);
-    setTabelaErro(null);
-
-    if (!aluno?.id || !turmaPrincipalId || !anoReferencia) return;
-    let ativo = true;
-    const controller = new AbortController();
-    const debounceId = window.setTimeout(() => {
-      (async () => {
-        try {
-          setTabelaLoading(true);
-          const params = new URLSearchParams({
-            aluno_id: String(aluno.id),
-            alvo_tipo: "TURMA",
-            alvo_id: String(turmaPrincipalId),
-            ano: String(anoReferencia),
-          });
-          const data = await fetchJSON<PrecoResolverResp>("/api/matriculas/precos/resolver?" + params.toString(), {
-            signal: controller.signal,
-          });
-          if (!ativo) return;
-          setTabelaAplicavel(data.data?.tabela ?? null);
-          setItemAplicado(data.data?.item_aplicado ?? null);
-          if (isDev) setDebugInfo(data.data?.debug ?? null);
-        } catch (e) {
-          if (!ativo) return;
-          const name = e && typeof e === "object" && "name" in e ? String(e.name) : "";
-          if (name === "AbortError") return;
-          setTabelaErro(e instanceof Error ? e.message : "Falha ao resolver tabela aplicavel.");
-        } finally {
-          if (ativo) setTabelaLoading(false);
-        }
-      })();
-    }, 500);
-    return () => {
-      ativo = false;
-      controller.abort();
-      window.clearTimeout(debounceId);
-    };
-  }, [aluno?.id, turmaPrincipalId, anoReferencia, isDev]);
-
-  useEffect(() => {
-    let ativo = true;
-    (async () => {
-      if (!aluno?.id || !Number.isFinite(anoReferencia)) {
-        if (ativo) setPrecosItens([]);
-        return;
-      }
-
-      const completos = itensCarrinho
-        .map((it, idx) => ({ it, idx }))
-        .filter(
-          ({ it }) =>
-            typeof it.servico_id === "number" &&
-            typeof it.unidade_execucao_id === "number" &&
-            typeof it.turma_id === "number",
-        );
-
-      if (completos.length === 0 || completos.length !== itensCarrinho.length) {
-        if (ativo) setPrecosItens([]);
-        return;
-      }
-
-      const results: PrecoItem[] = [];
-
-      for (const { it, idx } of completos) {
-        const servicoId = it.servico_id as number;
-        const unidadeExecucaoId = it.unidade_execucao_id as number;
-        const turmaId = it.turma_id as number;
-
-        const url = new URL("/api/matriculas/precos/resolver", window.location.origin);
-        url.searchParams.set("aluno_id", String(aluno.id));
-        url.searchParams.set("alvo_tipo", "TURMA");
-        url.searchParams.set("alvo_id", String(turmaId));
-        url.searchParams.set("ano", String(anoReferencia));
-        url.searchParams.set("servico_id", String(servicoId));
-        url.searchParams.set("unidade_execucao_id", String(unidadeExecucaoId));
-        url.searchParams.set("ano_referencia", String(anoReferencia));
-        url.searchParams.set("tier_ordem_override", String(idx + 1));
-
-        const res = await fetch(url.toString());
-        if (!res.ok) continue;
-
-        const json = (await res.json()) as PrecoResolverResp;
-        const cent = json.data?.valor_final_centavos ?? json.data?.item_aplicado?.valor_centavos ?? null;
-        if (typeof cent !== "number" || !Number.isFinite(cent)) continue;
-
-        const brl =
-          (json.data?.valor_final_brl && json.data.valor_final_brl.trim()) || formatCurrency(cent);
-
-        results.push({
-          idx,
-          servico_id: servicoId,
-          unidade_execucao_id: unidadeExecucaoId,
-          turma_id: turmaId,
-          valor_final_centavos: cent,
-          valor_final_brl: brl,
-        });
-      }
-
-      if (!ativo) return;
-      setPrecosItens(results.sort((a, b) => a.idx - b.idx));
-    })();
-    return () => {
-      ativo = false;
-    };
-  }, [aluno?.id, anoReferencia, itensCarrinho]);
 
   async function onSubmit() {
     setErro(null);
@@ -664,23 +629,23 @@ export default function NovaMatriculaPage() {
       return;
     }
 
-    if (niveisDaTurma.length > 0 && !nivelId) {
-      setErro("Selecione o nivel desta matricula.");
+    if (niveisCarregando) {
+      setErro("Aguarde o carregamento dos niveis.");
       return;
     }
 
-    if (niveisLoadError) {
-      setErro(niveisLoadError);
+    if (!niveisOk) {
+      setErro("Informe o nivel em todas as execucoes.");
+      return;
+    }
+
+    if (!valoresOk) {
+      setErro("Informe o valor mensal de todas as execucoes.");
       return;
     }
 
     if (tipo === "REGULAR" && !anoReferencia) {
       setErro("Ano referencia obrigatorio para turma regular.");
-      return;
-    }
-
-    if (!precoOk) {
-      setErro(tabelaErro || "Tabela de precos nao resolvida para a combinacao selecionada.");
       return;
     }
 
@@ -703,28 +668,68 @@ export default function NovaMatriculaPage() {
             typeof item.unidade_execucao_id === "number" &&
             typeof item.turma_id === "number",
         );
-      const vinculosIds = Array.from(new Set(itensPayload.map((item) => item.turma_id)));
-      const vinculoPrincipalId = vinculosIds[0];
       const unidadeExecucaoIds = Array.from(new Set(itensPayload.map((item) => item.unidade_execucao_id)));
+      const execucoesPayload = modoManualValores
+        ? itensCarrinho
+            .map((item) => {
+              if (!item.turma_id) return null;
+              const valorCentavos = parseMoneyToCentavos(item.valor_mensal_reais);
+              if (valorCentavos === null) return null;
+              const niveisTurma = item.turma_id ? niveisPorTurma[item.turma_id] ?? [] : [];
+              const nivelNome =
+                item.nivel_id && niveisTurma.length > 0
+                  ? niveisTurma.find((nivel) => nivel.id === item.nivel_id)?.nome ?? item.nivel_texto
+                  : item.nivel_texto;
+              return {
+                turma_id: item.turma_id,
+                nivel: nivelNome.trim(),
+                nivel_id: item.nivel_id ?? null,
+                valor_mensal_centavos: valorCentavos,
+              };
+            })
+            .filter(
+              (
+                execucao,
+              ): execucao is {
+                turma_id: number;
+                nivel: string;
+                nivel_id: number | null;
+                valor_mensal_centavos: number;
+              } => !!execucao,
+            )
+        : [];
 
-      if (!vinculoPrincipalId) {
-        throw new Error("Turma principal nao encontrada para concluir a matricula.");
+      const vinculosIdsManual = Array.from(new Set(execucoesPayload.map((execucao) => execucao.turma_id)));
+      const vinculoPrincipalIdManual = vinculosIdsManual[0] ?? null;
+      const vinculosIdsAuto = Array.from(new Set(itensPayload.map((item) => item.turma_id)));
+      const vinculoPrincipalIdAuto = vinculosIdsAuto[0] ?? null;
+      const vinculosIdsFinal = modoManualValores ? vinculosIdsManual : vinculosIdsAuto;
+      const vinculoPrincipalIdFinal = modoManualValores ? vinculoPrincipalIdManual : vinculoPrincipalIdAuto;
+
+      if (!vinculoPrincipalIdFinal) {
+        throw new Error("Turma (item 1) nao encontrada para concluir a matricula.");
+      }
+      if (modoManualValores && execucoesPayload.length !== itensCarrinho.length) {
+        throw new Error("Execucoes invalidas para concluir a matricula.");
       }
 
       const payload: Record<string, unknown> = {
         pessoa_id: aluno.id,
         responsavel_financeiro_id: responsavel.id,
         tipo_matricula: tipo,
-        vinculo_id: vinculoPrincipalId,
-        nivel_id: nivelId,
-        ...(vinculosIds.length > 1 ? { vinculos_ids: vinculosIds } : {}),
+        vinculo_id: vinculoPrincipalIdFinal,
+        ...(vinculosIdsFinal.length > 1 ? { vinculos_ids: vinculosIdsFinal } : {}),
         itens: itensPayload,
         ...(unidadeExecucaoIds.length > 0 ? { unidade_execucao_ids: unidadeExecucaoIds } : {}),
-        total_mensalidade_centavos: totalMensalidadeCentavos,
         data_matricula: dataMatricula,
         data_inicio_vinculo: dataInicioVinculo,
         observacoes: observacoes.trim() || null,
       };
+
+      if (modoManualValores) {
+        payload.execucoes = execucoesPayload;
+        payload.total_mensalidade_centavos = totalMensalidadeCentavos;
+      }
 
       if (tipo === "REGULAR") {
         payload.ano_referencia = anoReferencia;
@@ -750,28 +755,7 @@ export default function NovaMatriculaPage() {
         throw new Error("Resposta invalida: matricula sem id.");
       }
 
-      if (!itemAplicado) {
-        throw new Error("Preco nao resolvido para definir a primeira cobranca.");
-      }
-
-      const primeiraCobrancaTipo =
-        itemAplicado.codigo_item === "MENSALIDADE" ? "MENSALIDADE_CHEIA_CARTAO" : "ENTRADA_PRORATA";
-      const primeiraCobrancaValorCentavos = itemAplicado.valor_centavos;
-
-      const { error: updErr } = await supabase
-        .from("matriculas")
-        .update({
-          primeira_cobranca_tipo: primeiraCobrancaTipo,
-          primeira_cobranca_status: "PENDENTE",
-          primeira_cobranca_valor_centavos: primeiraCobrancaValorCentavos,
-        })
-        .eq("id", id);
-
-      if (updErr) {
-        throw new Error("Falha ao atualizar matricula com a primeira cobranca.");
-      }
-
-      router.push(`/escola/matriculas/liquidacao?matriculaId=${id}`);
+      router.push(`/escola/matriculas/${id}`);
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Falha ao criar matricula.");
     } finally {
@@ -786,12 +770,25 @@ export default function NovaMatriculaPage() {
           title="Nova matricula (Escola)"
           description="Operacional: selecione aluno, turma e data de inicio. A API cuidara da cobranca conforme as regras oficiais."
           actions={
-            <Link
-              href="/escola/matriculas"
-              className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:border-slate-300"
-            >
-              Voltar para matriculas
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setModoManualValores((prev) => !prev)}
+                className={
+                  modoManualValores
+                    ? "rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900"
+                    : "rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-slate-300"
+                }
+              >
+                {modoManualValores ? "Valores manuais: ATIVO" : "Inserir valores manualmente"}
+              </button>
+              <Link
+                href="/escola/matriculas"
+                className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:border-slate-300"
+              >
+                Voltar para matriculas
+              </Link>
+            </div>
           }
         />
 
@@ -951,18 +948,18 @@ export default function NovaMatriculaPage() {
                 const turmaKey =
                   item.curso_id && periodoLetivoId ? `${periodoLetivoId}:${item.curso_id}` : null;
                 const turmas = turmaKey ? turmasPorCurso[turmaKey] ?? [] : [];
+                const niveisTurma = item.turma_id ? niveisPorTurma[item.turma_id] ?? [] : [];
+                const niveisLoadingItem = item.turma_id ? niveisLoading[item.turma_id] : false;
+                const niveisErroItem = item.turma_id ? niveisErro[item.turma_id] : null;
+                const valorMensalCentavos = parseMoneyToCentavos(item.valor_mensal_reais);
+                const valorMensalInvalido =
+                  item.valor_mensal_reais.trim() !== "" && valorMensalCentavos === null;
                 return (
                   <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold">
-                          {idx === 0 ? "Curso / Turma (Principal)" : `Curso / Turma (${idx + 1})`}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {idx === 0
-                            ? "Define a referencia principal do resumo e da precificacao (MVP)."
-                            : "Item adicional do combo."}
-                        </div>
+                        <div className="text-sm font-semibold">{`Curso / Turma (${idx + 1})`}</div>
+                        <div className="text-xs text-slate-500">O item 1 vira referencia do resumo (tecnico).</div>
                       </div>
                       <button
                         type="button"
@@ -987,6 +984,9 @@ export default function NovaMatriculaPage() {
                               servico_id: null,
                               unidade_execucao_id: null,
                               turma_id: null,
+                              nivel_id: null,
+                              nivel_texto: "",
+                              valor_mensal_reais: "",
                             });
                           }}
                           disabled={carregandoCursos || (contextoObrigatorio && !contextoId)}
@@ -1017,6 +1017,9 @@ export default function NovaMatriculaPage() {
                               turma_id: nextId,
                               unidade_execucao_id: selected?.unidade_execucao_id ?? null,
                               servico_id: selected?.servico_id ?? null,
+                              nivel_id: null,
+                              nivel_texto: "",
+                              valor_mensal_reais: "",
                             });
                           }}
                           disabled={
@@ -1044,37 +1047,75 @@ export default function NovaMatriculaPage() {
                         ) : null}
                       </div>
                     </div>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Nivel nesta execucao</label>
+                        {!item.turma_id ? (
+                          <input
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value=""
+                            placeholder="Selecione a turma primeiro"
+                            disabled
+                          />
+                        ) : niveisLoadingItem ? (
+                          <p className="text-xs text-muted-foreground">Carregando niveis...</p>
+                        ) : niveisErroItem ? (
+                          <p className="text-xs text-red-600">{niveisErroItem}</p>
+                        ) : niveisTurma.length > 0 ? (
+                          <select
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={item.nivel_id ?? ""}
+                            onChange={(e) => {
+                              const nextId = e.target.value ? Number(e.target.value) : null;
+                              const nome =
+                                nextId && Number.isFinite(nextId)
+                                  ? niveisTurma.find((nivel) => nivel.id === nextId)?.nome ?? ""
+                                  : "";
+                              updateItemCarrinho(item.id, { nivel_id: nextId, nivel_texto: nome });
+                            }}
+                          >
+                            <option value="">Selecione...</option>
+                            {niveisTurma.map((nivel) => (
+                              <option key={nivel.id} value={nivel.id}>
+                                {nivel.nome}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-xs text-red-600">
+                            {niveisErroItem || "Turma sem níveis vinculados. Configure em Acadêmico > Turmas."}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        {modoManualValores ? (
+                          <>
+                            <label className="text-sm font-medium">Valor mensal</label>
+                            <input
+                              className="w-full rounded-md border px-3 py-2 text-sm"
+                              value={item.valor_mensal_reais}
+                              onChange={(e) => updateItemCarrinho(item.id, { valor_mensal_reais: e.target.value })}
+                              inputMode="decimal"
+                              placeholder="Ex.: 220,00"
+                            />
+                            {valorMensalInvalido ? (
+                              <p className="text-xs text-red-600">Valor mensal invalido.</p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">Informe o valor em reais.</p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Ative &quot;Inserir valores manualmente&quot; para informar o valor mensal.
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
-
-              {turmaPrincipalId ? (
-                <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-sm font-medium">Nivel nesta matricula</div>
-                  <div className="mt-2 space-y-1">
-                    {niveisLoading ? (
-                      <p className="text-xs text-muted-foreground">Carregando niveis...</p>
-                    ) : niveisLoadError ? (
-                      <p className="text-xs text-red-600">{niveisLoadError}</p>
-                    ) : niveisDaTurma.length > 0 ? (
-                      <select
-                        className="w-full rounded-md border px-3 py-2 text-sm"
-                        value={nivelId ?? ""}
-                        onChange={(e) => setNivelId(e.target.value ? Number(e.target.value) : null)}
-                      >
-                        <option value="">Selecione...</option>
-                        {niveisDaTurma.map((nivel) => (
-                          <option key={nivel.id} value={nivel.id}>
-                            {nivel.nome}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Esta turma nao possui niveis cadastrados.</p>
-                    )}
-                  </div>
-                </div>
-              ) : null}
 
               {carregandoTurmas ? <p className="text-xs text-muted-foreground">Carregando turmas...</p> : null}
               {turmasErro ? <p className="text-xs text-red-600">{turmasErro}</p> : null}
@@ -1127,34 +1168,28 @@ export default function NovaMatriculaPage() {
             </div>
             <div>Cursos/Turmas: {itensResumo.length > 0 ? itensResumo.join(" | ") : "-"}</div>
             <div>Turma principal: {turmaSelecionada ? labelTurma(turmaSelecionada) : "-"}</div>
-            {tabelaLoading ? (
-              <div>Tabela aplicada: carregando...</div>
-            ) : tabelaErro ? (
-              <div className="text-rose-600">Tabela aplicada: {tabelaErro}</div>
-            ) : tabelaAplicavel ? (
-              <div>
-                Tabela aplicada: {tabelaAplicavel.titulo} - Ano {tabelaAplicavel.ano_referencia ?? "-"}
+            {modoManualValores ? (
+              <div className="text-sm">
+                <div className="font-medium">Valores por execucao</div>
+                {execucoesResumo.length === 0 ? (
+                  <div className="mt-1 text-muted-foreground">-</div>
+                ) : (
+                  <>
+                    <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                      {execucoesResumo.map((execucao) => (
+                        <li key={execucao.id}>
+                          {execucao.idx + 1}a execucao: {execucao.turmaLabel} | Nivel: {execucao.nivel} | Valor:{" "}
+                          {execucao.valor}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 font-semibold">Total mensalidade: {totalMensalidadeBRL}</div>
+                  </>
+                )}
               </div>
             ) : (
-              <div>Tabela aplicada: -</div>
+              <div className="text-sm text-muted-foreground">Valores: modo automatico (nao configurado neste MVP).</div>
             )}
-            <div className="text-sm">
-              <div className="font-medium">Mensalidades por item</div>
-              {precosItens.length === 0 ? (
-                <div className="mt-1 text-muted-foreground">-</div>
-              ) : (
-                <>
-                  <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                    {precosItens.map((p) => (
-                      <li key={p.idx}>
-                        {p.idx + 1}a modalidade: {p.valor_final_brl}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-2 font-semibold">Total mensalidade: {totalMensalidadeBRL}</div>
-                </>
-              )}
-            </div>
             <div>Plano de pagamento: Plano padrao aplicado</div>
             <div>Data da matricula: {dataMatricula}</div>
             <div>Inicio do vinculo: {dataInicioVinculo}</div>
@@ -1162,24 +1197,11 @@ export default function NovaMatriculaPage() {
           </div>
         </SectionCard>
 
-        {isDev && debugInfo ? (
-          <SectionCard title="Diagnostico de precificacao (dev)" className="border-amber-200 bg-amber-50">
-            <div className="space-y-2 text-sm text-amber-900">
-              <div>
-                Servico/UE/Tabela: {debugInfo.servico_id ?? "-"} / {debugInfo.unidade_execucao_id ?? "-"} /{" "}
-                {debugInfo.tabela_id}
-              </div>
-              <div>Pivot aplica? {debugInfo.pivot_aplica ? "Sim" : "Nao"}</div>
-              <div>
-                Tier grupo / qtd / ordem: {debugInfo.tier_grupo_id ?? "-"} / {debugInfo.qtd_modalidades_ativas ?? "-"} /{" "}
-                {debugInfo.tier_ordem_aplicada ?? "-"}
-              </div>
-              <div>
-                Valor base vs final: {formatCurrency(debugInfo.valor_base_centavos)} {" -> "}
-                {formatCurrency(debugInfo.valor_final_centavos)} ({debugInfo.origem_valor})
-              </div>
-            </div>
-          </SectionCard>
+        {process.env.NODE_ENV !== "production" ? (
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+            <div className="font-semibold">Debug validacao (dev)</div>
+            <pre className="mt-2 whitespace-pre-wrap">{JSON.stringify(debugFlags, null, 2)}</pre>
+          </div>
         ) : null}
 
         <ToolbarRow className="justify-end">
