@@ -74,6 +74,11 @@ export default function Page() {
       }
 
       setMatricula(m as MatriculaResumo);
+      if (m.status_fluxo === "ATIVA") {
+        setErro("Matricula ja liquidada.");
+        setLoading(false);
+        return;
+      }
       const valorSugeridoEntradaCentavos =
         typeof m.total_mensalidade_centavos === "number" ? m.total_mensalidade_centavos : 0;
       const valorStr = typeof m.total_mensalidade_centavos === "number" ? String(valorSugeridoEntradaCentavos) : "";
@@ -110,6 +115,11 @@ export default function Page() {
     if (!matricula) return;
 
     setErro(null);
+
+    if (matricula.status_fluxo === "ATIVA") {
+      setErro("Matricula ja liquidada.");
+      return;
+    }
 
     if (!valorResolvido) {
       setErro("Valor nao resolvido na matricula. Volte e gere a matricula novamente.");
@@ -201,6 +211,23 @@ export default function Page() {
       <div className="p-6">
         <h1 className="text-xl font-semibold">Liquidação da Matrícula</h1>
         <p className="mt-2 text-sm text-muted-foreground">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (matricula?.status_fluxo === "ATIVA") {
+    return (
+      <div className="p-6 max-w-3xl">
+        <h1 className="text-xl font-semibold">Liquidacao da Matricula</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Matricula ja liquidada.</p>
+        <div className="mt-4">
+          <button
+            className="px-4 py-2 rounded-md border"
+            onClick={() => router.push(`/escola/matriculas/${matricula.id}`)}
+          >
+            Voltar
+          </button>
+        </div>
       </div>
     );
   }

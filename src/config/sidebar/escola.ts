@@ -3,91 +3,76 @@
 export const escolaSidebar: SidebarSection[] = [
   {
     id: "escola-inicio",
-    title: "Início",
-    items: [{ label: "Início", href: "/escola" }], // TODO(migracao): rota /escola ainda nao existe
+    title: "🏠 Início",
+    items: [{ label: "🏠 Início", href: "/escola" }], // TODO(migracao): rota /escola ainda nao existe
   },
   {
     id: "escola-caixa",
-    title: "Caixa (Escola)",
-    items: [{ label: "Frente de caixa", href: "/escola/caixa" }], // TODO(migracao): ainda sem equivalente confirmado
+    title: "💰 Caixa (Escola)",
+    items: [{ label: "💰 Frente de caixa", href: "/escola/caixa" }], // TODO(migracao): ainda sem equivalente confirmado
   },
   {
     id: "escola-calendario",
-    title: "Calendário",
+    title: "📅 Calendário",
     items: [
-      { label: "Visão geral", href: "/escola/calendario" },
-      { label: "Eventos internos", href: "/escola/calendario/eventos-internos" },
-      { label: "Feriados", href: "/escola/calendario/feriados" },
+      { label: "📅 Visão geral", href: "/escola/calendario" },
+      { label: "🎭 Eventos internos", href: "/escola/calendario/eventos-internos" },
+      { label: "🗓️ Feriados", href: "/escola/calendario/feriados" },
     ],
   },
   {
     id: "escola-captacao",
-    title: "Captação (CRM)",
+    title: "🎯 Captação (CRM)",
     items: [
-      { label: "Visão geral", href: "/captacao" },
-      { label: "Novo interessado", href: "/captacao/novo" },
-      { label: "Interessados", href: "/captacao/interessados" },
+      { label: "📌 Visão geral", href: "/captacao" },
+      { label: "➕ Novo interessado", href: "/captacao/novo" },
+      { label: "👥 Interessados", href: "/captacao/interessados" },
     ],
   },
   {
     id: "escola-pessoas",
-    title: "Pessoas",
+    title: "👤 Pessoas",
     items: [
-      { label: "Nova pessoa", href: "/escola/pessoas/nova" },
-      { label: "Lista de pessoas", href: "/escola/pessoas" },
+      { label: "➕ Nova pessoa", href: "/escola/pessoas/nova" },
+      { label: "📋 Lista de pessoas", href: "/escola/pessoas" },
     ],
   },
   {
     id: "escola-alunos",
-    title: "Alunos",
+    title: "🎓 Alunos",
     items: [
-      { label: "Matrículas", href: "/escola/matriculas" },
-      { label: "Lista de alunos", href: "/escola/alunos/lista" },
-      { label: "Currículo", href: "/escola/alunos/curriculos" },
-      { label: "Grupos de alunos", href: "/escola/alunos/grupos" },
+      { label: "🧾 Matrículas", href: "/escola/matriculas" },
+      { label: "📋 Lista de alunos", href: "/escola/alunos/lista" },
+      { label: "🧠 Currículo", href: "/escola/alunos/curriculos" },
+      { label: "👥 Grupos de alunos", href: "/escola/alunos/grupos" },
     ],
   },
   {
     id: "escola-academico",
-    title: "Acadêmico",
+    title: "📚 Acadêmico",
     items: [
-      { label: "Cursos", href: "/escola/academico/cursos" },
-      { label: "Cursos Livres", href: "/escola/academico/cursos-livres" },
-      { label: "Níveis", href: "/escola/academico/niveis" },
-      { label: "Módulos", href: "/escola/academico/modulos" },
-      { label: "Plano de aula", href: "/academico/planejamento" },
-      { label: "Períodos letivos", href: "/escola/academico/periodos-letivos" },
-      { label: "Avaliações", href: "/escola/academico/avaliacoes" },
-      { label: "Professores", href: "/escola/academico/professores" }, // TODO(migracao): rota ainda nao existe
-      { label: "Nova turma", href: "/escola/academico/turmas/nova" },
-      { label: "Turmas", href: "/escola/academico/turmas" },
-      { label: "Grade", href: "/escola/academico/turmas/grade" },
-      { label: "Diário de classe", href: "/escola/diario-de-classe" },
-    ],
-  },
-  {
-    id: "escola-config",
-    title: "Configurações",
-    items: [
-      { label: "Serviços", href: "/escola/configuracoes/servicos" },
-      { label: "Preços de serviço", href: "/escola/configuracoes/servicos/precos" },
-    ],
-  },
-  {
-    id: "escola-config-matriculas",
-    title: "Configurações (Escola)",
-    items: [
-      { label: "Tabelas de preços (Escola)", href: "/escola/configuracoes/matriculas/tabelas" },
+      { label: "📘 Cursos", href: "/escola/academico/cursos" },
+      { label: "🧩 Cursos Livres", href: "/escola/academico/cursos-livres" },
+      { label: "🧠 Níveis", href: "/escola/academico/niveis" },
+      { label: "🗂️ Módulos", href: "/escola/academico/modulos" },
+      { label: "📝 Plano de aula", href: "/academico/planejamento" },
+      { label: "🗓️ Períodos letivos", href: "/escola/academico/periodos-letivos" },
+      { label: "📊 Avaliações", href: "/escola/academico/avaliacoes" },
+      { label: "👩‍🏫 Professores", href: "/escola/academico/professores" }, // TODO(migracao): rota ainda nao existe
+      { label: "➕ Nova turma", href: "/escola/academico/turmas/nova" },
+      { label: "🏫 Turmas", href: "/escola/academico/turmas" },
+      { label: "🧮 Grade", href: "/escola/academico/turmas/grade" },
+      { label: "📒 Diário de classe", href: "/escola/diario-de-classe" },
     ],
   },
   {
     id: "escola-movimento",
-    title: "Movimento Conexão Dança",
+    title: "💜 Movimento Conexão Dança",
     items: [
-      { label: "Bolsas", href: "/movimento/bolsas" },
-      { label: "Acolhimento", href: "/movimento/acolhimento" },
-      { label: "Ações solidárias", href: "/movimento/acoes" }, // TODO(migracao): equivalencia incerta
-      { label: "Informações sociais", href: "/movimento/informacoes-sociais" },
+      { label: "🎓 Bolsas", href: "/movimento/bolsas" },
+      { label: "🤝 Acolhimento", href: "/movimento/acolhimento" },
+      { label: "🎁 Ações solidárias", href: "/movimento/acoes" }, // TODO(migracao): equivalencia incerta
+      { label: "🧾 Informações sociais", href: "/movimento/informacoes-sociais" },
     ],
   },
 ];
