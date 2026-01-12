@@ -58,6 +58,9 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 - Resumo calcula total por múltiplas UEs (ex.: 220 + 180)
 - Integração com Cartão Conexão gera cobrança/lançamento consolidado corretamente
 
+### Registro de Observacoes Operacionais (NASC)
+- Botao flutuante + API + export CSV (MVP)
+
 ---
 
 ## Pendências

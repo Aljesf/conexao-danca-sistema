@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import AppShell from "@/components/AppShell";
 import MovimentoButton from "@/components/MovimentoButton";
+import { NascMount } from "@/components/nasc/NascMount";
 import { getSystemSettings } from "@/lib/systemSettings";
 
 export default async function PrivateLayout({
@@ -25,6 +26,7 @@ export default async function PrivateLayout({
   return (
     <AppShell systemSettings={systemSettings}>
       {children}
+      <NascMount />
       <MovimentoButton />
     </AppShell>
   );
