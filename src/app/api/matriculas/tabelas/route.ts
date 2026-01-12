@@ -508,6 +508,64 @@ export async function POST(req: Request) {
         return badRequest("servico_tipo ou produto_tipo invalido.");
       }
 
+      const alvoTipoRaw = (body.alvo_tipo ?? (body.turma_ids ? "TURMA" : null)) as AlvoTipo | null;
+      const alvoIdsRaw = body.alvo_ids?.length ? body.alvo_ids : body.turma_ids ?? [];
+
+      if (alvoTipoRaw === "TURMA" && alvoIdsRaw.length > 0) {
+        const alvoIds = await normalizarAlvoIds(admin, "TURMA", alvoIdsRaw);
+        if (alvoIds.length !== 1) {
+          return badRequest("Informe exatamente 1 turma alvo para esta tabela.", { alvo_ids: alvoIds });
+        }
+
+        const alvoId = alvoIds[0];
+        const { data: turma, error: turmaErr } = await admin
+          .from("turmas")
+          .select("turma_id, produto_id")
+          .eq("turma_id", alvoId)
+          .maybeSingle();
+
+        if (turmaErr || !turma) {
+          return badRequest("Turma alvo nao encontrada.", { alvo_id: alvoId });
+        }
+
+        if (Number(turma.produto_id) !== servicoId) {
+          return badRequest("Servico nao corresponde a turma alvo.", {
+            servico_id: servicoId,
+            alvo_id: alvoId,
+          });
+        }
+
+        if (unidadeExecucaoIds.length > 0) {
+          const { data: unidades, error: unidadesErr } = await admin
+            .from("escola_unidades_execucao")
+            .select("unidade_execucao_id, origem_id")
+            .eq("origem_tipo", "TURMA")
+            .in("unidade_execucao_id", unidadeExecucaoIds);
+
+          if (unidadesErr) {
+            return serverError("Falha ao validar unidades de execucao da turma.", { error: unidadesErr });
+          }
+
+          const rows = (unidades ?? []) as Array<{ unidade_execucao_id: number; origem_id: number }>;
+          const found = new Set(rows.map((r) => Number(r.unidade_execucao_id)));
+          const missing = unidadeExecucaoIds.filter((id) => !found.has(id));
+          const invalid = rows
+            .filter((row) => Number(row.origem_id) !== alvoId)
+            .map((row) => Number(row.unidade_execucao_id));
+
+          const invalidIds = Array.from(new Set([...missing, ...invalid])).filter(
+            (id) => Number.isFinite(id) && id > 0,
+          );
+
+          if (invalidIds.length) {
+            return badRequest("Unidades de execucao nao pertencem a turma alvo.", {
+              unidade_execucao_ids: invalidIds,
+              alvo_id: alvoId,
+            });
+          }
+        }
+      }
+
       if (servicoTipo === "CURSO_LIVRE" && (await isCursoLivreId(admin, servicoId))) {
         const unidadesCheck = await ensureUnidadesBelongToCursoLivre(admin, servicoId, unidadeExecucaoIds);
         if (!unidadesCheck.ok) {

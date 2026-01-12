@@ -47,6 +47,16 @@ export default function TabelaMatriculaNovaForm() {
   const paramAlvoIdRaw = Number(searchParams.get("alvo_id") || "");
   const paramAno = searchParams.get("ano");
 
+  const paramAlvoId =
+    Number.isFinite(paramAlvoIdRaw) && paramAlvoIdRaw > 0
+      ? paramAlvoIdRaw
+      : null;
+
+  const alvoTipoParam =
+    paramAlvoTipoRaw === "TURMA" || paramAlvoTipoRaw === "CURSO_LIVRE" || paramAlvoTipoRaw === "PROJETO"
+      ? paramAlvoTipoRaw
+      : null;
+
   const initialCategoria: ServicoTipo =
     paramServicoTipoRaw === "CURSO_REGULAR" ||
     paramServicoTipoRaw === "CURSO_LIVRE" ||
@@ -61,8 +71,8 @@ export default function TabelaMatriculaNovaForm() {
   const initialServicoId =
     Number.isFinite(paramServicoIdRaw) && paramServicoIdRaw > 0
       ? paramServicoIdRaw
-      : paramAlvoTipoRaw !== "TURMA" && Number.isFinite(paramAlvoIdRaw) && paramAlvoIdRaw > 0
-        ? paramAlvoIdRaw
+      : paramAlvoTipoRaw !== "TURMA" && paramAlvoId
+        ? paramAlvoId
         : null;
 
   const [categoria, setCategoria] = useState<ServicoTipo>(initialCategoria);
@@ -159,6 +169,30 @@ export default function TabelaMatriculaNovaForm() {
   useEffect(() => {
     let ativoFlag = true;
     (async () => {
+      if (alvoTipoParam !== "TURMA") return;
+      if (!paramAlvoId) return;
+      if (servicoId) return;
+      try {
+        const res = await fetch(`/api/turmas/${paramAlvoId}`);
+        if (!res.ok) return;
+        const json = (await res.json()) as { turma?: { produto_id?: number | null } };
+        const produtoId = Number(json?.turma?.produto_id);
+        if (!ativoFlag) return;
+        if (Number.isFinite(produtoId) && produtoId > 0) {
+          setServicoId(produtoId);
+        }
+      } catch {
+        if (!ativoFlag) return;
+      }
+    })();
+    return () => {
+      ativoFlag = false;
+    };
+  }, [alvoTipoParam, paramAlvoId, servicoId]);
+
+  useEffect(() => {
+    let ativoFlag = true;
+    (async () => {
       if (!servicoId) {
         setUnidades([]);
         setUnidadesSelecionadas([]);
@@ -247,35 +281,42 @@ export default function TabelaMatriculaNovaForm() {
         ativo: i.ativo,
       }));
 
+      const payload: Record<string, unknown> = {
+        titulo: titulo.trim(),
+        ano_referencia: anoParsed,
+        ativo,
+        observacoes: observacoes || null,
+        servico_tipo: categoria,
+        servico_id: servicoId,
+        unidade_execucao_ids: aplicarTodas ? [] : unidadesSelecionadas,
+        itens: itemsPayload,
+      };
+
+      if (alvoTipoParam && paramAlvoId) {
+        payload.alvo_tipo = alvoTipoParam;
+        payload.alvo_ids = [paramAlvoId];
+      }
+
       const res = await fetch("/api/matriculas/tabelas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          titulo: titulo.trim(),
-          ano_referencia: anoParsed,
-          ativo,
-          observacoes: observacoes || null,
-          servico_tipo: categoria,
-          servico_id: servicoId,
-          unidade_execucao_ids: aplicarTodas ? [] : unidadesSelecionadas,
-          itens: itemsPayload,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      let payload: { ok?: boolean; data?: { id: number }; message?: string } | null = null;
+      let responsePayload: { ok?: boolean; data?: { id: number }; message?: string } | null = null;
       try {
-        payload = (await res.json()) as { ok?: boolean; data?: { id: number }; message?: string };
+        responsePayload = (await res.json()) as { ok?: boolean; data?: { id: number }; message?: string };
       } catch {
-        payload = null;
+        responsePayload = null;
       }
 
-      if (!res.ok || !payload?.ok) {
-        throw new Error(payload?.message || "Falha ao criar tabela.");
+      if (!res.ok || !responsePayload?.ok) {
+        throw new Error(responsePayload?.message || "Falha ao criar tabela.");
       }
 
-      setOkMsg(`Tabela criada com sucesso (ID ${payload.data?.id}).`);
-      if (payload?.data?.id) {
-        router.push(`/admin/escola/configuracoes/matriculas/tabelas/${payload.data.id}`);
+      setOkMsg(`Tabela criada com sucesso (ID ${responsePayload.data?.id}).`);
+      if (responsePayload?.data?.id) {
+        router.push(`/admin/escola/configuracoes/matriculas/tabelas/${responsePayload.data.id}`);
       } else {
         router.refresh();
       }

@@ -165,11 +165,12 @@ function formatValor(value: unknown): string {
 }
 
 type TurmaPageProps = {
-  params: { turmaId: string };
+  params: Promise<{ turmaId: string }>;
 };
 
 export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
-  const turmaId = Number(params.turmaId);
+  const { turmaId: turmaIdRaw } = await params;
+  const turmaId = Number(turmaIdRaw);
   if (Number.isNaN(turmaId)) {
     notFound();
   }
