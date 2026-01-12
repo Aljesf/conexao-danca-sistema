@@ -453,12 +453,27 @@ export async function gerarSnapshot(
   const inicioSerieHistorica = addDays(hoje, -89);
   const fimSerieFutura = addDays(hoje, 30);
 
+  devLog("Parametros de janela", {
+    hoje,
+    inicioSerieHistorica,
+    fimSerieFutura,
+    inicioJanela,
+    inicioJanelaAnterior,
+    fimJanelaAnterior,
+  });
+
   // Movimentos ate hoje (para saldo e serie historica)
   const { data: movimentosAntes, error: errAntes } = await supabase
     .from("movimento_financeiro")
     .select("tipo, valor_centavos")
     .lt("data_movimento", `${inicioSerieHistorica}T00:00:00`);
   if (errAntes) throw errAntes;
+  devLog("movimento_financeiro antes da serie", {
+    table: "movimento_financeiro",
+    ate: `${inicioSerieHistorica}T00:00:00`,
+    count: movimentosAntes?.length ?? 0,
+    sample: (movimentosAntes || []).slice(0, 3),
+  });
 
   const { data: movimentos, error: errMov } = await supabase
     .from("movimento_financeiro")
@@ -466,6 +481,13 @@ export async function gerarSnapshot(
     .gte("data_movimento", `${inicioSerieHistorica}T00:00:00`)
     .lte("data_movimento", `${hoje}T23:59:59`);
   if (errMov) throw errMov;
+  devLog("movimento_financeiro janela historica", {
+    table: "movimento_financeiro",
+    inicio: `${inicioSerieHistorica}T00:00:00`,
+    fim: `${hoje}T23:59:59`,
+    count: movimentos?.length ?? 0,
+    sample: (movimentos || []).slice(0, 3),
+  });
 
   // Entradas previstas e saídas comprometidas (30d futuros)
   const { data: cobrancas, error: errCob } = await supabase
@@ -476,6 +498,13 @@ export async function gerarSnapshot(
     .gte("vencimento", `${hoje}T00:00:00`)
     .lte("vencimento", `${fimSerieFutura}T23:59:59`);
   if (errCob) throw errCob;
+  devLog("cobrancas futuras (entradas previstas)", {
+    table: "cobrancas",
+    inicio: `${hoje}T00:00:00`,
+    fim: `${fimSerieFutura}T23:59:59`,
+    count: cobrancas?.length ?? 0,
+    sample: (cobrancas || []).slice(0, 3),
+  });
 
   const { data: contasPagar, error: errPagar } = await supabase
     .from("contas_pagar")
@@ -484,6 +513,13 @@ export async function gerarSnapshot(
     .gte("vencimento", `${hoje}T00:00:00`)
     .lte("vencimento", `${fimSerieFutura}T23:59:59`);
   if (errPagar) throw errPagar;
+  devLog("contas_pagar futuras (saidas comprometidas)", {
+    table: "contas_pagar",
+    inicio: `${hoje}T00:00:00`,
+    fim: `${fimSerieFutura}T23:59:59`,
+    count: contasPagar?.length ?? 0,
+    sample: (contasPagar || []).slice(0, 3),
+  });
 
   const { data: cobrancasAtrasadas, error: errCobAtrasadas } = await supabase
     .from("cobrancas")
@@ -491,6 +527,12 @@ export async function gerarSnapshot(
     .lt("vencimento", `${hoje}T00:00:00`)
     .neq("status", "RECEBIDO");
   if (errCobAtrasadas) throw errCobAtrasadas;
+  devLog("cobrancas atrasadas", {
+    table: "cobrancas",
+    ate: `${hoje}T00:00:00`,
+    count: cobrancasAtrasadas?.length ?? 0,
+    sample: (cobrancasAtrasadas || []).slice(0, 3),
+  });
 
   const { data: cobrancasRecebidas, error: errCobRecebidas } = await supabase
     .from("cobrancas")
@@ -499,6 +541,13 @@ export async function gerarSnapshot(
     .gte("data_pagamento", `${inicioJanela}T00:00:00`)
     .lte("data_pagamento", `${hoje}T23:59:59`);
   if (errCobRecebidas) throw errCobRecebidas;
+  devLog("cobrancas recebidas (janela 30d)", {
+    table: "cobrancas",
+    inicio: `${inicioJanela}T00:00:00`,
+    fim: `${hoje}T23:59:59`,
+    count: cobrancasRecebidas?.length ?? 0,
+    sample: (cobrancasRecebidas || []).slice(0, 3),
+  });
 
   const movimentosTodos = [...(movimentosAntes || []), ...(movimentos || [])];
   const saldoMovimentos = somaMovimentos(movimentosTodos);

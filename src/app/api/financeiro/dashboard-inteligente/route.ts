@@ -5,6 +5,9 @@ import {
   obterSnapshotDoDia,
 } from "@/lib/financeiro/dashboardInteligente";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: Request) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;

@@ -197,7 +197,7 @@ export default function FinanceiroDashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/financeiro/dashboard-inteligente");
+      const res = await fetch("/api/financeiro/dashboard-inteligente", { cache: "no-store" });
       const json = (await res.json()) as DashboardResponse;
       if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao carregar dashboard.");
       setSnapshot(json.snapshot);

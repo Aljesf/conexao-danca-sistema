@@ -4,6 +4,9 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type GptStatus = "OK" | "SEM_CHAVE" | "ERRO" | "PARSER";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function sanitizeError(err: any): string {
   if (!err) return "erro_desconhecido";
   const raw =
