@@ -337,8 +337,13 @@ where not exists (
   select 1 from public.documentos_modelo where titulo = 'Ficha Financeira — Matrícula Pagante'
 );
 
--- 6) Vinculo conjunto/grupo (MATRICULA_REGULAR / DOCUMENTO_PRINCIPAL)
-with g as (
+-- ============================================================
+-- Vínculo Grupo ↔ Modelos (principal) — CONTRATO + FICHA
+-- (CTE precisa estar no MESMO comando do INSERT)
+-- ============================================================
+
+with
+g as (
   select g.id as grupo_id
   from public.documentos_grupos g
   join public.documentos_conjuntos c on c.id = g.conjunto_id
@@ -347,40 +352,36 @@ with g as (
   limit 1
 ),
 m_contrato as (
-  select id as modelo_id
-  from public.documentos_modelo
-  where titulo = 'Contrato — Matrícula Pagante (Padrão)'
-  order by id desc
+  select m.id as modelo_id
+  from public.documentos_modelo m
+  where m.titulo = 'Contrato — Matrícula Pagante (Padrão)'
+  order by m.id desc
   limit 1
 ),
 m_ficha as (
-  select id as modelo_id
-  from public.documentos_modelo
-  where titulo = 'Ficha Financeira — Matrícula Pagante'
-  order by id desc
+  select m.id as modelo_id
+  from public.documentos_modelo m
+  where m.titulo = 'Ficha Financeira — Matrícula Pagante'
+  order by m.id desc
   limit 1
+),
+ins as (
+  select g.grupo_id as conjunto_grupo_id, m_contrato.modelo_id, 1::int as ordem, true as ativo
+  from g, m_contrato
+  union all
+  select g.grupo_id as conjunto_grupo_id, m_ficha.modelo_id, 2::int as ordem, true as ativo
+  from g, m_ficha
 )
 insert into public.documentos_conjuntos_grupos_modelos (conjunto_grupo_id, modelo_id, ordem, ativo)
-select g.grupo_id, m.modelo_id, 1, true
-from g
-join m_contrato m on true
-where not exists (
-  select 1
-  from public.documentos_conjuntos_grupos_modelos x
-  where x.conjunto_grupo_id = g.grupo_id
-    and x.modelo_id = m.modelo_id
-);
-
-insert into public.documentos_conjuntos_grupos_modelos (conjunto_grupo_id, modelo_id, ordem, ativo)
-select g.grupo_id, m.modelo_id, 2, true
-from g
-join m_ficha m on true
-where not exists (
-  select 1
-  from public.documentos_conjuntos_grupos_modelos x
-  where x.conjunto_grupo_id = g.grupo_id
-    and x.modelo_id = m.modelo_id
-);
+select i.conjunto_grupo_id, i.modelo_id, i.ordem, i.ativo
+from ins i
+where i.modelo_id is not null
+  and not exists (
+    select 1
+    from public.documentos_conjuntos_grupos_modelos x
+    where x.conjunto_grupo_id = i.conjunto_grupo_id
+      and x.modelo_id = i.modelo_id
+  );
 
 commit;
 
