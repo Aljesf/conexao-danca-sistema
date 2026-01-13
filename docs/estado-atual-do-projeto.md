@@ -82,6 +82,8 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 - Renderizacao do preview usa HTML (emitido com fallback de modelo) com decode controlado quando necessario.
 - Toggle de preview: modelo sem dados x resolver com dados, sem sobrescrever o editor; imprimir usa o modo resolvido.
 - Aviso quando preview resolvido ainda contem placeholders ({{ ... }}).
+- Impressao/PDF: CSS print remove max-width e define @page A4 com margem base 10mm.
+- Impressao/PDF: altura efetiva de header/footer zerada quando nao ha template.
 
 
 ---
@@ -106,6 +108,9 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 5) Documentos - preview HTML
 - Rodar diagnostico no SQL Editor (documentos_modelo/documentos_emitidos) e validar emitidos 12/13 (resolver com dados) e doc emitido ID=13 / modelo 41.
+
+6) Documentos - impressao/PDF
+- Validar emitidos/12 com preview de impressao (largura normal, margem 10mm, sem reserva de header/footer quando vazio).
 
 
 ---

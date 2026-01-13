@@ -2,6 +2,7 @@
    TAILWIND v4 - Import oficial
    =========================== */
 @import "tailwindcss";
+@import "../styles/print.css";
 
 /* ===========================
    PALETA GLOBAL E RESET LEVE

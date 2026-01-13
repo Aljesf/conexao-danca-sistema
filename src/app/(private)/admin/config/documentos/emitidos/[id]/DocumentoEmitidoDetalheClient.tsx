@@ -218,10 +218,16 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const pageMarginValue = Number(doc?.page_margin_mm);
   const headerHeightPx = Number.isFinite(headerHeightValue) && headerHeightValue > 0 ? headerHeightValue : 120;
   const footerHeightPx = Number.isFinite(footerHeightValue) && footerHeightValue > 0 ? footerHeightValue : 80;
-  const pageMarginMm = Number.isFinite(pageMarginValue) && pageMarginValue > 0 ? pageMarginValue : 15;
+  const pageMarginMm = Number.isFinite(pageMarginValue) && pageMarginValue > 0 ? pageMarginValue : 10;
+  const headerTrimmed = headerHtml.trim();
+  const footerTrimmed = footerHtml.trim();
+  const hasHeader = headerTrimmed.length > 0 && headerTrimmed.toLowerCase() !== "sem header";
+  const hasFooter = footerTrimmed.length > 0 && footerTrimmed.toLowerCase() !== "sem footer";
+  const headerEffectivePx = hasHeader ? headerHeightPx : 0;
+  const footerEffectivePx = hasFooter ? footerHeightPx : 0;
   const printVars = {
-    "--header-height-px": `${headerHeightPx}px`,
-    "--footer-height-px": `${footerHeightPx}px`,
+    "--header-height-px": `${headerEffectivePx}px`,
+    "--footer-height-px": `${footerEffectivePx}px`,
     "--page-margin-mm": `${pageMarginMm}mm`,
   } as React.CSSProperties;
   const previewConteudoRaw =
@@ -255,7 +261,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <div className="doc-print-shell mx-auto flex max-w-6xl flex-col gap-6">
         <div className="no-print rounded-2xl border bg-white p-6 shadow-sm">
           <h1 className="text-xl font-semibold">Documento emitido</h1>
           <p className="mt-1 text-sm text-slate-600">
@@ -413,8 +419,8 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                     Para gerar PDF, use &quot;Imprimir / Salvar PDF&quot;.
                   </p>
 
-                  <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
-                    <div id="print-root" style={printVars}>
+                  <div className="documento-preview mt-3 rounded-lg border border-slate-200 bg-white p-4">
+                    <div id="print-root" className="doc-print-root" style={printVars}>
                       <div
                         id="print-header"
                         className="prose max-w-none"
@@ -471,7 +477,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
           #print-header {
             position: fixed !important;
             left: 0 !important;
-            top: var(--page-margin-mm, 15mm) !important;
+            top: var(--page-margin-mm, 10mm) !important;
             right: 0 !important;
             height: var(--header-height-px, 120px) !important;
             padding: 0 !important;
@@ -482,7 +488,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             position: fixed !important;
             left: 0 !important;
             right: 0 !important;
-            bottom: var(--page-margin-mm, 15mm) !important;
+            bottom: var(--page-margin-mm, 10mm) !important;
             height: var(--footer-height-px, 80px) !important;
             padding: 0 !important;
             margin: 0 !important;
@@ -494,8 +500,8 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             right: 0 !important;
             width: 100% !important;
             padding: 0 !important;
-            margin-top: calc(var(--page-margin-mm, 15mm) + var(--header-height-px, 120px)) !important;
-            margin-bottom: calc(var(--page-margin-mm, 15mm) + var(--footer-height-px, 80px)) !important;
+            margin-top: calc(var(--page-margin-mm, 10mm) + var(--header-height-px, 120px)) !important;
+            margin-bottom: calc(var(--page-margin-mm, 10mm) + var(--footer-height-px, 80px)) !important;
           }
 
           .rounded-lg,
@@ -512,7 +518,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
           }
 
           @page {
-            margin: var(--page-margin-mm, 15mm);
+            margin: var(--page-margin-mm, 10mm);
           }
         }
 
