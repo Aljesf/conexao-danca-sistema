@@ -1,18 +1,7 @@
--- Objetivo:
--- Padronizar um "resumo financeiro" por pessoa, considerando:
--- - Responsavel financeiro (quando aplicavel)
--- - Cobrancas diretas abertas/vencidas (fora do Cartao Conexao)
--- - Faturas do Cartao Conexao abertas/em atraso do titular
--- Observacao:
--- A view e "melhor esforco" e deve ser compativel com o schema atual.
--- Se alguma tabela/campo nao existir, ajuste no passo 1.2 (verificacao).
+-- VIEW resiliente a variacao de nomes de colunas via to_jsonb()->>'campo'
 
 create or replace view public.vw_pessoa_resumo_financeiro as
 with
--- 1) Responsavel financeiro:
--- Regra:
--- - Se existir matricula com responsavel_financeiro_id, ele e o pagador preferencial.
--- - Caso nao exista, considerar a propria pessoa como pagador.
 resp as (
   select
     p.id as pessoa_id,
@@ -28,26 +17,37 @@ resp as (
     ) as responsavel_financeiro_id
   from public.pessoas p
 ),
--- 2) Cobrancas diretas:
--- Aqui assumimos tabela public.cobrancas com:
--- - id
--- - pessoa_id (devedor)
--- - status (ABERTA/PAGA/CANCELADA etc.)
--- - data_vencimento (date) ou vencimento (date)
--- - valor_total_centavos (int) ou valor_centavos (int)
--- - origem_tipo / origem_subtipo / origem_id (opcional)
+
+/*
+  Cobrancas diretas:
+  - Nao referenciar colunas diretamente (pode nao existir).
+  - Usar to_jsonb(c)->>'coluna' para tolerar variacoes:
+    vencimento vs data_vencimento
+    valor_centavos vs valor_total_centavos
+*/
 cobr as (
   select
-    c.id as cobranca_id,
-    c.pessoa_id as devedor_pessoa_id,
-    coalesce(c.data_vencimento, c.vencimento)::date as data_vencimento,
-    coalesce(c.valor_total_centavos, c.valor_centavos, 0)::int as valor_centavos,
-    coalesce(c.status, 'DESCONHECIDO')::text as status,
-    coalesce(c.origem_tipo, '')::text as origem_tipo,
-    coalesce(c.origem_subtipo, '')::text as origem_subtipo,
-    c.created_at as created_at
+    (to_jsonb(c)->>'id')::bigint as cobranca_id,
+    (to_jsonb(c)->>'pessoa_id')::bigint as devedor_pessoa_id,
+    nullif(
+      coalesce(
+        to_jsonb(c)->>'data_vencimento',
+        to_jsonb(c)->>'vencimento'
+      ),
+      ''
+    )::date as data_vencimento,
+    coalesce(
+      nullif(to_jsonb(c)->>'valor_total_centavos','')::bigint,
+      nullif(to_jsonb(c)->>'valor_centavos','')::bigint,
+      0
+    )::bigint as valor_centavos,
+    coalesce(nullif(to_jsonb(c)->>'status',''), 'DESCONHECIDO')::text as status,
+    coalesce(nullif(to_jsonb(c)->>'origem_tipo',''), '')::text as origem_tipo,
+    coalesce(nullif(to_jsonb(c)->>'origem_subtipo',''), '')::text as origem_subtipo,
+    (to_jsonb(c)->>'created_at')::timestamptz as created_at
   from public.cobrancas c
 ),
+
 cobr_pendentes as (
   select
     r.pessoa_id,
@@ -65,34 +65,30 @@ cobr_pendentes as (
     on b.devedor_pessoa_id = r.responsavel_financeiro_id
   where upper(b.status) in ('ABERTA', 'PENDENTE', 'EM_ABERTO', 'OPEN')
 ),
--- 3) Cartao Conexao:
--- Assumimos que existe public.credito_conexao_contas com:
--- - id
--- - pessoa_titular_id
--- E public.credito_conexao_faturas com:
--- - id
--- - conta_conexao_id
--- - periodo_referencia
--- - data_vencimento
--- - valor_total_centavos
--- - status (ABERTA/PAGA/EM_ATRASO etc.)
+
+/*
+  Cartao Conexao:
+  - Mesma abordagem resiliente.
+*/
 contas as (
   select
-    cc.id as conta_conexao_id,
-    cc.pessoa_titular_id
+    (to_jsonb(cc)->>'id')::bigint as conta_conexao_id,
+    (to_jsonb(cc)->>'pessoa_titular_id')::bigint as pessoa_titular_id
   from public.credito_conexao_contas cc
 ),
+
 faturas as (
   select
-    f.id as fatura_id,
-    f.conta_conexao_id,
-    f.periodo_referencia,
-    f.data_vencimento,
-    f.valor_total_centavos,
-    f.status,
-    f.created_at
+    (to_jsonb(f)->>'id')::bigint as fatura_id,
+    (to_jsonb(f)->>'conta_conexao_id')::bigint as conta_conexao_id,
+    coalesce(nullif(to_jsonb(f)->>'periodo_referencia',''), '')::text as periodo_referencia,
+    nullif(to_jsonb(f)->>'data_vencimento','')::date as data_vencimento,
+    coalesce(nullif(to_jsonb(f)->>'valor_total_centavos','')::bigint, 0)::bigint as valor_total_centavos,
+    coalesce(nullif(to_jsonb(f)->>'status',''), 'DESCONHECIDO')::text as status,
+    (to_jsonb(f)->>'created_at')::timestamptz as created_at
   from public.credito_conexao_faturas f
 ),
+
 faturas_pendentes as (
   select
     r.pessoa_id,
@@ -103,7 +99,11 @@ faturas_pendentes as (
     ft.data_vencimento,
     ft.valor_total_centavos,
     ft.status,
-    (ft.data_vencimento is not null and ft.data_vencimento < current_date and upper(ft.status) in ('ABERTA','EM_ATRASO','PENDENTE','OPEN')) as vencida,
+    (
+      ft.data_vencimento is not null
+      and ft.data_vencimento < current_date
+      and upper(ft.status) in ('ABERTA','EM_ATRASO','PENDENTE','OPEN')
+    ) as vencida,
     ft.created_at
   from resp r
   join contas ct
@@ -112,13 +112,16 @@ faturas_pendentes as (
     on ft.conta_conexao_id = ct.conta_conexao_id
   where upper(ft.status) in ('ABERTA', 'EM_ATRASO', 'PENDENTE', 'OPEN')
 )
+
 select
   r.pessoa_id,
   r.responsavel_financeiro_id,
+
   -- agregados de cobrancas diretas
   (select coalesce(count(*),0) from cobr_pendentes cp where cp.pessoa_id = r.pessoa_id) as cobrancas_pendentes_qtd,
   (select coalesce(sum(cp.valor_centavos),0) from cobr_pendentes cp where cp.pessoa_id = r.pessoa_id) as cobrancas_pendentes_total_centavos,
   (select coalesce(count(*),0) from cobr_pendentes cp where cp.pessoa_id = r.pessoa_id and cp.vencida = true) as cobrancas_vencidas_qtd,
+
   -- agregados de faturas
   (select coalesce(count(*),0) from faturas_pendentes fp where fp.pessoa_id = r.pessoa_id) as faturas_pendentes_qtd,
   (select coalesce(sum(fp.valor_total_centavos),0) from faturas_pendentes fp where fp.pessoa_id = r.pessoa_id) as faturas_pendentes_total_centavos,

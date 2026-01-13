@@ -736,7 +736,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const statusFluxoInicial = "AGUARDANDO_LIQUIDACAO";
   const insertPayload: Record<string, unknown> = {
     pessoa_id: pessoaId,
     responsavel_financeiro_id: respFinId,
@@ -750,9 +749,7 @@ export async function POST(req: Request) {
     forma_liquidacao_padrao: formaLiquidacaoPadrao ?? plano?.forma_liquidacao_padrao ?? null,
     documento_modelo_id: documentoModeloId,
     observacoes: body.observacoes ?? null,
-    status_fluxo: statusFluxoInicial,
     total_mensalidade_centavos: totalMensalidadeCentavos,
-    rascunho_expira_em: new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString(),
     status: "ATIVA",
     created_by: user.id,
     updated_by: user.id,

@@ -21,6 +21,8 @@ type Payload = {
 
   // excecao (quando ADIAR_EXCECAO)
   motivo_excecao?: string;
+  vencimento_manual?: string; // YYYY-MM-DD
+  meio_cobranca?: string; // BOLETO | FIMP | OUTRO
 };
 
 type LedgerTipo = "ENTRADA" | "PARCELA" | "LANCAMENTO_CREDITO" | "OUTRO";
@@ -785,7 +787,7 @@ export async function POST(req: Request) {
   const { data: matricula, error: errMat } = await supabase
     .from("matriculas")
     .select(
-      "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos, total_mensalidade_centavos, ano_referencia, data_inicio_vinculo, data_matricula, vinculo_id, status_fluxo",
+      "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos, total_mensalidade_centavos, ano_referencia, data_inicio_vinculo, data_matricula, vinculo_id",
     )
     .eq("id", matriculaId)
     .single();
@@ -823,7 +825,7 @@ export async function POST(req: Request) {
   debugCartao.data_inicio_vinculo =
     typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null;
 
-  if (matricula.primeira_cobranca_status === "PAGA" || matricula.primeira_cobranca_status === "LANCADA_CARTAO") {
+  if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO"].includes(matricula.primeira_cobranca_status)) {
     return NextResponse.json({ error: "matricula_ja_liquidada" }, { status: 409 });
   }
 
@@ -978,7 +980,6 @@ export async function POST(req: Request) {
         primeira_cobranca_recebimento_id: receb.id,
         primeira_cobranca_forma_pagamento_id: formaPagamentoId,
         primeira_cobranca_data_pagamento: dataPg,
-        status_fluxo: "ATIVA",
       })
       .eq("id", matricula.id);
 
@@ -1306,7 +1307,6 @@ export async function POST(req: Request) {
           primeira_cobranca_status: "LANCADA_CARTAO",
           primeira_cobranca_valor_centavos: totalMensalidadeManual,
           primeira_cobranca_data_pagamento: null,
-          status_fluxo: "ATIVA",
         })
         .eq("id", matricula.id);
 
@@ -1431,7 +1431,6 @@ export async function POST(req: Request) {
         primeira_cobranca_status: "LANCADA_CARTAO",
         primeira_cobranca_valor_centavos: totalMensalidade,
         primeira_cobranca_data_pagamento: null,
-        status_fluxo: "ATIVA",
       })
       .eq("id", matricula.id);
 
@@ -1443,9 +1442,75 @@ export async function POST(req: Request) {
   }
 
   if (body.modo === "ADIAR_EXCECAO") {
+    if (body.tipo_primeira_cobranca !== "ENTRADA_PRORATA") {
+      return NextResponse.json({ error: "modo_invalido_para_tipo_cobranca" }, { status: 400 });
+    }
+
     const motivo = typeof body.motivo_excecao === "string" ? body.motivo_excecao.trim() : "";
     if (!motivo) {
       return NextResponse.json({ error: "motivo_excecao_obrigatorio" }, { status: 400 });
+    }
+
+    if (!valorFinal) {
+      return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
+    }
+
+    const vencimentoManual = asDateStr(body.vencimento_manual);
+    if (!vencimentoManual) {
+      return NextResponse.json({ error: "vencimento_manual_obrigatorio" }, { status: 400 });
+    }
+    const hoje = new Date().toISOString().slice(0, 10);
+    if (vencimentoManual < hoje) {
+      return NextResponse.json({ error: "vencimento_manual_invalido" }, { status: 400 });
+    }
+
+    const meioRaw = typeof body.meio_cobranca === "string" ? body.meio_cobranca.trim().toUpperCase() : "";
+    const meioCobranca = meioRaw || "BOLETO";
+    if (!["BOLETO", "FIMP"].includes(meioCobranca)) {
+      return NextResponse.json({ error: "meio_cobranca_invalido" }, { status: 400 });
+    }
+
+    const { data: cobranca, error: errCobr } = await supabase
+      .from("cobrancas")
+      .insert({
+        pessoa_id: matricula.responsavel_financeiro_id,
+        descricao: "Entrada (excecao adiada) - matricula",
+        valor_centavos: valorFinal,
+        vencimento: vencimentoManual,
+        status: "PENDENTE",
+        metodo_pagamento: meioCobranca,
+        observacoes: body.observacoes ?? null,
+        origem_tipo: "MATRICULA_ENTRADA",
+        origem_id: matricula.id,
+      })
+      .select("id")
+      .single();
+
+    if (errCobr || !cobranca) {
+      return NextResponse.json(
+        { error: "falha_criar_cobranca_avulsa", details: errCobr?.message ?? "erro_desconhecido" },
+        { status: 500 },
+      );
+    }
+
+    const ledgerEntrada: LedgerInsert = {
+      matricula_id: matricula.id,
+      tipo: "ENTRADA",
+      descricao: "Entrada / Pro-rata (adiada)",
+      valor_centavos: valorFinal,
+      vencimento: vencimentoManual,
+      data_evento: vencimentoManual,
+      status: "PENDENTE",
+      origem_tabela: "cobrancas",
+      origem_id: cobranca.id,
+    };
+
+    const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerEntrada);
+    if (ledgerErr) {
+      return NextResponse.json(
+        { error: "falha_inserir_ledger", details: ledgerErr.message },
+        { status: 500 },
+      );
     }
 
     const { error: errUpd } = await supabase
@@ -1453,11 +1518,15 @@ export async function POST(req: Request) {
       .update({
         primeira_cobranca_tipo: body.tipo_primeira_cobranca,
         primeira_cobranca_status: "ADIADA_EXCECAO",
+        primeira_cobranca_valor_centavos: valorFinal,
+        primeira_cobranca_cobranca_id: cobranca.id,
+        primeira_cobranca_recebimento_id: null,
+        primeira_cobranca_forma_pagamento_id: null,
+        primeira_cobranca_data_pagamento: null,
         excecao_primeiro_pagamento: true,
         motivo_excecao_primeiro_pagamento: motivo,
         excecao_autorizada_por: auth.user.id,
         excecao_criada_em: new Date().toISOString(),
-        status_fluxo: "ATIVA",
       })
       .eq("id", matricula.id);
 
@@ -1465,7 +1534,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, status: "ADIADA_EXCECAO" });
+    return NextResponse.json({ ok: true, status: "ADIADA_EXCECAO", cobranca_avulsa_id: cobranca.id });
   }
 
   return NextResponse.json({ error: "modo_invalido" }, { status: 400 });

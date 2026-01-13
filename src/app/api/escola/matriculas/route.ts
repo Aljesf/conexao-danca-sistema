@@ -93,7 +93,7 @@ async function fetchMatriculas(admin: ReturnType<typeof getSupabaseAdmin>, param
     .from("matriculas")
     .select(selectBase.join(","))
     .eq("ano_referencia", params.ano)
-    .eq("status_fluxo", "ATIVA");
+    .eq("status", "ATIVA");
 
   if (params.pessoaId) {
     query = query.eq("pessoa_id", params.pessoaId);

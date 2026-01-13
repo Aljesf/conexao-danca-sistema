@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -14,7 +14,6 @@ type MatriculaResumo = {
   id: number;
   pessoa_id: number;
   responsavel_financeiro_id: number;
-  status_fluxo: string;
   primeira_cobranca_status: string;
   primeira_cobranca_tipo: string | null;
   primeira_cobranca_valor_centavos: number | null;
@@ -46,6 +45,8 @@ export default function Page() {
   const [dataPagamento, setDataPagamento] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [observacoes, setObservacoes] = useState<string>("");
   const [motivoExcecao, setMotivoExcecao] = useState<string>("");
+  const [vencimentoManual, setVencimentoManual] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [meioCobranca, setMeioCobranca] = useState<string>("BOLETO");
 
   useEffect(() => {
     const run = async () => {
@@ -54,7 +55,7 @@ export default function Page() {
 
       const idNum = matriculaId ? Number(matriculaId) : NaN;
       if (!matriculaId || Number.isNaN(idNum)) {
-        setErro("matriculaId ausente ou inválido na URL.");
+        setErro("matriculaId ausente ou invÃ¡lido na URL.");
         setLoading(false);
         return;
       }
@@ -62,19 +63,19 @@ export default function Page() {
       const { data: m, error: mErr } = await supabase
         .from("matriculas")
         .select(
-          "id, status_fluxo, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos",
+          "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos",
         )
         .eq("id", idNum)
         .single();
 
       if (mErr || !m) {
-        setErro("Não foi possível carregar a matrícula.");
+        setErro("NÃ£o foi possÃ­vel carregar a matrÃ­cula.");
         setLoading(false);
         return;
       }
 
       setMatricula(m as MatriculaResumo);
-      if (m.status_fluxo === "ATIVA") {
+      if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO"].includes(String(m.primeira_cobranca_status))) {
         setErro("Matricula ja liquidada.");
         setLoading(false);
         return;
@@ -94,7 +95,7 @@ export default function Page() {
         .order("nome", { ascending: true });
 
       if (fpErr) {
-        setErro("Não foi possível carregar as formas de pagamento.");
+        setErro("NÃ£o foi possÃ­vel carregar as formas de pagamento.");
         setLoading(false);
         return;
       }
@@ -106,8 +107,15 @@ export default function Page() {
     void run();
   }, [matriculaId, supabase]);
 
+  useEffect(() => {
+    if (tipoPrimeira !== "ENTRADA_PRORATA" && modo === "ADIAR_EXCECAO") {
+      setModo("LANCAR_NO_CARTAO");
+    }
+  }, [modo, tipoPrimeira]);
+
   const precisaFormaPagamento = modo === "PAGAR_AGORA";
   const precisaMotivo = modo === "ADIAR_EXCECAO";
+  const precisaVencimentoManual = modo === "ADIAR_EXCECAO";
   const precisaValor = modo === "PAGAR_AGORA" || modo === "LANCAR_NO_CARTAO";
   const valorResolvido = valorCentavos.trim() !== "";
 
@@ -116,7 +124,7 @@ export default function Page() {
 
     setErro(null);
 
-    if (matricula.status_fluxo === "ATIVA") {
+    if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO"].includes(String(matricula.primeira_cobranca_status))) {
       setErro("Matricula ja liquidada.");
       return;
     }
@@ -140,8 +148,24 @@ export default function Page() {
     }
 
     if (precisaMotivo && motivoExcecao.trim().length < 5) {
-      setErro("Informe um motivo objetivo para a exceção (mínimo 5 caracteres).");
+      setErro("Informe um motivo objetivo para a exceÃ§Ã£o (mÃ­nimo 5 caracteres).");
       return;
+    }
+
+    if (precisaVencimentoManual) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimentoManual)) {
+        setErro("Informe a data de vencimento combinada.");
+        return;
+      }
+      const hoje = new Date().toISOString().slice(0, 10);
+      if (vencimentoManual < hoje) {
+        setErro("A data de vencimento deve ser hoje ou futura.");
+        return;
+      }
+      if (!meioCobranca) {
+        setErro("Selecione o meio de cobranca.");
+        return;
+      }
     }
 
     try {
@@ -159,6 +183,8 @@ export default function Page() {
           data_pagamento: dataPagamento,
           observacoes,
           motivo_excecao: motivoExcecao,
+          vencimento_manual: precisaVencimentoManual ? vencimentoManual : undefined,
+          meio_cobranca: precisaVencimentoManual ? meioCobranca : undefined,
         }),
       });
 
@@ -182,7 +208,7 @@ export default function Page() {
           setErro(`${json?.error ?? "Falha ao liquidar a primeira cobranca."} | ${erroDebug}`);
           return;
         }
-        setErro(json?.error ?? "Falha ao liquidar a primeira cobrança.");
+        setErro(json?.error ?? "Falha ao liquidar a primeira cobranÃ§a.");
         return;
       }
 
@@ -190,7 +216,7 @@ export default function Page() {
         const periodoInicio = json.debugCartao.periodo_inicio ?? "-";
         const periodoFim = json.debugCartao.periodo_fim ?? "-";
         alert(
-          `Cartao: executado=${json.debugCartao.executado} lancamentos=${json.debugCartao.created_lancamentos} vinculos=${json.debugCartao.linked_faturas} periodo=${periodoInicio}→${periodoFim}`,
+          `Cartao: executado=${json.debugCartao.executado} lancamentos=${json.debugCartao.created_lancamentos} vinculos=${json.debugCartao.linked_faturas} periodo=${periodoInicio}â†’${periodoFim}`,
         );
       }
 
@@ -209,13 +235,13 @@ export default function Page() {
   if (loading) {
     return (
       <div className="p-6">
-        <h1 className="text-xl font-semibold">Liquidação da Matrícula</h1>
+        <h1 className="text-xl font-semibold">LiquidaÃ§Ã£o da MatrÃ­cula</h1>
         <p className="mt-2 text-sm text-muted-foreground">Carregando...</p>
       </div>
     );
   }
 
-  if (matricula?.status_fluxo === "ATIVA") {
+  if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO"].includes(String(matricula?.primeira_cobranca_status))) {
     return (
       <div className="p-6 max-w-3xl">
         <h1 className="text-xl font-semibold">Liquidacao da Matricula</h1>
@@ -234,11 +260,11 @@ export default function Page() {
 
   return (
     <div className="p-6 max-w-3xl">
-      <h1 className="text-xl font-semibold">Liquidação da Matrícula (Ato)</h1>
+      <h1 className="text-xl font-semibold">LiquidaÃ§Ã£o da MatrÃ­cula (Ato)</h1>
 
       <p className="text-sm text-muted-foreground mt-2">
-        Este valor refere-se à <strong>entrada no ato</strong>. A mensalidade recorrente será cobrada separadamente via
-        <strong> Cartão Conexão</strong>.
+        Este valor refere-se Ã  <strong>entrada no ato</strong>. A mensalidade recorrente serÃ¡ cobrada separadamente via
+        <strong> CartÃ£o ConexÃ£o</strong>.
       </p>
 
       {erro ? (
@@ -250,23 +276,23 @@ export default function Page() {
       <div className="mt-6 space-y-4">
         <div className="rounded-lg border p-4 space-y-3">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Tipo da primeira cobrança</label>
+            <label className="text-sm font-medium">Tipo da primeira cobranÃ§a</label>
             <select
               className="border rounded-md p-2"
               value={tipoPrimeira}
               onChange={(e) => setTipoPrimeira(e.target.value as typeof tipoPrimeira)}
             >
-              <option value="ENTRADA_PRORATA">Entrada / Pró-rata (fora do Cartão Conexão)</option>
-              <option value="MENSALIDADE_CHEIA_CARTAO">Mensalidade cheia (Cartão Conexão)</option>
+              <option value="ENTRADA_PRORATA">Entrada / PrÃ³-rata (fora do CartÃ£o ConexÃ£o)</option>
+              <option value="MENSALIDADE_CHEIA_CARTAO">Mensalidade cheia (CartÃ£o ConexÃ£o)</option>
             </select>
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Ação no ato</label>
+            <label className="text-sm font-medium">AÃ§Ã£o no ato</label>
             <select className="border rounded-md p-2" value={modo} onChange={(e) => setModo(e.target.value as typeof modo)}>
               <option value="PAGAR_AGORA">Pagar agora (gera recebimento)</option>
-              <option value="LANCAR_NO_CARTAO">Lançar no Cartão Conexão (sem recebimento)</option>
-              <option value="ADIAR_EXCECAO">Exceção: adiar primeiro pagamento (auditoria)</option>
+              <option value="LANCAR_NO_CARTAO">LanÃ§ar no CartÃ£o ConexÃ£o (sem recebimento)</option>
+              <option value="ADIAR_EXCECAO">ExceÃ§Ã£o: adiar primeiro pagamento (auditoria)</option>
             </select>
           </div>
 
@@ -308,36 +334,63 @@ export default function Page() {
 
           {modo === "LANCAR_NO_CARTAO" ? (
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Valor a lançar no Cartão (centavos)</label>
+              <label className="text-sm font-medium">Valor a lanÃ§ar no CartÃ£o (centavos)</label>
               <input
                 className="border rounded-md p-2"
                 inputMode="numeric"
                 value={valorCentavos}
                 onChange={(e) => setValorCentavos(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">Este lançamento não cria recebimento nem movimento de caixa.</p>
+              <p className="text-xs text-muted-foreground">Este lanÃ§amento nÃ£o cria recebimento nem movimento de caixa.</p>
             </div>
           ) : null}
 
           {modo === "ADIAR_EXCECAO" ? (
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Motivo da exceção (obrigatório)</label>
-              <textarea
-                className="border rounded-md p-2 min-h-[80px]"
-                value={motivoExcecao}
-                onChange={(e) => setMotivoExcecao(e.target.value)}
-                placeholder="Ex.: Responsável pediu para pagar no vencimento por receber apenas dia 10."
-              />
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-muted-foreground">
+                Sera gerada uma cobranca avulsa (fora do Cartao Conexao) no Contas a Receber e no Relatorio Financeiro do Aluno.
+              </p>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium">Motivo da excecao (obrigatorio)</label>
+                <textarea
+                  className="border rounded-md p-2 min-h-[80px]"
+                  value={motivoExcecao}
+                  onChange={(e) => setMotivoExcecao(e.target.value)}
+                  placeholder="Ex.: Responsavel pediu para pagar no vencimento por receber apenas dia 10."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">Data de vencimento combinada</label>
+                  <input
+                    className="border rounded-md p-2"
+                    type="date"
+                    value={vencimentoManual}
+                    onChange={(e) => setVencimentoManual(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">Meio de cobranca</label>
+                  <select
+                    className="border rounded-md p-2"
+                    value={meioCobranca}
+                    onChange={(e) => setMeioCobranca(e.target.value)}
+                  >
+                    <option value="BOLETO">Boleto</option>
+                    <option value="FIMP">FIMP</option>
+                  </select>
+                </div>
+              </div>
             </div>
           ) : null}
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Observações (opcional)</label>
+            <label className="text-sm font-medium">ObservaÃ§Ãµes (opcional)</label>
             <textarea
               className="border rounded-md p-2 min-h-[60px]"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
-              placeholder="Observação interna do ato."
+              placeholder="ObservaÃ§Ã£o interna do ato."
             />
           </div>
 
@@ -347,7 +400,7 @@ export default function Page() {
               onClick={onSalvar}
               disabled={saving || !valorResolvido}
             >
-              {saving ? "Salvando..." : "Confirmar liquidação"}
+              {saving ? "Salvando..." : modo === "ADIAR_EXCECAO" ? "Gerar cobranca" : "Confirmar liquidacao"}
             </button>
 
             <button className="px-4 py-2 rounded-md border" onClick={() => router.push(`/escola/matriculas/${matricula?.id ?? ""}`)} disabled={saving}>
@@ -359,3 +412,5 @@ export default function Page() {
     </div>
   );
 }
+
+

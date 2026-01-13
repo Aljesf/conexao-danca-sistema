@@ -23,7 +23,7 @@ export async function POST(_: Request, ctx: { params: { id: string } }) {
 
   const { data: matricula, error: getErr } = await supabase
     .from("matriculas")
-    .select("id,status_fluxo")
+    .select("id,status")
     .eq("id", id)
     .maybeSingle();
 
@@ -31,18 +31,14 @@ export async function POST(_: Request, ctx: { params: { id: string } }) {
     return NextResponse.json({ ok: false, error: "matricula_nao_encontrada" }, { status: 404 });
   }
 
-  if (matricula.status_fluxo !== "AGUARDANDO_LIQUIDACAO") {
-    return NextResponse.json(
-      { ok: false, error: "matricula_nao_esta_em_liquidacao", status_fluxo: matricula.status_fluxo },
-      { status: 409 },
-    );
+  if (matricula.status === "ATIVA") {
+    return NextResponse.json({ ok: true, data: { matricula_id: id, status: "ATIVA" } });
   }
 
   const { error: updErr } = await supabase
     .from("matriculas")
     .update({
-      status_fluxo: "ATIVA",
-      concluida_em: new Date().toISOString(),
+      status: "ATIVA",
       rascunho_expira_em: null,
     })
     .eq("id", id);
@@ -51,5 +47,5 @@ export async function POST(_: Request, ctx: { params: { id: string } }) {
     return NextResponse.json({ ok: false, error: "falha_finalizar_matricula", detail: updErr.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, data: { matricula_id: id, status_fluxo: "ATIVA" } });
+  return NextResponse.json({ ok: true, data: { matricula_id: id, status: "ATIVA" } });
 }
