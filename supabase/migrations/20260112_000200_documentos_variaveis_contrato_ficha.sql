@@ -118,30 +118,107 @@ select
   'Contrato — Matrícula Pagante (Padrão)',
   'v1.0',
   true,
-  $$<h2>CONTRATO DE PRESTACAO DE SERVICOS - {{TITULO_CONTRATO}}</h2>
-<p>Pelo presente instrumento, de um lado:</p>
-<p><strong>{{ESCOLA_NOME}}</strong>, CNPJ n.o {{ESCOLA_CNPJ}}, com sede em {{ESCOLA_ENDERECO}}, {{ESCOLA_CIDADE}}, doravante chamada CONTRATADA;</p>
-<p>E, de outro:</p>
-<p><strong>{{RESP_FIN_NOME}}</strong>, CPF n.o {{RESP_FIN_CPF}}, responsavel pelo(a) aluno(a) {{ALUNO_NOME}}, doravante chamado CONTRATANTE;</p>
-<p>Resolvem firmar o presente Contrato de {{TIPO_CONTRATO_DESCRICAO}}, que sera regido pelas clausulas seguintes:</p>
-<h3>CLAUSULA 1 - DO OBJETO</h3>
-<p>{{DESCRICAO_OBJETO}}</p>
-<h3>CLAUSULA 2 - DO PROJETO/TURMA</h3>
-<p>{{DESCRICAO_PEDAGOGICA}}</p>
-<h3>CLAUSULA 3 - DOS VALORES</h3>
-<p>{{DISCRIMINACAO_VALORES}}</p>
-<h3>CLAUSULA 4 - DAS CONDICOES DE PAGAMENTO</h3>
-<p>Multa de {{MULTA_PERCENTUAL}}% e juros de {{JUROS_DIARIO}}% ao dia.</p>
-<h3>CLAUSULA 5 - DA RESCISAO</h3>
-<p>{{REGRAS_CANCELAMENTO}}</p>
-<h3>CLAUSULA 6 - DIREITO DE IMAGEM (Obrigatorio em PROJETO_ARTISTICO)</h3>
-<p>Texto padrao.</p>
-<h3>CLAUSULA 7 - VIGENCIA</h3>
-<p>{{TURMA_DATA_INICIO}} a {{TURMA_DATA_FIM}}</p>
-<h3>CLAUSULA 8 - DISPOSICOES GERAIS</h3>
-<p>...</p>
-<p>Assinatura:</p>
-<p>{{RESP_FIN_NOME}} - {{DATA_ASSINATURA}}</p>$$,
+  $$<h2>CONTRATO DE PRESTAÇÃO DE SERVIÇOS EDUCACIONAIS</h2>
+<h3>MATRÍCULA — ENSINO ARTÍSTICO, CULTURAL E CORPORAL</h3>
+
+<p>
+Pelo presente instrumento particular, de um lado <strong>{{ESCOLA_NOME}}</strong>,
+pessoa jurídica de direito privado, inscrita no CNPJ sob nº <strong>{{ESCOLA_CNPJ}}</strong>,
+instituição de ensino artístico, cultural e corporal, doravante denominada <strong>INSTITUIÇÃO</strong>,
+e, de outro lado, <strong>{{RESP_FIN_NOME}}</strong>, inscrito(a) no CPF nº <strong>{{ALUNO_CPF}}</strong>,
+responsável legal e financeiro pelo(a) aluno(a) <strong>{{ALUNO_NOME}}</strong>, doravante denominado(a)
+<strong>CONTRATANTE</strong>, resolvem firmar o presente Contrato de Prestação de Serviços Educacionais,
+que se regerá pelas cláusulas seguintes.
+</p>
+
+<h4>CLÁUSULA PRIMEIRA — DO OBJETO</h4>
+<p>
+1.1. O presente contrato tem por objeto a prestação de serviços educacionais na área de ensino artístico,
+cultural e corporal, compreendendo aulas, treinos, ensaios e atividades pedagógicas, conforme modalidade,
+curso, nível, turma e organização definidos no ato da matrícula.
+</p>
+<p>
+1.2. A matrícula formaliza o vínculo educacional entre as partes, garantindo ao(à) aluno(a) o direito de
+frequentar as atividades correspondentes enquanto vigente a matrícula.
+</p>
+<p>
+1.3. Para efeitos de referência no sistema, esta matrícula integra o ano letivo <strong>{{MATRICULA_ANO}}</strong>
+e está vinculada à turma/curso <strong>{{CURSO_NOME}}</strong>.
+</p>
+
+<h4>CLÁUSULA SEGUNDA — DA VIGÊNCIA</h4>
+<p>
+2.1. O presente contrato entra em vigor na data de sua assinatura e terá vigência durante todo o período
+de validade da matrícula do(a) aluno(a), permanecendo ativo enquanto houver vínculo educacional vigente com
+a INSTITUIÇÃO.
+</p>
+<p>
+2.2. O contrato será automaticamente encerrado com a conclusão regular da matrícula, com o cancelamento ou
+trancamento (nos termos das Regras Oficiais de Matrícula) ou com o encerramento do curso/turma, quando aplicável.
+</p>
+
+<h4>CLÁUSULA TERCEIRA — DA ORGANIZAÇÃO PEDAGÓGICA</h4>
+<p>
+3.1. As aulas e atividades serão ministradas conforme os dias, horários, modalidade, nível e turma definidos
+na matrícula, os quais integram este contrato por referência.
+</p>
+<p>
+3.2. Não haverá aulas nos feriados nacionais, estaduais ou municipais, nem reposição automática desses dias,
+salvo deliberação expressa da INSTITUIÇÃO.
+</p>
+
+<h4>CLÁUSULA QUARTA — DA FREQUÊNCIA, CONDUTA E DISCIPLINA</h4>
+<p>
+4.1. A frequência e a pontualidade são essenciais para o aproveitamento pedagógico e artístico do(a) aluno(a).
+</p>
+<p>
+4.2. A ausência do(a) aluno(a), ainda que justificada, não gera direito a desconto, por se tratar de serviço
+educacional de natureza continuada, conforme regulamento interno.
+</p>
+
+<h4>CLÁUSULA QUINTA — DO REGULAMENTO INTERNO</h4>
+<p>
+5.1. O CONTRATANTE declara ter pleno conhecimento do Regulamento Interno da INSTITUIÇÃO, comprometendo-se a
+cumpri-lo integralmente.
+</p>
+
+<h4>CLÁUSULA SEXTA — DAS OBRIGAÇÕES DA INSTITUIÇÃO</h4>
+<p>
+6.1. Compete à INSTITUIÇÃO oferecer ensino de qualidade, manter ambiente seguro e comunicar orientações relevantes,
+respeitando a privacidade e os dados pessoais.
+</p>
+
+<h4>CLÁUSULA SÉTIMA — DAS OBRIGAÇÕES DO(A) ALUNO(A) E DO CONTRATANTE</h4>
+<p>
+7.1. Compete ao(à) aluno(a) e ao CONTRATANTE cumprir este contrato, zelar pelas instalações e informar condições
+de saúde relevantes.
+</p>
+
+<h4>CLÁUSULA DÉCIMA PRIMEIRA — DOS VALORES, PARCELAS E FORMA DE PAGAMENTO</h4>
+<p>
+11.1. Os valores contratados, número de parcelas e forma de pagamento são definidos no momento da matrícula e
+registrados no sistema.
+</p>
+<p>
+11.2. Valor total contratado (snapshot): <strong>{{VALOR_TOTAL_CONTRATADO}}</strong>.
+</p>
+<p>
+11.3. Os detalhes de cobrança, vencimentos e liquidação seguem o Cartão Conexão e as Regras Oficiais.
+</p>
+
+<h4>CLÁUSULA DÉCIMA SÉTIMA — DO FORO</h4>
+<p>
+17.1. Fica eleito o foro da comarca de assinatura do contrato para dirimir quaisquer controvérsias oriundas deste contrato.
+</p>
+
+<p>
+E, por estarem de pleno acordo, firmam o presente instrumento.
+</p>
+
+<p style="margin-top:24px;">
+<strong>CONTRATANTE:</strong> {{RESP_FIN_NOME}}<br/>
+<strong>ALUNO(A):</strong> {{ALUNO_NOME}}
+</p>$$,
   '[]'::jsonb,
   'Modelo base para contrato de matricula pagante.'
 where not exists (
@@ -153,32 +230,71 @@ select
   'Ficha Financeira — Matrícula Pagante',
   'v1.0',
   true,
-  $$<h2>FICHA FINANCEIRA - MATRICULA PAGANTE</h2>
-<p><strong>Escola:</strong> {{ESCOLA_NOME}} (CNPJ {{ESCOLA_CNPJ}})</p>
-<p><strong>Endereco:</strong> {{ESCOLA_ENDERECO}} - {{ESCOLA_CIDADE}}</p>
-<p><strong>Aluno(a):</strong> {{ALUNO_NOME}} (CPF {{ALUNO_CPF}})</p>
-<p><strong>Responsavel financeiro:</strong> {{RESP_FIN_NOME}} (CPF {{RESP_FIN_CPF}})</p>
-<p><strong>Matricula:</strong> #{{MATRICULA_ID}} - {{MATRICULA_STATUS}} - {{MATRICULA_TIPO}}</p>
-<p><strong>Ano:</strong> {{MATRICULA_ANO}} - <strong>Data:</strong> {{MATRICULA_DATA}}</p>
-<p><strong>Turma:</strong> {{CURSO_NOME}} | {{TURMA_TIPO}} | {{TURMA_NIVEL}} | {{TURMA_TURNO}}</p>
-<p><strong>Periodo:</strong> {{TURMA_DATA_INICIO}} a {{TURMA_DATA_FIM}}</p>
-<hr />
-<h3>Resumo financeiro</h3>
-<ul>
-  <li>Valor total contratado: {{VALOR_TOTAL_CONTRATADO}}</li>
-  <li>Valor mensalidade: {{VALOR_MENSALIDADE}}</li>
-  <li>Valor matricula: {{VALOR_MATRICULA}}</li>
-  <li>Numero de parcelas: {{NUMERO_PARCELAS}}</li>
-  <li>Dia de vencimento: {{DIA_VENCIMENTO}}</li>
-</ul>
-<h3>Parcelas</h3>
-<table border="1" cellspacing="0" cellpadding="6">
+  $$<h2>FICHA FINANCEIRA — MATRÍCULA</h2>
+
+<p><strong>Aluno(a):</strong> {{ALUNO_NOME}}</p>
+<p><strong>CPF do(a) aluno(a):</strong> {{ALUNO_CPF}}</p>
+<p><strong>Responsável financeiro:</strong> {{RESP_FIN_NOME}}</p>
+<p><strong>Curso/Turma:</strong> {{CURSO_NOME}}</p>
+<p><strong>Ano de referência:</strong> {{MATRICULA_ANO}}</p>
+<p><strong>Valor total contratado (snapshot):</strong> {{VALOR_TOTAL_CONTRATADO}}</p>
+
+<hr/>
+
+<h3>Lançamentos de Crédito — Matrícula</h3>
+<table style="width:100%; border-collapse:collapse;" border="1" cellpadding="6">
   <thead>
     <tr>
-      <th>Vencimento</th>
-      <th>Descricao</th>
-      <th>Valor</th>
-      <th>Status</th>
+      <th style="width:18%;">Data</th>
+      <th>Descrição</th>
+      <th style="width:18%;">Valor</th>
+      <th style="width:18%;">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#MATRICULA_LANCAMENTOS_CREDITO}}
+    <tr>
+      <td>{{DATA}}</td>
+      <td>{{DESCRICAO}}</td>
+      <td>{{VALOR}}</td>
+      <td>{{STATUS}}</td>
+    </tr>
+    {{/MATRICULA_LANCAMENTOS_CREDITO}}
+  </tbody>
+</table>
+
+<br/>
+<h3>Entradas / Pró-rata</h3>
+<table style="width:100%; border-collapse:collapse;" border="1" cellpadding="6">
+  <thead>
+    <tr>
+      <th style="width:18%;">Data</th>
+      <th>Descrição</th>
+      <th style="width:18%;">Valor</th>
+      <th style="width:18%;">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#MATRICULA_ENTRADAS}}
+    <tr>
+      <td>{{DATA}}</td>
+      <td>{{DESCRICAO}}</td>
+      <td>{{VALOR}}</td>
+      <td>{{STATUS}}</td>
+    </tr>
+    {{/MATRICULA_ENTRADAS}}
+  </tbody>
+</table>
+
+<br/>
+<h3>Parcelas / Mensalidades</h3>
+<table style="width:100%; border-collapse:collapse;" border="1" cellpadding="6">
+  <thead>
+    <tr>
+      <th style="width:18%;">Vencimento</th>
+      <th>Descrição</th>
+      <th style="width:18%;">Valor</th>
+      <th style="width:18%;">Status</th>
     </tr>
   </thead>
   <tbody>
@@ -190,6 +306,29 @@ select
       <td>{{STATUS}}</td>
     </tr>
     {{/MATRICULA_PARCELAS}}
+  </tbody>
+</table>
+
+<br/>
+<h3>Lançamentos de Crédito — Fatura</h3>
+<table style="width:100%; border-collapse:collapse;" border="1" cellpadding="6">
+  <thead>
+    <tr>
+      <th style="width:18%;">Data</th>
+      <th>Descrição</th>
+      <th style="width:18%;">Valor</th>
+      <th style="width:18%;">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#FATURA_LANCAMENTOS_CREDITO}}
+    <tr>
+      <td>{{DATA}}</td>
+      <td>{{DESCRICAO}}</td>
+      <td>{{VALOR}}</td>
+      <td>{{STATUS}}</td>
+    </tr>
+    {{/FATURA_LANCAMENTOS_CREDITO}}
   </tbody>
 </table>$$,
   '[]'::jsonb,
