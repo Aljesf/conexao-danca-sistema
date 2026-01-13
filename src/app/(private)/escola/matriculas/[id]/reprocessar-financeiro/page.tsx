@@ -9,15 +9,25 @@ type MensalidadeRow = {
 };
 
 function brlToCentavos(v: string): number {
-  const cleaned = v.replace(/[^\d,]/g, "").replace(",", ".");
-  const num = Number(cleaned);
-  if (!Number.isFinite(num)) return 0;
-  return Math.round(num * 100);
+  // Estrategia robusta: captura apenas digitos e assume 2 casas decimais.
+  const digits = (v || "").replace(/\D/g, "");
+  if (!digits) return 0;
+
+  // "475" => 4,75 | "5" => 0,05 | "50" => 0,50
+  const padded = digits.padStart(3, "0");
+  const reais = padded.slice(0, -2);
+  const cents = padded.slice(-2);
+
+  const n = Number(`${reais}.${cents}`);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100);
 }
 
-function centavosToBrlInput(value: number): string {
-  const safe = Number.isFinite(value) ? value : 0;
-  return (safe / 100).toFixed(2).replace(".", ",");
+function centavosToBrlInput(c: number): string {
+  const cent = Number.isFinite(c) ? Math.round(c) : 0;
+  const reais = Math.floor(cent / 100);
+  const cents = String(Math.abs(cent % 100)).padStart(2, "0");
+  return `${reais},${cents}`;
 }
 
 export default function ReprocessarFinanceiroMatriculaPage() {
@@ -138,7 +148,21 @@ export default function ReprocessarFinanceiroMatriculaPage() {
 
       const json = await res.json();
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.detail || json?.error || "Falha ao reprocessar financeiro.");
+        const detail = json?.detail || json?.error || "Falha ao reprocessar financeiro.";
+        if (res.status === 409 && json?.error === "reprocessamento_bloqueado_ja_existe") {
+          const linhas = Array.isArray(json?.cobrancas_existentes)
+            ? json.cobrancas_existentes
+                .map(
+                  (c: { id?: number; competencia_ano_mes?: string; valor_centavos?: number }) =>
+                    `- cobranca #${c.id} | competencia ${c.competencia_ano_mes} | R$ ${centavosToBrlInput(
+                      Number(c.valor_centavos ?? 0)
+                    )}`
+                )
+                .join("\n")
+            : "";
+          throw new Error(`${detail}\n${linhas}`);
+        }
+        throw new Error(detail);
       }
 
       setResp(json);

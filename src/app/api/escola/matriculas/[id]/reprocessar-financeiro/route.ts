@@ -343,6 +343,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
       return NextResponse.json({ ok: false, error: "matricula_sem_responsavel_financeiro" }, { status: 400 });
     }
 
+    const competenciasPayload = Array.from(new Set(payload.mensalidades.map((m) => m.competencia)));
+    const { data: cobExistentes, error: errCobExist } = await supabase
+      .from("cobrancas")
+      .select("id, competencia_ano_mes, valor_centavos, status")
+      .in("origem_tipo", ["MATRICULA", "MATRICULA_MENSALIDADE"])
+      .eq("origem_subtipo", "CARTAO_CONEXAO")
+      .eq("origem_id", matriculaId)
+      .in("competencia_ano_mes", competenciasPayload);
+
+    if (errCobExist) throw errCobExist;
+
+    if (cobExistentes && cobExistentes.length > 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "reprocessamento_bloqueado_ja_existe",
+          detail:
+            "Ja existem cobrancas elegiveis ao Cartao Conexao para esta matricula/competencia. Para evitar duplicidade, o reprocessamento foi bloqueado.",
+          cobrancas_existentes: cobExistentes,
+        },
+        { status: 409 },
+      );
+    }
+
     const { data: conta, error: contaErr } = await supabase
       .from("credito_conexao_contas")
       .select("id, pessoa_titular_id, tipo_conta, ativo, dia_vencimento")
@@ -352,21 +376,34 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
       .maybeSingle();
 
     if (contaErr) throw contaErr;
-    if (!conta) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "conta_cartao_conexao_inexistente",
-          detail: "Responsavel financeiro nao possui Cartao Conexao (ALUNO) ativo.",
-        },
-        { status: 400 },
-      );
-    }
+    let contaConexaoId: number;
+    let diaVencimento: number | null = null;
 
-    const contaConexaoId = Number(conta.id);
-    const diaVencimento = Number.isFinite(Number(conta.dia_vencimento))
-      ? Number(conta.dia_vencimento)
-      : null;
+    if (!conta) {
+      const { data: contaNova, error: errContaNova } = await supabase
+        .from("credito_conexao_contas")
+        .insert({
+          pessoa_titular_id: responsavelId,
+          tipo_conta: "ALUNO",
+          descricao_exibicao: "Cartao Conexao ALUNO",
+          dia_fechamento: 10,
+          dia_vencimento: 12,
+          ativo: true,
+        })
+        .select("id, dia_vencimento")
+        .single();
+
+      if (errContaNova) throw errContaNova;
+      contaConexaoId = Number(contaNova.id);
+      diaVencimento = Number.isFinite(Number(contaNova.dia_vencimento))
+        ? Number(contaNova.dia_vencimento)
+        : null;
+    } else {
+      contaConexaoId = Number(conta.id);
+      diaVencimento = Number.isFinite(Number(conta.dia_vencimento))
+        ? Number(conta.dia_vencimento)
+        : null;
+    }
 
     const resultados: {
       cobrancas_criadas: number[];
