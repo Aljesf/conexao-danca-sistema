@@ -212,6 +212,14 @@ export default function MatriculaDetalhePage() {
             >
               Ver faturas do Cartao Conexao
             </Link>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                href={`/escola/matriculas/${id}/reprocessar-financeiro`}
+                className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
+              >
+                Reprocessar financeiro
+              </Link>
+            </div>
             <div>
               Proximo vencimento:{" "}
               {resumoCartao?.proximo_vencimento ? formatDateISO(resumoCartao.proximo_vencimento) : "-"}
