@@ -26,17 +26,6 @@ type DashboardSerieRow = {
   matriculas_efetivadas: number;
 };
 
-type DashboardAlunoTurmaRow = {
-  turma_id: number;
-  turma_nome: string;
-  aluno_pessoa_id: number;
-  aluno_nome: string;
-  dt_inicio: string | null;
-  dt_fim: string | null;
-  status: string | null;
-  matricula_id: number | null;
-};
-
 type DashboardTrendsRow = {
   pessoas_30d: number;
   pessoas_prev30d: number;
@@ -63,9 +52,9 @@ export async function GET() {
     .select("*")
     .single();
 
-  if (kpisError || !kpisData) {
+  if (kpisError) {
     return NextResponse.json(
-      { error: "falha_kpis", details: kpisError?.message ?? "kpis_vazio" },
+      { error: "falha_kpis", details: kpisError.message },
       { status: 500 },
     );
   }
@@ -73,6 +62,7 @@ export async function GET() {
   const { data: turmasData, error: turmasError } = await supabase
     .from("vw_escola_dashboard_turmas")
     .select("*")
+    .order("alunos_ativos", { ascending: false })
     .order("nome", { ascending: true });
 
   if (turmasError) {
@@ -94,26 +84,14 @@ export async function GET() {
     );
   }
 
-  const { data: alunosTurmaData, error: alunosTurmaError } = await supabase
-    .from("vw_escola_dashboard_alunos_turma")
-    .select("*")
-    .limit(200);
-
-  if (alunosTurmaError) {
-    return NextResponse.json(
-      { error: "falha_alunos_turma", details: alunosTurmaError.message },
-      { status: 500 },
-    );
-  }
-
   const { data: trendsData, error: trendsError } = await supabase
     .from("vw_escola_dashboard_trends_30d")
     .select("*")
     .single();
 
-  if (trendsError || !trendsData) {
+  if (trendsError) {
     return NextResponse.json(
-      { error: "falha_trends", details: trendsError?.message ?? "trends_vazio" },
+      { error: "falha_trends", details: trendsError.message },
       { status: 500 },
     );
   }
@@ -123,7 +101,6 @@ export async function GET() {
       kpis: kpisData as DashboardKpisRow,
       turmas: (turmasData ?? []) as DashboardTurmaRow[],
       series7d: (serieData ?? []) as DashboardSerieRow[],
-      alunosTurma: (alunosTurmaData ?? []) as DashboardAlunoTurmaRow[],
       trends30d: trendsData as DashboardTrendsRow,
     },
     { status: 200 },

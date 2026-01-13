@@ -28,15 +28,14 @@ type DashboardSerie = {
   matriculas_efetivadas: number;
 };
 
-type DashboardAlunoTurma = {
+type DashboardTurma = {
   turma_id: number;
-  turma_nome: string;
-  aluno_pessoa_id: number;
-  aluno_nome: string;
-  dt_inicio: string | null;
-  dt_fim: string | null;
+  nome: string;
+  tipo_turma: string | null;
+  ano_referencia: number | null;
   status: string | null;
-  matricula_id: number | null;
+  capacidade: number | null;
+  alunos_ativos: number;
 };
 
 type DashboardTrends30d = {
@@ -55,7 +54,7 @@ type DashboardTrends30d = {
 type DashboardPayload = {
   kpis: DashboardKpis;
   series7d: DashboardSerie[];
-  alunosTurma: DashboardAlunoTurma[];
+  turmas: DashboardTurma[];
   trends30d: DashboardTrends30d;
 };
 
@@ -123,6 +122,8 @@ export default function EscolaDashboardPage() {
     ? trendLabel(trends.alunos_saldo_30d, trends.alunos_saldo_prev30d)
     : null;
 
+  const turmas = data?.turmas ?? [];
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 md:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -130,7 +131,7 @@ export default function EscolaDashboardPage() {
           <CardHeader>
             <CardTitle>Escola - Dashboard</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Visao ampla do cenario: cadastros, matriculas e vinculos por turma.
+              Visao ampla do cenario: cadastros, matriculas e alunos por turma.
             </p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -192,9 +193,7 @@ export default function EscolaDashboardPage() {
               <CardTitle className="text-base">Tendencia (30 dias) - Pessoas</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
-              <div className="text-2xl font-semibold">
-                {loading ? "..." : trends?.pessoas_30d ?? 0}
-              </div>
+              <div className="text-2xl font-semibold">{loading ? "..." : trends?.pessoas_30d ?? 0}</div>
               <div className={`text-sm ${pessoasTrend?.tone ?? "text-slate-600"}`}>
                 {loading ? "..." : pessoasTrend?.label ?? "-"}
               </div>
@@ -226,9 +225,7 @@ export default function EscolaDashboardPage() {
               <CardTitle className="text-base">Tendencia (30 dias) - Alunos (saldo)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
-              <div className="text-2xl font-semibold">
-                {loading ? "..." : trends?.alunos_saldo_30d ?? 0}
-              </div>
+              <div className="text-2xl font-semibold">{loading ? "..." : trends?.alunos_saldo_30d ?? 0}</div>
               <div className={`text-sm ${alunosTrend?.tone ?? "text-slate-600"}`}>
                 {loading ? "..." : alunosTrend?.label ?? "-"}
               </div>
@@ -244,7 +241,7 @@ export default function EscolaDashboardPage() {
           <CardHeader>
             <CardTitle className="text-base">Ultimos 7 dias</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Cadastros de pessoas e matriculas efetivadas por dia.
+              Cadastros de pessoas (azul) e matriculas efetivadas (verde).
             </p>
           </CardHeader>
           <CardContent className="h-[320px]">
@@ -255,8 +252,14 @@ export default function EscolaDashboardPage() {
                 <YAxis allowDecimals={false} />
                 <Tooltip />
                 <Legend />
-                <Line dataKey="pessoas" name="Pessoas" />
-                <Line dataKey="matriculas" name="Matriculas efetivadas" />
+                <Line dataKey="pessoas" name="Pessoas" stroke="#2563eb" strokeWidth={2} dot={false} />
+                <Line
+                  dataKey="matriculas"
+                  name="Matriculas efetivadas"
+                  stroke="#16a34a"
+                  strokeWidth={2}
+                  dot={false}
+                />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -264,9 +267,9 @@ export default function EscolaDashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Alunos x Turmas</CardTitle>
+            <CardTitle className="text-base">Alunos por Turma</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Vinculos ativos por turma (amostra ate 200 linhas).
+              Ordenado da turma com mais alunos para a com menos alunos.
             </p>
           </CardHeader>
           <CardContent>
@@ -275,24 +278,20 @@ export default function EscolaDashboardPage() {
                 <thead className="bg-slate-50">
                   <tr className="text-left">
                     <th className="border-b px-3 py-2">Turma</th>
-                    <th className="border-b px-3 py-2">Aluno</th>
-                    <th className="border-b px-3 py-2">Inicio</th>
-                    <th className="border-b px-3 py-2">Matricula ID</th>
+                    <th className="border-b px-3 py-2 w-[140px]">Alunos</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(data?.alunosTurma ?? []).map((r) => (
-                    <tr key={`${r.turma_id}-${r.aluno_pessoa_id}`} className="hover:bg-slate-50">
-                      <td className="border-b px-3 py-2">{r.turma_nome}</td>
-                      <td className="border-b px-3 py-2">{r.aluno_nome}</td>
-                      <td className="border-b px-3 py-2">{r.dt_inicio ?? "-"}</td>
-                      <td className="border-b px-3 py-2">{r.matricula_id ?? "-"}</td>
+                  {turmas.map((t) => (
+                    <tr key={t.turma_id} className="hover:bg-slate-50">
+                      <td className="border-b px-3 py-2">{t.nome}</td>
+                      <td className="border-b px-3 py-2 font-medium">{t.alunos_ativos}</td>
                     </tr>
                   ))}
-                  {!loading && (data?.alunosTurma?.length ?? 0) === 0 ? (
+                  {!loading && turmas.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
-                        Nenhum vinculo ativo encontrado.
+                      <td className="px-3 py-6 text-center text-muted-foreground" colSpan={2}>
+                        Nenhuma turma encontrada.
                       </td>
                     </tr>
                   ) : null}
