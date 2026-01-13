@@ -36,6 +36,7 @@ type ParcelaCartaoConexao = {
   periodo: string;
   vencimento: string;
   valor: string;
+  valor_centavos: number;
   status: string;
 };
 
@@ -57,6 +58,13 @@ type LancamentoCartaoRow = {
   valor_centavos: number | null;
 };
 
+type EscolaContext = {
+  nome: string;
+  cnpj: string;
+  endereco: string;
+  cidade: string;
+};
+
 function formatDateBR(dateISO: string | null): string {
   if (!dateISO) return "";
   const [y, m, d] = dateISO.split("-");
@@ -67,6 +75,81 @@ function formatDateBR(dateISO: string | null): string {
 function formatBRLFromCentavos(centavos: number): string {
   const valor = Number.isFinite(centavos) ? centavos / 100 : 0;
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function pickFirstText(source: Record<string, unknown> | null, keys: string[]): string {
+  if (!source) return "";
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function pickEnv(keys: string[]): string {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+async function resolveEscolaContext(supabase: SupabaseClient): Promise<EscolaContext> {
+  const escola: EscolaContext = {
+    nome: "",
+    cnpj: "",
+    endereco: "",
+    cidade: "",
+  };
+
+  const { data: settings } = await supabase
+    .from("system_settings")
+    .select("*")
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (settings && typeof settings === "object") {
+    const rec = settings as Record<string, unknown>;
+    escola.nome =
+      pickFirstText(rec, ["escola_nome", "school_name", "nome", "system_name"]) || escola.nome;
+    escola.cnpj = pickFirstText(rec, ["escola_cnpj", "school_cnpj", "cnpj", "documento"]) || escola.cnpj;
+    escola.endereco =
+      pickFirstText(rec, ["escola_endereco", "school_endereco", "endereco"]) || escola.endereco;
+    escola.cidade =
+      pickFirstText(rec, ["escola_cidade", "school_cidade", "cidade"]) || escola.cidade;
+  }
+
+  if (!escola.nome || !escola.endereco || !escola.cidade) {
+    const { data: locais } = await supabase
+      .from("locais")
+      .select("nome,endereco")
+      .eq("ativo", true)
+      .order("id", { ascending: true })
+      .limit(1);
+
+    if (locais && locais.length > 0) {
+      const local = locais[0] as Record<string, unknown>;
+      if (!escola.nome) escola.nome = pickFirstText(local, ["nome"]);
+      if (!escola.endereco) escola.endereco = pickFirstText(local, ["endereco"]);
+    }
+  }
+
+  if (!escola.nome) escola.nome = pickEnv(["ESCOLA_NOME", "SCHOOL_NAME", "NEXT_PUBLIC_ESCOLA_NOME"]);
+  if (!escola.cnpj) escola.cnpj = pickEnv(["ESCOLA_CNPJ", "SCHOOL_CNPJ", "NEXT_PUBLIC_ESCOLA_CNPJ"]);
+  if (!escola.endereco) escola.endereco = pickEnv(["ESCOLA_ENDERECO", "SCHOOL_ENDERECO", "NEXT_PUBLIC_ESCOLA_ENDERECO"]);
+  if (!escola.cidade) escola.cidade = pickEnv(["ESCOLA_CIDADE", "SCHOOL_CIDADE", "NEXT_PUBLIC_ESCOLA_CIDADE"]);
+
+  return escola;
 }
 
 const isInDirection = (direction?: string | null) =>
@@ -296,9 +379,46 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   const emitidos: Array<Record<string, unknown>> = [];
-  const snapshot = (body.snapshot_financeiro ?? {}) as Record<string, unknown>;
+  const snapshotBase = (body.snapshot_financeiro ?? {}) as Record<string, unknown>;
   const manuaisRaw = (body.variaveis_manuais ?? {}) as Record<string, unknown>;
   const manuais = normalizeManualVars(manuaisRaw);
+
+  const matriculaRec = mat as Record<string, unknown>;
+  const valorMensalidade =
+    toFiniteNumber(snapshotBase.valor_mensalidade_centavos) ??
+    toFiniteNumber(matriculaRec.total_mensalidade_centavos);
+  const valorMatricula =
+    toFiniteNumber(snapshotBase.valor_matricula_centavos) ??
+    toFiniteNumber(matriculaRec.primeira_cobranca_valor_centavos);
+  let numeroParcelas = toFiniteNumber(snapshotBase.numero_parcelas);
+  if (numeroParcelas === null) {
+    const planoPagamentoId = toFiniteNumber(matriculaRec.plano_pagamento_id);
+    if (planoPagamentoId) {
+      const { data: planoPagamento } = await supabase
+        .from("matricula_planos_pagamento")
+        .select("numero_parcelas")
+        .eq("id", planoPagamentoId)
+        .maybeSingle();
+      const parsed = planoPagamento
+        ? toFiniteNumber(
+            (planoPagamento as { numero_parcelas?: number | null }).numero_parcelas,
+          )
+        : null;
+      if (parsed !== null) {
+        numeroParcelas = parsed;
+      }
+    }
+  }
+  const diaVencimento =
+    toFiniteNumber(snapshotBase.dia_vencimento) ??
+    toFiniteNumber(matriculaRec.vencimento_dia_padrao);
+  const snapshot: Record<string, unknown> = {
+    ...snapshotBase,
+    valor_mensalidade_centavos: valorMensalidade ?? null,
+    valor_matricula_centavos: valorMatricula ?? null,
+    numero_parcelas: numeroParcelas ?? null,
+    dia_vencimento: diaVencimento ?? null,
+  };
 
   const { data: variaveisRaw, error: variaveisErr } = await supabase
     .from("documentos_variaveis")
@@ -337,12 +457,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
   }
 
+  const escolaContexto = await resolveEscolaContext(supabase);
   const contexto: Record<string, unknown> = {
     aluno: aluno ?? null,
     turma,
     matricula: mat,
     responsavel: responsavel ?? null,
-    escola: null,
+    escola: escolaContexto,
     snapshot_financeiro: snapshot,
     variaveis_manuais: manuais,
   };
@@ -457,6 +578,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           periodo: fatura.periodo_referencia ?? "",
           vencimento: formatDateBR(fatura.data_vencimento ?? null),
           valor: formatBRLFromCentavos(valorCentavos),
+          valor_centavos: valorCentavos,
           status: fatura.status ?? "",
         });
       }
@@ -465,10 +587,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   contexto.PARCELAS_CARTAO_CONEXAO = parcelasCartao;
   const parcelasDocumento = parcelasCartao.map((parcela) => ({
-    data: parcela.vencimento,
+    vencimento: parcela.vencimento,
     descricao: parcela.periodo ? `Fatura ${parcela.periodo}` : "Fatura",
-    valor: parcela.valor,
+    valor_centavos: parcela.valor_centavos,
     status: parcela.status,
+    data: parcela.vencimento,
+    valor: parcela.valor,
   }));
   contexto.parcelas = parcelasDocumento;
 

@@ -23,6 +23,12 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
   - `(competencia)`
   - `GIN (composicao_json)`
 
+### Documentos - contrato e ficha financeira (matricula pagante)
+- Migration: `20260112_000200_documentos_variaveis_contrato_ficha.sql`.
+- Variaveis novas (aluno/responsavel/matricula/turma/escola/manual + financeiro snapshot).
+- Colecao `MATRICULA_PARCELAS` padronizada (vencimento/descricao/valor_centavos/status + valor BRL).
+- Modelos: Contrato + Ficha Financeira vinculados ao conjunto MATRICULA_REGULAR/DOCUMENTO_PRINCIPAL.
+
 ---
 
 ## APIs concluídas
@@ -46,6 +52,11 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
   - fatura mostra 1 lançamento (ex.: R$ 400,00)
   - composição disponível para auditoria (220 + 180)
 
+### Documentos - emissao contrato/ficha (matricula pagante)
+- Contexto de emissao inclui escola, snapshot financeiro normalizado e parcelas padronizadas.
+- Colecao MATRICULA_PARCELAS agora retorna VENCIMENTO/VALOR_CENTAVOS/STATUS (com aliases DATA/VALOR).
+
+
 ---
 
 ## Páginas / componentes concluídos
@@ -60,6 +71,10 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 ### Registro de Observacoes Operacionais (NASC)
 - Botao flutuante + API + export CSV (MVP)
+
+### Documentos - variaveis
+- Sem ajustes necessarios: origens ESCOLA e MANUAL ja disponiveis na tela.
+
 
 ---
 
@@ -76,6 +91,11 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 3) Validação técnica
 - Rodar `npm run lint` e `npm run build` sem erros após as alterações recentes.
+
+4) Documentos - validacao/prints
+- Aplicar migration no Supabase e emitir Contrato + Ficha Financeira.
+- Gerar prints: placeholders ESCOLA_* resolvidos e parcelas com vencimento/BRL.
+
 
 ---
 

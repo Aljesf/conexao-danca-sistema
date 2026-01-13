@@ -90,10 +90,17 @@ function mapParcelasResumo(
 ): CollectionRow[] {
   return rows.map((row, index) => {
     const descricao = row.descricao ?? `Parcela ${index + 1}`;
+    const vencimento = formatDateBR(row.vencimento);
+    const valorCentavos = Number(row.valorCentavos ?? 0);
+    const valorFormatado = formatBRLFromCentavos(valorCentavos);
+    const status = row.status ?? "";
     return {
-      DATA: formatDateBR(row.vencimento),
+      VENCIMENTO: vencimento,
+      DATA: vencimento,
       DESCRICAO: descricao,
-      VALOR: formatBRLFromCentavos(row.valorCentavos ?? 0),
+      VALOR: valorFormatado,
+      VALOR_CENTAVOS: String(valorCentavos),
+      STATUS: status,
     };
   });
 }
@@ -214,10 +221,15 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
           for (let mes = 1; mes <= 12; mes += 1) {
             const competencia = `${anoReferencia}-${pad2(mes)}`;
             const dataIso = buildIsoDate(anoReferencia, mes, clampDay(anoReferencia, mes, diaVencimento));
+            const valorCentavos = Number.isFinite(valorMensalCentavos) ? valorMensalCentavos : 0;
+            const vencimento = formatDateBR(dataIso);
             previsao.push({
-              DATA: formatDateBR(dataIso),
+              VENCIMENTO: vencimento,
+              DATA: vencimento,
               DESCRICAO: `Mensalidade (${competencia}) - ${composicaoTexto}`,
               VALOR: valorLabel,
+              VALOR_CENTAVOS: String(valorCentavos),
+              STATUS: "PREVISTO",
             });
           }
 
