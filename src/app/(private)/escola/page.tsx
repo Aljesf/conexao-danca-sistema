@@ -1,0 +1,205 @@
+"use client";
+
+import * as React from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  BarChart,
+  Bar,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  LineChart,
+  Line,
+  Legend,
+} from "recharts";
+
+type DashboardKpis = {
+  total_pessoas: number;
+  pessoas_hoje: number;
+  pessoas_ontem: number;
+  matriculas_efetivadas_total: number;
+  matriculas_efetivadas_hoje: number;
+  matriculas_efetivadas_ontem: number;
+};
+
+type DashboardTurma = {
+  turma_id: number;
+  nome: string;
+  tipo_turma: string | null;
+  ano_referencia: number | null;
+  status: string | null;
+  capacidade: number | null;
+  alunos_ativos: number;
+};
+
+type DashboardSerie = {
+  dia: string;
+  pessoas_cadastradas: number;
+  matriculas_efetivadas: number;
+};
+
+type DashboardPayload = {
+  kpis: DashboardKpis;
+  turmas: DashboardTurma[];
+  series7d: DashboardSerie[];
+};
+
+function formatDiaBR(iso: string) {
+  const [y, m, d] = iso.split("-").map((x) => Number(x));
+  if (!y || !m || !d) return iso;
+  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+}
+
+export default function EscolaDashboardPage() {
+  const [data, setData] = React.useState<DashboardPayload | null>(null);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/escola/dashboard", { cache: "no-store" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { error?: string; details?: string }
+          | null;
+        throw new Error(body?.details || body?.error || `http_${res.status}`);
+      }
+      const payload = (await res.json()) as DashboardPayload;
+      setData(payload);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "erro_desconhecido");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  React.useEffect(() => {
+    void load();
+  }, []);
+
+  const kpis = data?.kpis;
+
+  const turmasChart = (data?.turmas ?? []).map((t) => ({
+    nome: t.nome,
+    alunos: t.alunos_ativos,
+    capacidade: t.capacidade ?? null,
+  }));
+
+  const serieChart = (data?.series7d ?? []).map((s) => ({
+    dia: formatDiaBR(s.dia),
+    pessoas: s.pessoas_cadastradas,
+    matriculas: s.matriculas_efetivadas,
+  }));
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 md:p-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Escola - Dashboard</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Visao ampla do cenario atual: cadastros, matriculas e distribuicao de alunos por turma.
+            </p>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <button
+              className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              {loading ? "Atualizando..." : "Atualizar"}
+            </button>
+          </CardContent>
+        </Card>
+
+        {error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            Erro ao carregar dashboard: {error}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Pessoas (Total)</CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-semibold">
+              {loading ? "..." : kpis?.total_pessoas ?? 0}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Cadastros Hoje</CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-semibold">
+              {loading ? "..." : kpis?.pessoas_hoje ?? 0}
+            </CardContent>
+            <CardContent className="pt-0 text-sm text-muted-foreground">
+              Ontem: {loading ? "..." : kpis?.pessoas_ontem ?? 0}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Matriculas Efetivadas</CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-semibold">
+              {loading ? "..." : kpis?.matriculas_efetivadas_total ?? 0}
+            </CardContent>
+            <CardContent className="pt-0 text-sm text-muted-foreground">
+              Hoje: {loading ? "..." : kpis?.matriculas_efetivadas_hoje ?? 0} • Ontem:{" "}
+              {loading ? "..." : kpis?.matriculas_efetivadas_ontem ?? 0}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Alunos por Turma</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Contagem operacional de alunos ativos por turma (vinculo ativo em turma_aluno).
+            </p>
+          </CardHeader>
+          <CardContent className="h-[360px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={turmasChart}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="nome" interval={0} angle={-25} textAnchor="end" height={80} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="alunos" name="Alunos ativos" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Ultimos 7 dias</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Cadastros de pessoas e matriculas efetivadas por dia.
+            </p>
+          </CardHeader>
+          <CardContent className="h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={serieChart}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="dia" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Legend />
+                <Line dataKey="pessoas" name="Pessoas" />
+                <Line dataKey="matriculas" name="Matriculas efetivadas" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
