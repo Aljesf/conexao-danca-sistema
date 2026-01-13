@@ -13,6 +13,7 @@ import { resolveCollections } from "@/lib/documentos/collectionsResolver";
 import { type JoinEdge } from "@/lib/documentos/resolveByJoinPath";
 import { normalizeOperacaoTipo, OPERACAO_TIPOS } from "@/lib/documentos/operacaoTipos";
 import { decodeHtmlEntities } from "@/lib/documentos/renderHtml";
+import { buildContextFromMatricula } from "@/lib/documentos/buildContext";
 
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
 
@@ -207,6 +208,16 @@ async function resolveEmitidoConteudo(params: {
     docRec.contexto_json && typeof docRec.contexto_json === "object"
       ? (docRec.contexto_json as Record<string, unknown>)
       : {};
+  const snapshotBase =
+    docRec.snapshot_financeiro_json && typeof docRec.snapshot_financeiro_json === "object"
+      ? (docRec.snapshot_financeiro_json as Record<string, unknown>)
+      : contextoBase.snapshot_financeiro && typeof contextoBase.snapshot_financeiro === "object"
+        ? (contextoBase.snapshot_financeiro as Record<string, unknown>)
+        : {};
+  const variaveisManuaisRaw =
+    contextoBase.variaveis_manuais && typeof contextoBase.variaveis_manuais === "object"
+      ? (contextoBase.variaveis_manuais as Record<string, unknown>)
+      : {};
 
   const contratoModeloIdRaw = docRec.contrato_modelo_id ?? docRec.documento_modelo_id;
   const contratoModeloIdNum =
@@ -233,8 +244,26 @@ async function resolveEmitidoConteudo(params: {
     }
   }
 
+  let contextoResult: Awaited<ReturnType<typeof buildContextFromMatricula>>;
+  try {
+    contextoResult = await buildContextFromMatricula({
+      supabase,
+      matriculaId,
+      snapshotFinanceiro: snapshotBase,
+      variaveisManuais: variaveisManuaisRaw,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro ao montar contexto.";
+    const status = message.toLowerCase().includes("matricula nao encontrada") ? 404 : 500;
+    return { ok: false, status, message };
+  }
+
+  const { contexto, parcelasCartao, parcelasDocumento, snapshot } = contextoResult;
+
   const contextoPersistido: Record<string, unknown> = {
     ...contextoBase,
+    ...contexto,
+    snapshot_financeiro: snapshot,
   };
 
   const { data: variaveisRaw, error: variaveisErr } = await supabase
@@ -273,9 +302,15 @@ async function resolveEmitidoConteudo(params: {
 
   const collectionsResolvedFinal: Record<string, Array<Record<string, string>>> = {
     ...collectionsResolved,
+    PARCELAS_CARTAO_CONEXAO: parcelasCartao,
+    parcelas: parcelasDocumento,
   };
 
+  const hasParcelasTag = /{{#\s*parcelas\s*}}/i.test(template);
   const colecoesDetectadasSet = new Set<string>(collectionCodes);
+  if (hasParcelasTag) {
+    colecoesDetectadasSet.add("parcelas");
+  }
   const colecoesDetectadas = Array.from(colecoesDetectadasSet);
   const colecoesVazias = colecoesDetectadas.filter((code) => {
     const rows = collectionsResolvedFinal[code];
@@ -553,6 +588,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const conteudoResolvidoPreview = maybeDecodeHtml(resolved.conteudoResolvidoLimpo) ?? "";
+
+    if (docRec.editado_manual) {
+      return NextResponse.json(
+        {
+          ok: true,
+          data: { id: docId, editado_manual: true },
+          html: conteudoResolvidoPreview,
+          ...(debugEnabled ? { debug: resolved.debugPayload } : {}),
+          message: "Documento editado manualmente; nao sobrescrito.",
+        } satisfies ApiResp<unknown>,
+        { status: 200 },
+      );
+    }
 
     const { data: atualizado, error: updErr } = await supabase
       .from("documentos_emitidos")

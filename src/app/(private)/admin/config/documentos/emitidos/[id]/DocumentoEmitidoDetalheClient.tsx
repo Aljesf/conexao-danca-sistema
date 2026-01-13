@@ -234,6 +234,8 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const previewConteudoResolved =
     resolvedHtml && resolvedHtml.trim().length > 0 ? resolvedHtml : previewConteudoRaw;
   const previewConteudo = viewMode === "resolved" ? previewConteudoResolved : previewConteudoRaw;
+  const resolvedHasPlaceholders =
+    viewMode === "resolved" && previewConteudoResolved.includes("{{");
   const colecoesVazias = React.useMemo(() => {
     const raw = doc?.variaveis_utilizadas_json;
     if (!raw || typeof raw !== "object") return [];
@@ -287,6 +289,11 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
           <div className="no-print rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             Colecoes sem dados: {colecoesVazias.join(", ")}. Verifique se o modelo usa a colecao correta para a
             matricula.
+          </div>
+        ) : null}
+        {resolvedHasPlaceholders ? (
+          <div className="no-print rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            Algumas variaveis nao foram resolvidas.
           </div>
         ) : null}
 
