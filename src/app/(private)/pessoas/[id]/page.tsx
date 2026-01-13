@@ -11,6 +11,7 @@ import { AbaCuidadosAluno } from "@/components/pessoas/AbaCuidadosAluno";
 import { AbaMedidasDeclaradas } from "@/components/pessoas/AbaMedidasDeclaradas";
 import { AbaObservacoesGerais } from "@/components/pessoas/AbaObservacoesGerais";
 import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPedagogicas";
+import { PessoaResumoFinanceiro } from "@/components/pessoas/PessoaResumoFinanceiro";
 import { BairroPicker } from "@/components/enderecos/BairroPicker";
 import { CidadePicker } from "@/components/enderecos/CidadePicker";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
@@ -1210,7 +1211,7 @@ export default function PessoaDetalhesPage() {
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
                     Resumo financeiro
                   </h2>
-                  <p className="text-slate-600">Integracoes financeiras nao configuradas.</p>
+                  <PessoaResumoFinanceiro pessoaId={pessoa.id} />
                 </div>
               )}
 
