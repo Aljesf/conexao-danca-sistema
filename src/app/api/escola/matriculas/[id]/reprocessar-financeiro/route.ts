@@ -20,11 +20,39 @@ type ReprocessarPayload = {
   motivo?: string | null;
 };
 
+type SugestoesResponse = {
+  ok: true;
+  matricula_id: number;
+  sugestoes: {
+    entrada: {
+      valor_centavos: number;
+      pago_no_ato: boolean;
+      metodo_pagamento: string;
+      data_pagamento: string;
+      observacoes: string;
+    };
+    mensalidades: Array<{
+      competencia: string;
+      valor_centavos: number;
+      descricao: string;
+    }>;
+  };
+  fontes: {
+    entrada: string;
+    mensalidades: string;
+  };
+};
+
 function parseId(value: string | undefined): number | null {
   if (!value) return null;
   const n = Number(value);
   if (!Number.isInteger(n) || n <= 0) return null;
   return n;
+}
+
+function isSchemaMissing(err: unknown): boolean {
+  const anyErr = err as { code?: string } | null;
+  return !!anyErr?.code && (anyErr.code === "42P01" || anyErr.code === "42703");
 }
 
 function isCompetencia(val: string): boolean {
@@ -33,6 +61,10 @@ function isCompetencia(val: string): boolean {
 
 function isDateISO(val: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(val);
+}
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function toTimestamptzNoonUtc(dateYYYYMMDD: string): string {
@@ -46,6 +78,204 @@ function buildVencimento(competencia: string, diaVencimento: number | null): str
   const dia = diaVencimento && diaVencimento >= 1 && diaVencimento <= 31 ? diaVencimento : 12;
   const data = new Date(Date.UTC(ano, mes - 1, dia));
   return data.toISOString().slice(0, 10);
+}
+
+export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }> }) {
+  const denied = await guardApiByRole(_req as any);
+  if (denied) return denied as any;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { id } = await ctx.params;
+    const matriculaId = parseId(id);
+
+    if (!matriculaId) {
+      return NextResponse.json({ ok: false, error: "matricula_id_invalido" }, { status: 400 });
+    }
+
+    const { data: matricula, error: errMat } = await supabase
+      .from("matriculas")
+      .select(
+        "id, primeira_cobranca_valor_centavos, primeira_cobranca_data_pagamento, total_mensalidade_centavos",
+      )
+      .eq("id", matriculaId)
+      .maybeSingle();
+
+    if (errMat) throw errMat;
+    if (!matricula) {
+      return NextResponse.json({ ok: false, error: "matricula_nao_encontrada" }, { status: 404 });
+    }
+
+    let entradaValor = 0;
+    let entradaPagoNoAto = true;
+    let entradaMetodo = "PIX";
+    let entradaData = todayISO();
+    let entradaFonte = "sem_dados";
+
+    const primeiraValor = Number(matricula.primeira_cobranca_valor_centavos ?? 0);
+    if (Number.isFinite(primeiraValor) && primeiraValor > 0) {
+      entradaValor = primeiraValor;
+      entradaFonte = "matriculas.primeira_cobranca_valor_centavos";
+      if (typeof matricula.primeira_cobranca_data_pagamento === "string") {
+        entradaData = matricula.primeira_cobranca_data_pagamento.slice(0, 10);
+      }
+    }
+
+    if (entradaValor === 0) {
+      const { data: cobrancaEntrada, error: errEntrada } = await supabase
+        .from("cobrancas")
+        .select("valor_centavos, data_pagamento, metodo_pagamento, status")
+        .in("origem_tipo", ["MATRICULA", "MATRICULA_ENTRADA"])
+        .eq("origem_id", matriculaId)
+        .is("competencia_ano_mes", null)
+        .order("id", { ascending: false })
+        .limit(1);
+
+      if (errEntrada && !isSchemaMissing(errEntrada)) throw errEntrada;
+      if (Array.isArray(cobrancaEntrada) && cobrancaEntrada.length > 0) {
+        const row = cobrancaEntrada[0] as Record<string, unknown>;
+        const valor = Number(row.valor_centavos ?? 0);
+        if (Number.isFinite(valor) && valor > 0) {
+          entradaValor = valor;
+          entradaFonte = "cobrancas (MATRICULA)";
+          const status = String(row.status ?? "").toUpperCase();
+          entradaPagoNoAto = ["PAGA", "PAGO", "RECEBIDO"].includes(status);
+          const dataPg = typeof row.data_pagamento === "string" ? row.data_pagamento : null;
+          if (dataPg) entradaData = dataPg.slice(0, 10);
+          const metodo = typeof row.metodo_pagamento === "string" ? row.metodo_pagamento : null;
+          if (metodo) entradaMetodo = metodo;
+        }
+      }
+    }
+
+    let mensalidades: Array<{ competencia: string; valor_centavos: number; descricao: string }> = [];
+    let mensalidadesFonte = "sem_dados";
+    let valorBaseMensal: number | null = null;
+
+    const { data: execRows, error: execErr } = await supabase
+      .from("matricula_execucao_valores")
+      .select("valor_mensal_centavos")
+      .eq("matricula_id", matriculaId)
+      .eq("ativo", true);
+
+    if (execErr && !isSchemaMissing(execErr)) throw execErr;
+    if (!execErr && Array.isArray(execRows) && execRows.length > 0) {
+      const total = execRows.reduce((acc, row) => acc + Number(row.valor_mensal_centavos ?? 0), 0);
+      if (Number.isFinite(total) && total > 0) {
+        valorBaseMensal = total;
+        mensalidadesFonte = "matricula_execucao_valores";
+      }
+    }
+
+    const competenciaPadrao = new Date().toISOString().slice(0, 7);
+    const { data: cobMens, error: errCobMens } = await supabase
+      .from("cobrancas")
+      .select("competencia_ano_mes, valor_centavos")
+      .in("origem_tipo", ["MATRICULA", "MATRICULA_MENSALIDADE"])
+      .eq("origem_subtipo", "CARTAO_CONEXAO")
+      .eq("origem_id", matriculaId);
+
+    if (errCobMens && !isSchemaMissing(errCobMens)) throw errCobMens;
+
+    if (valorBaseMensal && valorBaseMensal > 0) {
+      const competencias =
+        !errCobMens && Array.isArray(cobMens)
+          ? Array.from(
+              new Set(
+                cobMens
+                  .map((row) => (typeof row.competencia_ano_mes === "string" ? row.competencia_ano_mes : ""))
+                  .filter((comp) => isCompetencia(comp)),
+              ),
+            )
+          : [];
+
+      if (competencias.length > 0) {
+        mensalidades = competencias.sort().map((comp) => ({
+          competencia: comp,
+          valor_centavos: valorBaseMensal,
+          descricao: "Mensalidade (herdada)",
+        }));
+        mensalidadesFonte = "matricula_execucao_valores + cobrancas";
+      } else {
+        mensalidades = [
+          {
+            competencia: competenciaPadrao,
+            valor_centavos: valorBaseMensal,
+            descricao: "Mensalidade (herdada)",
+          },
+        ];
+      }
+    } else if (!errCobMens && Array.isArray(cobMens) && cobMens.length > 0) {
+      const mapMensal = new Map<string, number>();
+      cobMens.forEach((row) => {
+        const comp = typeof row.competencia_ano_mes === "string" ? row.competencia_ano_mes : "";
+        const valor = Number(row.valor_centavos);
+        if (isCompetencia(comp) && Number.isFinite(valor) && valor > 0) {
+          mapMensal.set(comp, valor);
+        }
+      });
+      mensalidades = Array.from(mapMensal.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([competencia, valor_centavos]) => ({
+          competencia,
+          valor_centavos,
+          descricao: "Mensalidade (inferida por cobrancas)",
+        }));
+      if (mensalidades.length > 0) {
+        mensalidadesFonte = "cobrancas (MATRICULA/CARTAO_CONEXAO)";
+      }
+    } else {
+      const totalMensal = Number(matricula.total_mensalidade_centavos ?? 0);
+      if (Number.isFinite(totalMensal) && totalMensal > 0) {
+        mensalidades = [
+          {
+            competencia: competenciaPadrao,
+            valor_centavos: totalMensal,
+            descricao: "Mensalidade (herdada)",
+          },
+        ];
+        mensalidadesFonte = "matriculas.total_mensalidade_centavos";
+      }
+    }
+
+    if (mensalidades.length === 0) {
+      mensalidades = [
+        {
+          competencia: competenciaPadrao,
+          valor_centavos: 0,
+          descricao: "Mensalidade (manual)",
+        },
+      ];
+      mensalidadesFonte = "sem_dados";
+    }
+
+    const resp: SugestoesResponse = {
+      ok: true,
+      matricula_id: matriculaId,
+      sugestoes: {
+        entrada: {
+          valor_centavos: entradaValor,
+          pago_no_ato: entradaPagoNoAto,
+          metodo_pagamento: entradaMetodo,
+          data_pagamento: entradaData,
+          observacoes: "Reprocessamento manual (herdado).",
+        },
+        mensalidades,
+      },
+      fontes: {
+        entrada: entradaFonte,
+        mensalidades: mensalidadesFonte,
+      },
+    };
+
+    return NextResponse.json(resp);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "erro_desconhecido";
+    return NextResponse.json(
+      { ok: false, error: "erro_buscar_sugestoes_reprocessamento", detail: msg },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id?: string }> }) {

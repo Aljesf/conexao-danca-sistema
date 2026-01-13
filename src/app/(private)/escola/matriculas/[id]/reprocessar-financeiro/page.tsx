@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 type MensalidadeRow = {
@@ -15,6 +15,11 @@ function brlToCentavos(v: string): number {
   return Math.round(num * 100);
 }
 
+function centavosToBrlInput(value: number): string {
+  const safe = Number.isFinite(value) ? value : 0;
+  return (safe / 100).toFixed(2).replace(".", ",");
+}
+
 export default function ReprocessarFinanceiroMatriculaPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -22,6 +27,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
 
   const [motivo, setMotivo] = useState("");
   const [forcarRebuild, setForcarRebuild] = useState(true);
+  const [fontes, setFontes] = useState<{ entrada?: string; mensalidades?: string } | null>(null);
 
   const [entradaValor, setEntradaValor] = useState("0,00");
   const [entradaPago, setEntradaPago] = useState(true);
@@ -36,6 +42,47 @@ export default function ReprocessarFinanceiroMatriculaPage() {
   const [loading, setLoading] = useState(false);
   const [resp, setResp] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!matriculaId) return;
+
+    const metodosValidos = ["PIX", "DINHEIRO", "CARTAO", "TRANSFERENCIA", "BOLETO", "OUTRO"];
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/escola/matriculas/${matriculaId}/reprocessar-financeiro`, {
+          method: "GET",
+        });
+        const json = await res.json();
+        if (!res.ok || !json?.ok) return;
+
+        const ent = json.sugestoes?.entrada;
+        const mens = json.sugestoes?.mensalidades;
+
+        if (ent) {
+          setEntradaValor(centavosToBrlInput(Number(ent.valor_centavos ?? 0)));
+          setEntradaPago(Boolean(ent.pago_no_ato));
+          const metodo = String(ent.metodo_pagamento ?? "PIX").toUpperCase();
+          setEntradaMetodo(metodosValidos.includes(metodo) ? metodo : "OUTRO");
+          setEntradaData(String(ent.data_pagamento ?? new Date().toISOString().slice(0, 10)));
+          setEntradaObs(String(ent.observacoes ?? "Reprocessamento manual (herdado)."));
+        }
+
+        if (Array.isArray(mens) && mens.length > 0) {
+          setMensalidades(
+            mens.map((m: any) => ({
+              competencia: String(m.competencia ?? new Date().toISOString().slice(0, 7)),
+              valor: centavosToBrlInput(Number(m.valor_centavos ?? 0)),
+            })),
+          );
+        }
+
+        if (json.fontes) setFontes(json.fontes);
+      } catch {
+        // silencioso: nao bloqueia o operador
+      }
+    })();
+  }, [matriculaId]);
 
   const canSubmit = useMemo(() => {
     if (!motivo.trim()) return false;
@@ -140,6 +187,20 @@ export default function ReprocessarFinanceiroMatriculaPage() {
           </div>
         </div>
 
+        {fontes ? (
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            <h3 className="text-sm font-semibold">Fonte dos dados (herdados)</h3>
+            <div className="mt-2 text-xs text-muted-foreground space-y-1">
+              <div>
+                <span className="font-medium">Entrada:</span> {fontes.entrada ?? "-"}
+              </div>
+              <div>
+                <span className="font-medium">Mensalidades:</span> {fontes.mensalidades ?? "-"}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
           <h2 className="text-base font-semibold">Entrada (fora do Cartao Conexao)</h2>
 
@@ -168,12 +229,18 @@ export default function ReprocessarFinanceiroMatriculaPage() {
 
             <div>
               <label className="text-sm font-medium">Metodo de pagamento</label>
-              <input
+              <select
                 className="mt-1 w-full rounded-md border px-3 py-2"
                 value={entradaMetodo}
                 onChange={(e) => setEntradaMetodo(e.target.value)}
-                placeholder="PIX"
-              />
+              >
+                <option value="PIX">PIX</option>
+                <option value="DINHEIRO">Dinheiro</option>
+                <option value="CARTAO">Cartao</option>
+                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="BOLETO">Boleto</option>
+                <option value="OUTRO">Outro</option>
+              </select>
             </div>
 
             <div>
