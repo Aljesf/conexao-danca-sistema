@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { createClient } from "@/lib/supabase/server";
 
 type DashboardKpisRow = {
   total_pessoas: number;
@@ -26,8 +26,32 @@ type DashboardSerieRow = {
   matriculas_efetivadas: number;
 };
 
+type DashboardAlunoTurmaRow = {
+  turma_id: number;
+  turma_nome: string;
+  aluno_pessoa_id: number;
+  aluno_nome: string;
+  dt_inicio: string | null;
+  dt_fim: string | null;
+  status: string | null;
+  matricula_id: number | null;
+};
+
+type DashboardTrendsRow = {
+  pessoas_30d: number;
+  pessoas_prev30d: number;
+  matriculas_30d: number;
+  matriculas_prev30d: number;
+  alunos_entradas_30d: number;
+  alunos_saidas_30d: number;
+  alunos_saldo_30d: number;
+  alunos_entradas_prev30d: number;
+  alunos_saidas_prev30d: number;
+  alunos_saldo_prev30d: number;
+};
+
 export async function GET() {
-  const supabase = await getSupabaseServer();
+  const supabase = await createClient();
 
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth?.user) {
@@ -70,11 +94,37 @@ export async function GET() {
     );
   }
 
+  const { data: alunosTurmaData, error: alunosTurmaError } = await supabase
+    .from("vw_escola_dashboard_alunos_turma")
+    .select("*")
+    .limit(200);
+
+  if (alunosTurmaError) {
+    return NextResponse.json(
+      { error: "falha_alunos_turma", details: alunosTurmaError.message },
+      { status: 500 },
+    );
+  }
+
+  const { data: trendsData, error: trendsError } = await supabase
+    .from("vw_escola_dashboard_trends_30d")
+    .select("*")
+    .single();
+
+  if (trendsError || !trendsData) {
+    return NextResponse.json(
+      { error: "falha_trends", details: trendsError?.message ?? "trends_vazio" },
+      { status: 500 },
+    );
+  }
+
   return NextResponse.json(
     {
       kpis: kpisData as DashboardKpisRow,
       turmas: (turmasData ?? []) as DashboardTurmaRow[],
       series7d: (serieData ?? []) as DashboardSerieRow[],
+      alunosTurma: (alunosTurmaData ?? []) as DashboardAlunoTurmaRow[],
+      trends30d: trendsData as DashboardTrendsRow,
     },
     { status: 200 },
   );
