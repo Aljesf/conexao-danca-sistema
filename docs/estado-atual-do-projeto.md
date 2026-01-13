@@ -55,6 +55,7 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 ### Documentos - emissao contrato/ficha (matricula pagante)
 - Contexto de emissao inclui escola, snapshot financeiro normalizado e parcelas padronizadas.
 - Colecao MATRICULA_PARCELAS agora retorna VENCIMENTO/VALOR_CENTAVOS/STATUS (com aliases DATA/VALOR).
+- Preview de documentos emitidos: API retorna HTML decodificado quando detectar conteudo escapado (ex.: &lt;h).
 
 
 ---
@@ -74,6 +75,9 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 ### Documentos - variaveis
 - Sem ajustes necessarios: origens ESCOLA e MANUAL ja disponiveis na tela.
+
+### Documentos - preview emitidos (admin)
+- Renderizacao do preview usa HTML (emitido com fallback de modelo) com decode controlado quando necessario.
 
 
 ---
@@ -95,6 +99,9 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 4) Documentos - validacao/prints
 - Aplicar migration no Supabase e emitir Contrato + Ficha Financeira.
 - Gerar prints: placeholders ESCOLA_* resolvidos e parcelas com vencimento/BRL.
+
+5) Documentos - preview HTML
+- Rodar diagnostico no SQL Editor (documentos_modelo/documentos_emitidos) e validar doc emitido ID=13 / modelo 41.
 
 
 ---

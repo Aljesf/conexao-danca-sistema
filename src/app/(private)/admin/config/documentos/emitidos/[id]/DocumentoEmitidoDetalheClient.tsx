@@ -2,6 +2,7 @@
 
 import React from "react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor/RichTextEditor";
+import { decodeHtmlEntities } from "@/lib/documentos/renderHtml";
 
 type DocEmitido = {
   id: number;
@@ -44,6 +45,14 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const [debug, setDebug] = React.useState<unknown>(null);
 
   type LoadOptions = { preservePreviewHtml?: boolean; preserveEditorHtml?: boolean };
+  const shouldDecodeHtml = React.useCallback((raw: string) => {
+    const trimmed = raw.trimStart();
+    return trimmed.startsWith("&lt;") || raw.includes("&lt;h");
+  }, []);
+  const maybeDecodeHtml = React.useCallback(
+    (raw: string) => (shouldDecodeHtml(raw) ? decodeHtmlEntities(raw) : raw),
+    [shouldDecodeHtml],
+  );
 
   async function carregar(options?: LoadOptions) {
     setErro(null);
@@ -55,11 +64,12 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
       if (!res.ok || !json.ok || !json.data) {
         throw new Error(json.message || "Falha ao carregar documento emitido.");
       }
-      const baseHtml =
+      const baseHtmlRaw =
         json.data.conteudo_resolvido_html ||
         json.data.conteudo_template_html ||
         json.data.conteudo_renderizado_md ||
         "<p></p>";
+      const baseHtml = maybeDecodeHtml(baseHtmlRaw);
       setDoc(json.data);
       if (!options?.preserveEditorHtml) {
         setHtml(baseHtml);
@@ -95,8 +105,9 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
         keys: jsonRecord ? Object.keys(jsonRecord) : [],
       };
       if (typeof json.html === "string") {
-        setPreviewHtml(json.html);
-        setHtml(json.html);
+        const decoded = maybeDecodeHtml(json.html);
+        setPreviewHtml(decoded);
+        setHtml(decoded);
       }
       setDebug(json.debug ?? fallbackDebug);
       setOkMsg("Documento recarregado com dados atuais da matricula.");
@@ -158,8 +169,8 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
   const modeloId = doc?.documento_modelo_id ?? doc?.contrato_modelo_id ?? "-";
   const status = doc?.status_assinatura ?? doc?.status ?? "-";
-  const headerHtml = doc?.header_html ?? doc?.cabecalho_html ?? "";
-  const footerHtml = doc?.footer_html ?? doc?.rodape_html ?? "";
+  const headerHtml = maybeDecodeHtml(doc?.header_html ?? doc?.cabecalho_html ?? "");
+  const footerHtml = maybeDecodeHtml(doc?.footer_html ?? doc?.rodape_html ?? "");
   const headerHeightValue = Number(doc?.header_height_px);
   const footerHeightValue = Number(doc?.footer_height_px);
   const pageMarginValue = Number(doc?.page_margin_mm);
@@ -171,12 +182,13 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     "--footer-height-px": `${footerHeightPx}px`,
     "--page-margin-mm": `${pageMarginMm}mm`,
   } as React.CSSProperties;
-  const previewConteudo =
+  const previewConteudoRaw =
     (previewHtml && previewHtml.trim().length > 0 ? previewHtml : "") ||
     doc?.conteudo_resolvido_html ||
     doc?.conteudo_template_html ||
     doc?.conteudo_renderizado_md ||
     "<p>(sem conteudo)</p>";
+  const previewConteudo = maybeDecodeHtml(previewConteudoRaw);
   const colecoesVazias = React.useMemo(() => {
     const raw = doc?.variaveis_utilizadas_json;
     if (!raw || typeof raw !== "object") return [];
@@ -311,12 +323,12 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                       type="button"
                       className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       onClick={() => {
-                        setHtml(
+                        const nextHtml =
                           doc.conteudo_resolvido_html ||
-                            doc.conteudo_template_html ||
-                            doc.conteudo_renderizado_md ||
-                            "<p></p>",
-                        );
+                          doc.conteudo_template_html ||
+                          doc.conteudo_renderizado_md ||
+                          "<p></p>";
+                        setHtml(maybeDecodeHtml(nextHtml));
                         setModoEditar(false);
                       }}
                     >

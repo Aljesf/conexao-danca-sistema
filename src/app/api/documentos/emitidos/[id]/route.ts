@@ -12,6 +12,7 @@ import { extractCollectionCodes, renderTemplateHtml } from "@/lib/documentos/tem
 import { resolveCollections } from "@/lib/documentos/collectionsResolver";
 import { type JoinEdge } from "@/lib/documentos/resolveByJoinPath";
 import { normalizeOperacaoTipo, OPERACAO_TIPOS } from "@/lib/documentos/operacaoTipos";
+import { decodeHtmlEntities } from "@/lib/documentos/renderHtml";
 
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
 
@@ -27,6 +28,16 @@ type DocumentoVariavelDb = DocumentoVariavel & {
 
 const isInDirection = (direction?: string | null) =>
   direction === "IN" || direction === "IN_GUESS";
+
+const shouldDecodeHtml = (raw: string) => {
+  const trimmed = raw.trimStart();
+  return trimmed.startsWith("&lt;") || raw.includes("&lt;h");
+};
+
+const maybeDecodeHtml = (raw: string | null | undefined) => {
+  if (typeof raw !== "string") return raw ?? null;
+  return shouldDecodeHtml(raw) ? decodeHtmlEntities(raw) : raw;
+};
 
 function normalizeJoinPathForRpc(joinPath: JoinEdge[] | null): JoinEdge[] | null {
   if (!joinPath || joinPath.length === 0) return null;
@@ -175,7 +186,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ ok: false, message: error.message } satisfies ApiResp<never>, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true, data } satisfies ApiResp<unknown>, { status: 200 });
+  const decoded = {
+    ...data,
+    conteudo_resolvido_html: maybeDecodeHtml(data.conteudo_resolvido_html),
+    conteudo_template_html: maybeDecodeHtml(data.conteudo_template_html),
+    conteudo_renderizado_md: maybeDecodeHtml(data.conteudo_renderizado_md),
+    header_html: maybeDecodeHtml(data.header_html),
+    footer_html: maybeDecodeHtml(data.footer_html),
+    cabecalho_html: maybeDecodeHtml(data.cabecalho_html),
+    rodape_html: maybeDecodeHtml(data.rodape_html),
+  };
+
+  return NextResponse.json({ ok: true, data: decoded } satisfies ApiResp<unknown>, { status: 200 });
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -400,6 +422,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const conteudoResolvido = renderTemplateHtml(template, contextoFinal);
     const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
+    const conteudoResolvidoPreview = maybeDecodeHtml(conteudoResolvidoLimpo) ?? "";
     const htmlLen = conteudoResolvidoLimpo.length;
 
     const debugPayload = debugEnabled
@@ -439,7 +462,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       {
         ok: true,
         data: atualizado,
-        html: conteudoResolvidoLimpo,
+        html: conteudoResolvidoPreview,
         ...(debugEnabled ? { debug: debugPayload } : {}),
       } satisfies ApiResp<unknown>,
       { status: 200 },
