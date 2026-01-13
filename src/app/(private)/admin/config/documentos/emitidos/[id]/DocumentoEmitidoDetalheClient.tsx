@@ -39,12 +39,19 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
   const [modoEditar, setModoEditar] = React.useState(false);
   const [html, setHtml] = React.useState<string>("");
-  const [previewHtml, setPreviewHtml] = React.useState<string>("");
+  const [rawHtml, setRawHtml] = React.useState<string>("");
+  const [resolvedHtml, setResolvedHtml] = React.useState<string>("");
+  const [viewMode, setViewMode] = React.useState<"raw" | "resolved">("raw");
+  const [previewLoadingMode, setPreviewLoadingMode] = React.useState<"raw" | "resolved" | null>(null);
   const [salvando, setSalvando] = React.useState(false);
   const [okMsg, setOkMsg] = React.useState<string | null>(null);
   const [debug, setDebug] = React.useState<unknown>(null);
 
-  type LoadOptions = { preservePreviewHtml?: boolean; preserveEditorHtml?: boolean };
+  type LoadOptions = {
+    preserveDraftHtml?: boolean;
+    preserveRawHtml?: boolean;
+    preserveResolvedHtml?: boolean;
+  };
   const shouldDecodeHtml = React.useCallback((raw: string) => {
     const trimmed = raw.trimStart();
     return trimmed.startsWith("&lt;") || raw.includes("&lt;h");
@@ -53,13 +60,14 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     (raw: string) => (shouldDecodeHtml(raw) ? decodeHtmlEntities(raw) : raw),
     [shouldDecodeHtml],
   );
+  const previewLoading = previewLoadingMode !== null;
 
   async function carregar(options?: LoadOptions) {
     setErro(null);
     setOkMsg(null);
     setLoading(true);
     try {
-      const res = await fetch(`/api/documentos/emitidos/${docId}`, { cache: "no-store" });
+      const res = await fetch(`/api/documentos/emitidos/${docId}?mode=raw`, { cache: "no-store" });
       const json = (await res.json()) as ApiResp<DocEmitido>;
       if (!res.ok || !json.ok || !json.data) {
         throw new Error(json.message || "Falha ao carregar documento emitido.");
@@ -70,12 +78,18 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
         json.data.conteudo_renderizado_md ||
         "<p></p>";
       const baseHtml = maybeDecodeHtml(baseHtmlRaw);
+      const rawHtmlRaw = typeof json.html === "string" ? json.html : baseHtml;
+      const rawHtmlDecoded = maybeDecodeHtml(rawHtmlRaw) ?? "";
       setDoc(json.data);
-      if (!options?.preserveEditorHtml) {
+      if (!options?.preserveDraftHtml) {
         setHtml(baseHtml);
       }
-      if (!options?.preservePreviewHtml) {
-        setPreviewHtml(baseHtml);
+      if (!options?.preserveRawHtml) {
+        setRawHtml(rawHtmlDecoded);
+      }
+      if (!options?.preserveResolvedHtml) {
+        setResolvedHtml("");
+        setViewMode("raw");
       }
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado.");
@@ -84,42 +98,63 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     }
   }
 
-  async function recarregarEmitido() {
+  async function verModeloSemDados(): Promise<boolean> {
     setErro(null);
     setOkMsg(null);
     setDebug(null);
-    setLoading(true);
+    setPreviewLoadingMode("raw");
     try {
-      const res = await fetch(`/api/documentos/emitidos/${docId}?debug=1`, { method: "POST" });
-      const json = (await res.json()) as ApiResp<unknown>;
-      if (!res.ok || !json.ok) {
-        throw new Error(json.message || "Falha ao recarregar documento emitido.");
+      const res = await fetch(`/api/documentos/emitidos/${docId}?mode=raw`, { cache: "no-store" });
+      const json = (await res.json()) as ApiResp<DocEmitido>;
+      if (!res.ok || !json.ok || !json.data) {
+        throw new Error(json.message || "Falha ao carregar modelo sem dados.");
       }
-      const jsonRecord =
-        json && typeof json === "object" ? (json as Record<string, unknown>) : null;
-      const fallbackDebug = {
-        ok: json?.ok ?? null,
-        httpStatus: res.status,
-        hasHtml: typeof json?.html === "string",
-        htmlLen: typeof json?.html === "string" ? json.html.length : 0,
-        keys: jsonRecord ? Object.keys(jsonRecord) : [],
-      };
-      if (typeof json.html === "string") {
-        const decoded = maybeDecodeHtml(json.html);
-        setPreviewHtml(decoded);
-        setHtml(decoded);
-      }
-      setDebug(json.debug ?? fallbackDebug);
-      setOkMsg("Documento recarregado com dados atuais da matricula.");
-      await carregar(
+      const fallbackRaw =
         typeof json.html === "string"
-          ? { preservePreviewHtml: true, preserveEditorHtml: true }
-          : undefined,
-      );
+          ? json.html
+          : json.data.conteudo_template_html ||
+            json.data.conteudo_renderizado_md ||
+            json.data.conteudo_resolvido_html ||
+            "<p></p>";
+      const rawDecoded = maybeDecodeHtml(fallbackRaw) ?? "";
+      setRawHtml(rawDecoded);
+      setDoc(json.data);
+      setViewMode("raw");
+      return true;
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado.");
+      return false;
     } finally {
-      setLoading(false);
+      setPreviewLoadingMode(null);
+    }
+  }
+
+  async function verComDadosResolver(): Promise<boolean> {
+    setErro(null);
+    setOkMsg(null);
+    setDebug(null);
+    setPreviewLoadingMode("resolved");
+    try {
+      const res = await fetch(`/api/documentos/emitidos/${docId}?mode=resolved`, { cache: "no-store" });
+      const json = (await res.json()) as ApiResp<DocEmitido>;
+      if (!res.ok || !json.ok) {
+        throw new Error(json.message || "Falha ao resolver documento.");
+      }
+      const resolvedDecoded = typeof json.html === "string" ? maybeDecodeHtml(json.html) ?? "" : "";
+      setResolvedHtml(resolvedDecoded);
+      if (json.data) {
+        setDoc(json.data);
+      }
+      setViewMode("resolved");
+      if (json.debug) {
+        setDebug(json.debug);
+      }
+      return true;
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro inesperado.");
+      return false;
+    } finally {
+      setPreviewLoadingMode(null);
     }
   }
 
@@ -154,9 +189,16 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     }
   }
 
-  function imprimirComoPdf() {
-    document.body.classList.add("print-mode");
-    window.print();
+  async function imprimirComoPdf() {
+    const precisaResolver = !(viewMode === "resolved" && resolvedHtml.trim());
+    if (precisaResolver) {
+      const ok = await verComDadosResolver();
+      if (!ok) return;
+    }
+    requestAnimationFrame(() => {
+      document.body.classList.add("print-mode");
+      window.print();
+    });
   }
 
   React.useEffect(() => {
@@ -183,12 +225,15 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     "--page-margin-mm": `${pageMarginMm}mm`,
   } as React.CSSProperties;
   const previewConteudoRaw =
-    (previewHtml && previewHtml.trim().length > 0 ? previewHtml : "") ||
-    doc?.conteudo_resolvido_html ||
+    (rawHtml && rawHtml.trim().length > 0 ? rawHtml : "") ||
+    (html && html.trim().length > 0 ? html : "") ||
     doc?.conteudo_template_html ||
     doc?.conteudo_renderizado_md ||
+    doc?.conteudo_resolvido_html ||
     "<p>(sem conteudo)</p>";
-  const previewConteudo = maybeDecodeHtml(previewConteudoRaw);
+  const previewConteudoResolved =
+    resolvedHtml && resolvedHtml.trim().length > 0 ? resolvedHtml : previewConteudoRaw;
+  const previewConteudo = viewMode === "resolved" ? previewConteudoResolved : previewConteudoRaw;
   const colecoesVazias = React.useMemo(() => {
     const raw = doc?.variaveis_utilizadas_json;
     if (!raw || typeof raw !== "object") return [];
@@ -233,7 +278,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             <div className="mt-3 text-xs text-slate-200">
               <div className="font-semibold text-slate-100">Preview (primeiros 300 chars)</div>
               <pre className="mt-1 whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
-                {(previewHtml || "").slice(0, 300)}
+                {previewConteudo.slice(0, 300)}
               </pre>
             </div>
           </details>
@@ -295,9 +340,19 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                   <button
                     type="button"
                     className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
-                    onClick={recarregarEmitido}
+                    onClick={verModeloSemDados}
+                    disabled={previewLoading || viewMode === "raw"}
                   >
-                    Recarregar
+                    {previewLoadingMode === "raw" ? "Carregando..." : "Ver modelo (sem dados)"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                    onClick={verComDadosResolver}
+                    disabled={previewLoading || viewMode === "resolved"}
+                  >
+                    {previewLoadingMode === "resolved" ? "Carregando..." : "Ver com dados (resolver)"}
                   </button>
                 </div>
               </div>
@@ -375,8 +430,8 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                   </div>
                   {debug ? (
                     <div className="mt-2 text-xs text-slate-500">
-                      HTML len (previewHtml): {previewHtml.length} | HTML len (fallback):{" "}
-                      {previewConteudo.length}
+                      HTML len (raw): {previewConteudoRaw.length} | HTML len (resolved):{" "}
+                      {previewConteudoResolved.length}
                     </div>
                   ) : null}
                 </div>

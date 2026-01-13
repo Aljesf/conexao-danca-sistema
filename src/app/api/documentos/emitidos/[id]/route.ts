@@ -26,6 +26,23 @@ type DocumentoVariavelDb = DocumentoVariavel & {
   mapeamento_pendente: boolean;
 };
 
+type ResolveEmitidoOk = {
+  ok: true;
+  conteudoResolvidoLimpo: string;
+  template: string;
+  contextoPersistido: Record<string, unknown>;
+  variaveisUtilizadasFinal: Record<string, unknown>;
+  debugPayload: Record<string, unknown> | null;
+};
+
+type ResolveEmitidoResult =
+  | ResolveEmitidoOk
+  | {
+      ok: false;
+      status: number;
+      message: string;
+    };
+
 const isInDirection = (direction?: string | null) =>
   direction === "IN" || direction === "IN_GUESS";
 
@@ -165,7 +182,201 @@ function resolveModeloTemplate(modelo: Record<string, unknown>): string {
   return typeof texto === "string" ? texto : "";
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+function resolveRawTemplateFromDoc(doc: Record<string, unknown>): string {
+  const html = doc.conteudo_template_html;
+  if (typeof html === "string" && html.trim()) return html;
+  const md = doc.conteudo_renderizado_md;
+  if (typeof md === "string" && md.trim()) return md;
+  return "";
+}
+
+async function resolveEmitidoConteudo(params: {
+  supabase: SupabaseClient;
+  docId: number;
+  doc: Record<string, unknown>;
+  debugEnabled: boolean;
+}): Promise<ResolveEmitidoResult> {
+  const { supabase, docId, doc, debugEnabled } = params;
+  const docRec = doc as Record<string, unknown>;
+  const matriculaId = Number(docRec.matricula_id);
+  if (!Number.isFinite(matriculaId) || matriculaId <= 0) {
+    return { ok: false, status: 400, message: "Matricula invalida no emitido." };
+  }
+
+  const contextoBase =
+    docRec.contexto_json && typeof docRec.contexto_json === "object"
+      ? (docRec.contexto_json as Record<string, unknown>)
+      : {};
+
+  const contratoModeloIdRaw = docRec.contrato_modelo_id ?? docRec.documento_modelo_id;
+  const contratoModeloIdNum =
+    typeof contratoModeloIdRaw === "number" ? contratoModeloIdRaw : Number(contratoModeloIdRaw);
+  const contratoModeloId = Number.isFinite(contratoModeloIdNum) ? contratoModeloIdNum : null;
+
+  let template = resolveTemplateBase(docRec);
+  if (contratoModeloId && contratoModeloId > 0) {
+    const { data: modelo, error: modeloErr } = await supabase
+      .from("documentos_modelo")
+      .select("id,formato,conteudo_html,texto_modelo_md")
+      .eq("id", contratoModeloId)
+      .single();
+
+    if (modeloErr || !modelo) {
+      return { ok: false, status: 404, message: "Modelo nao encontrado." };
+    }
+
+    template = resolveModeloTemplate(modelo as Record<string, unknown>);
+
+    if (process.env.DOCS_EMIT_DEBUG === "1") {
+      console.log("[emitido-resolve] emitido_id:", docId, "matricula_id:", matriculaId, "modelo_id:", contratoModeloId);
+      console.log("[emitido-resolve] modelo_carregado_id:", modelo.id, "tamanho_texto:", template.length);
+    }
+  }
+
+  const contextoPersistido: Record<string, unknown> = {
+    ...contextoBase,
+  };
+
+  const { data: variaveisRaw, error: variaveisErr } = await supabase
+    .from("documentos_variaveis")
+    .select(
+      "codigo, path_origem, formato, tipo, root_table, root_pk_column, join_path, target_table, target_column, ai_gerada, mapeamento_pendente",
+    )
+    .eq("ativo", true);
+
+  if (variaveisErr) {
+    return { ok: false, status: 500, message: variaveisErr.message };
+  }
+
+  const variaveisByCodigo = buildVariaveisByCodigo(
+    (variaveisRaw ?? []) as unknown as Array<Record<string, unknown>>,
+  );
+
+  const { values: simpleContext, utilizadas: variaveisUtilizadas } = await resolveTemplateValues({
+    template,
+    variaveisByCodigo,
+    contexto: contextoPersistido,
+    supabase,
+    rootId: matriculaId,
+  });
+
+  const collectionCodes = extractCollectionCodes(template);
+  const operacaoTipo = normalizeOperacaoTipo(OPERACAO_TIPOS.MATRICULA);
+  const collectionsResolved =
+    collectionCodes.length > 0
+      ? await resolveCollections({
+          operacaoTipo,
+          operacaoId: matriculaId,
+          colecoes: collectionCodes,
+        })
+      : {};
+
+  const collectionsResolvedFinal: Record<string, Array<Record<string, string>>> = {
+    ...collectionsResolved,
+  };
+
+  const colecoesDetectadasSet = new Set<string>(collectionCodes);
+  const colecoesDetectadas = Array.from(colecoesDetectadasSet);
+  const colecoesVazias = colecoesDetectadas.filter((code) => {
+    const rows = collectionsResolvedFinal[code];
+    return Array.isArray(rows) && rows.length === 0;
+  });
+
+  const variaveisUtilizadasFinal = {
+    ...variaveisUtilizadas,
+    __colecoes_detectadas: colecoesDetectadas,
+    __colecoes_vazias: colecoesVazias,
+  };
+
+  const contextoFinal: Record<string, unknown> = {
+    ...simpleContext,
+    ...collectionsResolvedFinal,
+  };
+
+  const parcelasRaw = (contextoFinal as Record<string, unknown>)["MATRICULA_PARCELAS"];
+  const parcelasArr = Array.isArray(parcelasRaw) ? (parcelasRaw as Array<Record<string, unknown>>) : [];
+  const primeiraParcela = parcelasArr.length > 0 ? parcelasArr[0] : null;
+  const previewLinhaDebug =
+    debugEnabled && primeiraParcela && typeof primeiraParcela === "object"
+      ? [
+          "<tr>",
+          `<td>${String(primeiraParcela.DATA ?? "")}</td>`,
+          `<td>${String(primeiraParcela.DESCRICAO ?? "")}</td>`,
+          `<td>${String(primeiraParcela.VALOR ?? "")}</td>`,
+          `<td>${String(primeiraParcela.STATUS ?? "")}</td>`,
+          "</tr>",
+        ].join("")
+      : null;
+
+  let sanityDbLen: number | null = null;
+  if (debugEnabled) {
+    const { data: sanityRows, error: sanityErr } = await supabase
+      .from("credito_conexao_lancamentos")
+      .select("id")
+      .in("origem_sistema", ["MATRICULA", "MATRICULAS"])
+      .eq("origem_id", matriculaId);
+
+    if (!sanityErr && Array.isArray(sanityRows)) {
+      sanityDbLen = sanityRows.length;
+    } else {
+      sanityDbLen = -1;
+    }
+  }
+
+  if (debugEnabled) {
+    console.log("[doc-colecao] matricula_id:", matriculaId);
+    console.log("[doc-colecao] colecoes_detectadas:", colecoesDetectadas);
+    console.log("[doc-colecao] keys_contexto:", Object.keys(contextoFinal));
+    const rows = collectionsResolvedFinal.MATRICULA_PARCELAS;
+    console.log("[doc-colecao] MATRICULA_PARCELAS_len:", Array.isArray(rows) ? rows.length : 0);
+    console.log(
+      "[doc-colecao] colecoes_linhas:",
+      Object.fromEntries(
+        Object.entries(collectionsResolvedFinal).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
+      ),
+    );
+    console.log(
+      "[emitido-render]",
+      "keys:",
+      Object.keys(contextoFinal),
+      "parcelas_len:",
+      Array.isArray((contextoFinal as Record<string, unknown>).MATRICULA_PARCELAS)
+        ? (contextoFinal as Record<string, unknown>).MATRICULA_PARCELAS.length
+        : "N/A",
+    );
+  }
+
+  const conteudoResolvido = renderTemplateHtml(template, contextoFinal);
+  const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
+  const htmlLen = conteudoResolvidoLimpo.length;
+
+  const debugPayload = debugEnabled
+    ? {
+        emitidoId: docId,
+        matriculaId,
+        contratoModeloId,
+        templateSize: template.length,
+        colecoesDetectadas: Array.isArray(colecoesDetectadas) ? colecoesDetectadas : [],
+        parcelasLen: parcelasArr.length,
+        primeiraParcela,
+        previewLinhaDebug,
+        sanityDbLen,
+        htmlLen,
+        keysContexto: Object.keys(contextoFinal),
+      }
+    : null;
+
+  return {
+    ok: true,
+    conteudoResolvidoLimpo,
+    template,
+    contextoPersistido,
+    variaveisUtilizadasFinal,
+    debugPayload,
+  };
+}
+
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const docId = Number(id);
   if (!Number.isFinite(docId) || docId <= 0) {
@@ -174,6 +385,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       { status: 400 },
     );
   }
+
+  const url = new URL(req.url);
+  const mode = url.searchParams.get("mode");
+  const debugEnabled = process.env.DOCS_EMIT_DEBUG === "1" || url.searchParams.get("debug") === "1";
 
   const supabase = await getSupabaseServerSSR();
   const { data, error } = await supabase
@@ -196,6 +411,60 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     cabecalho_html: maybeDecodeHtml(data.cabecalho_html),
     rodape_html: maybeDecodeHtml(data.rodape_html),
   };
+
+  if (mode === "raw") {
+    const docRec = data as Record<string, unknown>;
+    let rawHtml = resolveRawTemplateFromDoc(docRec);
+    if (!rawHtml.trim()) {
+      const modeloIdRaw = docRec.contrato_modelo_id ?? docRec.documento_modelo_id;
+      const modeloId = typeof modeloIdRaw === "number" ? modeloIdRaw : Number(modeloIdRaw);
+      if (Number.isFinite(modeloId) && modeloId > 0) {
+        const { data: modelo } = await supabase
+          .from("documentos_modelo")
+          .select("id,formato,conteudo_html,texto_modelo_md")
+          .eq("id", modeloId)
+          .single();
+        if (modelo) {
+          rawHtml = resolveModeloTemplate(modelo as Record<string, unknown>);
+        }
+      }
+    }
+    if (!rawHtml.trim()) {
+      const fallback = docRec.conteudo_resolvido_html;
+      rawHtml = typeof fallback === "string" ? fallback : "";
+    }
+    const rawHtmlDecoded = maybeDecodeHtml(rawHtml) ?? "";
+    return NextResponse.json(
+      { ok: true, data: decoded, html: rawHtmlDecoded, mode: "raw" } satisfies ApiResp<unknown>,
+      { status: 200 },
+    );
+  }
+
+  if (mode === "resolved") {
+    const resolved = await resolveEmitidoConteudo({
+      supabase,
+      docId,
+      doc: data as Record<string, unknown>,
+      debugEnabled,
+    });
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { ok: false, message: resolved.message } satisfies ApiResp<never>,
+        { status: resolved.status },
+      );
+    }
+    const htmlResolved = maybeDecodeHtml(resolved.conteudoResolvidoLimpo) ?? "";
+    return NextResponse.json(
+      {
+        ok: true,
+        data: decoded,
+        html: htmlResolved,
+        ...(debugEnabled ? { debug: resolved.debugPayload } : {}),
+        mode: "resolved",
+      } satisfies ApiResp<unknown>,
+      { status: 200 },
+    );
+  }
 
   return NextResponse.json({ ok: true, data: decoded } satisfies ApiResp<unknown>, { status: 200 });
 }
@@ -267,187 +536,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const docRec = doc as Record<string, unknown>;
-    const matriculaId = Number(docRec.matricula_id);
-    if (!Number.isFinite(matriculaId) || matriculaId <= 0) {
-      return NextResponse.json({ ok: false, message: "Matricula invalida no emitido." } satisfies ApiResp<never>, {
-        status: 400,
-      });
-    }
-
-    const contextoBase =
-      docRec.contexto_json && typeof docRec.contexto_json === "object"
-        ? (docRec.contexto_json as Record<string, unknown>)
-        : {};
-
-    const contratoModeloIdRaw = docRec.contrato_modelo_id ?? docRec.documento_modelo_id;
-    const contratoModeloId =
-      typeof contratoModeloIdRaw === "number" ? contratoModeloIdRaw : Number(contratoModeloIdRaw);
-
-    let template = resolveTemplateBase(docRec);
-    if (Number.isFinite(contratoModeloId) && contratoModeloId > 0) {
-      const { data: modelo, error: modeloErr } = await supabase
-        .from("documentos_modelo")
-        .select("id,formato,conteudo_html,texto_modelo_md")
-        .eq("id", contratoModeloId)
-        .single();
-
-      if (modeloErr || !modelo) {
-        return NextResponse.json({ ok: false, message: "Modelo nao encontrado." } satisfies ApiResp<never>, {
-          status: 404,
-        });
-      }
-
-      template = resolveModeloTemplate(modelo as Record<string, unknown>);
-
-      if (process.env.DOCS_EMIT_DEBUG === "1") {
-        console.log("[emitido-reload] emitido_id:", docId, "matricula_id:", matriculaId, "modelo_id:", contratoModeloId);
-        console.log("[emitido-reload] modelo_carregado_id:", modelo.id, "tamanho_texto:", template.length);
-      }
-    }
-
-    const contextoPersistido: Record<string, unknown> = {
-      ...contextoBase,
-    };
-
-    const { data: variaveisRaw, error: variaveisErr } = await supabase
-      .from("documentos_variaveis")
-      .select(
-        "codigo, path_origem, formato, tipo, root_table, root_pk_column, join_path, target_table, target_column, ai_gerada, mapeamento_pendente",
-      )
-      .eq("ativo", true);
-
-    if (variaveisErr) {
-      return NextResponse.json({ ok: false, message: variaveisErr.message } satisfies ApiResp<never>, { status: 500 });
-    }
-
-    const variaveisByCodigo = buildVariaveisByCodigo(
-      (variaveisRaw ?? []) as unknown as Array<Record<string, unknown>>,
-    );
-
-    const { values: simpleContext, utilizadas: variaveisUtilizadas } = await resolveTemplateValues({
-      template,
-      variaveisByCodigo,
-      contexto: contextoPersistido,
-      supabase,
-      rootId: matriculaId,
-    });
-
-    const collectionCodes = extractCollectionCodes(template);
-    const operacaoTipo = normalizeOperacaoTipo(OPERACAO_TIPOS.MATRICULA);
-    const collectionsResolved =
-      collectionCodes.length > 0
-        ? await resolveCollections({
-            operacaoTipo,
-            operacaoId: matriculaId,
-            colecoes: collectionCodes,
-          })
-        : {};
-
-    const collectionsResolvedFinal: Record<string, Array<Record<string, string>>> = {
-      ...collectionsResolved,
-    };
-
-    const colecoesDetectadasSet = new Set<string>(collectionCodes);
-    const colecoesDetectadas = Array.from(colecoesDetectadasSet);
-    const colecoesVazias = colecoesDetectadas.filter((code) => {
-      const rows = collectionsResolvedFinal[code];
-      return Array.isArray(rows) && rows.length === 0;
-    });
-
-    const variaveisUtilizadasFinal = {
-      ...variaveisUtilizadas,
-      __colecoes_detectadas: colecoesDetectadas,
-      __colecoes_vazias: colecoesVazias,
-    };
-
-    const contextoFinal: Record<string, unknown> = {
-      ...simpleContext,
-      ...collectionsResolvedFinal,
-    };
-
     const url = new URL(req.url);
     const debugEnabled = process.env.DOCS_EMIT_DEBUG === "1" || url.searchParams.get("debug") === "1";
-    const parcelasRaw = (contextoFinal as Record<string, unknown>)["MATRICULA_PARCELAS"];
-    const parcelasArr = Array.isArray(parcelasRaw) ? (parcelasRaw as Array<Record<string, unknown>>) : [];
-    const primeiraParcela = parcelasArr.length > 0 ? parcelasArr[0] : null;
-    const previewLinhaDebug =
-      debugEnabled && primeiraParcela && typeof primeiraParcela === "object"
-        ? [
-            "<tr>",
-            `<td>${String(primeiraParcela.DATA ?? "")}</td>`,
-            `<td>${String(primeiraParcela.DESCRICAO ?? "")}</td>`,
-            `<td>${String(primeiraParcela.VALOR ?? "")}</td>`,
-            `<td>${String(primeiraParcela.STATUS ?? "")}</td>`,
-            "</tr>",
-          ].join("")
-        : null;
+    const resolved = await resolveEmitidoConteudo({
+      supabase,
+      docId,
+      doc: docRec,
+      debugEnabled,
+    });
 
-    let sanityDbLen: number | null = null;
-    if (debugEnabled) {
-      const { data: sanityRows, error: sanityErr } = await supabase
-        .from("credito_conexao_lancamentos")
-        .select("id")
-        .in("origem_sistema", ["MATRICULA", "MATRICULAS"])
-        .eq("origem_id", matriculaId);
-
-      if (!sanityErr && Array.isArray(sanityRows)) {
-        sanityDbLen = sanityRows.length;
-      } else {
-        sanityDbLen = -1;
-      }
-    }
-
-    if (debugEnabled) {
-      console.log("[doc-colecao] matricula_id:", matriculaId);
-      console.log("[doc-colecao] colecoes_detectadas:", colecoesDetectadas);
-      console.log("[doc-colecao] keys_contexto:", Object.keys(contextoFinal));
-      const rows = collectionsResolvedFinal.MATRICULA_PARCELAS;
-      console.log("[doc-colecao] MATRICULA_PARCELAS_len:", Array.isArray(rows) ? rows.length : 0);
-      console.log(
-        "[doc-colecao] colecoes_linhas:",
-        Object.fromEntries(
-          Object.entries(collectionsResolvedFinal).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0]),
-        ),
-      );
-      console.log(
-        "[emitido-render]",
-        "keys:",
-        Object.keys(contextoFinal),
-        "parcelas_len:",
-        Array.isArray((contextoFinal as Record<string, unknown>).MATRICULA_PARCELAS)
-          ? (contextoFinal as Record<string, unknown>).MATRICULA_PARCELAS.length
-          : "N/A",
+    if (!resolved.ok) {
+      return NextResponse.json(
+        { ok: false, message: resolved.message } satisfies ApiResp<never>,
+        { status: resolved.status },
       );
     }
 
-    const conteudoResolvido = renderTemplateHtml(template, contextoFinal);
-    const conteudoResolvidoLimpo = stripBackgroundStyles(conteudoResolvido);
-    const conteudoResolvidoPreview = maybeDecodeHtml(conteudoResolvidoLimpo) ?? "";
-    const htmlLen = conteudoResolvidoLimpo.length;
-
-    const debugPayload = debugEnabled
-      ? {
-          emitidoId: docId,
-          matriculaId,
-          contratoModeloId,
-          templateSize: template.length,
-          colecoesDetectadas: Array.isArray(colecoesDetectadas) ? colecoesDetectadas : [],
-          parcelasLen: parcelasArr.length,
-          primeiraParcela,
-          previewLinhaDebug,
-          sanityDbLen,
-          htmlLen,
-          keysContexto: Object.keys(contextoFinal),
-        }
-      : null;
+    const conteudoResolvidoPreview = maybeDecodeHtml(resolved.conteudoResolvidoLimpo) ?? "";
 
     const { data: atualizado, error: updErr } = await supabase
       .from("documentos_emitidos")
       .update({
-        conteudo_template_html: template,
-        conteudo_resolvido_html: conteudoResolvidoLimpo,
-        contexto_json: contextoPersistido,
-        variaveis_utilizadas_json: variaveisUtilizadasFinal,
+        conteudo_template_html: resolved.template,
+        conteudo_resolvido_html: resolved.conteudoResolvidoLimpo,
+        contexto_json: resolved.contextoPersistido,
+        variaveis_utilizadas_json: resolved.variaveisUtilizadasFinal,
         updated_at: new Date().toISOString(),
       })
       .eq("id", docId)
@@ -463,7 +576,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         ok: true,
         data: atualizado,
         html: conteudoResolvidoPreview,
-        ...(debugEnabled ? { debug: debugPayload } : {}),
+        ...(debugEnabled ? { debug: resolved.debugPayload } : {}),
       } satisfies ApiResp<unknown>,
       { status: 200 },
     );

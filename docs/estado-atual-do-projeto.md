@@ -56,6 +56,7 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 - Contexto de emissao inclui escola, snapshot financeiro normalizado e parcelas padronizadas.
 - Colecao MATRICULA_PARCELAS agora retorna VENCIMENTO/VALOR_CENTAVOS/STATUS (com aliases DATA/VALOR).
 - Preview de documentos emitidos: API retorna HTML decodificado quando detectar conteudo escapado (ex.: &lt;h).
+- Preview emitidos: GET /api/documentos/emitidos/[id] aceita mode=raw/resolved para retornar HTML sem resolver ou resolvido.
 
 
 ---
@@ -78,6 +79,7 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 ### Documentos - preview emitidos (admin)
 - Renderizacao do preview usa HTML (emitido com fallback de modelo) com decode controlado quando necessario.
+- Toggle de preview: modelo sem dados x resolver com dados, sem sobrescrever o editor; imprimir usa o modo resolvido.
 
 
 ---
