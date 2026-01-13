@@ -1132,14 +1132,10 @@ export default function NovaMatriculaPage() {
               onChange={(e) => setPoliticaModo(e.target.value as "PADRAO" | "ADIAR_PARA_VENCIMENTO")}
             >
               <option value="PADRAO">Padrao (entrada paga no ato)</option>
-              <option value="ADIAR_PARA_VENCIMENTO">Matricula em processamento (entrada pendente)</option>
+              <option value="ADIAR_PARA_VENCIMENTO">Adiar para vencimento</option>
             </select>
             {politicaModo === "ADIAR_PARA_VENCIMENTO" ? (
               <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Entrada nao paga no ato. O sistema cria a entrada como cobranca pendente com vencimento no proximo
-                  vencimento aplicavel. Mensalidades seguem o Cartao Conexao.
-                </p>
                 <label className="text-sm font-medium">Motivo da excecao</label>
                 <textarea
                   className="w-full rounded-md border px-3 py-2 text-sm"
@@ -1197,20 +1193,7 @@ export default function NovaMatriculaPage() {
             <div>Plano de pagamento: Plano padrao aplicado</div>
             <div>Data da matricula: {dataMatricula}</div>
             <div>Inicio do vinculo: {dataInicioVinculo}</div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span>
-                Politica:{" "}
-                {politicaModo === "PADRAO" ? "Padrao" : "Matricula em processamento (entrada pendente)"}
-              </span>
-              {politicaModo === "ADIAR_PARA_VENCIMENTO" ? (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                  PENDENTE DE CONFIRMACAO
-                </span>
-              ) : null}
-            </div>
-            {politicaModo === "ADIAR_PARA_VENCIMENTO" ? (
-              <div>Motivo da excecao: {motivoExcecao.trim() || "-"}</div>
-            ) : null}
+            <div>Politica: {politicaModo === "PADRAO" ? "Padrao" : "Adiar para vencimento"}</div>
           </div>
         </SectionCard>
 

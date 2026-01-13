@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
-import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 
@@ -72,8 +71,6 @@ type MatriculaItem = {
   unidade_execucao_id: number;
   turma_id: number;
 };
-
-type SupabaseAdminClient = ReturnType<typeof getSupabaseAdmin>;
 
 function badRequest(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null }, { status: 400 });
@@ -284,249 +281,6 @@ function calcularPrimeiraCobranca(params: {
   };
 }
 
-function buildPeriodo(ano: number, mes: number): string {
-  return `${ano}-${String(mes).padStart(2, "0")}`;
-}
-
-function parsePeriodo(periodo: string): { year: number; month: number } | null {
-  if (!/^\d{4}-\d{2}$/.test(periodo)) return null;
-  const year = Number(periodo.slice(0, 4));
-  const month = Number(periodo.slice(5, 7));
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
-  return { year, month };
-}
-
-function buildCompetenciasBetween(inicio: string, fim: string): string[] {
-  const start = parsePeriodo(inicio);
-  const end = parsePeriodo(fim);
-  if (!start || !end) return [];
-  const out: string[] = [];
-  let year = start.year;
-  let month = start.month;
-  while (year < end.year || (year === end.year && month <= end.month)) {
-    out.push(buildPeriodo(year, month));
-    month += 1;
-    if (month > 12) {
-      month = 1;
-      year += 1;
-    }
-  }
-  return out;
-}
-
-function buildDateFromYMD(year: number, month: number, day: number): string {
-  const mm = String(month).padStart(2, "0");
-  const dd = String(day).padStart(2, "0");
-  return `${year}-${mm}-${dd}`;
-}
-
-function clampDiaVencimento(year: number, month: number, day: number): number {
-  const ultimoDia = lastDayOfMonth(year, month);
-  const safeDay = Number.isFinite(day) ? Math.trunc(day) : 12;
-  if (safeDay <= 0) return Math.min(12, ultimoDia);
-  return Math.min(safeDay, ultimoDia);
-}
-
-function ymFromDate(dateYYYYMMDD: string): string {
-  return dateYYYYMMDD.slice(0, 7);
-}
-
-function proximoVencimento(diaVencimento: number, baseDate: string): string {
-  const parts = parseDateParts(baseDate) ?? parseDateParts(new Date().toISOString().slice(0, 10));
-  const safeDia = Math.min(28, Math.max(1, Math.trunc(diaVencimento)));
-  if (!parts) {
-    const now = new Date();
-    return buildDateFromYMD(now.getUTCFullYear(), now.getUTCMonth() + 1, safeDia);
-  }
-  let year = parts.year;
-  let month = parts.month;
-  if (parts.day > safeDia) {
-    month += 1;
-    if (month > 12) {
-      month = 1;
-      year += 1;
-    }
-  }
-  const diaFinal = clampDiaVencimento(year, month, safeDia);
-  return buildDateFromYMD(year, month, diaFinal);
-}
-
-async function ensureContaCreditoConexaoAluno(params: { supabase: SupabaseAdminClient; pessoaTitularId: number }) {
-  const { supabase, pessoaTitularId } = params;
-
-  const { data: contaExistente } = await supabase
-    .from("credito_conexao_contas")
-    .select("id, dia_fechamento, dia_vencimento")
-    .eq("pessoa_titular_id", pessoaTitularId)
-    .eq("tipo_conta", "ALUNO")
-    .eq("ativo", true)
-    .maybeSingle();
-
-  if (contaExistente?.id) return contaExistente;
-
-  const { data: contaNova, error: errNova } = await supabase
-    .from("credito_conexao_contas")
-    .insert({
-      pessoa_titular_id: pessoaTitularId,
-      tipo_conta: "ALUNO",
-      descricao_exibicao: "Cartao Conexao ALUNO",
-      dia_fechamento: 10,
-      dia_vencimento: 12,
-      ativo: true,
-    })
-    .select("id, dia_fechamento, dia_vencimento")
-    .single();
-
-  if (errNova || !contaNova) {
-    throw new Error(`falha_criar_conta_credito_conexao: ${errNova?.message ?? "erro_desconhecido"}`);
-  }
-
-  return contaNova;
-}
-
-async function ensureFaturasAno(params: {
-  supabase: SupabaseAdminClient;
-  contaConexaoId: number;
-  ano: number;
-  diaFechamento: number;
-  diaVencimento: number | null;
-}) {
-  const { supabase, contaConexaoId, ano, diaFechamento, diaVencimento } = params;
-
-  for (let m = 1; m <= 12; m++) {
-    const periodo = buildPeriodo(ano, m);
-
-    const { data: jaExiste } = await supabase
-      .from("credito_conexao_faturas")
-      .select("id")
-      .eq("conta_conexao_id", contaConexaoId)
-      .eq("periodo_referencia", periodo)
-      .maybeSingle();
-
-    if (jaExiste?.id) continue;
-
-    const dataFechamento = buildDateFromYMD(ano, m, diaFechamento);
-    const dataVenc = diaVencimento ? buildDateFromYMD(ano, m, diaVencimento) : null;
-
-    const { error } = await supabase.from("credito_conexao_faturas").insert({
-      conta_conexao_id: contaConexaoId,
-      periodo_referencia: periodo,
-      data_fechamento: dataFechamento,
-      data_vencimento: dataVenc,
-      valor_total_centavos: 0,
-      status: "ABERTA",
-    });
-
-    if (error) {
-      throw new Error(`falha_criar_fatura_credito_conexao: ${error.message}`);
-    }
-  }
-}
-
-async function vincularLancamentoNaFatura(params: {
-  supabase: SupabaseAdminClient;
-  contaConexaoId: number;
-  periodoReferencia: string;
-  lancamentoId: number;
-}) {
-  const { supabase, contaConexaoId, periodoReferencia, lancamentoId } = params;
-
-  const { data: fatura, error: errFat } = await supabase
-    .from("credito_conexao_faturas")
-    .select("id")
-    .eq("conta_conexao_id", contaConexaoId)
-    .eq("periodo_referencia", periodoReferencia)
-    .single();
-
-  if (errFat || !fatura) {
-    throw new Error(`fatura_nao_encontrada_para_periodo: ${periodoReferencia}`);
-  }
-
-  const { error: errLink } = await supabase.from("credito_conexao_fatura_lancamentos").insert({
-    fatura_id: fatura.id,
-    lancamento_id: lancamentoId,
-  });
-
-  if (errLink) {
-    throw new Error(`falha_vincular_lancamento_fatura: ${errLink.message}`);
-  }
-}
-
-async function ensureCobrancaCartaoConexao(params: {
-  supabase: SupabaseAdminClient;
-  pessoaId: number;
-  matriculaId: number;
-  competencia: string;
-  valorCentavos: number;
-  vencimento: string;
-  descricao: string;
-}): Promise<number> {
-  const { supabase, pessoaId, matriculaId, competencia, valorCentavos, vencimento, descricao } = params;
-
-  const { data: existente, error: findErr } = await supabase
-    .from("cobrancas")
-    .select("id")
-    .eq("pessoa_id", pessoaId)
-    .eq("origem_tipo", "MATRICULA")
-    .eq("origem_id", matriculaId)
-    .eq("origem_subtipo", "CARTAO_CONEXAO")
-    .eq("competencia_ano_mes", competencia)
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (findErr) {
-    throw new Error(`falha_buscar_cobranca_cartao: ${findErr.message}`);
-  }
-
-  const existenteId = existente ? Number((existente as { id?: number }).id) : NaN;
-  if (Number.isFinite(existenteId) && existenteId > 0) {
-    const { error: updErr } = await supabase
-      .from("cobrancas")
-      .update({
-        descricao,
-        valor_centavos: valorCentavos,
-        vencimento,
-        origem_subtipo: "CARTAO_CONEXAO",
-        competencia_ano_mes: competencia,
-      })
-      .eq("id", existenteId);
-
-    if (updErr) {
-      throw new Error(`falha_atualizar_cobranca_cartao: ${updErr.message}`);
-    }
-
-    return existenteId;
-  }
-
-  const { data: cobranca, error: insErr } = await supabase
-    .from("cobrancas")
-    .insert({
-      pessoa_id: pessoaId,
-      descricao,
-      valor_centavos: valorCentavos,
-      vencimento,
-      status: "PENDENTE",
-      origem_tipo: "MATRICULA",
-      origem_id: matriculaId,
-      origem_subtipo: "CARTAO_CONEXAO",
-      competencia_ano_mes: competencia,
-    })
-    .select("id")
-    .single();
-
-  if (insErr || !cobranca) {
-    throw new Error(`falha_criar_cobranca_cartao: ${insErr?.message ?? "erro_desconhecido"}`);
-  }
-
-  const id = Number((cobranca as { id?: number }).id);
-  if (!Number.isFinite(id) || id <= 0) {
-    throw new Error("cobranca_id_invalido");
-  }
-
-  return id;
-}
-
 export async function POST(req: Request) {
   try {
     const denied = await guardApiByRole(req as any);
@@ -586,12 +340,6 @@ export async function POST(req: Request) {
     return badRequest("politica_primeiro_pagamento invalida.");
   }
   const politicaModo = politicaPrimeiroPagamento?.modo ?? "PADRAO";
-  if (politicaModo === "ADIAR_PARA_VENCIMENTO") {
-    const motivo = politicaPrimeiroPagamento?.motivo_excecao?.trim() ?? "";
-    if (!motivo) {
-      return badRequest("motivo_excecao_obrigatorio.");
-    }
-  }
 
   const usarExecucoes = modoManual && execucoesIn.length > 0;
   const itensIn = usarExecucoes ? [] : itensParsed ?? [];
@@ -942,7 +690,7 @@ export async function POST(req: Request) {
       .eq("vinculo_id", vinculoId)
       .eq("tipo_matricula", "REGULAR")
       .eq("ano_referencia", anoRef)
-      .in("status_fluxo", ["PENDENTE_CONFIRMACAO", "CONCLUIDA", "ATIVA"])
+      .in("status", ["ATIVA", "TRANCADA"])
       .limit(1);
 
     if (dupErr) {
@@ -958,9 +706,6 @@ export async function POST(req: Request) {
   if (usarExecucoes) {
     totalMensalidadeCentavos = Math.trunc(totalMensalidadeManual);
   }
-  if (politicaModo === "ADIAR_PARA_VENCIMENTO" && totalMensalidadeCentavos <= 0) {
-    return badRequest("total_mensalidade_centavos_obrigatorio_para_adiar.");
-  }
 
   let primeiraCobranca: PrimeiraCobrancaCalc | null = null;
   let primeiraCobrancaStatus: string | null = null;
@@ -969,15 +714,18 @@ export async function POST(req: Request) {
   let excecaoAutorizadaPor: string | null = null;
   let excecaoCriadaEm: string | null = null;
 
-  if (totalMensalidadeCentavos > 0) {
+  if (usarExecucoes) {
     primeiraCobranca = calcularPrimeiraCobranca({
       totalCentavos: totalMensalidadeCentavos,
       dataInicio: dataInicioVinculo,
       dataMatricula: dataMatricula,
     });
 
-    if (politicaModo === "ADIAR_PARA_VENCIMENTO") {
+    if (primeiraCobranca.tipo === "ENTRADA_PRORATA" && politicaModo === "ADIAR_PARA_VENCIMENTO") {
       const motivo = politicaPrimeiroPagamento?.motivo_excecao?.trim() ?? "";
+      if (!motivo) {
+        return badRequest("motivo_excecao_obrigatorio.");
+      }
       excecaoPrimeiroPagamento = true;
       motivoExcecaoPrimeiroPagamento = motivo;
       excecaoAutorizadaPor = user.id;
@@ -988,9 +736,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const statusFluxoInicial =
-    politicaModo === "ADIAR_PARA_VENCIMENTO" ? "PENDENTE_CONFIRMACAO" : "AGUARDANDO_LIQUIDACAO";
-  const concluidaEm = statusFluxoInicial === "CONCLUIDA" ? new Date().toISOString() : null;
+  const statusFluxoInicial = "AGUARDANDO_LIQUIDACAO";
   const insertPayload: Record<string, unknown> = {
     pessoa_id: pessoaId,
     responsavel_financeiro_id: respFinId,
@@ -1005,7 +751,6 @@ export async function POST(req: Request) {
     documento_modelo_id: documentoModeloId,
     observacoes: body.observacoes ?? null,
     status_fluxo: statusFluxoInicial,
-    concluida_em: concluidaEm ?? undefined,
     total_mensalidade_centavos: totalMensalidadeCentavos,
     rascunho_expira_em: new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString(),
     status: "ATIVA",
@@ -1055,220 +800,6 @@ export async function POST(req: Request) {
         });
       }
       return jsonError("MANUAL_INSERT_EXECUCOES_FAIL", "Falha ao salvar valores manuais.", 500, { execErr });
-    }
-  }
-
-  if (politicaModo === "ADIAR_PARA_VENCIMENTO") {
-    try {
-      if (!primeiraCobranca) {
-        return serverError("PRIMEIRA_COBRANCA_AUSENTE", "Falha ao resolver primeira cobranca.", {
-          matricula_id: matriculaId,
-        });
-      }
-
-      const conta = await ensureContaCreditoConexaoAluno({
-        supabase: admin,
-        pessoaTitularId: respFinId,
-      });
-
-      const contaConexaoId = Number((conta as { id?: number }).id);
-      if (!Number.isFinite(contaConexaoId) || contaConexaoId <= 0) {
-        return serverError("CONTA_CARTAO_INVALIDA", "Conta Cartao Conexao invalida.", {
-          matricula_id: matriculaId,
-        });
-      }
-
-      const diaVencimentoRaw = Number((conta as { dia_vencimento?: number | null }).dia_vencimento ?? 12);
-      const diaFechamentoRaw = Number((conta as { dia_fechamento?: number | null }).dia_fechamento ?? 10);
-      const diaVencimento = Math.min(28, Math.max(1, Math.trunc(diaVencimentoRaw)));
-      const diaFechamento = Math.min(28, Math.max(1, Math.trunc(diaFechamentoRaw)));
-
-      const baseData = dataMatricula ?? dataInicioVinculo ?? new Date().toISOString().slice(0, 10);
-      const vencimentoEntrada = proximoVencimento(diaVencimento, baseData);
-
-      if (primeiraCobranca.tipo === "ENTRADA_PRORATA" && primeiraCobranca.valor_centavos > 0) {
-        const { data: cobrancaEntrada, error: errCob } = await admin
-          .from("cobrancas")
-          .insert({
-            pessoa_id: respFinId,
-            descricao: "Entrada / Pro-rata - matricula",
-            valor_centavos: primeiraCobranca.valor_centavos,
-            vencimento: vencimentoEntrada,
-            status: "PENDENTE",
-            origem_tipo: "MATRICULA",
-            origem_id: matriculaId,
-          })
-          .select("id")
-          .single();
-
-        if (errCob || !cobrancaEntrada) {
-          return serverError("CRIAR_COBRANCA_ENTRADA_FAIL", "Falha ao criar cobranca de entrada.", { errCob });
-        }
-
-        const cobrancaEntradaId = Number((cobrancaEntrada as { id?: number }).id);
-        if (Number.isFinite(cobrancaEntradaId) && cobrancaEntradaId > 0) {
-          const { error: updMatErr } = await admin
-            .from("matriculas")
-            .update({
-              primeira_cobranca_cobranca_id: cobrancaEntradaId,
-              primeira_cobranca_status: "ADIADA_EXCECAO",
-              primeira_cobranca_valor_centavos: primeiraCobranca.valor_centavos,
-              primeira_cobranca_data_pagamento: null,
-            })
-            .eq("id", matriculaId);
-
-          if (updMatErr) {
-            return serverError("ATUALIZAR_MATRICULA_ENTRADA_FAIL", "Falha ao atualizar matricula.", {
-              updMatErr,
-            });
-          }
-
-          const ledgerEntrada = {
-            matricula_id: matriculaId,
-            tipo: "ENTRADA",
-            descricao: "Entrada / Pro-rata",
-            valor_centavos: primeiraCobranca.valor_centavos,
-            vencimento: vencimentoEntrada,
-            data_evento: null,
-            status: "PENDENTE",
-            origem_tabela: "cobrancas",
-            origem_id: cobrancaEntradaId,
-          };
-
-          const { error: ledgerErr } = await admin.from("matriculas_financeiro_linhas").insert(ledgerEntrada);
-          if (ledgerErr) {
-            return serverError("INSERIR_LEDGER_ENTRADA_FAIL", "Falha ao registrar ledger da entrada.", {
-              ledgerErr,
-            });
-          }
-        }
-      }
-
-      const competenciaInicio = buildPeriodo(
-        primeiraCobranca.ano_base,
-        primeiraCobranca.mes_primeira_mensalidade,
-      );
-      let competenciaFim = buildPeriodo(primeiraCobranca.ano_base, 12);
-
-      if (Number.isFinite(vinculoId) && vinculoId > 0) {
-        const { data: turmaRef, error: turmaErr } = await admin
-          .from("turmas")
-          .select("periodo_letivo_id")
-          .eq("turma_id", vinculoId)
-          .maybeSingle();
-
-        if (!turmaErr && turmaRef?.periodo_letivo_id) {
-          const periodoLetivoId = Number(turmaRef.periodo_letivo_id);
-          if (Number.isFinite(periodoLetivoId) && periodoLetivoId > 0) {
-            const { data: periodo, error: periodoErr } = await admin
-              .from("periodos_letivos")
-              .select("data_fim")
-              .eq("id", periodoLetivoId)
-              .maybeSingle();
-
-            if (!periodoErr) {
-              const dataFim = typeof periodo?.data_fim === "string" ? periodo.data_fim : null;
-              if (dataFim) {
-                const fim = ymFromDate(dataFim);
-                competenciaFim = fim < competenciaInicio ? competenciaInicio : fim;
-              }
-            }
-          }
-        }
-      }
-
-      const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
-      const anosCompetencia = new Set(competencias.map((competencia) => Number(competencia.slice(0, 4))));
-
-      for (const ano of anosCompetencia) {
-        if (!Number.isFinite(ano)) continue;
-        await ensureFaturasAno({
-          supabase: admin,
-          contaConexaoId,
-          ano,
-          diaFechamento,
-          diaVencimento,
-        });
-      }
-
-      const composicaoBase = usarExecucoes
-        ? {
-            fonte: "MATRICULA_MANUAL",
-            aluno_pessoa_id: pessoaId,
-            responsavel_financeiro_id: respFinId,
-            total_centavos: totalMensalidadeCentavos,
-            itens: execucoesValidas.map((execucao) => ({
-              turma_id: execucao.turma_id,
-              descricao: execucao.nivel ? `Nivel ${execucao.nivel}` : `Turma ${execucao.turma_id}`,
-              valor_centavos: execucao.valor_mensal_centavos,
-            })),
-          }
-        : {
-            fonte: "MATRICULA_AUTO",
-            aluno_pessoa_id: pessoaId,
-            responsavel_financeiro_id: respFinId,
-            total_centavos: totalMensalidadeCentavos,
-          };
-
-      for (const competencia of competencias) {
-        const parsed = parsePeriodo(competencia);
-        if (!parsed) continue;
-        const vencimento = buildDateFromYMD(
-          parsed.year,
-          parsed.month,
-          clampDiaVencimento(parsed.year, parsed.month, diaVencimento),
-        );
-        const descricao = `Mensalidade ${competencia} - matricula`;
-
-        const cobrancaId = await ensureCobrancaCartaoConexao({
-          supabase: admin,
-          pessoaId: respFinId,
-          matriculaId,
-          competencia,
-          valorCentavos: totalMensalidadeCentavos,
-          vencimento,
-          descricao,
-        });
-
-        const lancamento = await upsertLancamentoPorCobranca({
-          cobrancaId,
-          contaConexaoId,
-          competencia,
-          valorCentavos: totalMensalidadeCentavos,
-          descricao,
-          origemSistema: "MATRICULA",
-          origemId: matriculaId,
-          composicaoJson: { ...composicaoBase, competencia },
-        });
-
-        await vincularLancamentoNaFatura({
-          supabase: admin,
-          contaConexaoId,
-          periodoReferencia: competencia,
-          lancamentoId: lancamento.id,
-        });
-
-        const ledgerLinha = {
-          matricula_id: matriculaId,
-          tipo: "LANCAMENTO_CREDITO",
-          descricao,
-          valor_centavos: totalMensalidadeCentavos,
-          vencimento: null,
-          data_evento: `${competencia}-01`,
-          status: "PENDENTE_FATURA",
-          origem_tabela: "credito_conexao_lancamentos",
-          origem_id: lancamento.id,
-        };
-
-        const { error: ledgerErr } = await admin.from("matriculas_financeiro_linhas").insert(ledgerLinha);
-        if (ledgerErr) {
-          return serverError("INSERIR_LEDGER_MENSALIDADE_FAIL", "Falha ao registrar ledger de mensalidade.", {
-            ledgerErr,
-          });
-        }
-      }
-    } catch (err) {
-      return jsonError("ADIAR_PROCESSAMENTO_FAIL", err, 500, { matricula_id: matriculaId });
     }
   }
   return NextResponse.json({ ok: true, matricula: matriculaCriada }, { status: 201 });

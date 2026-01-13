@@ -29,11 +29,6 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 - Colecao `MATRICULA_PARCELAS` padronizada (vencimento/descricao/valor_centavos/status + valor BRL).
 - Modelos: Contrato + Ficha Financeira vinculados ao conjunto MATRICULA_REGULAR/DOCUMENTO_PRINCIPAL.
 
-### Matriculas - status_fluxo (rascunho/pendente_confirmacao)
-- Migration: `20260113_150001_matriculas_status_rascunho.sql`.
-- Colunas auxiliares: `status_fluxo`, `concluida_em`, `cancelada_em`, `motivo_cancelamento`.
-- Check atualizado: `RASCUNHO`, `AGUARDANDO_LIQUIDACAO`, `PENDENTE_CONFIRMACAO`, `ATIVA`, `CANCELADA`, `CONCLUIDA`.
-
 ---
 
 ## APIs concluídas
@@ -64,11 +59,6 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 - Preview emitidos: GET /api/documentos/emitidos/[id] aceita mode=raw/resolved para retornar HTML sem resolver ou resolvido.
 - Resolver de emitidos reconstrui contexto via matricula (mesmo pipeline da emissao).
 
-### Matriculas - criacao/rascunho
-- Duplicidade considera apenas `status_fluxo` contavel (PENDENTE_CONFIRMACAO/CONCLUIDA/ATIVA); rascunho/aguardando nao bloqueiam.
-- Politica ADIAR_PARA_VENCIMENTO: cria entrada pendente com vencimento e mensalidades via Cartao Conexao; status_fluxo = PENDENTE_CONFIRMACAO.
-- DELETE /api/matriculas/rascunho/[id] para limpeza de rascunhos.
-
 
 ---
 
@@ -81,9 +71,6 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 ### Escola — Matrícula Nova / Liquidação
 - Resumo calcula total por múltiplas UEs (ex.: 220 + 180)
 - Integração com Cartão Conexão gera cobrança/lançamento consolidado corretamente
-
-- Politica renomeada para "Matricula em processamento (entrada pendente)" com helper explicativo.
-- Resumo mostra badge "PENDENTE DE CONFIRMACAO" e motivo da excecao quando aplicavel.
 
 ### Registro de Observacoes Operacionais (NASC)
 - Botao flutuante + API + export CSV (MVP)
