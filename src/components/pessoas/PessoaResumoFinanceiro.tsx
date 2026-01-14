@@ -40,6 +40,20 @@ type ResumoFinanceiro = {
   };
 };
 
+type CobrancaAvulsa = {
+  id: number;
+  origem_tipo: string;
+  origem_id: number;
+  valor_centavos: number;
+  vencimento: string;
+  status: string;
+  meio: string;
+  motivo_excecao: string;
+  observacao: string | null;
+  criado_em: string | null;
+  pago_em: string | null;
+};
+
 function formatBRLFromCentavos(v: number): string {
   const reais = (v ?? 0) / 100;
   return reais.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -58,6 +72,8 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ResumoFinanceiro | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [avulsas, setAvulsas] = useState<CobrancaAvulsa[]>([]);
+  const [avulsasError, setAvulsasError] = useState<string | null>(null);
 
   const [payOpen, setPayOpen] = useState(false);
   const [payCobrancaId, setPayCobrancaId] = useState<number | null>(null);
@@ -71,6 +87,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
   const loadResumo = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setAvulsasError(null);
     try {
       const res = await fetch(`/api/pessoas/${pessoaId}/resumo-financeiro`, {
         cache: "no-store",
@@ -81,6 +98,22 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
       }
       const j = (await res.json()) as ResumoFinanceiro;
       setData(j);
+
+      try {
+        const resAv = await fetch(`/api/financeiro/pessoas/${pessoaId}/cobrancas-avulsas`, {
+          cache: "no-store",
+        });
+        const jsonAv = await resAv.json().catch(() => ({}));
+        if (!resAv.ok || !jsonAv?.ok || !Array.isArray(jsonAv?.data)) {
+          setAvulsas([]);
+          setAvulsasError("Falha ao carregar cobrancas avulsas.");
+        } else {
+          setAvulsas(jsonAv.data as CobrancaAvulsa[]);
+        }
+      } catch {
+        setAvulsas([]);
+        setAvulsasError("Falha ao carregar cobrancas avulsas.");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "erro_carregar_resumo";
       setError(message);
@@ -224,6 +257,65 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                       </td>
                     </tr>
                   ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cobrancas avulsas</CardTitle>
+          <CardDescription>
+            Cobrancas geradas manualmente para excecoes (fora do Cartao Conexao).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {avulsasError ? (
+            <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
+              {avulsasError}
+            </div>
+          ) : null}
+
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="py-2 text-left">Cobranca</th>
+                  <th className="py-2 text-left">Vencimento</th>
+                  <th className="py-2 text-left">Status</th>
+                  <th className="py-2 text-left">Meio</th>
+                  <th className="py-2 text-right">Valor</th>
+                  <th className="py-2 text-left">Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {avulsas.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-3 text-muted-foreground">
+                      Nenhuma cobranca avulsa encontrada.
+                    </td>
+                  </tr>
+                ) : (
+                  avulsas.map((c) => {
+                    const vencida =
+                      c.vencimento && c.vencimento < new Date().toISOString().slice(0, 10);
+                    return (
+                      <tr key={c.id} className="border-t">
+                        <td className="py-2">#{c.id}</td>
+                        <td className="py-2">{c.vencimento}</td>
+                        <td className="py-2">
+                          {vencida && c.status === "PENDENTE"
+                            ? statusBadge("VENCIDA", "warning")
+                            : statusBadge(c.status, "neutral")}
+                        </td>
+                        <td className="py-2">{c.meio}</td>
+                        <td className="py-2 text-right">{formatBRLFromCentavos(c.valor_centavos)}</td>
+                        <td className="py-2">{c.motivo_excecao}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

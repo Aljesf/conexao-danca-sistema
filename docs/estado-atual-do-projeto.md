@@ -1,4 +1,4 @@
-﻿# estado-atual-do-projeto.md
+﻿﻿﻿# estado-atual-do-projeto.md
 
 ## Módulo atual
 Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Matrículas com múltiplas Unidades de Execução
@@ -28,6 +28,9 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 - Variaveis novas (aluno/responsavel/matricula/turma/escola/manual + financeiro snapshot).
 - Colecao `MATRICULA_PARCELAS` padronizada (vencimento/descricao/valor_centavos/status + valor BRL).
 - Modelos: Contrato + Ficha Financeira vinculados ao conjunto MATRICULA_REGULAR/DOCUMENTO_PRINCIPAL.
+
+### Financeiro - cobrancas avulsas (entrada adiada)
+- Migration: `20260113_180101_financeiro_cobrancas_avulsas.sql` (tabela + indices + trigger updated_at).
 
 ---
 
@@ -59,6 +62,11 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 - Preview emitidos: GET /api/documentos/emitidos/[id] aceita mode=raw/resolved para retornar HTML sem resolver ou resolvido.
 - Resolver de emitidos reconstrui contexto via matricula (mesmo pipeline da emissao).
 
+### Matriculas - excecao adiar primeiro pagamento
+- Liquidacao gera cobranca avulsa (fora do Cartao Conexao) com vencimento manual; sem recebimento automatico.
+- API de listagem: GET /api/financeiro/pessoas/[pessoaId]/cobrancas-avulsas.
+- API de contas a receber: GET /api/financeiro/cobrancas-avulsas.
+
 
 ---
 
@@ -71,6 +79,13 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 ### Escola — Matrícula Nova / Liquidação
 - Resumo calcula total por múltiplas UEs (ex.: 220 + 180)
 - Integração com Cartão Conexão gera cobrança/lançamento consolidado corretamente
+- Excecao "adiar primeiro pagamento" gera cobranca avulsa com vencimento manual (fora do Cartao Conexao)
+
+### Pessoas - resumo financeiro
+- Painel exibe cobrancas avulsas pendentes com vencimento, status, meio e motivo.
+
+### Financeiro - Contas a Receber
+- Lista inclui cobrancas avulsas geradas pela excecao de entrada.
 
 ### Registro de Observacoes Operacionais (NASC)
 - Botao flutuante + API + export CSV (MVP)
@@ -90,26 +105,31 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 ## Pendências
 
-1) Loja — parcelamento e integração com Cartão Conexão
+1) Matriculas - excecao adiar primeiro pagamento
+- Validar liquidacao com vencimento manual (gera cobranca avulsa).
+- Confirmar cobranca aparece em Contas a Receber e no Relatorio financeiro do aluno.
+- Confirmar nao gera fatura do Cartao Conexao.
+
+2) Loja — parcelamento e integração com Cartão Conexão
 - Garantir que venda parcelada gere N cobranças (1 por competência/parcela), elegíveis ao Cartão Conexão.
 
-2) NEOFIN — validação de integração
+3) NEOFIN — validação de integração
 - Confirmar que a geração de boleto continua ligada apenas à cobrança da fatura:
   - `credito_conexao_faturas.cobranca_id`
   - `cobrancas.origem_tipo = 'CREDITO_CONEXAO_FATURA'`
 - Garantir que cobranças “itens” (matrícula/loja/café) NÃO gerem boletos no NEOFIN.
 
-3) Validação técnica
+4) Validação técnica
 - Rodar `npm run lint` e `npm run build` sem erros após as alterações recentes.
 
-4) Documentos - validacao/prints
+5) Documentos - validacao/prints
 - Aplicar migration no Supabase e emitir Contrato + Ficha Financeira.
 - Gerar prints: placeholders ESCOLA_* resolvidos e parcelas com vencimento/BRL.
 
-5) Documentos - preview HTML
+6) Documentos - preview HTML
 - Rodar diagnostico no SQL Editor (documentos_modelo/documentos_emitidos) e validar emitidos 12/13 (resolver com dados) e doc emitido ID=13 / modelo 41.
 
-6) Documentos - impressao/PDF
+7) Documentos - impressao/PDF
 - Validar emitidos/12 com preview de impressao (largura normal, margem 10mm, sem reserva de header/footer quando vazio).
 
 

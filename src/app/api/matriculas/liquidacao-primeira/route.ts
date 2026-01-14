@@ -1471,17 +1471,17 @@ export async function POST(req: Request) {
     }
 
     const { data: cobranca, error: errCobr } = await supabase
-      .from("cobrancas")
+      .from("financeiro_cobrancas_avulsas")
       .insert({
         pessoa_id: matricula.responsavel_financeiro_id,
-        descricao: "Entrada (excecao adiada) - matricula",
+        origem_tipo: "MATRICULA_ENTRADA",
+        origem_id: matricula.id,
         valor_centavos: valorFinal,
         vencimento: vencimentoManual,
         status: "PENDENTE",
-        metodo_pagamento: meioCobranca,
-        observacoes: body.observacoes ?? null,
-        origem_tipo: "MATRICULA_ENTRADA",
-        origem_id: matricula.id,
+        meio: meioCobranca,
+        motivo_excecao: motivo,
+        observacao: body.observacoes ?? null,
       })
       .select("id")
       .single();
@@ -1501,7 +1501,7 @@ export async function POST(req: Request) {
       vencimento: vencimentoManual,
       data_evento: vencimentoManual,
       status: "PENDENTE",
-      origem_tabela: "cobrancas",
+      origem_tabela: "financeiro_cobrancas_avulsas",
       origem_id: cobranca.id,
     };
 
@@ -1534,7 +1534,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, status: "ADIADA_EXCECAO", cobranca_avulsa_id: cobranca.id });
+    return NextResponse.json({ ok: true, modo: "COBRANCA_AVULSA", cobranca_id: cobranca.id });
   }
 
   return NextResponse.json({ error: "modo_invalido" }, { status: 400 });

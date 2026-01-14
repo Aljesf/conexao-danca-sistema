@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateISO } from "@/lib/formatters/date";
@@ -18,9 +18,30 @@ type Cobranca = {
   saldo_centavos: number;
 };
 
+type CobrancaAvulsa = {
+  id: number;
+  pessoa_id: number;
+  origem_tipo: string;
+  origem_id: number;
+  valor_centavos: number;
+  vencimento: string | null;
+  status: string;
+  meio: string;
+  motivo_excecao: string;
+  observacao?: string | null;
+  criado_em?: string | null;
+  pago_em?: string | null;
+};
+
 type ListResponse = {
   ok: boolean;
   cobrancas?: Cobranca[];
+  error?: string;
+};
+
+type AvulsasResponse = {
+  ok: boolean;
+  data?: CobrancaAvulsa[];
   error?: string;
 };
 
@@ -71,6 +92,9 @@ export default function ContasReceberPage() {
   const [bandeiras, setBandeiras] = useState<BandeiraOp[]>([]);
   const [refsErro, setRefsErro] = useState<string | null>(null);
   const [refsLoading, setRefsLoading] = useState(false);
+  const [avulsas, setAvulsas] = useState<CobrancaAvulsa[]>([]);
+  const [avulsasLoading, setAvulsasLoading] = useState(false);
+  const [avulsasError, setAvulsasError] = useState<string | null>(null);
   const [form, setForm] = useState<ReceberForm>({
     valor_centavos: 0,
     data_pagamento: hojeISO(),
@@ -82,7 +106,7 @@ export default function ContasReceberPage() {
     observacoes: "",
   });
 
-  async function loadCobrancas() {
+  const loadCobrancas = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -102,9 +126,34 @@ export default function ContasReceberPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [statusFiltro, dataInicio, dataFim]);
 
-  async function loadRefs() {
+  const loadAvulsas = useCallback(async () => {
+    setAvulsasLoading(true);
+    setAvulsasError(null);
+    try {
+      const params = new URLSearchParams();
+      const statusMap = statusFiltro === "RECEBIDO" ? "PAGO" : statusFiltro;
+      if (statusMap && statusMap !== "TODOS") params.set("status", statusMap);
+      if (dataInicio) params.set("data_inicio", dataInicio);
+      if (dataFim) params.set("data_fim", dataFim);
+
+      const res = await fetch(`/api/financeiro/cobrancas-avulsas?${params.toString()}`);
+      const json = (await res.json()) as AvulsasResponse;
+      if (!res.ok || !json?.ok || !Array.isArray(json.data)) {
+        throw new Error(json?.error || "Erro ao carregar cobrancas avulsas.");
+      }
+      setAvulsas(json.data);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao carregar cobrancas avulsas.";
+      setAvulsasError(message);
+      setAvulsas([]);
+    } finally {
+      setAvulsasLoading(false);
+    }
+  }, [statusFiltro, dataInicio, dataFim]);
+
+  const loadRefs = useCallback(async () => {
     setRefsLoading(true);
     setRefsErro(null);
     try {
@@ -134,12 +183,13 @@ export default function ContasReceberPage() {
     } finally {
       setRefsLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadCobrancas();
     loadRefs();
-  }, []);
+    loadAvulsas();
+  }, [loadCobrancas, loadRefs, loadAvulsas]);
 
   function abrirModal(c: Cobranca) {
     setModalCobranca(c);
@@ -195,6 +245,7 @@ export default function ContasReceberPage() {
       }
       setModalCobranca(null);
       await loadCobrancas();
+      await loadAvulsas();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro ao registrar recebimento.";
       setError(message);
@@ -218,7 +269,10 @@ export default function ContasReceberPage() {
           </div>
           <button
             className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            onClick={loadCobrancas}
+            onClick={() => {
+              loadCobrancas();
+              loadAvulsas();
+            }}
             disabled={loading}
           >
             Recarregar
@@ -267,7 +321,10 @@ export default function ContasReceberPage() {
         <div className="mt-3 flex gap-2 text-sm">
           <button
             className="rounded-md bg-purple-600 px-3 py-2 text-white shadow-sm hover:bg-purple-500 disabled:opacity-60"
-            onClick={loadCobrancas}
+            onClick={() => {
+              loadCobrancas();
+              loadAvulsas();
+            }}
             disabled={loading}
           >
             Aplicar filtros
@@ -340,6 +397,54 @@ export default function ContasReceberPage() {
                         Registrar recebimento
                       </button>
                     </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Cobrancas avulsas</h2>
+            <p className="text-sm text-slate-600">
+              Cobrancas manuais geradas fora do Cartao Conexao (ex.: entrada adiada).
+            </p>
+          </div>
+        </div>
+        {avulsasError ? (
+          <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {avulsasError}
+          </div>
+        ) : null}
+        {avulsasLoading ? (
+          <p className="mt-3 text-sm text-slate-600">Carregando cobrancas avulsas...</p>
+        ) : avulsas.length === 0 ? (
+          <p className="mt-3 text-sm text-slate-600">Nenhuma cobranca avulsa encontrada.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="min-w-full text-sm text-slate-800">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 text-left">Vencimento</th>
+                  <th className="px-3 py-2 text-left">Pessoa</th>
+                  <th className="px-3 py-2 text-left">Meio</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-right">Valor</th>
+                  <th className="px-3 py-2 text-left">Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {avulsas.map((c) => (
+                  <tr key={`avulsa-${c.id}`} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2 text-slate-700">{formatDateISO(c.vencimento)}</td>
+                    <td className="px-3 py-2 text-slate-700">Pessoa #{c.pessoa_id}</td>
+                    <td className="px-3 py-2 text-slate-700">{c.meio}</td>
+                    <td className="px-3 py-2 text-slate-700">{c.status}</td>
+                    <td className="px-3 py-2 text-right">{formatBRLFromCents(c.valor_centavos)}</td>
+                    <td className="px-3 py-2 text-slate-700">{c.motivo_excecao}</td>
                   </tr>
                 ))}
               </tbody>
