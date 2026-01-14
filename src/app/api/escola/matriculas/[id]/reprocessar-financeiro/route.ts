@@ -369,7 +369,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
 
     const { data: conta, error: contaErr } = await supabase
       .from("credito_conexao_contas")
-      .select("id, pessoa_titular_id, tipo_conta, ativo, dia_vencimento")
+      .select("*")
       .eq("pessoa_titular_id", responsavelId)
       .eq("tipo_conta", "ALUNO")
       .eq("ativo", true)
@@ -385,12 +385,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
         .insert({
           pessoa_titular_id: responsavelId,
           tipo_conta: "ALUNO",
-          descricao_exibicao: "Cartao Conexao ALUNO",
-          dia_fechamento: 10,
-          dia_vencimento: 12,
+          descricao_exibicao: "Cartao Conexao Aluno",
           ativo: true,
         })
-        .select("id, dia_vencimento")
+        .select("*")
         .single();
 
       if (errContaNova) throw errContaNova;

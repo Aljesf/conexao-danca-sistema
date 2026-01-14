@@ -338,7 +338,11 @@ export default function ReprocessarFinanceiroMatriculaPage() {
         </div>
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-3">
-          {err ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm">{err}</div> : null}
+          {err ? (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm whitespace-pre-wrap">
+              {err}
+            </div>
+          ) : null}
           {resp ? (
             <pre className="overflow-auto rounded-md border bg-slate-50 p-3 text-xs">
               {JSON.stringify(resp, null, 2)}
