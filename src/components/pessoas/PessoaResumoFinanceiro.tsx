@@ -310,27 +310,32 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                     </td>
                   </tr>
                 ) : (
-                  data.faturas_credito_conexao.map((f) => (
-                    <tr key={f.id} className="border-t">
-                      <td className="py-2">#{f.id}</td>
-                      <td className="py-2">{f.periodo_referencia}</td>
-                      <td className="py-2">{f.data_vencimento ?? "-"}</td>
-                      <td className="py-2">
-                        {f.vencida ? statusBadge("EM ATRASO", "warning") : statusBadge(f.status, "neutral")}
-                      </td>
-                      <td className="py-2 text-right">
-                        {formatBRLFromCentavos(f.valor_total_centavos)}
-                      </td>
-                      <td className="py-2 text-right">
-                        <Link
-                          className="rounded-lg border px-3 py-1 text-sm hover:bg-slate-50"
-                          href={`/administracao/financeiro/credito-conexao/faturas/${f.id}`}
-                        >
-                          Abrir
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
+                  data.faturas_credito_conexao.map((f) => {
+                    const semValor = (f.valor_total_centavos ?? 0) <= 0;
+                    const atrasada = f.vencida && !semValor;
+                    const statusLabel = semValor ? "SEM LANCAMENTOS" : f.status;
+                    return (
+                      <tr key={f.id} className="border-t">
+                        <td className="py-2">#{f.id}</td>
+                        <td className="py-2">{f.periodo_referencia}</td>
+                        <td className="py-2">{f.data_vencimento ?? "-"}</td>
+                        <td className="py-2">
+                          {atrasada ? statusBadge("EM ATRASO", "warning") : statusBadge(statusLabel, "neutral")}
+                        </td>
+                        <td className="py-2 text-right">
+                          {formatBRLFromCentavos(f.valor_total_centavos)}
+                        </td>
+                        <td className="py-2 text-right">
+                          <Link
+                            className="rounded-lg border px-3 py-1 text-sm hover:bg-slate-50"
+                            href={`/administracao/financeiro/credito-conexao/faturas/${f.id}`}
+                          >
+                            Abrir
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -338,7 +338,7 @@ export default function NovaMatriculaPage() {
   const prorataLabel = resumoPrimeiraCobranca.competenciaInicial
     ? resumoPrimeiraCobranca.temProrata
       ? formatCurrency(resumoPrimeiraCobranca.prorataCentavos ?? 0)
-      : "Sem pró-rata"
+      : "Sem pro-rata"
     : "-";
   const execucoesResumo = useMemo(
     () =>
@@ -1299,7 +1299,7 @@ export default function NovaMatriculaPage() {
             <div>Data da matricula: {dataMatricula}</div>
             <div>Inicio do vinculo: {dataInicioVinculo}</div>
             <div>Competencia inicial: {competenciaInicialLabel}</div>
-            <div>Pró-rata (entrada): {prorataLabel}</div>
+            <div>Pro-rata (entrada): {prorataLabel}</div>
             <div>Mensalidade cheia a partir de: {competenciaMensalidadeLabel}</div>
             <div>Politica: {politicaModo === "PADRAO" ? "Padrao" : "Adiar para vencimento"}</div>
           </div>

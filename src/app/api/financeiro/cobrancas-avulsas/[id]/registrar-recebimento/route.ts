@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type Payload = {
   forma_pagamento?: string;
+  forma_pagamento_id?: number;
   valor_pago_centavos?: number;
   comprovante?: string | null;
   data_pagamento?: string | null; // YYYY-MM-DD (opcional)
@@ -57,10 +58,7 @@ async function getCentroCustoPadraoEscolaId(
     .eq("id", 1)
     .maybeSingle();
 
-  if (error) {
-    return null;
-  }
-
+  if (error) return null;
   const id = (data as { centro_custo_padrao_escola_id?: number | null })?.centro_custo_padrao_escola_id;
   return typeof id === "number" ? id : null;
 }
@@ -76,10 +74,7 @@ async function getCentroCustoFallbackPrimeiroAtivoId(
     .limit(1)
     .maybeSingle();
 
-  if (error || !data?.id) {
-    return null;
-  }
-
+  if (error || !data?.id) return null;
   return Number(data.id);
 }
 
@@ -88,26 +83,68 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
     const cobrancaId = Number(ctx.params.id);
     if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) {
       return NextResponse.json(
-        { ok: false, error_code: "id_invalido", message: "ID de cobrança inválido." },
+        { ok: false, error_code: "id_invalido", message: "ID de cobranca invalido." },
         { status: 400 }
       );
     }
 
     const body = (await req.json().catch(() => null)) as Payload | null;
-    const formaPagamento = normalizeFormaPagamento(body?.forma_pagamento);
+    const supabase = getSupabaseAdmin();
+
+    const formaPagamentoId = Number(body?.forma_pagamento_id ?? NaN);
+    let formaPagamento: string | null = null;
+
+    if (Number.isFinite(formaPagamentoId) && formaPagamentoId > 0) {
+      const { data: forma, error: formaErr } = await supabase
+        .from("formas_pagamento")
+        .select("codigo, nome")
+        .eq("id", formaPagamentoId)
+        .maybeSingle();
+
+      if (formaErr || !forma) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error_code: "forma_pagamento_invalida",
+            message: "Forma de pagamento nao encontrada.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const codigo = typeof forma.codigo === "string" ? forma.codigo : forma.nome;
+      formaPagamento = normalizeFormaPagamento(codigo ?? undefined);
+    } else {
+      formaPagamento = normalizeFormaPagamento(body?.forma_pagamento);
+    }
+
     if (!formaPagamento) {
       return NextResponse.json(
-        { ok: false, error_code: "forma_pagamento_obrigatoria", message: "Forma de pagamento é obrigatória." },
+        { ok: false, error_code: "forma_pagamento_obrigatoria", message: "Forma de pagamento obrigatoria." },
         { status: 400 }
       );
     }
 
-    const dataPagamento = isISODate(body?.data_pagamento) ? body?.data_pagamento : todayISO();
-    const valorPagoCentavosRaw = body?.valor_pago_centavos;
+    if (body?.data_pagamento && !isISODate(body.data_pagamento)) {
+      return NextResponse.json(
+        { ok: false, error_code: "data_pagamento_invalida", message: "Data de pagamento invalida." },
+        { status: 400 }
+      );
+    }
+
+    const dataPagamento = body?.data_pagamento ?? todayISO();
+    const dataPagamentoISO = dataPagamento.includes("T") ? dataPagamento : `${dataPagamento}T00:00:00`;
+
+    if (!Number.isFinite(body?.valor_pago_centavos) || Number(body?.valor_pago_centavos) <= 0) {
+      return NextResponse.json(
+        { ok: false, error_code: "valor_pago_invalido", message: "Valor pago deve ser maior que zero." },
+        { status: 400 }
+      );
+    }
+
+    const valorPago = Math.trunc(Number(body?.valor_pago_centavos));
     const comprovante = typeof body?.comprovante === "string" ? body.comprovante.trim() : "";
     const observacoes = typeof body?.observacoes === "string" ? body.observacoes.trim() : "";
-
-    const supabase = getSupabaseAdmin();
 
     const { data: cobranca, error: cobrErr } = await supabase
       .from("financeiro_cobrancas_avulsas")
@@ -117,42 +154,34 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
 
     if (cobrErr) {
       return NextResponse.json(
-        { ok: false, error_code: "erro_buscar_cobranca", message: "Falha ao buscar cobrança.", details: cobrErr.message },
+        {
+          ok: false,
+          error_code: "erro_buscar_cobranca",
+          message: "Falha ao buscar cobranca.",
+          details: cobrErr.message,
+        },
         { status: 500 }
       );
     }
 
     if (!cobranca) {
       return NextResponse.json(
-        { ok: false, error_code: "cobranca_nao_encontrada", message: "Cobrança não encontrada." },
+        { ok: false, error_code: "cobranca_nao_encontrada", message: "Cobranca nao encontrada." },
         { status: 404 }
       );
     }
 
     const statusAtual = String(cobranca.status ?? "").toUpperCase();
-    if (statusAtual === "PAGO") {
+    if (statusAtual === "PAGO" || statusAtual === "LIQUIDADA") {
       return NextResponse.json(
-        { ok: false, error_code: "cobranca_ja_paga", message: "Cobrança já está paga." },
+        { ok: false, error_code: "cobranca_ja_paga", message: "Cobranca ja paga." },
         { status: 409 }
       );
     }
     if (statusAtual === "CANCELADO") {
       return NextResponse.json(
-        { ok: false, error_code: "cobranca_cancelada", message: "Cobrança cancelada." },
+        { ok: false, error_code: "cobranca_cancelada", message: "Cobranca cancelada." },
         { status: 409 }
-      );
-    }
-
-    const valorBase = Number(cobranca.valor_centavos ?? 0);
-    const valorPago =
-      typeof valorPagoCentavosRaw === "number" && Number.isFinite(valorPagoCentavosRaw)
-        ? Math.trunc(valorPagoCentavosRaw)
-        : valorBase;
-
-    if (!Number.isFinite(valorPago) || valorPago <= 0) {
-      return NextResponse.json(
-        { ok: false, error_code: "valor_pago_invalido", message: "Valor pago deve ser maior que zero." },
-        { status: 400 }
       );
     }
 
@@ -162,7 +191,7 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
 
     if (!centroCustoId) {
       return NextResponse.json(
-        { ok: false, error_code: "centro_custo_indisponivel", message: "Centro de custo não configurado." },
+        { ok: false, error_code: "centro_custo_indisponivel", message: "Centro de custo nao configurado." },
         { status: 500 }
       );
     }
@@ -173,10 +202,11 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
         cobranca_id: null,
         centro_custo_id: centroCustoId,
         valor_centavos: valorPago,
-        data_pagamento: dataPagamento,
+        data_pagamento: dataPagamentoISO,
         metodo_pagamento: formaPagamento,
+        forma_pagamento_codigo: formaPagamento,
         origem_sistema: "COBRANCA_AVULSA",
-        observacoes: observacoes || comprovante || `Recebimento cobrança avulsa #${cobrancaId}`,
+        observacoes: observacoes || comprovante || `Recebimento cobranca avulsa #${cobrancaId}`,
       })
       .select("*")
       .single();
@@ -211,7 +241,7 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
         {
           ok: false,
           error_code: "erro_atualizar_cobranca",
-          message: "Falha ao atualizar cobrança.",
+          message: "Falha ao atualizar cobranca.",
           details: updErr?.message ?? "cobranca_nao_atualizada",
         },
         { status: 500 }
@@ -224,10 +254,10 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
         tipo: "RECEITA",
         centro_custo_id: centroCustoId,
         valor_centavos: valorPago,
-        data_movimento: dataPagamento,
+        data_movimento: dataPagamentoISO,
         origem: "RECEBIMENTO",
         origem_id: recebimento.id,
-        descricao: `Recebimento cobrança avulsa #${cobrancaId}`,
+        descricao: `Recebimento cobranca avulsa #${cobrancaId}`,
         usuario_id: null,
       })
       .select("*")
@@ -254,7 +284,12 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "erro_desconhecido";
     return NextResponse.json(
-      { ok: false, error_code: "erro_interno", message: "Falha inesperada ao registrar recebimento.", details: message },
+      {
+        ok: false,
+        error_code: "erro_interno",
+        message: "Falha inesperada ao registrar recebimento.",
+        details: message,
+      },
       { status: 500 }
     );
   }

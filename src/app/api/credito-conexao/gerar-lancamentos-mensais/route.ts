@@ -230,7 +230,10 @@ export async function POST(req: Request) {
         const statusNorm = row.status ? row.status.trim().toUpperCase() : null;
         const statusOk = !statusNorm || statusNorm === "ATIVO" || statusNorm === "ATIVA";
         if (!statusOk) return false;
-        if (row.dt_fim && row.dt_fim < competenciaInicio) return false;
+        const inicioComp = row.dt_inicio ? row.dt_inicio.slice(0, 7) : null;
+        if (inicioComp && inicioComp > competencia) return false;
+        const fim = row.dt_fim ? row.dt_fim.slice(0, 10) : null;
+        if (fim && fim < competenciaInicio) return false;
         return true;
       })
       .sort((a, b) => {

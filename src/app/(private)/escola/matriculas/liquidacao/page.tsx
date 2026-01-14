@@ -151,7 +151,7 @@ export default function Page() {
 
       const idNum = matriculaId ? Number(matriculaId) : NaN;
       if (!matriculaId || Number.isNaN(idNum)) {
-        setErro("matriculaId ausente ou invÃ¡lido na URL.");
+        setErro("matriculaId ausente ou invalido na URL.");
         setLoading(false);
         return;
       }
@@ -165,7 +165,7 @@ export default function Page() {
         .single();
 
       if (mErr || !m) {
-        setErro("NÃ£o foi possÃ­vel carregar a matrÃ­cula.");
+        setErro("Nao foi possivel carregar a matricula.");
         setLoading(false);
         return;
       }
@@ -200,7 +200,7 @@ export default function Page() {
         .order("nome", { ascending: true });
 
       if (fpErr) {
-        setErro("NÃ£o foi possÃ­vel carregar as formas de pagamento.");
+        setErro("Nao foi possivel carregar as formas de pagamento.");
         setLoading(false);
         return;
       }
@@ -235,7 +235,7 @@ export default function Page() {
   const competenciaMensalidadeLabel = resumoPrimeira.competenciaMensalidade ?? "-";
   const prorataLabel = resumoPrimeira.temProrata
     ? formatCurrency(resumoPrimeira.prorataCentavos ?? 0)
-    : "Sem pró-rata";
+    : "Sem pro-rata";
 
   const onSalvar = async () => {
     if (!matricula) return;
@@ -266,7 +266,7 @@ export default function Page() {
     }
 
     if (precisaMotivo && motivoExcecao.trim().length < 5) {
-      setErro("Informe um motivo objetivo para a exceÃ§Ã£o (mÃ­nimo 5 caracteres).");
+      setErro("Informe um motivo objetivo para a excecao (minimo 5 caracteres).");
       return;
     }
 
@@ -326,7 +326,7 @@ export default function Page() {
           setErro(`${json?.error ?? "Falha ao liquidar a primeira cobranca."} | ${erroDebug}`);
           return;
         }
-        setErro(json?.error ?? "Falha ao liquidar a primeira cobranÃ§a.");
+        setErro(json?.error ?? "Falha ao liquidar a primeira cobranca.");
         return;
       }
 
@@ -334,7 +334,7 @@ export default function Page() {
         const periodoInicio = json.debugCartao.periodo_inicio ?? "-";
         const periodoFim = json.debugCartao.periodo_fim ?? "-";
         alert(
-          `Cartao: executado=${json.debugCartao.executado} lancamentos=${json.debugCartao.created_lancamentos} vinculos=${json.debugCartao.linked_faturas} periodo=${periodoInicio}â†’${periodoFim}`,
+          `Cartao: executado=${json.debugCartao.executado} lancamentos=${json.debugCartao.created_lancamentos} vinculos=${json.debugCartao.linked_faturas} periodo=${periodoInicio}-${periodoFim}`,
         );
       }
 
@@ -353,7 +353,7 @@ export default function Page() {
   if (loading) {
     return (
       <div className="p-6">
-        <h1 className="text-xl font-semibold">LiquidaÃ§Ã£o da MatrÃ­cula</h1>
+        <h1 className="text-xl font-semibold">Liquidacao da Matricula</h1>
         <p className="mt-2 text-sm text-muted-foreground">Carregando...</p>
       </div>
     );
@@ -378,11 +378,11 @@ export default function Page() {
 
   return (
     <div className="p-6 max-w-3xl">
-      <h1 className="text-xl font-semibold">LiquidaÃ§Ã£o da MatrÃ­cula (Ato)</h1>
+      <h1 className="text-xl font-semibold">Liquidacao da Matricula (Ato)</h1>
 
       <p className="text-sm text-muted-foreground mt-2">
-        Este valor refere-se Ã  <strong>entrada no ato</strong>. A mensalidade recorrente serÃ¡ cobrada separadamente via
-        <strong> CartÃ£o ConexÃ£o</strong>.
+        Este valor refere-se a <strong>entrada no ato</strong>. A mensalidade recorrente sera cobrada separadamente via
+        <strong> Cartao Conexao</strong>.
       </p>
 
       <div className="mt-4 rounded-lg border p-3 text-sm text-slate-700">
@@ -390,7 +390,7 @@ export default function Page() {
           <span className="font-medium">Competencia inicial:</span> {competenciaInicialLabel}
         </div>
         <div>
-          <span className="font-medium">Pró-rata (entrada):</span> {prorataLabel}
+          <span className="font-medium">Pro-rata (entrada):</span> {prorataLabel}
         </div>
         <div>
           <span className="font-medium">Mensalidade cheia a partir de:</span> {competenciaMensalidadeLabel}
@@ -406,23 +406,23 @@ export default function Page() {
       <div className="mt-6 space-y-4">
         <div className="rounded-lg border p-4 space-y-3">
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Tipo da primeira cobranÃ§a</label>
+            <label className="text-sm font-medium">Tipo da primeira cobranca</label>
             <select
               className="border rounded-md p-2"
               value={tipoPrimeira}
               onChange={(e) => setTipoPrimeira(e.target.value as typeof tipoPrimeira)}
             >
-              <option value="ENTRADA_PRORATA">Entrada / PrÃ³-rata (fora do CartÃ£o ConexÃ£o)</option>
-              <option value="MENSALIDADE_CHEIA_CARTAO">Mensalidade cheia (CartÃ£o ConexÃ£o)</option>
+              <option value="ENTRADA_PRORATA">Entrada / Pro-rata (fora do Cartao Conexao)</option>
+              <option value="MENSALIDADE_CHEIA_CARTAO">Mensalidade cheia (Cartao Conexao)</option>
             </select>
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">AÃ§Ã£o no ato</label>
+            <label className="text-sm font-medium">Acao no ato</label>
             <select className="border rounded-md p-2" value={modo} onChange={(e) => setModo(e.target.value as typeof modo)}>
               <option value="PAGAR_AGORA">Pagar agora (gera recebimento)</option>
-              <option value="LANCAR_NO_CARTAO">LanÃ§ar no CartÃ£o ConexÃ£o (sem recebimento)</option>
-              <option value="ADIAR_EXCECAO">ExceÃ§Ã£o: adiar primeiro pagamento (auditoria)</option>
+              <option value="LANCAR_NO_CARTAO">Lancar no Cartao Conexao (sem recebimento)</option>
+              <option value="ADIAR_EXCECAO">Excecao: adiar primeiro pagamento (auditoria)</option>
             </select>
           </div>
 
@@ -464,14 +464,14 @@ export default function Page() {
 
           {modo === "LANCAR_NO_CARTAO" ? (
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Valor a lanÃ§ar no CartÃ£o (centavos)</label>
+              <label className="text-sm font-medium">Valor a lancar no Cartao (centavos)</label>
               <input
                 className="border rounded-md p-2"
                 inputMode="numeric"
                 value={valorCentavos}
                 onChange={(e) => setValorCentavos(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">Este lanÃ§amento nÃ£o cria recebimento nem movimento de caixa.</p>
+              <p className="text-xs text-muted-foreground">Este lancamento nao cria recebimento nem movimento de caixa.</p>
             </div>
           ) : null}
 
@@ -515,12 +515,12 @@ export default function Page() {
           ) : null}
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">ObservaÃ§Ãµes (opcional)</label>
+            <label className="text-sm font-medium">Observacoes (opcional)</label>
             <textarea
               className="border rounded-md p-2 min-h-[60px]"
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
-              placeholder="ObservaÃ§Ã£o interna do ato."
+              placeholder="Observacao interna do ato."
             />
           </div>
 
