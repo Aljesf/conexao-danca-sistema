@@ -358,10 +358,10 @@ export default function MatriculaDetalhePage() {
             </Link>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
-                href={`/escola/matriculas/${id}/reprocessar-financeiro`}
+                href={`/escola/matriculas/${id}/reprocessar`}
                 className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
               >
-                Reprocessar financeiro
+                Reprocessar matricula
               </Link>
             </div>
             <div>
