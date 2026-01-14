@@ -138,6 +138,95 @@ function parseMoneyToCentavos(value: string): number | null {
   return Math.round(num * 100);
 }
 
+type ProrataResumo = {
+  competenciaInicial: string | null;
+  competenciaMensalidade: string | null;
+  prorataCentavos: number | null;
+  temProrata: boolean;
+};
+
+function parseDateParts(value: string | null): { year: number; month: number; day: number } | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month, day };
+}
+
+function competenciaFromParts(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function calcularResumoPrimeiraCobranca(
+  totalCentavos: number,
+  dataInicio: string | null,
+  dataMatricula: string | null
+): ProrataResumo {
+  if (!Number.isFinite(totalCentavos) || totalCentavos <= 0) {
+    return { competenciaInicial: null, competenciaMensalidade: null, prorataCentavos: null, temProrata: false };
+  }
+
+  const fallback = parseDateParts(new Date().toISOString().slice(0, 10));
+  const base = parseDateParts(dataInicio) ?? parseDateParts(dataMatricula) ?? fallback;
+  if (!base) {
+    return { competenciaInicial: null, competenciaMensalidade: null, prorataCentavos: null, temProrata: false };
+  }
+
+  const { year, month, day } = base;
+  const competenciaInicial = competenciaFromParts(year, month);
+  const cutoffDia = 12;
+  const inicioLetivoJaneiro = 12;
+
+  if (month === 1) {
+    if (day <= inicioLetivoJaneiro) {
+      return {
+        competenciaInicial,
+        competenciaMensalidade: competenciaInicial,
+        prorataCentavos: 0,
+        temProrata: false,
+      };
+    }
+    const baseDiasJaneiro = 31 - inicioLetivoJaneiro + 1;
+    const diasRestantes = Math.max(0, 31 - day + 1);
+    const valor = Math.round((totalCentavos * diasRestantes) / baseDiasJaneiro);
+    const mesPrimeira = Math.min(12, month + 1);
+    return {
+      competenciaInicial,
+      competenciaMensalidade: competenciaFromParts(year, mesPrimeira),
+      prorataCentavos: Math.max(0, valor),
+      temProrata: true,
+    };
+  }
+
+  if (day <= cutoffDia) {
+    return {
+      competenciaInicial,
+      competenciaMensalidade: competenciaInicial,
+      prorataCentavos: 0,
+      temProrata: false,
+    };
+  }
+
+  const ultimoDia = lastDayOfMonth(year, month);
+  const diasRestantes = Math.max(0, ultimoDia - day + 1);
+  const valor = Math.round((totalCentavos * diasRestantes) / 30);
+  const mesPrimeira = Math.min(12, month + 1);
+  return {
+    competenciaInicial,
+    competenciaMensalidade: competenciaFromParts(year, mesPrimeira),
+    prorataCentavos: Math.max(0, valor),
+    temProrata: true,
+  };
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const text = await res.text();
@@ -235,6 +324,22 @@ export default function NovaMatriculaPage() {
       }),
     [totalMensalidadeCentavos],
   );
+  const resumoPrimeiraCobranca = useMemo(
+    () =>
+      calcularResumoPrimeiraCobranca(
+        totalMensalidadeCentavos,
+        dataInicioVinculo || null,
+        dataMatricula || null,
+      ),
+    [totalMensalidadeCentavos, dataInicioVinculo, dataMatricula],
+  );
+  const competenciaInicialLabel = resumoPrimeiraCobranca.competenciaInicial ?? "-";
+  const competenciaMensalidadeLabel = resumoPrimeiraCobranca.competenciaMensalidade ?? "-";
+  const prorataLabel = resumoPrimeiraCobranca.competenciaInicial
+    ? resumoPrimeiraCobranca.temProrata
+      ? formatCurrency(resumoPrimeiraCobranca.prorataCentavos ?? 0)
+      : "Sem pró-rata"
+    : "-";
   const execucoesResumo = useMemo(
     () =>
       itensCarrinho.map((item, idx) => {
@@ -1193,6 +1298,9 @@ export default function NovaMatriculaPage() {
             <div>Plano de pagamento: Plano padrao aplicado</div>
             <div>Data da matricula: {dataMatricula}</div>
             <div>Inicio do vinculo: {dataInicioVinculo}</div>
+            <div>Competencia inicial: {competenciaInicialLabel}</div>
+            <div>Pró-rata (entrada): {prorataLabel}</div>
+            <div>Mensalidade cheia a partir de: {competenciaMensalidadeLabel}</div>
             <div>Politica: {politicaModo === "PADRAO" ? "Padrao" : "Adiar para vencimento"}</div>
           </div>
         </SectionCard>

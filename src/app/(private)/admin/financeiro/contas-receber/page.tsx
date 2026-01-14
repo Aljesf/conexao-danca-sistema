@@ -288,7 +288,7 @@ export default function ContasReceberPage() {
 
     try {
       const res = await fetch(
-        `/api/financeiro/cobrancas-avulsas/${modalAvulsa.id}/registrar-pagamento`,
+        `/api/financeiro/cobrancas-avulsas/${modalAvulsa.id}/registrar-recebimento`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -299,9 +299,12 @@ export default function ContasReceberPage() {
           }),
         },
       );
-      const json = (await res.json()) as ReceberResponse;
+      const json = (await res.json().catch(() => ({}))) as ReceberResponse & {
+        message?: string;
+        details?: string;
+      };
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Erro ao registrar pagamento.");
+        throw new Error(json?.message || json?.details || json?.error || "Erro ao registrar pagamento.");
       }
 
       setModalAvulsa(null);

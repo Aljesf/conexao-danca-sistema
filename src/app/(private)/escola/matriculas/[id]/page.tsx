@@ -201,7 +201,7 @@ export default function MatriculaDetalhePage() {
 
     try {
       const res = await fetch(
-        `/api/financeiro/cobrancas-avulsas/${payCobrancaId}/registrar-pagamento`,
+        `/api/financeiro/cobrancas-avulsas/${payCobrancaId}/registrar-recebimento`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -213,9 +213,10 @@ export default function MatriculaDetalhePage() {
         },
       );
 
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error ?? `erro_http_${res.status}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json?.ok === false) {
+        const message = json?.message || json?.details || json?.error || `erro_http_${res.status}`;
+        throw new Error(message);
       }
 
       setPayOpen(false);

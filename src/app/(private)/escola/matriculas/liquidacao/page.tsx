@@ -18,7 +18,103 @@ type MatriculaResumo = {
   primeira_cobranca_tipo: string | null;
   primeira_cobranca_valor_centavos: number | null;
   total_mensalidade_centavos: number | null;
+  data_inicio_vinculo?: string | null;
+  data_matricula?: string | null;
 };
+
+type ProrataResumo = {
+  competenciaInicial: string | null;
+  competenciaMensalidade: string | null;
+  prorataCentavos: number | null;
+  temProrata: boolean;
+};
+
+function formatCurrency(cents?: number | null): string {
+  if (typeof cents !== "number" || Number.isNaN(cents)) return "-";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(cents / 100);
+}
+
+function parseDateParts(value: string | null): { year: number; month: number; day: number } | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return { year, month, day };
+}
+
+function competenciaFromParts(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function calcularResumoPrimeiraCobranca(
+  totalCentavos: number,
+  dataInicio: string | null,
+  dataMatricula: string | null
+): ProrataResumo {
+  if (!Number.isFinite(totalCentavos) || totalCentavos <= 0) {
+    return { competenciaInicial: null, competenciaMensalidade: null, prorataCentavos: null, temProrata: false };
+  }
+
+  const fallback = parseDateParts(new Date().toISOString().slice(0, 10));
+  const base = parseDateParts(dataInicio) ?? parseDateParts(dataMatricula) ?? fallback;
+  if (!base) {
+    return { competenciaInicial: null, competenciaMensalidade: null, prorataCentavos: null, temProrata: false };
+  }
+
+  const { year, month, day } = base;
+  const competenciaInicial = competenciaFromParts(year, month);
+  const cutoffDia = 12;
+  const inicioLetivoJaneiro = 12;
+
+  if (month === 1) {
+    if (day <= inicioLetivoJaneiro) {
+      return {
+        competenciaInicial,
+        competenciaMensalidade: competenciaInicial,
+        prorataCentavos: 0,
+        temProrata: false,
+      };
+    }
+    const baseDiasJaneiro = 31 - inicioLetivoJaneiro + 1;
+    const diasRestantes = Math.max(0, 31 - day + 1);
+    const valor = Math.round((totalCentavos * diasRestantes) / baseDiasJaneiro);
+    const mesPrimeira = Math.min(12, month + 1);
+    return {
+      competenciaInicial,
+      competenciaMensalidade: competenciaFromParts(year, mesPrimeira),
+      prorataCentavos: Math.max(0, valor),
+      temProrata: true,
+    };
+  }
+
+  if (day <= cutoffDia) {
+    return {
+      competenciaInicial,
+      competenciaMensalidade: competenciaInicial,
+      prorataCentavos: 0,
+      temProrata: false,
+    };
+  }
+
+  const ultimoDia = lastDayOfMonth(year, month);
+  const diasRestantes = Math.max(0, ultimoDia - day + 1);
+  const valor = Math.round((totalCentavos * diasRestantes) / 30);
+  const mesPrimeira = Math.min(12, month + 1);
+  return {
+    competenciaInicial,
+    competenciaMensalidade: competenciaFromParts(year, mesPrimeira),
+    prorataCentavos: Math.max(0, valor),
+    temProrata: true,
+  };
+}
 
 export default function Page() {
   const router = useRouter();
@@ -63,7 +159,7 @@ export default function Page() {
       const { data: m, error: mErr } = await supabase
         .from("matriculas")
         .select(
-          "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos",
+          "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos, data_inicio_vinculo, data_matricula",
         )
         .eq("id", idNum)
         .single();
@@ -80,9 +176,18 @@ export default function Page() {
         setLoading(false);
         return;
       }
+      if (m.primeira_cobranca_tipo === "ENTRADA_PRORATA" || m.primeira_cobranca_tipo === "MENSALIDADE_CHEIA_CARTAO") {
+        setTipoPrimeira(m.primeira_cobranca_tipo);
+      }
+
       const valorSugeridoEntradaCentavos =
-        typeof m.total_mensalidade_centavos === "number" ? m.total_mensalidade_centavos : 0;
-      const valorStr = typeof m.total_mensalidade_centavos === "number" ? String(valorSugeridoEntradaCentavos) : "";
+        typeof m.primeira_cobranca_valor_centavos === "number"
+          ? m.primeira_cobranca_valor_centavos
+          : typeof m.total_mensalidade_centavos === "number"
+            ? m.total_mensalidade_centavos
+            : 0;
+      const valorStr =
+        typeof valorSugeridoEntradaCentavos === "number" ? String(valorSugeridoEntradaCentavos) : "";
       setValorCentavos(valorStr);
       if (!valorStr) {
         setErro("Valor nao resolvido na matricula. Volte e gere a matricula novamente.");
@@ -118,6 +223,19 @@ export default function Page() {
   const precisaVencimentoManual = modo === "ADIAR_EXCECAO";
   const precisaValor = modo === "PAGAR_AGORA" || modo === "LANCAR_NO_CARTAO";
   const valorResolvido = valorCentavos.trim() !== "";
+  const resumoPrimeira = useMemo(() => {
+    const total = Number(matricula?.total_mensalidade_centavos ?? NaN);
+    return calcularResumoPrimeiraCobranca(
+      Number.isFinite(total) ? total : 0,
+      matricula?.data_inicio_vinculo ?? null,
+      matricula?.data_matricula ?? null,
+    );
+  }, [matricula]);
+  const competenciaInicialLabel = resumoPrimeira.competenciaInicial ?? "-";
+  const competenciaMensalidadeLabel = resumoPrimeira.competenciaMensalidade ?? "-";
+  const prorataLabel = resumoPrimeira.temProrata
+    ? formatCurrency(resumoPrimeira.prorataCentavos ?? 0)
+    : "Sem pró-rata";
 
   const onSalvar = async () => {
     if (!matricula) return;
@@ -266,6 +384,18 @@ export default function Page() {
         Este valor refere-se Ã  <strong>entrada no ato</strong>. A mensalidade recorrente serÃ¡ cobrada separadamente via
         <strong> CartÃ£o ConexÃ£o</strong>.
       </p>
+
+      <div className="mt-4 rounded-lg border p-3 text-sm text-slate-700">
+        <div>
+          <span className="font-medium">Competencia inicial:</span> {competenciaInicialLabel}
+        </div>
+        <div>
+          <span className="font-medium">Pró-rata (entrada):</span> {prorataLabel}
+        </div>
+        <div>
+          <span className="font-medium">Mensalidade cheia a partir de:</span> {competenciaMensalidadeLabel}
+        </div>
+      </div>
 
       {erro ? (
         <div className="mt-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">

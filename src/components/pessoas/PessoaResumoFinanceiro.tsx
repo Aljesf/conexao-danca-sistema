@@ -141,7 +141,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
     try {
       const res = await fetch(
-        `/api/financeiro/cobrancas-avulsas/${payCobrancaId}/registrar-pagamento`,
+        `/api/financeiro/cobrancas-avulsas/${payCobrancaId}/registrar-recebimento`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -153,9 +153,10 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
         },
       );
 
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j?.error ?? `erro_pagamento_${res.status}`);
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j?.ok === false) {
+        const message = j?.message || j?.details || j?.error || `erro_pagamento_${res.status}`;
+        throw new Error(message);
       }
 
       setPayOpen(false);

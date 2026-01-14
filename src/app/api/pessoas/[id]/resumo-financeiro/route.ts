@@ -127,14 +127,15 @@ export async function GET(_: Request, { params }: RouteParams) {
 
     faturas = (faturasRaw ?? []).map((f) => {
       const dataVenc = (f as any).data_vencimento ?? null;
+      const valorTotal = Number((f as any).valor_total_centavos ?? 0);
       return {
         id: Number((f as any).id),
         conta_conexao_id: Number((f as any).conta_conexao_id),
         periodo_referencia: String((f as any).periodo_referencia ?? ""),
         data_vencimento: dataVenc ? String(dataVenc) : null,
-        valor_total_centavos: Number((f as any).valor_total_centavos ?? 0),
+        valor_total_centavos: valorTotal,
         status: String((f as any).status ?? ""),
-        vencida: isVencida(dataVenc ? String(dataVenc) : null, hojeISO),
+        vencida: valorTotal > 0 && isVencida(dataVenc ? String(dataVenc) : null, hojeISO),
         created_at: (f as any).created_at ? String((f as any).created_at) : null,
       };
     });
