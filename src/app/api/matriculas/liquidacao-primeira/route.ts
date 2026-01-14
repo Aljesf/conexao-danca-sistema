@@ -850,6 +850,239 @@ export async function POST(req: Request) {
   const totalMensalidadeManual = execucoesManuais.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
   const turmasManuais = Array.from(new Set(execucoesManuais.map((execucao) => execucao.turma_id)));
   let cobrancasCriadasManual: Array<{ id: number; competencia_ano_mes: string }> = [];
+  const gerarMensalidadesCartao = async (): Promise<
+    | {
+        cobrancasCriadasManual: Array<{ id: number; competencia_ano_mes: string }>;
+        totalMensalidadeCentavos: number;
+      }
+    | NextResponse
+  > => {
+    debugCartao.executado = true;
+    let cobrancasGeradas: Array<{ id: number; competencia_ano_mes: string }> = [];
+    let totalMensalidade = 0;
+
+    try {
+      if (modoManual) {
+        if (!totalMensalidadeManual || totalMensalidadeManual <= 0) {
+          return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
+        }
+
+        const baseDate = dataInicio ?? new Date().toISOString().slice(0, 10);
+        const competenciaBase = ymFromDate(baseDate);
+        const competenciaInicio = shiftPeriodo(competenciaBase, 1) ?? competenciaBase;
+
+        let competenciaFim = competenciaInicio;
+        const turmaReferencia = vinculoId ?? turmasManuais[0] ?? null;
+
+        if (turmaReferencia) {
+          const { data: turmaRef, error: turmaErr } = await supabase
+            .from("turmas")
+            .select("periodo_letivo_id")
+            .eq("turma_id", turmaReferencia)
+            .maybeSingle();
+
+          if (turmaErr) {
+            throw new Error(`falha_buscar_turma: ${turmaErr.message}`);
+          }
+
+          const periodoLetivoId = asInt((turmaRef as { periodo_letivo_id?: unknown })?.periodo_letivo_id);
+          if (periodoLetivoId) {
+            const { data: periodo, error: periodoErr } = await supabase
+              .from("periodos_letivos")
+              .select("data_fim")
+              .eq("id", periodoLetivoId)
+              .maybeSingle();
+
+            if (periodoErr) {
+              throw new Error(`falha_buscar_periodo_letivo: ${periodoErr.message}`);
+            }
+
+            const dataFim = asDateStr((periodo as { data_fim?: unknown })?.data_fim);
+            if (dataFim) {
+              const fim = ymFromDate(dataFim);
+              competenciaFim = fim < competenciaInicio ? competenciaInicio : fim;
+            }
+          }
+        }
+
+        debugCartao.periodo_inicio = competenciaInicio;
+        debugCartao.periodo_fim = competenciaFim;
+        debugCartao.total_mensalidade_centavos = totalMensalidadeManual;
+        debugCartao.itens = execucoesManuais.map((execucao) => ({
+          turma_id: execucao.turma_id,
+          ue_id: null,
+          descricao: execucao.nivel ? `Nivel ${execucao.nivel}` : `Turma ${execucao.turma_id}`,
+          valor_centavos: execucao.valor_mensal_centavos,
+        }));
+
+        const conta = await ensureContaCreditoConexaoAluno({
+          supabase,
+          pessoaTitularId: matricula.responsavel_financeiro_id,
+        });
+
+        debugCartao.conta_conexao_id = conta.id;
+
+        const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
+        const anosCompetencia = new Set(competencias.map((competencia) => Number(competencia.slice(0, 4))));
+
+        for (const ano of anosCompetencia) {
+          await ensureFaturasAno({
+            supabase,
+            contaConexaoId: conta.id,
+            ano,
+            diaFechamento: conta.dia_fechamento ?? 10,
+            diaVencimento: conta.dia_vencimento ?? 12,
+          });
+        }
+
+        const resultado = await gerarCobrancasCartaoManual({
+          supabase,
+          contaConexaoId: conta.id,
+          pessoaId: matricula.responsavel_financeiro_id,
+          matriculaId: matricula.id,
+          alunoId,
+          execucoes: execucoesManuais,
+          totalCentavos: totalMensalidadeManual,
+          competenciaInicio,
+          competenciaFim,
+          diaVencimento: conta.dia_vencimento ?? 12,
+        });
+
+        cobrancasGeradas = resultado.cobrancas;
+        debugCartao.created_lancamentos += resultado.lancamentos;
+        debugCartao.linked_faturas += resultado.lancamentos;
+        totalMensalidade = totalMensalidadeManual;
+      } else {
+        const inicioVinculo = debugCartao.data_inicio_vinculo;
+        const anoRef =
+          typeof matricula.ano_referencia === "number"
+            ? matricula.ano_referencia
+            : inicioVinculo
+              ? yearFromDate(inicioVinculo)
+              : new Date().getFullYear();
+
+        debugCartao.ano_ref = anoRef;
+
+        const mesInicioVinculo = inicioVinculo ? monthFromDate(inicioVinculo) : 1;
+        const mesPrimeiraMensalidadeCheia = Math.min(12, mesInicioVinculo + 1);
+
+        debugCartao.periodo_inicio = buildPeriodo(anoRef, mesPrimeiraMensalidadeCheia);
+        debugCartao.periodo_fim = buildPeriodo(anoRef, 12);
+
+        const composicao = await montarComposicaoMensalidade({
+          supabase,
+          req,
+          cookieHeader,
+          matriculaId: matricula.id,
+          alunoId,
+          anoRef,
+        });
+
+        totalMensalidade = composicao.totalCentavos;
+        debugCartao.total_mensalidade_centavos = totalMensalidade;
+        debugCartao.itens = composicao.itens;
+
+        if (!totalMensalidade || totalMensalidade <= 0) {
+          console.warn(
+            "[matriculas/liquidacao] totalMensalidade ausente para lancamento no cartao. Matricula:",
+            matricula.id,
+          );
+        } else {
+          const conta = await ensureContaCreditoConexaoAluno({
+            supabase,
+            pessoaTitularId: matricula.responsavel_financeiro_id,
+          });
+
+          debugCartao.conta_conexao_id = conta.id;
+
+          await ensureFaturasAno({
+            supabase,
+            contaConexaoId: conta.id,
+            ano: anoRef,
+            diaFechamento: conta.dia_fechamento ?? 10,
+            diaVencimento: conta.dia_vencimento ?? 12,
+          });
+
+          const composicaoBase = {
+            fonte: "MATRICULA_MULTIPLA_UE",
+            aluno_pessoa_id: alunoId,
+            responsavel_financeiro_id: matricula.responsavel_financeiro_id,
+            ano_referencia: anoRef,
+            total_centavos: totalMensalidade,
+            itens: composicao.itens,
+          };
+
+          for (let mes = mesPrimeiraMensalidadeCheia; mes <= 12; mes++) {
+            const periodo = buildPeriodo(anoRef, mes);
+            const dataEvento = buildDateFromYMD(anoRef, mes, 1);
+            const vencimento = buildDateFromYMD(anoRef, mes, conta.dia_vencimento ?? 12);
+            const descricao = `Mensalidade ${periodo} - matricula`;
+
+            const cobrancaId = await ensureCobrancaCartaoConexao({
+              supabase,
+              pessoaId: matricula.responsavel_financeiro_id,
+              matriculaId: matricula.id,
+              competencia: periodo,
+              valorCentavos: totalMensalidade,
+              vencimento,
+              descricao,
+            });
+
+            const lancamento = await upsertLancamentoPorCobranca({
+              cobrancaId,
+              contaConexaoId: Number(conta.id),
+              competencia: periodo,
+              valorCentavos: totalMensalidade,
+              descricao,
+              origemSistema: "MATRICULA",
+              origemId: matricula.id,
+              composicaoJson: { ...composicaoBase, competencia: periodo },
+            });
+
+            debugCartao.created_lancamentos += 1;
+
+            await vincularLancamentoNaFatura({
+              supabase,
+              contaConexaoId: conta.id,
+              periodoReferencia: periodo,
+              lancamentoId: lancamento.id,
+              valorCentavos: totalMensalidade,
+            });
+
+            debugCartao.linked_faturas += 1;
+
+            const ledgerLinha: LedgerInsert = {
+              matricula_id: matricula.id,
+              tipo: "LANCAMENTO_CREDITO",
+              descricao,
+              valor_centavos: totalMensalidade,
+              vencimento: null,
+              data_evento: dataEvento,
+              status: "PENDENTE_FATURA",
+              origem_tabela: "credito_conexao_lancamentos",
+              origem_id: lancamento.id,
+            };
+
+            const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
+            if (ledgerErr) {
+              return NextResponse.json(
+                { error: "falha_inserir_ledger", details: ledgerErr.message },
+                { status: 500 },
+              );
+            }
+          }
+        }
+      }
+    } catch (err) {
+      debugCartao.erro = err instanceof Error ? err.message : "erro_desconhecido";
+      return NextResponse.json({ error: "falha_cartao_conexao", debugCartao }, { status: 500 });
+    }
+
+    return {
+      cobrancasCriadasManual: cobrancasGeradas,
+      totalMensalidadeCentavos: totalMensalidade,
+    };
+  };
 
   try {
     await ensureTurmaAlunoVinculos({
@@ -988,223 +1221,11 @@ export async function POST(req: Request) {
     }
 
     if (body.tipo_primeira_cobranca === "ENTRADA_PRORATA") {
-      debugCartao.executado = true;
-
-      try {
-        if (modoManual) {
-          if (!totalMensalidadeManual || totalMensalidadeManual <= 0) {
-            return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
-          }
-
-          const baseDate = dataInicio ?? new Date().toISOString().slice(0, 10);
-          const competenciaBase = ymFromDate(baseDate);
-          const competenciaInicio = shiftPeriodo(competenciaBase, 1) ?? competenciaBase;
-
-          let competenciaFim = competenciaInicio;
-          const turmaReferencia = vinculoId ?? turmasManuais[0] ?? null;
-
-          if (turmaReferencia) {
-            const { data: turmaRef, error: turmaErr } = await supabase
-              .from("turmas")
-              .select("periodo_letivo_id")
-              .eq("turma_id", turmaReferencia)
-              .maybeSingle();
-
-            if (turmaErr) {
-              throw new Error(`falha_buscar_turma: ${turmaErr.message}`);
-            }
-
-            const periodoLetivoId = asInt((turmaRef as { periodo_letivo_id?: unknown })?.periodo_letivo_id);
-            if (periodoLetivoId) {
-              const { data: periodo, error: periodoErr } = await supabase
-                .from("periodos_letivos")
-                .select("data_fim")
-                .eq("id", periodoLetivoId)
-                .maybeSingle();
-
-              if (periodoErr) {
-                throw new Error(`falha_buscar_periodo_letivo: ${periodoErr.message}`);
-              }
-
-              const dataFim = asDateStr((periodo as { data_fim?: unknown })?.data_fim);
-              if (dataFim) {
-                const fim = ymFromDate(dataFim);
-                competenciaFim = fim < competenciaInicio ? competenciaInicio : fim;
-              }
-            }
-          }
-
-          debugCartao.periodo_inicio = competenciaInicio;
-          debugCartao.periodo_fim = competenciaFim;
-          debugCartao.total_mensalidade_centavos = totalMensalidadeManual;
-          debugCartao.itens = execucoesManuais.map((execucao) => ({
-            turma_id: execucao.turma_id,
-            ue_id: null,
-            descricao: execucao.nivel ? `Nivel ${execucao.nivel}` : `Turma ${execucao.turma_id}`,
-            valor_centavos: execucao.valor_mensal_centavos,
-          }));
-
-          const conta = await ensureContaCreditoConexaoAluno({
-            supabase,
-            pessoaTitularId: matricula.responsavel_financeiro_id,
-          });
-
-          debugCartao.conta_conexao_id = conta.id;
-
-          const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
-          const anosCompetencia = new Set(competencias.map((competencia) => Number(competencia.slice(0, 4))));
-
-          for (const ano of anosCompetencia) {
-            await ensureFaturasAno({
-              supabase,
-              contaConexaoId: conta.id,
-              ano,
-              diaFechamento: conta.dia_fechamento ?? 10,
-              diaVencimento: conta.dia_vencimento ?? 12,
-            });
-          }
-
-          const resultado = await gerarCobrancasCartaoManual({
-            supabase,
-            contaConexaoId: conta.id,
-            pessoaId: matricula.responsavel_financeiro_id,
-            matriculaId: matricula.id,
-            alunoId,
-            execucoes: execucoesManuais,
-            totalCentavos: totalMensalidadeManual,
-            competenciaInicio,
-            competenciaFim,
-            diaVencimento: conta.dia_vencimento ?? 12,
-          });
-
-          cobrancasCriadasManual = resultado.cobrancas;
-          debugCartao.created_lancamentos += resultado.lancamentos;
-          debugCartao.linked_faturas += resultado.lancamentos;
-        } else {
-          const dataInicio = debugCartao.data_inicio_vinculo;
-          const anoRef =
-            typeof matricula.ano_referencia === "number"
-              ? matricula.ano_referencia
-              : dataInicio
-                ? yearFromDate(dataInicio)
-                : new Date().getFullYear();
-
-          debugCartao.ano_ref = anoRef;
-
-          const mesInicioVinculo = dataInicio ? monthFromDate(dataInicio) : 1;
-          const mesPrimeiraMensalidadeCheia = Math.min(12, mesInicioVinculo + 1);
-
-          debugCartao.periodo_inicio = buildPeriodo(anoRef, mesPrimeiraMensalidadeCheia);
-          debugCartao.periodo_fim = buildPeriodo(anoRef, 12);
-
-          const composicao = await montarComposicaoMensalidade({
-            supabase,
-            req,
-            cookieHeader,
-            matriculaId: matricula.id,
-            alunoId,
-            anoRef,
-          });
-
-          const totalMensalidade = composicao.totalCentavos;
-          debugCartao.total_mensalidade_centavos = totalMensalidade;
-          debugCartao.itens = composicao.itens;
-
-          if (!totalMensalidade || totalMensalidade <= 0) {
-            console.warn(
-              "[matriculas/liquidacao] totalMensalidade ausente para lancamento no cartao. Matricula:",
-              matricula.id,
-            );
-          } else {
-            const conta = await ensureContaCreditoConexaoAluno({
-              supabase,
-              pessoaTitularId: matricula.responsavel_financeiro_id,
-            });
-
-            debugCartao.conta_conexao_id = conta.id;
-
-            await ensureFaturasAno({
-              supabase,
-              contaConexaoId: conta.id,
-              ano: anoRef,
-              diaFechamento: conta.dia_fechamento ?? 10,
-              diaVencimento: conta.dia_vencimento ?? 12,
-            });
-
-            const composicaoBase = {
-              fonte: "MATRICULA_MULTIPLA_UE",
-              aluno_pessoa_id: alunoId,
-              responsavel_financeiro_id: matricula.responsavel_financeiro_id,
-              ano_referencia: anoRef,
-              total_centavos: totalMensalidade,
-              itens: composicao.itens,
-            };
-
-            for (let mes = mesPrimeiraMensalidadeCheia; mes <= 12; mes++) {
-              const periodo = buildPeriodo(anoRef, mes);
-              const dataEvento = buildDateFromYMD(anoRef, mes, 1);
-              const vencimento = buildDateFromYMD(anoRef, mes, conta.dia_vencimento ?? 12);
-              const descricao = `Mensalidade ${periodo} - matricula`;
-
-              const cobrancaId = await ensureCobrancaCartaoConexao({
-                supabase,
-                pessoaId: matricula.responsavel_financeiro_id,
-                matriculaId: matricula.id,
-                competencia: periodo,
-                valorCentavos: totalMensalidade,
-                vencimento,
-                descricao,
-              });
-
-              const lancamento = await upsertLancamentoPorCobranca({
-                cobrancaId,
-                contaConexaoId: Number(conta.id),
-                competencia: periodo,
-                valorCentavos: totalMensalidade,
-                descricao,
-                origemSistema: "MATRICULA",
-                origemId: matricula.id,
-                composicaoJson: { ...composicaoBase, competencia: periodo },
-              });
-
-              debugCartao.created_lancamentos += 1;
-
-              await vincularLancamentoNaFatura({
-                supabase,
-                contaConexaoId: conta.id,
-                periodoReferencia: periodo,
-                lancamentoId: lancamento.id,
-                valorCentavos: totalMensalidade,
-              });
-
-              debugCartao.linked_faturas += 1;
-
-              const ledgerLinha: LedgerInsert = {
-                matricula_id: matricula.id,
-                tipo: "LANCAMENTO_CREDITO",
-                descricao,
-                valor_centavos: totalMensalidade,
-                vencimento: null,
-                data_evento: dataEvento,
-                status: "PENDENTE_FATURA",
-                origem_tabela: "credito_conexao_lancamentos",
-                origem_id: lancamento.id,
-              };
-
-              const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
-              if (ledgerErr) {
-                return NextResponse.json(
-                  { error: "falha_inserir_ledger", details: ledgerErr.message },
-                  { status: 500 },
-                );
-              }
-            }
-          }
-        }
-      } catch (err) {
-        debugCartao.erro = err instanceof Error ? err.message : "erro_desconhecido";
-        return NextResponse.json({ error: "falha_cartao_conexao", debugCartao }, { status: 500 });
+      const cartaoResultado = await gerarMensalidadesCartao();
+      if (cartaoResultado instanceof NextResponse) {
+        return cartaoResultado;
       }
+      cobrancasCriadasManual = cartaoResultado.cobrancasCriadasManual;
     }
 
     return NextResponse.json({
@@ -1534,7 +1555,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, modo: "COBRANCA_AVULSA", cobranca_id: cobranca.id });
+    const cartaoResultado = await gerarMensalidadesCartao();
+    if (cartaoResultado instanceof NextResponse) {
+      return cartaoResultado;
+    }
+
+    return NextResponse.json({
+      ok: true,
+      modo: "EXCECAO_COBRANCA_AVULSA",
+      cobranca_avulsa_id: cobranca.id,
+      cartao_conta_id: debugCartao.conta_conexao_id ?? null,
+      lancamentos_criados: debugCartao.created_lancamentos,
+      ...(modoManual
+        ? {
+            total_mensalidade_centavos: cartaoResultado.totalMensalidadeCentavos,
+            turmas_ativadas: turmasManuais,
+            cobrancas_criadas: cartaoResultado.cobrancasCriadasManual,
+          }
+        : { total_mensalidade_centavos: cartaoResultado.totalMensalidadeCentavos }),
+    });
   }
 
   return NextResponse.json({ error: "modo_invalido" }, { status: 400 });

@@ -11,6 +11,7 @@ type Cobranca = {
   valor_centavos: number;
   vencimento: string | null;
   status: string;
+  pessoa_id?: number | null;
   pessoa_nome?: string | null;
   centro_custo_nome?: string | null;
   centro_custo_codigo?: string | null;
@@ -31,6 +32,18 @@ type CobrancaAvulsa = {
   observacao?: string | null;
   criado_em?: string | null;
   pago_em?: string | null;
+};
+
+type ReceberItem = {
+  tipo: "COBRANCA" | "AVULSA";
+  id: number;
+  pessoa_label: string;
+  vencimento: string | null;
+  valor_centavos: number;
+  status: string;
+  origem_label: string;
+  cobranca?: Cobranca;
+  avulsa?: CobrancaAvulsa;
 };
 
 type ListResponse = {
@@ -105,6 +118,12 @@ export default function ContasReceberPage() {
     cartao_numero_parcelas: null,
     observacoes: "",
   });
+  const [modalAvulsa, setModalAvulsa] = useState<CobrancaAvulsa | null>(null);
+  const [avulsaForma, setAvulsaForma] = useState<string>("PIX");
+  const [avulsaValor, setAvulsaValor] = useState<number>(0);
+  const [avulsaComprovante, setAvulsaComprovante] = useState<string>("");
+  const [avulsaPayError, setAvulsaPayError] = useState<string | null>(null);
+  const [avulsaPayLoading, setAvulsaPayLoading] = useState(false);
 
   const loadCobrancas = useCallback(async () => {
     setLoading(true);
@@ -169,7 +188,7 @@ export default function ContasReceberPage() {
       if (formasRes.ok && formasJson?.ok && Array.isArray(formasJson.formas)) {
         setFormas(formasJson.formas);
       } else {
-        setRefsErro("Falha ao carregar dicionário de formas de pagamento.");
+        setRefsErro("Falha ao carregar dicionario de formas de pagamento.");
       }
       if (maquinasRes.ok && maquinasJson?.ok && Array.isArray(maquinasJson.maquinas)) {
         setMaquinas(maquinasJson.maquinas);
@@ -205,13 +224,21 @@ export default function ContasReceberPage() {
     });
   }
 
+  function abrirModalAvulsa(c: CobrancaAvulsa) {
+    setModalAvulsa(c);
+    setAvulsaForma("PIX");
+    setAvulsaValor(c.valor_centavos);
+    setAvulsaComprovante("");
+    setAvulsaPayError(null);
+  }
+
   const formaSelecionada = useMemo(
     () => formas.find((f) => f.codigo === form.forma_pagamento_codigo),
     [formas, form.forma_pagamento_codigo]
   );
   const isCartao = useMemo(() => {
     const tipo = (formaSelecionada?.tipo_base || "").toUpperCase();
-    return tipo.includes("CARTAO") || tipo.includes("CARTÃO") || tipo.includes("CREDITO") || tipo.includes("DEBITO");
+    return tipo.includes("CARTAO") || tipo.includes("CREDITO") || tipo.includes("DEBITO");
   }, [formaSelecionada]);
 
   async function salvarRecebimento(e: React.FormEvent) {
@@ -254,10 +281,94 @@ export default function ContasReceberPage() {
     }
   }
 
-  const totalAberto = useMemo(
-    () => cobrancas.reduce((acc, c) => acc + (c.saldo_centavos || 0), 0),
-    [cobrancas]
-  );
+  async function registrarPagamentoAvulsa() {
+    if (!modalAvulsa) return;
+    setAvulsaPayLoading(true);
+    setAvulsaPayError(null);
+
+    try {
+      const res = await fetch(
+        `/api/financeiro/cobrancas-avulsas/${modalAvulsa.id}/registrar-pagamento`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            forma_pagamento: avulsaForma,
+            valor_pago_centavos: avulsaValor,
+            comprovante: avulsaComprovante || null,
+          }),
+        },
+      );
+      const json = (await res.json()) as ReceberResponse;
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Erro ao registrar pagamento.");
+      }
+
+      setModalAvulsa(null);
+      await loadAvulsas();
+      await loadCobrancas();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao registrar pagamento.";
+      setAvulsaPayError(message);
+    } finally {
+      setAvulsaPayLoading(false);
+    }
+  }
+
+  const receberItens = useMemo<ReceberItem[]>(() => {
+    const itensCobranca = cobrancas.map((c) => {
+      const saldo = Number(c.saldo_centavos || 0);
+      return {
+        tipo: "COBRANCA" as const,
+        id: c.id,
+        pessoa_label: c.pessoa_nome || (c.pessoa_id ? `Pessoa #${c.pessoa_id}` : "--"),
+        vencimento: c.vencimento,
+        valor_centavos: saldo > 0 ? saldo : Number(c.valor_centavos || 0),
+        status: c.status,
+        origem_label: c.descricao,
+        cobranca: c,
+      };
+    });
+
+    const itensAvulsas = avulsas.map((a) => {
+      const origem =
+        a.origem_tipo && a.origem_id
+          ? `${a.origem_tipo} #${a.origem_id}`
+          : a.origem_tipo || "Cobranca avulsa";
+      return {
+        tipo: "AVULSA" as const,
+        id: a.id,
+        pessoa_label: `Pessoa #${a.pessoa_id}`,
+        vencimento: a.vencimento,
+        valor_centavos: Number(a.valor_centavos || 0),
+        status: a.status,
+        origem_label: origem,
+        avulsa: a,
+      };
+    });
+
+    const itens = [...itensCobranca, ...itensAvulsas];
+    itens.sort((a, b) => {
+      const va = a.vencimento || "9999-12-31";
+      const vb = b.vencimento || "9999-12-31";
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+      return a.id - b.id;
+    });
+    return itens;
+  }, [cobrancas, avulsas]);
+
+  const totalAberto = useMemo(() => {
+    return receberItens.reduce((acc, item) => {
+      if (item.tipo === "COBRANCA") {
+        const saldo = item.cobranca?.saldo_centavos ?? 0;
+        return acc + Math.max(0, Number(saldo));
+      }
+      const status = String(item.status || "").toUpperCase();
+      if (status === "PAGO" || status === "CANCELADO") return acc;
+      return acc + Math.max(0, Number(item.valor_centavos || 0));
+    }, 0);
+  }, [receberItens]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
@@ -265,7 +376,7 @@ export default function ContasReceberPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-slate-800">Contas a receber</h1>
-            <p className="text-sm text-slate-600">Dados reais de cobranças e recebimentos.</p>
+            <p className="text-sm text-slate-600">Dados reais de cobrancas e recebimentos.</p>
           </div>
           <button
             className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -279,11 +390,11 @@ export default function ContasReceberPage() {
           </button>
         </div>
         <FinanceHelpCard
-          subtitle="Operação real"
+          subtitle="Operacao real"
           items={[
-            "Lista de cobranças filtradas por status e período.",
-            "Total recebido/saldo calculados pelos recebimentos reais.",
-            "Registrar recebimento atualiza saldo e status para RECEBIDO quando zerar.",
+            "Lista de cobrancas (cartao e avulsas) filtradas por status e periodo.",
+            "Total em aberto soma saldos das cobrancas e avulsas pendentes.",
+            "Registrar recebimento atualiza saldo e status.",
           ]}
         />
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -300,7 +411,7 @@ export default function ContasReceberPage() {
             </select>
           </label>
           <label className="text-sm text-slate-700">
-            Vencimento início
+            Vencimento inicio
             <input
               type="date"
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
@@ -341,118 +452,91 @@ export default function ContasReceberPage() {
         ) : null}
         {refsErro ? (
           <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
-            {refsErro} (usando fallback se necessário)
+            {refsErro} (usando fallback se necessario)
           </div>
         ) : null}
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        {loading ? (
-          <p className="text-sm text-slate-600">Carregando...</p>
-        ) : cobrancas.length === 0 ? (
-          <p className="text-sm text-slate-600">Nenhuma cobrança encontrada.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm text-slate-800">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-left">Vencimento</th>
-                  <th className="px-3 py-2 text-left">Descrição</th>
-                  <th className="px-3 py-2 text-left">Pessoa</th>
-                  <th className="px-3 py-2 text-left">Centro</th>
-                  <th className="px-3 py-2 text-right">Valor</th>
-                  <th className="px-3 py-2 text-right">Recebido</th>
-                  <th className="px-3 py-2 text-right">Saldo</th>
-                  <th className="px-3 py-2 text-center">Status</th>
-                  <th className="px-3 py-2 text-center">Ação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cobrancas.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-2 text-slate-700">{formatDateISO(c.vencimento)}</td>
-                    <td className="px-3 py-2">
-                      <div className="font-medium">{c.descricao}</div>
-                    </td>
-                    <td className="px-3 py-2 text-slate-700">{c.pessoa_nome || "--"}</td>
-                    <td className="px-3 py-2 text-slate-700">
-                      {c.centro_custo_nome || c.centro_custo_codigo || "--"}
-                    </td>
-                    <td className="px-3 py-2 text-right">{formatBRLFromCents(c.valor_centavos)}</td>
-                    <td className="px-3 py-2 text-right">
-                      {formatBRLFromCents(c.total_recebido_centavos)}
-                    </td>
-                    <td className="px-3 py-2 text-right">{formatBRLFromCents(c.saldo_centavos)}</td>
-                    <td className="px-3 py-2 text-center">
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <button
-                        className="rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
-                        disabled={c.status === "RECEBIDO" || c.saldo_centavos <= 0}
-                        onClick={() => abrirModal(c)}
-                      >
-                        Registrar recebimento
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800">Cobrancas avulsas</h2>
-            <p className="text-sm text-slate-600">
-              Cobrancas manuais geradas fora do Cartao Conexao (ex.: entrada adiada).
-            </p>
-          </div>
-        </div>
         {avulsasError ? (
           <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {avulsasError}
           </div>
         ) : null}
-        {avulsasLoading ? (
-          <p className="mt-3 text-sm text-slate-600">Carregando cobrancas avulsas...</p>
-        ) : avulsas.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-600">Nenhuma cobranca avulsa encontrada.</p>
+        {loading || avulsasLoading ? (
+          <p className="text-sm text-slate-600">Carregando...</p>
+        ) : receberItens.length === 0 ? (
+          <p className="text-sm text-slate-600">Nenhuma cobranca encontrada.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="min-w-full text-sm text-slate-800">
               <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                 <tr>
-                  <th className="px-3 py-2 text-left">Vencimento</th>
+                  <th className="px-3 py-2 text-left">Tipo</th>
                   <th className="px-3 py-2 text-left">Pessoa</th>
-                  <th className="px-3 py-2 text-left">Meio</th>
-                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">Vencimento</th>
                   <th className="px-3 py-2 text-right">Valor</th>
-                  <th className="px-3 py-2 text-left">Motivo</th>
+                  <th className="px-3 py-2 text-center">Status</th>
+                  <th className="px-3 py-2 text-left">Origem</th>
+                  <th className="px-3 py-2 text-center">Acoes</th>
                 </tr>
               </thead>
               <tbody>
-                {avulsas.map((c) => (
-                  <tr key={`avulsa-${c.id}`} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-2 text-slate-700">{formatDateISO(c.vencimento)}</td>
-                    <td className="px-3 py-2 text-slate-700">Pessoa #{c.pessoa_id}</td>
-                    <td className="px-3 py-2 text-slate-700">{c.meio}</td>
-                    <td className="px-3 py-2 text-slate-700">{c.status}</td>
-                    <td className="px-3 py-2 text-right">{formatBRLFromCents(c.valor_centavos)}</td>
-                    <td className="px-3 py-2 text-slate-700">{c.motivo_excecao}</td>
-                  </tr>
-                ))}
+                {receberItens.map((item) => {
+                  const isAvulsa = item.tipo === "AVULSA";
+                  const cobranca = item.cobranca;
+                  const avulsa = item.avulsa;
+                  const vencidaAvulsa =
+                    avulsa?.vencimento && avulsa.vencimento < hojeISO() && avulsa.status === "PENDENTE";
+                  const statusLabel = vencidaAvulsa ? "VENCIDA" : item.status;
+                  const canReceiveCobranca =
+                    cobranca && !(cobranca.status === "RECEBIDO" || cobranca.saldo_centavos <= 0);
+                  return (
+                    <tr key={`${item.tipo}-${item.id}`} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-3 py-2 text-slate-700">{isAvulsa ? "Avulsa" : "Cobranca"}</td>
+                      <td className="px-3 py-2 text-slate-700">{item.pessoa_label}</td>
+                      <td className="px-3 py-2 text-slate-700">
+                        {item.vencimento ? formatDateISO(item.vencimento) : "-"}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {formatBRLFromCents(item.valor_centavos)}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                          {statusLabel}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{item.origem_label || "--"}</td>
+                      <td className="px-3 py-2 text-center">
+                        {isAvulsa ? (
+                          avulsa?.status === "PENDENTE" ? (
+                            <button
+                              className="rounded-md bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700"
+                              onClick={() => avulsa && abrirModalAvulsa(avulsa)}
+                            >
+                              Registrar recebimento
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">-</span>
+                          )
+                        ) : (
+                          <button
+                            className="rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
+                            disabled={!canReceiveCobranca}
+                            onClick={() => cobranca && abrirModal(cobranca)}
+                          >
+                            Registrar recebimento
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
-
       {modalCobranca ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-10 sm:items-center">
           <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
@@ -516,14 +600,14 @@ export default function ContasReceberPage() {
                   </label>
                 ) : (
                   <label className="text-sm text-slate-700">
-                    Método (texto)
+                    Metodo (texto)
                     <input
                       className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                       value={form.metodo_pagamento_texto}
                       onChange={(e) =>
                         setForm((f) => ({ ...f, metodo_pagamento_texto: e.target.value }))
                       }
-                      placeholder="PIX, Cartão..."
+                      placeholder="PIX, Cartao..."
                     />
                   </label>
                 )}
@@ -543,7 +627,7 @@ export default function ContasReceberPage() {
                         }))
                       }
                     >
-                      <option value="">Não especificado</option>
+                      <option value="">Nao especificado</option>
                       {maquinas.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.nome || `Maquina #${m.id}`}
@@ -563,7 +647,7 @@ export default function ContasReceberPage() {
                         }))
                       }
                     >
-                      <option value="">Não especificada</option>
+                      <option value="">Nao especificada</option>
                       {bandeiras.map((b) => (
                         <option key={b.id} value={b.id}>
                           {b.nome || b.codigo || `Bandeira #${b.id}`}
@@ -589,7 +673,7 @@ export default function ContasReceberPage() {
               ) : null}
 
               <label className="text-sm text-slate-700">
-                Observações
+                Observacoes
                 <textarea
                   className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                   value={form.observacoes}
@@ -614,6 +698,85 @@ export default function ContasReceberPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {modalAvulsa ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-10 sm:items-center">
+          <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
+            <div className="font-semibold text-slate-800">Registrar recebimento</div>
+            <div className="mt-1 text-sm text-slate-600">Cobranca avulsa #{modalAvulsa.id}</div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="text-sm text-slate-700">
+                Forma de pagamento
+                <select
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  value={avulsaForma}
+                  onChange={(e) => setAvulsaForma(e.target.value)}
+                >
+                  <option value="PIX">PIX</option>
+                  <option value="DINHEIRO">Dinheiro</option>
+                  <option value="CARTAO_CREDITO_AVISTA">Cartao de credito (a vista)</option>
+                  <option value="CARTAO_CREDITO_PARCELADO">Cartao de credito (parcelado)</option>
+                  <option value="CARTAO_CONEXAO_ALUNO">Cartao Conexao (Aluno)</option>
+                  <option value="CARTAO_CONEXAO_COLABORADOR">Cartao Conexao (Colaborador)</option>
+                  <option value="CREDITO_INTERNO_ALUNO">Credito interno (Aluno)</option>
+                  <option value="CREDIARIO_COLABORADOR">Crediario (Colaborador)</option>
+                  <option value="OUTRO">Outro</option>
+                </select>
+              </label>
+
+              <label className="text-sm text-slate-700">
+                Valor pago (centavos)
+                <input
+                  type="number"
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  value={avulsaValor}
+                  onChange={(e) => setAvulsaValor(Number(e.target.value || 0))}
+                />
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Padrao: {formatBRLFromCents(avulsaValor)}.
+                </div>
+              </label>
+
+              <label className="text-sm text-slate-700 md:col-span-2">
+                Comprovante (opcional)
+                <input
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  value={avulsaComprovante}
+                  onChange={(e) => setAvulsaComprovante(e.target.value)}
+                />
+              </label>
+            </div>
+
+            {avulsaPayError ? (
+              <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+                {avulsaPayError}
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                onClick={() => {
+                  setModalAvulsa(null);
+                  setAvulsaPayError(null);
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                onClick={registrarPagamentoAvulsa}
+                disabled={avulsaPayLoading}
+              >
+                {avulsaPayLoading ? "Processando..." : "Confirmar pagamento"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

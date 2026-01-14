@@ -78,9 +78,8 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
   const [payOpen, setPayOpen] = useState(false);
   const [payCobrancaId, setPayCobrancaId] = useState<number | null>(null);
   const [payValor, setPayValor] = useState<number>(0);
-  const [payData, setPayData] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [payMetodo, setPayMetodo] = useState<string>("PIX");
-  const [payObs, setPayObs] = useState<string>("");
+  const [payComprovante, setPayComprovante] = useState<string>("");
   const [payError, setPayError] = useState<string | null>(null);
   const [payLoading, setPayLoading] = useState(false);
 
@@ -100,7 +99,9 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
       setData(j);
 
       try {
-        const resAv = await fetch(`/api/financeiro/pessoas/${pessoaId}/cobrancas-avulsas`, {
+        const responsavelId = Number(j.responsavel_financeiro_id || pessoaId);
+        const alvoId = Number.isFinite(responsavelId) ? responsavelId : pessoaId;
+        const resAv = await fetch(`/api/financeiro/pessoas/${alvoId}/cobrancas-avulsas`, {
           cache: "no-store",
         });
         const jsonAv = await resAv.json().catch(() => ({}));
@@ -140,17 +141,16 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
     try {
       const res = await fetch(
-        "/api/financeiro/cobrancas/registrar-pagamento-presencial",
+        `/api/financeiro/cobrancas-avulsas/${payCobrancaId}/registrar-pagamento`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            cobranca_id: payCobrancaId,
-            data_pagamento: payData,
-            metodo_pagamento: payMetodo,
-            observacao: payObs || null,
+            forma_pagamento: payMetodo,
+            valor_pago_centavos: payValor,
+            comprovante: payComprovante || null,
           }),
-        }
+        },
       );
 
       if (!res.ok) {
@@ -203,69 +203,6 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Pendencias diretas (fora do Cartao Conexao)</CardTitle>
-          <CardDescription>
-            Cobrancas em aberto: {data.agregados.cobrancas_pendentes_qtd} • Total:{" "}
-            {formatBRLFromCentavos(data.agregados.cobrancas_pendentes_total_centavos)} •
-            Vencidas: {data.agregados.cobrancas_vencidas_qtd}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="py-2 text-left">Cobranca</th>
-                  <th className="py-2 text-left">Vencimento</th>
-                  <th className="py-2 text-left">Status</th>
-                  <th className="py-2 text-left">Origem</th>
-                  <th className="py-2 text-right">Valor</th>
-                  <th className="py-2 text-right">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.cobrancas.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-3 text-muted-foreground">
-                      Nenhuma cobranca direta em aberto.
-                    </td>
-                  </tr>
-                ) : (
-                  data.cobrancas.map((c) => (
-                    <tr key={c.id} className="border-t">
-                      <td className="py-2">#{c.id}</td>
-                      <td className="py-2">{c.data_vencimento ?? "—"}</td>
-                      <td className="py-2">
-                        {c.vencida ? statusBadge("VENCIDA", "warning") : statusBadge(c.status, "neutral")}
-                      </td>
-                      <td className="py-2">
-                        {c.origem_tipo || "—"} {c.origem_subtipo ? `(${c.origem_subtipo})` : ""}
-                      </td>
-                      <td className="py-2 text-right">{formatBRLFromCentavos(c.valor_centavos)}</td>
-                      <td className="py-2 text-right">
-                        <Button
-                          variant="secondary"
-                          onClick={() => {
-                            setPayCobrancaId(c.id);
-                            setPayValor(c.valor_centavos);
-                            setPayData(new Date().toISOString().slice(0, 10));
-                            setPayOpen(true);
-                          }}
-                        >
-                          Pagar agora
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Cobrancas avulsas</CardTitle>
           <CardDescription>
             Cobrancas geradas manualmente para excecoes (fora do Cartao Conexao).
@@ -288,12 +225,13 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                   <th className="py-2 text-left">Meio</th>
                   <th className="py-2 text-right">Valor</th>
                   <th className="py-2 text-left">Motivo</th>
+                  <th className="py-2 text-right">Acoes</th>
                 </tr>
               </thead>
               <tbody>
                 {avulsas.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-3 text-muted-foreground">
+                    <td colSpan={7} className="py-3 text-muted-foreground">
                       Nenhuma cobranca avulsa encontrada.
                     </td>
                   </tr>
@@ -313,6 +251,24 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                         <td className="py-2">{c.meio}</td>
                         <td className="py-2 text-right">{formatBRLFromCentavos(c.valor_centavos)}</td>
                         <td className="py-2">{c.motivo_excecao}</td>
+                        <td className="py-2 text-right">
+                          {c.status === "PENDENTE" ? (
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setPayCobrancaId(c.id);
+                                setPayValor(c.valor_centavos);
+                                setPayMetodo("PIX");
+                                setPayComprovante("");
+                                setPayOpen(true);
+                              }}
+                            >
+                              Registrar recebimento
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })
@@ -327,9 +283,9 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
         <CardHeader>
           <CardTitle>Cartao Conexao (faturas)</CardTitle>
           <CardDescription>
-            Faturas pendentes: {data.agregados.faturas_pendentes_qtd} • Total:{" "}
-            {formatBRLFromCentavos(data.agregados.faturas_pendentes_total_centavos)} • Em
-            atraso: {data.agregados.faturas_vencidas_qtd}
+            Faturas pendentes: {data.agregados.faturas_pendentes_qtd} - Total:{" "}
+            {formatBRLFromCentavos(data.agregados.faturas_pendentes_total_centavos)} - Em atraso:{" "}
+            {data.agregados.faturas_vencidas_qtd}
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
@@ -357,7 +313,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                     <tr key={f.id} className="border-t">
                       <td className="py-2">#{f.id}</td>
                       <td className="py-2">{f.periodo_referencia}</td>
-                      <td className="py-2">{f.data_vencimento ?? "—"}</td>
+                      <td className="py-2">{f.data_vencimento ?? "-"}</td>
                       <td className="py-2">
                         {f.vencida ? statusBadge("EM ATRASO", "warning") : statusBadge(f.status, "neutral")}
                       </td>
@@ -392,17 +348,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="text-sm">
-                Data do pagamento
-                <input
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
-                  type="date"
-                  value={payData}
-                  onChange={(e) => setPayData(e.target.value)}
-                />
-              </label>
-
-              <label className="text-sm">
-                Metodo
+                Forma de pagamento
                 <select
                   className="mt-1 w-full rounded-lg border px-3 py-2"
                   value={payMetodo}
@@ -410,25 +356,35 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                 >
                   <option value="PIX">PIX</option>
                   <option value="DINHEIRO">Dinheiro</option>
+                  <option value="CARTAO_CREDITO_AVISTA">Cartao de credito (a vista)</option>
+                  <option value="CARTAO_CREDITO_PARCELADO">Cartao de credito (parcelado)</option>
+                  <option value="CARTAO_CONEXAO_ALUNO">Cartao Conexao (Aluno)</option>
+                  <option value="CARTAO_CONEXAO_COLABORADOR">Cartao Conexao (Colaborador)</option>
+                  <option value="CREDITO_INTERNO_ALUNO">Credito interno (Aluno)</option>
+                  <option value="CREDIARIO_COLABORADOR">Crediario (Colaborador)</option>
+                  <option value="OUTRO">Outro</option>
                 </select>
               </label>
 
-              <div className="text-sm md:col-span-2">
-                Valor da cobranca
-                <div className="mt-1 rounded-lg border px-3 py-2 text-sm">
-                  {formatBRLFromCentavos(payValor)} ({payValor} centavos)
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  O valor segue o cadastro da cobranca.
-                </div>
-              </div>
-
-              <label className="text-sm md:col-span-2">
-                Observacao
+              <label className="text-sm">
+                Valor pago (centavos)
                 <input
                   className="mt-1 w-full rounded-lg border px-3 py-2"
-                  value={payObs}
-                  onChange={(e) => setPayObs(e.target.value)}
+                  type="number"
+                  value={payValor}
+                  onChange={(e) => setPayValor(Number(e.target.value))}
+                />
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Padrao: {formatBRLFromCentavos(payValor)}.
+                </div>
+              </label>
+
+              <label className="text-sm md:col-span-2">
+                Comprovante (opcional)
+                <input
+                  className="mt-1 w-full rounded-lg border px-3 py-2"
+                  value={payComprovante}
+                  onChange={(e) => setPayComprovante(e.target.value)}
                 />
               </label>
             </div>
