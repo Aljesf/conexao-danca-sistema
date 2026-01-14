@@ -436,6 +436,8 @@ function ymFromDate(dateYYYYMMDD: string): string {
   return dateYYYYMMDD.slice(0, 7);
 }
 
+const DIA_CORTE_PRORATA = 12;
+
 function yearFromDate(dateYYYYMMDD: string): number {
   return Number(dateYYYYMMDD.slice(0, 4));
 }
@@ -492,17 +494,20 @@ async function ensureContaCreditoConexaoAluno(params: { supabase: any; pessoaTit
   return contaNova;
 }
 
-async function ensureFaturasAno(params: {
+async function ensureFaturasPeriodo(params: {
   supabase: any;
   contaConexaoId: number;
-  ano: number;
+  competenciaInicio: string;
+  competenciaFim: string;
   diaFechamento: number;
   diaVencimento: number | null;
 }) {
-  const { supabase, contaConexaoId, ano, diaFechamento, diaVencimento } = params;
+  const { supabase, contaConexaoId, competenciaInicio, competenciaFim, diaFechamento, diaVencimento } = params;
+  const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
 
-  for (let m = 1; m <= 12; m++) {
-    const periodo = `${ano}-${String(m).padStart(2, "0")}`;
+  for (const periodo of competencias) {
+    const parsed = parsePeriodo(periodo);
+    if (!parsed) continue;
 
     const { data: jaExiste } = await supabase
       .from("credito_conexao_faturas")
@@ -513,8 +518,8 @@ async function ensureFaturasAno(params: {
 
     if (jaExiste?.id) continue;
 
-    const dataFechamento = buildDateFromYMD(ano, m, diaFechamento);
-    const dataVenc = diaVencimento ? buildDateFromYMD(ano, m, diaVencimento) : null;
+    const dataFechamento = buildDateFromYMD(parsed.year, parsed.month, diaFechamento);
+    const dataVenc = diaVencimento ? buildDateFromYMD(parsed.year, parsed.month, diaVencimento) : null;
 
     const { error } = await supabase.from("credito_conexao_faturas").insert({
       conta_conexao_id: contaConexaoId,
@@ -633,6 +638,29 @@ function buildCompetenciasBetween(inicio: string, fim: string): string[] {
     }
   }
   return out;
+}
+
+function resolveCompetenciaMensalidade(dataBase: string | null, cutoffDia: number = DIA_CORTE_PRORATA): {
+  competenciaBase: string;
+  competenciaMensalidade: string;
+  diaBase: number;
+} {
+  const base = dataBase ?? new Date().toISOString().slice(0, 10);
+  const competenciaBase = ymFromDate(base);
+  const diaBase = Number(base.slice(8, 10));
+  const usaMesSeguinte = Number.isFinite(diaBase) && diaBase > cutoffDia;
+  const competenciaMensalidade = usaMesSeguinte ? shiftPeriodo(competenciaBase, 1) ?? competenciaBase : competenciaBase;
+  return { competenciaBase, competenciaMensalidade, diaBase };
+}
+
+function normalizeCompetenciaFim(competenciaInicio: string, competenciaFim: string): string {
+  const inicio = parsePeriodo(competenciaInicio);
+  const fim = parsePeriodo(competenciaFim);
+  if (!inicio || !fim) return competenciaFim;
+  if (fim.year < inicio.year || (fim.year === inicio.year && fim.month < inicio.month)) {
+    return competenciaInicio;
+  }
+  return competenciaFim;
 }
 
 function clampDiaVencimento(year: number, month: number, day: number): number {
@@ -867,9 +895,8 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
         }
 
-        const baseDate = dataInicio ?? new Date().toISOString().slice(0, 10);
-        const competenciaBase = ymFromDate(baseDate);
-        const competenciaInicio = shiftPeriodo(competenciaBase, 1) ?? competenciaBase;
+        const { competenciaMensalidade } = resolveCompetenciaMensalidade(dataInicio);
+        const competenciaInicio = competenciaMensalidade;
 
         let competenciaFim = competenciaInicio;
         const turmaReferencia = vinculoId ?? turmasManuais[0] ?? null;
@@ -922,18 +949,14 @@ export async function POST(req: Request) {
 
         debugCartao.conta_conexao_id = conta.id;
 
-        const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
-        const anosCompetencia = new Set(competencias.map((competencia) => Number(competencia.slice(0, 4))));
-
-        for (const ano of anosCompetencia) {
-          await ensureFaturasAno({
-            supabase,
-            contaConexaoId: conta.id,
-            ano,
-            diaFechamento: conta.dia_fechamento ?? 10,
-            diaVencimento: conta.dia_vencimento ?? 12,
-          });
-        }
+        await ensureFaturasPeriodo({
+          supabase,
+          contaConexaoId: conta.id,
+          competenciaInicio,
+          competenciaFim,
+          diaFechamento: conta.dia_fechamento ?? 10,
+          diaVencimento: conta.dia_vencimento ?? 12,
+        });
 
         const resultado = await gerarCobrancasCartaoManual({
           supabase,
@@ -963,11 +986,12 @@ export async function POST(req: Request) {
 
         debugCartao.ano_ref = anoRef;
 
-        const mesInicioVinculo = inicioVinculo ? monthFromDate(inicioVinculo) : 1;
-        const mesPrimeiraMensalidadeCheia = Math.min(12, mesInicioVinculo + 1);
+        const { competenciaMensalidade } = resolveCompetenciaMensalidade(inicioVinculo ?? dataInicio);
+        let competenciaFim = buildPeriodo(anoRef, 12);
+        competenciaFim = normalizeCompetenciaFim(competenciaMensalidade, competenciaFim);
 
-        debugCartao.periodo_inicio = buildPeriodo(anoRef, mesPrimeiraMensalidadeCheia);
-        debugCartao.periodo_fim = buildPeriodo(anoRef, 12);
+        debugCartao.periodo_inicio = competenciaMensalidade;
+        debugCartao.periodo_fim = competenciaFim;
 
         const composicao = await montarComposicaoMensalidade({
           supabase,
@@ -995,10 +1019,11 @@ export async function POST(req: Request) {
 
           debugCartao.conta_conexao_id = conta.id;
 
-          await ensureFaturasAno({
+          await ensureFaturasPeriodo({
             supabase,
             contaConexaoId: conta.id,
-            ano: anoRef,
+            competenciaInicio: competenciaMensalidade,
+            competenciaFim,
             diaFechamento: conta.dia_fechamento ?? 10,
             diaVencimento: conta.dia_vencimento ?? 12,
           });
@@ -1012,10 +1037,13 @@ export async function POST(req: Request) {
             itens: composicao.itens,
           };
 
-          for (let mes = mesPrimeiraMensalidadeCheia; mes <= 12; mes++) {
-            const periodo = buildPeriodo(anoRef, mes);
-            const dataEvento = buildDateFromYMD(anoRef, mes, 1);
-            const vencimento = buildDateFromYMD(anoRef, mes, conta.dia_vencimento ?? 12);
+          const competencias = buildCompetenciasBetween(competenciaMensalidade, competenciaFim);
+
+          for (const periodo of competencias) {
+            const parsed = parsePeriodo(periodo);
+            if (!parsed) continue;
+            const dataEvento = buildDateFromYMD(parsed.year, parsed.month, 1);
+            const vencimento = buildDateFromYMD(parsed.year, parsed.month, conta.dia_vencimento ?? 12);
             const descricao = `Mensalidade ${periodo} - matricula`;
 
             const cobrancaId = await ensureCobrancaCartaoConexao({
@@ -1256,8 +1284,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
       }
 
-      const baseDate = dataInicio ?? new Date().toISOString().slice(0, 10);
-      const competenciaInicio = ymFromDate(baseDate);
+      const { competenciaMensalidade } = resolveCompetenciaMensalidade(dataInicio);
+      const competenciaInicio = competenciaMensalidade;
       let competenciaFim = competenciaInicio;
       const turmaReferencia = vinculoId ?? turmasManuais[0] ?? null;
 
@@ -1295,18 +1323,14 @@ export async function POST(req: Request) {
         }
       }
 
-      const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
-      const anosCompetencia = new Set(competencias.map((competencia) => Number(competencia.slice(0, 4))));
-
-      for (const ano of anosCompetencia) {
-        await ensureFaturasAno({
-          supabase,
-          contaConexaoId: conta.id,
-          ano,
-          diaFechamento: conta.dia_fechamento ?? 10,
-          diaVencimento: conta.dia_vencimento ?? 12,
-        });
-      }
+      await ensureFaturasPeriodo({
+        supabase,
+        contaConexaoId: conta.id,
+        competenciaInicio,
+        competenciaFim,
+        diaFechamento: conta.dia_fechamento ?? 10,
+        diaVencimento: conta.dia_vencimento ?? 12,
+      });
 
       const resultado = await gerarCobrancasCartaoManual({
         supabase,
@@ -1346,20 +1370,24 @@ export async function POST(req: Request) {
     }
 
     const anoRef = typeof matricula.ano_referencia === "number" ? matricula.ano_referencia : new Date().getFullYear();
-    await ensureFaturasAno({
+    const { competenciaMensalidade } = resolveCompetenciaMensalidade(dataInicio);
+    const competenciaFim = normalizeCompetenciaFim(competenciaMensalidade, buildPeriodo(anoRef, 12));
+
+    await ensureFaturasPeriodo({
       supabase,
       contaConexaoId: conta.id,
-      ano: anoRef,
+      competenciaInicio: competenciaMensalidade,
+      competenciaFim,
       diaFechamento: conta.dia_fechamento ?? 10,
       diaVencimento: conta.dia_vencimento ?? 12,
     });
 
-    const periodo =
-      typeof matricula.data_inicio_vinculo === "string" ? ymFromDate(matricula.data_inicio_vinculo) : `${anoRef}-01`;
-
-    const anoPeriodo = Number(periodo.slice(0, 4));
-    const mesPeriodo = Number(periodo.slice(5, 7));
-    const vencimento = buildDateFromYMD(anoPeriodo, mesPeriodo, conta.dia_vencimento ?? 12);
+    const periodo = competenciaMensalidade;
+    const parsedPeriodo = parsePeriodo(periodo);
+    if (!parsedPeriodo) {
+      return NextResponse.json({ error: "competencia_invalida" }, { status: 400 });
+    }
+    const vencimento = buildDateFromYMD(parsedPeriodo.year, parsedPeriodo.month, conta.dia_vencimento ?? 12);
 
     let composicao;
     try {
