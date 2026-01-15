@@ -48,7 +48,9 @@ export default function AppShell({ children, systemSettings }: Props) {
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (debouncedTerm.length >= 2) setSearchOpen(true);
+    const digits = debouncedTerm.replace(/\D/g, "");
+    const hasMinQuery = debouncedTerm.length >= 2 || digits.length >= 1;
+    if (hasMinQuery) setSearchOpen(true);
   }
 
   function handleResultClick() {
@@ -64,7 +66,10 @@ export default function AppShell({ children, systemSettings }: Props) {
   }, [searchTerm]);
 
   useEffect(() => {
-    if (debouncedTerm.length < 2) {
+    const digits = debouncedTerm.replace(/\D/g, "");
+    const hasMinQuery = debouncedTerm.length >= 2 || digits.length >= 1;
+
+    if (!hasMinQuery) {
       setSearchResults({ pessoas: [], turmas: [], matriculas: [] });
       setSearchLoading(false);
       setSearchError(null);
@@ -136,7 +141,9 @@ export default function AppShell({ children, systemSettings }: Props) {
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   onFocus={() => {
-                    if (debouncedTerm.length >= 2) setSearchOpen(true);
+                    const digits = debouncedTerm.replace(/\D/g, "");
+                    const hasMinQuery = debouncedTerm.length >= 2 || digits.length >= 1;
+                    if (hasMinQuery) setSearchOpen(true);
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") setSearchOpen(false);

@@ -1,4 +1,4 @@
-import type { SidebarSection } from "./types";
+﻿import type { SidebarSection } from "./types";
 
 export const lojaSidebar: SidebarSection[] = [
   {
@@ -17,7 +17,9 @@ export const lojaSidebar: SidebarSection[] = [
     items: [
       { label: "🏷️ Produtos", href: "/loja/produtos" },
       { label: "📦 Estoque", href: "/loja/estoque" },
+      { label: "📋 Listas de demanda", href: "/loja/listas-demanda" },
       { label: "🚚 Fornecedores", href: "/loja/fornecedores" },
     ],
   },
 ];
+

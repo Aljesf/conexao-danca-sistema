@@ -26,46 +26,64 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const q = sanitizeQuery(url.searchParams.get("q") ?? "");
+  const qDigits = q.replace(/\D/g, "");
+  const hasTextQuery = q.length >= 2;
+  const hasIdQuery = qDigits.length >= 1;
 
-  if (q.length < 2) {
+  if (!hasTextQuery && !hasIdQuery) {
     return NextResponse.json({ ok: true, pessoas: [], turmas: [], matriculas: [] });
   }
 
-  const like = buildIlike(q);
-  const qDigits = q.replace(/\D/g, "");
+  const like = hasTextQuery ? buildIlike(q) : "";
   const likeDigits = qDigits ? `%${qDigits}%` : null;
 
-  const pessoaOrParts = [
-    `nome.ilike.${like}`,
-    `email.ilike.${like}`,
-    `razao_social.ilike.${like}`,
-    `nome_fantasia.ilike.${like}`,
-  ];
-  if (likeDigits) {
-    pessoaOrParts.push(`cpf.ilike.${likeDigits}`, `cnpj.ilike.${likeDigits}`);
-  }
+  let pessoas: Array<{
+    id: number;
+    nome: string | null;
+    email: string | null;
+    cpf: string | null;
+    cnpj?: string | null;
+    razao_social?: string | null;
+    nome_fantasia?: string | null;
+  }> = [];
+  let turmas: Array<{ turma_id: number; nome: string; status: string | null }> = [];
 
-  const [pessoasRes, turmasRes] = await Promise.all([
-    supabase
-      .from("pessoas")
-      .select("id,nome,email,cpf,cnpj,razao_social,nome_fantasia")
-      .or(pessoaOrParts.join(","))
-      .order("nome", { ascending: true })
-      .limit(10),
-    supabase
-      .from("turmas")
-      .select("turma_id,nome,status")
-      .ilike("nome", like)
-      .order("nome", { ascending: true })
-      .limit(10),
-  ]);
+  if (hasTextQuery) {
+    const pessoaOrParts = [
+      `nome.ilike.${like}`,
+      `email.ilike.${like}`,
+      `razao_social.ilike.${like}`,
+      `nome_fantasia.ilike.${like}`,
+    ];
+    if (likeDigits) {
+      pessoaOrParts.push(`cpf.ilike.${likeDigits}`, `cnpj.ilike.${likeDigits}`);
+    }
 
-  if (pessoasRes.error) {
-    return NextResponse.json({ ok: false, error: "erro_busca_pessoas" }, { status: 500 });
-  }
+    const [pessoasRes, turmasRes] = await Promise.all([
+      supabase
+        .from("pessoas")
+        .select("id,nome,email,cpf,cnpj,razao_social,nome_fantasia")
+        .or(pessoaOrParts.join(","))
+        .order("nome", { ascending: true })
+        .limit(10),
+      supabase
+        .from("turmas")
+        .select("turma_id,nome,status")
+        .ilike("nome", like)
+        .order("nome", { ascending: true })
+        .limit(10),
+    ]);
 
-  if (turmasRes.error) {
-    return NextResponse.json({ ok: false, error: "erro_busca_turmas" }, { status: 500 });
+    if (pessoasRes.error) {
+      return NextResponse.json({ ok: false, error: "erro_busca_pessoas" }, { status: 500 });
+    }
+
+    if (turmasRes.error) {
+      return NextResponse.json({ ok: false, error: "erro_busca_turmas" }, { status: 500 });
+    }
+
+    pessoas = pessoasRes.data ?? [];
+    turmas = turmasRes.data ?? [];
   }
 
   let matriculas = [] as Array<{
@@ -75,7 +93,7 @@ export async function GET(req: Request) {
     status: string | null;
   }>;
 
-  if (qDigits) {
+  if (hasIdQuery) {
     const qNumber = Number(qDigits);
     if (Number.isFinite(qNumber)) {
       const { data: mats, error: matErr } = await supabase
@@ -92,10 +110,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({
-    ok: true,
-    pessoas: pessoasRes.data ?? [],
-    turmas: turmasRes.data ?? [],
-    matriculas,
-  });
+  return NextResponse.json({ ok: true, pessoas, turmas, matriculas });
 }
