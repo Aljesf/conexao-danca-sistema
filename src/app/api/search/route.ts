@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function sanitizeQuery(raw: string): string {
+  return raw.trim().replace(/\s+/g, " ");
+}
+
+function buildIlike(q: string): string {
+  return `%${q.replace(/%/g, "").replace(/_/g, "")}%`;
+}
+
 export async function GET(req: Request) {
-  const cookieStore = await cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+  const supabase = await getSupabaseServer();
 
   const {
     data: { user },
@@ -19,33 +25,46 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const q = (url.searchParams.get("q") ?? "").trim();
+  const q = sanitizeQuery(url.searchParams.get("q") ?? "");
 
   if (q.length < 2) {
     return NextResponse.json({ ok: true, pessoas: [], turmas: [], matriculas: [] });
   }
 
-  const like = `%${q.replace(/%/g, "").replace(/_/g, "")}%`;
+  const like = buildIlike(q);
+  const qDigits = q.replace(/\D/g, "");
+  const likeDigits = qDigits ? `%${qDigits}%` : null;
 
-  const { data: pessoas, error: pessoasErr } = await supabase
-    .from("pessoas")
-    .select("id,nome,email,cpf,ativo")
-    .or(`nome.ilike.${like},email.ilike.${like},cpf.ilike.${like}`)
-    .order("nome", { ascending: true })
-    .limit(10);
+  const pessoaOrParts = [
+    `nome.ilike.${like}`,
+    `email.ilike.${like}`,
+    `razao_social.ilike.${like}`,
+    `nome_fantasia.ilike.${like}`,
+  ];
+  if (likeDigits) {
+    pessoaOrParts.push(`cpf.ilike.${likeDigits}`, `cnpj.ilike.${likeDigits}`);
+  }
 
-  if (pessoasErr) {
+  const [pessoasRes, turmasRes] = await Promise.all([
+    supabase
+      .from("pessoas")
+      .select("id,nome,email,cpf,cnpj,razao_social,nome_fantasia")
+      .or(pessoaOrParts.join(","))
+      .order("nome", { ascending: true })
+      .limit(10),
+    supabase
+      .from("turmas")
+      .select("turma_id,nome,status")
+      .ilike("nome", like)
+      .order("nome", { ascending: true })
+      .limit(10),
+  ]);
+
+  if (pessoasRes.error) {
     return NextResponse.json({ ok: false, error: "erro_busca_pessoas" }, { status: 500 });
   }
 
-  const { data: turmas, error: turmasErr } = await supabase
-    .from("turmas")
-    .select("turma_id,nome,status")
-    .ilike("nome", like)
-    .order("nome", { ascending: true })
-    .limit(10);
-
-  if (turmasErr) {
+  if (turmasRes.error) {
     return NextResponse.json({ ok: false, error: "erro_busca_turmas" }, { status: 500 });
   }
 
@@ -56,25 +75,27 @@ export async function GET(req: Request) {
     status: string | null;
   }>;
 
-  const qNumber = Number(q);
-  if (Number.isFinite(qNumber)) {
-    const { data: mats, error: matErr } = await supabase
-      .from("matriculas")
-      .select("id,pessoa_id,ano_referencia,status")
-      .eq("id", qNumber)
-      .limit(10);
+  if (qDigits) {
+    const qNumber = Number(qDigits);
+    if (Number.isFinite(qNumber)) {
+      const { data: mats, error: matErr } = await supabase
+        .from("matriculas")
+        .select("id,pessoa_id,ano_referencia,status")
+        .eq("id", qNumber)
+        .limit(10);
 
-    if (matErr) {
-      return NextResponse.json({ ok: false, error: "erro_busca_matriculas" }, { status: 500 });
+      if (matErr) {
+        return NextResponse.json({ ok: false, error: "erro_busca_matriculas" }, { status: 500 });
+      }
+
+      matriculas = mats ?? [];
     }
-
-    matriculas = mats ?? [];
   }
 
   return NextResponse.json({
     ok: true,
-    pessoas: pessoas ?? [],
-    turmas: turmas ?? [],
+    pessoas: pessoasRes.data ?? [],
+    turmas: turmasRes.data ?? [],
     matriculas,
   });
 }

@@ -22,7 +22,13 @@ type SystemSettings = {
 };
 
 type GlobalSearchResults = {
-  pessoas: Array<{ id: number; nome: string | null; email: string | null; cpf: string | null }>;
+  pessoas: Array<{
+    id: number;
+    nome: string | null;
+    email: string | null;
+    cpf: string | null;
+    cnpj?: string | null;
+  }>;
   turmas: Array<{ turma_id: number; nome: string; status: string | null }>;
   matriculas: Array<{ id: number; pessoa_id: number | null; ano_referencia: number | null; status: string | null }>;
 };
@@ -168,7 +174,7 @@ export default function AppShell({ children, systemSettings }: Props) {
                                   {pessoa.nome ?? `Pessoa #${pessoa.id}`}
                                 </div>
                                 <div className="text-xs text-slate-500">
-                                  {pessoa.email ?? pessoa.cpf ?? `ID ${pessoa.id}`}
+                                  {pessoa.email ?? pessoa.cpf ?? pessoa.cnpj ?? `ID ${pessoa.id}`}
                                 </div>
                               </Link>
                             </li>
