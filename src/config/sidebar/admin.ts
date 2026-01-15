@@ -28,6 +28,7 @@ export const adminSidebar: SidebarSection[] = [
     title: "🤝 Movimento Conexao Danca (Admin)",
     items: [
       { label: "📌 Painel do Movimento", href: "/admin/movimento" },
+      { label: "📋 Analises socioeconomicas", href: "/admin/movimento/analises" },
       { label: "🎟️ Beneficiarios", href: "/admin/movimento/beneficiarios" },
       { label: "💳 Conceder creditos", href: "/admin/movimento/creditos" },
       { label: "📦 Lotes", href: "/admin/movimento/lotes" },

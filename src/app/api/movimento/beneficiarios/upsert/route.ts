@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 type UpsertBeneficiarioBody = {
   pessoa_id: string;
+  analise_id?: string;
   responsavel_id?: string | null;
   eh_menor?: boolean;
   acionar_form_responsavel?: boolean;
@@ -73,6 +74,58 @@ async function ensureInstancia(params: {
   return created;
 }
 
+async function validateAnaliseId(params: {
+  supabase: ReturnType<typeof getSupabaseAdmin>;
+  pessoaId: string;
+  analiseId: string;
+}) {
+  const { data, error } = await params.supabase
+    .from("movimento_analises_socioeconomicas")
+    .select("id,pessoa_id")
+    .eq("id", params.analiseId)
+    .single();
+
+  if (error || !data?.id) {
+    throw new Error("ANALISE_NAO_ENCONTRADA");
+  }
+
+  if (String(data.pessoa_id) !== params.pessoaId) {
+    throw new Error("ANALISE_PESSOA_INVALIDA");
+  }
+}
+
+async function createAnalise(params: {
+  supabase: ReturnType<typeof getSupabaseAdmin>;
+  pessoaId: string;
+  contexto: "ASE_18_PLUS" | "ASE_MENOR";
+  responsavelId: string | null;
+}) {
+  if (params.contexto === "ASE_MENOR" && !params.responsavelId) {
+    throw new Error("RESPONSAVEL_OBRIGATORIO");
+  }
+
+  const { data, error } = await params.supabase
+    .from("movimento_analises_socioeconomicas")
+    .insert({
+      pessoa_id: Number(params.pessoaId),
+      responsavel_legal_pessoa_id:
+        params.contexto === "ASE_MENOR" && params.responsavelId
+          ? Number(params.responsavelId)
+          : null,
+      contexto: params.contexto,
+      status: "RASCUNHO",
+      respostas_json: {},
+    })
+    .select("id")
+    .single();
+
+  if (error || !data?.id) {
+    throw new Error(error?.message || "ERRO_CRIAR_ANALISE");
+  }
+
+  return String(data.id);
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = getSupabaseAdmin();
@@ -83,7 +136,9 @@ export async function POST(req: Request) {
     }
 
     const pessoa_id = String(body.pessoa_id);
+    const analise_id = body.analise_id ? String(body.analise_id) : null;
     const responsavel_id = body.responsavel_id ? String(body.responsavel_id) : null;
+    const contexto = Boolean(body.eh_menor ?? false) ? "ASE_MENOR" : "ASE_18_PLUS";
 
     const payloadBenef = {
       pessoa_id,
@@ -107,8 +162,16 @@ export async function POST(req: Request) {
     if (errFound) throw new Error(errFound.message);
 
     let beneficiarioId: string;
+    let analiseFinal: string | null = analise_id;
+
+    if (analise_id) {
+      await validateAnaliseId({ supabase, pessoaId: pessoa_id, analiseId: analise_id });
+    }
 
     if (found?.id) {
+      if (analiseFinal) {
+        (payloadBenef as { analise_id: string }).analise_id = analiseFinal;
+      }
       const { data: updated, error: errUpd } = await supabase
         .from("movimento_beneficiarios")
         .update(payloadBenef)
@@ -119,6 +182,19 @@ export async function POST(req: Request) {
       if (errUpd) throw new Error(errUpd.message);
       beneficiarioId = String(updated.id);
     } else {
+      if (!analiseFinal) {
+        analiseFinal = await createAnalise({
+          supabase,
+          pessoaId: pessoa_id,
+          contexto,
+          responsavelId: responsavel_id,
+        });
+      }
+
+      if (analiseFinal) {
+        (payloadBenef as { analise_id: string }).analise_id = analiseFinal;
+      }
+
       const insertPayload = {
         ...payloadBenef,
         criado_em: new Date().toISOString(),
