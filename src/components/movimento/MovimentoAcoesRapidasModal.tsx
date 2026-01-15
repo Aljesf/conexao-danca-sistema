@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 type FormTipo = "RESPONSAVEL_LEGAL" | "ALUNO_MENOR" | "ALUNO_MAIOR";
 type ConcessaoStatus = "ATIVA" | "SUSPENSA" | "ENCERRADA";
-type LiquidacaoModelo = "FAMILIA" | "MOVIMENTO" | "HIBRIDO";
 type AcaoTipo = "CAMPANHA" | "DOACAO" | "INTERCAMBIO" | "ACOLHIMENTO" | "EVENTO" | "OUTRA";
 
 type PessoaSugestao = {
@@ -70,18 +69,14 @@ export function MovimentoAcoesRapidasModal(props: {
   const [acionarC, setAcionarC] = useState<boolean>(false);
 
   const [concessaoStatus, setConcessaoStatus] = useState<ConcessaoStatus>("ATIVA");
-  const [modeloLiquidacao, setModeloLiquidacao] = useState<LiquidacaoModelo>("MOVIMENTO");
-  const [pctMov, setPctMov] = useState<number>(100);
-  const [pctFam, setPctFam] = useState<number>(0);
 
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
   const [revisaoPrevista, setRevisaoPrevista] = useState<string>("");
+  const [diaVencCiclo, setDiaVencCiclo] = useState<number>(1);
 
   const [justificativa, setJustificativa] = useState<string>("");
   const [observacoes, setObservacoes] = useState<string>("");
-
-  const pctOk = useMemo(() => pctMov + pctFam === 100 && pctMov >= 0 && pctFam >= 0, [pctMov, pctFam]);
 
   const [acaoTipo, setAcaoTipo] = useState<AcaoTipo>("OUTRA");
   const [acaoTitulo, setAcaoTitulo] = useState<string>("");
@@ -124,11 +119,6 @@ export function MovimentoAcoesRapidasModal(props: {
       return;
     }
 
-    if (modeloLiquidacao === "HIBRIDO" && !pctOk) {
-      setMsg({ kind: "err", text: "No modelo hibrido, os percentuais devem somar 100%." });
-      return;
-    }
-
     if (acionarA && !responsavelId) {
       setMsg({ kind: "err", text: "Para acionar o formulario A, selecione o responsavel legal." });
       return;
@@ -136,6 +126,10 @@ export function MovimentoAcoesRapidasModal(props: {
 
     setBusy(true);
     try {
+      const diaVenc = Number.isFinite(diaVencCiclo)
+        ? Math.min(28, Math.max(1, Math.trunc(diaVencCiclo)))
+        : 1;
+
       const payload = {
         pessoa_id: pessoaId,
         responsavel_id: responsavelId || null,
@@ -149,9 +143,7 @@ export function MovimentoAcoesRapidasModal(props: {
           data_inicio: toISODateOrNull(dataInicio) ?? undefined,
           data_fim: toISODateOrNull(dataFim),
           revisao_prevista_em: toISODateOrNull(revisaoPrevista),
-          modelo_liquidacao: modeloLiquidacao,
-          percentual_movimento: modeloLiquidacao === "HIBRIDO" ? pctMov : 100,
-          percentual_familia: modeloLiquidacao === "HIBRIDO" ? pctFam : 0,
+          dia_vencimento_ciclo: diaVenc,
           justificativa: justificativa || null,
         },
       };
@@ -251,7 +243,7 @@ export function MovimentoAcoesRapidasModal(props: {
               onClick={() => setAba("BOLSA")}
               disabled={busy}
             >
-              Bolsa / bolsista
+              Concessao de oportunidade
             </button>
             <button
               className={`rounded-full px-4 py-2 text-sm ${aba === "ACAO" ? "bg-pink-600 text-white" : "bg-gray-100 hover:bg-gray-200"}`}
@@ -393,7 +385,7 @@ export function MovimentoAcoesRapidasModal(props: {
               </div>
 
               <div className="rounded-2xl border p-4">
-                <div className="text-sm font-semibold">Concessao institucional</div>
+                <div className="text-sm font-semibold">Concessao de oportunidade (Movimento)</div>
 
                 <label className="mt-3 block text-xs text-gray-500">Status</label>
                 <select
@@ -407,52 +399,26 @@ export function MovimentoAcoesRapidasModal(props: {
                   <option value="ENCERRADA">ENCERRADA</option>
                 </select>
 
-                <label className="mt-3 block text-xs text-gray-500">Modelo de liquidacao</label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={modeloLiquidacao}
-                  onChange={(e) => setModeloLiquidacao(e.target.value as LiquidacaoModelo)}
-                  disabled={busy}
-                >
-                  <option value="MOVIMENTO">MOVIMENTO</option>
-                  <option value="FAMILIA">FAMILIA</option>
-                  <option value="HIBRIDO">HIBRIDO</option>
-                </select>
-
-                {modeloLiquidacao === "HIBRIDO" && (
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-500">% Movimento</label>
-                      <input
-                        className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                        type="number"
-                        value={pctMov}
-                        onChange={(e) => setPctMov(Number(e.target.value))}
-                        disabled={busy}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500">% Familia</label>
-                      <input
-                        className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                        type="number"
-                        value={pctFam}
-                        onChange={(e) => setPctFam(Number(e.target.value))}
-                        disabled={busy}
-                      />
-                    </div>
-                    {!pctOk && <div className="col-span-2 text-xs text-rose-600">Percentuais somam 100%.</div>}
-                  </div>
-                )}
-
-                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div>
-                    <label className="block text-xs text-gray-500">Inicio</label>
+                    <label className="block text-xs text-gray-500">Data de entrada no Movimento</label>
                     <input
                       className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
                       type="date"
                       value={dataInicio}
                       onChange={(e) => setDataInicio(e.target.value)}
+                      disabled={busy}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500">Dia de vencimento do ciclo (padrao 1)</label>
+                    <input
+                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                      type="number"
+                      min={1}
+                      max={28}
+                      value={diaVencCiclo}
+                      onChange={(e) => setDiaVencCiclo(Number(e.target.value))}
                       disabled={busy}
                     />
                   </div>

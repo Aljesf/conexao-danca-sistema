@@ -15,9 +15,7 @@ type UpsertBeneficiarioBody = {
     data_inicio?: string;
     data_fim?: string | null;
     revisao_prevista_em?: string | null;
-    modelo_liquidacao?: "FAMILIA" | "MOVIMENTO" | "HIBRIDO";
-    percentual_movimento?: number;
-    percentual_familia?: number;
+    dia_vencimento_ciclo?: number;
     justificativa?: string | null;
   };
 };
@@ -137,6 +135,7 @@ export async function POST(req: Request) {
     }
 
     let concessao: { id: string } | null = null;
+    let cicloCriado = false;
 
     if (body.concessao) {
       const c = body.concessao;
@@ -151,17 +150,18 @@ export async function POST(req: Request) {
 
       if (concFindErr) throw new Error(concFindErr.message);
 
+      const diaVenc = Number.isFinite(c.dia_vencimento_ciclo)
+        ? Math.trunc(c.dia_vencimento_ciclo as number)
+        : 1;
+      const diaVencimentoCiclo = Math.min(28, Math.max(1, diaVenc));
+
       const concPayload = {
         beneficiario_id: beneficiarioId,
         status: c.status ?? "ATIVA",
         data_inicio: c.data_inicio ?? undefined,
         data_fim: c.data_fim ?? null,
         revisao_prevista_em: c.revisao_prevista_em ?? null,
-        modelo_liquidacao: c.modelo_liquidacao ?? "MOVIMENTO",
-        percentual_movimento:
-          typeof c.percentual_movimento === "number" ? c.percentual_movimento : 100,
-        percentual_familia:
-          typeof c.percentual_familia === "number" ? c.percentual_familia : 0,
+        dia_vencimento_ciclo: diaVencimentoCiclo,
         justificativa: c.justificativa ?? null,
         atualizado_em: new Date().toISOString(),
       };
@@ -188,6 +188,36 @@ export async function POST(req: Request) {
 
         if (concInsErr) throw new Error(concInsErr.message);
         concessao = { id: String(concIns.id) };
+      }
+
+      if (concessao?.id) {
+        const inicio = c.data_inicio ?? new Date().toISOString().slice(0, 10);
+        const competencia = `${inicio.slice(0, 7)}-01`;
+        const dia = String(diaVencimentoCiclo).padStart(2, "0");
+        const dtVencimento = `${inicio.slice(0, 7)}-${dia}`;
+
+        const { data: cicloExist, error: cicloFindErr } = await supabase
+          .from("movimento_concessoes_ciclos")
+          .select("id")
+          .eq("concessao_id", concessao.id)
+          .eq("competencia", competencia)
+          .maybeSingle();
+
+        if (cicloFindErr) throw new Error(cicloFindErr.message);
+
+        if (!cicloExist) {
+          const { error: cicloInsErr } = await supabase
+            .from("movimento_concessoes_ciclos")
+            .insert({
+              concessao_id: concessao.id,
+              competencia,
+              dt_vencimento: dtVencimento,
+              criado_em: new Date().toISOString(),
+            });
+
+          if (cicloInsErr) throw new Error(cicloInsErr.message);
+          cicloCriado = true;
+        }
       }
     }
 
@@ -225,6 +255,7 @@ export async function POST(req: Request) {
       beneficiario: { id: beneficiarioId },
       concessao,
       instancias,
+      ciclo_criado: cicloCriado,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
