@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import SectionCard from "@/components/layout/SectionCard";
 
 type Lista = {
@@ -15,7 +15,8 @@ type Lista = {
 };
 
 export default function LojaListasDemandaPage() {
-  const [listas, setListas] = useState<Lista[]>([]);
+  const [ativas, setAtivas] = useState<Lista[]>([]);
+  const [encerradas, setEncerradas] = useState<Lista[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [titulo, setTitulo] = useState("");
   const [contexto, setContexto] = useState("");
@@ -23,9 +24,14 @@ export default function LojaListasDemandaPage() {
   async function carregar() {
     setErro(null);
     const r = await fetch("/api/loja/listas-demanda");
-    const j = (await r.json()) as { data?: Lista[]; error?: string };
+    const j = (await r.json()) as {
+      ativas?: Lista[];
+      encerradas?: Lista[];
+      error?: string;
+    };
     if (!r.ok) return setErro(j.error ?? "erro_ao_carregar");
-    setListas(j.data ?? []);
+    setAtivas(j.ativas ?? []);
+    setEncerradas(j.encerradas ?? []);
   }
 
   async function criar() {
@@ -35,8 +41,8 @@ export default function LojaListasDemandaPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ titulo, contexto: contexto || null }),
     });
-    const j = (await r.json()) as { data?: { id: number }; error?: string };
-    if (!r.ok) return setErro(j.error ?? "erro_ao_criar");
+    const j = (await r.json()) as { ok?: boolean; error?: string };
+    if (!r.ok || j.ok === false) return setErro(j.error ?? "erro_ao_criar");
     setTitulo("");
     setContexto("");
     await carregar();
@@ -45,9 +51,6 @@ export default function LojaListasDemandaPage() {
   useEffect(() => {
     void carregar();
   }, []);
-
-  const ativas = useMemo(() => listas.filter((l) => l.status === "ATIVA"), [listas]);
-  const encerradas = useMemo(() => listas.filter((l) => l.status === "ENCERRADA"), [listas]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4">

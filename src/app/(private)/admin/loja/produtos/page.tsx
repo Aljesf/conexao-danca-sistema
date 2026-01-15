@@ -765,11 +765,21 @@ export default function AdminLojaProdutosPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="text-xs tracking-widest text-slate-500">LOJA (ADMIN)</div>
-          <h1 className="mt-2 text-2xl font-semibold">Produtos</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Cadastro completo com estoque inicial, categorias e variantes.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs tracking-widest text-slate-500">LOJA (ADMIN)</div>
+              <h1 className="mt-2 text-2xl font-semibold">Produtos</h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Cadastro completo com estoque inicial, categorias e variantes.
+              </p>
+            </div>
+            <Link
+              href="/admin/loja/produtos/novo"
+              className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+            >
+              Novo produto
+            </Link>
+          </div>
         </div>
 
         {mensagem && (
