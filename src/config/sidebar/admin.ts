@@ -70,7 +70,7 @@ export const adminSidebar: SidebarSection[] = [
     title: "🛍️ Loja (Admin)",
     items: [
       { label: "📦 Gestao de estoque", href: "/admin/loja/gestao-estoque" },
-      { label: "📋 Listas de demanda", href: "/administracao/loja/listas-demanda" },
+      { label: "📋 Listas de demanda", href: "/admin/loja/listas-demanda" },
       { label: "🛒 Compras", href: "/admin/loja/compras" },
       { label: "🚚 Fornecedores", href: "/admin/loja/fornecedores" },
       { label: "🏷️ Categorias", href: "/admin/loja/categorias" },
@@ -133,4 +133,5 @@ export const adminSidebar: SidebarSection[] = [
     items: [{ label: "🤖 Painel de IA (GPT interno)", href: "/admin/ia" }],
   },
 ];
+
 
