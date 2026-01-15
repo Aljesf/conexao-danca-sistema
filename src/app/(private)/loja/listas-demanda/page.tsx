@@ -24,10 +24,7 @@ export default function LojaListasDemandaPage() {
     setErro(null);
     const r = await fetch("/api/loja/listas-demanda");
     const j = (await r.json()) as { data?: Lista[]; error?: string };
-    if (!r.ok) {
-      setErro(j.error ?? "erro_ao_carregar");
-      return;
-    }
+    if (!r.ok) return setErro(j.error ?? "erro_ao_carregar");
     setListas(j.data ?? []);
   }
 
@@ -39,10 +36,7 @@ export default function LojaListasDemandaPage() {
       body: JSON.stringify({ titulo, contexto: contexto || null }),
     });
     const j = (await r.json()) as { data?: { id: number }; error?: string };
-    if (!r.ok) {
-      setErro(j.error ?? "erro_ao_criar");
-      return;
-    }
+    if (!r.ok) return setErro(j.error ?? "erro_ao_criar");
     setTitulo("");
     setContexto("");
     await carregar();
@@ -53,29 +47,26 @@ export default function LojaListasDemandaPage() {
   }, []);
 
   const ativas = useMemo(() => listas.filter((l) => l.status === "ATIVA"), [listas]);
-  const encerradas = useMemo(
-    () => listas.filter((l) => l.status === "ENCERRADA"),
-    [listas]
-  );
+  const encerradas = useMemo(() => listas.filter((l) => l.status === "ENCERRADA"), [listas]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4">
       <div className="mx-auto w-full max-w-6xl space-y-6">
         <SectionCard
           title="Listas de demanda"
-          subtitle="Levantamentos internos. Nao e compra, nao e fornecedor, nao mexe em estoque e nao gera financeiro."
+          subtitle="Levantamentos internos. Não é compra, não é fornecedor, não mexe em estoque e não gera financeiro."
         />
 
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
           <div className="text-sm font-semibold">Criar nova lista</div>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-sm">Titulo</label>
+              <label className="text-sm">Título</label>
               <input
                 className="w-full rounded-lg border px-3 py-2"
                 value={titulo}
                 onChange={(e) => setTitulo(e.target.value)}
-                placeholder="Ex.: Uniformes 2026 - Lote 1"
+                placeholder="Ex.: Uniformes 2026 — Lote 1"
               />
             </div>
             <div className="space-y-1">
@@ -112,9 +103,7 @@ export default function LojaListasDemandaPage() {
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
           <div className="text-sm font-semibold">Ativas</div>
           <div className="space-y-2">
-            {ativas.length === 0 ? (
-              <div className="text-sm text-slate-600">Nenhuma lista ativa.</div>
-            ) : null}
+            {ativas.length === 0 ? <div className="text-sm text-slate-600">Nenhuma lista ativa.</div> : null}
             {ativas.map((l) => (
               <Link
                 key={l.id}
@@ -124,13 +113,13 @@ export default function LojaListasDemandaPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="font-semibold">{l.titulo}</div>
-                    <div className="text-sm text-slate-600">{l.contexto ?? "-"}</div>
+                    <div className="text-sm text-slate-600">{l.contexto ?? "—"}</div>
                   </div>
                   <div className="text-sm whitespace-nowrap">
                     {l.bloqueada ? (
                       <span className="rounded-full border px-2 py-1">🔒 Travada</span>
                     ) : (
-                      <span className="rounded-full border px-2 py-1">Editavel</span>
+                      <span className="rounded-full border px-2 py-1">Editável</span>
                     )}
                   </div>
                 </div>
@@ -142,9 +131,7 @@ export default function LojaListasDemandaPage() {
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
           <div className="text-sm font-semibold">Encerradas</div>
           <div className="space-y-2">
-            {encerradas.length === 0 ? (
-              <div className="text-sm text-slate-600">Nenhuma lista encerrada.</div>
-            ) : null}
+            {encerradas.length === 0 ? <div className="text-sm text-slate-600">Nenhuma lista encerrada.</div> : null}
             {encerradas.map((l) => (
               <Link
                 key={l.id}
@@ -152,7 +139,7 @@ export default function LojaListasDemandaPage() {
                 className="block rounded-xl border p-3 hover:bg-slate-50"
               >
                 <div className="font-semibold">{l.titulo}</div>
-                <div className="text-sm text-slate-600">{l.contexto ?? "-"}</div>
+                <div className="text-sm text-slate-600">{l.contexto ?? "—"}</div>
               </Link>
             ))}
           </div>

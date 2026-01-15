@@ -23,18 +23,18 @@ type Item = {
 };
 
 export default function LojaListaDemandaDetalhePage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams();
   const listaId = Number(params.id);
 
   const [lista, setLista] = useState<Lista | null>(null);
   const [itens, setItens] = useState<Item[]>([]);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [produtoId, setProdutoId] = useState("");
-  const [variacaoId, setVariacaoId] = useState("");
-  const [descricaoLivre, setDescricaoLivre] = useState("");
-  const [quantidade, setQuantidade] = useState("1");
-  const [observacoes, setObservacoes] = useState("");
+  const [produtoId, setProdutoId] = useState<string>("");
+  const [variacaoId, setVariacaoId] = useState<string>("");
+  const [descricaoLivre, setDescricaoLivre] = useState<string>("");
+  const [quantidade, setQuantidade] = useState<string>("1");
+  const [observacoes, setObservacoes] = useState<string>("");
 
   const podeEditar = useMemo(() => {
     if (!lista) return false;
@@ -45,10 +45,7 @@ export default function LojaListaDemandaDetalhePage() {
     setErro(null);
     const r = await fetch(`/api/loja/listas-demanda/${listaId}`);
     const j = (await r.json()) as { data?: { lista: Lista; itens: Item[] }; error?: string };
-    if (!r.ok) {
-      setErro(j.error ?? "erro_ao_carregar");
-      return;
-    }
+    if (!r.ok) return setErro(j.error ?? "erro_ao_carregar");
     setLista(j.data?.lista ?? null);
     setItens(j.data?.itens ?? []);
   }
@@ -61,10 +58,7 @@ export default function LojaListaDemandaDetalhePage() {
       body: JSON.stringify({ acao: "BLOQUEAR", bloqueada }),
     });
     const j = (await r.json()) as { ok?: boolean; error?: string };
-    if (!r.ok) {
-      setErro(j.error ?? "erro_ao_atualizar");
-      return;
-    }
+    if (!r.ok) return setErro(j.error ?? "erro_ao_atualizar");
     await carregar();
   }
 
@@ -76,10 +70,7 @@ export default function LojaListaDemandaDetalhePage() {
       body: JSON.stringify({ acao: "ENCERRAR" }),
     });
     const j = (await r.json()) as { ok?: boolean; error?: string };
-    if (!r.ok) {
-      setErro(j.error ?? "erro_ao_encerrar");
-      return;
-    }
+    if (!r.ok) return setErro(j.error ?? "erro_ao_encerrar");
     await carregar();
   }
 
@@ -88,8 +79,7 @@ export default function LojaListaDemandaDetalhePage() {
 
     const qtd = Number(quantidade);
     if (!Number.isFinite(qtd) || qtd <= 0) {
-      setErro("quantidade_invalida");
-      return;
+      return setErro("quantidade_invalida");
     }
 
     const body = {
@@ -107,10 +97,7 @@ export default function LojaListaDemandaDetalhePage() {
     });
 
     const j = (await r.json()) as { data?: { id: number }; error?: string };
-    if (!r.ok) {
-      setErro(j.error ?? "erro_ao_adicionar");
-      return;
-    }
+    if (!r.ok) return setErro(j.error ?? "erro_ao_adicionar");
 
     setProdutoId("");
     setVariacaoId("");
@@ -130,15 +117,18 @@ export default function LojaListaDemandaDetalhePage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4">
       <div className="mx-auto w-full max-w-6xl space-y-6">
         <SectionCard
-          title={lista ? `Lista #${lista.id} - ${lista.titulo}` : "Lista de demanda"}
-          subtitle="Voce pode travar (cadeado) para evitar novas inclusoes. Encerrar e definitivo."
+          title={lista ? `Lista #${lista.id} — ${lista.titulo}` : "Lista de demanda"}
+          subtitle="Você pode travar (cadeado) para evitar novas inclusões. Encerrar é definitivo."
         />
 
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2 items-center justify-between">
             <div className="text-sm text-slate-700">
-              Status: <span className="font-semibold">{lista?.status ?? "-"}</span>{" "}
-              {lista?.bloqueada ? "• 🔒 Travada" : lista ? "• Editavel" : ""}
+              Status:{" "}
+              <span className="font-semibold">
+                {lista?.status ?? "—"}
+              </span>{" "}
+              {lista?.bloqueada ? "• 🔒 Travada" : lista ? "• Editável" : ""}
             </div>
 
             <div className="flex gap-2">
@@ -183,13 +173,12 @@ export default function LojaListaDemandaDetalhePage() {
                 disabled={!podeEditar}
               />
               <div className="text-xs text-slate-500">
-                Neste MVP, informe o ID do produto (ou use descricao livre). Integracao com
-                busca/combobox pode vir depois.
+                Neste MVP, informe o ID do produto (ou use descrição livre). Integração com busca/combobox pode vir depois.
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm">Variacao ID (opcional)</label>
+              <label className="text-sm">Variação ID (opcional)</label>
               <input
                 className="w-full rounded-lg border px-3 py-2"
                 value={variacaoId}
@@ -200,12 +189,12 @@ export default function LojaListaDemandaDetalhePage() {
             </div>
 
             <div className="space-y-1 md:col-span-2">
-              <label className="text-sm">Descricao livre (quando nao houver produto)</label>
+              <label className="text-sm">Descrição livre (quando não houver produto)</label>
               <input
                 className="w-full rounded-lg border px-3 py-2"
                 value={descricaoLivre}
                 onChange={(e) => setDescricaoLivre(e.target.value)}
-                placeholder="Ex.: Perfume institucional para recepcao"
+                placeholder="Ex.: Perfume institucional para recepção"
                 disabled={!podeEditar}
               />
             </div>
@@ -221,7 +210,7 @@ export default function LojaListaDemandaDetalhePage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm">Observacoes (opcional)</label>
+              <label className="text-sm">Observações (opcional)</label>
               <input
                 className="w-full rounded-lg border px-3 py-2"
                 value={observacoes}
@@ -233,11 +222,7 @@ export default function LojaListaDemandaDetalhePage() {
           </div>
 
           <div className="flex gap-2">
-            <button
-              className="rounded-lg bg-black px-4 py-2 text-white"
-              onClick={() => void adicionarItem()}
-              disabled={!podeEditar}
-            >
+            <button className="rounded-lg bg-black px-4 py-2 text-white" onClick={() => void adicionarItem()} disabled={!podeEditar}>
               Adicionar
             </button>
           </div>
@@ -252,8 +237,8 @@ export default function LojaListaDemandaDetalhePage() {
                 <tr>
                   <th className="px-2 py-2 text-left">ID</th>
                   <th className="px-2 py-2 text-left">Produto</th>
-                  <th className="px-2 py-2 text-left">Variacao</th>
-                  <th className="px-2 py-2 text-left">Descricao</th>
+                  <th className="px-2 py-2 text-left">Variação</th>
+                  <th className="px-2 py-2 text-left">Descrição</th>
                   <th className="px-2 py-2 text-right">Qtd</th>
                   <th className="px-2 py-2 text-left">Obs.</th>
                 </tr>
@@ -261,20 +246,18 @@ export default function LojaListaDemandaDetalhePage() {
               <tbody>
                 {itens.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-2 py-4 text-slate-600">
-                      Nenhum item.
-                    </td>
+                    <td colSpan={6} className="px-2 py-4 text-slate-600">Nenhum item.</td>
                   </tr>
                 ) : null}
 
                 {itens.map((it) => (
                   <tr key={it.id} className="border-t">
                     <td className="px-2 py-2">{it.id}</td>
-                    <td className="px-2 py-2">{it.produto_id ?? "-"}</td>
-                    <td className="px-2 py-2">{it.produto_variacao_id ?? "-"}</td>
-                    <td className="px-2 py-2">{it.descricao_livre ?? "-"}</td>
+                    <td className="px-2 py-2">{it.produto_id ?? "—"}</td>
+                    <td className="px-2 py-2">{it.produto_variacao_id ?? "—"}</td>
+                    <td className="px-2 py-2">{it.descricao_livre ?? "—"}</td>
                     <td className="px-2 py-2 text-right">{it.quantidade}</td>
-                    <td className="px-2 py-2">{it.observacoes ?? "-"}</td>
+                    <td className="px-2 py-2">{it.observacoes ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -282,8 +265,7 @@ export default function LojaListaDemandaDetalhePage() {
           </div>
 
           <div className="text-xs text-slate-500">
-            Observacao: edicao/remocao de itens pode ser adicionada depois. O essencial aqui e
-            criar, travar e encerrar.
+            Observação: edição/remoção de itens pode ser adicionada depois. O essencial aqui é criar, travar e encerrar.
           </div>
         </div>
       </div>
