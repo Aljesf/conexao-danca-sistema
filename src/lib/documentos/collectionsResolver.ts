@@ -135,6 +135,67 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
       continue;
     }
 
+    if (codigo === "MATRICULA_CURSOS") {
+      const { data: vinculosRaw, error: vinculosErr } = await supabase
+        .from("turma_aluno")
+        .select("turma_id,status,dt_inicio,dt_fim,nivel_id")
+        .eq("matricula_id", input.operacaoId)
+        .is("dt_fim", null)
+        .limit(500);
+
+      if (vinculosErr) throw new Error(vinculosErr.message);
+
+      const vinculos = (vinculosRaw ?? []) as Array<Record<string, unknown>>;
+      const turmaIds = Array.from(
+        new Set(
+          vinculos
+            .map((row) => getNumber(row, "turma_id"))
+            .filter((id): id is number => Number.isFinite(id)),
+        ),
+      );
+
+      if (turmaIds.length === 0) {
+        resp[codigo] = [];
+        continue;
+      }
+
+      const { data: turmasRaw, error: turmasErr } = await supabase
+        .from("turmas")
+        .select("turma_id,nome,tipo_turma,nivel,turno,carga_horaria_prevista,status")
+        .in("turma_id", turmaIds);
+
+      if (turmasErr) throw new Error(turmasErr.message);
+
+      const turmasMap = new Map<number, Record<string, unknown>>();
+      (turmasRaw ?? []).forEach((row) => {
+        const id = getNumber(row as Record<string, unknown>, "turma_id");
+        if (Number.isFinite(id)) {
+          turmasMap.set(id as number, row as Record<string, unknown>);
+        }
+      });
+
+      resp[codigo] = vinculos.map((row) => {
+        const turmaId = getNumber(row, "turma_id");
+        const turma = turmaId ? turmasMap.get(turmaId) : null;
+        const nivel = (getString(turma ?? {}, "nivel") ?? "").trim();
+        const nivelId = getNumber(row, "nivel_id");
+
+        return {
+          CURSO_NOME: getString(turma ?? {}, "nome") ?? "",
+          MODALIDADE: getString(turma ?? {}, "tipo_turma") ?? "",
+          NIVEL: nivel || (Number.isFinite(nivelId) ? String(nivelId) : ""),
+          TURNO: getString(turma ?? {}, "turno") ?? "",
+          CARGA_HORARIA:
+            getNumber(turma ?? {}, "carga_horaria_prevista") !== null
+              ? String(getNumber(turma ?? {}, "carga_horaria_prevista"))
+              : "",
+          STATUS: getString(row, "status") ?? "",
+          TURMA_ID: turmaId ? String(turmaId) : "",
+        };
+      });
+      continue;
+    }
+
     if (codigo === "MATRICULA_ENTRADAS" || codigo === "MATRICULA_ENTRADA") {
       const { data, error } = await supabase
         .from("matriculas_financeiro_linhas")
