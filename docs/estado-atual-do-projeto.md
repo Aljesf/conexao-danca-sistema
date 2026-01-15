@@ -1,7 +1,7 @@
 ﻿﻿﻿# estado-atual-do-projeto.md
 
 ## Módulo atual
-Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Matrículas com múltiplas Unidades de Execução
+Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 
 ---
 
@@ -31,6 +31,9 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 ### Financeiro - cobrancas avulsas (entrada adiada)
 - Migration: `20260113_180101_financeiro_cobrancas_avulsas.sql` (tabela + indices + trigger updated_at).
+
+### Movimento - formularios e acoes sociais
+- Migration: `20260114_235500_movimento_refactor_formularios_e_acoes.sql` (beneficiarios + concessoes + formularios A/B/C + acoes sociais).
 
 ---
 
@@ -67,6 +70,12 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 - API de listagem: GET /api/financeiro/pessoas/[pessoaId]/cobrancas-avulsas.
 - API de contas a receber: GET /api/financeiro/cobrancas-avulsas.
 
+### Movimento Conexao Danca - beneficiarios e acoes
+- API: POST /api/movimento/beneficiarios/upsert.
+- API: GET /api/movimento/beneficiarios/[id]/pendencias-formulario.
+- API: POST /api/movimento/acoes.
+- API: POST /api/movimento/acoes/[id]/participantes.
+
 
 ---
 
@@ -86,6 +95,9 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 ### Financeiro - Contas a Receber
 - Lista inclui cobrancas avulsas geradas pela excecao de entrada.
+
+### Movimento - acoes rapidas
+- Modal de acoes rapidas (bolsa/acao social) integrado ao botao flutuante do Movimento.
 
 ### Registro de Observacoes Operacionais (NASC)
 - Botao flutuante + API + export CSV (MVP)
@@ -131,6 +143,9 @@ Crédito Conexão — Consolidação por cobrança canônica (cobranca_id) + Mat
 
 7) Documentos - impressao/PDF
 - Validar emitidos/12 com preview de impressao (largura normal, margem 10mm, sem reserva de header/footer quando vazio).
+
+8) Movimento - buscas e navegacao
+- Validar busca de pessoas no modal (usa /api/pessoas?search) e ajustar se necessario.
 
 
 ---
