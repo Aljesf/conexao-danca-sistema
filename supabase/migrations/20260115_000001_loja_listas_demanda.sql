@@ -1,99 +1,99 @@
--- Listas administrativas de demanda (nao e compra/fornecedor/estoque/financeiro)
+-- Listas Administrativas de Demanda (nao e compra, nao e fornecedor, nao e estoque, nao e financeiro)
 
--- 1) Enum de status
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'loja_lista_demanda_status') THEN
-    CREATE TYPE public.loja_lista_demanda_status AS ENUM ('ATIVA', 'ENCERRADA');
-  END IF;
-END $$;
+begin;
+
+-- 1) Enum de status (2 estados)
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'loja_lista_demanda_status') then
+    create type public.loja_lista_demanda_status as enum ('ATIVA', 'ENCERRADA');
+  end if;
+end $$;
 
 -- 2) Tabela de listas (cabecalho)
-CREATE TABLE IF NOT EXISTS public.loja_listas_demanda (
-  id            bigserial PRIMARY KEY,
-  titulo        text NOT NULL,
-  contexto      text NULL,
-  status        public.loja_lista_demanda_status NOT NULL DEFAULT 'ATIVA',
-  bloqueada     boolean NOT NULL DEFAULT false,
-  observacoes   text NULL,
+create table if not exists public.loja_listas_demanda (
+  id                bigserial primary key,
+  titulo            text not null,
+  contexto          text null, -- ex.: "Uniformes 2026", "Sapatilhas", "Material interno"
+  status            public.loja_lista_demanda_status not null default 'ATIVA',
+  bloqueada         boolean not null default false, -- "cadeado" operacional
+  observacoes       text null,
 
-  criado_em     timestamptz NOT NULL DEFAULT now(),
-  criado_por    uuid NULL,
+  criado_em         timestamptz not null default now(),
+  criado_por        uuid null,
 
-  bloqueada_em  timestamptz NULL,
-  bloqueada_por uuid NULL,
+  bloqueada_em      timestamptz null,
+  bloqueada_por     uuid null,
 
-  encerrada_em  timestamptz NULL,
-  encerrada_por uuid NULL
+  encerrada_em      timestamptz null,
+  encerrada_por     uuid null
 );
 
-CREATE INDEX IF NOT EXISTS idx_loja_listas_demanda_status
-  ON public.loja_listas_demanda (status);
-
-CREATE INDEX IF NOT EXISTS idx_loja_listas_demanda_bloqueada
-  ON public.loja_listas_demanda (bloqueada);
+create index if not exists idx_loja_listas_demanda_status on public.loja_listas_demanda (status);
+create index if not exists idx_loja_listas_demanda_bloqueada on public.loja_listas_demanda (bloqueada);
 
 -- 3) Tabela de itens
-CREATE TABLE IF NOT EXISTS public.loja_listas_demanda_itens (
-  id                  bigserial PRIMARY KEY,
-  lista_id            bigint NOT NULL REFERENCES public.loja_listas_demanda(id) ON DELETE CASCADE,
+-- Reuso de produtos e (quando existir no banco) variacoes.
+-- Produto/variacao sao opcionais; se nao houver, usa descricao_livre.
+create table if not exists public.loja_listas_demanda_itens (
+  id                    bigserial primary key,
+  lista_id              bigint not null references public.loja_listas_demanda(id) on delete cascade,
 
-  produto_id          bigint NULL REFERENCES public.loja_produtos(id) ON DELETE SET NULL,
-  produto_variacao_id bigint NULL,
+  produto_id            bigint null references public.loja_produtos(id) on delete set null,
 
-  descricao_livre     text NULL,
-  quantidade          integer NOT NULL CHECK (quantidade > 0),
-  observacoes         text NULL,
+  -- A variacao pode variar conforme seu schema real.
+  -- Vamos criar o campo como bigint (FK opcional) e deixar a FK condicional:
+  produto_variacao_id   bigint null,
 
-  criado_em           timestamptz NOT NULL DEFAULT now(),
-  criado_por          uuid NULL,
-  atualizado_em       timestamptz NOT NULL DEFAULT now(),
-  atualizado_por      uuid NULL
+  descricao_livre       text null,
+
+  quantidade            integer not null check (quantidade > 0),
+  observacoes           text null,
+
+  criado_em             timestamptz not null default now(),
+  criado_por            uuid null,
+  atualizado_em         timestamptz not null default now(),
+  atualizado_por        uuid null
 );
 
-CREATE INDEX IF NOT EXISTS idx_loja_listas_demanda_itens_lista
-  ON public.loja_listas_demanda_itens (lista_id);
+create index if not exists idx_loja_listas_demanda_itens_lista on public.loja_listas_demanda_itens (lista_id);
+create index if not exists idx_loja_listas_demanda_itens_produto on public.loja_listas_demanda_itens (produto_id);
 
-CREATE INDEX IF NOT EXISTS idx_loja_listas_demanda_itens_produto
-  ON public.loja_listas_demanda_itens (produto_id);
+-- 4) FK condicional para variacoes (se existir tabela padrao de variantes)
+-- Tentativas comuns: public.loja_produto_variantes / public.loja_produtos_variantes / public.loja_produto_variacoes.
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='loja_produto_variantes') then
+    if not exists (
+      select 1 from information_schema.table_constraints
+      where constraint_schema='public'
+        and table_name='loja_listas_demanda_itens'
+        and constraint_name='fk_loja_listas_demanda_itens_variacao'
+    ) then
+      alter table public.loja_listas_demanda_itens
+        add constraint fk_loja_listas_demanda_itens_variacao
+        foreign key (produto_variacao_id) references public.loja_produto_variantes(id) on delete set null;
+    end if;
+  end if;
+end $$;
 
--- 4) FK condicional para variacoes (se existir tabela padrao)
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.tables
-    WHERE table_schema='public' AND table_name='loja_produto_variantes'
-  ) THEN
-    IF NOT EXISTS (
-      SELECT 1
-      FROM information_schema.table_constraints
-      WHERE constraint_schema='public'
-        AND table_name='loja_listas_demanda_itens'
-        AND constraint_name='fk_loja_listas_demanda_itens_variacao'
-    ) THEN
-      ALTER TABLE public.loja_listas_demanda_itens
-        ADD CONSTRAINT fk_loja_listas_demanda_itens_variacao
-        FOREIGN KEY (produto_variacao_id) REFERENCES public.loja_produto_variantes(id) ON DELETE SET NULL;
-    END IF;
-  END IF;
-END $$;
-
--- 5) Regra: item precisa de produto OU descricao
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.table_constraints
-    WHERE constraint_schema='public'
-      AND table_name='loja_listas_demanda_itens'
-      AND constraint_name='chk_loja_lista_item_produto_ou_descricao'
-  ) THEN
-    ALTER TABLE public.loja_listas_demanda_itens
-      ADD CONSTRAINT chk_loja_lista_item_produto_ou_descricao
-      CHECK (
-        (produto_id IS NOT NULL)
-        OR (descricao_livre IS NOT NULL AND btrim(descricao_livre) <> '')
+-- 5) Regra de integridade do item:
+-- OU tem produto_id OU tem descricao_livre (nao pode ficar os dois vazios)
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.table_constraints
+    where constraint_schema='public'
+      and table_name='loja_listas_demanda_itens'
+      and constraint_name='chk_loja_lista_item_produto_ou_descricao'
+  ) then
+    alter table public.loja_listas_demanda_itens
+      add constraint chk_loja_lista_item_produto_ou_descricao
+      check (
+        (produto_id is not null)
+        or (descricao_livre is not null and btrim(descricao_livre) <> '')
       );
-  END IF;
-END $$;
+  end if;
+end $$;
+
+commit;
