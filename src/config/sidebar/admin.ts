@@ -69,6 +69,7 @@ export const adminSidebar: SidebarSection[] = [
     id: "admin-loja-admin",
     title: "🛍️ Loja (Admin)",
     items: [
+      { label: "🏷️ Produtos", href: "/admin/loja/produtos" },
       { label: "📦 Gestao de estoque", href: "/admin/loja/gestao-estoque" },
       { label: "📋 Listas de demanda", href: "/admin/loja/listas-demanda" },
       { label: "🛒 Compras", href: "/admin/loja/compras" },
