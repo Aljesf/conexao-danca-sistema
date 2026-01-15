@@ -96,6 +96,7 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - API: GET/PATCH /api/loja/listas-demanda/[id].
 - API: POST /api/loja/listas-demanda/[id]/itens (inclui pessoa_id).
 - API: GET /api/loja/listas-demanda/[id]/resumo.
+- API: GET /api/loja/listas-demanda/[id]/detalhe (itens enriquecidos + resumo).
 - API: GET /api/loja/produtos/busca.
 - API: GET /api/loja/produtos/[id]/variacoes.
 - API: GET /api/pessoas/busca.
@@ -114,7 +115,7 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - /admin/loja/produtos (cadastro completo + estoque inicial + variantes).
 
 ### Loja - listas de demanda (itens)
-- /loja/listas-demanda/[id] (busca produto/variacao/pessoa, pessoa_id opcional nos itens).
+- /loja/listas-demanda/[id] (layout padrao, nomes no lugar de IDs, resumo e Destinatario opcional).
 
 
 ### Escola - Matrícula Nova / Liquidação
@@ -287,5 +288,6 @@ Pendencias:
 ## Documentos normativos
 
 - Modulo Alunos - reestruturacao conceitual e plano de implementacao: docs/modulos/modulo-alunos-reestruturacao-conceito-e-implementacao.md
+
 
 

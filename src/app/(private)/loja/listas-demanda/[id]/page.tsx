@@ -14,15 +14,26 @@ type Lista = {
   bloqueada: boolean;
 };
 
-type Item = {
+type ItemEnriquecido = {
+  item: number;
   id: number;
-  lista_id: number;
-  produto_id: number | null;
-  produto_variacao_id: number | null;
-  pessoa_id: number | null;
-  descricao_livre: string | null;
   quantidade: number;
   observacoes: string | null;
+  descricao_livre: string | null;
+  produto: { id: number; nome: string; codigo: string | null } | null;
+  variacao: { id: number; label: string | null; sku: string | null } | null;
+  destinatario: { id: number; nome: string; cpf: string | null } | null;
+  raw: {
+    produto_id: number | null;
+    produto_variacao_id: number | null;
+    pessoa_id: number | null;
+  };
+};
+
+type ResumoItem = {
+  produto: string;
+  variacao: string;
+  quantidade: number;
 };
 
 export default function LojaListaDemandaDetalhePage() {
@@ -30,8 +41,10 @@ export default function LojaListaDemandaDetalhePage() {
   const listaId = Number(params.id);
 
   const [lista, setLista] = useState<Lista | null>(null);
-  const [itens, setItens] = useState<Item[]>([]);
+  const [itens, setItens] = useState<ItemEnriquecido[]>([]);
+  const [resumo, setResumo] = useState<ResumoItem[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const [produtoId, setProdutoId] = useState<number | null>(null);
   const [variacaoId, setVariacaoId] = useState<number | null>(null);
@@ -48,11 +61,25 @@ export default function LojaListaDemandaDetalhePage() {
 
   async function carregar() {
     setErro(null);
-    const r = await fetch(`/api/loja/listas-demanda/${listaId}`);
-    const j = (await r.json()) as { data?: { lista: Lista; itens: Item[] }; error?: string };
-    if (!r.ok) return setErro(j.error ?? "erro_ao_carregar");
-    setLista(j.data?.lista ?? null);
-    setItens(j.data?.itens ?? []);
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/loja/listas-demanda/${listaId}/detalhe`);
+      const j = (await r.json()) as {
+        lista?: Lista;
+        itens?: ItemEnriquecido[];
+        resumo?: ResumoItem[];
+        error?: string;
+      };
+      if (!r.ok) {
+        setErro(j.error ?? "erro_ao_carregar");
+        return;
+      }
+      setLista(j.lista ?? null);
+      setItens(j.itens ?? []);
+      setResumo(j.resumo ?? []);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function travarOuDestravar(bloqueada: boolean) {
@@ -125,21 +152,21 @@ export default function LojaListaDemandaDetalhePage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4">
       <div className="mx-auto w-full max-w-6xl space-y-6">
         <SectionCard
-          title={lista ? `Lista #${lista.id} — ${lista.titulo}` : "Lista de demanda"}
-          subtitle="Você pode travar (cadeado) para evitar novas inclusões. Encerrar é definitivo."
-        />
-
-        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-          <div className="flex flex-wrap gap-2 items-center justify-between">
-            <div className="text-sm text-slate-700">
-              Status:{" "}
-              <span className="font-semibold">
-                {lista?.status ?? "—"}
-              </span>{" "}
-              {lista?.bloqueada ? "• 🔒 Travada" : lista ? "• Editável" : ""}
+          title={lista ? `Lista #${lista.id} - ${lista.titulo}` : "Lista de demanda"}
+          subtitle="Organize itens e acompanhe o status da lista."
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-1 text-sm text-slate-600">
+              <div>
+                Contexto: <span className="font-semibold">{lista?.contexto ?? "-"}</span>
+              </div>
+              <div>
+                Status: <span className="font-semibold">{lista?.status ?? "-"}</span>
+                {lista?.bloqueada ? " - Travada" : lista ? " - Editavel" : ""}
+              </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 className="rounded-lg border px-4 py-2"
                 onClick={() => void travarOuDestravar(!(lista?.bloqueada ?? false))}
@@ -161,15 +188,15 @@ export default function LojaListaDemandaDetalhePage() {
           </div>
 
           {erro ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {erro}
             </div>
           ) : null}
-        </div>
 
-        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-          <div className="text-sm font-semibold">Adicionar item</div>
+          {loading ? <div className="mt-3 text-sm text-slate-500">Carregando...</div> : null}
+        </SectionCard>
 
+        <SectionCard title="Adicionar item" subtitle="Selecione produto, variacao e destinatario quando houver.">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2 space-y-1">
               <ProdutoBusca
@@ -194,12 +221,12 @@ export default function LojaListaDemandaDetalhePage() {
             </div>
 
             <div className="space-y-1 md:col-span-2">
-              <label className="text-sm">Descrição livre (quando não houver produto)</label>
+              <label className="text-sm">Descricao livre (quando nao houver produto)</label>
               <input
                 className="w-full rounded-lg border px-3 py-2"
                 value={descricaoLivre}
                 onChange={(e) => setDescricaoLivre(e.target.value)}
-                placeholder="Ex.: Perfume institucional para recepção"
+                placeholder="Ex.: Perfume institucional para recepcao"
                 disabled={!podeEditar}
               />
             </div>
@@ -215,7 +242,7 @@ export default function LojaListaDemandaDetalhePage() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm">Observações (opcional)</label>
+              <label className="text-sm">Observacoes (opcional)</label>
               <input
                 className="w-full rounded-lg border px-3 py-2"
                 value={observacoes}
@@ -226,24 +253,24 @@ export default function LojaListaDemandaDetalhePage() {
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button className="rounded-lg bg-black px-4 py-2 text-white" onClick={() => void adicionarItem()} disabled={!podeEditar}>
+          <div className="mt-3 flex gap-2">
+            <button
+              className="rounded-lg bg-black px-4 py-2 text-white"
+              onClick={() => void adicionarItem()}
+              disabled={!podeEditar}
+            >
               Adicionar
             </button>
           </div>
-        </div>
 
-        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-          <div className="text-sm font-semibold">Itens</div>
-
-          <div className="overflow-x-auto">
+          <div className="mt-6 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-xs uppercase text-slate-600">
                 <tr>
-                  <th className="px-2 py-2 text-left">ID</th>
+                  <th className="px-2 py-2 text-left">Item</th>
                   <th className="px-2 py-2 text-left">Produto</th>
-                  <th className="px-2 py-2 text-left">Variação</th>
-                  <th className="px-2 py-2 text-left">Descrição</th>
+                  <th className="px-2 py-2 text-left">Variacao</th>
+                  <th className="px-2 py-2 text-left">Destinatario</th>
                   <th className="px-2 py-2 text-right">Qtd</th>
                   <th className="px-2 py-2 text-left">Obs.</th>
                 </tr>
@@ -251,30 +278,61 @@ export default function LojaListaDemandaDetalhePage() {
               <tbody>
                 {itens.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-2 py-4 text-slate-600">Nenhum item.</td>
+                    <td colSpan={6} className="px-2 py-4 text-slate-600">
+                      Nenhum item.
+                    </td>
                   </tr>
                 ) : null}
 
-                {itens.map((it) => (
-                  <tr key={it.id} className="border-t">
-                    <td className="px-2 py-2">{it.id}</td>
-                    <td className="px-2 py-2">{it.produto_id ?? "—"}</td>
-                    <td className="px-2 py-2">{it.produto_variacao_id ?? "—"}</td>
-                    <td className="px-2 py-2">{it.descricao_livre ?? "—"}</td>
-                    <td className="px-2 py-2 text-right">{it.quantidade}</td>
-                    <td className="px-2 py-2">{it.observacoes ?? "—"}</td>
-                  </tr>
-                ))}
+                {itens.map((it) => {
+                  const produtoLabel = it.produto?.nome ?? it.descricao_livre ?? "-";
+                  const variacaoLabel = it.variacao?.label ?? "-";
+                  const destinatarioLabel = it.destinatario?.nome ?? "-";
+                  const obsLabel = it.observacoes ?? "-";
+
+                  return (
+                    <tr key={it.id} className="border-t">
+                      <td className="px-2 py-2">{it.item}</td>
+                      <td className="px-2 py-2">{produtoLabel}</td>
+                      <td className="px-2 py-2">{variacaoLabel}</td>
+                      <td className="px-2 py-2">{destinatarioLabel}</td>
+                      <td className="px-2 py-2 text-right">{it.quantidade}</td>
+                      <td className="px-2 py-2">{obsLabel}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+        </SectionCard>
 
-          <div className="text-xs text-slate-500">
-            Observação: edição/remoção de itens pode ser adicionada depois. O essencial aqui é criar, travar e encerrar.
-          </div>
-        </div>
+        <SectionCard title="Resumo do pedido" subtitle="Totais agrupados por produto e variacao.">
+          {resumo.length === 0 ? (
+            <div className="text-sm text-slate-600">Sem itens para resumir.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-xs uppercase text-slate-600">
+                  <tr>
+                    <th className="px-2 py-2 text-left">Produto</th>
+                    <th className="px-2 py-2 text-left">Variacao</th>
+                    <th className="px-2 py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resumo.map((r, idx) => (
+                    <tr key={`${r.produto}-${r.variacao}-${idx}`} className="border-t">
+                      <td className="px-2 py-2">{r.produto}</td>
+                      <td className="px-2 py-2">{r.variacao}</td>
+                      <td className="px-2 py-2 text-right">{r.quantidade}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </SectionCard>
       </div>
     </div>
   );
 }
-

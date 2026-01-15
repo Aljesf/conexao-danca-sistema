@@ -66,7 +66,7 @@ export default function PessoaBusca({ disabled, onSelect }: PessoaBuscaProps) {
 
   return (
     <div className="space-y-2">
-      <label className="text-sm">Beneficiario (opcional)</label>
+      <label className="text-sm">Destinatario (opcional)</label>
       <input
         className="w-full rounded-lg border px-3 py-2"
         value={query}
@@ -75,7 +75,7 @@ export default function PessoaBusca({ disabled, onSelect }: PessoaBuscaProps) {
           setSelecionado(null);
           onSelect({ pessoaId: null });
         }}
-        placeholder="Buscar pessoa por nome ou CPF"
+        placeholder="Buscar destinatario por nome ou CPF"
         disabled={disabled}
       />
 
