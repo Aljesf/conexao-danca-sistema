@@ -142,20 +142,60 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
         continue;
       }
 
+      const { data: matRow, error: matErr } = await supabase
+        .from("matriculas")
+        .select("id,aluno_pessoa_id")
+        .eq("id", matriculaId)
+        .maybeSingle();
+
+      if (matErr || !matRow) {
+        resp[codigo] = [];
+        continue;
+      }
+
+      const alunoPessoaId = getNumber(matRow as Record<string, unknown>, "aluno_pessoa_id");
       const today = new Date().toISOString().slice(0, 10);
-      const { data: vinculosRaw, error: vinculosErr } = await supabase
+      const { data: vinculosMat, error: vinculosMatErr } = await supabase
         .from("turma_aluno")
         .select("turma_id,status,dt_inicio,dt_fim,nivel_id")
         .eq("matricula_id", matriculaId)
         .or(`dt_fim.is.null,dt_fim.gt.${today}`)
         .limit(500);
 
-      if (vinculosErr || !vinculosRaw || vinculosRaw.length === 0) {
+      let vinculosRaw = (vinculosMat ?? []) as Array<Record<string, unknown>>;
+      let vinculosErr = vinculosMatErr ?? null;
+
+      if (!vinculosErr && vinculosRaw.length === 0 && alunoPessoaId) {
+        const { data: vinculosAluno, error: vinculosAlunoErr } = await supabase
+          .from("turma_aluno")
+          .select("turma_id,status,dt_inicio,dt_fim,nivel_id")
+          .eq("aluno_pessoa_id", alunoPessoaId)
+          .or(`dt_fim.is.null,dt_fim.gt.${today}`)
+          .limit(500);
+
+        vinculosRaw = (vinculosAluno ?? []) as Array<Record<string, unknown>>;
+        vinculosErr = vinculosAlunoErr ?? null;
+      }
+
+      if (vinculosErr || vinculosRaw.length === 0) {
         resp[codigo] = [];
         continue;
       }
 
-      const vinculos = vinculosRaw as Array<Record<string, unknown>>;
+      const now = new Date();
+      const vinculos = vinculosRaw.filter((row) => {
+        const dtFim = getString(row, "dt_fim");
+        if (!dtFim) return true;
+        const parsed = new Date(dtFim);
+        if (Number.isNaN(parsed.getTime())) return true;
+        return parsed > now;
+      });
+
+      if (vinculos.length === 0) {
+        resp[codigo] = [];
+        continue;
+      }
+
       const turmaIds = Array.from(
         new Set(
           vinculos

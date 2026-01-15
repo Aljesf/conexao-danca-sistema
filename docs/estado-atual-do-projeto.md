@@ -1,22 +1,22 @@
-ï»¿ï»¿ï»¿# estado-atual-do-projeto.md
+??# estado-atual-do-projeto.md
 
-## MÃ³dulo atual
+## Módulo atual
 Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 
 ---
 
-## SQL concluÃ­do
+## SQL concluído
 
-### CrÃ©dito ConexÃ£o â€” lanÃ§amentos canÃ´nicos por cobranÃ§a
+### Crédito Conexão - lançamentos canônicos por cobrança
 - Tabela `public.credito_conexao_lancamentos` atualizada com:
   - `competencia` (text)
   - `referencia_item` (text)
   - `composicao_json` (jsonb)
-  - `cobranca_id` (bigint, FK â†’ `cobrancas.id`, ON DELETE SET NULL)
+  - `cobranca_id` (bigint, FK ? `cobrancas.id`, ON DELETE SET NULL)
 - Constraints:
-  - `UNIQUE (conta_conexao_id, competencia, referencia_item)` (idempotÃªncia por item/competÃªncia)
-  - `UNIQUE (cobranca_id)` (1 cobranÃ§a â†’ 1 lanÃ§amento)
-- Ãndices adicionados/confirmados:
+  - `UNIQUE (conta_conexao_id, competencia, referencia_item)` (idempotência por item/competência)
+  - `UNIQUE (cobranca_id)` (1 cobrança ? 1 lançamento)
+- Índices adicionados/confirmados:
   - `(conta_conexao_id, competencia)`
   - `(referencia_item)`
   - `(cobranca_id, competencia)`
@@ -37,26 +37,26 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 
 ---
 
-## APIs concluÃ­das
+## APIs concluídas
 
-### CrÃ©dito ConexÃ£o â€” padrÃ£o â€œCobranÃ§a â†’ LanÃ§amento â†’ Faturaâ€
-- PadronizaÃ§Ã£o do fluxo:
-  - CobranÃ§as elegÃ­veis ao CartÃ£o ConexÃ£o (por competÃªncia) geram lanÃ§amentos via `cobranca_id`.
-  - `referencia_item` determinÃ­stica no formato `cobranca:<id>`.
+### Crédito Conexão - padrão "Cobrança ? Lançamento ? Fatura"
+- Padronização do fluxo:
+  - Cobranças elegíveis ao Cartão Conexão (por competência) geram lançamentos via `cobranca_id`.
+  - `referencia_item` determinística no formato `cobranca:<id>`.
 - Rebuild e fechamentos atualizados:
-  - critÃ©rio primÃ¡rio por `cobranca_id` + competÃªncia
-  - fallback legado mantido quando `cobranca_id` estiver nulo (apenas histÃ³rico).
+  - critério primário por `cobranca_id` + competência
+  - fallback legado mantido quando `cobranca_id` estiver nulo (apenas histórico).
 - Helper novo:
-  - `upsertLancamentoPorCobranca` (server-side) para garantir idempotÃªncia e rastreabilidade.
+  - `upsertLancamentoPorCobranca` (server-side) para garantir idempotência e rastreabilidade.
 
-### MatrÃ­culas â€” mÃºltiplas Unidades de ExecuÃ§Ã£o (Caminho A consolidado)
-- MatrÃ­cula com mÃºltiplas UEs passa a gerar:
-  - 1 cobranÃ§a elegÃ­vel por competÃªncia com valor consolidado
-  - 1 lanÃ§amento no CartÃ£o ConexÃ£o com valor consolidado
+### Matrículas - múltiplas Unidades de Execução (Caminho A consolidado)
+- Matrícula com múltiplas UEs passa a gerar:
+  - 1 cobrança elegível por competência com valor consolidado
+  - 1 lançamento no Cartão Conexão com valor consolidado
   - `composicao_json` contendo detalhamento por UE (valores por item)
 - Resultado final validado em UI:
-  - fatura mostra 1 lanÃ§amento (ex.: R$ 400,00)
-  - composiÃ§Ã£o disponÃ­vel para auditoria (220 + 180)
+  - fatura mostra 1 lançamento (ex.: R$ 400,00)
+  - composição disponível para auditoria (220 + 180)
 
 ### Documentos - emissao contrato/ficha (matricula pagante)
 - Contexto de emissao inclui escola, snapshot financeiro normalizado e parcelas padronizadas.
@@ -64,6 +64,7 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - Preview de documentos emitidos: API retorna HTML decodificado quando detectar conteudo escapado (ex.: &lt;h).
 - Preview emitidos: GET /api/documentos/emitidos/[id] aceita mode=raw/resolved para retornar HTML sem resolver ou resolvido.
 - Resolver de emitidos reconstrui contexto via matricula (mesmo pipeline da emissao).
+- Resolver MATRICULA_CURSOS: busca por matricula_id com fallback por aluno_pessoa_id (turma_aluno) e filtro de ativos por dt_fim.
 
 ### Matriculas - excecao adiar primeiro pagamento
 - Liquidacao gera cobranca avulsa (fora do Cartao Conexao) com vencimento manual; sem recebimento automatico.
@@ -79,15 +80,15 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 
 ---
 
-## PÃ¡ginas / componentes concluÃ­dos
+## Páginas / componentes concluídos
 
-### Admin â€” Faturas do CartÃ£o ConexÃ£o
-- ExibiÃ§Ã£o consistente do total e do(s) lanÃ§amento(s)
-- Suporte a composiÃ§Ã£o (`composicao_json`) para auditoria do consolidado (Caminho A)
+### Admin - Faturas do Cartão Conexão
+- Exibição consistente do total e do(s) lançamento(s)
+- Suporte a composição (`composicao_json`) para auditoria do consolidado (Caminho A)
 
-### Escola â€” MatrÃ­cula Nova / LiquidaÃ§Ã£o
-- Resumo calcula total por mÃºltiplas UEs (ex.: 220 + 180)
-- IntegraÃ§Ã£o com CartÃ£o ConexÃ£o gera cobranÃ§a/lanÃ§amento consolidado corretamente
+### Escola - Matrícula Nova / Liquidação
+- Resumo calcula total por múltiplas UEs (ex.: 220 + 180)
+- Integração com Cartão Conexão gera cobrança/lançamento consolidado corretamente
 - Excecao "adiar primeiro pagamento" gera cobranca avulsa com vencimento manual (fora do Cartao Conexao)
 
 ### Pessoas - resumo financeiro
@@ -115,24 +116,24 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 
 ---
 
-## PendÃªncias
+## Pendências
 
 1) Matriculas - excecao adiar primeiro pagamento
 - Validar liquidacao com vencimento manual (gera cobranca avulsa).
 - Confirmar cobranca aparece em Contas a Receber e no Relatorio financeiro do aluno.
 - Confirmar nao gera fatura do Cartao Conexao.
 
-2) Loja â€” parcelamento e integraÃ§Ã£o com CartÃ£o ConexÃ£o
-- Garantir que venda parcelada gere N cobranÃ§as (1 por competÃªncia/parcela), elegÃ­veis ao CartÃ£o ConexÃ£o.
+2) Loja - parcelamento e integração com Cartão Conexão
+- Garantir que venda parcelada gere N cobranças (1 por competência/parcela), elegíveis ao Cartão Conexão.
 
-3) NEOFIN â€” validaÃ§Ã£o de integraÃ§Ã£o
-- Confirmar que a geraÃ§Ã£o de boleto continua ligada apenas Ã  cobranÃ§a da fatura:
+3) NEOFIN - validação de integração
+- Confirmar que a geração de boleto continua ligada apenas à cobrança da fatura:
   - `credito_conexao_faturas.cobranca_id`
   - `cobrancas.origem_tipo = 'CREDITO_CONEXAO_FATURA'`
-- Garantir que cobranÃ§as â€œitensâ€ (matrÃ­cula/loja/cafÃ©) NÃƒO gerem boletos no NEOFIN.
+- Garantir que cobranças "itens" (matrícula/loja/café) NÃO gerem boletos no NEOFIN.
 
-4) ValidaÃ§Ã£o tÃ©cnica
-- Rodar `npm run lint` e `npm run build` sem erros apÃ³s as alteraÃ§Ãµes recentes.
+4) Validação técnica
+- Rodar `npm run lint` e `npm run build` sem erros após as alterações recentes.
 
 5) Documentos - validacao/prints
 - Aplicar migration no Supabase e emitir Contrato + Ficha Financeira.
@@ -151,20 +152,20 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ---
 
 ## Bloqueios
-Nenhum bloqueio tÃ©cnico confirmado apÃ³s validaÃ§Ã£o visual do consolidado e do rebuild.
+Nenhum bloqueio técnico confirmado após validação visual do consolidado e do rebuild.
 
 ---
 
-## VersÃ£o do sistema
-Sistema ConexÃ£o DanÃ§a â€” CrÃ©dito ConexÃ£o / MatrÃ­culas
-VersÃ£o lÃ³gica: v1.1 (cobranÃ§a canÃ´nica + composiÃ§Ã£o + mÃºltiplas UEs consolidado)
+## Versão do sistema
+Sistema Conexão Dança - Crédito Conexão / Matrículas
+Versão lógica: v1.1 (cobrança canônica + composição + múltiplas UEs consolidado)
 
 ---
 
-## PrÃ³ximas aÃ§Ãµes
+## Próximas ações
 
-1) Ajustar Loja: cobranÃ§a por parcela/competÃªncia (CartÃ£o ConexÃ£o)
-2) Validar integraÃ§Ã£o NEOFIN (somente fatura)
+1) Ajustar Loja: cobrança por parcela/competência (Cartão Conexão)
+2) Validar integração NEOFIN (somente fatura)
 3) Rodar lint/build e corrigir eventuais avisos do TS/ESLint
 
 ---
