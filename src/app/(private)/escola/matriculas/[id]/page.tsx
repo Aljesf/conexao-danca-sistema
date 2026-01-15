@@ -6,6 +6,18 @@ import Link from "next/link";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateISO, formatDateTimeISO } from "@/lib/formatters/date";
 
+const uiBtnBase =
+  "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-medium shadow-sm transition " +
+  "focus:outline-none focus:ring-2 focus:ring-violet-200 disabled:opacity-60 disabled:cursor-not-allowed md:text-sm";
+
+const uiBtnPrimary = uiBtnBase + " bg-violet-600 text-white hover:bg-violet-700";
+
+const uiBtnSoft = uiBtnBase + " border border-violet-100 bg-white/80 text-violet-700 hover:bg-violet-50";
+
+const uiBtnNeutral = uiBtnBase + " border border-slate-200 bg-white text-slate-700 hover:bg-slate-50";
+
+const uiBtnDanger = uiBtnBase + " border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100";
+
 type MatriculaDetalheResp = {
   ok: boolean;
   data?: Record<string, unknown> | null;
@@ -447,7 +459,7 @@ export default function MatriculaDetalhePage() {
                       </div>
                       {cobrancaEntrada.status === "PENDENTE" ? (
                         <button
-                          className="mt-2 inline-flex items-center rounded-md border px-3 py-2 text-sm"
+                          className={`mt-2 ${uiBtnPrimary}`}
                           onClick={() => {
                             setPayCobrancaId(cobrancaEntrada.id);
                             setPayValor(cobrancaEntrada.valor_centavos);
@@ -482,7 +494,7 @@ export default function MatriculaDetalhePage() {
                   <div className="flex flex-wrap gap-2">
                     <Link
                       href={`/escola/matriculas/${id}/reprocessar`}
-                      className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
+                      className={uiBtnSoft}
                     >
                       Reprocessar matricula
                     </Link>
@@ -525,33 +537,40 @@ export default function MatriculaDetalhePage() {
                 {itensMatricula.length === 0 ? (
                   <div className="mt-3 text-sm text-muted-foreground">Nenhum item ativo encontrado.</div>
                 ) : (
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-4 space-y-2">
                     {itensMatricula.map((it) => (
-                      <div key={it.turma_id} className="rounded-md border p-2">
-                        <div className="font-medium">{it.turma_nome ?? `Turma #${it.turma_id}`}</div>
-                        <div className="text-sm text-muted-foreground">
+                      <div
+                        key={it.turma_id}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm"
+                      >
+                        <p className="text-sm font-semibold text-slate-900">
+                          {it.turma_nome ?? `Turma #${it.turma_id}`}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
                           {it.ue_label ? `UE: ${it.ue_label}` : `Turma ID: ${it.turma_id}`}
-                        </div>
+                        </p>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {data.servico || data.unidade_execucao_label || data.turma?.turma_id ? (
-                  <div className="mt-4 text-sm">
-                    <div className="font-semibold">Principal (legado)</div>
-                    <div className="text-muted-foreground">
-                      Servico:{" "}
-                      {data.servico?.titulo?.trim() ||
-                        (data.servico?.id ? `Servico #${data.servico.id}` : "-")}{" "}
-                      | UE: {data.unidade_execucao_label ?? "-"} | Turma ID: {data.turma?.turma_id ?? "-"}
+                <div className="mt-5 space-y-4 text-sm text-slate-700">
+                  {data.servico || data.unidade_execucao_label || data.turma?.turma_id ? (
+                    <div>
+                      <div className="font-semibold">Principal (legado)</div>
+                      <div className="text-muted-foreground">
+                        Servico:{" "}
+                        {data.servico?.titulo?.trim() ||
+                          (data.servico?.id ? `Servico #${data.servico.id}` : "-")}{" "}
+                        | UE: {data.unidade_execucao_label ?? "-"} | Turma ID: {data.turma?.turma_id ?? "-"}
+                      </div>
                     </div>
-                  </div>
-                ) : null}
+                  ) : null}
 
-                <div className="mt-4 text-sm">
-                  <div className="text-sm font-semibold">Mensalidade consolidada (referencia)</div>
-                  <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
+                  <div>
+                    <div className="text-sm font-semibold">Mensalidade consolidada (referencia)</div>
+                    <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
+                  </div>
                 </div>
               </section>
 
@@ -563,13 +582,13 @@ export default function MatriculaDetalhePage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Link
                     href={verDocs}
-                    className="rounded-md border px-3 py-2 text-sm text-muted-foreground hover:underline"
+                    className={uiBtnNeutral}
                   >
                     Ver documentos
                   </Link>
                   <Link
                     href={emitirDocs}
-                    className="rounded-md border border-slate-800 px-3 py-2 text-sm font-medium"
+                    className={uiBtnPrimary}
                   >
                     Emitir documento
                   </Link>
@@ -602,7 +621,7 @@ export default function MatriculaDetalhePage() {
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
-                    className="rounded-md border px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+                    className={uiBtnDanger}
                     disabled
                     title="TODO: conectar API de encerramento"
                   >
@@ -610,7 +629,7 @@ export default function MatriculaDetalhePage() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+                    className={uiBtnNeutral}
                     disabled
                     title="TODO: conectar API de cancelamento"
                   >
