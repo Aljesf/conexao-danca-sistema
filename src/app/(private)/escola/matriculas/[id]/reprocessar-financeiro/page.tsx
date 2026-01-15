@@ -8,6 +8,26 @@ type MensalidadeRow = {
   valor: string;
 };
 
+type MensalidadeSugestao = {
+  competencia?: string | null;
+  valor_centavos?: number | null;
+};
+
+type SugestoesPayload = {
+  ok?: boolean;
+  sugestoes?: {
+    entrada?: {
+      valor_centavos?: number | null;
+      pago_no_ato?: boolean | null;
+      metodo_pagamento?: string | null;
+      data_pagamento?: string | null;
+      observacoes?: string | null;
+    };
+    mensalidades?: MensalidadeSugestao[];
+  };
+  fontes?: { entrada?: string; mensalidades?: string };
+};
+
 function brlToCentavos(v: string): number {
   // Estrategia robusta: captura apenas digitos e assume 2 casas decimais.
   const digits = (v || "").replace(/\D/g, "");
@@ -50,7 +70,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
   ]);
 
   const [loading, setLoading] = useState(false);
-  const [resp, setResp] = useState<any>(null);
+  const [resp, setResp] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,7 +83,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
         const res = await fetch(`/api/escola/matriculas/${matriculaId}/reprocessar-financeiro`, {
           method: "GET",
         });
-        const json = await res.json();
+        const json = (await res.json()) as SugestoesPayload;
         if (!res.ok || !json?.ok) return;
 
         const ent = json.sugestoes?.entrada;
@@ -80,7 +100,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
 
         if (Array.isArray(mens) && mens.length > 0) {
           setMensalidades(
-            mens.map((m: any) => ({
+            mens.map((m) => ({
               competencia: String(m.competencia ?? new Date().toISOString().slice(0, 7)),
               valor: centavosToBrlInput(Number(m.valor_centavos ?? 0)),
             })),

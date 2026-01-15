@@ -246,7 +246,7 @@ export default function Page() {
 
         {!editingId ? (
           <p className="text-sm text-slate-600">
-            Use o botao "Editar" em uma colecao cadastrada para abrir o formulario.
+            Use o botao &quot;Editar&quot; em uma colecao cadastrada para abrir o formulario.
           </p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">

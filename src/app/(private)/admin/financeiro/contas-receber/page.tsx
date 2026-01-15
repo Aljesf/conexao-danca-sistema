@@ -406,7 +406,7 @@ export default function ContasReceberPage() {
             <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={statusFiltro}
-              onChange={(e) => setStatusFiltro(e.target.value as any)}
+              onChange={(e) => setStatusFiltro(e.target.value as (typeof STATUS_OPCOES)[number])}
             >
               {STATUS_OPCOES.map((s) => (
                 <option key={s}>{s}</option>

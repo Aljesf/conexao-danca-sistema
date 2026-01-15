@@ -208,8 +208,9 @@ export default function ContasPagarPage() {
       }
       setModalConta(null);
       await loadContas();
-    } catch (err: any) {
-      setError(err?.message || "Erro ao registrar pagamento.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao registrar pagamento.";
+      setError(message);
     } finally {
       setSalvando(false);
     }
@@ -250,7 +251,7 @@ export default function ContasPagarPage() {
             <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               value={statusFiltro}
-              onChange={(e) => setStatusFiltro(e.target.value as any)}
+              onChange={(e) => setStatusFiltro(e.target.value as (typeof STATUS_OPCOES)[number])}
             >
               {STATUS_OPCOES.map((s) => (
                 <option key={s}>{s}</option>

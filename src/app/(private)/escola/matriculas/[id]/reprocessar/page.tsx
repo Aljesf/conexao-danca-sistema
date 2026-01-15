@@ -3,6 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+type Diagnostico = {
+  ok: boolean;
+  checks?: {
+    turma_aluno_ok?: boolean;
+    conta_cartao_existe?: boolean;
+    cobrancas_cartao_existentes?: number;
+    cobrancas_cartao_esperadas?: number;
+    competencias_faltantes?: string[];
+  };
+  fontes?: { entrada?: string; mensalidades?: string };
+  sugestoes?: { entrada_pactuada_centavos?: number };
+  acoes_planejadas?: Array<{ code?: string; detail?: string }>;
+};
+
+type ExecResponse = Record<string, unknown>;
+
 function centavosToBrlInput(c: number): string {
   const cent = Number.isFinite(c) ? Math.round(c) : 0;
   const reais = Math.floor(cent / 100);
@@ -26,11 +42,11 @@ export default function ReprocessarMatriculaPage() {
   const router = useRouter();
   const matriculaId = params?.id;
 
-  const [diag, setDiag] = useState<any>(null);
+  const [diag, setDiag] = useState<Diagnostico | null>(null);
   const [loadingDiag, setLoadingDiag] = useState(false);
   const [loadingExec, setLoadingExec] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [resp, setResp] = useState<any>(null);
+  const [resp, setResp] = useState<ExecResponse | null>(null);
 
   const [motivo, setMotivo] = useState("");
   const [forcarRebuild, setForcarRebuild] = useState(true);
@@ -178,8 +194,8 @@ export default function ReprocessarMatriculaPage() {
                 <div className="mt-2 rounded-md border bg-slate-50 p-2 text-xs">
                   <div className="font-medium">Acoes planejadas</div>
                   <ul className="mt-1 list-disc pl-4">
-                    {diag.acoes_planejadas.map((a: any) => (
-                      <li key={a.code}>{a.detail}</li>
+                    {diag.acoes_planejadas.map((a) => (
+                      <li key={a.code ?? a.detail}>{a.detail ?? ""}</li>
                     ))}
                   </ul>
                 </div>
