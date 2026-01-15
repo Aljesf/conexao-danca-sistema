@@ -16,18 +16,19 @@ function json<T>(status: number, payload: ApiResponse<T>) {
   return NextResponse.json(payload, { status });
 }
 
-function normalizeCodigoCategoria(nome: string): string {
+function normalizeCodigoSub(nome: string): string {
   const base = nome
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
-  return base.slice(0, 30) || "CATEGORIA";
+  return base.slice(0, 40) || "SUBCATEGORIA";
 }
 
-type CategoriaRow = {
+type SubcategoriaRow = {
   id: number;
+  categoria_id: number;
   nome: string;
   codigo: string | null;
   ativo: boolean;
@@ -41,14 +42,21 @@ export async function GET(req: NextRequest) {
     return json(500, { ok: false, error: "Supabase nao configurado." });
   }
 
+  const categoriaIdRaw = req.nextUrl.searchParams.get("categoria_id");
+  const categoria_id = categoriaIdRaw ? Number(categoriaIdRaw) : NaN;
+  if (!categoriaIdRaw || Number.isNaN(categoria_id)) {
+    return json(400, { ok: false, error: "categoria_id_obrigatorio" });
+  }
+
   const { data, error } = await supabaseAdmin
-    .from("loja_produto_categoria")
-    .select("id,nome,codigo,ativo")
+    .from("loja_produto_categoria_subcategoria")
+    .select("id,categoria_id,nome,codigo,ativo")
+    .eq("categoria_id", categoria_id)
     .eq("ativo", true)
     .order("nome", { ascending: true });
 
   if (error) return json(500, { ok: false, error: error.message });
-  return json(200, { ok: true, data: (data ?? []) as CategoriaRow[] });
+  return json(200, { ok: true, data: (data ?? []) as SubcategoriaRow[] });
 }
 
 export async function POST(req: NextRequest) {
@@ -60,6 +68,11 @@ export async function POST(req: NextRequest) {
   }
 
   const body: unknown = await req.json().catch(() => ({}));
+  const categoria_id =
+    typeof (body as { categoria_id?: unknown }).categoria_id === "number"
+      ? (body as { categoria_id: number }).categoria_id
+      : Number((body as { categoria_id?: unknown }).categoria_id);
+
   const nome =
     typeof (body as { nome?: unknown }).nome === "string"
       ? (body as { nome: string }).nome.trim()
@@ -69,16 +82,19 @@ export async function POST(req: NextRequest) {
       ? (body as { codigo: string }).codigo.trim()
       : "";
 
+  if (!categoria_id || Number.isNaN(categoria_id)) {
+    return json(400, { ok: false, error: "categoria_id_obrigatorio" });
+  }
   if (!nome) return json(400, { ok: false, error: "nome_obrigatorio" });
 
-  const codigo = codigoRaw ? codigoRaw : normalizeCodigoCategoria(nome);
+  const codigo = codigoRaw ? codigoRaw : normalizeCodigoSub(nome);
 
   const { data, error } = await supabaseAdmin
-    .from("loja_produto_categoria")
-    .insert({ nome, codigo, ativo: true })
-    .select("id,nome,codigo,ativo")
+    .from("loja_produto_categoria_subcategoria")
+    .insert({ categoria_id, nome, codigo, ativo: true })
+    .select("id,categoria_id,nome,codigo,ativo")
     .single();
 
   if (error) return json(500, { ok: false, error: error.message });
-  return json(201, { ok: true, data: data as CategoriaRow });
+  return json(201, { ok: true, data: data as SubcategoriaRow });
 }

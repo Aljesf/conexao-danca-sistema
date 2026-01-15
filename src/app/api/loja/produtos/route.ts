@@ -29,6 +29,8 @@ type ProdutoDb = {
   descricao?: string | null;
   categoria: string | null;
   categoria_subcategoria_id?: number | null;
+  categoria_nome?: string | null;
+  subcategoria_nome?: string | null;
   preco_venda_centavos: number;
   unidade: string | null;
   estoque_atual: number;
@@ -40,6 +42,9 @@ type ProdutoDb = {
   fornecedor_principal_id?: number | null;
   fornecedor_nome?: string | null;
 };
+
+type CategoriaRow = { id: number; nome: string };
+type SubcategoriaRow = { id: number; categoria_id: number; nome: string };
 
 // Utilitario para respostas JSON padronizadas
 function json(status: number, payload: ApiResponse) {
@@ -54,6 +59,42 @@ function normalizeNullableNumber(value: any): number | null {
 
 function normalizeCategoriaSubId(value: any): number | null {
   return normalizeNullableNumber(value);
+}
+
+async function resolveCategoriaTexto(
+  supabase: NonNullable<typeof supabaseAdmin>,
+  categoriaSubId: number | null
+): Promise<{ categoriaTexto: string | null; categoriaNome: string | null; subcategoriaNome: string | null }> {
+  if (!categoriaSubId) {
+    return { categoriaTexto: null, categoriaNome: null, subcategoriaNome: null };
+  }
+
+  const { data: sub, error: subErr } = await supabase
+    .from("loja_produto_categoria_subcategoria")
+    .select("id,categoria_id,nome")
+    .eq("id", categoriaSubId)
+    .single();
+
+  if (subErr || !sub) {
+    return { categoriaTexto: null, categoriaNome: null, subcategoriaNome: null };
+  }
+
+  const subcat = sub as SubcategoriaRow;
+
+  const { data: cat, error: catErr } = await supabase
+    .from("loja_produto_categoria")
+    .select("id,nome")
+    .eq("id", subcat.categoria_id)
+    .single();
+
+  if (catErr || !cat) {
+    return { categoriaTexto: subcat.nome, categoriaNome: null, subcategoriaNome: subcat.nome };
+  }
+
+  const categoria = cat as CategoriaRow;
+  const categoriaTexto = `${categoria.nome} / ${subcat.nome}`;
+
+  return { categoriaTexto, categoriaNome: categoria.nome, subcategoriaNome: subcat.nome };
 }
 
 // ==============================
@@ -150,6 +191,57 @@ export async function GET(req: NextRequest) {
         fornecedor_nome: (p as any).fornecedor_nome ?? null,
       })) ?? [];
 
+    const subMap = new Map<number, SubcategoriaRow>();
+    const catMap = new Map<number, CategoriaRow>();
+
+    const subIds = Array.from(
+      new Set(
+        itemsRaw
+          .map((p) => p.categoria_subcategoria_id)
+          .filter((id): id is number => typeof id === "number" && id > 0)
+      )
+    );
+
+    if (subIds.length > 0) {
+      const { data: subData, error: subError } = await supabaseAdmin
+        .from("loja_produto_categoria_subcategoria")
+        .select("id,categoria_id,nome")
+        .in("id", subIds);
+
+      if (subError) {
+        console.error("[GET /api/loja/produtos] Erro ao buscar subcategorias:", subError);
+      } else {
+        const subRows = (subData ?? []) as SubcategoriaRow[];
+        subRows.forEach((row) => {
+          subMap.set(row.id, row);
+        });
+
+        const catIds = Array.from(
+          new Set(
+            subRows
+              .map((row) => row.categoria_id)
+              .filter((id): id is number => typeof id === "number" && id > 0)
+          )
+        );
+
+        if (catIds.length > 0) {
+          const { data: catData, error: catError } = await supabaseAdmin
+            .from("loja_produto_categoria")
+            .select("id,nome")
+            .in("id", catIds);
+
+          if (catError) {
+            console.error("[GET /api/loja/produtos] Erro ao buscar categorias:", catError);
+          } else {
+            (catData ?? []).forEach((row) => {
+              const cat = row as CategoriaRow;
+              catMap.set(cat.id, cat);
+            });
+          }
+        }
+      }
+    }
+
     // Estoque pela view de variantes
     const estoqueMap = new Map<number, number>();
     if (itemsRaw.length > 0) {
@@ -168,10 +260,22 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const items: ProdutoDb[] = itemsRaw.map((p) => ({
-      ...p,
-      estoque_atual: estoqueMap.get(p.id) ?? 0,
-    }));
+    const items: ProdutoDb[] = itemsRaw.map((p) => {
+      const sub = p.categoria_subcategoria_id ? subMap.get(p.categoria_subcategoria_id) : null;
+      const cat = sub ? catMap.get(sub.categoria_id) : null;
+      const categoriaNome = cat?.nome ?? null;
+      const subcategoriaNome = sub?.nome ?? null;
+      const categoriaTexto =
+        p.categoria ?? (categoriaNome && subcategoriaNome ? `${categoriaNome} / ${subcategoriaNome}` : null);
+
+      return {
+        ...p,
+        categoria: categoriaTexto,
+        categoria_nome: categoriaNome,
+        subcategoria_nome: subcategoriaNome,
+        estoque_atual: estoqueMap.get(p.id) ?? 0,
+      };
+    });
 
     return json(200, {
       ok: true,
@@ -252,6 +356,7 @@ export async function POST(req: NextRequest) {
   const estoque = Number.isFinite(estoque_atual) ? Number(estoque_atual) : 0;
   const catSubId = normalizeCategoriaSubId(categoria_subcategoria_id);
   const fornecedorPrincipalId = normalizeNullableNumber(body?.fornecedor_principal_id);
+  const resolvedCategoria = await resolveCategoriaTexto(supabaseAdmin, catSubId);
 
   try {
     const { data, error } = await supabaseAdmin
@@ -260,7 +365,7 @@ export async function POST(req: NextRequest) {
         codigo: codigo || null,
         nome: nome.trim(),
         descricao: descricao || null,
-        categoria: null,
+        categoria: resolvedCategoria.categoriaTexto,
         categoria_subcategoria_id: catSubId,
         preco_venda_centavos: precoFinal,
         unidade: unidade || "UN",
@@ -278,7 +383,14 @@ export async function POST(req: NextRequest) {
       return json(500, { ok: false, error: "Erro ao criar produto." });
     }
 
-    return json(201, { ok: true, data });
+    const responseData: ProdutoDb = {
+      ...(data as ProdutoDb),
+      categoria: resolvedCategoria.categoriaTexto ?? (data as ProdutoDb).categoria ?? null,
+      categoria_nome: resolvedCategoria.categoriaNome,
+      subcategoria_nome: resolvedCategoria.subcategoriaNome,
+    };
+
+    return json(201, { ok: true, data: responseData });
   } catch (e) {
     console.error("[POST /api/loja/produtos] Erro inesperado:", e);
     return json(500, { ok: false, error: "Erro inesperado ao criar produto." });
@@ -328,6 +440,11 @@ export async function PUT(req: NextRequest) {
   }
 
   const updatePayload: Record<string, any> = {};
+  let resolvedCategoria: {
+    categoriaTexto: string | null;
+    categoriaNome: string | null;
+    subcategoriaNome: string | null;
+  } | null = null;
 
   if (typeof codigo !== "undefined") updatePayload.codigo = codigo || null;
   if (typeof nome === "string" && nome.trim().length > 0)
@@ -335,7 +452,10 @@ export async function PUT(req: NextRequest) {
   if (typeof descricao !== "undefined") updatePayload.descricao = descricao || null;
 
   if (typeof categoria_subcategoria_id !== "undefined") {
-    updatePayload.categoria_subcategoria_id = normalizeCategoriaSubId(categoria_subcategoria_id);
+    const catSubId = normalizeCategoriaSubId(categoria_subcategoria_id);
+    updatePayload.categoria_subcategoria_id = catSubId;
+    resolvedCategoria = await resolveCategoriaTexto(supabaseAdmin, catSubId);
+    updatePayload.categoria = resolvedCategoria.categoriaTexto;
   }
 
   // Preco de venda
@@ -398,8 +518,6 @@ export async function PUT(req: NextRequest) {
     });
   }
 
-  updatePayload.categoria = null;
-
   try {
     const { data, error } = await supabaseAdmin
       .from("loja_produtos")
@@ -413,7 +531,16 @@ export async function PUT(req: NextRequest) {
       return json(500, { ok: false, error: "Erro ao atualizar produto." });
     }
 
-    return json(200, { ok: true, data });
+    const responseData: ProdutoDb = resolvedCategoria
+      ? {
+          ...(data as ProdutoDb),
+          categoria: resolvedCategoria.categoriaTexto ?? (data as ProdutoDb).categoria ?? null,
+          categoria_nome: resolvedCategoria.categoriaNome,
+          subcategoria_nome: resolvedCategoria.subcategoriaNome,
+        }
+      : (data as ProdutoDb);
+
+    return json(200, { ok: true, data: responseData });
   } catch (e) {
     console.error("[PUT /api/loja/produtos] Erro inesperado:", e);
     return json(500, {

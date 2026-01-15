@@ -35,6 +35,10 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ### Movimento - formularios e acoes sociais
 - Migration: `20260114_235500_movimento_refactor_formularios_e_acoes.sql` (beneficiarios + concessoes + formularios A/B/C + acoes sociais).
 
+### Loja - codigo automatico de produto
+- Migration: `20260115_130001_loja_produtos_codigo_auto.sql` (sequence + trigger para codigo EVID-XXXXXX-SLUG).
+
+
 ---
 
 ## APIs concluídas
@@ -77,6 +81,11 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - API: POST /api/movimento/acoes.
 - API: POST /api/movimento/acoes/[id]/participantes.
 
+### Loja - categorias e subcategorias
+- API: GET/POST /api/loja/categorias.
+- API: GET/POST /api/loja/subcategorias.
+
+
 
 ---
 
@@ -85,6 +94,10 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ### Admin - Faturas do Cartão Conexão
 - Exibição consistente do total e do(s) lançamento(s)
 - Suporte a composição (`composicao_json`) para auditoria do consolidado (Caminho A)
+
+### Admin - Produtos
+- /admin/loja/produtos (cadastro + gestao de produtos, categorias e variantes).
+
 
 ### Escola - Matrícula Nova / Liquidação
 - Resumo calcula total por múltiplas UEs (ex.: 220 + 180)
