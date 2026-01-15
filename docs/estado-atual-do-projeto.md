@@ -85,6 +85,9 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - API: GET/POST /api/loja/categorias.
 - API: GET/POST /api/loja/subcategorias.
 
+### Loja - variantes
+- API: POST /api/loja/variantes (criacao de variante + SKU automatico).
+
 
 
 ---
@@ -96,7 +99,7 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - Suporte a composição (`composicao_json`) para auditoria do consolidado (Caminho A)
 
 ### Admin - Produtos
-- /admin/loja/produtos (cadastro + gestao de produtos, categorias e variantes).
+- /admin/loja/produtos (cadastro completo + estoque inicial + variantes).
 
 
 ### Escola - Matrícula Nova / Liquidação
@@ -165,7 +168,7 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ---
 
 ## Bloqueios
-Nenhum bloqueio técnico confirmado após validação visual do consolidado e do rebuild.
+- BLOQUEIO: npm run lint falha por erros pre-existentes (no-explicit-any, hooks deps, no-unused-vars, etc.) em varios arquivos fora do escopo desta entrega.
 
 ---
 

@@ -1,4 +1,5 @@
-﻿"use client";
+﻿
+"use client";
 
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -17,6 +18,7 @@ type Produto = {
   estoque_atual: number;
   ativo: boolean;
   observacoes?: string | null;
+  fornecedor_principal_id?: number | null;
 };
 
 type Variante = {
@@ -39,7 +41,26 @@ type ProdutosListResponse = {
 };
 
 type CategoriaRow = { id: number; nome: string; codigo: string | null; ativo: boolean };
+
 type SubcategoriaRow = { id: number; categoria_id: number; nome: string; codigo: string | null; ativo: boolean };
+
+type FornecedorRow = {
+  id: number;
+  pessoa_id: number;
+  codigo_interno: string | null;
+  ativo: boolean;
+  observacoes?: string | null;
+  pessoa_nome?: string | null;
+  pessoa_documento?: string | null;
+};
+
+type CorRow = { id: number; nome: string; codigo: string | null; hex: string | null; ativo: boolean };
+
+type NumeracaoRow = { id: number; tipo: string; valor: number; ativo: boolean };
+
+type TamanhoRow = { id: number; tipo: string; nome: string; ordem?: number | null; ativo: boolean };
+
+type AtributosData = { cores: CorRow[]; numeracoes: NumeracaoRow[]; tamanhos: TamanhoRow[] };
 
 type FiltrosState = {
   search: string;
@@ -49,11 +70,18 @@ type FiltrosState = {
 
 type CreateFormState = {
   nome: string;
+  codigo: string;
   categoria_id: string;
   subcategoria_id: string;
   unidade: string;
-  precoReais: string;
+  fornecedor_id: string;
+  estoque_inicial: string;
+  preco_custo: string;
+  preco_venda: string;
   ativo: boolean;
+  observacoes_produto: string;
+  observacoes_entrada: string;
+  criar_variante_padrao: boolean;
 };
 
 type EditFormState = {
@@ -62,8 +90,17 @@ type EditFormState = {
   codigo: string;
   subcategoria_id: string;
   unidade: string;
+  fornecedor_id: string;
   ativo: boolean;
-  precoReais: string;
+  preco_venda: string;
+  observacoes: string;
+};
+
+type VarianteFormState = {
+  modo: "PADRAO" | "ATRIBUTOS";
+  cor_id: string;
+  numeracao_id: string;
+  tamanho_id: string;
 };
 
 function moneyToCentavos(input: string): number | null {
@@ -74,11 +111,21 @@ function moneyToCentavos(input: string): number | null {
   return Math.round(n * 100);
 }
 
+function formatCentavos(value: number | null | undefined): string {
+  if (!Number.isFinite(value ?? NaN)) return "-";
+  return `R$ ${(Number(value) / 100).toFixed(2).replace(".", ",")}`;
+}
+
 export default function AdminLojaProdutosPage() {
   const [categorias, setCategorias] = useState<CategoriaRow[]>([]);
   const [subcategorias, setSubcategorias] = useState<SubcategoriaRow[]>([]);
+  const [fornecedores, setFornecedores] = useState<FornecedorRow[]>([]);
+  const [atributos, setAtributos] = useState<AtributosData>({ cores: [], numeracoes: [], tamanhos: [] });
+
   const [loadingCats, setLoadingCats] = useState(false);
   const [loadingSubs, setLoadingSubs] = useState(false);
+  const [loadingFornecedores, setLoadingFornecedores] = useState(false);
+  const [loadingAtributos, setLoadingAtributos] = useState(false);
 
   const [showModalCategoria, setShowModalCategoria] = useState(false);
   const [showModalSubcategoria, setShowModalSubcategoria] = useState(false);
@@ -90,11 +137,18 @@ export default function AdminLojaProdutosPage() {
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState<CreateFormState>({
     nome: "",
+    codigo: "",
     categoria_id: "",
     subcategoria_id: "",
     unidade: "UN",
-    precoReais: "",
+    fornecedor_id: "",
+    estoque_inicial: "",
+    preco_custo: "",
+    preco_venda: "",
     ativo: true,
+    observacoes_produto: "",
+    observacoes_entrada: "",
+    criar_variante_padrao: true,
   });
   const [createdProduto, setCreatedProduto] = useState<Produto | null>(null);
 
@@ -102,8 +156,11 @@ export default function AdminLojaProdutosPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
+
   const [variantes, setVariantes] = useState<Variante[]>([]);
   const [loadingVariantes, setLoadingVariantes] = useState(false);
+  const [criandoVariante, setCriandoVariante] = useState(false);
   const [erroVariantes, setErroVariantes] = useState<string | null>(null);
 
   const [filtros, setFiltros] = useState<FiltrosState>({
@@ -121,9 +178,19 @@ export default function AdminLojaProdutosPage() {
     codigo: "",
     subcategoria_id: "",
     unidade: "UN",
+    fornecedor_id: "",
     ativo: true,
-    precoReais: "",
+    preco_venda: "",
+    observacoes: "",
   });
+
+  const [varianteForm, setVarianteForm] = useState<VarianteFormState>({
+    modo: "PADRAO",
+    cor_id: "",
+    numeracao_id: "",
+    tamanho_id: "",
+  });
+  const [mostrarFormVariante, setMostrarFormVariante] = useState(false);
 
   function resetMensagem() {
     setMensagem(null);
@@ -153,6 +220,34 @@ export default function AdminLojaProdutosPage() {
       setLoadingSubs(false);
     }
   }, []);
+
+  async function carregarFornecedores() {
+    setLoadingFornecedores(true);
+    try {
+      const res = await fetch("/api/loja/fornecedores", { cache: "no-store" });
+      const json = (await res.json()) as ApiResponse<FornecedorRow[]>;
+      if (!res.ok || json.ok === false || !json.data) return;
+      setFornecedores(json.data.filter((f) => f.ativo));
+    } finally {
+      setLoadingFornecedores(false);
+    }
+  }
+
+  async function carregarAtributos() {
+    setLoadingAtributos(true);
+    try {
+      const res = await fetch("/api/loja/atributos", { cache: "no-store" });
+      const json = (await res.json()) as ApiResponse<AtributosData>;
+      if (!res.ok || json.ok === false || !json.data) return;
+      setAtributos({
+        cores: json.data.cores ?? [],
+        numeracoes: json.data.numeracoes ?? [],
+        tamanhos: json.data.tamanhos ?? [],
+      });
+    } finally {
+      setLoadingAtributos(false);
+    }
+  }
 
   async function carregarProdutos() {
     resetMensagem();
@@ -187,6 +282,8 @@ export default function AdminLojaProdutosPage() {
   useEffect(() => {
     void carregarCategorias();
     void carregarProdutos();
+    void carregarFornecedores();
+    void carregarAtributos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -200,7 +297,6 @@ export default function AdminLojaProdutosPage() {
   }, [createForm.categoria_id, carregarSubcategoriasByCategoria]);
 
   const produtosFiltrados = useMemo(() => produtos, [produtos]);
-
   async function carregarVariantes(produtoId: number) {
     setErroVariantes(null);
     setLoadingVariantes(true);
@@ -228,31 +324,40 @@ export default function AdminLojaProdutosPage() {
 
   function selecionarProduto(p: Produto) {
     resetMensagem();
+    setProdutoSelecionado(p);
     setEditForm({
       id: p.id,
       nome: p.nome,
       codigo: p.codigo ?? "",
       subcategoria_id: p.categoria_subcategoria_id ? String(p.categoria_subcategoria_id) : "",
       unidade: p.unidade ?? "UN",
+      fornecedor_id: p.fornecedor_principal_id ? String(p.fornecedor_principal_id) : "",
       ativo: p.ativo,
-      precoReais: p.preco_venda_centavos > 0 ? (p.preco_venda_centavos / 100).toFixed(2).replace(".", ",") : "",
+      preco_venda: p.preco_venda_centavos > 0 ? (p.preco_venda_centavos / 100).toFixed(2).replace(".", ",") : "",
+      observacoes: p.observacoes ?? "",
     });
+    setVarianteForm({ modo: "PADRAO", cor_id: "", numeracao_id: "", tamanho_id: "" });
+    setMostrarFormVariante(false);
     void carregarVariantes(p.id);
   }
 
   function limparSelecao() {
     resetMensagem();
+    setProdutoSelecionado(null);
     setEditForm({
       id: null,
       nome: "",
       codigo: "",
       subcategoria_id: "",
       unidade: "UN",
+      fornecedor_id: "",
       ativo: true,
-      precoReais: "",
+      preco_venda: "",
+      observacoes: "",
     });
     setVariantes([]);
     setErroVariantes(null);
+    setMostrarFormVariante(false);
   }
 
   async function criarCategoria() {
@@ -328,6 +433,69 @@ export default function AdminLojaProdutosPage() {
     setMensagem("Subcategoria cadastrada e selecionada.");
   }
 
+  async function criarVariante(payload: Record<string, unknown>) {
+    const res = await fetch("/api/loja/variantes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!res.ok || json.ok === false) {
+      return { ok: false, error: json.error || "Erro ao criar variante." };
+    }
+
+    return { ok: true };
+  }
+
+  async function criarVarianteAgora() {
+    resetMensagem();
+    if (!produtoSelecionado) {
+      setMensagemTipo("error");
+      setMensagem("Selecione um produto antes de criar variante.");
+      return;
+    }
+
+    if (
+      varianteForm.modo === "ATRIBUTOS" &&
+      !varianteForm.cor_id &&
+      !varianteForm.numeracao_id &&
+      !varianteForm.tamanho_id
+    ) {
+      setMensagemTipo("error");
+      setMensagem("Informe ao menos um atributo para criar variante.");
+      return;
+    }
+
+    setCriandoVariante(true);
+    try {
+      const payload: Record<string, unknown> = { produto_id: produtoSelecionado.id };
+      if (varianteForm.modo === "ATRIBUTOS") {
+        payload.cor_id = varianteForm.cor_id ? Number(varianteForm.cor_id) : null;
+        payload.numeracao_id = varianteForm.numeracao_id ? Number(varianteForm.numeracao_id) : null;
+        payload.tamanho_id = varianteForm.tamanho_id ? Number(varianteForm.tamanho_id) : null;
+      }
+
+      const resultado = await criarVariante(payload);
+      if (!resultado.ok) {
+        setMensagemTipo("error");
+        setMensagem(resultado.error || "Erro ao criar variante.");
+        return;
+      }
+
+      setMensagemTipo("success");
+      setMensagem("Variante criada com sucesso.");
+      setVarianteForm((prev) => ({ ...prev, cor_id: "", numeracao_id: "", tamanho_id: "" }));
+      await carregarVariantes(produtoSelecionado.id);
+      await carregarProdutos();
+    } catch (e) {
+      console.error("Erro ao criar variante:", e);
+      setMensagemTipo("error");
+      setMensagem("Erro inesperado ao criar variante.");
+    } finally {
+      setCriandoVariante(false);
+    }
+  }
   async function cadastrarProduto() {
     resetMensagem();
     setCreatedProduto(null);
@@ -335,7 +503,7 @@ export default function AdminLojaProdutosPage() {
     const nome = createForm.nome.trim();
     if (!nome) {
       setMensagemTipo("error");
-      setMensagem("Nome do produto é obrigatório.");
+      setMensagem("Nome do produto e obrigatorio.");
       return;
     }
 
@@ -346,10 +514,40 @@ export default function AdminLojaProdutosPage() {
       return;
     }
 
-    const precoCentavos = moneyToCentavos(createForm.precoReais);
-    if (precoCentavos === null) {
+    const precoVendaCentavos = moneyToCentavos(createForm.preco_venda);
+    if (precoVendaCentavos === null) {
       setMensagemTipo("error");
-      setMensagem("Preço de venda inválido.");
+      setMensagem("Preco de venda invalido.");
+      return;
+    }
+
+    const estoqueInicialRaw = createForm.estoque_inicial.trim();
+    const estoqueInicial = estoqueInicialRaw.length ? Number(estoqueInicialRaw) : 0;
+    if (!Number.isFinite(estoqueInicial) || estoqueInicial < 0) {
+      setMensagemTipo("error");
+      setMensagem("Estoque inicial invalido.");
+      return;
+    }
+
+    const precoCustoRaw = createForm.preco_custo.trim();
+    const precoCustoCentavos = precoCustoRaw.length ? moneyToCentavos(precoCustoRaw) : null;
+    if (precoCustoRaw.length && precoCustoCentavos === null) {
+      setMensagemTipo("error");
+      setMensagem("Preco de custo invalido.");
+      return;
+    }
+
+    const observacoesEntrada = createForm.observacoes_entrada.trim();
+    if (estoqueInicial <= 0 && (precoCustoCentavos !== null || observacoesEntrada.length > 0)) {
+      setMensagemTipo("error");
+      setMensagem("Para registrar entrada, informe estoque inicial maior que zero.");
+      return;
+    }
+
+    const fornecedorId = createForm.fornecedor_id ? Number(createForm.fornecedor_id) : null;
+    if (createForm.fornecedor_id && (!Number.isFinite(fornecedorId) || fornecedorId <= 0)) {
+      setMensagemTipo("error");
+      setMensagem("Fornecedor selecionado invalido.");
       return;
     }
 
@@ -357,10 +555,13 @@ export default function AdminLojaProdutosPage() {
     try {
       const payload: Record<string, unknown> = {
         nome,
+        codigo: createForm.codigo.trim() || null,
         categoria_subcategoria_id: subId,
-        preco_venda_centavos: precoCentavos,
+        preco_venda_centavos: precoVendaCentavos,
         unidade: createForm.unidade.trim() || "UN",
         ativo: createForm.ativo,
+        observacoes: createForm.observacoes_produto.trim() || null,
+        fornecedor_principal_id: fornecedorId,
       };
 
       const res = await fetch("/api/loja/produtos", {
@@ -376,12 +577,74 @@ export default function AdminLojaProdutosPage() {
         return;
       }
 
-      setCreatedProduto(json.data);
-      setMensagemTipo("success");
-      setMensagem("Produto cadastrado com sucesso.");
+      const novoProduto = json.data;
+      setCreatedProduto(novoProduto);
+      setProdutoSelecionado(novoProduto);
+      setEditForm({
+        id: novoProduto.id,
+        nome: novoProduto.nome,
+        codigo: novoProduto.codigo ?? "",
+        subcategoria_id: novoProduto.categoria_subcategoria_id ? String(novoProduto.categoria_subcategoria_id) : "",
+        unidade: novoProduto.unidade ?? "UN",
+        fornecedor_id: novoProduto.fornecedor_principal_id ? String(novoProduto.fornecedor_principal_id) : "",
+        ativo: novoProduto.ativo,
+        preco_venda:
+          novoProduto.preco_venda_centavos > 0
+            ? (novoProduto.preco_venda_centavos / 100).toFixed(2).replace(".", ",")
+            : "",
+        observacoes: novoProduto.observacoes ?? "",
+      });
 
-      setCreateForm((prev) => ({ ...prev, nome: "", precoReais: "" }));
+      const avisos: string[] = [];
+
+      if (estoqueInicial > 0) {
+        const resEntrada = await fetch("/api/loja/estoque/entrada", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            produto_id: novoProduto.id,
+            quantidade: Math.trunc(estoqueInicial),
+            fornecedor_id: fornecedorId ?? undefined,
+            preco_custo_centavos: precoCustoCentavos ?? undefined,
+            observacoes_entrada: observacoesEntrada || undefined,
+          }),
+        });
+
+        const jsonEntrada = (await resEntrada.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        if (!resEntrada.ok || jsonEntrada.ok === false) {
+          avisos.push(jsonEntrada.error || "Falha ao registrar entrada de estoque.");
+        }
+      }
+
+      if (createForm.criar_variante_padrao) {
+        const resultado = await criarVariante({ produto_id: novoProduto.id });
+        if (!resultado.ok) {
+          avisos.push(resultado.error || "Falha ao criar variante padrao.");
+        }
+      }
+
       await carregarProdutos();
+      await carregarVariantes(novoProduto.id);
+
+      setCreateForm((prev) => ({
+        ...prev,
+        nome: "",
+        codigo: "",
+        estoque_inicial: "",
+        preco_custo: "",
+        preco_venda: "",
+        observacoes_produto: "",
+        observacoes_entrada: "",
+        criar_variante_padrao: true,
+      }));
+
+      if (avisos.length > 0) {
+        setMensagemTipo("error");
+        setMensagem(`Produto cadastrado, mas ${avisos.join(" ")}`);
+      } else {
+        setMensagemTipo("success");
+        setMensagem("Produto cadastrado com sucesso.");
+      }
     } catch (e) {
       console.error("Erro ao cadastrar produto:", e);
       setMensagemTipo("error");
@@ -401,14 +664,32 @@ export default function AdminLojaProdutosPage() {
       return;
     }
 
-    const precoCentavos = editForm.precoReais.trim().length > 0 ? moneyToCentavos(editForm.precoReais) : 0;
+    if (!editForm.nome.trim()) {
+      setMensagemTipo("error");
+      setMensagem("Nome do produto e obrigatorio.");
+      return;
+    }
+
+    const precoCentavos = editForm.preco_venda.trim().length > 0 ? moneyToCentavos(editForm.preco_venda) : 0;
     if (precoCentavos === null) {
       setMensagemTipo("error");
-      setMensagem("Preço inválido.");
+      setMensagem("Preco de venda invalido.");
       return;
     }
 
     const subId = editForm.subcategoria_id ? Number(editForm.subcategoria_id) : null;
+    if (editForm.subcategoria_id && (!Number.isFinite(subId) || (subId as number) <= 0)) {
+      setMensagemTipo("error");
+      setMensagem("Subcategoria invalida.");
+      return;
+    }
+
+    const fornecedorId = editForm.fornecedor_id ? Number(editForm.fornecedor_id) : null;
+    if (editForm.fornecedor_id && (!Number.isFinite(fornecedorId) || (fornecedorId as number) <= 0)) {
+      setMensagemTipo("error");
+      setMensagem("Fornecedor selecionado invalido.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -420,6 +701,8 @@ export default function AdminLojaProdutosPage() {
         unidade: editForm.unidade.trim() || "UN",
         ativo: editForm.ativo,
         preco_venda_centavos: precoCentavos,
+        observacoes: editForm.observacoes.trim() || null,
+        fornecedor_principal_id: fornecedorId,
       };
 
       const res = await fetch("/api/loja/produtos", {
@@ -447,7 +730,25 @@ export default function AdminLojaProdutosPage() {
         return prev;
       });
 
-      selecionarProduto(produtoAtualizado);
+      setProdutoSelecionado(produtoAtualizado);
+      setEditForm((prev) => ({
+        ...prev,
+        nome: produtoAtualizado.nome,
+        codigo: produtoAtualizado.codigo ?? "",
+        subcategoria_id: produtoAtualizado.categoria_subcategoria_id
+          ? String(produtoAtualizado.categoria_subcategoria_id)
+          : "",
+        unidade: produtoAtualizado.unidade ?? "UN",
+        fornecedor_id: produtoAtualizado.fornecedor_principal_id
+          ? String(produtoAtualizado.fornecedor_principal_id)
+          : "",
+        ativo: produtoAtualizado.ativo,
+        preco_venda:
+          produtoAtualizado.preco_venda_centavos > 0
+            ? (produtoAtualizado.preco_venda_centavos / 100).toFixed(2).replace(".", ",")
+            : "",
+        observacoes: produtoAtualizado.observacoes ?? "",
+      }));
 
       setMensagemTipo("success");
       setMensagem("Produto atualizado com sucesso.");
@@ -467,7 +768,7 @@ export default function AdminLojaProdutosPage() {
           <div className="text-xs tracking-widest text-slate-500">LOJA (ADMIN)</div>
           <h1 className="mt-2 text-2xl font-semibold">Produtos</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Cadastre produtos, organize categorias/subcategorias e gerencie preços/variantes.
+            Cadastro completo com estoque inicial, categorias e variantes.
           </p>
         </div>
 
@@ -488,14 +789,14 @@ export default function AdminLojaProdutosPage() {
             <div>
               <h2 className="text-lg font-semibold">Cadastrar produto</h2>
               <p className="mt-1 text-sm text-slate-600">
-                O código institucional é gerado automaticamente quando não for informado.
+                Se o codigo interno nao for informado, o sistema gera automaticamente.
               </p>
             </div>
             <Link
               href="/admin/loja/gestao-estoque"
               className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
             >
-              Ir para Gestão de Estoque
+              Ir para Gestao de Estoque
             </Link>
           </div>
 
@@ -506,7 +807,27 @@ export default function AdminLojaProdutosPage() {
                 value={createForm.nome}
                 onChange={(e) => setCreateForm((p) => ({ ...p, nome: e.target.value }))}
                 className="mt-1 w-full rounded-xl border px-3 py-2"
-                placeholder="Ex.: Uniforme Conexão Dança 2026"
+                placeholder="Ex.: Uniforme Conexao Danca 2026"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Codigo interno (opcional)</label>
+              <input
+                value={createForm.codigo}
+                onChange={(e) => setCreateForm((p) => ({ ...p, codigo: e.target.value }))}
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                placeholder="Ex.: UNIF-2026"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Unidade</label>
+              <input
+                value={createForm.unidade}
+                onChange={(e) => setCreateForm((p) => ({ ...p, unidade: e.target.value }))}
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                placeholder="UN"
               />
             </div>
 
@@ -531,7 +852,7 @@ export default function AdminLojaProdutosPage() {
                     {c.nome}
                   </option>
                 ))}
-                <option value="__new__">+ Cadastrar nova categoria…</option>
+                <option value="__new__">+ Cadastrar nova categoria...</option>
               </select>
             </div>
 
@@ -562,27 +883,81 @@ export default function AdminLojaProdutosPage() {
                     {s.nome}
                   </option>
                 ))}
-                {createForm.categoria_id ? <option value="__new__">+ Cadastrar nova subcategoria…</option> : null}
+                {createForm.categoria_id ? <option value="__new__">+ Cadastrar nova subcategoria...</option> : null}
               </select>
             </div>
 
             <div>
-              <label className="text-sm font-medium">Unidade</label>
-              <input
-                value={createForm.unidade}
-                onChange={(e) => setCreateForm((p) => ({ ...p, unidade: e.target.value }))}
+              <label className="text-sm font-medium">Fornecedor principal</label>
+              <select
+                value={createForm.fornecedor_id}
+                onChange={(e) => setCreateForm((p) => ({ ...p, fornecedor_id: e.target.value }))}
                 className="mt-1 w-full rounded-xl border px-3 py-2"
-                placeholder="UN"
+                disabled={loadingFornecedores}
+              >
+                <option value="">{loadingFornecedores ? "Carregando..." : "Selecione o fornecedor"}</option>
+                {fornecedores.map((f) => {
+                  const nome = f.pessoa_nome || f.codigo_interno || `Fornecedor #${f.id}`;
+                  const doc = f.pessoa_documento ? ` (${f.pessoa_documento})` : "";
+                  return (
+                    <option key={f.id} value={String(f.id)}>
+                      {`${nome}${doc}`}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Estoque inicial</label>
+              <input
+                value={createForm.estoque_inicial}
+                onChange={(e) => setCreateForm((p) => ({ ...p, estoque_inicial: e.target.value }))}
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                placeholder="0"
+              />
+              <p className="mt-1 text-xs text-slate-500">Entrada so e registrada se o estoque inicial for maior que zero.</p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Preco de custo (opcional)</label>
+              <input
+                value={createForm.preco_custo}
+                onChange={(e) => setCreateForm((p) => ({ ...p, preco_custo: e.target.value }))}
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                placeholder="Ex.: 40,00"
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium">Preço de venda (R$) *</label>
+              <label className="text-sm font-medium">Preco de venda (R$) *</label>
               <input
-                value={createForm.precoReais}
-                onChange={(e) => setCreateForm((p) => ({ ...p, precoReais: e.target.value }))}
+                value={createForm.preco_venda}
+                onChange={(e) => setCreateForm((p) => ({ ...p, preco_venda: e.target.value }))}
                 className="mt-1 w-full rounded-xl border px-3 py-2"
                 placeholder="Ex.: 79,90"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium">Observacoes do produto</label>
+              <textarea
+                value={createForm.observacoes_produto}
+                onChange={(e) => setCreateForm((p) => ({ ...p, observacoes_produto: e.target.value }))}
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                rows={3}
+                placeholder="Detalhes gerais do produto..."
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium">Observacoes da entrada</label>
+              <textarea
+                value={createForm.observacoes_entrada}
+                onChange={(e) => setCreateForm((p) => ({ ...p, observacoes_entrada: e.target.value }))}
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+                rows={2}
+                placeholder="Notas sobre a entrada inicial de estoque..."
               />
             </div>
 
@@ -596,6 +971,19 @@ export default function AdminLojaProdutosPage() {
               />
               <label htmlFor="novoAtivo" className="text-sm font-medium text-slate-700">
                 Produto ativo
+              </label>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                id="criarVariantePadrao"
+                type="checkbox"
+                checked={createForm.criar_variante_padrao}
+                onChange={(e) => setCreateForm((p) => ({ ...p, criar_variante_padrao: e.target.checked }))}
+                className="rounded border-gray-300"
+              />
+              <label htmlFor="criarVariantePadrao" className="text-sm font-medium text-slate-700">
+                Criar variante padrao automaticamente
               </label>
             </div>
           </div>
@@ -612,14 +1000,14 @@ export default function AdminLojaProdutosPage() {
             {createdProduto ? (
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="rounded-xl border bg-slate-50 px-3 py-2">
-                  <span className="text-slate-500">Código:</span>{" "}
+                  <span className="text-slate-500">Codigo:</span>{" "}
                   <span className="font-semibold">{createdProduto.codigo ?? "-"}</span>
                 </span>
                 <Link
                   href={`/admin/loja/gestao-estoque?produtoId=${createdProduto.id}`}
                   className="rounded-xl border px-4 py-2 font-medium hover:bg-slate-50"
                 >
-                  Abrir na Gestão de Estoque
+                  Abrir na Gestao de Estoque
                 </Link>
                 <Link
                   href={`/admin/loja/produtos/${createdProduto.id}/variantes`}
@@ -631,17 +1019,364 @@ export default function AdminLojaProdutosPage() {
             ) : null}
           </div>
         </div>
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Painel do produto</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Selecione um item na lista para editar dados e criar variantes.
+              </p>
+            </div>
+            {produtoSelecionado ? (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMostrarFormVariante((prev) => !prev)}
+                  className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
+                >
+                  {mostrarFormVariante ? "Ocultar variante" : "Adicionar variante"}
+                </button>
+                <Link
+                  href={`/admin/loja/gestao-estoque?produtoId=${produtoSelecionado.id}`}
+                  className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
+                >
+                  Gestao de Estoque
+                </Link>
+              </div>
+            ) : null}
+          </div>
 
+          {!produtoSelecionado ? (
+            <p className="mt-4 text-sm text-slate-500">Nenhum produto selecionado.</p>
+          ) : (
+            <div className="mt-6 space-y-6">
+              <div className="grid gap-4 rounded-xl border bg-slate-50 p-4 md:grid-cols-4">
+                <div className="text-sm text-slate-600">
+                  Codigo: <span className="font-semibold text-slate-900">{produtoSelecionado.codigo ?? "-"}</span>
+                </div>
+                <div className="text-sm text-slate-600">
+                  Categoria: <span className="font-semibold text-slate-900">{produtoSelecionado.categoria ?? "-"}</span>
+                </div>
+                <div className="text-sm text-slate-600">
+                  Preco:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {formatCentavos(produtoSelecionado.preco_venda_centavos)}
+                  </span>
+                </div>
+                <div className="text-sm text-slate-600">
+                  Estoque: <span className="font-semibold text-slate-900">{produtoSelecionado.estoque_atual}</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Editar produto</h3>
+                  <button type="button" onClick={limparSelecao} className="text-xs text-gray-500 hover:text-gray-700">
+                    Limpar selecao
+                  </button>
+                </div>
+
+                <form className="mt-4 space-y-4" onSubmit={salvarEdicao}>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium mb-1">Nome do produto</label>
+                      <input
+                        type="text"
+                        value={editForm.nome}
+                        onChange={(e) => setEditForm((p) => ({ ...p, nome: e.target.value }))}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Codigo interno</label>
+                      <input
+                        type="text"
+                        value={editForm.codigo}
+                        onChange={(e) => setEditForm((p) => ({ ...p, codigo: e.target.value }))}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Subcategoria (ID)</label>
+                      <input
+                        type="text"
+                        value={editForm.subcategoria_id}
+                        onChange={(e) => setEditForm((p) => ({ ...p, subcategoria_id: e.target.value }))}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        placeholder="ID da subcategoria"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Unidade</label>
+                      <input
+                        type="text"
+                        value={editForm.unidade}
+                        onChange={(e) => setEditForm((p) => ({ ...p, unidade: e.target.value }))}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        placeholder="UN, PAR, KIT..."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Fornecedor principal</label>
+                      <select
+                        value={editForm.fornecedor_id}
+                        onChange={(e) => setEditForm((p) => ({ ...p, fornecedor_id: e.target.value }))}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        disabled={loadingFornecedores}
+                      >
+                        <option value="">{loadingFornecedores ? "Carregando..." : "Selecione o fornecedor"}</option>
+                        {fornecedores.map((f) => {
+                          const nome = f.pessoa_nome || f.codigo_interno || `Fornecedor #${f.id}`;
+                          const doc = f.pessoa_documento ? ` (${f.pessoa_documento})` : "";
+                          return (
+                            <option key={f.id} value={String(f.id)}>
+                              {`${nome}${doc}`}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium mb-1">Preco de venda (R$)</label>
+                      <input
+                        type="text"
+                        value={editForm.preco_venda}
+                        onChange={(e) => setEditForm((p) => ({ ...p, preco_venda: e.target.value }))}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        placeholder="Deixe em branco para aguardando preco"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium mb-1">Observacoes</label>
+                      <textarea
+                        value={editForm.observacoes}
+                        onChange={(e) => setEditForm((p) => ({ ...p, observacoes: e.target.value }))}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        rows={2}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="produtoAtivo"
+                        type="checkbox"
+                        checked={editForm.ativo}
+                        onChange={(e) => setEditForm((p) => ({ ...p, ativo: e.target.checked }))}
+                        className="rounded border-gray-300"
+                      />
+                      <label htmlFor="produtoAtivo" className="text-xs font-medium text-gray-700">
+                        Produto ativo
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                    >
+                      {saving ? "Salvando..." : "Salvar alteracoes"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="rounded-xl border p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Variantes</h3>
+                  <button
+                    type="button"
+                    onClick={() => void carregarVariantes(produtoSelecionado.id)}
+                    className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
+                  >
+                    Recarregar
+                  </button>
+                </div>
+
+                {mostrarFormVariante ? (
+                  <div className="mt-4 space-y-3 rounded-lg border bg-slate-50 p-3">
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="varianteModo"
+                          checked={varianteForm.modo === "PADRAO"}
+                          onChange={() => setVarianteForm((p) => ({ ...p, modo: "PADRAO" }))}
+                        />
+                        Variante padrao
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="varianteModo"
+                          checked={varianteForm.modo === "ATRIBUTOS"}
+                          onChange={() => setVarianteForm((p) => ({ ...p, modo: "ATRIBUTOS" }))}
+                        />
+                        Com atributos
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div>
+                        <label className="text-xs font-medium">Cor</label>
+                        <select
+                          value={varianteForm.cor_id}
+                          onChange={(e) => setVarianteForm((p) => ({ ...p, cor_id: e.target.value }))}
+                          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                          disabled={varianteForm.modo !== "ATRIBUTOS" || loadingAtributos}
+                        >
+                          <option value="">{loadingAtributos ? "Carregando..." : "Selecione"}</option>
+                          {atributos.cores.map((c) => (
+                            <option key={c.id} value={String(c.id)}>
+                              {c.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium">Numeracao</label>
+                        <select
+                          value={varianteForm.numeracao_id}
+                          onChange={(e) => setVarianteForm((p) => ({ ...p, numeracao_id: e.target.value }))}
+                          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                          disabled={varianteForm.modo !== "ATRIBUTOS" || loadingAtributos}
+                        >
+                          <option value="">{loadingAtributos ? "Carregando..." : "Selecione"}</option>
+                          {atributos.numeracoes.map((n) => (
+                            <option key={n.id} value={String(n.id)}>
+                              {n.valor}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium">Tamanho</label>
+                        <select
+                          value={varianteForm.tamanho_id}
+                          onChange={(e) => setVarianteForm((p) => ({ ...p, tamanho_id: e.target.value }))}
+                          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                          disabled={varianteForm.modo !== "ATRIBUTOS" || loadingAtributos}
+                        >
+                          <option value="">{loadingAtributos ? "Carregando..." : "Selecione"}</option>
+                          {atributos.tamanhos.map((t) => (
+                            <option key={t.id} value={String(t.id)}>
+                              {t.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void criarVarianteAgora()}
+                      disabled={criandoVariante}
+                      className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                    >
+                      {criandoVariante ? "Criando..." : "Criar variante agora"}
+                    </button>
+                  </div>
+                ) : null}
+
+                {erroVariantes && (
+                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    {erroVariantes}
+                  </div>
+                )}
+
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50">
+                      <tr className="text-left">
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">SKU</th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">
+                          Estoque
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">
+                          Preco
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Ativo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loadingVariantes && (
+                        <tr>
+                          <td colSpan={4} className="px-5 py-6 text-slate-500">
+                            Carregando variantes...
+                          </td>
+                        </tr>
+                      )}
+
+                      {!loadingVariantes && variantes.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-5 py-8 text-slate-500">
+                            Nenhuma variante encontrada.
+                          </td>
+                        </tr>
+                      )}
+
+                      {!loadingVariantes &&
+                        variantes.map((v) => (
+                          <tr key={v.id} className="border-t border-slate-100">
+                            <td className="px-5 py-3 font-medium text-slate-900">{v.sku}</td>
+                            <td className="px-5 py-3 text-right text-slate-700">{v.estoque_atual}</td>
+                            <td className="px-5 py-3 text-right text-slate-700">
+                              {v.preco_venda_centavos != null ? formatCentavos(v.preco_venda_centavos) : "-"}
+                            </td>
+                            <td className="px-5 py-3">
+                              <span
+                                className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${
+                                  v.ativo
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-slate-50 text-slate-600 border-slate-200"
+                                }`}
+                              >
+                                {v.ativo ? "Ativa" : "Inativa"}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link
+                    href={`/admin/loja/produtos/${produtoSelecionado.id}/variantes`}
+                    className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
+                  >
+                    Abrir cadastro de variantes
+                  </Link>
+                  <Link
+                    href={`/admin/loja/gestao-estoque?produtoId=${produtoSelecionado.id}`}
+                    className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
+                  >
+                    Abrir na Gestao de Estoque
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1 min-w-[240px]">
-              <label className="block text-xs font-medium mb-1">Buscar por nome ou código</label>
+              <label className="block text-xs font-medium mb-1">Buscar por nome ou codigo</label>
               <input
                 type="text"
                 value={filtros.search}
                 onChange={(e) => setFiltros((prev) => ({ ...prev, search: e.target.value }))}
                 className="w-full rounded-xl border px-3 py-2 text-sm"
-                placeholder="Digite parte do nome ou do código..."
+                placeholder="Digite parte do nome ou do codigo..."
               />
             </div>
 
@@ -659,20 +1394,15 @@ export default function AdminLojaProdutosPage() {
             </div>
 
             <div className="flex flex-wrap gap-2 items-center">
-              <span className="text-xs font-medium text-gray-700">Filtro de preço:</span>
+              <span className="text-xs font-medium text-gray-700">Filtro de preco:</span>
               <select
                 value={filtros.modoPreco}
-                onChange={(e) =>
-                  setFiltros((prev) => ({
-                    ...prev,
-                    modoPreco: e.target.value as FiltrosState["modoPreco"],
-                  }))
-                }
+                onChange={(e) => setFiltros((prev) => ({ ...prev, modoPreco: e.target.value as FiltrosState["modoPreco"] }))}
                 className="rounded-xl border px-3 py-2 text-xs"
               >
                 <option value="TODOS">Todos</option>
-                <option value="AGUARDANDO_PRECO">Aguardando preço</option>
-                <option value="COM_PRECO">Com preço definido</option>
+                <option value="AGUARDANDO_PRECO">Aguardando preco</option>
+                <option value="COM_PRECO">Com preco definido</option>
               </select>
             </div>
 
@@ -691,10 +1421,10 @@ export default function AdminLojaProdutosPage() {
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
                   <th className="px-3 py-2 text-left">Nome</th>
-                  <th className="px-3 py-2 text-left">Código</th>
+                  <th className="px-3 py-2 text-left">Codigo</th>
                   <th className="px-3 py-2 text-left">Categoria</th>
                   <th className="px-3 py-2 text-right">Estoque</th>
-                  <th className="px-3 py-2 text-right">Preço venda</th>
+                  <th className="px-3 py-2 text-right">Preco venda</th>
                   <th className="px-3 py-2 text-center">Status</th>
                 </tr>
               </thead>
@@ -721,7 +1451,7 @@ export default function AdminLojaProdutosPage() {
                         <div className="flex flex-col">
                           <span className="font-medium text-gray-800">{p.nome}</span>
                           {aguardandoPreco && (
-                            <span className="text-[11px] text-amber-600">Aguardando definição de preço</span>
+                            <span className="text-[11px] text-amber-600">Aguardando definicao de preco</span>
                           )}
                         </div>
                       </td>
@@ -729,9 +1459,7 @@ export default function AdminLojaProdutosPage() {
                       <td className="px-3 py-2 text-gray-600">{p.categoria || "-"}</td>
                       <td className="px-3 py-2 text-right text-gray-700">{p.estoque_atual}</td>
                       <td className="px-3 py-2 text-right text-gray-700">
-                        {p.preco_venda_centavos > 0
-                          ? `R$ ${(p.preco_venda_centavos / 100).toFixed(2).replace(".", ",")}`
-                          : "-"}
+                        {p.preco_venda_centavos > 0 ? formatCentavos(p.preco_venda_centavos) : "-"}
                       </td>
                       <td className="px-3 py-2 text-center">
                         <span
@@ -752,218 +1480,21 @@ export default function AdminLojaProdutosPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Edição do produto</h2>
-            <button type="button" onClick={limparSelecao} className="text-xs text-gray-500 hover:text-gray-700">
-              Limpar seleção
-            </button>
-          </div>
-
-          {!editForm.id ? (
-            <p className="mt-2 text-xs text-gray-500">Clique em um produto na tabela acima para editar.</p>
-          ) : (
-            <form className="mt-4 space-y-4" onSubmit={salvarEdicao}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-medium mb-1">Nome do produto</label>
-                  <input
-                    type="text"
-                    value={editForm.nome}
-                    onChange={(e) => setEditForm((p) => ({ ...p, nome: e.target.value }))}
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium mb-1">Código</label>
-                  <input
-                    type="text"
-                    value={editForm.codigo}
-                    onChange={(e) => setEditForm((p) => ({ ...p, codigo: e.target.value }))}
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium mb-1">Subcategoria</label>
-                  <input
-                    type="text"
-                    value={editForm.subcategoria_id}
-                    onChange={(e) => setEditForm((p) => ({ ...p, subcategoria_id: e.target.value }))}
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                    placeholder="ID da subcategoria (por enquanto)"
-                  />
-                  <p className="mt-1 text-[11px] text-gray-500">
-                    Ajuste fino: depois podemos trocar por select também (igual ao cadastro).
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium mb-1">Unidade</label>
-                  <input
-                    type="text"
-                    value={editForm.unidade}
-                    onChange={(e) => setEditForm((p) => ({ ...p, unidade: e.target.value }))}
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                    placeholder="UN, PAR, KIT..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium mb-1">Preço de venda (R$)</label>
-                  <input
-                    type="text"
-                    value={editForm.precoReais}
-                    onChange={(e) => setEditForm((p) => ({ ...p, precoReais: e.target.value }))}
-                    className="w-full rounded-xl border px-3 py-2 text-sm"
-                    placeholder="Deixe em branco para 'aguardando preço'"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2 mt-2">
-                  <input
-                    id="produtoAtivo"
-                    type="checkbox"
-                    checked={editForm.ativo}
-                    onChange={(e) => setEditForm((p) => ({ ...p, ativo: e.target.checked }))}
-                    className="rounded border-gray-300"
-                  />
-                  <label htmlFor="produtoAtivo" className="text-xs font-medium text-gray-700">
-                    Produto ativo
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-                >
-                  {saving ? "Salvando..." : "Salvar alterações"}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {editForm.id && (
-            <div className="mt-6 rounded-3xl border border-indigo-100 bg-white/95 shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800">Variantes</h3>
-                  <p className="text-xs text-slate-600">
-                    Produto #{editForm.id} - {editForm.nome || "Selecionado"}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void carregarVariantes(editForm.id as number)}
-                  className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white hover:bg-slate-50"
-                >
-                  Recarregar variantes
-                </button>
-              </div>
-
-              {erroVariantes && (
-                <div className="px-5 py-3 text-sm text-rose-700 bg-rose-50 border-b border-rose-100">
-                  {erroVariantes}
-                </div>
-              )}
-
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr className="text-left">
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">SKU</th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">
-                        Estoque
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 text-right">
-                        Preço
-                      </th>
-                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Ativo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loadingVariantes && (
-                      <tr>
-                        <td colSpan={4} className="px-5 py-6 text-slate-500">
-                          Carregando variantes...
-                        </td>
-                      </tr>
-                    )}
-
-                    {!loadingVariantes && variantes.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="px-5 py-8 text-slate-500">
-                          Nenhuma variante encontrada. Crie a variante padrão no Admin.
-                        </td>
-                      </tr>
-                    )}
-
-                    {!loadingVariantes &&
-                      variantes.map((v) => (
-                        <tr key={v.id} className="border-t border-slate-100">
-                          <td className="px-5 py-3 font-medium text-slate-900">{v.sku}</td>
-                          <td className="px-5 py-3 text-right text-slate-700">{v.estoque_atual}</td>
-                          <td className="px-5 py-3 text-right text-slate-700">
-                            {v.preco_venda_centavos != null
-                              ? `R$ ${(v.preco_venda_centavos / 100).toFixed(2).replace(".", ",")}`
-                              : "—"}
-                          </td>
-                          <td className="px-5 py-3">
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-medium border ${
-                                v.ativo
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-slate-50 text-slate-600 border-slate-200"
-                              }`}
-                            >
-                              {v.ativo ? "Ativa" : "Inativa"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {editForm.id ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link
-                href={`/admin/loja/produtos/${editForm.id}/variantes`}
-                className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
-              >
-                Abrir cadastro de variantes
-              </Link>
-              <Link
-                href={`/admin/loja/gestao-estoque?produtoId=${editForm.id}`}
-                className="rounded-xl border px-4 py-2 text-sm font-medium hover:bg-slate-50"
-              >
-                Abrir na Gestão de Estoque
-              </Link>
-            </div>
-          ) : null}
-        </div>
-
         {showModalCategoria ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
               <h3 className="text-lg font-semibold">Cadastrar nova categoria</h3>
-              <p className="mt-1 text-sm text-slate-600">Cria e já seleciona no cadastro.</p>
+              <p className="mt-1 text-sm text-slate-600">Cria e ja seleciona no cadastro.</p>
 
               <label className="mt-4 block text-sm font-medium">Nome</label>
               <input
                 value={novaCategoriaNome}
                 onChange={(e) => setNovaCategoriaNome(e.target.value)}
                 className="mt-1 w-full rounded-xl border px-3 py-2"
-                placeholder="Ex.: Vestuário"
+                placeholder="Ex.: Vestuario"
               />
 
-              <label className="mt-3 block text-sm font-medium">Código (opcional)</label>
+              <label className="mt-3 block text-sm font-medium">Codigo (opcional)</label>
               <input
                 value={novaCategoriaCodigo}
                 onChange={(e) => setNovaCategoriaCodigo(e.target.value)}
@@ -997,7 +1528,7 @@ export default function AdminLojaProdutosPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
               <h3 className="text-lg font-semibold">Cadastrar nova subcategoria</h3>
-              <p className="mt-1 text-sm text-slate-600">Cria e já seleciona no cadastro.</p>
+              <p className="mt-1 text-sm text-slate-600">Cria e ja seleciona no cadastro.</p>
 
               <label className="mt-4 block text-sm font-medium">Nome</label>
               <input
@@ -1007,7 +1538,7 @@ export default function AdminLojaProdutosPage() {
                 placeholder="Ex.: Camisas"
               />
 
-              <label className="mt-3 block text-sm font-medium">Código (opcional)</label>
+              <label className="mt-3 block text-sm font-medium">Codigo (opcional)</label>
               <input
                 value={novaSubcategoriaCodigo}
                 onChange={(e) => setNovaSubcategoriaCodigo(e.target.value)}
