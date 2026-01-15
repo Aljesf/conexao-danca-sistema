@@ -136,16 +136,26 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
     }
 
     if (codigo === "MATRICULA_CURSOS") {
+      const matriculaId = Number(input.operacaoId || 0);
+      if (!matriculaId) {
+        resp[codigo] = [];
+        continue;
+      }
+
+      const today = new Date().toISOString().slice(0, 10);
       const { data: vinculosRaw, error: vinculosErr } = await supabase
         .from("turma_aluno")
         .select("turma_id,status,dt_inicio,dt_fim,nivel_id")
-        .eq("matricula_id", input.operacaoId)
-        .is("dt_fim", null)
+        .eq("matricula_id", matriculaId)
+        .or(`dt_fim.is.null,dt_fim.gt.${today}`)
         .limit(500);
 
-      if (vinculosErr) throw new Error(vinculosErr.message);
+      if (vinculosErr || !vinculosRaw || vinculosRaw.length === 0) {
+        resp[codigo] = [];
+        continue;
+      }
 
-      const vinculos = (vinculosRaw ?? []) as Array<Record<string, unknown>>;
+      const vinculos = vinculosRaw as Array<Record<string, unknown>>;
       const turmaIds = Array.from(
         new Set(
           vinculos
@@ -161,13 +171,16 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
 
       const { data: turmasRaw, error: turmasErr } = await supabase
         .from("turmas")
-        .select("turma_id,nome,tipo_turma,nivel,turno,carga_horaria_prevista,status")
+        .select("turma_id,nome,modalidade,tipo_turma,nivel,turno,carga_horaria_prevista,status")
         .in("turma_id", turmaIds);
 
-      if (turmasErr) throw new Error(turmasErr.message);
+      if (turmasErr || !turmasRaw) {
+        resp[codigo] = [];
+        continue;
+      }
 
       const turmasMap = new Map<number, Record<string, unknown>>();
-      (turmasRaw ?? []).forEach((row) => {
+      turmasRaw.forEach((row) => {
         const id = getNumber(row as Record<string, unknown>, "turma_id");
         if (Number.isFinite(id)) {
           turmasMap.set(id as number, row as Record<string, unknown>);
@@ -179,16 +192,18 @@ export async function resolveCollections(input: ResolveCollectionsInput): Promis
         const turma = turmaId ? turmasMap.get(turmaId) : null;
         const nivel = (getString(turma ?? {}, "nivel") ?? "").trim();
         const nivelId = getNumber(row, "nivel_id");
+        const cargaHoraria = getNumber(turma ?? {}, "carga_horaria_prevista");
+        const modalidade =
+          getString(turma ?? {}, "modalidade") ??
+          getString(turma ?? {}, "tipo_turma") ??
+          "";
 
         return {
           CURSO_NOME: getString(turma ?? {}, "nome") ?? "",
-          MODALIDADE: getString(turma ?? {}, "tipo_turma") ?? "",
+          MODALIDADE: modalidade,
           NIVEL: nivel || (Number.isFinite(nivelId) ? String(nivelId) : ""),
           TURNO: getString(turma ?? {}, "turno") ?? "",
-          CARGA_HORARIA:
-            getNumber(turma ?? {}, "carga_horaria_prevista") !== null
-              ? String(getNumber(turma ?? {}, "carga_horaria_prevista"))
-              : "",
+          CARGA_HORARIA: cargaHoraria !== null ? String(cargaHoraria) : "",
           STATUS: getString(row, "status") ?? "",
           TURMA_ID: turmaId ? String(turmaId) : "",
         };
