@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateISO, formatDateTimeISO } from "@/lib/formatters/date";
 
 type MatriculaDetalheResp = {
   ok: boolean;
+  data?: Record<string, unknown> | null;
   matricula?: Record<string, unknown> | null;
   pessoa?: { id?: number; nome?: string | null } | null;
   responsavel_financeiro?: { id?: number; nome?: string | null } | null;
@@ -101,7 +102,24 @@ function labelFromPessoa(pessoa?: { nome?: string | null } | null, fallbackId?: 
   return fallbackId ? `Pessoa #${fallbackId}` : "-";
 }
 
+function badgeStatus(status: string | null | undefined) {
+  const value = (status ?? "").toUpperCase();
+  switch (value) {
+    case "ATIVA":
+      return { label: "ATIVA", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    case "TRANCADA":
+      return { label: "TRANCADA", className: "border-amber-200 bg-amber-50 text-amber-700" };
+    case "CANCELADA":
+      return { label: "CANCELADA", className: "border-rose-200 bg-rose-50 text-rose-700" };
+    case "CONCLUIDA":
+      return { label: "CONCLUIDA", className: "border-slate-200 bg-slate-100 text-slate-700" };
+    default:
+      return { label: status ?? "-", className: "border-slate-200 bg-slate-100 text-slate-600" };
+  }
+}
+
 export default function MatriculaDetalhePage() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params?.id;
 
@@ -138,9 +156,23 @@ export default function MatriculaDetalhePage() {
     };
   }, [id]);
 
-  const matricula = data?.matricula ?? null;
-  const pessoaId = useMemo(() => Number(matricula?.pessoa_id ?? NaN), [matricula]);
-  const respId = useMemo(() => Number(matricula?.responsavel_financeiro_id ?? NaN), [matricula]);
+  const matricula = useMemo(() => data?.data ?? data?.matricula ?? null, [data]);
+  const alunoPessoaId = useMemo(
+    () => Number(matricula?.aluno_pessoa_id ?? matricula?.pessoa_id ?? NaN),
+    [matricula],
+  );
+  const responsavelPessoaId = useMemo(
+    () => Number(matricula?.responsavel_pessoa_id ?? NaN),
+    [matricula],
+  );
+  const responsavelFinanceiroId = useMemo(
+    () => Number(matricula?.responsavel_financeiro_pessoa_id ?? matricula?.responsavel_financeiro_id ?? NaN),
+    [matricula],
+  );
+  const respId = useMemo(
+    () => (Number.isFinite(responsavelFinanceiroId) ? responsavelFinanceiroId : responsavelPessoaId),
+    [responsavelFinanceiroId, responsavelPessoaId],
+  );
   const resumo = data?.financeiro_resumo ?? null;
   const resumoCartao = data?.resumo_financeiro_cartao_conexao ?? null;
   const documentosEmitidos = data?.documentos_emitidos ?? [];
@@ -160,6 +192,14 @@ export default function MatriculaDetalhePage() {
     if (relacionadas.length === 0) return null;
     return relacionadas.find((c) => c.status === "PENDENTE") ?? relacionadas[0];
   }, [avulsas, matriculaIdNum]);
+
+  const responsavelLinkId = useMemo(() => {
+    if (Number.isFinite(responsavelPessoaId)) return responsavelPessoaId;
+    if (Number.isFinite(responsavelFinanceiroId)) return responsavelFinanceiroId;
+    return null;
+  }, [responsavelPessoaId, responsavelFinanceiroId]);
+
+  const statusInfo = useMemo(() => badgeStatus(String(matricula?.status ?? "")), [matricula?.status]);
 
   useEffect(() => {
     let ativo = true;
@@ -242,218 +282,345 @@ export default function MatriculaDetalhePage() {
   }
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Matricula #{id}</h1>
-          <p className="text-sm text-muted-foreground">Detalhe operacional da matricula.</p>
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-pink-50 via-slate-50 to-white px-4 py-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <div className="flex items-center justify-between text-[11px] text-slate-500 md:text-xs">
+          <div className="flex items-center gap-1">
+            <span className="font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Matriculas
+            </span>
+            <span className="text-slate-300">/</span>
+            <span className="font-medium text-slate-500">Detalhes</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => router.push("/escola/matriculas")}
+            className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white/70 px-4 py-1.5 text-[11px] font-medium text-violet-700 shadow-sm backdrop-blur hover:bg-violet-50 md:text-xs"
+          >
+            <span className="text-sm">&lt;</span>
+            Voltar para a lista
+          </button>
         </div>
-        <Link href="/escola/matriculas" className="text-sm text-muted-foreground hover:underline">
-          Voltar para lista
-        </Link>
-      </div>
 
-      {erro ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div> : null}
-      {loading && !data ? <div className="text-sm text-muted-foreground">Carregando...</div> : null}
-
-      {!data ? null : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-lg border p-4 space-y-2">
-            <div className="text-sm font-semibold">Dados principais</div>
-            <div>Aluno: {labelFromPessoa(data.pessoa, Number.isFinite(pessoaId) ? pessoaId : null)}</div>
+        <header className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-6 shadow-sm backdrop-blur">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              Responsavel: {labelFromPessoa(data.responsavel_financeiro, Number.isFinite(respId) ? respId : null)}
-            </div>
-            <div>Ano: {matricula?.ano_referencia ?? "-"}</div>
-            <div>Status: {String(matricula?.status ?? "-")}</div>
-            <div>Tipo: {String(matricula?.tipo_matricula ?? "-")}</div>
-            <div>Criada em: {formatDateTimeISO(String(matricula?.created_at ?? ""))}</div>
-          </div>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
+                Matricula #{id}
+              </h1>
+              <p className="mt-2 max-w-2xl text-[15px] text-slate-600">
+                Detalhe operacional da matricula. Aqui voce visualiza o vinculo,
+                o resumo financeiro e acessa rapidamente o aluno e o responsavel.
+              </p>
 
-          <div className="rounded-lg border p-4 space-y-2">
-            <div className="text-sm font-semibold">Itens da matricula</div>
-            {itensMatricula.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nenhum item ativo encontrado.</div>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {itensMatricula.map((it) => (
-                  <div key={it.turma_id} className="rounded-md border p-2">
-                    <div className="font-medium">{it.turma_nome ?? `Turma #${it.turma_id}`}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {it.ue_label ? `UE: ${it.ue_label}` : `Turma ID: ${it.turma_id}`}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {data.servico || data.unidade_execucao_label || data.turma?.turma_id ? (
-              <div className="mt-3 text-sm">
-                <div className="font-semibold">Principal (legado)</div>
-                <div className="text-muted-foreground">
-                  Servico:{" "}
-                  {data.servico?.titulo?.trim() || (data.servico?.id ? `Servico #${data.servico.id}` : "-")} | UE:{" "}
-                  {data.unidade_execucao_label ?? "-"} | Turma ID: {data.turma?.turma_id ?? "-"}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-3 text-sm">
-              <div className="text-sm font-semibold">Mensalidade consolidada (referencia)</div>
-              <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
-            </div>
-          </div>
-
-          <div className="rounded-lg border p-4 space-y-2">
-            <div className="text-sm font-semibold">Resumo financeiro</div>
-            <div>
-              Entrada paga:{" "}
-              {resumo
-                ? formatBRLFromCents(Number(resumo.entrada_total_paga_centavos))
-                : "-"}
-            </div>
-            {avulsasErro ? (
-              <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-                {avulsasErro}
-              </div>
-            ) : null}
-            {cobrancaEntrada ? (
-              <div className="mt-2 text-sm space-y-1">
-                <div className="font-medium">Entrada (cobranca avulsa)</div>
-                <div className="text-muted-foreground">
-                  Status: {cobrancaEntrada.status} | Vencimento:{" "}
-                  {cobrancaEntrada.vencimento ? formatDateISO(cobrancaEntrada.vencimento) : "-"}
-                </div>
-                <div className="text-muted-foreground">
-                  Valor: {formatBRLFromCents(Number(cobrancaEntrada.valor_centavos))}
-                </div>
-                {cobrancaEntrada.status === "PENDENTE" ? (
-                  <button
-                    className="mt-2 inline-flex items-center rounded-md border px-3 py-2 text-sm"
-                    onClick={() => {
-                      setPayCobrancaId(cobrancaEntrada.id);
-                      setPayValor(cobrancaEntrada.valor_centavos);
-                      setPayMetodo("PIX");
-                      setPayComprovante("");
-                      setPayOpen(true);
-                    }}
-                  >
-                    Registrar recebimento
-                  </button>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span
+                  className={
+                    "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold shadow-sm " +
+                    statusInfo.className
+                  }
+                >
+                  {statusInfo.label}
+                </span>
+                {matricula?.ano_referencia != null ? (
+                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                    Ano {matricula.ano_referencia}
+                  </span>
                 ) : null}
               </div>
-            ) : null}
-            <div className="mt-2 text-sm">
-              <div className="font-medium">Mensalidade consolidada</div>
-              <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
             </div>
-            <div className="mt-2 text-sm text-muted-foreground">
-              A mensalidade recorrente e cobrada via <strong>Cartao Conexao</strong> (faturas mensais). Use o painel
-              de faturas para acompanhar o ciclo mensal.
-            </div>
-            <Link
-              className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
-              href="/admin/financeiro/credito-conexao/faturas"
-            >
-              Ver faturas do Cartao Conexao
-            </Link>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Link
-                href={`/escola/matriculas/${id}/reprocessar`}
-                className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
-              >
-                Reprocessar matricula
-              </Link>
-            </div>
-            <div>
-              Proximo vencimento:{" "}
-              {resumoCartao?.proximo_vencimento ? formatDateISO(resumoCartao.proximo_vencimento) : "-"}
-            </div>
-            <div>
-              Ultima atualizacao: {resumo?.ultima_atualizacao ? formatDateTimeISO(resumo.ultima_atualizacao) : "-"}
-            </div>
-            <div>
-              Mensalidade aplicada:{" "}
-              {data.preco_aplicado?.valor_centavos !== undefined
-                ? formatBRLFromCents(Number(data.preco_aplicado.valor_centavos))
-                : "-"}
-            </div>
-            <div>Moeda: {data.preco_aplicado?.moeda ?? "-"}</div>
-            <div>
-              Plano de pagamento:{" "}
-              {data.plano_pagamento?.titulo?.trim() || (data.plano_pagamento?.id ? `Plano #${data.plano_pagamento.id}` : "-")}
-            </div>
-            <div>
-              Ciclo: {data.plano_pagamento?.ciclo_cobranca ?? "-"}{" "}
-              {data.plano_pagamento?.numero_parcelas ? `(${data.plano_pagamento.numero_parcelas} parcelas)` : ""}
+
+            <div className="flex flex-col items-start gap-2 text-sm text-slate-600 md:items-end">
+              <div>
+                <span className="text-slate-400">Criada em</span>
+                <div className="font-medium text-slate-700">
+                  {formatDateTimeISO(String(matricula?.created_at ?? ""))}
+                </div>
+              </div>
+              <div>
+                <span className="text-slate-400">Tipo</span>
+                <div className="font-medium text-slate-700">
+                  {String(matricula?.tipo_matricula ?? "-")}
+                </div>
+              </div>
             </div>
           </div>
+        </header>
 
-          <div className="rounded-lg border p-4 space-y-3">
-            <div className="text-sm font-semibold">Documentos</div>
-            <p className="text-sm text-muted-foreground">
-              Emissao e consulta de documentos vinculados a esta matricula.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href={verDocs}
-                className="rounded-md border px-3 py-2 text-sm text-muted-foreground hover:underline"
-              >
-                Ver documentos
-              </Link>
-              <Link
-                href={emitirDocs}
-                className="rounded-md border border-slate-800 px-3 py-2 text-sm font-medium"
-              >
-                Emitir documento
-              </Link>
-            </div>
-            {documentosEmitidos.length === 0 ? (
-              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                Nenhum documento emitido para esta matricula.
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {documentosEmitidos.map((doc) => (
-                  <Link
-                    key={doc.id}
-                    href={`/admin/config/documentos/emitidos/${doc.id}`}
-                    className="rounded-md border bg-white px-3 py-2 text-xs hover:bg-slate-50"
-                  >
-                    <div className="font-semibold">Documento #{doc.id}</div>
-                    <div className="mt-1 text-muted-foreground">
-                      Modelo: {doc.contrato_modelo_id ?? "-"} | Status: {doc.status_assinatura ?? "-"} | Criado em:{" "}
-                      {doc.created_at ? formatDateTimeISO(doc.created_at) : "-"}
+        {erro ? (
+          <div className="rounded-2xl border border-rose-100 bg-rose-50/80 px-4 py-3 text-sm text-rose-700 shadow-sm md:text-base">
+            {erro}
+          </div>
+        ) : null}
+
+        {loading && !data ? (
+          <div className="space-y-4">
+            <div className="h-20 rounded-3xl bg-white/70 shadow-sm backdrop-blur animate-pulse" />
+            <div className="h-40 rounded-3xl bg-white/70 shadow-sm backdrop-blur animate-pulse" />
+            <div className="h-40 rounded-3xl bg-white/70 shadow-sm backdrop-blur animate-pulse" />
+          </div>
+        ) : null}
+
+        {!data ? null : (
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="flex flex-col gap-6">
+              <section className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+                <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                  Dados principais
+                </h2>
+
+                <div className="mt-4 space-y-2 text-[15px] text-slate-700">
+                  <p>
+                    <span className="text-slate-500">Aluno:</span>{" "}
+                    <span className="font-medium">
+                      {labelFromPessoa(data.pessoa, Number.isFinite(alunoPessoaId) ? alunoPessoaId : null)}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Responsavel:</span>{" "}
+                    <span className="font-medium">
+                      {labelFromPessoa(data.responsavel_financeiro, Number.isFinite(respId) ? respId : null)}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Ano:</span>{" "}
+                    <span className="font-medium">{matricula?.ano_referencia ?? "-"}</span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Status:</span>{" "}
+                    <span className="font-medium">{String(matricula?.status ?? "-")}</span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Criada em:</span>{" "}
+                    <span className="font-medium">{formatDateTimeISO(String(matricula?.created_at ?? ""))}</span>
+                  </p>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {Number.isFinite(alunoPessoaId) ? (
+                    <Link
+                      href={`/pessoas/${alunoPessoaId}`}
+                      className="text-xs font-medium text-violet-700 hover:underline"
+                    >
+                      Abrir aluno
+                    </Link>
+                  ) : null}
+
+                  {responsavelLinkId ? (
+                    <Link
+                      href={`/pessoas/${responsavelLinkId}`}
+                      className="text-xs font-medium text-violet-700 hover:underline"
+                    >
+                      Abrir responsavel
+                    </Link>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+                <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                  Resumo financeiro
+                </h2>
+
+                <div className="mt-4 space-y-3 text-sm text-slate-700">
+                  <div>
+                    Entrada paga:{" "}
+                    {resumo ? formatBRLFromCents(Number(resumo.entrada_total_paga_centavos)) : "-"}
+                  </div>
+
+                  {avulsasErro ? (
+                    <div className="rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+                      {avulsasErro}
                     </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
+                  ) : null}
 
-          <div className="rounded-lg border p-4 space-y-3">
-            <div className="text-sm font-semibold">Acoes</div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="rounded-md border px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
-                disabled
-                title="TODO: conectar API de encerramento"
-              >
-                Encerrar
-              </button>
-              <button
-                type="button"
-                className="rounded-md border px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
-                disabled
-                title="TODO: conectar API de cancelamento"
-              >
-                Cancelar
-              </button>
+                  {cobrancaEntrada ? (
+                    <div className="space-y-1">
+                      <div className="font-medium">Entrada (cobranca avulsa)</div>
+                      <div className="text-muted-foreground">
+                        Status: {cobrancaEntrada.status} | Vencimento:{" "}
+                        {cobrancaEntrada.vencimento ? formatDateISO(cobrancaEntrada.vencimento) : "-"}
+                      </div>
+                      <div className="text-muted-foreground">
+                        Valor: {formatBRLFromCents(Number(cobrancaEntrada.valor_centavos))}
+                      </div>
+                      {cobrancaEntrada.status === "PENDENTE" ? (
+                        <button
+                          className="mt-2 inline-flex items-center rounded-md border px-3 py-2 text-sm"
+                          onClick={() => {
+                            setPayCobrancaId(cobrancaEntrada.id);
+                            setPayValor(cobrancaEntrada.valor_centavos);
+                            setPayMetodo("PIX");
+                            setPayComprovante("");
+                            setPayOpen(true);
+                          }}
+                        >
+                          Registrar recebimento
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div>
+                    <div className="font-medium">Mensalidade consolidada</div>
+                    <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
+                  </div>
+
+                  <div className="text-muted-foreground">
+                    A mensalidade recorrente e cobrada via <strong>Cartao Conexao</strong> (faturas mensais).
+                    Use o painel de faturas para acompanhar o ciclo mensal.
+                  </div>
+
+                  <Link
+                    className="inline-block text-sm font-medium text-blue-700 hover:underline"
+                    href="/admin/financeiro/credito-conexao/faturas"
+                  >
+                    Ver faturas do Cartao Conexao
+                  </Link>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/escola/matriculas/${id}/reprocessar`}
+                      className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
+                    >
+                      Reprocessar matricula
+                    </Link>
+                  </div>
+
+                  <div>
+                    Proximo vencimento:{" "}
+                    {resumoCartao?.proximo_vencimento ? formatDateISO(resumoCartao.proximo_vencimento) : "-"}
+                  </div>
+                  <div>
+                    Ultima atualizacao:{" "}
+                    {resumo?.ultima_atualizacao ? formatDateTimeISO(resumo.ultima_atualizacao) : "-"}
+                  </div>
+                  <div>
+                    Mensalidade aplicada:{" "}
+                    {data.preco_aplicado?.valor_centavos !== undefined
+                      ? formatBRLFromCents(Number(data.preco_aplicado.valor_centavos))
+                      : "-"}
+                  </div>
+                  <div>Moeda: {data.preco_aplicado?.moeda ?? "-"}</div>
+                  <div>
+                    Plano de pagamento:{" "}
+                    {data.plano_pagamento?.titulo?.trim() ||
+                      (data.plano_pagamento?.id ? `Plano #${data.plano_pagamento.id}` : "-")}
+                  </div>
+                  <div>
+                    Ciclo: {data.plano_pagamento?.ciclo_cobranca ?? "-"}{" "}
+                    {data.plano_pagamento?.numero_parcelas ? `(${data.plano_pagamento.numero_parcelas} parcelas)` : ""}
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div className="flex flex-col gap-6">
+              <section className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+                <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                  Itens da matricula
+                </h2>
+
+                {itensMatricula.length === 0 ? (
+                  <div className="mt-3 text-sm text-muted-foreground">Nenhum item ativo encontrado.</div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {itensMatricula.map((it) => (
+                      <div key={it.turma_id} className="rounded-md border p-2">
+                        <div className="font-medium">{it.turma_nome ?? `Turma #${it.turma_id}`}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {it.ue_label ? `UE: ${it.ue_label}` : `Turma ID: ${it.turma_id}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {data.servico || data.unidade_execucao_label || data.turma?.turma_id ? (
+                  <div className="mt-4 text-sm">
+                    <div className="font-semibold">Principal (legado)</div>
+                    <div className="text-muted-foreground">
+                      Servico:{" "}
+                      {data.servico?.titulo?.trim() ||
+                        (data.servico?.id ? `Servico #${data.servico.id}` : "-")}{" "}
+                      | UE: {data.unidade_execucao_label ?? "-"} | Turma ID: {data.turma?.turma_id ?? "-"}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="mt-4 text-sm">
+                  <div className="text-sm font-semibold">Mensalidade consolidada (referencia)</div>
+                  <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+                <h2 className="text-base font-semibold text-slate-800 md:text-lg">Documentos</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Emissao e consulta de documentos vinculados a esta matricula.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    href={verDocs}
+                    className="rounded-md border px-3 py-2 text-sm text-muted-foreground hover:underline"
+                  >
+                    Ver documentos
+                  </Link>
+                  <Link
+                    href={emitirDocs}
+                    className="rounded-md border border-slate-800 px-3 py-2 text-sm font-medium"
+                  >
+                    Emitir documento
+                  </Link>
+                </div>
+                {documentosEmitidos.length === 0 ? (
+                  <div className="mt-3 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                    Nenhum documento emitido para esta matricula.
+                  </div>
+                ) : (
+                  <div className="mt-3 grid gap-2">
+                    {documentosEmitidos.map((doc) => (
+                      <Link
+                        key={doc.id}
+                        href={`/admin/config/documentos/emitidos/${doc.id}`}
+                        className="rounded-md border bg-white px-3 py-2 text-xs hover:bg-slate-50"
+                      >
+                        <div className="font-semibold">Documento #{doc.id}</div>
+                        <div className="mt-1 text-muted-foreground">
+                          Modelo: {doc.contrato_modelo_id ?? "-"} | Status: {doc.status_assinatura ?? "-"} | Criado em:{" "}
+                          {doc.created_at ? formatDateTimeISO(doc.created_at) : "-"}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
+                <h2 className="text-base font-semibold text-slate-800 md:text-lg">Acoes</h2>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+                    disabled
+                    title="TODO: conectar API de encerramento"
+                  >
+                    Encerrar
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+                    disabled
+                    title="TODO: conectar API de cancelamento"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </section>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {payOpen && payCobrancaId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
@@ -534,6 +701,7 @@ export default function MatriculaDetalhePage() {
           </div>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }

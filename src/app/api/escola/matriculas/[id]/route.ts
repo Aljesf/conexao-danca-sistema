@@ -113,8 +113,25 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
       return errJson("not_found", "Matricula nao encontrada.", 404);
     }
 
-    const pessoaId = toPositiveNumber((matricula as { pessoa_id?: number }).pessoa_id);
-    const responsavelId = toPositiveNumber((matricula as { responsavel_financeiro_id?: number }).responsavel_financeiro_id);
+    const alunoPessoaId = toPositiveNumber(
+      (matricula as { pessoa_id?: number | null; aluno_pessoa_id?: number | null; aluno_id?: number | null })
+        .pessoa_id ??
+        (matricula as { aluno_pessoa_id?: number | null }).aluno_pessoa_id ??
+        (matricula as { aluno_id?: number | null }).aluno_id,
+    );
+    const responsavelPessoaId = toPositiveNumber(
+      (matricula as { responsavel_pessoa_id?: number | null; responsavel_id?: number | null })
+        .responsavel_pessoa_id ??
+        (matricula as { responsavel_id?: number | null }).responsavel_id,
+    );
+    const responsavelFinanceiroPessoaId = toPositiveNumber(
+      (matricula as { responsavel_financeiro_id?: number | null; responsavel_financeiro_pessoa_id?: number | null })
+        .responsavel_financeiro_id ??
+        (matricula as { responsavel_financeiro_pessoa_id?: number | null }).responsavel_financeiro_pessoa_id,
+    );
+
+    const pessoaId = alunoPessoaId;
+    const responsavelId = responsavelFinanceiroPessoaId ?? responsavelPessoaId;
     const vinculoId = toPositiveNumber((matricula as { vinculo_id?: number }).vinculo_id);
     const servicoIdRaw = (matricula as { servico_id?: number | null; produto_id?: number | null }).servico_id ??
       (matricula as { produto_id?: number | null }).produto_id ??
@@ -390,10 +407,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
         })
       : null;
 
+    const matriculaPayload = {
+      ...(matricula as Record<string, unknown>),
+      aluno_pessoa_id: alunoPessoaId ?? 0,
+      responsavel_pessoa_id: responsavelPessoaId,
+      responsavel_financeiro_pessoa_id: responsavelFinanceiroPessoaId,
+    };
+
     return okJson(
       {
         ok: true,
-        matricula,
+        data: matriculaPayload,
+        matricula: matriculaPayload,
         pessoa: pessoa ?? null,
         responsavel_financeiro: responsavel ?? null,
         servico: servico ?? (servicoId ? { id: servicoId, titulo: null } : null),
