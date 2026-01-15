@@ -12,9 +12,9 @@ export async function GET(req: NextRequest) {
 
   const like = `%${q}%`;
   const { data, error } = await supabase
-    .from("pessoas")
-    .select("id,nome,cpf")
-    .or(`nome.ilike.${like},nome_social.ilike.${like},cpf.ilike.${like}`)
+    .from("loja_produtos")
+    .select("id,nome,codigo")
+    .or(`nome.ilike.${like},codigo.ilike.${like}`)
     .order("nome", { ascending: true })
     .limit(20);
 

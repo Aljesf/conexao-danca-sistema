@@ -38,6 +38,9 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ### Loja - codigo automatico de produto
 - Migration: `20260115_130001_loja_produtos_codigo_auto.sql` (sequence + trigger para codigo EVID-XXXXXX-SLUG).
 
+### Loja - listas de demanda (itens com pessoa)
+- Migration: `20260115_180000_loja_listas_demanda_itens_pessoa.sql` (pessoa_id em itens + indices).
+
 
 ---
 
@@ -88,6 +91,15 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ### Loja - variantes
 - API: POST /api/loja/variantes (criacao de variante + SKU automatico).
 
+### Loja - listas de demanda (buscas e resumo)
+- API: GET /api/loja/listas-demanda (retorna ativas/encerradas).
+- API: GET/PATCH /api/loja/listas-demanda/[id].
+- API: POST /api/loja/listas-demanda/[id]/itens (inclui pessoa_id).
+- API: GET /api/loja/listas-demanda/[id]/resumo.
+- API: GET /api/loja/produtos/busca.
+- API: GET /api/loja/produtos/[id]/variacoes.
+- API: GET /api/pessoas/busca.
+
 
 
 ---
@@ -100,6 +112,9 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 
 ### Admin - Produtos
 - /admin/loja/produtos (cadastro completo + estoque inicial + variantes).
+
+### Loja - listas de demanda (itens)
+- /loja/listas-demanda/[id] (busca produto/variacao/pessoa, pessoa_id opcional nos itens).
 
 
 ### Escola - Matrícula Nova / Liquidação
@@ -272,3 +287,5 @@ Pendencias:
 ## Documentos normativos
 
 - Modulo Alunos - reestruturacao conceitual e plano de implementacao: docs/modulos/modulo-alunos-reestruturacao-conceito-e-implementacao.md
+
+

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import SectionCard from "@/components/layout/SectionCard";
+import ProdutoBusca from "@/components/loja/demanda/ProdutoBusca";
+import PessoaBusca from "@/components/loja/demanda/PessoaBusca";
 
 type Lista = {
   id: number;
@@ -17,6 +19,7 @@ type Item = {
   lista_id: number;
   produto_id: number | null;
   produto_variacao_id: number | null;
+  pessoa_id: number | null;
   descricao_livre: string | null;
   quantidade: number;
   observacoes: string | null;
@@ -30,8 +33,10 @@ export default function LojaListaDemandaDetalhePage() {
   const [itens, setItens] = useState<Item[]>([]);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [produtoId, setProdutoId] = useState<string>("");
-  const [variacaoId, setVariacaoId] = useState<string>("");
+  const [produtoId, setProdutoId] = useState<number | null>(null);
+  const [variacaoId, setVariacaoId] = useState<number | null>(null);
+  const [pessoaId, setPessoaId] = useState<number | null>(null);
+  const [buscaKey, setBuscaKey] = useState(0);
   const [descricaoLivre, setDescricaoLivre] = useState<string>("");
   const [quantidade, setQuantidade] = useState<string>("1");
   const [observacoes, setObservacoes] = useState<string>("");
@@ -83,8 +88,9 @@ export default function LojaListaDemandaDetalhePage() {
     }
 
     const body = {
-      produto_id: produtoId ? Number(produtoId) : null,
-      produto_variacao_id: variacaoId ? Number(variacaoId) : null,
+      produto_id: produtoId,
+      produto_variacao_id: variacaoId,
+      pessoa_id: pessoaId,
       descricao_livre: descricaoLivre.trim().length ? descricaoLivre.trim() : null,
       quantidade: qtd,
       observacoes: observacoes.trim().length ? observacoes.trim() : null,
@@ -96,11 +102,13 @@ export default function LojaListaDemandaDetalhePage() {
       body: JSON.stringify(body),
     });
 
-    const j = (await r.json()) as { data?: { id: number }; error?: string };
-    if (!r.ok) return setErro(j.error ?? "erro_ao_adicionar");
+    const j = (await r.json()) as { ok?: boolean; error?: string };
+    if (!r.ok || j.ok === false) return setErro(j.error ?? "erro_ao_adicionar");
 
-    setProdutoId("");
-    setVariacaoId("");
+    setProdutoId(null);
+    setVariacaoId(null);
+    setPessoaId(null);
+    setBuscaKey((prev) => prev + 1);
     setDescricaoLivre("");
     setQuantidade("1");
     setObservacoes("");
@@ -163,28 +171,25 @@ export default function LojaListaDemandaDetalhePage() {
           <div className="text-sm font-semibold">Adicionar item</div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-sm">Produto ID (opcional)</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2"
-                value={produtoId}
-                onChange={(e) => setProdutoId(e.target.value)}
-                placeholder="Ex.: 123"
+            <div className="md:col-span-2 space-y-1">
+              <ProdutoBusca
+                key={`produto-busca-${buscaKey}`}
                 disabled={!podeEditar}
+                onSelect={(sel) => {
+                  setProdutoId(sel.produtoId);
+                  setVariacaoId(sel.variacaoId);
+                }}
               />
               <div className="text-xs text-slate-500">
-                Neste MVP, informe o ID do produto (ou use descrição livre). Integração com busca/combobox pode vir depois.
+                Use a busca para selecionar produto e variacao. Ou descreva manualmente.
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-sm">Variação ID (opcional)</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2"
-                value={variacaoId}
-                onChange={(e) => setVariacaoId(e.target.value)}
-                placeholder="Ex.: 456"
+            <div className="md:col-span-2 space-y-1">
+              <PessoaBusca
+                key={`pessoa-busca-${buscaKey}`}
                 disabled={!podeEditar}
+                onSelect={(sel) => setPessoaId(sel.pessoaId)}
               />
             </div>
 
@@ -272,3 +277,4 @@ export default function LojaListaDemandaDetalhePage() {
     </div>
   );
 }
+
