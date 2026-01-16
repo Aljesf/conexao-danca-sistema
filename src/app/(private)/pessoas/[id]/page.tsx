@@ -12,6 +12,7 @@ import { AbaMedidasDeclaradas } from "@/components/pessoas/AbaMedidasDeclaradas"
 import { AbaObservacoesGerais } from "@/components/pessoas/AbaObservacoesGerais";
 import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPedagogicas";
 import FormulariosInternosCard from "@/components/pessoas/FormulariosInternosCard";
+import MovimentoMcdCard from "@/components/pessoas/MovimentoMcdCard";
 import { PessoaResumoFinanceiro } from "@/components/pessoas/PessoaResumoFinanceiro";
 import { BairroPicker } from "@/components/enderecos/BairroPicker";
 import { CidadePicker } from "@/components/enderecos/CidadePicker";
@@ -32,7 +33,8 @@ type AbaId =
   | "vinculos"
   | "resumo"
   | "sistema"
-  | "formularios_internos";
+  | "formularios_internos"
+  | "movimento_mcd";
 
 type LocalEndereco = (Partial<EnderecoPessoa> & { pessoa_id?: number }) | null;
 
@@ -439,6 +441,7 @@ export default function PessoaDetalhesPage() {
     { id: "resumo", label: "Resumo financeiro", icon: "" },
     { id: "sistema", label: "Dados do sistema", icon: "" },
     { id: "formularios_internos", label: "Formulários Internos", icon: "" },
+    { id: "movimento_mcd", label: "Movimento (MCD)", icon: "" },
   ];
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-pink-50 via-slate-50 to-white px-4 py-6">
@@ -1270,6 +1273,15 @@ export default function PessoaDetalhesPage() {
                   <FormulariosInternosCard pessoaId={pessoa.id} />
                 ) : (
                   <SectionCard title="Formulários Internos">
+                    <p className="text-sm text-slate-600">Carregando...</p>
+                  </SectionCard>
+                ))}
+
+              {abaAtiva === "movimento_mcd" &&
+                (pessoa?.id ? (
+                  <MovimentoMcdCard pessoaId={pessoa.id} />
+                ) : (
+                  <SectionCard title="Movimento (MCD)">
                     <p className="text-sm text-slate-600">Carregando...</p>
                   </SectionCard>
                 ))}
