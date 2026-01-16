@@ -67,6 +67,14 @@ export const adminSidebar: SidebarSection[] = [
     ],
   },
   {
+    id: "admin-formularios",
+    title: "?? Formularios",
+    items: [
+      { label: "?? Banco de Perguntas", href: "/admin/forms/questions" },
+      { label: "?? Formularios (Templates)", href: "/admin/forms/templates" },
+    ],
+  },
+  {
     id: "admin-loja-admin",
     title: "🛍️ Loja (Admin)",
     items: [
@@ -135,5 +143,6 @@ export const adminSidebar: SidebarSection[] = [
     items: [{ label: "🤖 Painel de IA (GPT interno)", href: "/admin/ia" }],
   },
 ];
+
 
 
