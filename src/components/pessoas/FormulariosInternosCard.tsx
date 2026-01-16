@@ -26,7 +26,10 @@ export default function FormulariosInternosCard({
     setErr(null);
     setMsg(null);
     try {
-      const tRes = await fetch("/api/admin/forms/templates", { cache: "no-store" });
+      const tRes = await fetch("/api/admin/forms/templates", {
+        cache: "no-store",
+        credentials: "include",
+      });
       const tJson = (await tRes.json()) as { data?: Template[]; error?: string };
       if (!tRes.ok) throw new Error(tJson.error ?? "Falha ao carregar templates.");
 
@@ -63,6 +66,7 @@ export default function FormulariosInternosCard({
     const res = await fetch(`/api/admin/forms/templates/${templateId}/generate-link`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({
         pessoa_id: pessoaId,
         responsavel_id: responsavelId ?? null,

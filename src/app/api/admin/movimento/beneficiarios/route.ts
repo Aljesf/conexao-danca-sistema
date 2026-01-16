@@ -1,9 +1,9 @@
 ﻿import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMovimentoAdmin } from "@/lib/auth/movimento-guard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { jsonError, zodToValidationError } from "@/lib/http/api-errors";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 
 const BeneficiarioCreateSchema = z.object({
   pessoa_id: z
@@ -51,7 +51,6 @@ export async function GET(req: Request) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
-    await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
 
     const { data, error } = await supabase
@@ -70,7 +69,16 @@ export async function POST(req: Request) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
-    const { userId } = await requireMovimentoAdmin();
+    const authClient = await getSupabaseServer();
+    const { data: userData, error: userErr } = await authClient.auth.getUser();
+    if (userErr || !userData?.user?.id) {
+      return NextResponse.json(
+        { ok: false, codigo: "NAO_AUTENTICADO", message: "Nao autenticado." },
+        { status: 401 },
+      );
+    }
+
+    const userId = userData.user.id;
     const supabase = getSupabaseServiceClient();
 
     const bodyUnknown = await req.json();

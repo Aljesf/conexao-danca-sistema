@@ -48,6 +48,7 @@ export default function MovimentoMcdCard({
     try {
       const bRes = await fetch(`/api/admin/movimento/beneficiarios?pessoa_id=${pessoaId}`, {
         cache: "no-store",
+        credentials: "include",
       });
       const bJson = (await bRes.json()) as {
         ok?: boolean;
@@ -64,7 +65,10 @@ export default function MovimentoMcdCard({
         : bJson.data ?? null;
       setBenef(benefFromApi);
 
-      const tRes = await fetch("/api/admin/forms/templates", { cache: "no-store" });
+      const tRes = await fetch("/api/admin/forms/templates", {
+        cache: "no-store",
+        credentials: "include",
+      });
       const tJson = (await tRes.json()) as { data?: Template[]; error?: string };
       if (!tRes.ok) throw new Error(tJson.error ?? "Falha ao carregar templates.");
 
@@ -101,6 +105,7 @@ export default function MovimentoMcdCard({
     const res = await fetch("/api/admin/movimento/beneficiarios", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ pessoa_id: pessoaId, responsavel_id: responsavelId ?? null }),
     });
 
