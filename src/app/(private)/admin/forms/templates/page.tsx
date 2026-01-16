@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
 
 type TemplateRow = {
   id: string;
@@ -36,43 +38,59 @@ export default async function AdminFormsTemplatesPage() {
   const rows = await fetchTemplates();
 
   return (
-    <div className="p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Formularios (Templates)</h1>
-        <Link className="px-3 py-2 rounded-lg border" href="/admin/forms/templates/new">
-          Novo template
-        </Link>
-      </div>
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title="Formularios (Templates)"
+        description="Crie templates e organize as perguntas do formulario."
+        actions={
+          <Link
+            className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
+            href="/admin/forms/templates/new"
+          >
+            Novo template
+          </Link>
+        }
+      />
 
-      <div className="mt-4 rounded-xl border overflow-hidden">
-        <div className="grid grid-cols-12 gap-2 px-3 py-2 text-sm font-medium bg-white/50">
-          <div className="col-span-5">Nome</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-1">Versao</div>
-          <div className="col-span-3">Atualizado</div>
-          <div className="col-span-1">Acoes</div>
+      <SectionCard title="Templates cadastrados">
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="py-2 pr-3 text-left">Nome</th>
+                <th className="py-2 pr-3 text-left">Status</th>
+                <th className="py-2 pr-3 text-left">Versao</th>
+                <th className="py-2 pr-3 text-left">Atualizado</th>
+                <th className="py-2 pr-3 text-left">Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b">
+                  <td className="py-2 pr-3">{r.nome}</td>
+                  <td className="py-2 pr-3">{r.status}</td>
+                  <td className="py-2 pr-3">{r.versao}</td>
+                  <td className="py-2 pr-3">
+                    {new Date(r.updated_at).toLocaleString("pt-BR")}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <Link className="underline" href={`/admin/forms/templates/${r.id}`}>
+                      Abrir
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td className="py-4 text-muted-foreground" colSpan={5}>
+                    Nenhum template cadastrado.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         </div>
-
-        {rows.map((r) => (
-          <div key={r.id} className="grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t">
-            <div className="col-span-5">{r.nome}</div>
-            <div className="col-span-2">{r.status}</div>
-            <div className="col-span-1">{r.versao}</div>
-            <div className="col-span-3">
-              {new Date(r.updated_at).toLocaleString("pt-BR")}
-            </div>
-            <div className="col-span-1">
-              <Link className="underline" href={`/admin/forms/templates/${r.id}`}>
-                Abrir
-              </Link>
-            </div>
-          </div>
-        ))}
-
-        {rows.length === 0 ? (
-          <div className="px-3 py-6 text-sm opacity-70">Nenhum template cadastrado.</div>
-        ) : null}
-      </div>
+      </SectionCard>
     </div>
   );
 }

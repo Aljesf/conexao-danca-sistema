@@ -1,8 +1,12 @@
-"use client";
+﻿"use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
+import ToolbarRow from "@/components/layout/ToolbarRow";
 
 type Option = { id: string; valor: string; rotulo: string; ordem: number; ativo: boolean };
+
 type Question = {
   id: string;
   codigo: string;
@@ -10,6 +14,7 @@ type Question = {
   tipo: string;
   form_question_options?: Option[];
 };
+
 type Item = {
   id?: string;
   ordem: number;
@@ -27,8 +32,25 @@ type Template = {
   versao: number;
 };
 
-export default function AdminFormsTemplatesEditorPage({ params }: { params: { id: string } }) {
-  const templateId = params.id;
+type QuestionTypeOption = { value: string; label: string };
+
+const QUESTION_TYPES: QuestionTypeOption[] = [
+  { value: "text", label: "Texto curto" },
+  { value: "textarea", label: "Texto longo" },
+  { value: "number", label: "Numero" },
+  { value: "date", label: "Data" },
+  { value: "boolean", label: "Sim ou nao" },
+  { value: "single_choice", label: "Escolha unica" },
+  { value: "multi_choice", label: "Multipla escolha" },
+  { value: "scale", label: "Escala" },
+];
+
+export default function AdminFormsTemplatesEditorPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id: templateId } = use(params);
 
   const [tpl, setTpl] = useState<Template | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -36,6 +58,15 @@ export default function AdminFormsTemplatesEditorPage({ params }: { params: { id
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [questionCodigo, setQuestionCodigo] = useState("");
+  const [questionTitulo, setQuestionTitulo] = useState("");
+  const [questionTipo, setQuestionTipo] = useState("text");
+  const [questionDescricao, setQuestionDescricao] = useState("");
+  const [questionAjuda, setQuestionAjuda] = useState("");
+  const [questionErr, setQuestionErr] = useState<string | null>(null);
+  const [questionSaving, setQuestionSaving] = useState(false);
 
   const selectedIds = useMemo(() => new Set(items.map((i) => i.form_questions.id)), [items]);
 
@@ -47,14 +78,19 @@ export default function AdminFormsTemplatesEditorPage({ params }: { params: { id
         fetch(`/api/admin/forms/templates/${templateId}`, { cache: "no-store" }),
         fetch("/api/admin/forms/questions", { cache: "no-store" }),
       ]);
+
       const aj = (await a.json()) as { data?: { template: Template; items: Item[] }; error?: string };
       const bj = (await b.json()) as { data?: Question[]; error?: string };
 
       if (!a.ok) throw new Error(aj.error ?? "Falha ao carregar template.");
+      if (aj.error) throw new Error(aj.error);
       if (!b.ok) throw new Error(bj.error ?? "Falha ao carregar perguntas.");
+      if (bj.error) throw new Error(bj.error);
 
-      setTpl(aj.data!.template);
-      setItems(aj.data!.items.map((x, idx) => ({ ...x, ordem: x.ordem ?? idx })));
+      if (!aj.data?.template) throw new Error("Template nao encontrado.");
+
+      setTpl(aj.data.template);
+      setItems(aj.data.items.map((x, idx) => ({ ...x, ordem: x.ordem ?? idx })));
       setAllQuestions(bj.data ?? []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro desconhecido.");
@@ -158,122 +194,309 @@ export default function AdminFormsTemplatesEditorPage({ params }: { params: { id
     }
   }
 
-  if (loading) return <div className="p-4">Carregando...</div>;
-  if (err && !tpl) return <div className="p-4 text-red-600">{err}</div>;
-  if (!tpl) return <div className="p-4">Template nao encontrado.</div>;
+  function resetQuestionForm() {
+    setQuestionCodigo("");
+    setQuestionTitulo("");
+    setQuestionTipo("text");
+    setQuestionDescricao("");
+    setQuestionAjuda("");
+    setQuestionErr(null);
+  }
+
+  async function createQuestion() {
+    setQuestionErr(null);
+    setMsg(null);
+
+    const codigo = questionCodigo.trim();
+    const titulo = questionTitulo.trim();
+    const tipo = questionTipo.trim();
+
+    if (!codigo || !titulo || !tipo) {
+      setQuestionErr("Informe codigo, titulo e tipo.");
+      return;
+    }
+
+    setQuestionSaving(true);
+    try {
+      const res = await fetch("/api/admin/forms/questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codigo,
+          titulo,
+          tipo,
+          descricao: questionDescricao.trim() ? questionDescricao.trim() : null,
+          ajuda: questionAjuda.trim() ? questionAjuda.trim() : null,
+        }),
+      });
+
+      const json = (await res.json()) as { data?: Question; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Falha ao criar pergunta.");
+
+      setModalOpen(false);
+      resetQuestionForm();
+      setMsg("Pergunta criada.");
+      await load();
+    } catch (e) {
+      setQuestionErr(e instanceof Error ? e.message : "Erro desconhecido.");
+    } finally {
+      setQuestionSaving(false);
+    }
+  }
+
+  if (loading) {
+    return <div className="p-6 text-sm text-slate-600">Carregando...</div>;
+  }
+
+  if (err && !tpl) {
+    return <div className="p-6 text-sm text-red-600">{err}</div>;
+  }
+
+  if (!tpl) {
+    return <div className="p-6 text-sm text-slate-600">Template nao encontrado.</div>;
+  }
 
   return (
-    <div className="p-4 grid gap-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{tpl.nome}</h1>
-          <div className="text-sm opacity-70">
-            Status: {tpl.status} | Versao: {tpl.versao}
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title={tpl.nome}
+        description={`Status: ${tpl.status} | Versao: ${tpl.versao}`}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+              onClick={() => void saveItems()}
+            >
+              Salvar itens
+            </button>
+            <button className="rounded-md border px-3 py-2 text-sm" onClick={() => void setStatus("published")}>
+              Publicar
+            </button>
+            <button className="rounded-md border px-3 py-2 text-sm" onClick={() => void setStatus("draft")}>
+              Rascunho
+            </button>
+            <button className="rounded-md border px-3 py-2 text-sm" onClick={() => void setStatus("archived")}>
+              Arquivar
+            </button>
+            <button className="rounded-md border px-3 py-2 text-sm" onClick={() => void generateLink()}>
+              Gerar link
+            </button>
           </div>
+        }
+      />
+
+      {msg ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          {msg}
         </div>
+      ) : null}
 
-        <div className="flex gap-2 flex-wrap">
-          <button className="px-3 py-2 rounded-lg border" onClick={saveItems}>
-            Salvar itens
-          </button>
-          <button className="px-3 py-2 rounded-lg border" onClick={() => setStatus("published")}>
-            Publicar
-          </button>
-          <button className="px-3 py-2 rounded-lg border" onClick={() => setStatus("draft")}>
-            Rascunho
-          </button>
-          <button className="px-3 py-2 rounded-lg border" onClick={() => setStatus("archived")}>
-            Arquivar
-          </button>
-          <button className="px-3 py-2 rounded-lg border" onClick={generateLink}>
-            Gerar link
-          </button>
-        </div>
-      </div>
+      {err ? (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">{err}</div>
+      ) : null}
 
-      {msg ? <div className="text-sm">{msg}</div> : null}
-      {err ? <div className="text-sm text-red-600">{err}</div> : null}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <SectionCard title="Perguntas disponiveis" description="Selecione para adicionar ao template.">
+          <ToolbarRow>
+            <button
+              className="rounded-md border px-3 py-2 text-sm"
+              onClick={() => {
+                setQuestionErr(null);
+                setModalOpen(true);
+              }}
+            >
+              Criar pergunta
+            </button>
+          </ToolbarRow>
 
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="rounded-xl border p-3">
-          <div className="font-medium mb-2">Perguntas disponiveis</div>
-          <div className="grid gap-2 max-h-[420px] overflow-auto">
-            {allQuestions.map((q) => (
-              <button
-                key={q.id}
-                className="text-left px-3 py-2 rounded-lg border disabled:opacity-50"
-                onClick={() => addQuestion(q)}
-                disabled={selectedIds.has(q.id)}
-              >
-                <div className="text-sm font-medium">{q.titulo}</div>
-                <div className="text-xs opacity-70">
-                  {q.codigo} • {q.tipo}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
+          {allQuestions.length === 0 ? (
+            <div className="rounded-md border border-dashed p-4 text-sm text-slate-500">
+              Nenhuma pergunta cadastrada. Clique em Criar pergunta.
+            </div>
+          ) : (
+            <div className="grid gap-2 max-h-[420px] overflow-auto">
+              {allQuestions.map((q) => (
+                <button
+                  key={q.id}
+                  className="text-left rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                  onClick={() => addQuestion(q)}
+                  disabled={selectedIds.has(q.id)}
+                >
+                  <div className="font-medium text-slate-900">{q.titulo}</div>
+                  <div className="text-xs text-slate-500">
+                    {q.codigo} - {q.tipo}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </SectionCard>
 
-        <div className="rounded-xl border p-3">
-          <div className="font-medium mb-2">Perguntas no template</div>
-
+        <SectionCard title="Perguntas no template" description="Organize ordem e obrigatoriedade.">
           {items.length === 0 ? (
-            <div className="text-sm opacity-70">Adicione perguntas ao template.</div>
-          ) : null}
-
-          <div className="grid gap-2">
-            {items.map((it) => (
-              <div key={it.form_questions.id} className="rounded-lg border p-3 grid gap-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium">
-                      {it.ordem + 1}. {it.form_questions.titulo}
+            <div className="rounded-md border border-dashed p-4 text-sm text-slate-500">
+              Adicione perguntas ao template.
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {items.map((it) => (
+                <div key={it.form_questions.id} className="rounded-lg border p-3 grid gap-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium">
+                        {it.ordem + 1}. {it.form_questions.titulo}
+                      </div>
+                      <div className="text-xs text-slate-500">{it.form_questions.codigo} - {it.form_questions.tipo}</div>
                     </div>
-                    <div className="text-xs opacity-70">{it.form_questions.tipo}</div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="rounded-md border px-2 py-1 text-xs"
+                        onClick={() => move(it.form_questions.id, -1)}
+                      >
+                        Subir
+                      </button>
+                      <button
+                        className="rounded-md border px-2 py-1 text-xs"
+                        onClick={() => move(it.form_questions.id, 1)}
+                      >
+                        Descer
+                      </button>
+                      <button
+                        className="rounded-md border px-2 py-1 text-xs"
+                        onClick={() => removeQuestion(it.form_questions.id)}
+                      >
+                        Remover
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      className="px-2 py-1 rounded border"
-                      onClick={() => move(it.form_questions.id, -1)}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      className="px-2 py-1 rounded border"
-                      onClick={() => move(it.form_questions.id, 1)}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      className="px-2 py-1 rounded border"
-                      onClick={() => removeQuestion(it.form_questions.id)}
-                    >
-                      Remover
-                    </button>
-                  </div>
-                </div>
 
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={it.obrigatoria}
-                    onChange={(e) =>
-                      setItems((prev) =>
-                        prev.map((x) =>
-                          x.form_questions.id === it.form_questions.id
-                            ? { ...x, obrigatoria: e.target.checked }
-                            : x
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={it.obrigatoria}
+                      onChange={(e) =>
+                        setItems((prev) =>
+                          prev.map((x) =>
+                            x.form_questions.id === it.form_questions.id
+                              ? { ...x, obrigatoria: e.target.checked }
+                              : x
+                          )
                         )
-                      )
-                    }
-                  />
-                  Obrigatoria
-                </label>
+                      }
+                    />
+                    Obrigatoria
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      </div>
+
+      {modalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Criar pergunta</h3>
+                <p className="text-sm text-slate-600">Cadastro rapido para adicionar ao template.</p>
               </div>
-            ))}
+              <button
+                type="button"
+                className="text-sm font-semibold text-slate-500"
+                onClick={() => {
+                  setModalOpen(false);
+                  resetQuestionForm();
+                }}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Codigo *</span>
+                <input
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={questionCodigo}
+                  onChange={(e) => setQuestionCodigo(e.target.value)}
+                  placeholder="ex: renda_familiar_mensal"
+                />
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Titulo *</span>
+                <input
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={questionTitulo}
+                  onChange={(e) => setQuestionTitulo(e.target.value)}
+                  placeholder="Titulo da pergunta"
+                />
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Tipo *</span>
+                <select
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={questionTipo}
+                  onChange={(e) => setQuestionTipo(e.target.value)}
+                >
+                  {QUESTION_TYPES.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Descricao</span>
+                <textarea
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={questionDescricao}
+                  onChange={(e) => setQuestionDescricao(e.target.value)}
+                  placeholder="Opcional"
+                />
+              </label>
+
+              <label className="grid gap-1 text-sm">
+                <span className="font-medium">Ajuda</span>
+                <textarea
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={questionAjuda}
+                  onChange={(e) => setQuestionAjuda(e.target.value)}
+                  placeholder="Opcional"
+                />
+              </label>
+
+              {questionErr ? (
+                <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+                  {questionErr}
+                </div>
+              ) : null}
+            </div>
+
+            <ToolbarRow className="mt-4">
+              <button
+                className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+                onClick={() => void createQuestion()}
+                disabled={questionSaving}
+              >
+                {questionSaving ? "Salvando..." : "Criar pergunta"}
+              </button>
+              <button
+                className="rounded-md border px-4 py-2 text-sm"
+                onClick={() => {
+                  setModalOpen(false);
+                  resetQuestionForm();
+                }}
+              >
+                Cancelar
+              </button>
+            </ToolbarRow>
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

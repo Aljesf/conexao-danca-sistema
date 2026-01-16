@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 
 type Option = { id: string; valor: string; rotulo: string; ordem: number; ativo: boolean };
 type Question = {
@@ -41,8 +41,12 @@ function asString(v: unknown): string {
   return typeof v === "string" ? v : v === null || v === undefined ? "" : String(v);
 }
 
-export default function PublicFormTokenPage({ params }: { params: { token: string } }) {
-  const token = params.token;
+export default function PublicFormTokenPage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
+  const { token } = use(params);
 
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);

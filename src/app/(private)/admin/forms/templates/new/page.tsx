@@ -1,7 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
+import ToolbarRow from "@/components/layout/ToolbarRow";
 
 export default function AdminFormsTemplatesNewPage() {
   const router = useRouter();
@@ -31,38 +35,55 @@ export default function AdminFormsTemplatesNewPage() {
   }
 
   return (
-    <div className="p-4 max-w-2xl">
-      <h1 className="text-xl font-semibold">Novo template</h1>
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title="Novo template"
+        description="Cadastre um template base para organizar as perguntas."
+        actions={
+          <Link
+            className="inline-flex items-center rounded-md border px-3 py-2 text-sm"
+            href="/admin/forms/templates"
+          >
+            Voltar
+          </Link>
+        }
+      />
 
-      <div className="mt-4 grid gap-3">
-        <label className="grid gap-1">
-          <span className="text-sm font-medium">Nome</span>
-          <input
-            className="border rounded-lg px-3 py-2"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-          />
-        </label>
+      {err ? (
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">{err}</div>
+      ) : null}
 
-        <label className="grid gap-1">
-          <span className="text-sm font-medium">Descricao</span>
-          <textarea
-            className="border rounded-lg px-3 py-2"
-            value={descricao}
-            onChange={(e) => setDescricao(e.target.value)}
-          />
-        </label>
+      <SectionCard title="Dados do template">
+        <div className="grid grid-cols-1 gap-3">
+          <div className="grid gap-1">
+            <label className="text-sm font-medium">Nome</label>
+            <input
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+            />
+          </div>
 
-        {err ? <div className="text-sm text-red-600">{err}</div> : null}
+          <div className="grid gap-1">
+            <label className="text-sm font-medium">Descricao</label>
+            <textarea
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={descricao}
+              onChange={(e) => setDescricao(e.target.value)}
+            />
+          </div>
+        </div>
 
-        <button
-          className="px-3 py-2 rounded-lg border w-fit"
-          onClick={onCreate}
-          disabled={loading || !nome.trim()}
-        >
-          {loading ? "Criando..." : "Criar"}
-        </button>
-      </div>
+        <ToolbarRow>
+          <button
+            className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
+            onClick={onCreate}
+            disabled={loading || !nome.trim()}
+          >
+            {loading ? "Criando..." : "Criar template"}
+          </button>
+        </ToolbarRow>
+      </SectionCard>
     </div>
   );
 }
