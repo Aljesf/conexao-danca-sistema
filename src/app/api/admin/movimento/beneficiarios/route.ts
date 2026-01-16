@@ -18,6 +18,35 @@ const BeneficiarioCreateSchema = z.object({
   dados_complementares: z.record(z.unknown()).optional(),
 });
 
+type AseSubmission = {
+  id: string;
+  submitted_at: string | null;
+  template_id: string;
+};
+
+async function findUltimaAseSubmission(supabase: ReturnType<typeof getSupabaseServiceClient>, pessoaId: number) {
+  const { data: templates, error: tplErr } = await supabase
+    .from("form_templates")
+    .select("id")
+    .ilike("nome", "ASE%Movimento%");
+
+  if (tplErr) throw tplErr;
+  const templateIds = (templates ?? []).map((t) => t.id);
+  if (templateIds.length === 0) return null;
+
+  const { data: submission, error: subErr } = await supabase
+    .from("form_submissions")
+    .select("id,submitted_at,template_id")
+    .eq("pessoa_id", pessoaId)
+    .in("template_id", templateIds)
+    .order("submitted_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (subErr) throw subErr;
+  return (submission ?? null) as AseSubmission | null;
+}
+
 export async function GET(req: Request) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
@@ -106,6 +135,39 @@ export async function POST(req: Request) {
       );
     }
 
+    const pessoaIdNumber = Number(pessoaId);
+    if (!Number.isFinite(pessoaIdNumber) || pessoaIdNumber <= 0) {
+      return NextResponse.json(
+        { ok: false, codigo: "VALIDACAO_INVALIDA", message: "pessoa_id invalido." },
+        { status: 400 },
+      );
+    }
+
+    let aseSubmission: AseSubmission | null = null;
+    try {
+      aseSubmission = await findUltimaAseSubmission(supabase, pessoaIdNumber);
+    } catch (error) {
+      return NextResponse.json(
+        {
+          ok: false,
+          codigo: "ASE_TEMPLATES_ERRO",
+          message: error instanceof Error ? error.message : "Erro ao buscar ASE.",
+        },
+        { status: 500 },
+      );
+    }
+
+    if (!aseSubmission?.id || !aseSubmission.submitted_at) {
+      return NextResponse.json(
+        {
+          ok: false,
+          codigo: "ASE_REQUIRED",
+          message: "ASE pendente. Gere o link e colete a ASE antes de ativar como beneficiario.",
+        },
+        { status: 409 },
+      );
+    }
+
     if (!analise) {
       const contexto = body.contexto ?? "ASE_18_PLUS";
 
@@ -149,7 +211,7 @@ export async function POST(req: Request) {
     const { data: pessoa, error: pessoaErr } = await supabase
       .from("pessoas")
       .select("id,nome,cpf,email,telefone")
-      .eq("id", body.pessoa_id)
+      .eq("id", pessoaIdNumber)
       .maybeSingle();
 
     if (pessoaErr) {
@@ -186,6 +248,9 @@ export async function POST(req: Request) {
       .insert({
         pessoa_id: pessoaId,
         analise_id: analise.id,
+        status: "APROVADO",
+        ase_submission_id: aseSubmission.id,
+        ase_submitted_at: aseSubmission.submitted_at,
         relatorio_socioeconomico: relatorioSocioeconomico,
         dados_complementares: (body.dados_complementares ?? null) as unknown,
         observacoes: body.observacoes ?? null,

@@ -75,13 +75,13 @@ export default function MovimentoBeneficiariosPage() {
       observacoes: obs.trim() || undefined,
     };
 
-    const r = await apiPost<{ ok: boolean; codigo?: string; data?: Beneficiario }>(
+    const r = await apiPost<{ ok: boolean; codigo?: string; message?: string; data?: Beneficiario }>(
       "/api/admin/movimento/beneficiarios",
       payload
     );
 
     if (!r.ok) {
-      setMsg(`Erro: ${r.codigo ?? "ERRO_INESPERADO"}`);
+      setMsg(r.message ?? `Erro: ${r.codigo ?? "ERRO_INESPERADO"}`);
       return;
     }
     if (r.data) {

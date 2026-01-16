@@ -61,8 +61,13 @@ export default function PublicFormTokenPage({
 
   function isVisible(it: Item): boolean {
     if (!it.cond_question_id) return true;
-    const val = answers[it.cond_question_id];
-    return asString(val) === asString(it.cond_equals_value);
+    const val = asString(answers[it.cond_question_id]).trim();
+    const allowed = asString(it.cond_equals_value)
+      .split("|")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (allowed.length === 0) return false;
+    return allowed.includes(val);
   }
 
   useEffect(() => {
