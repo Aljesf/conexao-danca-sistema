@@ -23,7 +23,7 @@ function getSupabaseEnv(): SupabaseEnv {
 export async function requireMovimentoAdmin(): Promise<{ userId: string }> {
   const { url, anonKey } = getSupabaseEnv();
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(url, anonKey, {
     cookies: {
       get(name) {
