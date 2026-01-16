@@ -11,6 +11,7 @@ import { AbaCuidadosAluno } from "@/components/pessoas/AbaCuidadosAluno";
 import { AbaMedidasDeclaradas } from "@/components/pessoas/AbaMedidasDeclaradas";
 import { AbaObservacoesGerais } from "@/components/pessoas/AbaObservacoesGerais";
 import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPedagogicas";
+import FormulariosInternosCard from "@/components/pessoas/FormulariosInternosCard";
 import { PessoaResumoFinanceiro } from "@/components/pessoas/PessoaResumoFinanceiro";
 import { BairroPicker } from "@/components/enderecos/BairroPicker";
 import { CidadePicker } from "@/components/enderecos/CidadePicker";
@@ -30,7 +31,8 @@ type AbaId =
   | "endereco"
   | "vinculos"
   | "resumo"
-  | "sistema";
+  | "sistema"
+  | "formularios_internos";
 
 type LocalEndereco = (Partial<EnderecoPessoa> & { pessoa_id?: number }) | null;
 
@@ -436,6 +438,7 @@ export default function PessoaDetalhesPage() {
     { id: "vinculos", label: "Vinculos no sistema", icon: "" },
     { id: "resumo", label: "Resumo financeiro", icon: "" },
     { id: "sistema", label: "Dados do sistema", icon: "" },
+    { id: "formularios_internos", label: "Formulários Internos", icon: "" },
   ];
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-pink-50 via-slate-50 to-white px-4 py-6">
@@ -1261,6 +1264,15 @@ export default function PessoaDetalhesPage() {
                   </dl>
                 </div>
               )}
+
+              {abaAtiva === "formularios_internos" &&
+                (pessoa?.id ? (
+                  <FormulariosInternosCard pessoaId={pessoa.id} />
+                ) : (
+                  <SectionCard title="Formulários Internos">
+                    <p className="text-sm text-slate-600">Carregando...</p>
+                  </SectionCard>
+                ))}
             </div>
 
             {/* MODAL DE FOTO */}
