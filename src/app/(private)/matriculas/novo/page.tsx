@@ -129,20 +129,25 @@ export default function NovaMatriculaWizardPage() {
       setAlunosLoading(true);
       setAlunosErro(null);
       try {
-        const resp = await fetch(
-          `/api/pessoas/busca?query=${encodeURIComponent(term)}`,
-          {
-            signal: controller.signal,
-            credentials: "include",
+          const resp = await fetch(
+            `/api/pessoas/busca?q=${encodeURIComponent(term)}&limit=20`,
+            {
+              signal: controller.signal,
+              credentials: "include",
+            }
+          );
+          if (!resp.ok) {
+            setAlunosResultados([]);
+            setAlunosErro("Erro ao buscar alunos.");
+            return;
           }
-        );
-        if (!resp.ok) {
-          setAlunosResultados([]);
-          setAlunosErro("Erro ao buscar alunos.");
-          return;
-        }
-        const data = (await resp.json()) as { ok: boolean; pessoas: PessoaResumo[] };
-        setAlunosResultados(data.pessoas ?? []);
+          const data = (await resp.json()) as {
+            ok: boolean;
+            pessoas?: PessoaResumo[];
+            items?: PessoaResumo[];
+          };
+          const pessoas = data?.pessoas ?? data?.items ?? [];
+          setAlunosResultados(pessoas);
       } catch (e) {
         if (controller.signal.aborted) return;
         setAlunosResultados([]);

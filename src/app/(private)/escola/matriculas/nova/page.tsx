@@ -1,11 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PessoaSearchBox, { PessoaSearchItem } from "@/components/PessoaSearchBox";
-import PageHeader from "@/components/layout/PageHeader";
-import SectionCard from "@/components/layout/SectionCard";
+import { SectionCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
 import ToolbarRow from "@/components/layout/ToolbarRow";
 
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
@@ -869,38 +868,43 @@ export default function NovaMatriculaPage() {
   }
 
   return (
-    <div className="px-4 py-6">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <PageHeader
-          title="Nova matricula (Escola)"
-          description="Operacional: selecione aluno, turma e data de inicio. A API cuidara da cobranca conforme as regras oficiais."
-          actions={
+    <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-pink-50 to-white px-4 py-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <header className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-6 shadow-sm backdrop-blur">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Escola</p>
+              <h1 className="text-2xl font-semibold text-slate-900 md:text-3xl">Nova matrícula (Escola)</h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Operacional: selecione aluno, responsável financeiro, período/turmas e datas. A API aplicará as regras
+                oficiais de cobrança e primeiro pagamento.
+              </p>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setModoManualValores((prev) => !prev)}
-                className={
-                  modoManualValores
-                    ? "rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900"
-                    : "rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 hover:border-slate-300"
-                }
-              >
+              <button type="button" onClick={() => setModoManualValores((prev) => !prev)} className={modoManualValores ? pillAccent : pillNeutral}>
                 {modoManualValores ? "Valores manuais: ATIVO" : "Inserir valores manualmente"}
               </button>
-              <Link
-                href="/escola/matriculas"
-                className="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:border-slate-300"
-              >
-                Voltar para matriculas
+
+              <Link href="/escola/matriculas" className={pillNeutral}>
+                Voltar para matrículas
               </Link>
             </div>
-          }
-        />
+          </div>
+        </header>
 
         {erro ? (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{erro}</div>
+          <SectionCard
+            title="Falha de validação"
+            subtitle="Status"
+            description="Verifique os campos obrigatórios antes de continuar."
+            className="border-rose-200 bg-rose-50/70"
+          >
+            <div className="text-sm text-rose-700">{erro}</div>
+          </SectionCard>
         ) : null}
 
+        <div className="flex flex-col gap-6">
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionCard title="Aluno e responsavel financeiro">
             <div className="space-y-4">
@@ -937,7 +941,7 @@ export default function NovaMatriculaPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Tipo de matricula</label>
                 <select
-                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                   value={tipo}
                   onChange={(e) => setTipo(e.target.value as TipoMatricula)}
                 >
@@ -952,7 +956,7 @@ export default function NovaMatriculaPage() {
                   <label className="text-sm font-medium">Data da matricula</label>
                   <input
                     type="date"
-                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                     value={dataMatricula}
                     onChange={(e) => setDataMatricula(e.target.value)}
                   />
@@ -961,7 +965,7 @@ export default function NovaMatriculaPage() {
                   <label className="text-sm font-medium">Inicio do vinculo (aulas)</label>
                   <input
                     type="date"
-                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                     value={dataInicioVinculo}
                     onChange={(e) => setDataInicioVinculo(e.target.value)}
                   />
@@ -970,11 +974,11 @@ export default function NovaMatriculaPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  Ano referencia {tipo === "REGULAR" ? "(obrigatorio)" : "(opcional)"}
+                  Ano referência {tipo === "REGULAR" ? "(obrigatório)" : "(opcional)"}
                 </label>
                 <input
                   type="number"
-                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                   value={anoReferencia}
                   onChange={(e) => setAnoReferencia(Number(e.target.value))}
                   min={2000}
@@ -990,7 +994,7 @@ export default function NovaMatriculaPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Periodo letivo</label>
               <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                 value={periodoLetivoId ?? ""}
                 onChange={(e) => {
                   const nextId = e.target.value ? Number(e.target.value) : null;
@@ -1080,7 +1084,7 @@ export default function NovaMatriculaPage() {
                       <div className="space-y-1">
                         <label className="text-sm font-medium">Curso</label>
                         <select
-                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                           value={item.curso_id ? String(item.curso_id) : ""}
                           onChange={(e) => {
                             const nextCursoId = e.target.value ? Number(e.target.value) : null;
@@ -1110,7 +1114,7 @@ export default function NovaMatriculaPage() {
                       <div className="space-y-1">
                         <label className="text-sm font-medium">Turma (Unidade de execucao)</label>
                         <select
-                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                           value={item.turma_id ?? ""}
                           onChange={(e) => {
                             const nextId = e.target.value ? Number(e.target.value) : null;
@@ -1158,7 +1162,7 @@ export default function NovaMatriculaPage() {
                         <label className="text-sm font-medium">Nivel nesta execucao</label>
                         {!item.turma_id ? (
                           <input
-                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                             value=""
                             placeholder="Selecione a turma primeiro"
                             disabled
@@ -1169,7 +1173,7 @@ export default function NovaMatriculaPage() {
                           <p className="text-xs text-red-600">{niveisErroItem}</p>
                         ) : niveisTurma.length > 0 ? (
                           <select
-                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                             value={item.nivel_id ?? ""}
                             onChange={(e) => {
                               const nextId = e.target.value ? Number(e.target.value) : null;
@@ -1199,7 +1203,7 @@ export default function NovaMatriculaPage() {
                           <>
                             <label className="text-sm font-medium">Valor mensal</label>
                             <input
-                              className="w-full rounded-md border px-3 py-2 text-sm"
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                               value={item.valor_mensal_reais}
                               onChange={(e) => updateItemCarrinho(item.id, { valor_mensal_reais: e.target.value })}
                               inputMode="decimal"
@@ -1232,7 +1236,7 @@ export default function NovaMatriculaPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Politica</label>
             <select
-              className="w-full rounded-md border px-3 py-2 text-sm"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
               value={politicaModo}
               onChange={(e) => setPoliticaModo(e.target.value as "PADRAO" | "ADIAR_PARA_VENCIMENTO")}
             >
@@ -1243,7 +1247,7 @@ export default function NovaMatriculaPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Motivo da excecao</label>
                 <textarea
-                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                   rows={3}
                   value={motivoExcecao}
                   onChange={(e) => setMotivoExcecao(e.target.value)}
@@ -1255,7 +1259,7 @@ export default function NovaMatriculaPage() {
 
         <SectionCard title="Observacoes internas">
           <textarea
-            className="w-full rounded-md border px-3 py-2 text-sm"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
             rows={3}
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value)}
@@ -1307,7 +1311,7 @@ export default function NovaMatriculaPage() {
 
         {process.env.NODE_ENV !== "production" ? (
           <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-            <div className="font-semibold">Debug validacao (dev)</div>
+            <div className="font-semibold">Debug validação (dev)</div>
             <pre className="mt-2 whitespace-pre-wrap">{JSON.stringify(debugFlags, null, 2)}</pre>
           </div>
         ) : null}
@@ -1319,10 +1323,13 @@ export default function NovaMatriculaPage() {
             onClick={() => void onSubmit()}
             disabled={loading || !podeSalvar}
           >
-            {loading ? "Salvando..." : "Concluir matricula"}
+            {loading ? "Salvando..." : "Concluir matrícula"}
           </button>
         </ToolbarRow>
+      </div>
       </div>
     </div>
   );
 }
+
+
