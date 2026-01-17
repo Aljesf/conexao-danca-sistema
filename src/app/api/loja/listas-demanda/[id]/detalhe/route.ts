@@ -1,6 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+type ResumoOrdenavel = {
+  produto: string;
+  cor: string;
+  tamanho: string;
+  variacaoId: number | null;
+  quantidade: number;
+};
+
+function parseVariacaoLabel(label: string | null): { tamanho: string; cor: string } {
+  const raw = (label ?? "").trim();
+  if (!raw) return { tamanho: "-", cor: "-" };
+  const parts = raw.split("|").map((s) => s.trim());
+  if (parts.length >= 2) return { tamanho: parts[0] || "-", cor: parts.slice(1).join(" | ") || "-" };
+  return { tamanho: raw, cor: "-" };
+}
+
+const TAMANHO_ORDEM = ["PP", "P", "M", "G", "GG", "XG", "XGG"];
+
+function cmpTamanho(a: string, b: string): number {
+  const na = Number(a);
+  const nb = Number(b);
+  const aNum = Number.isFinite(na);
+  const bNum = Number.isFinite(nb);
+  if (aNum && bNum) return na - nb;
+  const ia = TAMANHO_ORDEM.indexOf(a.toUpperCase());
+  const ib = TAMANHO_ORDEM.indexOf(b.toUpperCase());
+  if (ia !== -1 && ib !== -1) return ia - ib;
+  if (ia !== -1) return -1;
+  if (ib !== -1) return 1;
+  return a.localeCompare(b, "pt-BR");
+}
+
+function ordenarResumo(lista: ResumoOrdenavel[]): ResumoOrdenavel[] {
+  return [...lista].sort((x, y) => {
+    const p = x.produto.localeCompare(y.produto, "pt-BR");
+    if (p !== 0) return p;
+
+    const c = x.cor.localeCompare(y.cor, "pt-BR");
+    if (c !== 0) return c;
+
+    const t = cmpTamanho(x.tamanho, y.tamanho);
+    if (t !== 0) return t;
+
+    const vx = x.variacaoId ?? 0;
+    const vy = y.variacaoId ?? 0;
+    return vx - vy;
+  });
+}
+
 type ListaRow = {
   id: number;
   titulo: string;
@@ -169,17 +218,32 @@ export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
     };
   });
 
-  const resumoMap = new Map<string, { produto: string; variacao: string; quantidade: number }>();
+  const mapa = new Map<string, ResumoOrdenavel>();
   for (const it of itensEnriquecidos) {
-    const produtoNome = it.produto?.nome ?? (it.descricao_livre ?? "Item livre");
-    const variacaoNome = it.variacao?.label ?? "-";
-    const key = `${produtoNome}||${variacaoNome}`;
-    const current = resumoMap.get(key);
-    if (current) current.quantidade += it.quantidade;
-    else resumoMap.set(key, { produto: produtoNome, variacao: variacaoNome, quantidade: it.quantidade });
+    const produtoNome = it.produto?.nome ?? it.descricao_livre ?? "-";
+    const variacaoLabel = it.variacao?.label ?? null;
+
+    const { tamanho, cor } = parseVariacaoLabel(variacaoLabel);
+    const variacaoId = it.variacao?.id ?? null;
+
+    const chave = `${produtoNome}||${cor}||${tamanho}`;
+    const atual = mapa.get(chave);
+
+    if (!atual) {
+      mapa.set(chave, { produto: produtoNome, cor, tamanho, variacaoId, quantidade: it.quantidade });
+    } else {
+      atual.quantidade += it.quantidade;
+      if (variacaoId !== null) {
+        atual.variacaoId = atual.variacaoId === null ? variacaoId : Math.min(atual.variacaoId, variacaoId);
+      }
+    }
   }
 
-  const resumo = Array.from(resumoMap.values()).sort((a, b) => b.quantidade - a.quantidade);
+  const resumo = ordenarResumo(Array.from(mapa.values())).map((r) => ({
+    produto: r.produto,
+    variacao: `${r.tamanho} | ${r.cor}`,
+    quantidade: r.quantidade,
+  }));
 
   return NextResponse.json(
     {

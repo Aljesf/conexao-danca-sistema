@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import SectionCard from "@/components/layout/SectionCard";
+import { SectionCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
 import ProdutoBusca from "@/components/loja/demanda/ProdutoBusca";
 import PessoaBusca from "@/components/loja/demanda/PessoaBusca";
 
@@ -53,11 +53,19 @@ export default function LojaListaDemandaDetalhePage() {
   const [descricaoLivre, setDescricaoLivre] = useState<string>("");
   const [quantidade, setQuantidade] = useState<string>("1");
   const [observacoes, setObservacoes] = useState<string>("");
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [editQtd, setEditQtd] = useState<string>("1");
+  const [editObs, setEditObs] = useState<string>("");
+  const [editDesc, setEditDesc] = useState<string>("");
 
   const podeEditar = useMemo(() => {
     if (!lista) return false;
     return lista.status === "ATIVA" && !lista.bloqueada;
   }, [lista]);
+
+  const totalItens = useMemo(() => {
+    return (itens ?? []).reduce((acc, it) => acc + (Number(it.quantidade) || 0), 0);
+  }, [itens]);
 
   async function carregar() {
     setErro(null);
@@ -143,6 +151,38 @@ export default function LojaListaDemandaDetalhePage() {
     await carregar();
   }
 
+  async function removerItem(itemId: number) {
+    setErro(null);
+    const r = await fetch(`/api/loja/listas-demanda/${listaId}/itens/${itemId}`, { method: "DELETE" });
+    const j = (await r.json()) as { ok?: boolean; error?: string };
+    if (!r.ok || j.ok === false) return setErro(j.error ?? "erro_ao_remover");
+    await carregar();
+  }
+
+  async function salvarEdicao(itemId: number) {
+    setErro(null);
+    const qtd = Number(editQtd);
+    if (!Number.isFinite(qtd) || qtd <= 0) return setErro("quantidade_invalida");
+
+    const body = {
+      quantidade: qtd,
+      observacoes: editObs.trim().length ? editObs.trim() : null,
+      descricao_livre: editDesc.trim().length ? editDesc.trim() : null,
+    };
+
+    const r = await fetch(`/api/loja/listas-demanda/${listaId}/itens/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const j = (await r.json()) as { ok?: boolean; error?: string };
+    if (!r.ok || j.ok === false) return setErro(j.error ?? "erro_ao_salvar");
+
+    setEditandoId(null);
+    await carregar();
+  }
+
   useEffect(() => {
     if (!Number.isFinite(listaId) || listaId <= 0) return;
     void carregar();
@@ -168,20 +208,20 @@ export default function LojaListaDemandaDetalhePage() {
 
             <div className="flex flex-wrap gap-2">
               <button
-                className="rounded-lg border px-4 py-2"
+                className={pillNeutral}
                 onClick={() => void travarOuDestravar(!(lista?.bloqueada ?? false))}
                 disabled={!lista || lista.status === "ENCERRADA"}
               >
                 {lista?.bloqueada ? "Destravar" : "Travar"}
               </button>
               <button
-                className="rounded-lg bg-black px-4 py-2 text-white"
+                className={pillAccent}
                 onClick={() => void encerrar()}
                 disabled={!lista || lista.status === "ENCERRADA"}
               >
                 Encerrar
               </button>
-              <button className="rounded-lg border px-4 py-2" onClick={() => void carregar()}>
+              <button className={pillNeutral} onClick={() => void carregar()}>
                 Atualizar
               </button>
             </div>
@@ -223,7 +263,7 @@ export default function LojaListaDemandaDetalhePage() {
             <div className="space-y-1 md:col-span-2">
               <label className="text-sm">Descricao livre (quando nao houver produto)</label>
               <input
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                 value={descricaoLivre}
                 onChange={(e) => setDescricaoLivre(e.target.value)}
                 placeholder="Ex.: Perfume institucional para recepcao"
@@ -234,7 +274,7 @@ export default function LojaListaDemandaDetalhePage() {
             <div className="space-y-1">
               <label className="text-sm">Quantidade</label>
               <input
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                 value={quantidade}
                 onChange={(e) => setQuantidade(e.target.value)}
                 disabled={!podeEditar}
@@ -244,7 +284,7 @@ export default function LojaListaDemandaDetalhePage() {
             <div className="space-y-1">
               <label className="text-sm">Observacoes (opcional)</label>
               <input
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
                 placeholder="Ex.: prioridade alta / evento"
@@ -255,7 +295,7 @@ export default function LojaListaDemandaDetalhePage() {
 
           <div className="mt-3 flex gap-2">
             <button
-              className="rounded-lg bg-black px-4 py-2 text-white"
+              className={pillAccent}
               onClick={() => void adicionarItem()}
               disabled={!podeEditar}
             >
@@ -273,18 +313,20 @@ export default function LojaListaDemandaDetalhePage() {
                   <th className="px-2 py-2 text-left">Destinatario</th>
                   <th className="px-2 py-2 text-right">Qtd</th>
                   <th className="px-2 py-2 text-left">Obs.</th>
+                  <th className="px-2 py-2 text-right">Acoes</th>
                 </tr>
               </thead>
               <tbody>
                 {itens.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-2 py-4 text-slate-600">
+                    <td colSpan={7} className="px-2 py-4 text-slate-600">
                       Nenhum item.
                     </td>
                   </tr>
                 ) : null}
 
                 {itens.map((it) => {
+                  const editando = editandoId === it.id;
                   const produtoLabel = it.produto?.nome ?? it.descricao_livre ?? "-";
                   const variacaoLabel = it.variacao?.label ?? "-";
                   const destinatarioLabel = it.destinatario?.nome ?? "-";
@@ -293,11 +335,79 @@ export default function LojaListaDemandaDetalhePage() {
                   return (
                     <tr key={it.id} className="border-t">
                       <td className="px-2 py-2">{it.item}</td>
-                      <td className="px-2 py-2">{produtoLabel}</td>
+                      <td className="px-2 py-2">
+                        <div>{produtoLabel}</div>
+                        {editando ? (
+                          <input
+                            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                            value={editDesc}
+                            onChange={(e) => setEditDesc(e.target.value)}
+                            placeholder="Descricao livre"
+                            disabled={!podeEditar}
+                          />
+                        ) : null}
+                      </td>
                       <td className="px-2 py-2">{variacaoLabel}</td>
                       <td className="px-2 py-2">{destinatarioLabel}</td>
-                      <td className="px-2 py-2 text-right">{it.quantidade}</td>
-                      <td className="px-2 py-2">{obsLabel}</td>
+                      <td className="px-2 py-2 text-right">
+                        {editando ? (
+                          <input
+                            className="w-24 rounded-xl border border-slate-200 bg-white px-2 py-1 text-right text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                            value={editQtd}
+                            onChange={(e) => setEditQtd(e.target.value)}
+                            disabled={!podeEditar}
+                          />
+                        ) : (
+                          it.quantidade
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        {editando ? (
+                          <input
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                            value={editObs}
+                            onChange={(e) => setEditObs(e.target.value)}
+                            placeholder="Observacoes"
+                            disabled={!podeEditar}
+                          />
+                        ) : (
+                          obsLabel
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        {editando ? (
+                          <div className="flex justify-end gap-2">
+                            <button className={pillNeutral} onClick={() => setEditandoId(null)}>
+                              Cancelar
+                            </button>
+                            <button className={pillAccent} onClick={() => void salvarEdicao(it.id)}>
+                              Salvar
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end gap-2">
+                            <button
+                              className={pillNeutral}
+                              onClick={() => {
+                                setEditandoId(it.id);
+                                setEditQtd(String(it.quantidade));
+                                setEditObs(it.observacoes ?? "");
+                                setEditDesc(it.descricao_livre ?? "");
+                              }}
+                              disabled={!podeEditar}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                              onClick={() => void removerItem(it.id)}
+                              disabled={!podeEditar}
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -331,6 +441,17 @@ export default function LojaListaDemandaDetalhePage() {
               </table>
             </div>
           )}
+        </SectionCard>
+
+        <SectionCard
+          title="Total geral de itens"
+          subtitle="Fechamento da lista"
+          description="Soma de todas as quantidades adicionadas nesta lista de demanda."
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600">Quantidade total de itens</span>
+            <span className="text-3xl font-semibold text-slate-900">{totalItens}</span>
+          </div>
         </SectionCard>
       </div>
     </div>

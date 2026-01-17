@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import SectionCard from "@/components/layout/SectionCard";
+import { SectionCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
 
 type Lista = {
   id: number;
@@ -29,7 +29,7 @@ export default function LojaListasDemandaPage() {
       encerradas?: Lista[];
       error?: string;
     };
-    if (!r.ok) return setErro(j.error ?? "erro_ao_carregar");
+    if (!r.ok) return setErro(j.error ?? "-");
     setAtivas(j.ativas ?? []);
     setEncerradas(j.encerradas ?? []);
   }
@@ -42,7 +42,7 @@ export default function LojaListasDemandaPage() {
       body: JSON.stringify({ titulo, contexto: contexto || null }),
     });
     const j = (await r.json()) as { ok?: boolean; error?: string };
-    if (!r.ok || j.ok === false) return setErro(j.error ?? "erro_ao_criar");
+    if (!r.ok || j.ok === false) return setErro(j.error ?? "-");
     setTitulo("");
     setContexto("");
     await carregar();
@@ -60,25 +60,25 @@ export default function LojaListasDemandaPage() {
           subtitle="Levantamentos internos. Não é compra, não é fornecedor, não mexe em estoque e não gera financeiro."
         />
 
-        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+        <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="text-sm font-semibold">Criar nova lista</div>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <label className="text-sm">Título</label>
               <input
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                 value={titulo}
                 onChange={(e) => setTitulo(e.target.value)}
-                placeholder="Ex.: Uniformes 2026 — Lote 1"
+                placeholder="Ex.: Uniformes 2026 - Lote 1"
               />
             </div>
             <div className="space-y-1">
               <label className="text-sm">Contexto (opcional)</label>
               <input
-                className="w-full rounded-lg border px-3 py-2"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
                 value={contexto}
                 onChange={(e) => setContexto(e.target.value)}
-                placeholder="Ex.: Uniformes, sapatilhas, materiais"
+                placeholder="Ex.: Uniformes 2026 - Lote 1"
               />
             </div>
           </div>
@@ -91,19 +91,19 @@ export default function LojaListasDemandaPage() {
 
           <div className="flex gap-2">
             <button
-              className="rounded-lg bg-black px-4 py-2 text-white"
+              className={pillAccent}
               onClick={() => void criar()}
               disabled={titulo.trim().length < 3}
             >
               Criar lista
             </button>
-            <button className="rounded-lg border px-4 py-2" onClick={() => void carregar()}>
+            <button className={pillNeutral} onClick={() => void carregar()}>
               Atualizar
             </button>
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+        <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="text-sm font-semibold">Ativas</div>
           <div className="space-y-2">
             {ativas.length === 0 ? <div className="text-sm text-slate-600">Nenhuma lista ativa.</div> : null}
@@ -116,11 +116,11 @@ export default function LojaListasDemandaPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="font-semibold">{l.titulo}</div>
-                    <div className="text-sm text-slate-600">{l.contexto ?? "—"}</div>
+                    <div className="text-sm text-slate-600">{l.contexto ?? "-"}</div>
                   </div>
-                  <div className="text-sm whitespace-nowrap">
+                  <div className="whitespace-nowrap text-sm">
                     {l.bloqueada ? (
-                      <span className="rounded-full border px-2 py-1">🔒 Travada</span>
+                      <span className="rounded-full border px-2 py-1">Travada</span>
                     ) : (
                       <span className="rounded-full border px-2 py-1">Editável</span>
                     )}
@@ -131,7 +131,7 @@ export default function LojaListasDemandaPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+        <div className="space-y-3 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="text-sm font-semibold">Encerradas</div>
           <div className="space-y-2">
             {encerradas.length === 0 ? <div className="text-sm text-slate-600">Nenhuma lista encerrada.</div> : null}
@@ -142,7 +142,7 @@ export default function LojaListasDemandaPage() {
                 className="block rounded-xl border p-3 hover:bg-slate-50"
               >
                 <div className="font-semibold">{l.titulo}</div>
-                <div className="text-sm text-slate-600">{l.contexto ?? "—"}</div>
+                <div className="text-sm text-slate-600">{l.contexto ?? "-"}</div>
               </Link>
             ))}
           </div>
