@@ -12,6 +12,8 @@ type Question = {
   codigo: string;
   titulo: string;
   tipo: string;
+  scale_min?: number | null;
+  scale_max?: number | null;
   form_question_options?: Option[];
 };
 
@@ -44,6 +46,12 @@ const QUESTION_TYPES: QuestionTypeOption[] = [
   { value: "multi_choice", label: "Multipla escolha" },
   { value: "scale", label: "Escala" },
 ];
+
+const CONDITION_TYPES = new Set(["boolean", "single_choice", "scale"]);
+
+function isConditionEligible(question: Question): boolean {
+  return CONDITION_TYPES.has(question.tipo);
+}
 
 export default function AdminFormsTemplatesEditorPage({
   params,
@@ -130,17 +138,45 @@ export default function AdminFormsTemplatesEditorPage({
     });
   }
 
+  function updateItem(qid: string, patch: Partial<Item>) {
+    setItems((prev) =>
+      prev.map((x) => (x.form_questions.id === qid ? { ...x, ...patch } : x))
+    );
+  }
+
   async function saveItems() {
     setMsg(null);
     setErr(null);
     try {
+      for (const it of items) {
+        if (!it.cond_question_id) continue;
+        if (it.cond_question_id === it.form_questions.id) {
+          setErr("Condicao invalida: pergunta nao pode depender dela mesma.");
+          return;
+        }
+        const condQuestion = items.find((x) => x.form_questions.id === it.cond_question_id)?.form_questions;
+        if (!condQuestion || !isConditionEligible(condQuestion)) {
+          setErr("Condicao invalida: escolha uma pergunta elegivel.");
+          return;
+        }
+        const condValue = String(it.cond_equals_value ?? "").trim();
+        if (!condValue) {
+          setErr(`Informe o valor esperado da condicao para "${it.form_questions.titulo}".`);
+          return;
+        }
+        if (condQuestion.tipo === "boolean" && !["true", "false"].includes(condValue)) {
+          setErr("Condicao invalida: valor esperado deve ser true ou false.");
+          return;
+        }
+      }
+
       const payload = {
         items: items.map((x) => ({
           question_id: x.form_questions.id,
           ordem: x.ordem,
           obrigatoria: x.obrigatoria,
           cond_question_id: x.cond_question_id ?? null,
-          cond_equals_value: x.cond_equals_value ?? null,
+          cond_equals_value: x.cond_equals_value ? String(x.cond_equals_value).trim() : null,
         })),
       };
 
@@ -341,6 +377,21 @@ export default function AdminFormsTemplatesEditorPage({
             <div className="grid gap-3">
               {items.map((it) => (
                 <div key={it.form_questions.id} className="rounded-lg border p-3 grid gap-2">
+                  {(() => {
+                    const condCandidates = items
+                      .map((x) => x.form_questions)
+                      .filter(
+                        (q) =>
+                          q.id !== it.form_questions.id &&
+                          isConditionEligible(q)
+                      );
+                    const condQuestion =
+                      items.find((x) => x.form_questions.id === it.cond_question_id)
+                        ?.form_questions ?? null;
+                    const condEligible = condQuestion ? isConditionEligible(condQuestion) : false;
+
+                    return (
+                      <>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium">
@@ -375,17 +426,114 @@ export default function AdminFormsTemplatesEditorPage({
                       type="checkbox"
                       checked={it.obrigatoria}
                       onChange={(e) =>
-                        setItems((prev) =>
-                          prev.map((x) =>
-                            x.form_questions.id === it.form_questions.id
-                              ? { ...x, obrigatoria: e.target.checked }
-                              : x
-                          )
-                        )
+                        updateItem(it.form_questions.id, { obrigatoria: e.target.checked })
                       }
                     />
                     Obrigatoria
                   </label>
+
+                  <div className="grid gap-2 rounded-md border border-dashed p-3">
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span>Condicao (opcional)</span>
+                      {it.cond_question_id ? (
+                        <button
+                          className="rounded-md border px-2 py-1 text-xs"
+                          onClick={() =>
+                            updateItem(it.form_questions.id, {
+                              cond_question_id: null,
+                              cond_equals_value: null,
+                            })
+                          }
+                        >
+                          Limpar
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <label className="grid gap-1 text-sm">
+                      <span className="font-medium">Pergunta de referencia</span>
+                      <select
+                        className="w-full rounded-md border px-3 py-2 text-sm"
+                        value={it.cond_question_id ?? ""}
+                        onChange={(e) =>
+                          updateItem(it.form_questions.id, {
+                            cond_question_id: e.target.value ? e.target.value : null,
+                            cond_equals_value: null,
+                          })
+                        }
+                      >
+                        <option value="">Sem condicao</option>
+                        {condCandidates.map((q) => (
+                          <option key={q.id} value={q.id}>
+                            {q.titulo}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    {it.cond_question_id && !condEligible ? (
+                      <div className="text-xs text-red-600">
+                        Condicao atual nao elegivel. Limpe para continuar.
+                      </div>
+                    ) : null}
+
+                    {it.cond_question_id && condEligible && condQuestion ? (
+                      <label className="grid gap-1 text-sm">
+                        <span className="font-medium">Valor esperado</span>
+                        {condQuestion.tipo === "boolean" ? (
+                          <select
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={it.cond_equals_value ?? ""}
+                            onChange={(e) =>
+                              updateItem(it.form_questions.id, {
+                                cond_equals_value: e.target.value || null,
+                              })
+                            }
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="true">True</option>
+                            <option value="false">False</option>
+                          </select>
+                        ) : condQuestion.tipo === "single_choice" ? (
+                          <select
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={it.cond_equals_value ?? ""}
+                            onChange={(e) =>
+                              updateItem(it.form_questions.id, {
+                                cond_equals_value: e.target.value || null,
+                              })
+                            }
+                          >
+                            <option value="">Selecione...</option>
+                            {(condQuestion.form_question_options ?? [])
+                              .filter((o) => o.ativo)
+                              .sort((a, b) => a.ordem - b.ordem)
+                              .map((o) => (
+                                <option key={o.id} value={o.valor}>
+                                  {o.rotulo}
+                                </option>
+                              ))}
+                          </select>
+                        ) : condQuestion.tipo === "scale" ? (
+                          <input
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            type="number"
+                            min={condQuestion.scale_min ?? undefined}
+                            max={condQuestion.scale_max ?? undefined}
+                            value={it.cond_equals_value ?? ""}
+                            onChange={(e) =>
+                              updateItem(it.form_questions.id, {
+                                cond_equals_value: e.target.value || null,
+                              })
+                            }
+                          />
+                        ) : null}
+                      </label>
+                    ) : null}
+                  </div>
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
