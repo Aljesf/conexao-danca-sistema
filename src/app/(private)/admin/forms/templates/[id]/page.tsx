@@ -1,6 +1,8 @@
 ﻿"use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+/* eslint-disable @next/next/no-img-element */
+
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import ToolbarRow from "@/components/layout/ToolbarRow";
@@ -17,13 +19,23 @@ type Question = {
   form_question_options?: Option[];
 };
 
-type Item = {
+type BlockType = "PERGUNTA" | "TEXTO" | "IMAGEM" | "DIVISOR";
+type BlockAlign = "ESQUERDA" | "CENTRO" | "DIREITA";
+
+type Block = {
   id?: string;
+  client_id: string;
   ordem: number;
-  obrigatoria: boolean;
+  tipo: BlockType;
+  question_id?: string | null;
+  titulo?: string | null;
+  texto_md?: string | null;
+  imagem_url?: string | null;
+  alinhamento?: BlockAlign | null;
+  obrigatoria?: boolean;
   cond_question_id?: string | null;
   cond_equals_value?: string | null;
-  form_questions: Question;
+  form_questions?: Question | null;
 };
 
 type Template = {
@@ -32,6 +44,10 @@ type Template = {
   descricao: string | null;
   status: "draft" | "published" | "archived";
   versao: number;
+  header_image_url?: string | null;
+  footer_image_url?: string | null;
+  intro_text_md?: string | null;
+  outro_text_md?: string | null;
 };
 
 type QuestionTypeOption = { value: string; label: string };
@@ -53,6 +69,28 @@ function isConditionEligible(question: Question): boolean {
   return CONDITION_TYPES.has(question.tipo);
 }
 
+function makeClientId(prefix = "block"): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function markdownToHtmlSimples(markdown: string): string {
+  const trimmed = markdown.trim();
+  if (!trimmed) return "<p></p>";
+  const escaped = trimmed
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const blocks = escaped
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => `<p>${part.replace(/\n/g, "<br/>")}</p>`);
+  return blocks.join("") || "<p></p>";
+}
+
 export default function AdminFormsTemplatesEditorPage({
   params,
 }: {
@@ -61,11 +99,24 @@ export default function AdminFormsTemplatesEditorPage({
   const { id: templateId } = use(params);
 
   const [tpl, setTpl] = useState<Template | null>(null);
-  const [items, setItems] = useState<Item[]>([]);
+  const [blocks, setBlocks] = useState<Block[]>([]);
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [savingBlocks, setSavingBlocks] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  const [headerImageUrl, setHeaderImageUrl] = useState("");
+  const [footerImageUrl, setFooterImageUrl] = useState("");
+  const [introTextMd, setIntroTextMd] = useState("");
+  const [outroTextMd, setOutroTextMd] = useState("");
+  const [headerUploadFile, setHeaderUploadFile] = useState<File | null>(null);
+  const [footerUploadFile, setFooterUploadFile] = useState<File | null>(null);
+  const [headerUploading, setHeaderUploading] = useState(false);
+  const [footerUploading, setFooterUploading] = useState(false);
+  const headerFileRef = useRef<HTMLInputElement | null>(null);
+  const footerFileRef = useRef<HTMLInputElement | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [questionCodigo, setQuestionCodigo] = useState("");
@@ -76,29 +127,65 @@ export default function AdminFormsTemplatesEditorPage({
   const [questionErr, setQuestionErr] = useState<string | null>(null);
   const [questionSaving, setQuestionSaving] = useState(false);
 
-  const selectedIds = useMemo(() => new Set(items.map((i) => i.form_questions.id)), [items]);
+  const selectedIds = useMemo(() => {
+    const ids = blocks
+      .filter((b) => b.tipo === "PERGUNTA")
+      .map((b) => b.question_id ?? b.form_questions?.id)
+      .filter((id): id is string => !!id);
+    return new Set(ids);
+  }, [blocks]);
 
   const load = useCallback(async () => {
     setErr(null);
     setLoading(true);
     try {
-      const [a, b] = await Promise.all([
+      const [a, b, c] = await Promise.all([
         fetch(`/api/admin/forms/templates/${templateId}`, { cache: "no-store" }),
         fetch("/api/admin/forms/questions", { cache: "no-store" }),
+        fetch(`/api/admin/forms/templates/${templateId}/blocos`, { cache: "no-store" }),
       ]);
 
-      const aj = (await a.json()) as { data?: { template: Template; items: Item[] }; error?: string };
+      const aj = (await a.json()) as { data?: { template: Template; items?: unknown[] }; error?: string };
       const bj = (await b.json()) as { data?: Question[]; error?: string };
+      const cj = (await c.json()) as { data?: Block[]; error?: string };
 
       if (!a.ok) throw new Error(aj.error ?? "Falha ao carregar template.");
       if (aj.error) throw new Error(aj.error);
       if (!b.ok) throw new Error(bj.error ?? "Falha ao carregar perguntas.");
       if (bj.error) throw new Error(bj.error);
+      if (!c.ok) throw new Error(cj.error ?? "Falha ao carregar blocos.");
+      if (cj.error) throw new Error(cj.error);
 
       if (!aj.data?.template) throw new Error("Template nao encontrado.");
 
-      setTpl(aj.data.template);
-      setItems(aj.data.items.map((x, idx) => ({ ...x, ordem: x.ordem ?? idx })));
+      const template = aj.data.template;
+      setTpl(template);
+      setHeaderImageUrl(template.header_image_url ?? "");
+      setFooterImageUrl(template.footer_image_url ?? "");
+      setIntroTextMd(template.intro_text_md ?? "");
+      setOutroTextMd(template.outro_text_md ?? "");
+
+      const rawBlocks = Array.isArray(cj.data) ? cj.data : [];
+      const normalizedBlocks = rawBlocks.map((b, idx) => {
+        const questionId = b.question_id ?? b.form_questions?.id ?? null;
+        return {
+          ...b,
+          client_id: b.id ?? makeClientId(),
+          ordem: Number.isFinite(b.ordem) ? b.ordem : idx,
+          tipo: b.tipo,
+          question_id: questionId,
+          titulo: b.titulo ?? null,
+          texto_md: b.texto_md ?? null,
+          imagem_url: b.imagem_url ?? null,
+          alinhamento: b.alinhamento ?? null,
+          obrigatoria: b.obrigatoria ?? false,
+          cond_question_id: b.cond_question_id ?? null,
+          cond_equals_value: b.cond_equals_value ?? null,
+          form_questions: b.form_questions ?? null,
+        };
+      });
+
+      setBlocks(normalizedBlocks);
       setAllQuestions(bj.data ?? []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro desconhecido.");
@@ -111,22 +198,54 @@ export default function AdminFormsTemplatesEditorPage({
     void load();
   }, [load]);
 
-  function addQuestion(q: Question) {
+  function normalizeBlocks(list: Block[]): Block[] {
+    return list.map((item, idx) => ({ ...item, ordem: idx }));
+  }
+
+  function addQuestionBlock(q: Question) {
     if (selectedIds.has(q.id)) return;
-    setItems((prev) => [...prev, { ordem: prev.length, obrigatoria: false, form_questions: q }]);
+    setBlocks((prev) => {
+      const block: Block = {
+        client_id: makeClientId("question"),
+        ordem: prev.length,
+        tipo: "PERGUNTA",
+        question_id: q.id,
+        obrigatoria: false,
+        cond_question_id: null,
+        cond_equals_value: null,
+        form_questions: q,
+      };
+      return normalizeBlocks([...prev, block]);
+    });
   }
 
-  function removeQuestion(qid: string) {
-    setItems((prev) =>
-      prev
-        .filter((x) => x.form_questions.id !== qid)
-        .map((x, idx) => ({ ...x, ordem: idx }))
-    );
+  function addBlock(tipo: BlockType) {
+    setBlocks((prev) => {
+      const block: Block = {
+        client_id: makeClientId(tipo.toLowerCase()),
+        ordem: prev.length,
+        tipo,
+        question_id: null,
+        obrigatoria: false,
+        titulo: "",
+        texto_md: "",
+        imagem_url: "",
+        alinhamento: "ESQUERDA",
+        cond_question_id: null,
+        cond_equals_value: null,
+        form_questions: null,
+      };
+      return normalizeBlocks([...prev, block]);
+    });
   }
 
-  function move(qid: string, dir: -1 | 1) {
-    setItems((prev) => {
-      const idx = prev.findIndex((x) => x.form_questions.id === qid);
+  function removeBlock(clientId: string) {
+    setBlocks((prev) => normalizeBlocks(prev.filter((x) => x.client_id !== clientId)));
+  }
+
+  function moveBlock(clientId: string, dir: -1 | 1) {
+    setBlocks((prev) => {
+      const idx = prev.findIndex((x) => x.client_id === clientId);
       if (idx < 0) return prev;
       const next = idx + dir;
       if (next < 0 || next >= prev.length) return prev;
@@ -134,34 +253,83 @@ export default function AdminFormsTemplatesEditorPage({
       const tmp = copy[idx];
       copy[idx] = copy[next];
       copy[next] = tmp;
-      return copy.map((x, i) => ({ ...x, ordem: i }));
+      return normalizeBlocks(copy);
     });
   }
 
-  function updateItem(qid: string, patch: Partial<Item>) {
-    setItems((prev) =>
-      prev.map((x) => (x.form_questions.id === qid ? { ...x, ...patch } : x))
-    );
+  function updateBlock(clientId: string, patch: Partial<Block>) {
+    setBlocks((prev) => prev.map((x) => (x.client_id === clientId ? { ...x, ...patch } : x)));
   }
 
-  async function saveItems() {
+  async function saveTemplateMeta() {
     setMsg(null);
     setErr(null);
+    setSavingTemplate(true);
     try {
-      for (const it of items) {
-        if (!it.cond_question_id) continue;
-        if (it.cond_question_id === it.form_questions.id) {
+      const res = await fetch(`/api/admin/forms/templates/${templateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          header_image_url: headerImageUrl.trim() || null,
+          footer_image_url: footerImageUrl.trim() || null,
+          intro_text_md: introTextMd.trim() || null,
+          outro_text_md: outroTextMd.trim() || null,
+        }),
+      });
+
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Falha ao salvar template.");
+      setMsg("Template atualizado.");
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erro desconhecido.");
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  async function saveBlocks() {
+    setMsg(null);
+    setErr(null);
+    setSavingBlocks(true);
+    try {
+      const questionBlocks = blocks.filter((b) => b.tipo === "PERGUNTA");
+      const questionMap = new Map(
+        questionBlocks
+          .map((b) => {
+            const q = b.form_questions ?? allQuestions.find((x) => x.id === b.question_id) ?? null;
+            return q ? [q.id, q] : null;
+          })
+          .filter((pair): pair is [string, Question] => !!pair)
+      );
+
+      const seen = new Set<string>();
+      for (const block of questionBlocks) {
+        const qid = block.question_id ?? block.form_questions?.id ?? "";
+        if (!qid) {
+          setErr("Pergunta invalida: selecione uma pergunta para todos os blocos.");
+          return;
+        }
+        if (seen.has(qid)) {
+          setErr("Pergunta duplicada: remova duplicatas antes de salvar.");
+          return;
+        }
+        seen.add(qid);
+
+        if (!block.cond_question_id) continue;
+        if (block.cond_question_id === qid) {
           setErr("Condicao invalida: pergunta nao pode depender dela mesma.");
           return;
         }
-        const condQuestion = items.find((x) => x.form_questions.id === it.cond_question_id)?.form_questions;
+        const condQuestion = questionMap.get(block.cond_question_id) ?? null;
         if (!condQuestion || !isConditionEligible(condQuestion)) {
           setErr("Condicao invalida: escolha uma pergunta elegivel.");
           return;
         }
-        const condValue = String(it.cond_equals_value ?? "").trim();
+        const condValue = String(block.cond_equals_value ?? "").trim();
         if (!condValue) {
-          setErr(`Informe o valor esperado da condicao para "${it.form_questions.titulo}".`);
+          const current = questionMap.get(qid);
+          setErr(`Informe o valor esperado da condicao para "${current?.titulo ?? "pergunta"}".`);
           return;
         }
         if (condQuestion.tipo === "boolean" && !["true", "false"].includes(condValue)) {
@@ -171,27 +339,35 @@ export default function AdminFormsTemplatesEditorPage({
       }
 
       const payload = {
-        items: items.map((x) => ({
-          question_id: x.form_questions.id,
-          ordem: x.ordem,
-          obrigatoria: x.obrigatoria,
-          cond_question_id: x.cond_question_id ?? null,
-          cond_equals_value: x.cond_equals_value ? String(x.cond_equals_value).trim() : null,
+        blocks: blocks.map((block, idx) => ({
+          tipo: block.tipo,
+          ordem: idx,
+          question_id:
+            block.tipo === "PERGUNTA" ? block.question_id ?? block.form_questions?.id ?? null : null,
+          obrigatoria: Boolean(block.obrigatoria),
+          cond_question_id: block.cond_question_id ?? null,
+          cond_equals_value: block.cond_equals_value ? String(block.cond_equals_value).trim() : null,
+          titulo: block.titulo ? String(block.titulo).trim() : null,
+          texto_md: block.texto_md ? String(block.texto_md).trim() : null,
+          imagem_url: block.imagem_url ? String(block.imagem_url).trim() : null,
+          alinhamento: block.alinhamento ?? null,
         })),
       };
 
-      const res = await fetch(`/api/admin/forms/templates/${templateId}/items`, {
-        method: "PUT",
+      const res = await fetch(`/api/admin/forms/templates/${templateId}/blocos`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       const json = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? "Falha ao salvar itens.");
-      setMsg("Itens salvos.");
+      if (!res.ok) throw new Error(json.error ?? "Falha ao salvar blocos.");
+      setMsg("Blocos salvos.");
       await load();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro desconhecido.");
+    } finally {
+      setSavingBlocks(false);
     }
   }
 
@@ -280,6 +456,69 @@ export default function AdminFormsTemplatesEditorPage({
     }
   }
 
+  async function uploadImagem(file: File, nome: string): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("nome", nome);
+    form.append("tags", "forms,template");
+
+    const res = await fetch("/api/documentos/imagens/upload", {
+      method: "POST",
+      body: form,
+    });
+    const json = (await res.json()) as { ok?: boolean; data?: { public_url?: string }; message?: string };
+    if (!res.ok || !json.ok) {
+      throw new Error(json.message || "Falha ao enviar imagem.");
+    }
+    const url = json.data?.public_url;
+    if (!url) throw new Error("Upload concluido sem URL publica.");
+    return url;
+  }
+
+  async function uploadHeaderImage() {
+    if (!headerUploadFile) {
+      setErr("Selecione uma imagem para o cabecalho.");
+      return;
+    }
+    setErr(null);
+    setMsg(null);
+    setHeaderUploading(true);
+    try {
+      const nome = `${tpl?.nome ?? "template"} - cabecalho`;
+      const url = await uploadImagem(headerUploadFile, nome);
+      setHeaderImageUrl(url);
+      setHeaderUploadFile(null);
+      if (headerFileRef.current) headerFileRef.current.value = "";
+      setMsg("Imagem do cabecalho enviada.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erro ao enviar imagem.");
+    } finally {
+      setHeaderUploading(false);
+    }
+  }
+
+  async function uploadFooterImage() {
+    if (!footerUploadFile) {
+      setErr("Selecione uma imagem para o rodape.");
+      return;
+    }
+    setErr(null);
+    setMsg(null);
+    setFooterUploading(true);
+    try {
+      const nome = `${tpl?.nome ?? "template"} - rodape`;
+      const url = await uploadImagem(footerUploadFile, nome);
+      setFooterImageUrl(url);
+      setFooterUploadFile(null);
+      if (footerFileRef.current) footerFileRef.current.value = "";
+      setMsg("Imagem do rodape enviada.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erro ao enviar imagem.");
+    } finally {
+      setFooterUploading(false);
+    }
+  }
+
   if (loading) {
     return <div className="p-6 text-sm text-slate-600">Carregando...</div>;
   }
@@ -301,9 +540,17 @@ export default function AdminFormsTemplatesEditorPage({
           <div className="flex flex-wrap gap-2">
             <button
               className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
-              onClick={() => void saveItems()}
+              onClick={() => void saveBlocks()}
+              disabled={savingBlocks}
             >
-              Salvar itens
+              {savingBlocks ? "Salvando blocos..." : "Salvar blocos"}
+            </button>
+            <button
+              className="rounded-md border px-4 py-2 text-sm"
+              onClick={() => void saveTemplateMeta()}
+              disabled={savingTemplate}
+            >
+              {savingTemplate ? "Salvando template..." : "Salvar template"}
             </button>
             <button className="rounded-md border px-3 py-2 text-sm" onClick={() => void setStatus("published")}>
               Publicar
@@ -331,6 +578,69 @@ export default function AdminFormsTemplatesEditorPage({
         <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">{err}</div>
       ) : null}
 
+      <SectionCard
+        title="Cabecalho do formulario"
+        description="Imagem principal e texto introdutorio do formulario."
+      >
+        <div className="grid gap-4">
+          <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Imagem do cabecalho (URL)</span>
+              <input
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                value={headerImageUrl}
+                onChange={(e) => setHeaderImageUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </label>
+            <div className="grid gap-2 text-sm">
+              <span className="font-medium">Upload rapido</span>
+              <input
+                ref={headerFileRef}
+                type="file"
+                accept="image/*"
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                onChange={(e) => setHeaderUploadFile(e.target.files?.[0] ?? null)}
+              />
+              <button
+                className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                onClick={() => void uploadHeaderImage()}
+                disabled={headerUploading || !headerUploadFile}
+              >
+                {headerUploading ? "Enviando..." : "Enviar imagem"}
+              </button>
+            </div>
+          </div>
+
+          {headerImageUrl ? (
+            <div className="rounded-md border bg-slate-50 p-3">
+              <img src={headerImageUrl} alt="Cabecalho do formulario" className="max-h-32 w-full object-contain" />
+            </div>
+          ) : null}
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium">Texto introdutorio (markdown)</span>
+            <textarea
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              rows={4}
+              value={introTextMd}
+              onChange={(e) => setIntroTextMd(e.target.value)}
+              placeholder="Use markdown simples para apresentar o formulario."
+            />
+          </label>
+
+          {introTextMd.trim() ? (
+            <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-700">
+              <div className="text-xs text-slate-500 mb-2">Preview</div>
+              <div
+                className="prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(introTextMd) }}
+              />
+            </div>
+          ) : null}
+        </div>
+      </SectionCard>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Perguntas disponiveis" description="Selecione para adicionar ao template.">
           <ToolbarRow>
@@ -355,7 +665,7 @@ export default function AdminFormsTemplatesEditorPage({
                 <button
                   key={q.id}
                   className="text-left rounded-md border px-3 py-2 text-sm disabled:opacity-50"
-                  onClick={() => addQuestion(q)}
+                  onClick={() => addQuestionBlock(q)}
                   disabled={selectedIds.has(q.id)}
                 >
                   <div className="font-medium text-slate-900">{q.titulo}</div>
@@ -368,178 +678,348 @@ export default function AdminFormsTemplatesEditorPage({
           )}
         </SectionCard>
 
-        <SectionCard title="Perguntas no template" description="Organize ordem e obrigatoriedade.">
-          {items.length === 0 ? (
+        <SectionCard title="Blocos do formulario" description="Organize ordem e conteudo do template.">
+          <ToolbarRow>
+            <button className="rounded-md border px-3 py-2 text-sm" onClick={() => addBlock("TEXTO")}>
+              + Texto
+            </button>
+            <button className="rounded-md border px-3 py-2 text-sm" onClick={() => addBlock("IMAGEM")}>
+              + Imagem
+            </button>
+            <button className="rounded-md border px-3 py-2 text-sm" onClick={() => addBlock("DIVISOR")}>
+              + Divisor
+            </button>
+          </ToolbarRow>
+
+          {blocks.length === 0 ? (
             <div className="rounded-md border border-dashed p-4 text-sm text-slate-500">
-              Adicione perguntas ao template.
+              Adicione blocos ao template.
             </div>
           ) : (
             <div className="grid gap-3">
-              {items.map((it) => (
-                <div key={it.form_questions.id} className="rounded-lg border p-3 grid gap-2">
-                  {(() => {
-                    const condCandidates = items
-                      .map((x) => x.form_questions)
-                      .filter(
-                        (q) =>
-                          q.id !== it.form_questions.id &&
-                          isConditionEligible(q)
-                      );
-                    const condQuestion =
-                      items.find((x) => x.form_questions.id === it.cond_question_id)
-                        ?.form_questions ?? null;
-                    const condEligible = condQuestion ? isConditionEligible(condQuestion) : false;
+              {blocks.map((block) => {
+                const questionId = block.question_id ?? block.form_questions?.id ?? null;
+                const question =
+                  block.form_questions ?? allQuestions.find((q) => q.id === questionId) ?? null;
+                const questionBlocks = blocks
+                  .filter((b) => b.tipo === "PERGUNTA")
+                  .map((b) => b.form_questions ?? allQuestions.find((q) => q.id === b.question_id) ?? null)
+                  .filter((q): q is Question => !!q);
+                const condCandidates = questionBlocks.filter(
+                  (q) => q.id !== questionId && isConditionEligible(q)
+                );
+                const condQuestion = questionBlocks.find((q) => q.id === block.cond_question_id) ?? null;
+                const condEligible = condQuestion ? isConditionEligible(condQuestion) : false;
 
-                    return (
-                      <>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium">
-                        {it.ordem + 1}. {it.form_questions.titulo}
+                return (
+                  <div key={block.client_id} className="rounded-lg border p-3 grid gap-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium">
+                          {block.ordem + 1}.{" "}
+                          {block.tipo === "PERGUNTA"
+                            ? question?.titulo ?? "Pergunta"
+                            : block.tipo === "TEXTO"
+                              ? "Bloco de texto"
+                              : block.tipo === "IMAGEM"
+                                ? "Bloco de imagem"
+                                : "Divisor"}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {block.tipo === "PERGUNTA"
+                            ? `${question?.codigo ?? "-"} - ${question?.tipo ?? "-"}`
+                            : block.tipo}
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-500">{it.form_questions.codigo} - {it.form_questions.tipo}</div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        className="rounded-md border px-2 py-1 text-xs"
-                        onClick={() => move(it.form_questions.id, -1)}
-                      >
-                        Subir
-                      </button>
-                      <button
-                        className="rounded-md border px-2 py-1 text-xs"
-                        onClick={() => move(it.form_questions.id, 1)}
-                      >
-                        Descer
-                      </button>
-                      <button
-                        className="rounded-md border px-2 py-1 text-xs"
-                        onClick={() => removeQuestion(it.form_questions.id)}
-                      >
-                        Remover
-                      </button>
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={it.obrigatoria}
-                      onChange={(e) =>
-                        updateItem(it.form_questions.id, { obrigatoria: e.target.checked })
-                      }
-                    />
-                    Obrigatoria
-                  </label>
-
-                  <div className="grid gap-2 rounded-md border border-dashed p-3">
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>Condicao (opcional)</span>
-                      {it.cond_question_id ? (
+                      <div className="flex flex-wrap gap-2">
                         <button
                           className="rounded-md border px-2 py-1 text-xs"
-                          onClick={() =>
-                            updateItem(it.form_questions.id, {
-                              cond_question_id: null,
-                              cond_equals_value: null,
-                            })
-                          }
+                          onClick={() => moveBlock(block.client_id, -1)}
                         >
-                          Limpar
+                          Subir
                         </button>
-                      ) : null}
+                        <button
+                          className="rounded-md border px-2 py-1 text-xs"
+                          onClick={() => moveBlock(block.client_id, 1)}
+                        >
+                          Descer
+                        </button>
+                        <button
+                          className="rounded-md border px-2 py-1 text-xs"
+                          onClick={() => removeBlock(block.client_id)}
+                        >
+                          Remover
+                        </button>
+                      </div>
                     </div>
 
-                    <label className="grid gap-1 text-sm">
-                      <span className="font-medium">Pergunta de referencia</span>
-                      <select
-                        className="w-full rounded-md border px-3 py-2 text-sm"
-                        value={it.cond_question_id ?? ""}
-                        onChange={(e) =>
-                          updateItem(it.form_questions.id, {
-                            cond_question_id: e.target.value ? e.target.value : null,
-                            cond_equals_value: null,
-                          })
-                        }
-                      >
-                        <option value="">Sem condicao</option>
-                        {condCandidates.map((q) => (
-                          <option key={q.id} value={q.id}>
-                            {q.titulo}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    {block.tipo === "PERGUNTA" && question ? (
+                      <>
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(block.obrigatoria)}
+                            onChange={(e) => updateBlock(block.client_id, { obrigatoria: e.target.checked })}
+                          />
+                          Obrigatoria
+                        </label>
 
-                    {it.cond_question_id && !condEligible ? (
-                      <div className="text-xs text-red-600">
-                        Condicao atual nao elegivel. Limpe para continuar.
+                        <div className="grid gap-2 rounded-md border border-dashed p-3">
+                          <div className="flex items-center justify-between text-xs text-slate-500">
+                            <span>Condicao (opcional)</span>
+                            {block.cond_question_id ? (
+                              <button
+                                className="rounded-md border px-2 py-1 text-xs"
+                                onClick={() =>
+                                  updateBlock(block.client_id, {
+                                    cond_question_id: null,
+                                    cond_equals_value: null,
+                                  })
+                                }
+                              >
+                                Limpar
+                              </button>
+                            ) : null}
+                          </div>
+
+                          <label className="grid gap-1 text-sm">
+                            <span className="font-medium">Pergunta de referencia</span>
+                            <select
+                              className="w-full rounded-md border px-3 py-2 text-sm"
+                              value={block.cond_question_id ?? ""}
+                              onChange={(e) =>
+                                updateBlock(block.client_id, {
+                                  cond_question_id: e.target.value ? e.target.value : null,
+                                  cond_equals_value: null,
+                                })
+                              }
+                            >
+                              <option value="">Sem condicao</option>
+                              {condCandidates.map((q) => (
+                                <option key={q.id} value={q.id}>
+                                  {q.titulo}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          {block.cond_question_id && !condEligible ? (
+                            <div className="text-xs text-red-600">
+                              Condicao atual nao elegivel. Limpe para continuar.
+                            </div>
+                          ) : null}
+
+                          {block.cond_question_id && condEligible && condQuestion ? (
+                            <label className="grid gap-1 text-sm">
+                              <span className="font-medium">Valor esperado</span>
+                              {condQuestion.tipo === "boolean" ? (
+                                <select
+                                  className="w-full rounded-md border px-3 py-2 text-sm"
+                                  value={block.cond_equals_value ?? ""}
+                                  onChange={(e) =>
+                                    updateBlock(block.client_id, {
+                                      cond_equals_value: e.target.value || null,
+                                    })
+                                  }
+                                >
+                                  <option value="">Selecione...</option>
+                                  <option value="true">True</option>
+                                  <option value="false">False</option>
+                                </select>
+                              ) : condQuestion.tipo === "single_choice" ? (
+                                <select
+                                  className="w-full rounded-md border px-3 py-2 text-sm"
+                                  value={block.cond_equals_value ?? ""}
+                                  onChange={(e) =>
+                                    updateBlock(block.client_id, {
+                                      cond_equals_value: e.target.value || null,
+                                    })
+                                  }
+                                >
+                                  <option value="">Selecione...</option>
+                                  {(condQuestion.form_question_options ?? [])
+                                    .filter((o) => o.ativo)
+                                    .sort((a, b) => a.ordem - b.ordem)
+                                    .map((o) => (
+                                      <option key={o.id} value={o.valor}>
+                                        {o.rotulo}
+                                      </option>
+                                    ))}
+                                </select>
+                              ) : condQuestion.tipo === "scale" ? (
+                                <input
+                                  className="w-full rounded-md border px-3 py-2 text-sm"
+                                  type="number"
+                                  min={condQuestion.scale_min ?? undefined}
+                                  max={condQuestion.scale_max ?? undefined}
+                                  value={block.cond_equals_value ?? ""}
+                                  onChange={(e) =>
+                                    updateBlock(block.client_id, {
+                                      cond_equals_value: e.target.value || null,
+                                    })
+                                  }
+                                />
+                              ) : null}
+                            </label>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : null}
+
+                    {block.tipo === "TEXTO" ? (
+                      <div className="grid gap-2">
+                        <label className="grid gap-1 text-sm">
+                          <span className="font-medium">Titulo (opcional)</span>
+                          <input
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={block.titulo ?? ""}
+                            onChange={(e) => updateBlock(block.client_id, { titulo: e.target.value })}
+                            placeholder="Titulo do bloco"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm">
+                          <span className="font-medium">Texto (markdown)</span>
+                          <textarea
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            rows={4}
+                            value={block.texto_md ?? ""}
+                            onChange={(e) => updateBlock(block.client_id, { texto_md: e.target.value })}
+                            placeholder="Escreva o conteudo..."
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm">
+                          <span className="font-medium">Alinhamento</span>
+                          <select
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={block.alinhamento ?? "ESQUERDA"}
+                            onChange={(e) =>
+                              updateBlock(block.client_id, { alinhamento: e.target.value as BlockAlign })
+                            }
+                          >
+                            <option value="ESQUERDA">Esquerda</option>
+                            <option value="CENTRO">Centro</option>
+                            <option value="DIREITA">Direita</option>
+                          </select>
+                        </label>
                       </div>
                     ) : null}
 
-                    {it.cond_question_id && condEligible && condQuestion ? (
-                      <label className="grid gap-1 text-sm">
-                        <span className="font-medium">Valor esperado</span>
-                        {condQuestion.tipo === "boolean" ? (
-                          <select
-                            className="w-full rounded-md border px-3 py-2 text-sm"
-                            value={it.cond_equals_value ?? ""}
-                            onChange={(e) =>
-                              updateItem(it.form_questions.id, {
-                                cond_equals_value: e.target.value || null,
-                              })
-                            }
-                          >
-                            <option value="">Selecione...</option>
-                            <option value="true">True</option>
-                            <option value="false">False</option>
-                          </select>
-                        ) : condQuestion.tipo === "single_choice" ? (
-                          <select
-                            className="w-full rounded-md border px-3 py-2 text-sm"
-                            value={it.cond_equals_value ?? ""}
-                            onChange={(e) =>
-                              updateItem(it.form_questions.id, {
-                                cond_equals_value: e.target.value || null,
-                              })
-                            }
-                          >
-                            <option value="">Selecione...</option>
-                            {(condQuestion.form_question_options ?? [])
-                              .filter((o) => o.ativo)
-                              .sort((a, b) => a.ordem - b.ordem)
-                              .map((o) => (
-                                <option key={o.id} value={o.valor}>
-                                  {o.rotulo}
-                                </option>
-                              ))}
-                          </select>
-                        ) : condQuestion.tipo === "scale" ? (
+                    {block.tipo === "IMAGEM" ? (
+                      <div className="grid gap-2">
+                        <label className="grid gap-1 text-sm">
+                          <span className="font-medium">URL da imagem</span>
                           <input
                             className="w-full rounded-md border px-3 py-2 text-sm"
-                            type="number"
-                            min={condQuestion.scale_min ?? undefined}
-                            max={condQuestion.scale_max ?? undefined}
-                            value={it.cond_equals_value ?? ""}
-                            onChange={(e) =>
-                              updateItem(it.form_questions.id, {
-                                cond_equals_value: e.target.value || null,
-                              })
-                            }
+                            value={block.imagem_url ?? ""}
+                            onChange={(e) => updateBlock(block.client_id, { imagem_url: e.target.value })}
+                            placeholder="https://..."
                           />
+                        </label>
+                        <label className="grid gap-1 text-sm">
+                          <span className="font-medium">Alinhamento</span>
+                          <select
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={block.alinhamento ?? "CENTRO"}
+                            onChange={(e) =>
+                              updateBlock(block.client_id, { alinhamento: e.target.value as BlockAlign })
+                            }
+                          >
+                            <option value="ESQUERDA">Esquerda</option>
+                            <option value="CENTRO">Centro</option>
+                            <option value="DIREITA">Direita</option>
+                          </select>
+                        </label>
+                        {block.imagem_url ? (
+                          <div className="rounded-md border bg-slate-50 p-3">
+                            <img src={block.imagem_url} alt="Bloco de imagem" className="max-h-40 w-full object-contain" />
+                          </div>
                         ) : null}
-                      </label>
+                      </div>
+                    ) : null}
+
+                    {block.tipo === "DIVISOR" ? (
+                      <div className="grid gap-2">
+                        <label className="grid gap-1 text-sm">
+                          <span className="font-medium">Titulo (opcional)</span>
+                          <input
+                            className="w-full rounded-md border px-3 py-2 text-sm"
+                            value={block.titulo ?? ""}
+                            onChange={(e) => updateBlock(block.client_id, { titulo: e.target.value })}
+                            placeholder="Divisao visual"
+                          />
+                        </label>
+                        <div className="rounded-md border bg-slate-50 px-3 py-4">
+                          <div className="h-px w-full bg-slate-200" />
+                        </div>
+                      </div>
                     ) : null}
                   </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </SectionCard>
       </div>
+
+      <SectionCard title="Rodape do formulario" description="Imagem e texto final do formulario.">
+        <div className="grid gap-4">
+          <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Imagem do rodape (URL)</span>
+              <input
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                value={footerImageUrl}
+                onChange={(e) => setFooterImageUrl(e.target.value)}
+                placeholder="https://..."
+              />
+            </label>
+            <div className="grid gap-2 text-sm">
+              <span className="font-medium">Upload rapido</span>
+              <input
+                ref={footerFileRef}
+                type="file"
+                accept="image/*"
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                onChange={(e) => setFooterUploadFile(e.target.files?.[0] ?? null)}
+              />
+              <button
+                className="rounded-md border px-3 py-2 text-sm disabled:opacity-50"
+                onClick={() => void uploadFooterImage()}
+                disabled={footerUploading || !footerUploadFile}
+              >
+                {footerUploading ? "Enviando..." : "Enviar imagem"}
+              </button>
+            </div>
+          </div>
+
+          {footerImageUrl ? (
+            <div className="rounded-md border bg-slate-50 p-3">
+              <img src={footerImageUrl} alt="Rodape do formulario" className="max-h-32 w-full object-contain" />
+            </div>
+          ) : null}
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium">Texto final (markdown)</span>
+            <textarea
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              rows={4}
+              value={outroTextMd}
+              onChange={(e) => setOutroTextMd(e.target.value)}
+              placeholder="Mensagem final ou instrucoes."
+            />
+          </label>
+
+          {outroTextMd.trim() ? (
+            <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-700">
+              <div className="text-xs text-slate-500 mb-2">Preview</div>
+              <div
+                className="prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(outroTextMd) }}
+              />
+            </div>
+          ) : null}
+        </div>
+      </SectionCard>
 
       {modalOpen ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">

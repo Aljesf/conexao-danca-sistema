@@ -12,7 +12,9 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
 
     const { data: template, error: tErr } = await supabase
       .from("form_templates")
-      .select("id, nome, descricao, status, versao, created_at, updated_at, published_at, archived_at")
+      .select(
+        "id, nome, descricao, status, versao, header_image_url, footer_image_url, intro_text_md, outro_text_md, created_at, updated_at, published_at, archived_at"
+      )
       .eq("id", id)
       .single();
 
@@ -56,6 +58,18 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
 
     if (body.nome !== undefined) patch.nome = String(body.nome ?? "").trim();
     if (body.descricao !== undefined) patch.descricao = body.descricao ? String(body.descricao) : null;
+    if (body.header_image_url !== undefined) {
+      patch.header_image_url = body.header_image_url ? String(body.header_image_url).trim() : null;
+    }
+    if (body.footer_image_url !== undefined) {
+      patch.footer_image_url = body.footer_image_url ? String(body.footer_image_url).trim() : null;
+    }
+    if (body.intro_text_md !== undefined) {
+      patch.intro_text_md = body.intro_text_md ? String(body.intro_text_md) : null;
+    }
+    if (body.outro_text_md !== undefined) {
+      patch.outro_text_md = body.outro_text_md ? String(body.outro_text_md) : null;
+    }
 
     const { data, error } = await supabase
       .from("form_templates")
