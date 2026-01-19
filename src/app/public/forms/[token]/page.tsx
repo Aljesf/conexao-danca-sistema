@@ -3,6 +3,8 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { use, useEffect, useMemo, useState } from "react";
+import { PublicFormExperienceShell } from "@/components/forms/PublicFormExperienceShell";
+import { PublicFormQuestionCard } from "@/components/forms/PublicFormQuestionCard";
 
 type Option = { id: string; valor: string; rotulo: string; ordem: number; ativo: boolean };
 type Question = {
@@ -87,6 +89,9 @@ function markdownToHtmlSimples(markdown: string): string {
     .map((part) => `<p>${part.replace(/\n/g, "<br/>")}</p>`);
   return blocks.join("") || "<p></p>";
 }
+
+const fieldClassName =
+  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-slate-400 focus:ring-4 focus:ring-slate-100";
 
 export default function PublicFormTokenPage({
   params,
@@ -252,35 +257,32 @@ export default function PublicFormTokenPage({
   if (!data) return <div className="p-4">Formulario indisponivel.</div>;
 
   return (
-    <div className="p-4 max-w-3xl mx-auto grid gap-4">
-      <div className="rounded-xl border p-4 grid gap-3">
-        {data.template.header_image_url ? (
-          <div className="rounded-lg border bg-slate-50 p-3">
-            <img
-              src={data.template.header_image_url}
-              alt="Cabecalho do formulario"
-              className="max-h-40 w-full object-contain"
-            />
-          </div>
-        ) : null}
-        <div>
-          <h1 className="text-xl font-semibold">{data.template.nome}</h1>
-          {data.template.descricao ? (
-            <p className="text-sm opacity-80 mt-2">{data.template.descricao}</p>
-          ) : null}
+    <PublicFormExperienceShell
+      title={data.template.nome ?? "Formulario"}
+      subtitle={data.template.descricao ?? "Responda com calma e sinceridade."}
+      headerImageUrl={data.template.header_image_url ?? null}
+      introText={
+        data.template.intro_text_md ??
+        "Este formulario existe para entender seu contexto e melhorar nossas decisoes institucionais com responsabilidade."
+      }
+      progress={{
+        mode: "manual",
+        totalRequired: 0,
+        answeredRequired: 0,
+      }}
+    >
+      {okMsg ? (
+        <div className="rounded-2xl border bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+          {okMsg}
         </div>
-        {data.template.intro_text_md ? (
-          <div
-            className="text-sm text-slate-700"
-            dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(data.template.intro_text_md) }}
-          />
-        ) : null}
-      </div>
+      ) : null}
+      {err ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
+          {err}
+        </div>
+      ) : null}
 
-      {okMsg ? <div className="rounded-xl border p-3 text-sm">{okMsg}</div> : null}
-      {err ? <div className="rounded-xl border p-3 text-sm text-red-600">{err}</div> : null}
-
-      <div className="grid gap-3">
+      <div className="grid gap-4">
         {blocks.filter(isVisible).map((block) => {
           if (block.tipo === "TEXTO") {
             const align =
@@ -290,7 +292,7 @@ export default function PublicFormTokenPage({
                   ? "text-right"
                   : "text-left";
             return (
-              <div key={block.id} className="rounded-xl border p-4 grid gap-2">
+              <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm grid gap-2">
                 {block.titulo ? <div className="text-sm font-medium">{block.titulo}</div> : null}
                 {block.texto_md ? (
                   <div
@@ -310,7 +312,7 @@ export default function PublicFormTokenPage({
                   ? "ml-auto"
                   : "mr-auto";
             return (
-              <div key={block.id} className="rounded-xl border p-4">
+              <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm">
                 {block.imagem_url ? (
                   <img
                     src={block.imagem_url}
@@ -326,7 +328,7 @@ export default function PublicFormTokenPage({
 
           if (block.tipo === "DIVISOR") {
             return (
-              <div key={block.id} className="rounded-xl border p-4 grid gap-2">
+              <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm grid gap-2">
                 {block.titulo ? <div className="text-xs text-slate-500">{block.titulo}</div> : null}
                 <div className="h-px w-full bg-slate-200" />
               </div>
@@ -338,22 +340,22 @@ export default function PublicFormTokenPage({
           const v = answers[q.id];
 
           return (
-            <div key={block.id} className="rounded-xl border p-4 grid gap-2">
-              <div className="text-sm font-medium">
-                {q.titulo} {block.obrigatoria ? <span className="text-red-600">*</span> : null}
-              </div>
-              {q.ajuda ? <div className="text-xs opacity-70">{q.ajuda}</div> : null}
-
+            <PublicFormQuestionCard
+              key={block.id}
+              label={q.titulo}
+              required={block.obrigatoria}
+              hint={q.ajuda ?? undefined}
+            >
               {q.tipo === "textarea" ? (
                 <textarea
-                  className="border rounded-lg px-3 py-2"
+                  className={`${fieldClassName} min-h-[96px]`}
                   placeholder={q.placeholder ?? ""}
                   value={asString(v)}
                   onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
                 />
               ) : q.tipo === "number" ? (
                 <input
-                  className="border rounded-lg px-3 py-2"
+                  className={fieldClassName}
                   type="number"
                   value={v === undefined || v === null ? "" : String(v)}
                   onChange={(e) =>
@@ -365,7 +367,7 @@ export default function PublicFormTokenPage({
                 />
               ) : q.tipo === "date" ? (
                 <input
-                  className="border rounded-lg px-3 py-2"
+                  className={fieldClassName}
                   type="date"
                   value={asString(v)}
                   onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
@@ -381,7 +383,7 @@ export default function PublicFormTokenPage({
                 </label>
               ) : q.tipo === "single_choice" ? (
                 <select
-                  className="border rounded-lg px-3 py-2"
+                  className={fieldClassName}
                   value={asString(v)}
                   onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
                 >
@@ -422,7 +424,7 @@ export default function PublicFormTokenPage({
                 </div>
               ) : q.tipo === "scale" ? (
                 <input
-                  className="border rounded-lg px-3 py-2"
+                  className={fieldClassName}
                   type="number"
                   min={q.scale_min ?? undefined}
                   max={q.scale_max ?? undefined}
@@ -436,22 +438,22 @@ export default function PublicFormTokenPage({
                 />
               ) : (
                 <input
-                  className="border rounded-lg px-3 py-2"
+                  className={fieldClassName}
                   type="text"
                   placeholder={q.placeholder ?? ""}
                   value={asString(v)}
                   onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
                 />
               )}
-            </div>
+            </PublicFormQuestionCard>
           );
         })}
       </div>
 
       {data.template.outro_text_md || data.template.footer_image_url ? (
-        <div className="rounded-xl border p-4 grid gap-3">
+        <div className="rounded-2xl border bg-white p-4 shadow-sm grid gap-3">
           {data.template.footer_image_url ? (
-            <div className="rounded-lg border bg-slate-50 p-3">
+            <div className="rounded-xl border bg-slate-50 p-3">
               <img
                 src={data.template.footer_image_url}
                 alt="Rodape do formulario"
@@ -468,9 +470,14 @@ export default function PublicFormTokenPage({
         </div>
       ) : null}
 
-      <button className="px-4 py-3 rounded-xl border w-fit" onClick={submit}>
-        Enviar
-      </button>
-    </div>
+      <div className="flex items-center justify-end">
+        <button
+          className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+          onClick={submit}
+        >
+          Enviar
+        </button>
+      </div>
+    </PublicFormExperienceShell>
   );
 }
