@@ -4,10 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 type PessoaResumo = { id: number; nome: string | null };
 
-function toPositiveNumber(value: string): number | null {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as unknown as Request);
@@ -15,8 +12,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   try {
     const { id } = await ctx.params;
-    const submissionId = toPositiveNumber(id);
-    if (!submissionId) {
+    if (!UUID_RE.test(id)) {
       return NextResponse.json({ error: "submission_id_invalido" }, { status: 400 });
     }
 
@@ -25,9 +21,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const { data: submission, error: subErr } = await supabase
       .from("form_submissions")
       .select(
-        "id, template_id, template_versao, pessoa_id, responsavel_id, status, public_token, created_at, template:form_templates(id,nome)"
+        "id, template_id, template_versao, pessoa_id, responsavel_id, status, public_token, created_at, submitted_at, template:form_templates(id,nome)"
       )
-      .eq("id", submissionId)
+      .eq("id", id)
       .maybeSingle();
 
     if (subErr) {
@@ -60,7 +56,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       .select(
         "id, template_item_id, question_id, value_text, value_number, value_bool, value_date, value_json, question_titulo_snapshot, option_rotulos_snapshot, created_at, question:form_questions(id,codigo,titulo)"
       )
-      .eq("submission_id", submissionId)
+      .eq("submission_id", id)
       .order("template_item_id", { ascending: true })
       .order("created_at", { ascending: true });
 
@@ -74,6 +70,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         pessoa: submission.pessoa_id ? pessoasById.get(Number(submission.pessoa_id)) ?? null : null,
         responsavel: submission.responsavel_id ? pessoasById.get(Number(submission.responsavel_id)) ?? null : null,
         answers: answers ?? [],
+        answers_count: (answers ?? []).length,
+        has_answers: (answers ?? []).length > 0,
       },
     });
   } catch (err) {

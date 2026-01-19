@@ -16,6 +16,7 @@ type Submission = {
   status: string | null;
   public_token: string | null;
   created_at: string | null;
+  submitted_at?: string | null;
   template?: TemplateResumo | null;
 };
 
@@ -42,6 +43,8 @@ type ApiResponse = {
     pessoa?: PessoaResumo | null;
     responsavel?: PessoaResumo | null;
     answers: Answer[];
+    answers_count?: number;
+    has_answers?: boolean;
   };
   error?: string;
 };
@@ -102,6 +105,8 @@ export default function AdminFormsSubmissionPage({
 
   const answers = useMemo(() => data?.answers ?? [], [data]);
   const submission = data?.submission ?? null;
+  const answersCount =
+    typeof data?.answers_count === "number" ? data.answers_count : answers.length;
 
   if (loading) return <div className="p-6 text-sm text-slate-600">Carregando...</div>;
   if (err && !data) return <div className="p-6 text-sm text-red-600">{err}</div>;
@@ -145,6 +150,13 @@ export default function AdminFormsSubmissionPage({
           </div>
           <div>
             <span className="font-medium text-slate-600">Enviado em:</span> {formatDate(submission.created_at)}
+          </div>
+          <div>
+            <span className="font-medium text-slate-600">Respondido em:</span>{" "}
+            {submission.submitted_at ? formatDate(submission.submitted_at) : "Pendente"}
+          </div>
+          <div>
+            <span className="font-medium text-slate-600">Total de respostas:</span> {answersCount}
           </div>
         </div>
       </SectionCard>
