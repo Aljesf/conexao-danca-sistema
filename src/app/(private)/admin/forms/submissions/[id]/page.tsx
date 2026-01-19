@@ -1,11 +1,8 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
-
-type TemplateResumo = { id: string; nome: string | null };
 
 type Submission = {
   id: string;
@@ -13,11 +10,9 @@ type Submission = {
   template_versao: number | null;
   pessoa_id: number | null;
   responsavel_id: number | null;
-  status: string | null;
   public_token: string | null;
   created_at: string | null;
   submitted_at?: string | null;
-  template?: TemplateResumo | null;
 };
 
 type PessoaResumo = { id: number; nome: string | null };
@@ -43,8 +38,6 @@ type ApiResponse = {
     pessoa?: PessoaResumo | null;
     responsavel?: PessoaResumo | null;
     answers: Answer[];
-    answers_count?: number;
-    has_answers?: boolean;
   };
   error?: string;
 };
@@ -79,34 +72,31 @@ export default function AdminFormsSubmissionPage({
   const { id } = use(params);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
   const [data, setData] = useState<ApiResponse["data"] | null>(null);
 
-  useEffect(() => {
-    let ativo = true;
-    async function load() {
-      setLoading(true);
-      setErr(null);
-      try {
-        const res = await fetch(`/api/admin/forms/submissions/${id}`, { cache: "no-store" });
-        const json = (await res.json()) as ApiResponse;
-        if (!res.ok) throw new Error(json.error ?? "Falha ao carregar respostas.");
-        if (ativo) setData(json.data ?? null);
-      } catch (e) {
-        if (ativo) setErr(e instanceof Error ? e.message : "Erro desconhecido.");
-      } finally {
-        if (ativo) setLoading(false);
-      }
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/admin/forms/submissions/${id}`, { cache: "no-store" });
+      const json = (await res.json()) as ApiResponse;
+      if (!res.ok) throw new Error(json.error ?? "Falha ao carregar respostas.");
+      setData(json.data ?? null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erro desconhecido.");
+    } finally {
+      setLoading(false);
     }
-    void load();
-    return () => {
-      ativo = false;
-    };
   }, [id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const answers = useMemo(() => data?.answers ?? [], [data]);
   const submission = data?.submission ?? null;
-  const answersCount =
-    typeof data?.answers_count === "number" ? data.answers_count : answers.length;
+  const answersCount = answers.length;
 
   if (loading) return <div className="p-6 text-sm text-slate-600">Carregando...</div>;
   if (err && !data) return <div className="p-6 text-sm text-red-600">{err}</div>;
@@ -114,18 +104,13 @@ export default function AdminFormsSubmissionPage({
 
   return (
     <div className="p-6 space-y-6">
-      <PageHeader
-        title={submission.template?.nome ?? "Respostas do formulario"}
-        description={`Envio #${submission.id}`}
-        actions={
-          <Link
-            href="/admin/forms/templates"
-            className="rounded-md border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50"
-          >
-            Voltar para templates
-          </Link>
-        }
-      />
+      <PageHeader title="Respostas do formulario" description={`Envio #${submission.id}`} />
+
+      {msg ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
+          {msg}
+        </div>
+      ) : null}
 
       {err ? (
         <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">{err}</div>
@@ -135,7 +120,7 @@ export default function AdminFormsSubmissionPage({
         <div className="grid gap-2 text-sm text-slate-700">
           <div>
             <span className="font-medium text-slate-600">Template:</span>{" "}
-            {submission.template?.nome ?? submission.template_id}
+            {submission.template_id}
           </div>
           <div>
             <span className="font-medium text-slate-600">Pessoa:</span>{" "}
@@ -146,10 +131,7 @@ export default function AdminFormsSubmissionPage({
             {data?.responsavel?.nome ?? (submission.responsavel_id ? `#${submission.responsavel_id}` : "-")}
           </div>
           <div>
-            <span className="font-medium text-slate-600">Status:</span> {submission.status ?? "-"}
-          </div>
-          <div>
-            <span className="font-medium text-slate-600">Enviado em:</span> {formatDate(submission.created_at)}
+            <span className="font-medium text-slate-600">Gerado em:</span> {formatDate(submission.created_at)}
           </div>
           <div>
             <span className="font-medium text-slate-600">Respondido em:</span>{" "}
@@ -158,6 +140,29 @@ export default function AdminFormsSubmissionPage({
           <div>
             <span className="font-medium text-slate-600">Total de respostas:</span> {answersCount}
           </div>
+        </div>
+        <div className="mt-4 flex items-center justify-end">
+          <button
+            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:bg-rose-100"
+            onClick={async () => {
+              const ok = window.confirm("Resetar respostas deste envio?");
+              if (!ok) return;
+              setErr(null);
+              setMsg(null);
+              const res = await fetch(`/api/admin/forms/submissions/${submission.id}/reset`, {
+                method: "POST",
+              });
+              const json = (await res.json()) as { ok?: boolean; error?: string };
+              if (!res.ok || json.ok === false) {
+                setErr(json.error ?? "Falha ao resetar respostas.");
+                return;
+              }
+              setMsg("Respostas resetadas com sucesso.");
+              await load();
+            }}
+          >
+            Resetar respostas
+          </button>
         </div>
       </SectionCard>
 

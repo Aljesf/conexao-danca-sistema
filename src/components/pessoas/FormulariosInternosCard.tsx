@@ -103,7 +103,7 @@ export default function FormulariosInternosCard({
     if (!value) return "-";
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return value;
-    return dt.toLocaleDateString("pt-BR");
+    return dt.toLocaleString("pt-BR");
   }
 
   async function gerarLink() {
@@ -267,6 +267,11 @@ export default function FormulariosInternosCard({
                   <div className="mt-1 text-xs text-slate-600">
                     Status: {item.has_answers ? "Respondido" : "Pendente"}
                   </div>
+                  {item.submitted_at ? (
+                    <div className="mt-1 text-xs text-slate-600">
+                      Respondido em: {formatDate(item.submitted_at)}
+                    </div>
+                  ) : null}
                   <div className="mt-2 flex flex-wrap gap-3 text-xs">
                     {item.public_token ? (
                       <a

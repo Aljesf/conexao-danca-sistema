@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const { data: submission, error: subErr } = await supabase
       .from("form_submissions")
       .select(
-        "id, template_id, template_versao, pessoa_id, responsavel_id, status, public_token, created_at, submitted_at, template:form_templates(id,nome)"
+        "id, template_id, pessoa_id, responsavel_id, public_token, created_at, submitted_at"
       )
       .eq("id", id)
       .maybeSingle();
@@ -54,10 +54,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const { data: answers, error: ansErr } = await supabase
       .from("form_submission_answers")
       .select(
-        "id, template_item_id, question_id, value_text, value_number, value_bool, value_date, value_json, question_titulo_snapshot, option_rotulos_snapshot, created_at, question:form_questions(id,codigo,titulo)"
+        "template_item_id, question_id, question_titulo_snapshot, value_text, value_number, value_bool, value_date, value_json, option_rotulos_snapshot, created_at"
       )
       .eq("submission_id", id)
-      .order("template_item_id", { ascending: true })
       .order("created_at", { ascending: true });
 
     if (ansErr) {
@@ -70,8 +69,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         pessoa: submission.pessoa_id ? pessoasById.get(Number(submission.pessoa_id)) ?? null : null,
         responsavel: submission.responsavel_id ? pessoasById.get(Number(submission.responsavel_id)) ?? null : null,
         answers: answers ?? [],
-        answers_count: (answers ?? []).length,
-        has_answers: (answers ?? []).length > 0,
       },
     });
   } catch (err) {
