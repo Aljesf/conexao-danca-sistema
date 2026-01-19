@@ -1,12 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type Template = {
   id: string;
   nome: string;
   status?: string | null;
+};
+
+type SubmissionRow = {
+  id: string;
+  public_token: string | null;
+  created_at: string;
+  submitted_at: string | null;
+  template: { id: string; nome: string; status: string };
+  answers_count: number;
+  has_answers: boolean;
 };
 
 export default function FormulariosInternosCard({
@@ -23,6 +33,8 @@ export default function FormulariosInternosCard({
   const [err, setErr] = useState<string | null>(null);
   const [publicLink, setPublicLink] = useState<string | null>(null);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [history, setHistory] = useState<SubmissionRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,9 +67,44 @@ export default function FormulariosInternosCard({
     }
   }, []);
 
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "10");
+      if (pessoaId) params.set("pessoa_id", String(pessoaId));
+      if (responsavelId) params.set("responsavel_id", String(responsavelId));
+
+      const res = await fetch(`/api/admin/forms/submissions?${params.toString()}`, {
+        cache: "no-store",
+        credentials: "include",
+      });
+      const json = (await res.json()) as { data?: SubmissionRow[]; error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Falha ao carregar historico.");
+      setHistory(json.data ?? []);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erro desconhecido.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [pessoaId, responsavelId]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
+
+  const historyItems = useMemo(() => history.slice(0, 10), [history]);
+
+  function formatDate(value: string | null | undefined): string {
+    if (!value) return "-";
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return value;
+    return dt.toLocaleDateString("pt-BR");
+  }
 
   async function gerarLink() {
     setMsg(null);
@@ -117,20 +164,24 @@ export default function FormulariosInternosCard({
 
     setPublicLink(finalLink);
     setMsg("Link gerado com sucesso.");
+    await loadHistory();
   }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-base font-semibold">Formularios Internos</div>
+          <div className="text-base font-semibold">Formulários internos</div>
           <div className="mt-1 text-sm text-slate-600">
-            Questionarios e formularios internos vinculados a esta pessoa.
+            Envio e histórico de formulários vinculados a esta pessoa.
           </div>
         </div>
         <button
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          onClick={load}
+          onClick={() => {
+            void load();
+            void loadHistory();
+          }}
           disabled={loading}
         >
           Atualizar
@@ -191,6 +242,51 @@ export default function FormulariosInternosCard({
           </div>
         ) : null}
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+          <div className="text-sm font-medium text-slate-700">Histórico de formulários</div>
+          {historyLoading ? (
+            <div className="mt-2 text-xs text-slate-500">Carregando histórico...</div>
+          ) : historyItems.length === 0 ? (
+            <div className="mt-2 text-xs text-slate-500">Nenhum envio registrado.</div>
+          ) : (
+            <div className="mt-3 grid gap-2">
+              {historyItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium text-slate-800">
+                      {item.template?.nome ?? "Template"}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {formatDate(item.created_at)}
+                    </div>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-600">
+                    Status: {item.has_answers ? "Respondido" : "Pendente"}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                    {item.public_token ? (
+                      <a
+                        href={`/public/forms/${item.public_token}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-slate-700 underline"
+                      >
+                        Abrir formulário
+                      </a>
+                    ) : null}
+                    <Link href={`/admin/forms/submissions/${item.id}`} className="text-slate-700 underline">
+                      Ver respostas
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
