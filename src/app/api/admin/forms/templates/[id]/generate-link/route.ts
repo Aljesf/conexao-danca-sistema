@@ -62,10 +62,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: sErr.message }, { status: 500 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-    const publicUrl = baseUrl
-      ? `${baseUrl}/public/forms/${submission.public_token}`
-      : `/public/forms/${submission.public_token}`;
+    const origin = new URL(req.url).origin;
+    const publicUrl = `${origin}/public/forms/${submission.public_token}`;
 
     return NextResponse.json({
       data: {

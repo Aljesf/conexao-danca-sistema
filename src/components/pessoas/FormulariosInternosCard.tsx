@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 type Template = {
   id: string;
@@ -20,11 +21,15 @@ export default function FormulariosInternosCard({
   const [templateId, setTemplateId] = useState<string>("");
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [publicLink, setPublicLink] = useState<string | null>(null);
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr(null);
     setMsg(null);
+    setPublicLink(null);
+    setSubmissionId(null);
     try {
       const tRes = await fetch("/api/admin/forms/templates", {
         cache: "no-store",
@@ -57,6 +62,8 @@ export default function FormulariosInternosCard({
   async function gerarLink() {
     setMsg(null);
     setErr(null);
+    setPublicLink(null);
+    setSubmissionId(null);
 
     if (!templateId) {
       setErr("Selecione um template publicado.");
@@ -73,13 +80,43 @@ export default function FormulariosInternosCard({
       }),
     });
 
-    const json = (await res.json()) as { data?: { public_url: string }; error?: string };
+    const json = (await res.json()) as { data?: { public_url: string; submission_id?: string | number }; error?: string };
     if (!res.ok) {
       setErr(json.error ?? "Falha ao gerar link.");
       return;
     }
 
-    setMsg(`Link gerado: ${json.data?.public_url}`);
+    const publicUrl = json.data?.public_url ?? "";
+    if (!publicUrl) {
+      setErr("Falha ao gerar link publico.");
+      return;
+    }
+
+    const newSubmissionId = json.data?.submission_id;
+    setSubmissionId(newSubmissionId ? String(newSubmissionId) : null);
+
+    let finalLink = publicUrl;
+    try {
+      const url = new URL(publicUrl, "http://placeholder");
+      const targetPath = `${url.pathname}${url.search ?? ""}`;
+      const shortRes = await fetch("/api/admin/short-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target_path: targetPath,
+          target_label: templates.find((t) => t.id === templateId)?.nome ?? "Formulario publico",
+        }),
+      });
+      const shortJson = (await shortRes.json()) as { short_url?: string; data?: { short_url?: string } };
+      if (shortRes.ok) {
+        finalLink = shortJson.short_url ?? shortJson.data?.short_url ?? finalLink;
+      }
+    } catch {
+      finalLink = publicUrl;
+    }
+
+    setPublicLink(finalLink);
+    setMsg("Link gerado com sucesso.");
   }
 
   return (
@@ -131,6 +168,28 @@ export default function FormulariosInternosCard({
         </div>
 
         {msg ? <div className="text-sm text-slate-600">{msg}</div> : null}
+        {publicLink ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm">
+            <div>
+              <span className="font-medium text-emerald-800">Link gerado:</span>{" "}
+              <a
+                href={publicLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-700 underline break-all"
+              >
+                {publicLink}
+              </a>
+            </div>
+            {submissionId ? (
+              <div className="mt-2">
+                <Link href={`/admin/forms/submissions/${submissionId}`} className="text-emerald-700 underline">
+                  Ver respostas
+                </Link>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {err ? <div className="text-sm text-red-600">{err}</div> : null}
       </div>
     </div>

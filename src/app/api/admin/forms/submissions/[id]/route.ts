@@ -1,0 +1,83 @@
+import { NextRequest, NextResponse } from "next/server";
+import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+
+type PessoaResumo = { id: number; nome: string | null };
+
+function toPositiveNumber(value: string): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(req as unknown as Request);
+  if (denied) return denied as unknown as NextResponse;
+
+  try {
+    const { id } = await ctx.params;
+    const submissionId = toPositiveNumber(id);
+    if (!submissionId) {
+      return NextResponse.json({ error: "submission_id_invalido" }, { status: 400 });
+    }
+
+    const supabase = getSupabaseServiceClient();
+
+    const { data: submission, error: subErr } = await supabase
+      .from("form_submissions")
+      .select(
+        "id, template_id, template_versao, pessoa_id, responsavel_id, status, public_token, created_at, template:form_templates(id,nome)"
+      )
+      .eq("id", submissionId)
+      .maybeSingle();
+
+    if (subErr) {
+      return NextResponse.json({ error: subErr.message }, { status: 500 });
+    }
+    if (!submission) {
+      return NextResponse.json({ error: "submission_nao_encontrada" }, { status: 404 });
+    }
+
+    const pessoaIds = [submission.pessoa_id, submission.responsavel_id]
+      .filter((v) => Number.isFinite(Number(v)))
+      .map((v) => Number(v));
+
+    let pessoasById = new Map<number, PessoaResumo>();
+    if (pessoaIds.length > 0) {
+      const { data: pessoas, error: pessoasErr } = await supabase
+        .from("pessoas")
+        .select("id,nome")
+        .in("id", pessoaIds);
+      if (pessoasErr) {
+        return NextResponse.json({ error: pessoasErr.message }, { status: 500 });
+      }
+      pessoasById = new Map(
+        (pessoas ?? []).map((row) => [Number(row.id), { id: Number(row.id), nome: row.nome ?? null }])
+      );
+    }
+
+    const { data: answers, error: ansErr } = await supabase
+      .from("form_submission_answers")
+      .select(
+        "id, template_item_id, question_id, value_text, value_number, value_bool, value_date, value_json, question_titulo_snapshot, option_rotulos_snapshot, created_at, question:form_questions(id,codigo,titulo)"
+      )
+      .eq("submission_id", submissionId)
+      .order("template_item_id", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (ansErr) {
+      return NextResponse.json({ error: ansErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      data: {
+        submission,
+        pessoa: submission.pessoa_id ? pessoasById.get(Number(submission.pessoa_id)) ?? null : null,
+        responsavel: submission.responsavel_id ? pessoasById.get(Number(submission.responsavel_id)) ?? null : null,
+        answers: answers ?? [],
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro inesperado";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

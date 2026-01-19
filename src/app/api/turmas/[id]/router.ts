@@ -5,8 +5,9 @@ import { getSupabaseServer } from "@/lib/supabaseServer";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function PUT(_req: Request, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export async function PUT(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const turmaId = Number(id);
   const supabase = await getSupabaseServer();
   const body = await _req.json(); // { turma: {...}, horarios: [...] }
   const turmaPayload = { ...(body.turma ?? {}) } as Record<string, unknown>;
@@ -30,7 +31,7 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
   const { data, error } = await supabase
     .from("turmas")
     .update(turmaPayload)
-    .eq("turma_id", id)
+    .eq("turma_id", turmaId)
     .select("*")
     .single();
 
@@ -38,10 +39,10 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
 
   // substitui horários
   if (Array.isArray(body.horarios)) {
-    await supabase.from("turmas_horarios").delete().eq("turma_id", id);
+    await supabase.from("turmas_horarios").delete().eq("turma_id", turmaId);
 
     const rows = body.horarios.map((h: any) => ({
-      turma_id: id,
+      turma_id: turmaId,
       day_of_week: h.day,
       inicio: h.inicio,
       fim: h.fim,
@@ -54,10 +55,11 @@ export async function PUT(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({ data });
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const id = Number(params.id);
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const turmaId = Number(id);
   const supabase = await getSupabaseServer();
-  const { error } = await supabase.from("turmas").delete().eq("turma_id", id);
+  const { error } = await supabase.from("turmas").delete().eq("turma_id", turmaId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

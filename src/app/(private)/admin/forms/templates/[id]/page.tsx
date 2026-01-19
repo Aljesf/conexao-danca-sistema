@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 import ToolbarRow from "@/components/layout/ToolbarRow";
@@ -107,6 +108,7 @@ export default function AdminFormsTemplatesEditorPage({
   const [savingBlocks, setSavingBlocks] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [publicLink, setPublicLink] = useState<string | null>(null);
+  const [submissionId, setSubmissionId] = useState<string | null>(null);
 
   const [headerImageUrl, setHeaderImageUrl] = useState("");
   const [footerImageUrl, setFooterImageUrl] = useState("");
@@ -139,6 +141,7 @@ export default function AdminFormsTemplatesEditorPage({
   const load = useCallback(async () => {
     setErr(null);
     setPublicLink(null);
+    setSubmissionId(null);
     setLoading(true);
     try {
       const [a, b, c] = await Promise.all([
@@ -395,6 +398,7 @@ export default function AdminFormsTemplatesEditorPage({
     setMsg(null);
     setErr(null);
     setPublicLink(null);
+    setSubmissionId(null);
     try {
       const res = await fetch(`/api/admin/forms/templates/${templateId}/generate-link`, {
         method: "POST",
@@ -402,12 +406,14 @@ export default function AdminFormsTemplatesEditorPage({
         body: JSON.stringify({ pessoa_id: null, responsavel_id: null }),
       });
       const json = (await res.json()) as {
-        data?: { public_url?: string; public_token?: string };
+        data?: { public_url?: string; public_token?: string; submission_id?: string | number };
         error?: string;
       };
       if (!res.ok) throw new Error(json.error ?? "Falha ao gerar link.");
       const publicUrl = json.data?.public_url ?? "";
       if (!publicUrl) throw new Error("Falha ao gerar link publico.");
+      const newSubmissionId = json.data?.submission_id;
+      setSubmissionId(newSubmissionId ? String(newSubmissionId) : null);
 
       const url = new URL(publicUrl, "http://placeholder");
       const targetPath = `${url.pathname}${url.search ?? ""}`;
@@ -604,17 +610,28 @@ export default function AdminFormsTemplatesEditorPage({
         </div>
       ) : null}
 
-      {publicLink ? (
+      {publicLink || submissionId ? (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm">
-          <span className="font-medium text-emerald-800">Link gerado:</span>{" "}
-          <a
-            href={publicLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-emerald-700 underline break-all"
-          >
-            {publicLink}
-          </a>
+          {publicLink ? (
+            <div>
+              <span className="font-medium text-emerald-800">Link gerado:</span>{" "}
+              <a
+                href={publicLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-700 underline break-all"
+              >
+                {publicLink}
+              </a>
+            </div>
+          ) : null}
+          {submissionId ? (
+            <div className={publicLink ? "mt-2" : undefined}>
+              <Link href={`/admin/forms/submissions/${submissionId}`} className="text-emerald-700 underline">
+                Ver respostas
+              </Link>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

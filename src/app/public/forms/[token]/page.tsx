@@ -104,6 +104,7 @@ export default function PublicFormTokenPage({
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [answers, setAnswers] = useState<AnswerState>({});
 
   const blocks = useMemo(() => {
@@ -146,6 +147,8 @@ export default function PublicFormTokenPage({
     async function load() {
       setLoading(true);
       setErr(null);
+      setOkMsg(null);
+      setSubmitted(false);
       try {
         const res = await fetch(`/api/public/forms/${token}`, { cache: "no-store" });
         const json = (await res.json()) as { data?: Payload; error?: string };
@@ -250,6 +253,7 @@ export default function PublicFormTokenPage({
     }
 
     setOkMsg("Formulario enviado com sucesso. Obrigado!");
+    setSubmitted(true);
   }
 
   if (loading) return <div className="p-4">Carregando...</div>;
@@ -271,213 +275,242 @@ export default function PublicFormTokenPage({
         answeredRequired: 0,
       }}
     >
-      {okMsg ? (
-        <div className="rounded-2xl border bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
-          {okMsg}
-        </div>
-      ) : null}
-      {err ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
-          {err}
-        </div>
-      ) : null}
-
-      <div className="grid gap-4">
-        {blocks.filter(isVisible).map((block) => {
-          if (block.tipo === "TEXTO") {
-            const align =
-              block.alinhamento === "CENTRO"
-                ? "text-center"
-                : block.alinhamento === "DIREITA"
-                  ? "text-right"
-                  : "text-left";
-            return (
-              <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm grid gap-2">
-                {block.titulo ? <div className="text-sm font-medium">{block.titulo}</div> : null}
-                {block.texto_md ? (
-                  <div
-                    className={`text-sm text-slate-700 ${align}`}
-                    dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(block.texto_md) }}
-                  />
-                ) : null}
-              </div>
-            );
-          }
-
-          if (block.tipo === "IMAGEM") {
-            const align =
-              block.alinhamento === "CENTRO"
-                ? "mx-auto"
-                : block.alinhamento === "DIREITA"
-                  ? "ml-auto"
-                  : "mr-auto";
-            return (
-              <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm">
-                {block.imagem_url ? (
-                  <img
-                    src={block.imagem_url}
-                    alt={block.titulo ?? "Imagem do formulario"}
-                    className={`max-h-64 w-full object-contain ${align}`}
-                  />
-                ) : (
-                  <div className="text-sm text-slate-500">Imagem nao configurada.</div>
-                )}
-              </div>
-            );
-          }
-
-          if (block.tipo === "DIVISOR") {
-            return (
-              <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm grid gap-2">
-                {block.titulo ? <div className="text-xs text-slate-500">{block.titulo}</div> : null}
-                <div className="h-px w-full bg-slate-200" />
-              </div>
-            );
-          }
-
-          const q = block.form_questions;
-          if (!q) return null;
-          const v = answers[q.id];
-
-          return (
-            <PublicFormQuestionCard
-              key={block.id}
-              label={q.titulo}
-              required={block.obrigatoria}
-              hint={q.ajuda ?? undefined}
+      {submitted ? (
+        <div className="rounded-2xl border bg-white px-5 py-4 text-sm text-slate-700 shadow-sm">
+          <div className="text-base font-semibold text-slate-900">Envio concluido</div>
+          <div className="mt-2">
+            {okMsg ?? "Formulario enviado com sucesso. Obrigado!"}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+              onClick={() => {
+                if (window.opener) window.close();
+                else if (window.history.length > 1) window.history.back();
+                else window.location.reload();
+              }}
             >
-              {q.tipo === "textarea" ? (
-                <textarea
-                  className={`${fieldClassName} min-h-[96px]`}
-                  placeholder={q.placeholder ?? ""}
-                  value={asString(v)}
-                  onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
-                />
-              ) : q.tipo === "number" ? (
-                <input
-                  className={fieldClassName}
-                  type="number"
-                  value={v === undefined || v === null ? "" : String(v)}
-                  onChange={(e) =>
-                    setAnswers((p) => ({
-                      ...p,
-                      [q.id]: e.target.value === "" ? null : Number(e.target.value),
-                    }))
-                  }
-                />
-              ) : q.tipo === "date" ? (
-                <input
-                  className={fieldClassName}
-                  type="date"
-                  value={asString(v)}
-                  onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
-                />
-              ) : q.tipo === "boolean" ? (
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(v)}
-                    onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.checked }))}
-                  />
-                  Sim
-                </label>
-              ) : q.tipo === "single_choice" ? (
-                <select
-                  className={fieldClassName}
-                  value={asString(v)}
-                  onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
-                >
-                  <option value="">Selecione...</option>
-                  {(q.form_question_options ?? [])
-                    .filter((o) => o.ativo)
-                    .sort((a, b) => a.ordem - b.ordem)
-                    .map((o) => (
-                      <option key={o.id} value={o.valor}>
-                        {o.rotulo}
-                      </option>
-                    ))}
-                </select>
-              ) : q.tipo === "multi_choice" ? (
-                <div className="grid gap-2">
-                  {(q.form_question_options ?? [])
-                    .filter((o) => o.ativo)
-                    .sort((a, b) => a.ordem - b.ordem)
-                    .map((o) => {
-                      const arr = Array.isArray(v) ? (v as unknown[]).map(asString) : [];
-                      const checked = arr.includes(o.valor);
-                      return (
-                        <label key={o.id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              const cur = new Set(arr);
-                              if (e.target.checked) cur.add(o.valor);
-                              else cur.delete(o.valor);
-                              setAnswers((p) => ({ ...p, [q.id]: Array.from(cur) }));
-                            }}
-                          />
-                          {o.rotulo}
-                        </label>
-                      );
-                    })}
-                </div>
-              ) : q.tipo === "scale" ? (
-                <input
-                  className={fieldClassName}
-                  type="number"
-                  min={q.scale_min ?? undefined}
-                  max={q.scale_max ?? undefined}
-                  value={v === undefined || v === null ? "" : String(v)}
-                  onChange={(e) =>
-                    setAnswers((p) => ({
-                      ...p,
-                      [q.id]: e.target.value === "" ? null : Number(e.target.value),
-                    }))
-                  }
-                />
-              ) : (
-                <input
-                  className={fieldClassName}
-                  type="text"
-                  placeholder={q.placeholder ?? ""}
-                  value={asString(v)}
-                  onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
-                />
-              )}
-            </PublicFormQuestionCard>
-          );
-        })}
-      </div>
-
-      {data.template.outro_text_md || data.template.footer_image_url ? (
-        <div className="rounded-2xl border bg-white p-4 shadow-sm grid gap-3">
-          {data.template.footer_image_url ? (
-            <div className="rounded-xl border bg-slate-50 p-3">
-              <img
-                src={data.template.footer_image_url}
-                alt="Rodape do formulario"
-                className="max-h-40 w-full object-contain"
-              />
+              Fechar
+            </button>
+            <button
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              onClick={() => window.location.reload()}
+            >
+              Reabrir link
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {okMsg ? (
+            <div className="rounded-2xl border bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+              {okMsg}
             </div>
           ) : null}
-          {data.template.outro_text_md ? (
-            <div
-              className="text-sm text-slate-700"
-              dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(data.template.outro_text_md) }}
-            />
+          {err ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
+              {err}
+            </div>
           ) : null}
-        </div>
-      ) : null}
 
-      <div className="flex items-center justify-end">
-        <button
-          className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
-          onClick={submit}
-        >
-          Enviar
-        </button>
-      </div>
+          <div className="grid gap-4">
+            {blocks.filter(isVisible).map((block) => {
+              if (block.tipo === "TEXTO") {
+                const align =
+                  block.alinhamento === "CENTRO"
+                    ? "text-center"
+                    : block.alinhamento === "DIREITA"
+                      ? "text-right"
+                      : "text-left";
+                return (
+                  <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm grid gap-2">
+                    {block.titulo ? <div className="text-sm font-medium">{block.titulo}</div> : null}
+                    {block.texto_md ? (
+                      <div
+                        className={`text-sm text-slate-700 ${align}`}
+                        dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(block.texto_md) }}
+                      />
+                    ) : null}
+                  </div>
+                );
+              }
+
+              if (block.tipo === "IMAGEM") {
+                const align =
+                  block.alinhamento === "CENTRO"
+                    ? "mx-auto"
+                    : block.alinhamento === "DIREITA"
+                      ? "ml-auto"
+                      : "mr-auto";
+                return (
+                  <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm">
+                    {block.imagem_url ? (
+                      <img
+                        src={block.imagem_url}
+                        alt={block.titulo ?? "Imagem do formulario"}
+                        className={`max-h-64 w-full object-contain ${align}`}
+                      />
+                    ) : (
+                      <div className="text-sm text-slate-500">Imagem nao configurada.</div>
+                    )}
+                  </div>
+                );
+              }
+
+              if (block.tipo === "DIVISOR") {
+                return (
+                  <div key={block.id} className="rounded-2xl border bg-white p-4 shadow-sm grid gap-2">
+                    {block.titulo ? <div className="text-xs text-slate-500">{block.titulo}</div> : null}
+                    <div className="h-px w-full bg-slate-200" />
+                  </div>
+                );
+              }
+
+              const q = block.form_questions;
+              if (!q) return null;
+              const v = answers[q.id];
+
+              return (
+                <PublicFormQuestionCard
+                  key={block.id}
+                  label={q.titulo}
+                  required={block.obrigatoria}
+                  hint={q.ajuda ?? undefined}
+                >
+                  {q.tipo === "textarea" ? (
+                    <textarea
+                      className={`${fieldClassName} min-h-[96px]`}
+                      placeholder={q.placeholder ?? ""}
+                      value={asString(v)}
+                      onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
+                    />
+                  ) : q.tipo === "number" ? (
+                    <input
+                      className={fieldClassName}
+                      type="number"
+                      value={v === undefined || v === null ? "" : String(v)}
+                      onChange={(e) =>
+                        setAnswers((p) => ({
+                          ...p,
+                          [q.id]: e.target.value === "" ? null : Number(e.target.value),
+                        }))
+                      }
+                    />
+                  ) : q.tipo === "date" ? (
+                    <input
+                      className={fieldClassName}
+                      type="date"
+                      value={asString(v)}
+                      onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
+                    />
+                  ) : q.tipo === "boolean" ? (
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(v)}
+                        onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.checked }))}
+                      />
+                      Sim
+                    </label>
+                  ) : q.tipo === "single_choice" ? (
+                    <select
+                      className={fieldClassName}
+                      value={asString(v)}
+                      onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
+                    >
+                      <option value="">Selecione...</option>
+                      {(q.form_question_options ?? [])
+                        .filter((o) => o.ativo)
+                        .sort((a, b) => a.ordem - b.ordem)
+                        .map((o) => (
+                          <option key={o.id} value={o.valor}>
+                            {o.rotulo}
+                          </option>
+                        ))}
+                    </select>
+                  ) : q.tipo === "multi_choice" ? (
+                    <div className="grid gap-2">
+                      {(q.form_question_options ?? [])
+                        .filter((o) => o.ativo)
+                        .sort((a, b) => a.ordem - b.ordem)
+                        .map((o) => {
+                          const arr = Array.isArray(v) ? (v as unknown[]).map(asString) : [];
+                          const checked = arr.includes(o.valor);
+                          return (
+                            <label key={o.id} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const cur = new Set(arr);
+                                  if (e.target.checked) cur.add(o.valor);
+                                  else cur.delete(o.valor);
+                                  setAnswers((p) => ({ ...p, [q.id]: Array.from(cur) }));
+                                }}
+                              />
+                              {o.rotulo}
+                            </label>
+                          );
+                        })}
+                    </div>
+                  ) : q.tipo === "scale" ? (
+                    <input
+                      className={fieldClassName}
+                      type="number"
+                      min={q.scale_min ?? undefined}
+                      max={q.scale_max ?? undefined}
+                      value={v === undefined || v === null ? "" : String(v)}
+                      onChange={(e) =>
+                        setAnswers((p) => ({
+                          ...p,
+                          [q.id]: e.target.value === "" ? null : Number(e.target.value),
+                        }))
+                      }
+                    />
+                  ) : (
+                    <input
+                      className={fieldClassName}
+                      type="text"
+                      placeholder={q.placeholder ?? ""}
+                      value={asString(v)}
+                      onChange={(e) => setAnswers((p) => ({ ...p, [q.id]: e.target.value }))}
+                    />
+                  )}
+                </PublicFormQuestionCard>
+              );
+            })}
+          </div>
+
+          {data.template.outro_text_md || data.template.footer_image_url ? (
+            <div className="rounded-2xl border bg-white p-4 shadow-sm grid gap-3">
+              {data.template.footer_image_url ? (
+                <div className="rounded-xl border bg-slate-50 p-3">
+                  <img
+                    src={data.template.footer_image_url}
+                    alt="Rodape do formulario"
+                    className="max-h-40 w-full object-contain"
+                  />
+                </div>
+              ) : null}
+              {data.template.outro_text_md ? (
+                <div
+                  className="text-sm text-slate-700"
+                  dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(data.template.outro_text_md) }}
+                />
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-end">
+            <button
+              className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+              onClick={submit}
+            >
+              Enviar
+            </button>
+          </div>
+        </>
+      )}
     </PublicFormExperienceShell>
   );
 }
