@@ -167,6 +167,58 @@ export default function FormulariosInternosCard({
     await loadHistory();
   }
 
+  async function excluirSubmission(id: string) {
+    const ok = window.confirm(
+      "Isso vai APAGAR definitivamente esta submissao e todas as respostas. Confirmar?"
+    );
+    if (!ok) return;
+
+    setErr(null);
+    setMsg(null);
+    const res = await fetch(`/api/admin/forms/submissions/${id}`, { method: "DELETE" });
+    const json = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok || json.ok === false) {
+      setErr(json.error ?? "Falha ao excluir submissao.");
+      return;
+    }
+    setMsg("Submissao excluida com sucesso.");
+    await loadHistory();
+  }
+
+  async function limparDuplicados() {
+    if (!templateId) return;
+    const ok = window.confirm(
+      "Isso vai apagar definitivamente submissoes duplicadas deste template para esta pessoa."
+    );
+    if (!ok) return;
+    const typed = window.prompt("Digite APAGAR para confirmar:");
+    if (typed !== "APAGAR") return;
+
+    setErr(null);
+    setMsg(null);
+
+    const res = await fetch("/api/admin/forms/submissions/cleanup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pessoa_id: pessoaId,
+        responsavel_id: responsavelId ?? null,
+        template_id: templateId,
+        keep: "latest",
+      }),
+    });
+    const json = (await res.json()) as { data?: { kept_id: string | null; deleted_count: number }; error?: string };
+    if (!res.ok) {
+      setErr(json.error ?? "Falha ao limpar duplicados.");
+      return;
+    }
+
+    const keptId = json.data?.kept_id ?? "N/A";
+    const deletedCount = json.data?.deleted_count ?? 0;
+    setMsg(`Duplicados removidos. Mantido: ${keptId}. Apagados: ${deletedCount}.`);
+    await loadHistory();
+  }
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -215,6 +267,15 @@ export default function FormulariosInternosCard({
             disabled={loading || !templateId}
           >
             Gerar link
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+            onClick={limparDuplicados}
+            disabled={loading || !templateId}
+          >
+            Limpar duplicados
           </button>
         </div>
 
@@ -286,6 +347,12 @@ export default function FormulariosInternosCard({
                     <Link href={`/admin/forms/submissions/${item.id}`} className="text-slate-700 underline">
                       Ver respostas
                     </Link>
+                    <button
+                      className="text-rose-700 underline"
+                      onClick={() => void excluirSubmission(item.id)}
+                    >
+                      Excluir
+                    </button>
                   </div>
                 </div>
               ))}

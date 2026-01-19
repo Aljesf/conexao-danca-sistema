@@ -76,3 +76,31 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(req as unknown as Request);
+  if (denied) return denied as unknown as NextResponse;
+
+  try {
+    const { id } = await ctx.params;
+    if (!UUID_RE.test(id)) {
+      return NextResponse.json({ error: "submission_id_invalido" }, { status: 400 });
+    }
+
+    const supabase = getSupabaseServiceClient();
+    const { data, error } = await supabase.from("form_submissions").delete().eq("id", id).select("id");
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "submission_nao_encontrada" }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro inesperado";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
