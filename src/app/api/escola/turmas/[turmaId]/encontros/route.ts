@@ -16,8 +16,9 @@ function parseId(value: string | undefined): number | null {
   return n;
 }
 
-export async function GET(_req: Request, ctx: { params: { turmaId?: string } }) {
-  const turmaId = parseId(ctx.params.turmaId);
+export async function GET(_req: Request, ctx: { params: Promise<{ turmaId?: string }> }) {
+  const { turmaId: turmaIdRaw } = await ctx.params;
+  const turmaId = parseId(turmaIdRaw);
   if (!turmaId) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
@@ -48,8 +49,9 @@ export async function GET(_req: Request, ctx: { params: { turmaId?: string } }) 
   return NextResponse.json({ encontros: (data ?? []) as EncontroRow[] }, { status: 200 });
 }
 
-export async function POST(req: Request, ctx: { params: { turmaId?: string } }) {
-  const turmaId = parseId(ctx.params.turmaId);
+export async function POST(req: Request, ctx: { params: Promise<{ turmaId?: string }> }) {
+  const { turmaId: turmaIdRaw } = await ctx.params;
+  const turmaId = parseId(turmaIdRaw);
   if (!turmaId) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }

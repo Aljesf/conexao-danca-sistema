@@ -9,11 +9,12 @@ type TurmaAlunoRow = {
 /**
  * GET /api/professor/diario-de-classe/turmas/:turmaId/alunos
  */
-export async function GET(_req: Request, ctx: { params: { turmaId: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ turmaId: string }> }) {
   const auth = await getUserOrThrow();
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
-  const turmaId = zTurmaId.safeParse(ctx.params.turmaId);
+  const { turmaId: turmaIdRaw } = await ctx.params;
+  const turmaId = zTurmaId.safeParse(turmaIdRaw);
   if (!turmaId.success) {
     return NextResponse.json({ ok: false, code: "TURMA_ID_INVALIDO" }, { status: 400 });
   }

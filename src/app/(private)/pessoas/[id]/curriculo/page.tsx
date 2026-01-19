@@ -363,11 +363,11 @@ export default async function CurriculoPage({
     );
   }
 
-  const headersList = headers();
+  const headersList = await headers();
   const host = headersList.get("host");
   const protocol = headersList.get("x-forwarded-proto") ?? "http";
   const baseUrl = host ? `${protocol}://${host}` : "";
-  const cookieHeader = cookies().toString();
+  const cookieHeader = (await cookies()).toString();
 
   const [pessoa, internas, externas, experiencias, avaliacoes, matriculas] =
     await Promise.all([

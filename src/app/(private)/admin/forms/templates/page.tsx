@@ -11,8 +11,8 @@ type TemplateRow = {
   updated_at: string;
 };
 
-function getBaseUrl() {
-  const hdrs = headers();
+async function getBaseUrl() {
+  const hdrs = await headers();
   const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host");
   const proto = hdrs.get("x-forwarded-proto") ?? "http";
   const envBase = process.env.NEXT_PUBLIC_SITE_URL;
@@ -20,10 +20,11 @@ function getBaseUrl() {
 }
 
 async function fetchTemplates(): Promise<TemplateRow[]> {
-  const baseUrl = getBaseUrl();
+  const baseUrl = await getBaseUrl();
   if (!baseUrl) return [];
 
-  const cookie = headers().get("cookie") ?? "";
+  const hdrs = await headers();
+  const cookie = hdrs.get("cookie") ?? "";
   const res = await fetch(`${baseUrl}/api/admin/forms/templates`, {
     cache: "no-store",
     headers: { cookie },

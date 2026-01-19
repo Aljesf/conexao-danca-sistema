@@ -178,10 +178,11 @@ async function getById(id: number) {
   return { ok: true as const, data: data as MatriculaPlano | null };
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const idNum = parseIntStrict(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const idNum = parseIntStrict(rawId);
   if (idNum === null || idNum <= 0) return badRequest("ID invalido.");
 
   let payload: unknown;
@@ -233,10 +234,11 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
   return NextResponse.json({ ok: true, data: data as MatriculaPlano });
 }
 
-export async function DELETE(_req: Request, ctx: { params: { id: string } }) {
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
-  const idNum = parseIntStrict(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const idNum = parseIntStrict(rawId);
   if (idNum === null || idNum <= 0) return badRequest("ID invalido.");
 
   const current = await getById(idNum);

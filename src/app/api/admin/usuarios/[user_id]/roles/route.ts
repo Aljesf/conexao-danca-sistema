@@ -2,13 +2,13 @@
 import { assertAdmin } from "@/lib/auth/assertAdmin";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
-export async function GET(_req: Request, ctx: { params: { user_id: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ user_id: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
   const auth = await assertAdmin();
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
-  const user_id = ctx.params.user_id;
+  const { user_id } = await ctx.params;
   const { data: ur, error: urErr } = await auth.supabase.from("usuario_roles").select("user_id, role_id").eq("user_id", user_id);
   if (urErr) return NextResponse.json({ ok: false, error: "erro_usuario_roles", details: urErr.message }, { status: 500 });
 
@@ -22,13 +22,13 @@ export async function GET(_req: Request, ctx: { params: { user_id: string } }) {
   return NextResponse.json({ ok: true, roles: roles || [] });
 }
 
-export async function POST(req: Request, ctx: { params: { user_id: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ user_id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   const auth = await assertAdmin();
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
-  const user_id = ctx.params.user_id;
+  const { user_id } = await ctx.params;
   const body = await req.json().catch(() => null);
   const role_id = body?.role_id;
 
@@ -42,13 +42,13 @@ export async function POST(req: Request, ctx: { params: { user_id: string } }) {
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(req: Request, ctx: { params: { user_id: string } }) {
+export async function DELETE(req: Request, ctx: { params: Promise<{ user_id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   const auth = await assertAdmin();
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
 
-  const user_id = ctx.params.user_id;
+  const { user_id } = await ctx.params;
   const body = await req.json().catch(() => null);
   const role_id = body?.role_id;
 

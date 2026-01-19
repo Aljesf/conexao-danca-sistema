@@ -41,11 +41,12 @@ type PessoaRow = {
   email: string | null;
 };
 
-export async function GET(_: Request, ctx: { params: { id: string } }) {
+export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(_ as any);
   if (denied) return denied as any;
   const supabase = getSupabaseAdmin();
-  const faturaId = Number(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const faturaId = Number(rawId);
 
   if (!Number.isFinite(faturaId)) {
     return NextResponse.json({ ok: false, error: "fatura_id_invalido" }, { status: 400 });

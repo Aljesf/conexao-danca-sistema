@@ -32,10 +32,11 @@ function mapTipoTurmaPorContexto(tipo: ContextoTipo): TipoTurma[] {
   return ["ENSAIO", "PROJETO_ARTISTICO"];
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const contextoId = Number(params.id);
+  const { id } = await params;
+  const contextoId = Number(id);
   if (!Number.isFinite(contextoId) || contextoId <= 0) {
     return NextResponse.json({ ok: false, error: "contexto_id_invalido" }, { status: 400 });
   }

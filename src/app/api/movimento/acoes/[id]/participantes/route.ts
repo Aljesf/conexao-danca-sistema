@@ -7,10 +7,11 @@ type AddParticipanteBody = {
   observacoes?: string | null;
 };
 
-export async function POST(req: Request, ctx: { params: { id: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const supabase = getSupabaseAdmin();
-    const acaoId = String(ctx.params.id);
+    const { id } = await ctx.params;
+    const acaoId = String(id);
     const body = (await req.json()) as AddParticipanteBody;
 
     if (!body?.pessoa_id) {

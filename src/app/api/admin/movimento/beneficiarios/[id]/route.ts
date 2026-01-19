@@ -15,17 +15,18 @@ const BeneficiarioUpdateSchema = z.object({
   documentos_refs: z.record(z.unknown()).optional(),
 });
 
-export async function GET(_: Request, ctx: { params: { id: string } }) {
+export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(_ as any);
   if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
+    const { id } = await ctx.params;
 
     const { data, error } = await supabase
       .from("movimento_beneficiarios")
       .select("*")
-      .eq("id", ctx.params.id)
+      .eq("id", id)
       .maybeSingle();
 
     if (error) throw error;
@@ -37,12 +38,13 @@ export async function GET(_: Request, ctx: { params: { id: string } }) {
   }
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
+    const { id } = await ctx.params;
 
     const bodyUnknown = await req.json();
     const body = BeneficiarioUpdateSchema.parse(bodyUnknown);
@@ -60,7 +62,7 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
     const { data, error } = await supabase
       .from("movimento_beneficiarios")
       .update(updatePayload)
-      .eq("id", ctx.params.id)
+      .eq("id", id)
       .select("*")
       .maybeSingle();
 

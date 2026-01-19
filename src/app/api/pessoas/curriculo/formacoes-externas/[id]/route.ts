@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 type Body = {
   nome_curso?: string;
@@ -15,8 +15,9 @@ type Body = {
 };
 
 export async function PUT(req: Request, { params }: Params): Promise<Response> {
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) {
+  const { id } = await params;
+  const formacaoId = Number(id);
+  if (!Number.isFinite(formacaoId)) {
     return NextResponse.json({ ok: false, error: "id invalido." }, { status: 400 });
   }
 
@@ -42,7 +43,7 @@ export async function PUT(req: Request, { params }: Params): Promise<Response> {
   const { data, error } = await supabase
     .from("curriculo_formacoes_externas")
     .update(payload)
-    .eq("id", id)
+    .eq("id", formacaoId)
     .select("*")
     .single();
 
@@ -54,14 +55,18 @@ export async function PUT(req: Request, { params }: Params): Promise<Response> {
 }
 
 export async function DELETE(_: Request, { params }: Params): Promise<Response> {
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) {
+  const { id } = await params;
+  const formacaoId = Number(id);
+  if (!Number.isFinite(formacaoId)) {
     return NextResponse.json({ ok: false, error: "id invalido." }, { status: 400 });
   }
 
   const supabase = createAdminClient();
 
-  const { error } = await supabase.from("curriculo_formacoes_externas").delete().eq("id", id);
+  const { error } = await supabase
+    .from("curriculo_formacoes_externas")
+    .delete()
+    .eq("id", formacaoId);
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

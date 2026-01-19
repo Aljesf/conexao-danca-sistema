@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 type AddMembroBody = {
   pessoa_id: number;
@@ -10,7 +10,8 @@ type AddMembroBody = {
 
 export async function POST(req: Request, { params }: Params): Promise<Response> {
   const supabase = createAdminClient();
-  const grupoId = Number(params.id);
+  const { id } = await params;
+  const grupoId = Number(id);
 
   if (!Number.isFinite(grupoId)) {
     return NextResponse.json({ ok: false, error: "grupo_id invalido." }, { status: 400 });
@@ -52,7 +53,8 @@ export async function DELETE(req: Request, { params }: Params): Promise<Response
   const url = new URL(req.url);
   const pessoaId = Number(url.searchParams.get("pessoa_id"));
   const supabase = createAdminClient();
-  const grupoId = Number(params.id);
+  const { id } = await params;
+  const grupoId = Number(id);
 
   if (!Number.isFinite(grupoId)) {
     return NextResponse.json({ ok: false, error: "grupo_id invalido." }, { status: 400 });

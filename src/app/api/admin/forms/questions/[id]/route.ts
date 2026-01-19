@@ -42,12 +42,12 @@ function toNullableString(value: unknown): string | null {
   return s ? s : null;
 }
 
-export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
 
   try {
-    const id = ctx.params.id;
+    const { id } = await ctx.params;
     if (!id) return NextResponse.json({ error: "Parametro id invalido." }, { status: 400 });
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;

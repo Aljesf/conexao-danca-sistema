@@ -10,10 +10,11 @@ function isResponsavelFinanceiro(role: string): boolean {
   return role.toUpperCase() === "RESPONSAVEL_FINANCEIRO";
 }
 
-export async function POST(req: Request, ctx: { params: { id: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
 
-  const pessoaId = Number(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const pessoaId = Number(rawId);
   if (!Number.isFinite(pessoaId) || pessoaId <= 0) {
     return Response.json({ ok: false, code: "PESSOA_ID_INVALIDO" }, { status: 400 });
   }

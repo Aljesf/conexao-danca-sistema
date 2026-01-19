@@ -5,14 +5,13 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 const BLOCK_TYPES = new Set(["PERGUNTA", "TEXTO", "IMAGEM", "DIVISOR"]);
 const ALIGN_TYPES = new Set(["ESQUERDA", "CENTRO", "DIREITA"]);
 
-export async function PUT(req: NextRequest, ctx: { params: { id: string; blocoId: string } }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string; blocoId: string }> }) {
   const denied = await guardApiByRole(req as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
 
   try {
     const supabase = getSupabaseServiceClient();
-    const templateId = ctx.params.id;
-    const blocoId = ctx.params.blocoId;
+    const { id: templateId, blocoId } = await ctx.params;
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") {
@@ -115,14 +114,13 @@ export async function PUT(req: NextRequest, ctx: { params: { id: string; blocoId
   }
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: { id: string; blocoId: string } }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string; blocoId: string }> }) {
   const denied = await guardApiByRole(req as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
 
   try {
     const supabase = getSupabaseServiceClient();
-    const templateId = ctx.params.id;
-    const blocoId = ctx.params.blocoId;
+    const { id: templateId, blocoId } = await ctx.params;
 
     const { error } = await supabase
       .from("form_template_blocos")

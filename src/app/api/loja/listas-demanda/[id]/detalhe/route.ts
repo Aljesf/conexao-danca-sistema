@@ -88,9 +88,10 @@ function uniq<T>(arr: T[]) {
   return Array.from(new Set(arr));
 }
 
-export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
-  const listaId = Number(ctx.params.id);
+  const { id } = await ctx.params;
+  const listaId = Number(id);
 
   if (!Number.isFinite(listaId) || listaId <= 0) {
     return NextResponse.json({ error: "Lista invalida" }, { status: 400 });

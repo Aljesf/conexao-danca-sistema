@@ -30,11 +30,12 @@ function serverError(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "server_error", message, details: details ?? null }, { status: 500 });
 }
 
-export async function POST(req: Request, ctx: { params: { tierGrupoId?: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ tierGrupoId?: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
-    const tierGrupoId = parseId(ctx.params.tierGrupoId);
+    const { tierGrupoId: tierGrupoIdRaw } = await ctx.params;
+    const tierGrupoId = parseId(tierGrupoIdRaw);
     if (!tierGrupoId) return badRequest("tier_grupo_id invalido.");
 
     const body = (await req.json().catch(() => null)) as {

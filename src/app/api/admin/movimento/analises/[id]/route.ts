@@ -21,17 +21,18 @@ const AseUpdateSchema = z
   })
   .strict();
 
-export async function GET(req: Request, ctx: { params: { id: string } }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
+    const { id } = await ctx.params;
 
     const { data, error } = await supabase
       .from("movimento_analises_socioeconomicas")
       .select("*")
-      .eq("id", ctx.params.id)
+      .eq("id", id)
       .single();
 
     if (error) throw error;
@@ -42,12 +43,13 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
   }
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
     await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
+    const { id } = await ctx.params;
 
     const bodyUnknown = await req.json();
     const body = AseUpdateSchema.parse(bodyUnknown);
@@ -81,7 +83,7 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
     const { data, error } = await supabase
       .from("movimento_analises_socioeconomicas")
       .update(payload)
-      .eq("id", ctx.params.id)
+      .eq("id", id)
       .select("*")
       .single();
 

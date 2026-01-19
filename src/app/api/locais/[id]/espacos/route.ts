@@ -4,8 +4,9 @@ import { getSupabaseServer } from "@/lib/supabaseServer";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, ctx: { params: { id?: string } }) {
-  const localId = Number(ctx.params.id);
+export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }> }) {
+  const { id } = await ctx.params;
+  const localId = Number(id);
   if (!Number.isInteger(localId) || localId <= 0) {
     return NextResponse.json({ error: "local_id_invalido" }, { status: 400 });
   }

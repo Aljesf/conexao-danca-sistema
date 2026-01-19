@@ -78,9 +78,10 @@ async function getCentroCustoFallbackPrimeiroAtivoId(
   return Number(data.id);
 }
 
-export async function POST(req: Request, ctx: { params: { id: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const cobrancaId = Number(ctx.params.id);
+    const { id: rawId } = await ctx.params;
+    const cobrancaId = Number(rawId);
     if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) {
       return NextResponse.json(
         { ok: false, error_code: "id_invalido", message: "ID de cobranca invalido." },

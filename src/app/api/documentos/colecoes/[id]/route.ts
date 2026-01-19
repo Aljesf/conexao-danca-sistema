@@ -48,9 +48,10 @@ function parseColunas(raw: unknown): { value: ColecaoColunaPayload[] } {
   return { value: output };
 }
 
-export async function GET(_req: Request, ctx: { params: { id: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await getSupabaseServerSSR();
-  const id = Number(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const id = Number(rawId);
 
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "ID invalido." } satisfies ApiResp<never>, { status: 400 });
@@ -97,9 +98,10 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
   );
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await getSupabaseServerSSR();
-  const id = Number(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const id = Number(rawId);
 
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "ID invalido." } satisfies ApiResp<never>, { status: 400 });

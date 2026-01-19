@@ -11,7 +11,7 @@ import {
 export const runtime = "nodejs";
 
 type RouteParams = {
-  params: { pessoaId: string };
+  params: Promise<{ pessoaId: string }>;
 };
 
 function getInitials(nome?: string | null) {
@@ -47,20 +47,21 @@ async function embedFoto(
 }
 
 export async function GET(_req: Request, { params }: RouteParams) {
-  const pessoaId = Number(params.pessoaId);
-  if (!pessoaId || Number.isNaN(pessoaId)) {
+  const { pessoaId } = await params;
+  const pessoaIdNum = Number(pessoaId);
+  if (!pessoaIdNum || Number.isNaN(pessoaIdNum)) {
     return NextResponse.json({ error: "ID inválido" }, { status: 400 });
   }
 
-  const pessoa = await buscarDadosBasicosPessoa(pessoaId);
+  const pessoa = await buscarDadosBasicosPessoa(pessoaIdNum);
   if (!pessoa) {
     return NextResponse.json({ error: "Pessoa não encontrada" }, { status: 404 });
   }
 
   const [formacoesInternas, formacoesExternas, experiencias] = await Promise.all([
-    listarFormacoesInternas(pessoaId),
-    listarFormacoesExternas(pessoaId),
-    listarExperienciasArtisticas(pessoaId),
+    listarFormacoesInternas(pessoaIdNum),
+    listarFormacoesExternas(pessoaIdNum),
+    listarExperienciasArtisticas(pessoaIdNum),
   ]);
 
   const pdfDoc = await PDFDocument.create();
@@ -210,7 +211,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="curriculo_${pessoaId}.pdf"`,
+      "Content-Disposition": `inline; filename="curriculo_${pessoaIdNum}.pdf"`,
     },
   });
 }

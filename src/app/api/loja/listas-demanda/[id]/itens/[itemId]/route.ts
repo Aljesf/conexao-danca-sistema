@@ -7,10 +7,11 @@ function toInt(v: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export async function PATCH(req: NextRequest, ctx: { params: { id: string; itemId: string } }) {
-  const listaId = toInt(ctx.params.id);
-  const itemId = toInt(ctx.params.itemId);
-  if (!listaId || !itemId) return NextResponse.json({ error: "param_invalido" }, { status: 400 });
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string; itemId: string }> }) {
+  const { id, itemId } = await ctx.params;
+  const listaId = toInt(id);
+  const itemIdNum = toInt(itemId);
+  if (!listaId || !itemIdNum) return NextResponse.json({ error: "param_invalido" }, { status: 400 });
 
   const supabase = await createClient();
 
@@ -45,17 +46,18 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string; itemI
   const { error } = await supabase
     .from("loja_listas_demanda_itens")
     .update(patch)
-    .eq("id", itemId)
+    .eq("id", itemIdNum)
     .eq("lista_id", listaId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true }, { status: 200 });
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: { id: string; itemId: string } }) {
-  const listaId = toInt(ctx.params.id);
-  const itemId = toInt(ctx.params.itemId);
-  if (!listaId || !itemId) return NextResponse.json({ error: "param_invalido" }, { status: 400 });
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string; itemId: string }> }) {
+  const { id, itemId } = await ctx.params;
+  const listaId = toInt(id);
+  const itemIdNum = toInt(itemId);
+  if (!listaId || !itemIdNum) return NextResponse.json({ error: "param_invalido" }, { status: 400 });
 
   const supabase = await createClient();
 
@@ -73,7 +75,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: { id: string; ite
   const { error } = await supabase
     .from("loja_listas_demanda_itens")
     .delete()
-    .eq("id", itemId)
+    .eq("id", itemIdNum)
     .eq("lista_id", listaId);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

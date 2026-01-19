@@ -7,8 +7,9 @@ function parseId(param: string): number | null {
   return id;
 }
 
-export async function GET(_req: Request, ctx: { params: { id: string } }) {
-  const cursoLivreId = parseId(ctx.params.id);
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const cursoLivreId = parseId(id);
   if (!cursoLivreId) {
     return NextResponse.json({ error: "id_invalido" }, { status: 400 });
   }
@@ -38,8 +39,9 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
   return NextResponse.json({ curso_livre: data }, { status: 200 });
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
-  const cursoLivreId = parseId(ctx.params.id);
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const cursoLivreId = parseId(id);
   if (!cursoLivreId) {
     return NextResponse.json({ error: "id_invalido" }, { status: 400 });
   }

@@ -63,7 +63,7 @@ function getTipoFromUrl(req: NextRequest): TipoCadastro | null {
   return null;
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   if (!supabaseAdmin) {
@@ -71,8 +71,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 
   try {
-    const id = Number(params.id);
-    if (!Number.isFinite(id) || id <= 0) {
+    const { id } = await params;
+    const cadastroId = Number(id);
+    if (!Number.isFinite(cadastroId) || cadastroId <= 0) {
       return json(400, { ok: false, error: "id_invalido" });
     }
 
@@ -131,7 +132,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       }
     }
 
-    const { data, error } = await supabaseAdmin.from(table).update(patch).eq("id", id).select("*").single();
+    const { data, error } = await supabaseAdmin
+      .from(table)
+      .update(patch)
+      .eq("id", cadastroId)
+      .select("*")
+      .single();
     if (error) {
       console.error("Erro PUT /api/loja/cadastros/[id]", error);
       return json(500, { ok: false, error: error.message });

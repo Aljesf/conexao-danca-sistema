@@ -3,7 +3,7 @@ import { getSupabaseServer } from "@/lib/supabaseServer";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
-type RouteContext = { params: { id: string } };
+type RouteContext = { params: Promise<{ id: string }> };
 
 type Fatura = {
   id: number;
@@ -166,7 +166,8 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   const force = new URL(req.url).searchParams.get("force") === "true";
-  const faturaId = Number(params.id);
+  const { id } = await params;
+  const faturaId = Number(id);
 
   if (!faturaId || Number.isNaN(faturaId)) {
     return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });

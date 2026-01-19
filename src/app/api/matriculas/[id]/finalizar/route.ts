@@ -4,7 +4,7 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
-export async function POST(_: Request, ctx: { params: { id: string } }) {
+export async function POST(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(_ as any);
   if (denied) return denied as any;
   const cookieStore = await cookies();
@@ -15,7 +15,8 @@ export async function POST(_: Request, ctx: { params: { id: string } }) {
   }
 
   const supabase = getSupabaseAdmin();
-  const id = Number(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const id = Number(rawId);
 
   if (!Number.isFinite(id)) {
     return NextResponse.json({ ok: false, error: "matricula_id_invalido" }, { status: 400 });

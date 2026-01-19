@@ -5,8 +5,9 @@ function bad(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-export async function GET(_req: Request, ctx: { params: { id: string } }) {
-  const id = Number(ctx.params.id);
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await ctx.params;
+  const id = Number(rawId);
   if (Number.isNaN(id)) return bad("id invalido.");
 
   const supabase = await getSupabaseServer();
@@ -40,8 +41,9 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
   return NextResponse.json({ periodo: pl, faixas: faixas ?? [], excecoes: excecoes ?? [] });
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
-  const id = Number(ctx.params.id);
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await ctx.params;
+  const id = Number(rawId);
   if (Number.isNaN(id)) return bad("id invalido.");
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;

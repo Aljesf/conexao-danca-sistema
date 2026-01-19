@@ -17,12 +17,13 @@ function parseId(value: string | undefined): number | null {
   return id;
 }
 
-export async function GET(_req: Request, ctx: { params: { servicoId?: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ servicoId?: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdmin();
-    const servicoId = parseId(ctx.params.servicoId);
+    const { servicoId: servicoIdRaw } = await ctx.params;
+    const servicoId = parseId(servicoIdRaw);
     if (!servicoId) {
       return NextResponse.json({ ok: false, error: "servico_id_invalido" }, { status: 400 });
     }
@@ -44,12 +45,13 @@ export async function GET(_req: Request, ctx: { params: { servicoId?: string } }
   }
 }
 
-export async function POST(req: Request, ctx: { params: { servicoId?: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ servicoId?: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdmin();
-    const servicoId = parseId(ctx.params.servicoId);
+    const { servicoId: servicoIdRaw } = await ctx.params;
+    const servicoId = parseId(servicoIdRaw);
     if (!servicoId) {
       return NextResponse.json({ ok: false, error: "servico_id_invalido" }, { status: 400 });
     }

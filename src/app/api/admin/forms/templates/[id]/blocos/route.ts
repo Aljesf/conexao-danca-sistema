@@ -56,13 +56,13 @@ function normalizeBlock(input: BlockInput, idx: number) {
   } as const;
 }
 
-export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
 
   try {
     const supabase = getSupabaseServiceClient();
-    const templateId = ctx.params.id;
+    const { id: templateId } = await ctx.params;
 
     const { data: blocks, error: blocksErr } = await supabase
       .from("form_template_blocos")
@@ -138,13 +138,13 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
   }
 }
 
-export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
 
   try {
     const supabase = getSupabaseServiceClient();
-    const templateId = ctx.params.id;
+    const { id: templateId } = await ctx.params;
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") {

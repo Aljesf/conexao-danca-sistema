@@ -8,11 +8,12 @@ function parseNumber(value: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export async function GET(req: NextRequest, ctx: { params: { pessoaId: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ pessoaId: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
 
-  const pessoaId = Number(ctx.params.pessoaId);
+  const { pessoaId: pessoaIdRaw } = await ctx.params;
+  const pessoaId = Number(pessoaIdRaw);
   if (!Number.isFinite(pessoaId) || pessoaId <= 0) {
     return NextResponse.json({ ok: false, error: "pessoa_id_invalido" }, { status: 400 });
   }

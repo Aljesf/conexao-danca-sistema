@@ -4,11 +4,12 @@ import { getUserOrThrow, canAccessTurma } from "../../../_lib/auth";
 
 const zAulaId = z.coerce.number().int().positive();
 
-export async function GET(_req: Request, ctx: { params: { aulaId: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ aulaId: string }> }) {
   const auth = await getUserOrThrow();
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
-  const aulaId = zAulaId.safeParse(ctx.params.aulaId);
+  const { aulaId: aulaIdRaw } = await ctx.params;
+  const aulaId = zAulaId.safeParse(aulaIdRaw);
   if (!aulaId.success) {
     return NextResponse.json({ ok: false, code: "AULA_ID_INVALIDO" }, { status: 400 });
   }

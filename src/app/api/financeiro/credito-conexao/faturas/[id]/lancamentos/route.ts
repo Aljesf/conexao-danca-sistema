@@ -2,11 +2,12 @@
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
   const supabase = await getSupabaseServer();
-  const faturaId = Number(params.id);
+  const { id } = await params;
+  const faturaId = Number(id);
 
   if (!faturaId || Number.isNaN(faturaId)) {
     return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });

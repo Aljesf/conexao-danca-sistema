@@ -4,9 +4,10 @@ import { getSupabaseServer } from "@/lib/supabaseServer";
 
 export async function POST(
   _req: Request,
-  { params }: { params: { turmaId: string; profId: string } },
+  { params }: { params: Promise<{ turmaId: string; profId: string }> },
 ) {
   const supabase = getSupabaseServer();
+  const { turmaId, profId } = await params;
 
   const { error } = await supabase
     .from("turma_professores")
@@ -15,11 +16,11 @@ export async function POST(
       ativo: false,
       principal: false,
     })
-    .eq("id", Number(params.profId));
+    .eq("id", Number(profId));
 
   if (error) {
     console.error("Erro ao encerrar professor da turma:", error);
   }
 
-  redirect(`/escola/academico/turmas/${params.turmaId}`);
+  redirect(`/escola/academico/turmas/${turmaId}`);
 }

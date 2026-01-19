@@ -5,14 +5,15 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const zId = z.coerce.number().int().positive();
 
-export async function POST(req: Request, ctx: { params: { blocoId: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ blocoId: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   const admin = await getAdminContext();
   if (!admin.ok) return NextResponse.json(admin.body, { status: admin.status });
 
-  const blocoId = zId.safeParse(ctx.params.blocoId);
-  if (!blocoId.success) {
+  const { blocoId } = await ctx.params;
+  const blocoIdParsed = zId.safeParse(blocoId);
+  if (!blocoIdParsed.success) {
     return NextResponse.json({ ok: false, code: "BLOCO_ID_INVALIDO" }, { status: 400 });
   }
 
@@ -35,7 +36,7 @@ export async function POST(req: Request, ctx: { params: { blocoId: string } }) {
   }
 
   const payload = {
-    bloco_id: blocoId.data,
+    bloco_id: blocoIdParsed.data,
     ordem: parsed.data.ordem,
     titulo: parsed.data.titulo,
     minutos_min: parsed.data.minutos_min ?? null,

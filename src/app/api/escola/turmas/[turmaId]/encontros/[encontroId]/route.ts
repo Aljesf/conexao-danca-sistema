@@ -7,9 +7,10 @@ function parseId(value: string | undefined): number | null {
   return n;
 }
 
-export async function DELETE(_req: Request, ctx: { params: { turmaId?: string; encontroId?: string } }) {
-  const turmaId = parseId(ctx.params.turmaId);
-  const encontroId = parseId(ctx.params.encontroId);
+export async function DELETE(_req: Request, ctx: { params: Promise<{ turmaId?: string; encontroId?: string }> }) {
+  const { turmaId: turmaIdRaw, encontroId: encontroIdRaw } = await ctx.params;
+  const turmaId = parseId(turmaIdRaw);
+  const encontroId = parseId(encontroIdRaw);
 
   if (!turmaId || !encontroId) {
     return NextResponse.json({ error: "parametros_invalidos" }, { status: 400 });

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
-  const produtoId = Number(ctx.params.id);
+  const { id } = await ctx.params;
+  const produtoId = Number(id);
 
   if (!Number.isFinite(produtoId) || produtoId <= 0) {
     return NextResponse.json({ error: "Produto invalido" }, { status: 400 });

@@ -7,9 +7,10 @@ function json(status: number, payload: Record<string, unknown>) {
   return NextResponse.json(payload, { status });
 }
 
-export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
-  const listaId = Number(ctx.params.id);
+  const { id } = await ctx.params;
+  const listaId = Number(id);
 
   if (!Number.isFinite(listaId) || listaId <= 0) {
     return json(400, { error: "Lista invalida" });
@@ -38,9 +39,10 @@ export async function GET(_req: NextRequest, ctx: { params: { id: string } }) {
   return json(200, { data: { lista, itens: itens ?? [] } });
 }
 
-export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
-  const listaId = Number(ctx.params.id);
+  const { id } = await ctx.params;
+  const listaId = Number(id);
 
   if (!Number.isFinite(listaId) || listaId <= 0) {
     return json(400, { error: "Lista invalida" });

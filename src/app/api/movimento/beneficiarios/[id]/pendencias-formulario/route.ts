@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
-export async function GET(_: Request, ctx: { params: { id: string } }) {
+export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const supabase = getSupabaseAdmin();
-    const beneficiarioId = String(ctx.params.id);
+    const { id } = await ctx.params;
+    const beneficiarioId = String(id);
 
     const { data, error } = await supabase
       .from("movimento_formularios_instancia")

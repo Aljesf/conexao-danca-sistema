@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
 
   try {
     const supabase = getSupabaseServiceClient();
-    const id = ctx.params.id;
+    const { id } = await ctx.params;
 
     const { data: template, error: tErr } = await supabase
       .from("form_templates")
@@ -41,13 +41,13 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
   }
 }
 
-export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
 
   try {
     const supabase = getSupabaseServiceClient();
-    const id = ctx.params.id;
+    const { id } = await ctx.params;
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== "object") {

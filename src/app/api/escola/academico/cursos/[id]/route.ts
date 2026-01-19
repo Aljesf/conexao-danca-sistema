@@ -18,9 +18,10 @@ function asId(value: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-export async function GET(_: Request, ctx: { params: { id: string } }) {
+export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const id = asId(ctx.params.id);
+    const { id: idRaw } = await ctx.params;
+    const id = asId(idRaw);
     if (!id) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
@@ -99,9 +100,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 }
 
-export async function DELETE(_: Request, ctx: { params: { id: string } }) {
+export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const id = asId(ctx.params.id);
+    const { id: idRaw } = await ctx.params;
+    const id = asId(idRaw);
     if (!id) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }

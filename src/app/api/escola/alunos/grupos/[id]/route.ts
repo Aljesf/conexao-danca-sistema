@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-type Params = { params: { id: string } };
+type Params = { params: Promise<{ id: string }> };
 
 type GrupoUpdate = {
   nome?: string;
@@ -16,16 +16,17 @@ type GrupoUpdate = {
 
 export async function GET(_req: Request, { params }: Params): Promise<Response> {
   const supabase = createAdminClient();
-  const id = Number(params.id);
+  const { id } = await params;
+  const grupoId = Number(id);
 
-  if (!Number.isFinite(id)) {
+  if (!Number.isFinite(grupoId)) {
     return NextResponse.json({ ok: false, error: "id invalido." }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("aluno_grupos")
     .select("id,nome,categoria,subcategoria,tipo,descricao,ativo,data_inicio,data_fim,created_at,updated_at")
-    .eq("id", id)
+    .eq("id", grupoId)
     .single();
 
   if (error) {
@@ -37,9 +38,10 @@ export async function GET(_req: Request, { params }: Params): Promise<Response> 
 
 export async function PUT(req: Request, { params }: Params): Promise<Response> {
   const supabase = createAdminClient();
-  const id = Number(params.id);
+  const { id } = await params;
+  const grupoId = Number(id);
 
-  if (!Number.isFinite(id)) {
+  if (!Number.isFinite(grupoId)) {
     return NextResponse.json({ ok: false, error: "id invalido." }, { status: 400 });
   }
 
@@ -66,7 +68,7 @@ export async function PUT(req: Request, { params }: Params): Promise<Response> {
   const { data, error } = await supabase
     .from("aluno_grupos")
     .update(payload)
-    .eq("id", id)
+    .eq("id", grupoId)
     .select("id,nome,categoria,subcategoria,tipo,descricao,ativo,data_inicio,data_fim,created_at,updated_at")
     .single();
 
@@ -79,13 +81,14 @@ export async function PUT(req: Request, { params }: Params): Promise<Response> {
 
 export async function DELETE(_req: Request, { params }: Params): Promise<Response> {
   const supabase = createAdminClient();
-  const id = Number(params.id);
+  const { id } = await params;
+  const grupoId = Number(id);
 
-  if (!Number.isFinite(id)) {
+  if (!Number.isFinite(grupoId)) {
     return NextResponse.json({ ok: false, error: "id invalido." }, { status: 400 });
   }
 
-  const { error } = await supabase.from("aluno_grupos").delete().eq("id", id);
+  const { error } = await supabase.from("aluno_grupos").delete().eq("id", grupoId);
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

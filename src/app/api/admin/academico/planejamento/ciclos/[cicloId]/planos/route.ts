@@ -5,14 +5,15 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const zId = z.coerce.number().int().positive();
 
-export async function GET(_req: Request, ctx: { params: { cicloId: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ cicloId: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
   const admin = await getAdminContext();
   if (!admin.ok) return NextResponse.json(admin.body, { status: admin.status });
 
-  const cicloId = zId.safeParse(ctx.params.cicloId);
-  if (!cicloId.success) {
+  const { cicloId } = await ctx.params;
+  const cicloIdParsed = zId.safeParse(cicloId);
+  if (!cicloIdParsed.success) {
     return NextResponse.json({ ok: false, code: "CICLO_ID_INVALIDO" }, { status: 400 });
   }
 
@@ -21,7 +22,7 @@ export async function GET(_req: Request, ctx: { params: { cicloId: string } }) {
     .select(
       "id,ciclo_id,aula_numero,intencao_pedagogica,observacoes_gerais,playlist_url,created_at,updated_at,plano_aula_blocos(id,plano_aula_id,ordem,titulo,objetivo,minutos_min,minutos_ideal,minutos_max,musica_sugestao,observacoes,plano_aula_subblocos(id,bloco_id,ordem,titulo,minutos_min,minutos_ideal,minutos_max,habilidade_id,nivel_abordagem,instrucoes,musica_sugestao))"
     )
-    .eq("ciclo_id", cicloId.data)
+    .eq("ciclo_id", cicloIdParsed.data)
     .order("aula_numero", { ascending: true });
 
   if (error) {
@@ -31,14 +32,15 @@ export async function GET(_req: Request, ctx: { params: { cicloId: string } }) {
   return NextResponse.json({ ok: true, planos: data ?? [] });
 }
 
-export async function POST(req: Request, ctx: { params: { cicloId: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ cicloId: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   const admin = await getAdminContext();
   if (!admin.ok) return NextResponse.json(admin.body, { status: admin.status });
 
-  const cicloId = zId.safeParse(ctx.params.cicloId);
-  if (!cicloId.success) {
+  const { cicloId } = await ctx.params;
+  const cicloIdParsed = zId.safeParse(cicloId);
+  if (!cicloIdParsed.success) {
     return NextResponse.json({ ok: false, code: "CICLO_ID_INVALIDO" }, { status: 400 });
   }
 
@@ -56,7 +58,7 @@ export async function POST(req: Request, ctx: { params: { cicloId: string } }) {
   }
 
   const payload = {
-    ciclo_id: cicloId.data,
+    ciclo_id: cicloIdParsed.data,
     aula_numero: parsed.data.aula_numero,
     intencao_pedagogica: parsed.data.intencao_pedagogica ?? null,
     observacoes_gerais: parsed.data.observacoes_gerais ?? null,

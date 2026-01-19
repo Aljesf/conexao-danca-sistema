@@ -10,7 +10,7 @@ const supabaseAdmin =
     ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     : null;
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   if (!supabaseAdmin) {
@@ -20,8 +20,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     );
   }
 
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) {
+  const { id } = await params;
+  const subcategoriaId = Number(id);
+  if (!Number.isFinite(subcategoriaId)) {
     return NextResponse.json({ ok: false, error: "ID invalido de subcategoria." }, { status: 400 });
   }
 
@@ -51,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { error } = await supabaseAdmin
     .from("loja_produto_categoria_subcategoria")
     .update(update)
-    .eq("id", id);
+    .eq("id", subcategoriaId);
 
   if (error) {
     console.error("Erro ao atualizar subcategoria de produto:", error);

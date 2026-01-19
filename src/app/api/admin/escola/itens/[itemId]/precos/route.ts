@@ -17,12 +17,13 @@ function parseId(value: string | undefined): number | null {
   return id;
 }
 
-export async function GET(_req: Request, ctx: { params: { itemId?: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ itemId?: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdmin();
-    const itemId = parseId(ctx.params.itemId);
+    const { itemId: itemIdRaw } = await ctx.params;
+    const itemId = parseId(itemIdRaw);
     if (!itemId) {
       return NextResponse.json({ ok: false, error: "item_id_invalido" }, { status: 400 });
     }
@@ -44,12 +45,13 @@ export async function GET(_req: Request, ctx: { params: { itemId?: string } }) {
   }
 }
 
-export async function POST(req: Request, ctx: { params: { itemId?: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ itemId?: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
     const supabase = getSupabaseAdmin();
-    const itemId = parseId(ctx.params.itemId);
+    const { itemId: itemIdRaw } = await ctx.params;
+    const itemId = parseId(itemIdRaw);
     if (!itemId) {
       return NextResponse.json({ ok: false, error: "item_id_invalido" }, { status: 400 });
     }

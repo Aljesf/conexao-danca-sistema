@@ -5,14 +5,15 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const zId = z.coerce.number().int().positive();
 
-export async function PUT(req: Request, ctx: { params: { planoId: string } }) {
+export async function PUT(req: Request, ctx: { params: Promise<{ planoId: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   const admin = await getAdminContext();
   if (!admin.ok) return NextResponse.json(admin.body, { status: admin.status });
 
-  const planoId = zId.safeParse(ctx.params.planoId);
-  if (!planoId.success) {
+  const { planoId } = await ctx.params;
+  const planoIdParsed = zId.safeParse(planoId);
+  if (!planoIdParsed.success) {
     return NextResponse.json({ ok: false, code: "PLANO_ID_INVALIDO" }, { status: 400 });
   }
 
@@ -51,7 +52,7 @@ export async function PUT(req: Request, ctx: { params: { planoId: string } }) {
   const { data, error } = await admin.supabase
     .from("planos_aula")
     .update(patch)
-    .eq("id", planoId.data)
+    .eq("id", planoIdParsed.data)
     .select("*")
     .single();
 

@@ -5,14 +5,15 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const zId = z.coerce.number().int().positive();
 
-export async function POST(req: Request, ctx: { params: { mapaModuloId: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ mapaModuloId: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   const admin = await getAdminContext();
   if (!admin.ok) return NextResponse.json(admin.body, { status: admin.status });
 
-  const mapaModuloId = zId.safeParse(ctx.params.mapaModuloId);
-  if (!mapaModuloId.success) {
+  const { mapaModuloId } = await ctx.params;
+  const mapaModuloIdParsed = zId.safeParse(mapaModuloId);
+  if (!mapaModuloIdParsed.success) {
     return NextResponse.json({ ok: false, code: "MAPA_MODULO_ID_INVALIDO" }, { status: 400 });
   }
 
@@ -31,7 +32,7 @@ export async function POST(req: Request, ctx: { params: { mapaModuloId: string }
 
   const { habilidade_id, obrigatoria, peso_pedagogico, ordem } = parsed.data;
   const payload = {
-    mapa_modulo_id: mapaModuloId.data,
+    mapa_modulo_id: mapaModuloIdParsed.data,
     habilidade_id,
     obrigatoria: typeof obrigatoria === "boolean" ? obrigatoria : true,
     peso_pedagogico: typeof peso_pedagogico === "number" ? peso_pedagogico : null,

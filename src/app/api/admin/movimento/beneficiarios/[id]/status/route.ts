@@ -9,12 +9,13 @@ const StatusSchema = z.object({
   status: z.enum(["EM_ANALISE", "APROVADO", "SUSPENSO", "ENCERRADO"]),
 });
 
-export async function POST(req: Request, ctx: { params: { id: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
     const { userId } = await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
+    const { id } = await ctx.params;
 
     const bodyUnknown = await req.json();
     const body = StatusSchema.parse(bodyUnknown);
@@ -29,7 +30,7 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
     const { data, error } = await supabase
       .from("movimento_beneficiarios")
       .update(patch)
-      .eq("id", ctx.params.id)
+      .eq("id", id)
       .select("*")
       .maybeSingle();
 

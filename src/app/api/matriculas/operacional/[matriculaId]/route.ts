@@ -51,14 +51,15 @@ async function qMany(
   return rows as Array<Record<string, unknown>>;
 }
 
-export async function GET(_req: Request, ctx: { params: { matriculaId?: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ matriculaId?: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
   if (!process.env.SUPABASE_DB_URL) {
     return NextResponse.json({ error: "env_invalida", message: "SUPABASE_DB_URL nao configurada." }, { status: 500 });
   }
 
-  const matriculaId = parseId(ctx.params.matriculaId);
+  const { matriculaId: matriculaIdRaw } = await ctx.params;
+  const matriculaId = parseId(matriculaIdRaw);
   if (!matriculaId) {
     return NextResponse.json({ error: "param_invalido" }, { status: 400 });
   }

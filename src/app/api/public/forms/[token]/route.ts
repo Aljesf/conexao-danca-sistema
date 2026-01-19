@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-export async function GET(_req: NextRequest, ctx: { params: { token: string } }) {
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   try {
     const supabase = getSupabaseServiceClient();
-    const token = ctx.params.token;
+    const { token } = await ctx.params;
 
     const { data: submission, error: subErr } = await supabase
       .from("form_submissions")
@@ -97,10 +97,10 @@ export async function GET(_req: NextRequest, ctx: { params: { token: string } })
   }
 }
 
-export async function POST(req: NextRequest, ctx: { params: { token: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   try {
     const supabase = getSupabaseServiceClient();
-    const token = ctx.params.token;
+    const { token } = await ctx.params;
 
     const { data: submission, error: subErr } = await supabase
       .from("form_submissions")

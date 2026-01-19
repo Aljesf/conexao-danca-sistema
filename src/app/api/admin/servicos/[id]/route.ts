@@ -17,10 +17,11 @@ function parseId(param: string | undefined): number | null {
   return n;
 }
 
-export async function GET(_req: Request, ctx: { params: { id?: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
-  const id = parseId(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const id = parseId(rawId);
   if (!id) return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
 
   const client = await pool.connect();
@@ -36,10 +37,11 @@ export async function GET(_req: Request, ctx: { params: { id?: string } }) {
   }
 }
 
-export async function PATCH(req: Request, ctx: { params: { id?: string } }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id?: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const id = parseId(ctx.params.id);
+  const { id: rawId } = await ctx.params;
+  const id = parseId(rawId);
   if (!id) return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;

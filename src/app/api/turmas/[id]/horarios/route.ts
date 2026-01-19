@@ -37,8 +37,9 @@ function uniqHorarios(list: HorarioInput[]) {
   return Array.from(map.values());
 }
 
-export async function GET(_req: Request, ctx: { params: { id: string } }) {
-  const turmaId = Number(ctx.params.id);
+export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await ctx.params;
+  const turmaId = Number(rawId);
   if (!Number.isFinite(turmaId)) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
@@ -64,8 +65,9 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
   return NextResponse.json({ horarios });
 }
 
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
-  const turmaId = Number(ctx.params.id);
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await ctx.params;
+  const turmaId = Number(rawId);
   if (!Number.isFinite(turmaId)) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }

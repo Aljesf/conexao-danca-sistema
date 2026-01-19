@@ -7,15 +7,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteContext = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export async function POST(_req: Request, context: RouteContext) {
   try {
     const supabase = await getSupabaseServer();
-    const id = Number(context.params.id);
+    const { id } = await context.params;
+    const cobrancaId = Number(id);
 
-    if (!id || Number.isNaN(id)) {
+    if (!cobrancaId || Number.isNaN(cobrancaId)) {
       return NextResponse.json(
         { ok: false, error: "ID da cobrança inválido." },
         { status: 400 }
@@ -49,7 +50,7 @@ export async function POST(_req: Request, context: RouteContext) {
         )
       `
       )
-      .eq("id", id)
+      .eq("id", cobrancaId)
       .single();
 
     if (eCobranca || !cobranca) {

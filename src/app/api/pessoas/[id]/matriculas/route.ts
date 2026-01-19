@@ -3,7 +3,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
 
-type RouteCtx = { params: { id?: string } };
+type RouteCtx = { params: Promise<{ id?: string }> };
 
 type MatriculaRow = {
   id: number;
@@ -47,8 +47,8 @@ function normalizeNumberArray(values: Array<number | null | undefined>): number[
 
 export async function GET(_req: Request, ctx: RouteCtx) {
   try {
-    const params = await Promise.resolve(ctx.params);
-    const pessoaId = Number(params.id);
+    const { id } = await ctx.params;
+    const pessoaId = Number(id);
     if (!Number.isFinite(pessoaId) || pessoaId <= 0) {
       return NextResponse.json({ error: "ID invalido." }, { status: 400 });
     }

@@ -29,7 +29,7 @@ function json<T>(status: number, payload: ApiResponse<T>) {
 }
 
 // PUT /api/loja/categorias/[id]
-export async function PUT(request: NextRequest, context: { params: { id: string } }) {
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   if (!supabaseAdmin) {
@@ -41,7 +41,8 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
   }
 
   try {
-    const rawId = Number(context.params.id);
+    const { id } = await context.params;
+    const rawId = Number(id);
     if (!Number.isFinite(rawId) || rawId <= 0) {
       return json(400, { ok: false, error: "id_invalido" });
     }

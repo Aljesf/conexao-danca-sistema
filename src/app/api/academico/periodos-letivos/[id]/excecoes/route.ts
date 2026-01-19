@@ -18,8 +18,9 @@ function bad(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-export async function POST(req: Request, ctx: { params: { id: string } }) {
-  const periodoId = Number(ctx.params.id);
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id: rawId } = await ctx.params;
+  const periodoId = Number(rawId);
   if (Number.isNaN(periodoId)) return bad("id invalido.");
 
   const body = (await req.json().catch(() => null)) as ExcecaoInput | null;

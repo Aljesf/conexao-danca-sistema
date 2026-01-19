@@ -9,8 +9,9 @@ function clampInt(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const turmaId = Number(params.id);
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const turmaId = Number(id);
   if (!Number.isInteger(turmaId) || turmaId <= 0) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }

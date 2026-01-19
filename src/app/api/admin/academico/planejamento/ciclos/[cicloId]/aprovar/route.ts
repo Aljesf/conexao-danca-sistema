@@ -5,14 +5,15 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const zId = z.coerce.number().int().positive();
 
-export async function POST(_req: Request, ctx: { params: { cicloId: string } }) {
+export async function POST(_req: Request, ctx: { params: Promise<{ cicloId: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
   const admin = await getAdminContext();
   if (!admin.ok) return NextResponse.json(admin.body, { status: admin.status });
 
-  const cicloId = zId.safeParse(ctx.params.cicloId);
-  if (!cicloId.success) {
+  const { cicloId } = await ctx.params;
+  const cicloIdParsed = zId.safeParse(cicloId);
+  if (!cicloIdParsed.success) {
     return NextResponse.json({ ok: false, code: "CICLO_ID_INVALIDO" }, { status: 400 });
   }
 
@@ -24,7 +25,7 @@ export async function POST(_req: Request, ctx: { params: { cicloId: string } }) 
       aprovado_em: new Date().toISOString(),
       updated_by: admin.user.id,
     })
-    .eq("id", cicloId.data)
+    .eq("id", cicloIdParsed.data)
     .select("*")
     .single();
 
