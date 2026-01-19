@@ -106,6 +106,7 @@ export default function AdminFormsTemplatesEditorPage({
   const [err, setErr] = useState<string | null>(null);
   const [savingBlocks, setSavingBlocks] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [publicLink, setPublicLink] = useState<string | null>(null);
 
   const [headerImageUrl, setHeaderImageUrl] = useState("");
   const [footerImageUrl, setFooterImageUrl] = useState("");
@@ -137,6 +138,7 @@ export default function AdminFormsTemplatesEditorPage({
 
   const load = useCallback(async () => {
     setErr(null);
+    setPublicLink(null);
     setLoading(true);
     try {
       const [a, b, c] = await Promise.all([
@@ -392,15 +394,43 @@ export default function AdminFormsTemplatesEditorPage({
   async function generateLink() {
     setMsg(null);
     setErr(null);
+    setPublicLink(null);
     try {
       const res = await fetch(`/api/admin/forms/templates/${templateId}/generate-link`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pessoa_id: null, responsavel_id: null }),
       });
-      const json = (await res.json()) as { data?: { public_url: string }; error?: string };
+      const json = (await res.json()) as {
+        data?: { public_url?: string; public_token?: string };
+        error?: string;
+      };
       if (!res.ok) throw new Error(json.error ?? "Falha ao gerar link.");
-      setMsg(`Link gerado: ${json.data?.public_url ?? ""}`);
+      const publicUrl = json.data?.public_url ?? "";
+      if (!publicUrl) throw new Error("Falha ao gerar link publico.");
+
+      const url = new URL(publicUrl, "http://placeholder");
+      const targetPath = `${url.pathname}${url.search ?? ""}`;
+
+      const shortRes = await fetch("/api/admin/short-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target_path: targetPath,
+          target_label: tpl?.nome ?? "Formulario publico",
+        }),
+      });
+      const shortJson = (await shortRes.json()) as {
+        short_url?: string;
+        data?: { short_url?: string };
+        error?: string;
+      };
+      if (!shortRes.ok) throw new Error(shortJson.error ?? "Erro ao gerar link publico");
+
+      const shortUrl = shortJson.short_url ?? shortJson.data?.short_url ?? "";
+      if (!shortUrl) throw new Error("Resposta invalida ao gerar link publico.");
+      setPublicLink(shortUrl);
+      setMsg("Link publico gerado.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro desconhecido.");
     }
@@ -571,6 +601,20 @@ export default function AdminFormsTemplatesEditorPage({
       {msg ? (
         <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
           {msg}
+        </div>
+      ) : null}
+
+      {publicLink ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm">
+          <span className="font-medium text-emerald-800">Link gerado:</span>{" "}
+          <a
+            href={publicLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-emerald-700 underline break-all"
+          >
+            {publicLink}
+          </a>
         </div>
       ) : null}
 
