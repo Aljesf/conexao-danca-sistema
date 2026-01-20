@@ -32,6 +32,7 @@ export default function FormulariosInternosCard({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [publicLink, setPublicLink] = useState<string | null>(null);
+  const [shortLink, setShortLink] = useState<string | null>(null);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [history, setHistory] = useState<SubmissionRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -41,6 +42,7 @@ export default function FormulariosInternosCard({
     setErr(null);
     setMsg(null);
     setPublicLink(null);
+    setShortLink(null);
     setSubmissionId(null);
     try {
       const tRes = await fetch("/api/admin/forms/templates", {
@@ -98,6 +100,7 @@ export default function FormulariosInternosCard({
   }, [loadHistory]);
 
   const historyItems = useMemo(() => history.slice(0, 10), [history]);
+  const primaryLink = shortLink ?? publicLink;
 
   function formatDate(value: string | null | undefined): string {
     if (!value) return "-";
@@ -110,6 +113,7 @@ export default function FormulariosInternosCard({
     setMsg(null);
     setErr(null);
     setPublicLink(null);
+    setShortLink(null);
     setSubmissionId(null);
 
     if (!templateId) {
@@ -127,7 +131,10 @@ export default function FormulariosInternosCard({
       }),
     });
 
-    const json = (await res.json()) as { data?: { public_url: string; submission_id?: string | number }; error?: string };
+    const json = (await res.json()) as {
+      data?: { public_url?: string; short_url?: string | null; submission_id?: string | number };
+      error?: string;
+    };
     if (!res.ok) {
       setErr(json.error ?? "Falha ao gerar link.");
       return;
@@ -142,27 +149,9 @@ export default function FormulariosInternosCard({
     const newSubmissionId = json.data?.submission_id;
     setSubmissionId(newSubmissionId ? String(newSubmissionId) : null);
 
-    let finalLink = publicUrl;
-    try {
-      const url = new URL(publicUrl, "http://placeholder");
-      const targetPath = `${url.pathname}${url.search ?? ""}`;
-      const shortRes = await fetch("/api/admin/short-links", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target_path: targetPath,
-          target_label: templates.find((t) => t.id === templateId)?.nome ?? "Formulario publico",
-        }),
-      });
-      const shortJson = (await shortRes.json()) as { short_url?: string; data?: { short_url?: string } };
-      if (shortRes.ok) {
-        finalLink = shortJson.short_url ?? shortJson.data?.short_url ?? finalLink;
-      }
-    } catch {
-      finalLink = publicUrl;
-    }
-
-    setPublicLink(finalLink);
+    const shortUrl = typeof json.data?.short_url === "string" ? json.data?.short_url : null;
+    setPublicLink(publicUrl);
+    setShortLink(shortUrl && shortUrl.trim() ? shortUrl : null);
     setMsg("Link gerado com sucesso.");
     await loadHistory();
   }
@@ -280,19 +269,48 @@ export default function FormulariosInternosCard({
         </div>
 
         {msg ? <div className="text-sm text-slate-600">{msg}</div> : null}
-        {publicLink ? (
+        {primaryLink ? (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm">
             <div>
-              <span className="font-medium text-emerald-800">Link gerado:</span>{" "}
+              <span className="font-medium text-emerald-800">
+                {shortLink ? "Link curto:" : "Link gerado:"}
+              </span>{" "}
               <a
-                href={publicLink}
+                href={primaryLink}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-emerald-700 underline break-all"
               >
-                {publicLink}
+                {primaryLink}
               </a>
+              <button
+                className="ml-2 rounded-md border border-emerald-200 px-2 py-1 text-xs text-emerald-700"
+                onClick={() => void navigator.clipboard?.writeText(primaryLink)}
+                type="button"
+              >
+                Copiar
+              </button>
             </div>
+            {shortLink && publicLink && shortLink !== publicLink ? (
+              <div className="mt-2 text-xs text-emerald-800">
+                Link publico:{" "}
+                <a
+                  href={publicLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-700 underline break-all"
+                >
+                  {publicLink}
+                </a>
+                <button
+                  className="ml-2 rounded-md border border-emerald-200 px-2 py-1 text-[11px] text-emerald-700"
+                  onClick={() => void navigator.clipboard?.writeText(publicLink)}
+                  type="button"
+                >
+                  Copiar
+                </button>
+              </div>
+            ) : null}
             {submissionId ? (
               <div className="mt-2">
                 <Link href={`/admin/forms/submissions/${submissionId}`} className="text-emerald-700 underline">

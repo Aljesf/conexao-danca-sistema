@@ -406,36 +406,22 @@ export default function AdminFormsTemplatesEditorPage({
         body: JSON.stringify({ pessoa_id: null, responsavel_id: null }),
       });
       const json = (await res.json()) as {
-        data?: { public_url?: string; public_token?: string; submission_id?: string | number };
+        data?: {
+          public_url?: string;
+          short_url?: string | null;
+          public_token?: string;
+          submission_id?: string | number;
+        };
         error?: string;
       };
       if (!res.ok) throw new Error(json.error ?? "Falha ao gerar link.");
       const publicUrl = json.data?.public_url ?? "";
-      if (!publicUrl) throw new Error("Falha ao gerar link publico.");
+      const shortUrl = typeof json.data?.short_url === "string" ? json.data?.short_url : "";
+      const finalUrl = shortUrl || publicUrl;
+      if (!finalUrl) throw new Error("Falha ao gerar link publico.");
       const newSubmissionId = json.data?.submission_id;
       setSubmissionId(newSubmissionId ? String(newSubmissionId) : null);
-
-      const url = new URL(publicUrl, "http://placeholder");
-      const targetPath = `${url.pathname}${url.search ?? ""}`;
-
-      const shortRes = await fetch("/api/admin/short-links", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target_path: targetPath,
-          target_label: tpl?.nome ?? "Formulario publico",
-        }),
-      });
-      const shortJson = (await shortRes.json()) as {
-        short_url?: string;
-        data?: { short_url?: string };
-        error?: string;
-      };
-      if (!shortRes.ok) throw new Error(shortJson.error ?? "Erro ao gerar link publico");
-
-      const shortUrl = shortJson.short_url ?? shortJson.data?.short_url ?? "";
-      if (!shortUrl) throw new Error("Resposta invalida ao gerar link publico.");
-      setPublicLink(shortUrl);
+      setPublicLink(finalUrl);
       setMsg("Link publico gerado.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro desconhecido.");

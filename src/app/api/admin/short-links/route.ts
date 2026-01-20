@@ -1,19 +1,37 @@
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
-import { headers } from "next/headers";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-async function getCanonicalBaseUrl(): Promise<string> {
-  const envUrl =
-    process.env.PUBLIC_BASE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL;
+function normalizeBaseUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\/+$/, "");
+}
 
-  if (envUrl) return envUrl.replace(/\/+$/, "");
+function resolveEnvBaseUrl(): string | null {
+  return normalizeBaseUrl(
+    process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL,
+  );
+}
 
-  const h = await headers();
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+async function getCanonicalBaseUrl(
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
+  req: Request,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("app_config")
+    .select("value")
+    .eq("key", "public_base_url")
+    .maybeSingle();
+  const configUrl = error ? null : normalizeBaseUrl(data?.value ?? null);
+  if (configUrl) return configUrl;
+
+  const envUrl = resolveEnvBaseUrl();
+  if (envUrl) return envUrl;
+
+  const proto = req.headers.get("x-forwarded-proto") ?? "http";
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "localhost:3000";
   return `${proto}://${host}`;
 }
 
@@ -35,7 +53,7 @@ export async function POST(req: Request) {
       .eq("ativo", true)
       .maybeSingle();
 
-    const baseUrl = await getCanonicalBaseUrl();
+    const baseUrl = await getCanonicalBaseUrl(supabase, req);
 
     if (existing?.code) {
       return NextResponse.json({

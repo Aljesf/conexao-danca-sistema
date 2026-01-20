@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { nanoid } from "nanoid";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -11,6 +12,66 @@ function toNumberOrNull(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+function normalizeBaseUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\/+$/, "");
+}
+
+function resolveEnvBaseUrl(): string | null {
+  return normalizeBaseUrl(
+    process.env.PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL,
+  );
+}
+
+async function resolvePublicBaseUrl(
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
+  req: NextRequest,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("app_config")
+    .select("value")
+    .eq("key", "public_base_url")
+    .maybeSingle();
+  const configUrl = error ? null : normalizeBaseUrl(data?.value ?? null);
+  return configUrl ?? resolveEnvBaseUrl() ?? new URL(req.url).origin;
+}
+
+async function ensureShortUrl(
+  supabase: ReturnType<typeof getSupabaseServiceClient>,
+  baseUrl: string,
+  targetPath: string,
+): Promise<{ shortUrl: string | null; shortPath: string | null }> {
+  try {
+    const { data: existing, error: lookupErr } = await supabase
+      .from("short_links")
+      .select("code")
+      .eq("target_path", targetPath)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (lookupErr) return { shortUrl: null, shortPath: null };
+
+    const code = existing?.code ?? nanoid(7);
+
+    if (!existing?.code) {
+      const { error: insertErr } = await supabase.from("short_links").insert({
+        code,
+        target_path: targetPath,
+        ativo: true,
+      });
+
+      if (insertErr) return { shortUrl: null, shortPath: null };
+    }
+
+    const shortPath = `/l/${code}`;
+    return { shortUrl: `${baseUrl}${shortPath}`, shortPath };
+  } catch {
+    return { shortUrl: null, shortPath: null };
+  }
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -62,14 +123,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: sErr.message }, { status: 500 });
     }
 
-    const origin = new URL(req.url).origin;
-    const publicUrl = `${origin}/public/forms/${submission.public_token}`;
+    const baseUrl = await resolvePublicBaseUrl(supabase, req);
+    const publicUrl = `${baseUrl}/public/forms/${submission.public_token}`;
+    const targetPath = `/public/forms/${submission.public_token}`;
+    const { shortUrl, shortPath } = await ensureShortUrl(supabase, baseUrl, targetPath);
 
     return NextResponse.json({
       data: {
         submission_id: submission.id,
         public_token: submission.public_token,
         public_url: publicUrl,
+        short_url: shortUrl,
+        short_path: shortPath,
       },
     });
   } catch (err) {
