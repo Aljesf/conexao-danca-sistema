@@ -86,7 +86,7 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🏷️ Categorias", href: "/admin/loja/categorias" },
       { label: "⚙️ Configuracoes do produto", href: "/admin/loja/cadastros" },
     ],
-  },
+  },`n  {`n    id: "admin-cafe",`n    title: "Ballet Cafe (Admin)",`n    items: [{ label: "Insumos", href: "/admin/cafe/insumos" }],`n  },
   {
     id: "admin-colaboradores",
     title: "👥 Colaboradores",
@@ -143,6 +143,7 @@ export const adminSidebar: SidebarSection[] = [
     items: [{ label: "🤖 Painel de IA (GPT interno)", href: "/admin/ia" }],
   },
 ];
+
 
 
 
