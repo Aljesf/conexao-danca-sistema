@@ -1,19 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-
-type VendaItemIn = {
-  produto_id: number;
-  quantidade: number;
-};
-
-type VendaIn = {
-  pagador_pessoa_id?: number | null;
-  consumidor_pessoa_id?: number | null;
-  forma_pagamento: "PIX" | "DINHEIRO" | "CARTAO_CONEXAO_ALUNO" | "CARTAO_CONEXAO_COLABORADOR";
-  observacoes?: string | null;
-  itens: VendaItemIn[];
-};
+import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 
 type ProdutoRow = {
   id: number;
@@ -29,6 +17,193 @@ type ReceitaRow = {
   insumo_id: number;
   quantidade: number;
 };
+
+type InsumoRow = {
+  id: number;
+  nome: string;
+  saldo_atual: number;
+};
+
+type VendaItemInsert = {
+  venda_id: number;
+  produto_id: number;
+  quantidade: number;
+  preco_unitario_centavos: number;
+  total_centavos: number;
+};
+
+type CartaoTipoTransacao = "CREDITO_AVISTA" | "CREDITO_PARCELADO";
+
+type ContaConexaoResumo = {
+  id: number;
+  pessoa_titular_id: number;
+  dia_vencimento: number | null;
+};
+
+type JsonRecord = Record<string, unknown>;
+
+type ItemParsed = {
+  produto_id: number;
+  quantidade: number;
+  preco_unitario_centavos: number | null;
+  total_centavos: number;
+  beneficiario_pessoa_id: number | null;
+  observacoes: string | null;
+};
+
+function isRecord(v: unknown): v is JsonRecord {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function asInt(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) {
+    return Math.trunc(Number(v));
+  }
+  return null;
+}
+
+function asString(v: unknown): string | null {
+  if (typeof v === "string") return v;
+  return null;
+}
+
+function parseCentavos(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v !== "string") return null;
+
+  const s0 = v.trim();
+  if (!s0) return null;
+
+  if (/^\d+$/.test(s0)) return Math.trunc(Number(s0));
+
+  const s = s0
+    .replace(/[R$\s]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
+  const n = Number(s);
+  if (!Number.isFinite(n)) return null;
+
+  return Math.round(n * 100);
+}
+
+function pickInt(obj: Record<string, unknown>, keys: string[]): number | null {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+    if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) {
+      return Math.trunc(Number(v));
+    }
+  }
+  return null;
+}
+
+function pickCentavos(obj: Record<string, unknown>, keys: string[]): number | null {
+  for (const k of keys) {
+    const v = obj[k];
+    const c = parseCentavos(v);
+    if (typeof c === "number" && Number.isFinite(c)) return c;
+  }
+  return null;
+}
+
+function todayISODate(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDaysISODate(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function competenciaFromDate(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return value.slice(0, 7);
+}
+
+function addCompetencia(base: string, offset: number): string {
+  const [anoStr, mesStr] = base.split("-");
+  const ano = Number(anoStr);
+  const mes = Number(mesStr);
+  if (!Number.isFinite(ano) || !Number.isFinite(mes)) return base;
+  const d = new Date(Date.UTC(ano, mes - 1 + offset, 1));
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${yyyy}-${mm}`;
+}
+
+function buildVencimentoFromCompetencia(
+  competencia: string,
+  diaVencimento: number | null
+): string {
+  const [anoStr, mesStr] = competencia.split("-");
+  const ano = Number(anoStr);
+  const mes = Number(mesStr);
+  const maxDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const diaRaw =
+    diaVencimento && Number.isFinite(diaVencimento) ? Math.trunc(diaVencimento) : 12;
+  const dia = Math.min(Math.max(diaRaw, 1), maxDia);
+  const mm = String(mes).padStart(2, "0");
+  const dd = String(dia).padStart(2, "0");
+  return `${ano}-${mm}-${dd}`;
+}
+
+function distribuirCentavos(total: number, parcelas: number): number[] {
+  const n = Math.max(1, Math.trunc(parcelas));
+  const base = Math.floor(total / n);
+  let resto = total - base * n;
+  const valores = new Array<number>(n).fill(base);
+  for (let i = 0; i < n && resto > 0; i++) {
+    valores[i] += 1;
+    resto -= 1;
+  }
+  return valores;
+}
+
+function isCartaoConexaoForma(
+  formaPagamento: string | null,
+  formaPagamentoCodigo: string | null
+): boolean {
+  const forma = (formaPagamento ?? "").toUpperCase();
+  const codigo = (formaPagamentoCodigo ?? "").toUpperCase();
+  return forma === "CARTAO_CONEXAO" || codigo.includes("CARTAO_CONEXAO");
+}
+
+function isCartaoCredito(forma: string | null): boolean {
+  if (!forma) return false;
+  const code = forma.toUpperCase();
+  const isDebito = code.includes("DEBITO");
+  if (isDebito) return false;
+  return code.includes("CREDITO") || code.includes("CARTAO");
+}
+
+function isPagamentoImediato(forma: string | null): boolean {
+  if (!forma) return false;
+  if (isCartaoCredito(forma)) return false;
+
+  const code = forma.toUpperCase();
+  const immediateKeywords = ["DINHEIRO", "PIX", "TRANSFERENCIA", "TED", "DOC", "AVISTA", "DEBITO", "SEM_COBRANCA"];
+  return immediateKeywords.some((kw) => code.includes(kw));
+}
+
+function inferTipoTransacao(parcelas: number): CartaoTipoTransacao {
+  return parcelas > 1 ? "CREDITO_PARCELADO" : "CREDITO_AVISTA";
+}
+
+function nowLocalISOString(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString();
+}
 
 export async function GET(req: Request) {
   const denied = await guardApiByRole(req);
@@ -49,24 +224,134 @@ export async function POST(req: Request) {
   const denied = await guardApiByRole(req);
   if (denied) return denied as unknown as NextResponse;
 
-  const body = (await req.json().catch(() => null)) as VendaIn | null;
-
-  if (!body?.forma_pagamento) {
-    return NextResponse.json({ error: "forma_pagamento_obrigatoria" }, { status: 400 });
-  }
-  if (!Array.isArray(body?.itens) || body.itens.length === 0) {
-    return NextResponse.json({ error: "itens_obrigatorio" }, { status: 400 });
-  }
-
   const supabase = getSupabaseServiceClient();
+  const bodyUnknown = (await req.json().catch(() => null)) as JsonRecord | null;
 
-  const produtoIds = Array.from(
-    new Set(body.itens.map((i) => Number(i.produto_id)).filter((id) => Number.isFinite(id)))
+  if (!isRecord(bodyUnknown)) {
+    return NextResponse.json({ ok: false, error: "payload_invalido" }, { status: 400 });
+  }
+
+  const compradorId = asInt(
+    bodyUnknown.comprador_pessoa_id ??
+      bodyUnknown.pagador_pessoa_id ??
+      bodyUnknown.cliente_pessoa_id ??
+      bodyUnknown.clientePessoaId ??
+      bodyUnknown.cliente_id
+  );
+  const consumidorId = asInt(
+    bodyUnknown.consumidor_pessoa_id ?? bodyUnknown.consumidorPessoaId
+  );
+  const formaPagamento = asString(
+    bodyUnknown.forma_pagamento ?? bodyUnknown.formaPagamento
+  );
+  const formaPagamentoCodigo = asString(
+    bodyUnknown.forma_pagamento_codigo ?? bodyUnknown.formaPagamentoCodigo
   );
 
-  if (produtoIds.length === 0) {
-    return NextResponse.json({ error: "itens_obrigatorio" }, { status: 400 });
+  if (!compradorId || !formaPagamento) {
+    return NextResponse.json(
+      { ok: false, error: "campos_obrigatorios" },
+      { status: 400 }
+    );
   }
+
+  const formaBase = formaPagamentoCodigo ?? formaPagamento;
+  const statusPagamento =
+    asString(bodyUnknown.status_pagamento ?? bodyUnknown.statusPagamento) ??
+    (isPagamentoImediato(formaBase) ? "PAGO" : "PENDENTE");
+
+  const dadosCartaoExterno = isRecord(bodyUnknown.dados_cartao_externo)
+    ? bodyUnknown.dados_cartao_externo
+    : null;
+  const dadosCartaoConexao = isRecord(bodyUnknown.dados_cartao_conexao)
+    ? bodyUnknown.dados_cartao_conexao
+    : null;
+
+  const contaConexaoId = asInt(
+    (dadosCartaoConexao as any)?.conta_conexao_id ??
+      (dadosCartaoConexao as any)?.contaConexaoId ??
+      bodyUnknown.conta_conexao_id ??
+      bodyUnknown.contaConexaoId
+  );
+  const numeroParcelas =
+    asInt(
+      bodyUnknown.numero_parcelas ??
+        bodyUnknown.numeroParcelas ??
+        bodyUnknown.cartao_numero_parcelas ??
+        (dadosCartaoConexao as any)?.parcelas ??
+        (dadosCartaoExterno as any)?.parcelas
+    ) ?? 1;
+  const taxaCartaoConexaoCentavos =
+    asInt(
+      (dadosCartaoConexao as any)?.taxa_cartao_conexao_centavos ??
+        bodyUnknown.taxa_cartao_conexao_centavos ??
+        bodyUnknown.taxaCartaoConexaoCentavos
+    ) ?? 0;
+  const cartaoConexaoTipoConta = asString(
+    (dadosCartaoConexao as any)?.tipo_conta ??
+      bodyUnknown.cartao_conexao_tipo_conta ??
+      bodyUnknown.cartaoConexaoTipoConta
+  );
+
+  const isCartaoConexao = isCartaoConexaoForma(formaPagamento, formaPagamentoCodigo);
+
+  if (isCartaoConexao && (!contaConexaoId || contaConexaoId <= 0)) {
+    return NextResponse.json(
+      { ok: false, error: "conta_conexao_id_obrigatorio" },
+      { status: 400 }
+    );
+  }
+  if (isCartaoConexao && numeroParcelas < 1) {
+    return NextResponse.json(
+      { ok: false, error: "numero_parcelas_invalido" },
+      { status: 400 }
+    );
+  }
+
+  const itensCandidate =
+    (bodyUnknown as any).itens ??
+    (bodyUnknown as any).items ??
+    (bodyUnknown as any).venda_itens;
+
+  if (!Array.isArray(itensCandidate) || itensCandidate.length === 0) {
+    return NextResponse.json({ ok: false, error: "itens_obrigatorios" }, { status: 400 });
+  }
+
+  const itensParsed: ItemParsed[] = [];
+
+  for (const raw of itensCandidate) {
+    if (!isRecord(raw)) continue;
+    const produtoId = pickInt(raw, ["produto_id", "produtoId", "produto"]);
+    const quantidade = pickInt(raw, ["quantidade", "qtd", "qtde", "quantity"]);
+    if (!produtoId || !quantidade || quantidade <= 0) continue;
+
+    itensParsed.push({
+      produto_id: produtoId,
+      quantidade,
+      preco_unitario_centavos: pickCentavos(raw, [
+        "preco_unitario_centavos",
+        "precoUnitarioCentavos",
+        "preco_unitario",
+        "precoUnit",
+        "preco",
+      ]),
+      total_centavos: 0,
+      beneficiario_pessoa_id:
+        pickInt(raw, [
+          "beneficiario_pessoa_id",
+          "beneficiarioPessoaId",
+          "aluno_pessoa_id",
+          "alunoPessoaId",
+        ]) ?? compradorId,
+      observacoes: asString(raw.observacoes) ?? null,
+    });
+  }
+
+  if (itensParsed.length === 0) {
+    return NextResponse.json({ ok: false, error: "itens_invalidos" }, { status: 400 });
+  }
+
+  const produtoIds = Array.from(new Set(itensParsed.map((i) => i.produto_id)));
 
   const { data: produtos, error: prodErr } = await supabase
     .from("cafe_produtos")
@@ -74,7 +359,7 @@ export async function POST(req: Request) {
     .in("id", produtoIds);
 
   if (prodErr || !produtos) {
-    return NextResponse.json({ error: "erro_carregar_produtos" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "erro_carregar_produtos" }, { status: 500 });
   }
 
   const produtoMap = new Map<number, ProdutoRow>();
@@ -83,33 +368,29 @@ export async function POST(req: Request) {
   }
 
   if (produtoMap.size !== produtoIds.length) {
-    return NextResponse.json({ error: "produto_nao_encontrado" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "produto_nao_encontrado" }, { status: 400 });
   }
 
   for (const produto of produtoMap.values()) {
     if (!produto.ativo) {
-      return NextResponse.json({ error: "produto_inativo" }, { status: 400 });
+      return NextResponse.json({ ok: false, error: "produto_inativo" }, { status: 400 });
     }
   }
 
-  const itensCalc = body.itens.map((i) => {
-    const produto = produtoMap.get(i.produto_id);
-    if (!produto) throw new Error("produto_nao_encontrado");
-    const qtd = Number(i.quantidade);
-    if (!Number.isFinite(qtd) || qtd <= 0) throw new Error("quantidade_invalida");
-    const pu = Number(produto.preco_venda_centavos || 0);
-    const total = Math.round(pu * qtd);
+  const itensCalc: ItemParsed[] = itensParsed.map((it) => {
+    const produto = produtoMap.get(it.produto_id);
+    const precoFallback = produto ? Number(produto.preco_venda_centavos || 0) : 0;
+    const preco =
+      it.preco_unitario_centavos === null ? precoFallback : it.preco_unitario_centavos;
+    const total = Math.max(0, it.quantidade * preco);
     return {
-      produto_id: i.produto_id,
-      quantidade: qtd,
-      preco_unitario_centavos: pu,
+      ...it,
+      preco_unitario_centavos: preco,
       total_centavos: total,
     };
   });
 
   const valorTotal = itensCalc.reduce((acc, it) => acc + it.total_centavos, 0);
-
-  const statusPagamento = body.forma_pagamento.startsWith("CARTAO_CONEXAO") ? "PENDENTE" : "PAGO";
 
   const { data: receitas, error: receitasErr } = await supabase
     .from("cafe_produto_receitas")
@@ -117,7 +398,9 @@ export async function POST(req: Request) {
     .eq("ativo", true)
     .in("produto_id", produtoIds);
 
-  if (receitasErr) return NextResponse.json({ error: receitasErr.message }, { status: 500 });
+  if (receitasErr) {
+    return NextResponse.json({ ok: false, error: receitasErr.message }, { status: 500 });
+  }
 
   const receitaMap = new Map<number, ReceitaRow[]>();
   for (const r of (receitas as ReceitaRow[] | null) ?? []) {
@@ -147,6 +430,7 @@ export async function POST(req: Request) {
     }
   }
 
+  const saldosAntes = new Map<number, number>();
   if (consumoMap.size > 0) {
     const insumoIds = Array.from(consumoMap.keys());
     const { data: insumos, error: insumoErr } = await supabase
@@ -154,20 +438,28 @@ export async function POST(req: Request) {
       .select("id, nome, saldo_atual")
       .in("id", insumoIds);
 
-    if (insumoErr) return NextResponse.json({ error: insumoErr.message }, { status: 500 });
+    if (insumoErr) {
+      return NextResponse.json({ ok: false, error: insumoErr.message }, { status: 500 });
+    }
 
-    const insumoMap = new Map<number, { nome: string; saldo_atual: number }>();
-    for (const insumo of (insumos as { id: number; nome: string; saldo_atual: number }[] | null) ?? []) {
-      insumoMap.set(insumo.id, { nome: insumo.nome, saldo_atual: Number(insumo.saldo_atual ?? 0) });
+    const insumoMap = new Map<number, InsumoRow>();
+    for (const insumo of (insumos as InsumoRow[] | null) ?? []) {
+      insumoMap.set(insumo.id, {
+        id: insumo.id,
+        nome: insumo.nome,
+        saldo_atual: Number(insumo.saldo_atual ?? 0),
+      });
     }
 
     for (const [insumoId, consumo] of consumoMap.entries()) {
       const info = insumoMap.get(insumoId);
-      if (!info) return NextResponse.json({ error: "insumo_nao_encontrado" }, { status: 400 });
+      if (!info) return NextResponse.json({ ok: false, error: "insumo_nao_encontrado" }, { status: 400 });
+      saldosAntes.set(insumoId, info.saldo_atual);
       const novoSaldo = info.saldo_atual - consumo;
       if (novoSaldo < 0) {
         return NextResponse.json(
           {
+            ok: false,
             error: "saldo_insuficiente",
             insumo_id: insumoId,
             insumo_nome: info.nome,
@@ -183,45 +475,58 @@ export async function POST(req: Request) {
   const { data: venda, error: vendaErr } = await supabase
     .from("cafe_vendas")
     .insert({
-      pagador_pessoa_id: body.pagador_pessoa_id ?? null,
-      consumidor_pessoa_id: body.consumidor_pessoa_id ?? null,
+      pagador_pessoa_id: compradorId,
+      consumidor_pessoa_id: consumidorId ?? null,
       valor_total_centavos: valorTotal,
-      forma_pagamento: body.forma_pagamento,
+      forma_pagamento: formaPagamento,
       status_pagamento: statusPagamento,
-      observacoes: body.observacoes ?? null,
+      observacoes: asString(bodyUnknown.observacoes) ?? null,
     })
     .select("*")
     .single();
 
   if (vendaErr || !venda) {
-    return NextResponse.json({ error: vendaErr?.message ?? "erro_criar_venda" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: vendaErr?.message ?? "erro_criar_venda" }, { status: 500 });
   }
 
-  const itensPayload = itensCalc.map((it) => ({ ...it, venda_id: venda.id }));
+  const vendaId = Number((venda as { id?: number }).id);
+
+  const rollbackVenda = async () => {
+    await supabase
+      .from("cafe_insumo_movimentos")
+      .delete()
+      .eq("origem", "VENDA")
+      .eq("referencia_id", vendaId);
+
+    for (const [insumoId, saldo] of saldosAntes.entries()) {
+      await supabase
+        .from("cafe_insumos")
+        .update({ saldo_atual: saldo })
+        .eq("id", insumoId);
+    }
+
+    await supabase.from("cafe_venda_itens").delete().eq("venda_id", vendaId);
+    await supabase.from("cafe_vendas").delete().eq("id", vendaId);
+  };
+
+  const itensPayload: VendaItemInsert[] = itensCalc.map((it) => ({
+    venda_id: vendaId,
+    produto_id: it.produto_id,
+    quantidade: it.quantidade,
+    preco_unitario_centavos: it.preco_unitario_centavos,
+    total_centavos: it.total_centavos,
+  }));
+
   const { error: itensErr } = await supabase.from("cafe_venda_itens").insert(itensPayload);
-  if (itensErr) return NextResponse.json({ error: itensErr.message }, { status: 500 });
+  if (itensErr) {
+    await rollbackVenda();
+    return NextResponse.json({ ok: false, error: itensErr.message }, { status: 500 });
+  }
 
   if (consumoMap.size > 0) {
     for (const [insumoId, consumo] of consumoMap.entries()) {
-      const { data: insumoRow, error: insumoErr } = await supabase
-        .from("cafe_insumos")
-        .select("saldo_atual")
-        .eq("id", insumoId)
-        .single();
-
-      if (insumoErr || !insumoRow) {
-        return NextResponse.json({ error: "insumo_nao_encontrado" }, { status: 500 });
-      }
-
-      const saldoAtual = Number(insumoRow.saldo_atual ?? 0);
-      const novoSaldo = saldoAtual - consumo;
-
-      if (novoSaldo < 0) {
-        return NextResponse.json(
-          { error: "saldo_insuficiente", insumo_id: insumoId, saldo_atual: saldoAtual, consumo },
-          { status: 400 }
-        );
-      }
+      const saldoAntes = saldosAntes.get(insumoId) ?? 0;
+      const novoSaldo = saldoAntes - consumo;
 
       const { error: movErr } = await supabase
         .from("cafe_insumo_movimentos")
@@ -230,22 +535,328 @@ export async function POST(req: Request) {
           tipo: "SAIDA",
           quantidade: consumo,
           origem: "VENDA",
-          referencia_id: venda.id,
-          observacoes: `Venda #${venda.id}`,
+          referencia_id: vendaId,
+          observacoes: `Venda #${vendaId}`,
         })
         .select("id")
         .maybeSingle();
 
-      if (movErr) return NextResponse.json({ error: movErr.message }, { status: 500 });
+      if (movErr) {
+        await rollbackVenda();
+        return NextResponse.json({ ok: false, error: movErr.message }, { status: 500 });
+      }
 
       const { error: updErr } = await supabase
         .from("cafe_insumos")
         .update({ saldo_atual: novoSaldo })
         .eq("id", insumoId);
 
-      if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+      if (updErr) {
+        await rollbackVenda();
+        return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
+      }
     }
   }
 
-  return NextResponse.json({ data: { ...venda, valor_total_centavos: valorTotal } }, { status: 201 });
+  const movimentoFinanceiroImediato = isPagamentoImediato(formaBase);
+  if (movimentoFinanceiroImediato && valorTotal > 0) {
+    let centroCustoId = asInt(bodyUnknown.centro_custo_id ?? bodyUnknown.centroCustoId) ?? null;
+
+    if (!centroCustoId) {
+      const { data: formaCtx, error: formaCtxError } = await supabase
+        .from("formas_pagamento_contexto")
+        .select("centro_custo_id")
+        .eq("forma_pagamento_codigo", formaBase)
+        .eq("ativo", true)
+        .order("ordem_exibicao", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (formaCtxError) {
+        console.error(
+          "[POST /api/cafe/vendas] erro ao buscar centro de custo da forma de pagamento:",
+          formaCtxError
+        );
+      }
+
+      centroCustoId = asInt((formaCtx as any)?.centro_custo_id ?? null);
+    }
+
+    if (centroCustoId) {
+      const { error: movFinErr } = await supabase.from("movimento_financeiro").insert({
+        tipo: "RECEITA",
+        centro_custo_id: centroCustoId,
+        valor_centavos: valorTotal,
+        data_movimento: nowLocalISOString(),
+        origem: "VENDA_CAFE",
+        origem_id: vendaId,
+        descricao: `Venda Cafe #${vendaId} - ${formaPagamento}`,
+        usuario_id: null,
+      });
+
+      if (movFinErr) {
+        console.error(
+          "[POST /api/cafe/vendas] erro ao registrar movimento financeiro imediato:",
+          movFinErr
+        );
+      }
+    } else {
+      console.error(
+        "[POST /api/cafe/vendas] centro_custo_id nao encontrado para movimento financeiro imediato."
+      );
+    }
+  }
+
+  const cartaoMaquinaId = asInt(
+    (dadosCartaoExterno as any)?.maquina_id ??
+      bodyUnknown.cartao_maquina_id ??
+      bodyUnknown.maquina_id ??
+      bodyUnknown.maquinaId
+  );
+  const cartaoBandeiraId = asInt(
+    (dadosCartaoExterno as any)?.bandeira_id ??
+      bodyUnknown.cartao_bandeira_id ??
+      bodyUnknown.bandeira_id ??
+      bodyUnknown.bandeiraId
+  );
+
+  if (cartaoMaquinaId && cartaoBandeiraId && valorTotal > 0) {
+    const { data: maquinaRow, error: maqErr } = await supabase
+      .from("cartao_maquinas")
+      .select("id, conta_financeira_id")
+      .eq("id", cartaoMaquinaId)
+      .single();
+
+    if (maqErr || !maquinaRow?.conta_financeira_id) {
+      await rollbackVenda();
+      return NextResponse.json(
+        { ok: false, error: "maquina_invalida", details: maqErr?.message ?? "maquina_sem_conta_financeira" },
+        { status: 400 }
+      );
+    }
+
+    const contaFinanceiraId: number = maquinaRow.conta_financeira_id;
+    const parcelas = Math.max(1, numeroParcelas);
+    const tipoTransacao = asString(
+      bodyUnknown.cartao_tipo_transacao ?? bodyUnknown.tipo_transacao
+    ) as CartaoTipoTransacao | null;
+    const tipoTransacaoFinal: CartaoTipoTransacao =
+      tipoTransacao === "CREDITO_AVISTA" || tipoTransacao === "CREDITO_PARCELADO"
+        ? tipoTransacao
+        : inferTipoTransacao(parcelas);
+
+    const { data: regraRow } = await supabase
+      .from("cartao_regras_operacao")
+      .select("prazo_recebimento_dias, taxa_percentual, taxa_fixa_centavos")
+      .eq("maquina_id", cartaoMaquinaId)
+      .eq("bandeira_id", cartaoBandeiraId)
+      .eq("tipo_transacao", tipoTransacaoFinal)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    const prazoDias =
+      typeof regraRow?.prazo_recebimento_dias === "number" ? regraRow.prazo_recebimento_dias : 30;
+    const taxaPercentual =
+      typeof regraRow?.taxa_percentual === "number" ? regraRow.taxa_percentual : 0;
+    const taxaFixa =
+      typeof regraRow?.taxa_fixa_centavos === "number" ? regraRow.taxa_fixa_centavos : 0;
+
+    const valorBruto = valorTotal;
+    const taxaOperadoraFromPayload = asInt(
+      bodyUnknown.taxa_operadora_centavos ?? bodyUnknown.taxaOperadoraCentavos
+    );
+    const valorLiquidoFromPayload = asInt(
+      bodyUnknown.valor_liquido_centavos ?? bodyUnknown.valorLiquidoCentavos
+    );
+
+    const taxaOperadora =
+      taxaOperadoraFromPayload ?? Math.max(0, Math.round(valorBruto * (taxaPercentual / 100)) + taxaFixa);
+    const valorLiquido = valorLiquidoFromPayload ?? Math.max(0, valorBruto - taxaOperadora);
+
+    const dataPrevistaPagamento =
+      asString(bodyUnknown.data_prevista_pagamento ?? bodyUnknown.dataPrevistaPagamento) ??
+      addDaysISODate(prazoDias);
+
+    const recebivelInsert: JsonRecord = {
+      venda_id: vendaId,
+      maquina_id: cartaoMaquinaId,
+      bandeira_id: cartaoBandeiraId,
+      conta_financeira_id: contaFinanceiraId,
+      valor_bruto_centavos: valorBruto,
+      taxa_operadora_centavos: taxaOperadora,
+      valor_liquido_centavos: valorLiquido,
+      numero_parcelas: parcelas,
+      data_prevista_pagamento: dataPrevistaPagamento,
+      status: "PREVISTO",
+    };
+
+    const { error: recErr } = await supabase.from("cartao_recebiveis").insert(recebivelInsert);
+
+    if (recErr) {
+      await rollbackVenda();
+      return NextResponse.json(
+        { ok: false, error: "falha_insert_cartao_recebivel", details: recErr.message },
+        { status: 500 }
+      );
+    }
+  }
+
+  let cobrancaIdParaVenda: number | null = null;
+  if (isCartaoConexao && contaConexaoId && valorTotal > 0) {
+    const { data: contaRow, error: contaErr } = await supabase
+      .from("credito_conexao_contas")
+      .select("id, pessoa_titular_id, dia_vencimento")
+      .eq("id", contaConexaoId)
+      .maybeSingle();
+
+    if (contaErr || !contaRow) {
+      await rollbackVenda();
+      return NextResponse.json(
+        { ok: false, error: "conta_conexao_invalida", details: contaErr?.message ?? null },
+        { status: 400 }
+      );
+    }
+
+    const conta = contaRow as ContaConexaoResumo;
+    const pessoaTitularId = Number(conta.pessoa_titular_id);
+    const pessoaCobrancaId = Number.isFinite(pessoaTitularId) && pessoaTitularId > 0
+      ? pessoaTitularId
+      : compradorId;
+
+    const competenciaBase = competenciaFromDate(todayISODate()) ?? new Date().toISOString().slice(0, 7);
+    const parcelas = Math.max(1, numeroParcelas);
+    const totalVendaCentavos = Math.max(0, valorTotal);
+    const taxaTotalCentavos = Math.max(0, taxaCartaoConexaoCentavos);
+    const baseTotalCentavos = Math.max(0, totalVendaCentavos - taxaTotalCentavos);
+    const parcelasBase = distribuirCentavos(baseTotalCentavos, parcelas);
+    const parcelasTaxa = distribuirCentavos(taxaTotalCentavos, parcelas);
+    const cobrancasCriadas: number[] = [];
+
+    const rollbackCartaoConexao = async () => {
+      if (cobrancasCriadas.length === 0) return;
+      await supabase
+        .from("credito_conexao_lancamentos")
+        .delete()
+        .in("cobranca_id", cobrancasCriadas);
+      await supabase.from("cobrancas").delete().in("id", cobrancasCriadas);
+    };
+
+    for (let i = 0; i < parcelas; i++) {
+      const competencia = addCompetencia(competenciaBase, i);
+      const valorBase = parcelasBase[i] ?? 0;
+      const valorTaxa = parcelasTaxa[i] ?? 0;
+      const valorParcela = valorBase + valorTaxa;
+      const vencimento = buildVencimentoFromCompetencia(
+        competencia,
+        conta.dia_vencimento ?? null
+      );
+
+      const descricao =
+        parcelas > 1 ? `Venda Cafe #${vendaId} (${i + 1}/${parcelas})` : `Venda Cafe #${vendaId}`;
+
+      const { data: cobranca, error: cobrErr } = await supabase
+        .from("cobrancas")
+        .insert({
+          pessoa_id: pessoaCobrancaId,
+          descricao,
+          valor_centavos: valorParcela,
+          vencimento,
+          status: "PENDENTE",
+          origem_tipo: "CAFE",
+          origem_id: vendaId,
+          origem_subtipo: "CARTAO_CONEXAO",
+          competencia_ano_mes: competencia,
+        })
+        .select("id")
+        .single();
+
+      if (cobrErr || !cobranca) {
+        await rollbackCartaoConexao();
+        await rollbackVenda();
+        return NextResponse.json(
+          { ok: false, error: "falha_criar_cobranca_cartao_conexao", details: cobrErr?.message ?? null },
+          { status: 500 }
+        );
+      }
+
+      const cobrancaId = Number((cobranca as { id?: number }).id);
+      if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) {
+        await rollbackCartaoConexao();
+        await rollbackVenda();
+        return NextResponse.json(
+          { ok: false, error: "cobranca_id_invalido" },
+          { status: 500 }
+        );
+      }
+
+      cobrancasCriadas.push(cobrancaId);
+
+      const composicaoJson: Record<string, unknown> = {
+        origem: "CAFE_PARCELADO",
+        venda_id: vendaId,
+        parcela_numero: i + 1,
+        total_parcelas: parcelas,
+        competencia,
+        valor_parcela_centavos: valorParcela,
+        valor_parcela_brl: (valorParcela / 100).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        }),
+        valor_base_centavos: valorBase,
+        taxa_centavos: valorTaxa,
+        valor_total_venda_centavos: totalVendaCentavos,
+        taxa_total_centavos: taxaTotalCentavos,
+        cartao_conexao_tipo_conta: cartaoConexaoTipoConta ?? null,
+        itens: itensCalc.map((item) => ({
+          produto_id: item.produto_id,
+          quantidade: item.quantidade,
+          total_centavos: item.total_centavos,
+        })),
+      };
+
+      try {
+        await upsertLancamentoPorCobranca({
+          cobrancaId,
+          contaConexaoId,
+          competencia,
+          valorCentavos: valorParcela,
+          descricao,
+          origemSistema: "CAFE",
+          origemId: vendaId,
+          composicaoJson,
+        });
+      } catch (err) {
+        await rollbackCartaoConexao();
+        await rollbackVenda();
+        const msg = err instanceof Error ? err.message : "erro_desconhecido";
+        return NextResponse.json(
+          { ok: false, error: "falha_upsert_lancamento_cartao_conexao", details: msg },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (cobrancasCriadas.length === 1) {
+      cobrancaIdParaVenda = cobrancasCriadas[0] ?? null;
+    }
+  }
+
+  if (cobrancaIdParaVenda) {
+    const { error: updErr } = await supabase
+      .from("cafe_vendas")
+      .update({ cobranca_id: cobrancaIdParaVenda })
+      .eq("id", vendaId);
+    if (updErr) {
+      console.error("[POST /api/cafe/vendas] falha ao atualizar cobranca_id:", updErr);
+    }
+  }
+
+  return NextResponse.json(
+    {
+      ok: true,
+      venda,
+      redirect_url: `/cafe/vendas/${vendaId}`,
+    },
+    { status: 201 }
+  );
 }
