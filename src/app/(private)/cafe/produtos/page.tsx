@@ -209,7 +209,7 @@ export default function CafeProdutosPage() {
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        title="Ballet Cafe - Produtos"
+        title="Ballet Café — Produtos"
         description="Cadastre produtos e configure receitas/insumos usados."
       />
 

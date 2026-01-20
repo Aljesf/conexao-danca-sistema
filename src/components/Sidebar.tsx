@@ -1,28 +1,49 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { sidebarConfig, type SidebarSection, type SidebarItem } from "@/config/sidebarConfig";
-import { useBranding } from "@/context/BrandingContext";
+import { sidebarConfig, type SidebarItem, type SidebarSection } from "@/config/sidebarConfig";
+import { useBranding, type ContextKey } from "@/context/BrandingContext";
 import UserBadge from "./UserBadge";
+
+type SidebarContext = keyof typeof sidebarConfig;
+type AnyContext = SidebarContext | ContextKey;
 
 type SidebarProps = {
   /**
    * Contexto atual do app.
-   * Se não for informado, usar o contexto vindo do BrandingContext.
+   * Se nao for informado, usar o contexto vindo do BrandingContext.
    */
-  context?: keyof typeof sidebarConfig;
+  context?: AnyContext;
 };
 
-const contextMap: Record<string, string> = {
+const sidebarContextMap: Record<AnyContext, SidebarContext> = {
   escola: "escola",
   loja: "loja",
   lanchonete: "cafe",
   administracao: "admin",
+  cafe: "cafe",
+  admin: "admin",
 };
 
-function Section({ id, title, items, defaultOpen = true }: SidebarSection & { defaultOpen?: boolean }) {
+const brandingContextMap: Record<AnyContext, ContextKey> = {
+  escola: "escola",
+  loja: "loja",
+  lanchonete: "lanchonete",
+  administracao: "administracao",
+  cafe: "lanchonete",
+  admin: "administracao",
+};
+
+const contextLabels: Record<SidebarContext, string> = {
+  escola: "Conex\u00e3o Dan\u00e7a",
+  loja: "AJ Dance Store",
+  cafe: "Ballet Caf\u00e9",
+  admin: "Administra\u00e7\u00e3o do Sistema",
+};
+
+function Section({ id, title, items, defaultOpen = true }: SidebarSection) {
   const [open, setOpen] = useState(defaultOpen);
 
   useEffect(() => {
@@ -46,11 +67,11 @@ function Section({ id, title, items, defaultOpen = true }: SidebarSection & { de
         onClick={() => setOpen((prev) => !prev)}
       >
         <span>{title}</span>
-        <span className="text-[9px]">{open ? "▼" : "▲"}</span>
+        <span className="text-[9px]">{open ? "v" : ">"}</span>
       </button>
 
       {open && (
-        <ul className="space-y-1 pl-2 pb-2">
+        <ul className="space-y-1 pb-2 pl-2">
           {items.map((item, index) => (
             <SidebarLink key={`${id}-${item.href}-${index}`} item={item} />
           ))}
@@ -80,31 +101,23 @@ function SidebarLink({ item }: { item: SidebarItem }) {
 }
 
 export default function Sidebar({ context }: SidebarProps) {
-  const { appName, activeContext, configs } = useBranding();
+  const { activeContext, configs } = useBranding();
 
-  const resolvedContext: keyof typeof sidebarConfig =
-    (contextMap[context ?? activeContext] as keyof typeof sidebarConfig) ?? "escola";
-
+  const rawContext: AnyContext = context ?? activeContext;
+  const resolvedContext = sidebarContextMap[rawContext] ?? "escola";
   const sections = sidebarConfig[resolvedContext] ?? [];
 
-  const contextMeta: Record<string, { label: string }> = {
-    escola: { label: "Conexão Dança" },
-    loja: { label: "AJ Dance Store" },
-    lanchonete: { label: "Ballet Café" },
-    administracao: { label: "Administração do Sistema" },
-  };
-
-  const meta = contextMeta[resolvedContext] ?? { label: appName ?? "Painel interno" };
-  const rawContext = context ?? activeContext;
-  const currentConfig = (configs as any)?.[rawContext];
-  const logoUrl = currentConfig?.logoUrl as string | undefined;
-  const logoFallback = meta.label && meta.label.length > 0 ? meta.label.slice(0, 2).toUpperCase() : "APP";
+  const brandingKey = brandingContextMap[rawContext] ?? "escola";
+  const currentConfig = configs[brandingKey];
+  const metaLabel = contextLabels[resolvedContext] ?? "Painel interno";
+  const logoUrl = currentConfig?.logoUrl;
+  const logoFallback = metaLabel.length > 0 ? metaLabel.slice(0, 2).toUpperCase() : "APP";
 
   return (
-    <aside className="flex h-full w-72 flex-col text-sm bg-gradient-to-b from-[color:var(--accent-1,#eef2ff)] to-[color:var(--accent-3,#e0e7ff)] text-slate-700">
+    <aside className="flex h-full w-72 flex-col bg-gradient-to-b from-[color:var(--accent-1,#eef2ff)] to-[color:var(--accent-3,#e0e7ff)] text-sm text-slate-700">
       <div className="flex flex-col items-center gap-3 border-b border-black/5 py-6">
         {logoUrl ? (
-          <img src={logoUrl} alt={meta.label} className="h-28 w-28 rounded-3xl object-contain shadow-sm" />
+          <img src={logoUrl} alt={metaLabel} className="h-28 w-28 rounded-3xl object-contain shadow-sm" />
         ) : (
           <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-white text-xl font-semibold text-slate-700 shadow-sm">
             {logoFallback}
@@ -112,7 +125,7 @@ export default function Sidebar({ context }: SidebarProps) {
         )}
         <div className="flex flex-col text-center">
           <span className="text-[10px] uppercase tracking-wider text-slate-500">Contexto ativo</span>
-          <span className="text-sm font-semibold text-slate-700">{meta.label}</span>
+          <span className="text-sm font-semibold text-slate-700">{metaLabel}</span>
         </div>
       </div>
 
@@ -123,7 +136,7 @@ export default function Sidebar({ context }: SidebarProps) {
             id={section.id}
             title={section.title}
             items={section.items}
-            defaultOpen={(section as any).defaultOpen ?? true}
+            defaultOpen={section.defaultOpen ?? true}
           />
         ))}
       </nav>

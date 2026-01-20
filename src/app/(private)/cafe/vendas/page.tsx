@@ -127,7 +127,7 @@ export default function CafeVendasPage() {
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        title="Ballet Cafe - Vendas"
+        title="Ballet Café — Vendas"
         description="Frente de caixa simplificada para registrar vendas e pagamentos."
       />
 

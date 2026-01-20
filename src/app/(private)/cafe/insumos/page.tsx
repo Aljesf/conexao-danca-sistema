@@ -131,8 +131,8 @@ export default function CafeInsumosPage() {
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        title="Ballet Cafe - Insumos"
-        description="Cadastre insumos e faca abastecimento manual com historico."
+        title="Ballet Café — Insumos"
+        description="Cadastre insumos e faça abastecimento manual com histórico."
       />
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}

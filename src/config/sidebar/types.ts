@@ -1,13 +1,17 @@
+import type { ReactNode } from "react";
+
 export type SidebarItem = {
   label: string;
   href: string;
-  icon?: any;
+  matchPrefix?: string;
+  icon?: ReactNode;
 };
 
 export type SidebarSection = {
   id: string;
   title: string;
   items: SidebarItem[];
+  defaultOpen?: boolean;
 };
 
 export type SidebarConfig = {
