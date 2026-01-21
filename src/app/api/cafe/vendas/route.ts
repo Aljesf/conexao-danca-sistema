@@ -247,12 +247,33 @@ export async function POST(req: Request) {
   const formaPagamentoCodigo = asString(
     bodyUnknown.forma_pagamento_codigo ?? bodyUnknown.formaPagamentoCodigo
   );
+  const tabelaPrecoId = asInt(
+    bodyUnknown.tabela_preco_id ?? bodyUnknown.tabelaPrecoId
+  );
 
   if (!compradorId || !formaPagamento) {
     return NextResponse.json(
       { ok: false, error: "campos_obrigatorios" },
       { status: 400 }
     );
+  }
+
+  if (tabelaPrecoId) {
+    const { data: tabela, error: tabelaErr } = await supabase
+      .from("cafe_tabelas_preco")
+      .select("id, ativo")
+      .eq("id", tabelaPrecoId)
+      .maybeSingle();
+
+    if (tabelaErr) {
+      return NextResponse.json({ ok: false, error: tabelaErr.message }, { status: 500 });
+    }
+    if (!tabela) {
+      return NextResponse.json({ ok: false, error: "tabela_preco_invalida" }, { status: 400 });
+    }
+    if (tabela.ativo === false) {
+      return NextResponse.json({ ok: false, error: "tabela_preco_inativa" }, { status: 400 });
+    }
   }
 
   const formaBase = formaPagamentoCodigo ?? formaPagamento;
@@ -480,6 +501,7 @@ export async function POST(req: Request) {
       valor_total_centavos: valorTotal,
       forma_pagamento: formaPagamento,
       status_pagamento: statusPagamento,
+      tabela_preco_id: tabelaPrecoId ?? null,
       observacoes: asString(bodyUnknown.observacoes) ?? null,
     })
     .select("*")

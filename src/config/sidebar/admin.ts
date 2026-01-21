@@ -95,6 +95,7 @@ export const adminSidebar: SidebarSection[] = [
       { label: "Configuracoes", href: "/admin/cafe" },
       { label: "Insumos", href: "/admin/cafe/insumos" },
       { label: "Produtos", href: "/admin/cafe/produtos" },
+      { label: "Tabelas de preco", href: "/admin/cafe/tabelas-preco" },
     ],
   },
   {

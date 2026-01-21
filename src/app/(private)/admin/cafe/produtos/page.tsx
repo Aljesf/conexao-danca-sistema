@@ -29,6 +29,22 @@ type ReceitaItem = {
   ativo?: boolean;
 };
 
+type TabelaPreco = {
+  id: number;
+  codigo: string;
+  nome: string;
+  descricao: string | null;
+  ativo: boolean;
+  is_default: boolean;
+  ordem: number;
+};
+
+type PrecoProduto = {
+  tabela_preco_id: number;
+  preco_centavos: number;
+  ativo: boolean;
+};
+
 function formatBRLFromCentavos(value: number): string {
   const val = (value || 0) / 100;
   return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -56,6 +72,9 @@ export default function CafeProdutosPage() {
 
   const [receitaItens, setReceitaItens] = useState<ReceitaItem[]>([]);
   const [receitaLoading, setReceitaLoading] = useState(false);
+  const [tabelasPreco, setTabelasPreco] = useState<TabelaPreco[]>([]);
+  const [precosTabela, setPrecosTabela] = useState<Record<number, string>>({});
+  const [precosLoading, setPrecosLoading] = useState(false);
 
   async function loadProdutos() {
     setLoading(true);
@@ -79,6 +98,40 @@ export default function CafeProdutosPage() {
     setInsumos(json.data ?? []);
   }
 
+  async function loadTabelasPreco() {
+    const res = await fetch("/api/cafe/tabelas-preco");
+    const json = (await res.json()) as { ok?: boolean; data?: TabelaPreco[] };
+    setTabelasPreco(Array.isArray(json?.data) ? json.data : []);
+  }
+
+  async function loadPrecos(produtoId: number) {
+    setPrecosLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/cafe/produtos/${produtoId}/precos`);
+      const json = (await res.json()) as { ok?: boolean; data?: PrecoProduto[]; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Falha ao carregar precos.");
+
+      const basePrice = selectedProduto?.preco_venda_centavos ?? 0;
+      const map = new Map<number, number>();
+      for (const row of json.data ?? []) {
+        map.set(row.tabela_preco_id, Number(row.preco_centavos ?? 0));
+      }
+
+      const next: Record<number, string> = {};
+      for (const tabela of tabelasPreco) {
+        if (!tabela.ativo) continue;
+        const valor = map.has(tabela.id) ? map.get(tabela.id) : basePrice;
+        next[tabela.id] = String(valor ?? 0);
+      }
+      setPrecosTabela(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar precos.");
+    } finally {
+      setPrecosLoading(false);
+    }
+  }
+
   async function loadReceita(produtoId: number) {
     setReceitaLoading(true);
     try {
@@ -96,11 +149,18 @@ export default function CafeProdutosPage() {
   useEffect(() => {
     void loadProdutos();
     void loadInsumos();
+    void loadTabelasPreco();
   }, []);
 
   useEffect(() => {
     if (selectedProdutoId) void loadReceita(selectedProdutoId);
   }, [selectedProdutoId]);
+
+  useEffect(() => {
+    if (selectedProdutoId && tabelasPreco.length > 0) {
+      void loadPrecos(selectedProdutoId);
+    }
+  }, [selectedProdutoId, tabelasPreco]);
 
   async function criarProduto() {
     setError(null);
@@ -203,6 +263,44 @@ export default function CafeProdutosPage() {
 
     setMessage("Receita salva.");
     await loadReceita(selectedProdutoId);
+  }
+
+  async function salvarPrecos() {
+    if (!selectedProdutoId) return;
+    setError(null);
+    setMessage(null);
+
+    const precos = tabelasPreco
+      .filter((t) => t.ativo)
+      .map((t) => {
+        const raw = precosTabela[t.id] ?? "";
+        const value = raw.trim() === "" ? 0 : Number(raw);
+        return {
+          tabela_preco_id: t.id,
+          preco_centavos: Math.round(value),
+          ativo: true,
+        };
+      });
+
+    if (precos.some((p) => !Number.isFinite(p.preco_centavos) || p.preco_centavos < 0)) {
+      setError("Preco invalido.");
+      return;
+    }
+
+    const res = await fetch(`/api/cafe/produtos/${selectedProdutoId}/precos`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ precos }),
+    });
+
+    const json = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok || !json.ok) {
+      setError(json.error ?? "Falha ao salvar precos.");
+      return;
+    }
+
+    setMessage("Precos atualizados.");
+    await loadPrecos(selectedProdutoId);
   }
 
   const insumoOptions = useMemo(() => insumos, [insumos]);
@@ -418,6 +516,46 @@ export default function CafeProdutosPage() {
               onClick={() => void salvarProduto()}
             >
               Salvar produto
+            </button>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {selectedProduto ? (
+        <SectionCard title="Precos por tabela">
+          {tabelasPreco.length === 0 ? (
+            <p className="text-sm text-slate-600">Nenhuma tabela de preco cadastrada.</p>
+          ) : (
+            <div className="space-y-3">
+              {tabelasPreco.filter((t) => t.ativo).map((tabela) => (
+                <div key={tabela.id} className="grid gap-2 md:grid-cols-[2fr_1fr] items-center">
+                  <div>
+                    <div className="text-sm font-medium">
+                      {tabela.nome} {tabela.is_default ? "(Default)" : ""}
+                    </div>
+                    <div className="text-xs text-slate-500">{tabela.codigo}</div>
+                  </div>
+                  <input
+                    className="rounded-md border p-2 text-sm"
+                    value={precosTabela[tabela.id] ?? ""}
+                    onChange={(e) =>
+                      setPrecosTabela((prev) => ({ ...prev, [tabela.id]: e.target.value }))
+                    }
+                    placeholder="Preco (centavos)"
+                    disabled={precosLoading}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-4">
+            <button
+              className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
+              onClick={() => void salvarPrecos()}
+              disabled={precosLoading || tabelasPreco.length === 0}
+            >
+              {precosLoading ? "Carregando..." : "Salvar precos"}
             </button>
           </div>
         </SectionCard>

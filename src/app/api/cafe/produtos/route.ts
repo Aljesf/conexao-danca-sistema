@@ -20,6 +20,9 @@ export async function GET(req: Request) {
   const search = (searchParams.get("search") ?? searchParams.get("q") ?? "").trim();
   const pageRaw = Number(searchParams.get("page") ?? "1");
   const pageSizeRaw = Number(searchParams.get("pageSize") ?? "20");
+  const tabelaPrecoRaw = searchParams.get("tabela_preco_id");
+  const tabelaPrecoId =
+    tabelaPrecoRaw && Number.isFinite(Number(tabelaPrecoRaw)) ? Number(tabelaPrecoRaw) : null;
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.trunc(pageRaw) : 1;
   const pageSize =
     Number.isFinite(pageSizeRaw) && pageSizeRaw > 0
@@ -46,12 +49,34 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
+  let precoMap: Map<number, number> | null = null;
+  if (tabelaPrecoId && (data ?? []).length > 0) {
+    const produtoIds = (data ?? []).map((row) => row.id);
+    const { data: precos, error: precosErr } = await supabase
+      .from("cafe_produto_precos")
+      .select("produto_id, preco_centavos")
+      .eq("tabela_preco_id", tabelaPrecoId)
+      .eq("ativo", true)
+      .in("produto_id", produtoIds);
+
+    if (precosErr) {
+      return NextResponse.json({ ok: false, error: precosErr.message }, { status: 500 });
+    }
+
+    precoMap = new Map<number, number>();
+    for (const row of precos ?? []) {
+      precoMap.set(row.produto_id, Number(row.preco_centavos ?? 0));
+    }
+  }
+
   const items =
     (data ?? []).map((row) => ({
       id: row.id,
       nome: row.nome,
       codigo: null,
-      preco_venda_centavos: Number(row.preco_venda_centavos ?? 0),
+      preco_venda_centavos: precoMap?.has(row.id)
+        ? Number(precoMap.get(row.id) ?? 0)
+        : Number(row.preco_venda_centavos ?? 0),
       unidade_venda: row.unidade_venda ?? null,
       ativo: row.ativo ?? true,
     })) ?? [];

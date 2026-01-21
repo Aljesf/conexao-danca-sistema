@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import PessoaLookup, { PessoaLookupItem } from "@/components/PessoaLookup";
@@ -20,6 +20,16 @@ type ProdutoResumo = {
   nome: string;
   codigo?: string | null;
   preco_venda_centavos: number;
+};
+
+type TabelaPreco = {
+  id: number;
+  codigo: string;
+  nome: string;
+  descricao?: string | null;
+  ativo: boolean;
+  is_default: boolean;
+  ordem: number;
 };
 
 type ItemCaixa = {
@@ -120,6 +130,9 @@ export default function FrenteCaixaCafePage() {
   const [itens, setItens] = useState<ItemCaixa[]>([]);
   const [tipoOperacao, setTipoOperacao] = useState<TipoOperacaoCafe>("VENDA");
   const [centroCustoCafeId, setCentroCustoCafeId] = useState<number | null>(null);
+  const [tabelasPreco, setTabelasPreco] = useState<TabelaPreco[]>([]);
+  const [tabelaPrecoId, setTabelaPrecoId] = useState<number | "">("");
+  const [carregandoTabelasPreco, setCarregandoTabelasPreco] = useState(false);
 
   // formas de pagamento por contexto (centro CAFE)
   const [formasPagamentoCtx, setFormasPagamentoCtx] = useState<FormaPagamentoContexto[]>(
@@ -257,6 +270,41 @@ export default function FrenteCaixaCafePage() {
       cancelado = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function carregarTabelasPreco() {
+      setCarregandoTabelasPreco(true);
+      try {
+        const res = await fetch("/api/cafe/tabelas-preco");
+        if (!res.ok) {
+          console.error("Erro ao carregar tabelas de preco:", await res.text());
+          return;
+        }
+
+        const json = await res.json();
+        const lista = Array.isArray(json?.data) ? json.data : [];
+        const ativas = (lista as TabelaPreco[]).filter((t) => t?.ativo ?? true);
+        if (!cancelado) {
+          setTabelasPreco(ativas);
+          if (!tabelaPrecoId && ativas.length > 0) {
+            const def = ativas.find((t) => t.is_default) ?? ativas[0];
+            setTabelaPrecoId(def.id);
+          }
+        }
+      } catch (e) {
+        console.error("Erro inesperado ao carregar tabelas de preco:", e);
+      } finally {
+        if (!cancelado) setCarregandoTabelasPreco(false);
+      }
+    }
+
+    carregarTabelasPreco();
+    return () => {
+      cancelado = true;
+    };
+  }, []);
   // ======== BUSCAS AUXILIARES (COMPRADOR, ALUNO, PRODUTO) =========
   // busca comprador
   useEffect(() => {
@@ -298,12 +346,16 @@ export default function FrenteCaixaCafePage() {
       setResultadoProduto([]);
       return;
     }
+    const tabelaParam =
+      tabelaPrecoId && typeof tabelaPrecoId === "number"
+        ? `&tabela_preco_id=${tabelaPrecoId}`
+        : "";
     const controller = new AbortController();
     async function run() {
       setBuscandoProduto(true);
       try {
         const resp = await fetch(
-          `/api/cafe/produtos?search=${encodeURIComponent(term)}&pageSize=20`,
+          `/api/cafe/produtos?search=${encodeURIComponent(term)}&pageSize=20${tabelaParam}`,
           { signal: controller.signal },
         );
         if (!resp.ok) {
@@ -325,7 +377,7 @@ export default function FrenteCaixaCafePage() {
     }
     run();
     return () => controller.abort();
-  }, [buscaProduto]);
+  }, [buscaProduto, tabelaPrecoId]);
 
   const totalVenda = useMemo(
     () => itens.reduce((sum, i) => sum + i.quantidade * i.precoUnitarioCentavos, 0),
@@ -816,6 +868,8 @@ export default function FrenteCaixaCafePage() {
       observacoes: observacoes || undefined,
       observacao_vendedor: observacaoVendedor || undefined,
       centro_custo_id: centroCustoCafeId ?? undefined,
+      tabela_preco_id:
+        tabelaPrecoId && typeof tabelaPrecoId === "number" ? tabelaPrecoId : null,
       itens: itens.map((it) => ({
         produto_id: it.produto.id,
         quantidade: it.quantidade,
@@ -1007,7 +1061,7 @@ export default function FrenteCaixaCafePage() {
           {buscandoProduto && (
             <p className="text-[11px] text-gray-500">Buscando produtos...</p>
           )}
-          <div className="grid md:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+          <div className="grid md:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
                 {resultadoProduto.map((p) => (
                   <button
                     key={p.id}
@@ -1192,7 +1246,7 @@ export default function FrenteCaixaCafePage() {
 
       {/* Pagamento e resumo */}
       <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
-        <div className="grid md:grid-cols-3 gap-3">
+        <div className="grid md:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-medium mb-1">Tipo de operação</label>
             <select
@@ -1208,6 +1262,25 @@ export default function FrenteCaixaCafePage() {
                 Operação sem cobrança financeira.
               </p>
             )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Tabela de preco</label>
+            <select
+              value={tabelaPrecoId ?? ""}
+              onChange={(e) => {
+                const id = e.target.value ? Number(e.target.value) : "";
+                setTabelaPrecoId(id);
+              }}
+              className="w-full border rounded-md px-3 py-2 text-sm"
+              disabled={carregandoTabelasPreco}
+            >
+              <option value="">Selecione...</option>
+              {tabelasPreco.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -1259,7 +1332,7 @@ export default function FrenteCaixaCafePage() {
 
         {/* Cartao Conexao - selecao de parcelas conforme regras */}
         {isCartaoConexao && (
-          <div className="grid md:grid-cols-3 gap-3 mt-3">
+          <div className="grid md:grid-cols-4 gap-3 mt-3">
             <div>
               <label className="block text-xs font-medium mb-1">
                 Parcelas (Cartao Conexao)
@@ -1324,7 +1397,7 @@ export default function FrenteCaixaCafePage() {
 
         {/* Cartão externo (maquininha) */}
         {isCredito && (
-          <div className="md:col-span-3 grid md:grid-cols-3 gap-3 mt-3">
+          <div className="md:col-span-3 grid md:grid-cols-4 gap-3 mt-3">
             <div>
               <label className="block text-xs font-medium mb-1">Maquininha *</label>
               <select
@@ -1781,6 +1854,7 @@ function CadastroPessoaRapidaModal({
     </div>
   );
 }
+
 
 
 
