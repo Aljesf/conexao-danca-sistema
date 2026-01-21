@@ -75,9 +75,17 @@ export default async function AdminFormsTemplatesPage() {
                     {new Date(r.updated_at).toLocaleString("pt-BR")}
                   </td>
                   <td className="py-2 pr-3">
-                    <Link className="underline" href={`/admin/forms/templates/${r.id}`}>
-                      Abrir
-                    </Link>
+                    <div className="flex flex-wrap gap-3">
+                      <Link className="underline" href={`/admin/forms/templates/${r.id}`}>
+                        Abrir
+                      </Link>
+                      <Link className="underline" href={`/admin/forms/templates/${r.id}/responses`}>
+                        Respostas
+                      </Link>
+                      <Link className="underline" href={`/admin/forms/templates/${r.id}/analytics`}>
+                        Analytics
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}

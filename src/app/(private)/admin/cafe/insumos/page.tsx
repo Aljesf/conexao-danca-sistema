@@ -137,7 +137,7 @@ export default function CafeInsumosPage() {
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
-      <SectionCard title="Admin \u2014 Ballet Caf\u00e9 \u2014 Insumos">
+      <SectionCard title="Novo insumo">
         <div className="grid gap-3 md:grid-cols-3">
           <div>
             <label className="text-sm font-medium">Nome</label>
@@ -180,7 +180,7 @@ export default function CafeInsumosPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Admin \u2014 Ballet Caf\u00e9 \u2014 Insumos">
+      <SectionCard title="Lista de insumos">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="text-xs uppercase text-slate-500">

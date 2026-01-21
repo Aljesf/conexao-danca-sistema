@@ -586,6 +586,18 @@ export default function AdminFormsTemplatesEditorPage({
             <button className="rounded-md border px-3 py-2 text-sm" onClick={() => void generateLink()}>
               Gerar link
             </button>
+            <Link
+              className="rounded-md border px-3 py-2 text-sm"
+              href={`/admin/forms/templates/${templateId}/responses`}
+            >
+              Respostas
+            </Link>
+            <Link
+              className="rounded-md border px-3 py-2 text-sm"
+              href={`/admin/forms/templates/${templateId}/analytics`}
+            >
+              Analytics
+            </Link>
           </div>
         }
       />

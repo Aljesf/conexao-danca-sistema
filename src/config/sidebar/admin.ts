@@ -72,6 +72,7 @@ export const adminSidebar: SidebarSection[] = [
     items: [
       { label: "?? Banco de Perguntas", href: "/admin/forms/questions" },
       { label: "?? Formularios (Templates)", href: "/admin/forms/templates" },
+      { label: "\ud83d\udcca Resultados (Formularios)", href: "/admin/forms/results" },
     ],
   },
   {
@@ -86,7 +87,12 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🏷️ Categorias", href: "/admin/loja/categorias" },
       { label: "⚙️ Configuracoes do produto", href: "/admin/loja/cadastros" },
     ],
-  },`n  {`n    id: "admin-cafe",`n    title: "Ballet Cafe (Admin)",`n    items: [{ label: "Insumos", href: "/admin/cafe/insumos" }],`n  },
+  },
+  {
+    id: "admin-cafe",
+    title: "Ballet Cafe (Admin)",
+    items: [{ label: "Insumos", href: "/admin/cafe/insumos" }],
+  },
   {
     id: "admin-colaboradores",
     title: "👥 Colaboradores",
