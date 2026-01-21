@@ -113,7 +113,7 @@ export async function POST(req: Request) {
   const insumoIds = Array.from(new Set(itensCalc.map((it) => it.insumo_id)));
   const { data: insumos, error: insErr } = await supabase
     .from("cafe_insumos")
-    .select("id,saldo_atual")
+    .select("id,saldo_atual,custo_unitario_estimado_centavos")
     .in("id", insumoIds);
 
   if (insErr) return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
@@ -122,8 +122,10 @@ export async function POST(req: Request) {
   }
 
   const saldoMap = new Map<number, number>();
+  const custoMap = new Map<number, number>();
   for (const insumo of insumos ?? []) {
     saldoMap.set(insumo.id, Number(insumo.saldo_atual ?? 0));
+    custoMap.set(insumo.id, Number(insumo.custo_unitario_estimado_centavos ?? 0));
   }
 
   const payload: Record<string, unknown> = {
@@ -160,8 +162,21 @@ export async function POST(req: Request) {
   if (itensErr) return NextResponse.json({ ok: false, error: itensErr.message }, { status: 500 });
 
   for (const it of itensCalc) {
-    const saldoAtual = saldoMap.get(it.insumo_id) ?? 0;
-    const novoSaldo = saldoAtual + Number(it.quantidade);
+    const saldoAnterior = saldoMap.get(it.insumo_id) ?? 0;
+    const custoAnterior = custoMap.get(it.insumo_id) ?? 0;
+    const qtdCompra = Number(it.quantidade);
+    const custoCompra = Number(it.custo_unitario_centavos);
+    const novoSaldo = saldoAnterior + qtdCompra;
+
+    let novoCustoEst = custoAnterior;
+    if (Number.isFinite(custoCompra) && custoCompra > 0) {
+      if (saldoAnterior <= 0) {
+        novoCustoEst = custoCompra;
+      } else {
+        const numerador = saldoAnterior * custoAnterior + qtdCompra * custoCompra;
+        novoCustoEst = Math.round(numerador / novoSaldo);
+      }
+    }
 
     const { error: movErr } = await supabase.from("cafe_insumo_movimentos").insert({
       insumo_id: it.insumo_id,
@@ -178,11 +193,12 @@ export async function POST(req: Request) {
 
     const { error: updErr } = await supabase
       .from("cafe_insumos")
-      .update({ saldo_atual: novoSaldo })
+      .update({ saldo_atual: novoSaldo, custo_unitario_estimado_centavos: novoCustoEst })
       .eq("id", it.insumo_id);
 
     if (updErr) return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
     saldoMap.set(it.insumo_id, novoSaldo);
+    custoMap.set(it.insumo_id, novoCustoEst);
   }
 
   // TODO: registrar movimento_financeiro (DESPESA) usando o helper de lancamentos manuais.
