@@ -50,6 +50,16 @@ function formatBRLFromCentavos(value: number): string {
   return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function parseBRLToCentavos(input: string): number {
+  const clean = input
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const n = Number(clean);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100);
+}
+
 export default function CafeProdutosPage() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
@@ -58,7 +68,7 @@ export default function CafeProdutosPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const [novoNome, setNovoNome] = useState("");
-  const [novoPreco, setNovoPreco] = useState<string>("0");
+  const [novoPrecoBRL, setNovoPrecoBRL] = useState<string>("0,00");
   const [novoCategoria, setNovoCategoria] = useState("");
   const [novoUnidadeVenda, setNovoUnidadeVenda] = useState("un");
   const [novoPreparado, setNovoPreparado] = useState(true);
@@ -69,6 +79,7 @@ export default function CafeProdutosPage() {
     if (!Array.isArray(produtos)) return null;
     return produtos.find((p) => p.id === selectedProdutoId) ?? null;
   }, [produtos, selectedProdutoId]);
+  const [selectedPrecoBRL, setSelectedPrecoBRL] = useState("");
 
   const [receitaItens, setReceitaItens] = useState<ReceitaItem[]>([]);
   const [receitaLoading, setReceitaLoading] = useState(false);
@@ -122,7 +133,7 @@ export default function CafeProdutosPage() {
       for (const tabela of tabelasPreco) {
         if (!tabela.ativo) continue;
         const valor = map.has(tabela.id) ? map.get(tabela.id) : basePrice;
-        next[tabela.id] = String(valor ?? 0);
+        next[tabela.id] = formatBRLFromCentavos(Number(valor ?? 0));
       }
       setPrecosTabela(next);
     } catch (err) {
@@ -162,6 +173,14 @@ export default function CafeProdutosPage() {
     }
   }, [selectedProdutoId, tabelasPreco]);
 
+  useEffect(() => {
+    if (!selectedProduto) {
+      setSelectedPrecoBRL("");
+      return;
+    }
+    setSelectedPrecoBRL(formatBRLFromCentavos(selectedProduto.preco_venda_centavos));
+  }, [selectedProduto?.id, selectedProduto?.preco_venda_centavos]);
+
   async function criarProduto() {
     setError(null);
     setMessage(null);
@@ -169,13 +188,13 @@ export default function CafeProdutosPage() {
       setError("Nome obrigatorio.");
       return;
     }
-    const preco = Number(novoPreco.replace(",", "."));
-    if (!Number.isFinite(preco) || preco < 0) {
+    const precoCentavos = parseBRLToCentavos(novoPrecoBRL);
+    if (!Number.isFinite(precoCentavos) || precoCentavos < 0) {
       setError("Preco invalido.");
       return;
     }
 
-    const insumoDiretoId = novoInsumoDiretoId ? Number(novoInsumoDiretoId) : null;
+    const insumoDiretoId = novoPreparado ? null : (novoInsumoDiretoId ? Number(novoInsumoDiretoId) : null);
     if (novoInsumoDiretoId && !Number.isFinite(insumoDiretoId)) {
       setError("Insumo direto invalido.");
       return;
@@ -188,7 +207,7 @@ export default function CafeProdutosPage() {
         nome: novoNome,
         categoria: novoCategoria,
         unidade_venda: novoUnidadeVenda,
-        preco_venda_centavos: Math.round(preco),
+        preco_venda_centavos: precoCentavos,
         preparado: novoPreparado,
         insumo_direto_id: insumoDiretoId,
       }),
@@ -201,7 +220,7 @@ export default function CafeProdutosPage() {
     }
 
     setNovoNome("");
-    setNovoPreco("0");
+    setNovoPrecoBRL("0,00");
     setNovoCategoria("");
     setNovoUnidadeVenda("un");
     setNovoPreparado(true);
@@ -248,7 +267,19 @@ export default function CafeProdutosPage() {
     setError(null);
     setMessage(null);
 
-    const itens = receitaItens.filter((i) => i.insumo_id && i.quantidade > 0 && i.unidade.trim());
+    const seen = new Set<number>();
+    const itens = receitaItens
+      .filter((i) => i.insumo_id && i.quantidade > 0 && i.unidade.trim())
+      .filter((i) => {
+        if (seen.has(i.insumo_id)) return false;
+        seen.add(i.insumo_id);
+        return true;
+      });
+
+    if (selectedProduto?.preparado && itens.length === 0) {
+      setError("Receita obrigatoria para produto preparado.");
+      return;
+    }
     const res = await fetch(`/api/cafe/produtos/${selectedProdutoId}/receita`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -274,7 +305,7 @@ export default function CafeProdutosPage() {
       .filter((t) => t.ativo)
       .map((t) => {
         const raw = precosTabela[t.id] ?? "";
-        const value = raw.trim() === "" ? 0 : Number(raw);
+        const value = parseBRLToCentavos(raw);
         return {
           tabela_preco_id: t.id,
           preco_centavos: Math.round(value),
@@ -308,8 +339,8 @@ export default function CafeProdutosPage() {
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        title="Admin \u2014 Ballet Cafe \u2014 Produtos"
-        description="Cadastre produtos, precos e configure receitas/insumos."
+        title="Admin \u2014 Ballet Café \u2014 Produtos"
+        description="Cadastre produtos, defina preços em reais e configure receitas/insumos."
       />
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
@@ -326,11 +357,11 @@ export default function CafeProdutosPage() {
             />
           </div>
           <div>
-            <label className="text-sm font-medium">Preco (centavos)</label>
+            <label className="text-sm font-medium">Preco (R$)</label>
             <input
               className="mt-1 w-full rounded-md border p-2"
-              value={novoPreco}
-              onChange={(e) => setNovoPreco(e.target.value)}
+              value={novoPrecoBRL}
+              onChange={(e) => setNovoPrecoBRL(e.target.value)}
             />
           </div>
           <div>
@@ -351,27 +382,33 @@ export default function CafeProdutosPage() {
               placeholder="un"
             />
           </div>
-          <div>
-            <label className="text-sm font-medium">Insumo direto (opcional)</label>
-            <select
-              className="mt-1 w-full rounded-md border p-2"
-              value={novoInsumoDiretoId}
-              onChange={(e) => setNovoInsumoDiretoId(e.target.value)}
-            >
-              <option value="">--</option>
-              {insumoOptions.map((insumo) => (
-                <option key={insumo.id} value={insumo.id}>
-                  {insumo.nome}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!novoPreparado ? (
+            <div>
+              <label className="text-sm font-medium">Insumo direto (opcional)</label>
+              <select
+                className="mt-1 w-full rounded-md border p-2"
+                value={novoInsumoDiretoId}
+                onChange={(e) => setNovoInsumoDiretoId(e.target.value)}
+              >
+                <option value="">--</option>
+                {insumoOptions.map((insumo) => (
+                  <option key={insumo.id} value={insumo.id}>
+                    {insumo.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div className="flex items-end gap-2">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={novoPreparado}
-                onChange={(e) => setNovoPreparado(e.target.checked)}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setNovoPreparado(next);
+                  if (next) setNovoInsumoDiretoId("");
+                }}
               />
               Produto preparado
             </label>
@@ -433,19 +470,22 @@ export default function CafeProdutosPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Preco (centavos)</label>
+              <label className="text-sm font-medium">Preco (R$)</label>
               <input
                 className="mt-1 w-full rounded-md border p-2"
-                value={String(selectedProduto.preco_venda_centavos)}
-                onChange={(e) =>
+                value={selectedPrecoBRL}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setSelectedPrecoBRL(value);
+                  const centavos = parseBRLToCentavos(value);
                   setProdutos((prev) =>
                     prev.map((p) =>
                       p.id === selectedProduto.id
-                        ? { ...p, preco_venda_centavos: Number(e.target.value) || 0 }
+                        ? { ...p, preco_venda_centavos: centavos }
                         : p
                     )
-                  )
-                }
+                  );
+                }}
               />
             </div>
             <div>
@@ -472,29 +512,31 @@ export default function CafeProdutosPage() {
                 }
               />
             </div>
-            <div>
-              <label className="text-sm font-medium">Insumo direto</label>
-              <select
-                className="mt-1 w-full rounded-md border p-2"
-                value={selectedProduto.insumo_direto_id ?? ""}
-                onChange={(e) =>
-                  setProdutos((prev) =>
-                    prev.map((p) =>
-                      p.id === selectedProduto.id
-                        ? { ...p, insumo_direto_id: e.target.value ? Number(e.target.value) : null }
-                        : p
+            {!selectedProduto.preparado ? (
+              <div>
+                <label className="text-sm font-medium">Insumo direto</label>
+                <select
+                  className="mt-1 w-full rounded-md border p-2"
+                  value={selectedProduto.insumo_direto_id ?? ""}
+                  onChange={(e) =>
+                    setProdutos((prev) =>
+                      prev.map((p) =>
+                        p.id === selectedProduto.id
+                          ? { ...p, insumo_direto_id: e.target.value ? Number(e.target.value) : null }
+                          : p
+                      )
                     )
-                  )
-                }
-              >
-                <option value="">--</option>
-                {insumoOptions.map((insumo) => (
-                  <option key={insumo.id} value={insumo.id}>
-                    {insumo.nome}
-                  </option>
-                ))}
-              </select>
-            </div>
+                  }
+                >
+                  <option value="">--</option>
+                  {insumoOptions.map((insumo) => (
+                    <option key={insumo.id} value={insumo.id}>
+                      {insumo.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <div className="flex items-end gap-2">
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -502,7 +544,11 @@ export default function CafeProdutosPage() {
                   checked={selectedProduto.preparado}
                   onChange={(e) =>
                     setProdutos((prev) =>
-                      prev.map((p) => (p.id === selectedProduto.id ? { ...p, preparado: e.target.checked } : p))
+                      prev.map((p) =>
+                        p.id === selectedProduto.id
+                          ? { ...p, preparado: e.target.checked, insumo_direto_id: e.target.checked ? null : p.insumo_direto_id }
+                          : p
+                      )
                     )
                   }
                 />
@@ -541,7 +587,7 @@ export default function CafeProdutosPage() {
                     onChange={(e) =>
                       setPrecosTabela((prev) => ({ ...prev, [tabela.id]: e.target.value }))
                     }
-                    placeholder="Preco (centavos)"
+                    placeholder="Preco (R$)"
                     disabled={precosLoading}
                   />
                 </div>
@@ -561,8 +607,8 @@ export default function CafeProdutosPage() {
         </SectionCard>
       ) : null}
 
-      {selectedProduto ? (
-        <SectionCard title="Receita/Composicao">
+      {selectedProduto?.preparado ? (
+        <SectionCard title="Receita / Insumos">
           {receitaLoading ? <p className="text-sm text-slate-600">Carregando receita...</p> : null}
           <div className="mt-2 space-y-3">
             {receitaItens.map((item, idx) => (
