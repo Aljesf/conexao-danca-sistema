@@ -3,24 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-
-type ChoiceCount = { valor: string; rotulo: string; count: number; percent: number };
-type NumericStats = { min: number | null; max: number | null; avg: number | null; filled: number };
-
-type ByQuestion =
-  | { id: string; codigo: string; titulo: string; tipo: string; totalResponses: number; kind: "CHOICE"; counts: ChoiceCount[] }
-  | { id: string; codigo: string; titulo: string; tipo: string; totalResponses: number; kind: "MULTI"; counts: ChoiceCount[] }
-  | { id: string; codigo: string; titulo: string; tipo: string; totalResponses: number; kind: "BOOLEAN"; counts: ChoiceCount[] }
-  | { id: string; codigo: string; titulo: string; tipo: string; totalResponses: number; kind: "NUMERIC"; stats: NumericStats }
-  | { id: string; codigo: string; titulo: string; tipo: string; totalResponses: number; kind: "TEXT"; filled: number; samples: string[] }
-  | { id: string; codigo: string; titulo: string; tipo: string; totalResponses: number; kind: "BASIC"; filled: number };
+import { AnalyticsQuestionCard, type AnalyticsQuestionItem } from "@/components/forms/analytics/AnalyticsQuestionCard";
 
 type ApiPayload = {
   template_id: string;
   totalResponses: number;
   firstAt?: string | null;
   lastAt?: string | null;
-  byQuestion: ByQuestion[];
+  byQuestion: AnalyticsQuestionItem[];
   warning?: string;
   junction_error?: string;
   sourceTemplateQuestions?: string | null;
@@ -34,7 +24,7 @@ export default function TemplateAnalyticsPage() {
   const [total, setTotal] = useState<number>(0);
   const [firstAt, setFirstAt] = useState<string | null>(null);
   const [lastAt, setLastAt] = useState<string | null>(null);
-  const [byQuestion, setByQuestion] = useState<ByQuestion[]>([]);
+  const [byQuestion, setByQuestion] = useState<AnalyticsQuestionItem[]>([]);
   const [warning, setWarning] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -64,15 +54,15 @@ export default function TemplateAnalyticsPage() {
         if (!alive) return;
 
         setTotal(json.totalResponses ?? 0);
-        setByQuestion((json.byQuestion ?? []) as ByQuestion[]);
+        setByQuestion((json.byQuestion ?? []) as AnalyticsQuestionItem[]);
         setFirstAt(json.firstAt ? new Date(json.firstAt).toLocaleString("pt-BR") : null);
         setLastAt(json.lastAt ? new Date(json.lastAt).toLocaleString("pt-BR") : null);
 
         if (json.warning) {
           setWarning(
-            `Aviso: ${json.warning}${
-              json.sourceTemplateQuestions ? ` (junction: ${json.sourceTemplateQuestions})` : ""
-            }${json.junction_error ? ` - ${json.junction_error}` : ""}`
+            `Aviso: ${json.warning}${json.sourceTemplateQuestions ? ` (junction: ${json.sourceTemplateQuestions})` : ""}${
+              json.junction_error ? ` - ${json.junction_error}` : ""
+            }`
           );
         }
       } catch (e) {
@@ -122,12 +112,11 @@ export default function TemplateAnalyticsPage() {
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-2">
           <div className="text-sm text-slate-700">
-            <span className="font-medium">Total de respostas:</span>{" "}
-            {loading ? "Carregando..." : total}
+            <span className="font-medium">Total de respostas:</span> {loading ? "Carregando..." : total}
           </div>
           <div className="text-sm text-slate-600">
             <span className="font-medium">Primeira:</span> {firstAt ?? "-"}{" "}
-            <span className="mx-2">•</span>
+            <span className="mx-2">-</span>
             <span className="font-medium">Ultima:</span> {lastAt ?? "-"}
           </div>
         </div>
@@ -161,71 +150,7 @@ export default function TemplateAnalyticsPage() {
           )}
 
           {!loading && !errorMsg && byQuestion.map((q) => (
-            <div key={q.id} className="rounded-2xl border bg-white p-6 shadow-sm space-y-3">
-              <div>
-                <div className="text-base font-semibold text-slate-900">{q.titulo}</div>
-                <div className="text-xs text-slate-500">{q.codigo} • {q.tipo}</div>
-              </div>
-
-              {(q.kind === "CHOICE" || q.kind === "MULTI" || q.kind === "BOOLEAN") ? (
-                <div className="space-y-2">
-                  {q.counts.map((c) => (
-                    <div key={c.valor} className="flex items-center justify-between gap-3 text-sm">
-                      <div className="text-slate-700">{c.rotulo}</div>
-                      <div className="text-slate-600">
-                        {c.count} ({c.percent}%)
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {q.kind === "NUMERIC" ? (
-                <div className="grid gap-3 sm:grid-cols-4 text-sm">
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-slate-500">Min</div>
-                    <div className="font-medium">{q.stats.min ?? "-"}</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-slate-500">Max</div>
-                    <div className="font-medium">{q.stats.max ?? "-"}</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-slate-500">Media</div>
-                    <div className="font-medium">{q.stats.avg ?? "-"}</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-slate-500">Preenchidas</div>
-                    <div className="font-medium">{q.stats.filled}</div>
-                  </div>
-                </div>
-              ) : null}
-
-              {q.kind === "TEXT" ? (
-                <div className="space-y-2">
-                  <div className="text-sm text-slate-600">
-                    Preenchidas: <span className="font-medium">{q.filled}</span>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto rounded-lg border p-3 text-sm text-slate-700 space-y-2">
-                    {q.samples.length === 0 ? (
-                      <div className="text-slate-500">Sem respostas textuais registradas.</div>
-                    ) : (
-                      q.samples.map((t, idx) => (
-                        <div key={`${idx}-${t.slice(0, 12)}`} className="border-b last:border-b-0 pb-2 last:pb-0">
-                          {t}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
-              {q.kind === "BASIC" ? (
-                <div className="text-sm text-slate-600">
-                  Respostas registradas: <span className="font-medium">{q.filled}</span>
-                </div>
-              ) : null}
-            </div>
+            <AnalyticsQuestionCard key={q.id} item={q} />
           ))}
         </div>
       </div>

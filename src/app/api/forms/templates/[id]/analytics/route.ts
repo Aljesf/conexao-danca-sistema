@@ -100,6 +100,28 @@ function pickId(row: Record<string, unknown>, candidates: string[]): string | nu
   return null;
 }
 
+function normalizeToken(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+function parseMultiFromAnswer(a: AnswerRow): string[] {
+  const vj = a["value_json"] ?? a["valor_json"];
+  if (Array.isArray(vj)) {
+    return vj
+      .map((x) => (typeof x === "string" ? x : ""))
+      .map(normalizeToken)
+      .filter((x) => x.length > 0);
+  }
+
+  const s = pickString(a as Record<string, unknown>);
+  if (!s) return [];
+
+  return s
+    .split(/[,;\n]/g)
+    .map(normalizeToken)
+    .filter((x) => x.length > 0);
+}
+
 function safeAvg(nums: number[]): number | null {
   if (nums.length === 0) return null;
   const sum = nums.reduce((acc, n) => acc + n, 0);
@@ -221,21 +243,21 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   let selectedOptions: SelectedOptionRow[] = [];
   if (submissionIds.length > 0) {
-    const { data: sel, error: eSel } = await supabase
+    const { data: selByQ, error: eSelByQ } = await supabase
       .from("form_response_selected_options")
       .select("*")
-      .in("submission_id", submissionIds);
+      .in("question_id", questionIds);
 
-    if (!eSel) {
-      selectedOptions = (sel ?? []) as SelectedOptionRow[];
+    if (!eSelByQ) {
+      selectedOptions = (selByQ ?? []) as SelectedOptionRow[];
     } else {
-      const { data: sel2, error: eSel2 } = await supabase
+      const { data: selByQ2, error: eSelByQ2 } = await supabase
         .from("form_response_selected_options")
         .select("*")
-        .in("form_submission_id", submissionIds);
+        .in("form_question_id", questionIds);
 
-      if (!eSel2) {
-        selectedOptions = (sel2 ?? []) as SelectedOptionRow[];
+      if (!eSelByQ2) {
+        selectedOptions = (selByQ2 ?? []) as SelectedOptionRow[];
       } else {
         selectedOptions = [];
       }
@@ -290,16 +312,71 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       const filled = qAnswers.length;
 
       if (q.tipo === "single_choice" || q.tipo === "multi_choice") {
-        const counts = new Map<string, number>();
+        const countsByOptionId = new Map<string, number>();
+        const totalBase = totalResponses;
+
         for (const r of qSelected) {
+          const sid = soSubmissionId(r);
+          if (sid && !submissionIds.includes(sid)) continue;
+
           const oid = soOptionId(r);
           if (!oid) continue;
-          counts.set(oid, (counts.get(oid) ?? 0) + 1);
+          countsByOptionId.set(oid, (countsByOptionId.get(oid) ?? 0) + 1);
         }
 
-        const totalBase = totalResponses;
+        if (countsByOptionId.size === 0 && qAnswers.length > 0 && qOptions.length > 0) {
+          const byToken = new Map<string, OptionRow>();
+          for (const o of qOptions) {
+            byToken.set(normalizeToken(o.valor), o);
+            byToken.set(normalizeToken(o.rotulo), o);
+          }
+
+          if (q.tipo === "single_choice") {
+            const seenSubmission = new Set<string>();
+            for (const a of qAnswers) {
+              const sid =
+                (typeof a["submission_id"] === "string" ? (a["submission_id"] as string) : null) ??
+                (typeof a["form_submission_id"] === "string"
+                  ? (a["form_submission_id"] as string)
+                  : null);
+
+              if (sid && seenSubmission.has(sid)) continue;
+              if (sid) seenSubmission.add(sid);
+
+              const v = pickString(a as Record<string, unknown>);
+              if (!v) continue;
+
+              const opt = byToken.get(normalizeToken(v));
+              if (!opt) continue;
+
+              countsByOptionId.set(opt.id, (countsByOptionId.get(opt.id) ?? 0) + 1);
+            }
+          } else {
+            const seen = new Set<string>();
+            for (const a of qAnswers) {
+              const sid =
+                (typeof a["submission_id"] === "string" ? (a["submission_id"] as string) : null) ??
+                (typeof a["form_submission_id"] === "string"
+                  ? (a["form_submission_id"] as string)
+                  : null);
+
+              const items = parseMultiFromAnswer(a);
+              for (const item of items) {
+                const opt = byToken.get(item);
+                if (!opt) continue;
+
+                const dedupKey = sid ? `${sid}|${opt.id}` : opt.id;
+                if (seen.has(dedupKey)) continue;
+                seen.add(dedupKey);
+
+                countsByOptionId.set(opt.id, (countsByOptionId.get(opt.id) ?? 0) + 1);
+              }
+            }
+          }
+        }
+
         const breakdown = qOptions.map((o) => {
-          const c = counts.get(o.id) ?? 0;
+          const c = countsByOptionId.get(o.id) ?? 0;
           return {
             option_id: o.id,
             valor: o.valor,
@@ -329,6 +406,9 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
         if (qSelected.length > 0 && qOptions.length > 0) {
           const counts = new Map<string, number>();
           for (const r of qSelected) {
+            const sid = soSubmissionId(r);
+            if (sid && !submissionIds.includes(sid)) continue;
+
             const oid = soOptionId(r);
             if (!oid) continue;
             counts.set(oid, (counts.get(oid) ?? 0) + 1);
@@ -361,8 +441,22 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
           };
         }
 
-        const yes = qAnswers.filter((a) => pickBoolean(a) === true).length;
-        const no = qAnswers.filter((a) => pickBoolean(a) === false).length;
+        const seenSubmission = new Set<string>();
+        const bools = qAnswers
+          .map((a) => {
+            const sid =
+              (typeof a["submission_id"] === "string" ? (a["submission_id"] as string) : null) ??
+              (typeof a["form_submission_id"] === "string"
+                ? (a["form_submission_id"] as string)
+                : null);
+
+            if (sid) seenSubmission.add(sid);
+            return pickBoolean(a as Record<string, unknown>);
+          })
+          .filter((v): v is boolean => typeof v === "boolean");
+
+        const yes = bools.filter((v) => v === true).length;
+        const no = bools.filter((v) => v === false).length;
 
         return {
           id: q.id,
@@ -371,13 +465,23 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
           tipo: q.tipo,
           ordem: qOrder,
           totalResponses,
-          filled,
+          filled: seenSubmission.size,
           analytics: {
             kind: "boolean",
             total: totalResponses,
             opcoes: [
-              { valor: "SIM", rotulo: "Sim", quantidade: yes, percentual: percent(yes, totalResponses) },
-              { valor: "NAO", rotulo: "Nao", quantidade: no, percentual: percent(no, totalResponses) },
+              {
+                valor: "SIM",
+                rotulo: "Sim",
+                quantidade: yes,
+                percentual: percent(yes, totalResponses),
+              },
+              {
+                valor: "NAO",
+                rotulo: "Nao",
+                quantidade: no,
+                percentual: percent(no, totalResponses),
+              },
             ],
           },
         };

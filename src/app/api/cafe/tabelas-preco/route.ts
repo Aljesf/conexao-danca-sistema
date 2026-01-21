@@ -18,11 +18,14 @@ export async function GET(req: Request) {
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("cafe_tabelas_preco")
-    .select("*")
+    .select("id,codigo,nome,is_default,ativo,ordem")
     .order("ordem", { ascending: true })
     .order("nome", { ascending: true });
 
-  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  if (error) {
+    console.error("Erro ao carregar tabelas de preco:", error);
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
 

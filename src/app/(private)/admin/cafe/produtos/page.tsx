@@ -110,9 +110,21 @@ export default function CafeProdutosPage() {
   }
 
   async function loadTabelasPreco() {
-    const res = await fetch("/api/cafe/tabelas-preco");
-    const json = (await res.json()) as { ok?: boolean; data?: TabelaPreco[] };
-    setTabelasPreco(Array.isArray(json?.data) ? json.data : []);
+    try {
+      const res = await fetch("/api/cafe/tabelas-preco");
+      const json = (await res.json()) as { ok?: boolean; data?: TabelaPreco[]; error?: string };
+
+      if (!res.ok || !json.ok) {
+        console.warn("Falha ao carregar tabelas de preco:", json?.error);
+        setTabelasPreco([]);
+        return;
+      }
+
+      setTabelasPreco(Array.isArray(json?.data) ? json.data : []);
+    } catch (err) {
+      console.error("Erro inesperado ao carregar tabelas de preco", err);
+      setTabelasPreco([]);
+    }
   }
 
   async function loadPrecos(produtoId: number) {
