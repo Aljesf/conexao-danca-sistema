@@ -22,12 +22,45 @@ type SubmissionRow = {
   submitted_at: string | null;
 };
 
-type AnswerRow = {
-  submission_id: string;
+type OptionRow = {
+  id: string;
   question_id: string;
+  valor: string;
+  rotulo: string;
+  ordem: number | null;
+  ativo?: boolean | null;
+};
+
+type AnswerRow = {
+  submission_id?: string;
+  form_submission_id?: string;
+  question_id?: string;
 } & Record<string, unknown>;
 
-function pickBoolean(a: AnswerRow): boolean | null {
+type SelectedOptionRow = Record<string, unknown>;
+
+function percent(count: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((count / total) * 1000) / 10;
+}
+
+function pickString(a: Record<string, unknown>): string | null {
+  const candidates = [
+    "value_text",
+    "valor_texto",
+    "texto",
+    "text_value",
+    "string_value",
+    "value",
+  ];
+  for (const key of candidates) {
+    const v = a[key];
+    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+  }
+  return null;
+}
+
+function pickBoolean(a: Record<string, unknown>): boolean | null {
   const candidates = [
     "value_boolean",
     "value_bool",
@@ -36,7 +69,6 @@ function pickBoolean(a: AnswerRow): boolean | null {
     "boolean_value",
     "bool_value",
   ];
-
   for (const key of candidates) {
     const v = a[key];
     if (typeof v === "boolean") return v;
@@ -44,7 +76,7 @@ function pickBoolean(a: AnswerRow): boolean | null {
   return null;
 }
 
-function pickNumber(a: AnswerRow): number | null {
+function pickNumber(a: Record<string, unknown>): number | null {
   const candidates = [
     "value_number",
     "value_num",
@@ -53,7 +85,6 @@ function pickNumber(a: AnswerRow): number | null {
     "number_value",
     "num_value",
   ];
-
   for (const key of candidates) {
     const v = a[key];
     if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -61,9 +92,18 @@ function pickNumber(a: AnswerRow): number | null {
   return null;
 }
 
-function percent(count: number, total: number): number {
-  if (total <= 0) return 0;
-  return Math.round((count / total) * 1000) / 10;
+function pickId(row: Record<string, unknown>, candidates: string[]): string | null {
+  for (const k of candidates) {
+    const v = row[k];
+    if (typeof v === "string" && v.length > 0) return v;
+  }
+  return null;
+}
+
+function safeAvg(nums: number[]): number | null {
+  if (nums.length === 0) return null;
+  const sum = nums.reduce((acc, n) => acc + n, 0);
+  return sum / nums.length;
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
@@ -90,18 +130,14 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const submissionIds = submissions.map((s) => s.id);
 
   const totalResponses = submissions.length;
-  const firstAt =
-    submissions
-      .map((s) => s.submitted_at ?? s.created_at)
-      .filter((v): v is string => Boolean(v))
-      .sort()[0] ?? null;
 
-  const lastAt =
-    submissions
-      .map((s) => s.submitted_at ?? s.created_at)
-      .filter((v): v is string => Boolean(v))
-      .sort()
-      .slice(-1)[0] ?? null;
+  const timeline = submissions
+    .map((s) => s.submitted_at ?? s.created_at)
+    .filter((v): v is string => Boolean(v))
+    .sort();
+
+  const firstAt = timeline[0] ?? null;
+  const lastAt = timeline.length > 0 ? timeline[timeline.length - 1] : null;
 
   const { data: tqs, error: eTqs } = await supabase
     .from("form_template_questions")
@@ -118,7 +154,6 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const templateQuestionsRaw = (tqs ?? []) as TemplateQuestionRow[];
   const templateQuestions = templateQuestionsRaw.filter((r) => r.ativo !== false);
-
   const questionIds = templateQuestions.map((r) => r.question_id);
 
   if (questionIds.length === 0) {
@@ -146,6 +181,28 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const questions = (qs ?? []) as QuestionRow[];
 
+  const { data: optRows, error: eOpts } = await supabase
+    .from("form_question_options")
+    .select("id, question_id, valor, rotulo, ordem, ativo")
+    .in("question_id", questionIds)
+    .order("ordem", { ascending: true });
+
+  if (eOpts) {
+    return NextResponse.json(
+      { error: "Erro ao buscar opcoes das perguntas", details: eOpts.message },
+      { status: 500 }
+    );
+  }
+
+  const options = (optRows ?? []) as OptionRow[];
+  const optionsByQuestion = new Map<string, OptionRow[]>();
+  for (const o of options) {
+    if (o.ativo === false) continue;
+    const list = optionsByQuestion.get(o.question_id) ?? [];
+    list.push(o);
+    optionsByQuestion.set(o.question_id, list);
+  }
+
   let answers: AnswerRow[] = [];
   if (submissionIds.length > 0) {
     const { data: ans, error: eAns } = await supabase
@@ -159,54 +216,231 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
         { status: 500 }
       );
     }
-
     answers = (ans ?? []) as AnswerRow[];
+  }
+
+  let selectedOptions: SelectedOptionRow[] = [];
+  if (submissionIds.length > 0) {
+    const { data: sel, error: eSel } = await supabase
+      .from("form_response_selected_options")
+      .select("*")
+      .in("submission_id", submissionIds);
+
+    if (!eSel) {
+      selectedOptions = (sel ?? []) as SelectedOptionRow[];
+    } else {
+      const { data: sel2, error: eSel2 } = await supabase
+        .from("form_response_selected_options")
+        .select("*")
+        .in("form_submission_id", submissionIds);
+
+      if (!eSel2) {
+        selectedOptions = (sel2 ?? []) as SelectedOptionRow[];
+      } else {
+        selectedOptions = [];
+      }
+    }
+  }
+
+  const soSubmissionKeyCandidates = ["submission_id", "form_submission_id"];
+  const soQuestionKeyCandidates = ["question_id", "form_question_id"];
+  const soOptionKeyCandidates = [
+    "option_id",
+    "question_option_id",
+    "selected_option_id",
+    "form_question_option_id",
+  ];
+
+  function soSubmissionId(row: SelectedOptionRow): string | null {
+    return pickId(row, soSubmissionKeyCandidates);
+  }
+  function soQuestionId(row: SelectedOptionRow): string | null {
+    return pickId(row, soQuestionKeyCandidates);
+  }
+  function soOptionId(row: SelectedOptionRow): string | null {
+    return pickId(row, soOptionKeyCandidates);
+  }
+
+  const soByQuestion = new Map<string, SelectedOptionRow[]>();
+  for (const r of selectedOptions) {
+    const qid = soQuestionId(r);
+    if (!qid) continue;
+    const list = soByQuestion.get(qid) ?? [];
+    list.push(r);
+    soByQuestion.set(qid, list);
+  }
+
+  const ansByQuestion = new Map<string, AnswerRow[]>();
+  for (const a of answers) {
+    const qid = (typeof a.question_id === "string" ? a.question_id : null) ?? null;
+    if (!qid) continue;
+    const list = ansByQuestion.get(qid) ?? [];
+    list.push(a);
+    ansByQuestion.set(qid, list);
   }
 
   const byQuestion = questions
     .map((q) => {
-      const qAnswers = answers.filter((a) => a.question_id === q.id);
+      const qOrder = templateQuestions.find((t) => t.question_id === q.id)?.ordem ?? 0;
 
-      if (q.tipo === "BOOLEAN") {
-        const yes = qAnswers.filter((a) => pickBoolean(a) === true).length;
-        const no = qAnswers.filter((a) => pickBoolean(a) === false).length;
+      const qAnswers = ansByQuestion.get(q.id) ?? [];
+      const qSelected = soByQuestion.get(q.id) ?? [];
+      const qOptions = optionsByQuestion.get(q.id) ?? [];
+
+      const filled = qAnswers.length;
+
+      if (q.tipo === "single_choice" || q.tipo === "multi_choice") {
+        const counts = new Map<string, number>();
+        for (const r of qSelected) {
+          const oid = soOptionId(r);
+          if (!oid) continue;
+          counts.set(oid, (counts.get(oid) ?? 0) + 1);
+        }
+
+        const totalBase = totalResponses;
+        const breakdown = qOptions.map((o) => {
+          const c = counts.get(o.id) ?? 0;
+          return {
+            option_id: o.id,
+            valor: o.valor,
+            rotulo: o.rotulo,
+            quantidade: c,
+            percentual: percent(c, totalBase),
+          };
+        });
+
         return {
-          ...q,
-          kind: "BOOLEAN",
+          id: q.id,
+          codigo: q.codigo,
+          titulo: q.titulo,
+          tipo: q.tipo,
+          ordem: qOrder,
           totalResponses,
-          counts: [
-            { valor: "SIM", rotulo: "Sim", count: yes, percent: percent(yes, totalResponses) },
-            { valor: "NAO", rotulo: "Nao", count: no, percent: percent(no, totalResponses) },
-          ],
+          filled,
+          analytics: {
+            kind: q.tipo,
+            total: totalBase,
+            opcoes: breakdown,
+          },
         };
       }
 
-      if (q.tipo === "ESCALA" || q.tipo === "NUMERO") {
+      if (q.tipo === "boolean") {
+        if (qSelected.length > 0 && qOptions.length > 0) {
+          const counts = new Map<string, number>();
+          for (const r of qSelected) {
+            const oid = soOptionId(r);
+            if (!oid) continue;
+            counts.set(oid, (counts.get(oid) ?? 0) + 1);
+          }
+          const totalBase = totalResponses;
+          const breakdown = qOptions.map((o) => {
+            const c = counts.get(o.id) ?? 0;
+            return {
+              option_id: o.id,
+              valor: o.valor,
+              rotulo: o.rotulo,
+              quantidade: c,
+              percentual: percent(c, totalBase),
+            };
+          });
+
+          return {
+            id: q.id,
+            codigo: q.codigo,
+            titulo: q.titulo,
+            tipo: q.tipo,
+            ordem: qOrder,
+            totalResponses,
+            filled,
+            analytics: {
+              kind: "boolean",
+              total: totalBase,
+              opcoes: breakdown,
+            },
+          };
+        }
+
+        const yes = qAnswers.filter((a) => pickBoolean(a) === true).length;
+        const no = qAnswers.filter((a) => pickBoolean(a) === false).length;
+
+        return {
+          id: q.id,
+          codigo: q.codigo,
+          titulo: q.titulo,
+          tipo: q.tipo,
+          ordem: qOrder,
+          totalResponses,
+          filled,
+          analytics: {
+            kind: "boolean",
+            total: totalResponses,
+            opcoes: [
+              { valor: "SIM", rotulo: "Sim", quantidade: yes, percentual: percent(yes, totalResponses) },
+              { valor: "NAO", rotulo: "Nao", quantidade: no, percentual: percent(no, totalResponses) },
+            ],
+          },
+        };
+      }
+
+      if (q.tipo === "number" || q.tipo === "scale") {
         const nums = qAnswers
           .map((a) => pickNumber(a))
           .filter((n): n is number => typeof n === "number");
 
-        const sum = nums.reduce((acc, n) => acc + n, 0);
-        const avg = nums.length > 0 ? sum / nums.length : null;
+        const avg = safeAvg(nums);
 
         return {
-          ...q,
-          kind: "NUMERIC",
+          id: q.id,
+          codigo: q.codigo,
+          titulo: q.titulo,
+          tipo: q.tipo,
+          ordem: qOrder,
           totalResponses,
-          filled: qAnswers.length,
-          avg,
-          min: nums.length > 0 ? Math.min(...nums) : null,
-          max: nums.length > 0 ? Math.max(...nums) : null,
+          filled: nums.length,
+          analytics: {
+            kind: q.tipo,
+            total: nums.length,
+            media: avg,
+            min: nums.length > 0 ? Math.min(...nums) : null,
+            max: nums.length > 0 ? Math.max(...nums) : null,
+          },
         };
       }
 
-      return { ...q, kind: "BASIC", totalResponses, filled: qAnswers.length };
+      if (q.tipo === "text" || q.tipo === "textarea") {
+        const texts = qAnswers
+          .map((a) => pickString(a))
+          .filter((t): t is string => typeof t === "string" && t.length > 0);
+
+        return {
+          id: q.id,
+          codigo: q.codigo,
+          titulo: q.titulo,
+          tipo: q.tipo,
+          ordem: qOrder,
+          totalResponses,
+          filled: texts.length,
+          analytics: {
+            kind: q.tipo,
+            total: texts.length,
+            respostas: texts,
+          },
+        };
+      }
+
+      return {
+        id: q.id,
+        codigo: q.codigo,
+        titulo: q.titulo,
+        tipo: q.tipo,
+        ordem: qOrder,
+        totalResponses,
+        filled,
+        analytics: { kind: "unknown", total: filled },
+      };
     })
-    .sort((a, b) => {
-      const oa = templateQuestions.find((t) => t.question_id === a.id)?.ordem ?? 0;
-      const ob = templateQuestions.find((t) => t.question_id === b.id)?.ordem ?? 0;
-      return oa - ob;
-    });
+    .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
 
   return NextResponse.json({
     template_id: templateId,
