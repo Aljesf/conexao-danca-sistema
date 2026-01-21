@@ -91,7 +91,11 @@ export const adminSidebar: SidebarSection[] = [
   {
     id: "admin-cafe",
     title: "Ballet Cafe (Admin)",
-    items: [{ label: "Insumos", href: "/admin/cafe/insumos" }],
+    items: [
+      { label: "Configuracoes", href: "/admin/cafe" },
+      { label: "Insumos", href: "/admin/cafe/insumos" },
+      { label: "Produtos", href: "/admin/cafe/produtos" },
+    ],
   },
   {
     id: "admin-colaboradores",

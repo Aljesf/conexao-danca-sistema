@@ -11,7 +11,6 @@ export const cafeSidebar: SidebarSection[] = [
     title: "Operacao",
     items: [
       { label: "Caixa", href: "/cafe/vendas" },
-      { label: "Produtos", href: "/cafe/produtos" },
     ],
   },
 ];

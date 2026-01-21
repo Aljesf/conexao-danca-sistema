@@ -1,38 +1,21 @@
-﻿"use client";
-
-import Link from "next/link";
-import PageHeader from "@/components/layout/PageHeader";
-import SectionCard from "@/components/layout/SectionCard";
-
 export default function CafeHomePage() {
   return (
-    <div className="p-6 space-y-6">
-      <PageHeader
-        title="Ballet Caf\u00e9"
-        description="Painel do cafe: vendas e produtos."
-      />
-
-      <SectionCard title="Atalhos principais">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <Link className="rounded-md border p-4 hover:bg-slate-50" href="/cafe/vendas">
-            <div className="text-sm font-semibold">Caixa e vendas</div>
-            <div className="mt-1 text-xs text-slate-600">Registrar vendas e pagamentos.</div>
-          </Link>
-          <Link className="rounded-md border p-4 hover:bg-slate-50" href="/cafe/produtos">
-            <div className="text-sm font-semibold">Produtos e receitas</div>
-            <div className="mt-1 text-xs text-slate-600">Cardapio e composicao dos produtos.</div>
-          </Link>
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white p-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold">Ballet Cafe</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Operacao do Cafe: caixa e visao rapida do dia (dashboard basico sera evoluido).
+          </p>
         </div>
-      </SectionCard>
 
-      <SectionCard title="Fluxo rapido">
-        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
-          <li>Cadastre produtos e associe receitas para baixar insumos automaticamente.</li>
-          <li>Registre vendas no caixa e acompanhe o status do pagamento.</li>
-        </ul>
-      </SectionCard>
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <div className="text-sm font-semibold">Dashboard</div>
+          <p className="mt-1 text-sm text-slate-600">
+            (MVP) Em breve: total vendido hoje, quantidade de vendas e top produtos.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
-
-
