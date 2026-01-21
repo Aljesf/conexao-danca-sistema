@@ -12,6 +12,8 @@ type CompraRow = {
   data_compra: string;
   onde_comprei: string;
   valor_total_centavos: number;
+  status?: string | null;
+  cancelada_em?: string | null;
 };
 type Item = {
   insumo_id: number | null;
@@ -166,6 +168,31 @@ export default function AdminCafeComprasPage() {
     setCategoriaId("");
     setItens([{ insumo_id: null, quantidade: "", valor_total_brl: "", validade: "" }]);
     setMessage("Compra registrada.");
+    await loadBase();
+  }
+
+  async function cancelarCompra(compraId: number) {
+    setError(null);
+    setMessage(null);
+
+    const ok = window.confirm("Deseja cancelar esta compra? Essa acao reverte o estoque.");
+    if (!ok) return;
+
+    const motivo = window.prompt("Motivo do cancelamento (opcional):", "") ?? "";
+
+    const res = await fetch(`/api/cafe/compras/${compraId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motivo }),
+    });
+
+    if (!res.ok) {
+      const json = (await res.json()) as { error?: string };
+      setError(json.error ?? "Falha ao cancelar compra.");
+      return;
+    }
+
+    setMessage("Compra cancelada.");
     await loadBase();
   }
 
@@ -326,6 +353,8 @@ export default function AdminCafeComprasPage() {
                 <th className="px-2 py-2 text-left">Data</th>
                 <th className="px-2 py-2 text-left">Onde</th>
                 <th className="px-2 py-2 text-right">Total</th>
+                <th className="px-2 py-2 text-left">Status</th>
+                <th className="px-2 py-2 text-right">Acoes</th>
               </tr>
             </thead>
             <tbody>
@@ -334,11 +363,21 @@ export default function AdminCafeComprasPage() {
                   <td className="px-2 py-2">{c.data_compra}</td>
                   <td className="px-2 py-2">{c.onde_comprei}</td>
                   <td className="px-2 py-2 text-right">{formatBRLFromCentavos(c.valor_total_centavos)}</td>
+                  <td className="px-2 py-2">{c.status ?? "ATIVA"}</td>
+                  <td className="px-2 py-2 text-right">
+                    <button
+                      className="text-sm text-red-600 hover:underline disabled:text-slate-400"
+                      onClick={() => void cancelarCompra(c.id)}
+                      disabled={c.status === "CANCELADA"}
+                    >
+                      Cancelar
+                    </button>
+                  </td>
                 </tr>
               ))}
               {compras.length === 0 && !loading ? (
                 <tr className="border-t">
-                  <td className="px-2 py-3 text-slate-500" colSpan={3}>
+                  <td className="px-2 py-3 text-slate-500" colSpan={5}>
                     Nenhuma compra registrada.
                   </td>
                 </tr>

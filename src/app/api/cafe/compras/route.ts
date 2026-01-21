@@ -31,12 +31,21 @@ export async function GET(req: Request) {
   if (denied) return denied as unknown as NextResponse;
 
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase
+  const url = new URL(req.url);
+  const includeCanceladas = url.searchParams.get("include_canceladas") === "true";
+
+  let query = supabase
     .from("cafe_compras")
-    .select("id,data_compra,onde_comprei,valor_total_centavos,created_at")
+    .select("id,data_compra,onde_comprei,valor_total_centavos,created_at,status,cancelada_em")
     .eq("centro_custo_id", 3)
     .order("data_compra", { ascending: false })
     .limit(50);
+
+  if (!includeCanceladas) {
+    query = query.eq("status", "ATIVA");
+  }
+
+  const { data, error } = await query;
 
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, data }, { status: 200 });
