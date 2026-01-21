@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 import { formatDateTimeISO } from "@/lib/formatters/date";
 import EmitirDocumentosClient from "./EmitirDocumentosClient";
 
@@ -33,7 +33,7 @@ export default async function Page({
     return <EmitirDocumentosClient matriculaId={matriculaId} />;
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const supabase = await getSupabaseServer();
   const { data: emitidos, error } = await supabase
     .from("documentos_emitidos")
     .select("id, matricula_id, contrato_modelo_id, status_assinatura, created_at")
