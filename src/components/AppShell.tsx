@@ -11,6 +11,8 @@ import UserBadge from "./UserBadge";
 type Props = {
   children: ReactNode;
   systemSettings?: SystemSettings | null;
+  user?: { id: string; email: string | null };
+  logoutAction?: () => Promise<void>;
 };
 
 type SystemSettings = {
@@ -33,7 +35,7 @@ type GlobalSearchResults = {
   matriculas: Array<{ id: number; pessoa_id: number | null; ano_referencia: number | null; status: string | null }>;
 };
 
-export default function AppShell({ children, systemSettings }: Props) {
+export default function AppShell({ children, systemSettings, user, logoutAction }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedTerm, setDebouncedTerm] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -256,7 +258,7 @@ export default function AppShell({ children, systemSettings }: Props) {
             </form>
             <div className="flex shrink-0 items-center gap-3">
               <ContextSelector />
-              <UserBadge />
+              <UserBadge user={user} logoutAction={logoutAction} />
             </div>
           </div>
         </header>
