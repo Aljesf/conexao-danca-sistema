@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type DashboardKpisRow = {
   total_pessoas: number;
@@ -39,13 +39,11 @@ type DashboardTrendsRow = {
   alunos_saldo_prev30d: number;
 };
 
-export async function GET() {
-  const supabase = await createClient();
+export async function GET(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError || !auth?.user) {
-    return NextResponse.json({ error: "nao_autenticado" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { data: kpisData, error: kpisError } = await supabase
     .from("vw_escola_dashboard_kpis")
@@ -106,3 +104,5 @@ export async function GET() {
     { status: 200 },
   );
 }
+
+

@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 function parseId(param: string): number | null {
   const id = Number(param);
@@ -7,7 +7,7 @@ function parseId(param: string): number | null {
   return id;
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string; turmaId: string }> }) {
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string; turmaId: string }> }) {
   const { id, turmaId: turmaIdRaw } = await ctx.params;
   const cursoLivreId = parseId(id);
   const turmaId = parseId(turmaIdRaw);
@@ -16,14 +16,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string;
     return NextResponse.json({ error: "parametros_invalidos" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { data: turma, error: turmaError } = await supabase
     .from("turmas")

@@ -1,9 +1,8 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type LiquidacaoModo = "PAGAR_AGORA" | "LANCAR_NO_CARTAO" | "ADIAR_EXCECAO";
 
@@ -79,15 +78,15 @@ function asInt(n: unknown): number | null {
 }
 
 async function resolverMensalidadePorTurma(params: {
-  req: Request;
+  request: Request;
   cookieHeader: string;
   alunoId: number;
   turmaId: number;
   anoRef: number;
   tierOrdemOverride: number;
 }): Promise<{ valor_centavos: number; descricao: string | null }> {
-  const { req, cookieHeader, alunoId, turmaId, anoRef, tierOrdemOverride } = params;
-  const resolveUrl = new URL("/api/matriculas/precos/resolver", req.url);
+  const { request, cookieHeader, alunoId, turmaId, anoRef, tierOrdemOverride } = params;
+  const resolveUrl = new URL("/api/matriculas/precos/resolver", request.url);
   resolveUrl.searchParams.set("aluno_id", String(alunoId));
   resolveUrl.searchParams.set("alvo_tipo", "TURMA");
   resolveUrl.searchParams.set("alvo_id", String(turmaId));
@@ -120,13 +119,13 @@ async function resolverMensalidadePorTurma(params: {
 
 async function montarComposicaoMensalidade(params: {
   supabase: SupabaseAdminClient;
-  req: Request;
+  request: Request;
   cookieHeader: string;
   matriculaId: number;
   alunoId: number;
   anoRef: number;
 }): Promise<{ itens: ComposicaoItem[]; totalCentavos: number }> {
-  const { supabase, req, cookieHeader, matriculaId, alunoId, anoRef } = params;
+  const { supabase, request, cookieHeader, matriculaId, alunoId, anoRef } = params;
 
   const { data: taRows, error: taErr } = await supabase
     .from("turma_aluno")
@@ -194,7 +193,7 @@ async function montarComposicaoMensalidade(params: {
       `Turma ${turmaId}`;
 
     const resolved = await resolverMensalidadePorTurma({
-      req,
+      request,
       cookieHeader,
       alunoId,
       turmaId,
@@ -776,24 +775,19 @@ async function gerarCobrancasCartaoManual(params: {
   return { cobrancas, lancamentos };
 }
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
-  // Next.js 15: cookies() is async
-  const cookieStore = await cookies();
-  const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-  const cookieHeader = cookieStore.toString();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const { data: auth } = await supabaseAuth.auth.getUser();
-  if (!auth?.user) {
-    return NextResponse.json({ error: "nao_autenticado" }, { status: 401 });
-  }
+  const cookieHeader = request.headers.get("cookie") ?? "";
 
   const supabase = getSupabaseAdmin();
 
   let body: Payload;
   try {
-    body = (await req.json()) as Payload;
+    body = (await request.json()) as Payload;
   } catch {
     return NextResponse.json({ error: "payload_invalido" }, { status: 400 });
   }
@@ -995,7 +989,7 @@ export async function POST(req: Request) {
 
         const composicao = await montarComposicaoMensalidade({
           supabase,
-          req,
+          request,
           cookieHeader,
           matriculaId: matricula.id,
           alunoId,
@@ -1393,7 +1387,7 @@ export async function POST(req: Request) {
     try {
       composicao = await montarComposicaoMensalidade({
         supabase,
-        req,
+        request,
         cookieHeader,
         matriculaId: matricula.id,
         alunoId,
@@ -1606,3 +1600,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ error: "modo_invalido" }, { status: 400 });
 }
+
+

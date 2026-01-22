@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 function clampDays(raw: string | null, def = 30) {
   const n = raw ? Number(raw) : def;
@@ -14,18 +14,14 @@ function csvEscape(value: unknown) {
   return needs ? `"${escaped}"` : escaped;
 }
 
-export async function GET(req: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    if (!user) {
-      return NextResponse.json({ ok: false, error: "usuario_nao_autenticado" }, { status: 401 });
-    }
+    const { supabase } = auth;
 
-    const url = new URL(req.url);
+    const url = new URL(request.url);
     const days = clampDays(url.searchParams.get("days"), 30);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
@@ -82,3 +78,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 }
+
+

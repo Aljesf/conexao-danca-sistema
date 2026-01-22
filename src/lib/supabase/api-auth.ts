@@ -2,16 +2,12 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-export type ApiAuthOk = {
+export type ApiAuthContext = {
   supabase: ReturnType<typeof createServerClient>;
   userId: string;
 };
 
-export type ApiAuthFail = {
-  response: NextResponse;
-};
-
-export async function requireUser(request: NextRequest): Promise<ApiAuthOk | ApiAuthFail> {
+export async function requireUser(request: NextRequest): Promise<ApiAuthContext | NextResponse> {
   const response = NextResponse.next();
 
   const supabase = createServerClient(
@@ -37,7 +33,7 @@ export async function requireUser(request: NextRequest): Promise<ApiAuthOk | Api
   } = await supabase.auth.getUser();
 
   if (error) {
-    console.error("[requireUser] auth.getUser error:", error);
+    console.error("[requireUser] auth error:", error);
   }
 
   if (!user) {
@@ -50,9 +46,8 @@ export async function requireUser(request: NextRequest): Promise<ApiAuthOk | Api
       unauthorized.cookies.set(c.name, c.value, c);
     });
 
-    return { response: unauthorized };
+    return unauthorized;
   }
 
   return { supabase, userId: user.id };
 }
-

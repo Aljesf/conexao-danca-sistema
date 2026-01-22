@@ -1,25 +1,15 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { requireUser } from "@/lib/supabase/api-auth";
+import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * MVP: devolve as formas de pagamento ativas para alimentar selects.
  * Fonte de verdade: public.formas_pagamento (schema já existe).
  */
-export async function GET() {
-  const cookieStore = await cookies();
-  const supabase = createRouteHandlerClient({
-    cookies: () => cookieStore,
-  });
+export async function GET(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const {
-    data: { user },
-    error: userErr,
-  } = await supabase.auth.getUser();
-
-  if (userErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   // (MVP) Sem checagem rígida de role aqui; pode adicionar is_admin depois.
   const { data, error } = await supabase
@@ -37,3 +27,4 @@ export async function GET() {
 
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
+

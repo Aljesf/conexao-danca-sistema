@@ -1,9 +1,8 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
@@ -61,16 +60,14 @@ async function buscarTabelaIdsLegado(admin: ReturnType<typeof createClient>, alv
   return (data ?? []).map((l) => Number((l as { tabela_id: number }).tabela_id));
 }
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const url = new URL(req.url);
+    const url = new URL(request.url);
     const alvoTipoRaw = String(url.searchParams.get("alvo_tipo") || "TURMA");
     const alvoIdParam = url.searchParams.get("alvo_id");
     const turmaIdParam = url.searchParams.get("turma_id");
@@ -161,3 +158,5 @@ export async function GET(req: Request) {
     });
   }
 }
+
+

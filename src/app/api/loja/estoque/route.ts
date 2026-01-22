@@ -1,8 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type ApiResponse<T = any> = {
   ok: boolean;
@@ -105,8 +104,10 @@ export async function GET(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabase = supabaseAdmin ?? createRouteHandlerClient({ cookies: () => cookieStore });
+    const auth = await requireUser(req);
+    if (auth instanceof NextResponse) return auth;
+
+    const supabase = supabaseAdmin ?? auth.supabase;
 
     if (!supabase) {
       return json(500, {
@@ -179,7 +180,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/loja/estoque
 // Ajuste manual de estoque por VARIANTE
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   if (!supabaseAdmin) {
@@ -189,9 +190,10 @@ export async function POST(req: Request) {
         "Configuracao do Supabase ausente. Verifique NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.",
     });
   }
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
 
-  const cookieStore = await cookies();
-  const supabase = supabaseAdmin ?? createRouteHandlerClient({ cookies: () => cookieStore });
+  const supabase = supabaseAdmin ?? auth.supabase;
 
   let body: any = {};
   try {
@@ -380,3 +382,4 @@ export async function POST(req: Request) {
     return json(500, { ok: false, error: "Erro inesperado ao ajustar estoque." });
   }
 }
+

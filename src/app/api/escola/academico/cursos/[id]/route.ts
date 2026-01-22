@@ -1,9 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerAuth } from "@/lib/supabaseServer";
-
-async function supabaseServer() {
-  return await getSupabaseServerAuth();
-}
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth"
 
 function asText(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -16,22 +12,17 @@ function asId(value: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id: idRaw } = await ctx.params;
     const id = asId(idRaw);
     if (!id) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const supabase = await supabaseServer();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
-    }
+    const { supabase } = auth;
     const { data, error } = await supabase.from("cursos").select("*").eq("id", id).maybeSingle();
 
     if (error) {
@@ -48,24 +39,19 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   }
 }
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id: idStr } = await ctx.params;
     const id = asId(idStr);
     if (!id) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const supabase = await supabaseServer();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
-    }
+    const { supabase } = auth;
 
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) {
       return NextResponse.json({ ok: false, error: "body_required" }, { status: 400 });
     }
@@ -105,15 +91,10 @@ export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> 
     if (!id) {
       return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
     }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const supabase = await supabaseServer();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ ok: false, error: "UNAUTHENTICATED" }, { status: 401 });
-    }
+    const { supabase } = auth;
     const { data, error } = await supabase
       .from("cursos")
       .update({ situacao: "Inativo", updated_at: new Date().toISOString() })
@@ -136,3 +117,5 @@ export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ ok: false, error: "erro_interno", message: msg }, { status: 500 });
   }
 }
+
+

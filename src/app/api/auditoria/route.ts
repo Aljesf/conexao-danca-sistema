@@ -1,8 +1,7 @@
 // src/app/api/auditoria/route.ts
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,28 +9,14 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
+export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
   const usuarioId = url.searchParams.get("usuario_id");
   const dataIni = url.searchParams.get("data_ini");
   const dataFim = url.searchParams.get("data_fim");
 
-  const supabaseAuth = createRouteHandlerClient({ cookies });
-  const {
-    data: { user },
-    error: authError,
-  } = await supabaseAuth.auth.getUser();
-
-  if (authError) {
-    console.error("[GET /api/auditoria] erro ao validar usuario:", authError);
-  }
-
-  if (!user) {
-    return NextResponse.json(
-      { error: "Usuario nao autenticado." },
-      { status: 401 }
-    );
-  }
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
   try {
     let query = supabaseAdmin

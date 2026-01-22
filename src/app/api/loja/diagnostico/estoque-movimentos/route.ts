@@ -1,6 +1,6 @@
-﻿import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import type { NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,12 +15,14 @@ function json(data: any, status = 200) {
 // Endpoint de diagnóstico: tenta ler constraint e colunas de loja_estoque_movimentos.
 // Observação: requer RPC "sql" habilitada no Supabase. Caso não esteja disponível,
 // retornará erro orientando a rodar os SELECTs manualmente no SQL Editor.
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const auth = await requireUser(request);
+    if (auth instanceof Response) return auth;
+
+    const { supabase } = auth;
 
     const queries = {
       constraint: `
@@ -62,3 +64,4 @@ export async function GET(req: Request) {
     return json({ ok: false, error: String(err?.message || err) }, 500);
   }
 }
+

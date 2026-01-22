@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth"
 
 type EspacoRow = {
   id: number;
@@ -49,8 +49,8 @@ function parseNumber(raw: string | null, field: string) {
   return { value, error: null };
 }
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
 
   const anoRaw = searchParams.get("ano");
   const espacoRaw = searchParams.get("espaco");
@@ -64,15 +64,10 @@ export async function GET(req: Request) {
 
   const { value: localId, error: localErr } = parseNumber(localRaw, "local");
   if (localErr) return NextResponse.json({ error: localErr }, { status: 400 });
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   let espacosQ = supabase
     .from("espacos")
@@ -138,3 +133,5 @@ export async function GET(req: Request) {
     horarios: (horariosData ?? []) as TurmaHorario[],
   });
 }
+
+

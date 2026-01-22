@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { resolveParamsId } from "../../_helpers/params";
 
 const UpdateNivelSchema = z.object({
@@ -13,31 +13,26 @@ const UpdateNivelSchema = z.object({
   pre_requisito_nivel_id: z.number().int().positive().nullable().optional(),
 });
 
-async function requireAdmin() {
-  const supabase = await getSupabaseRoute();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data?.user) {
-    return { ok: false as const, status: 401 };
-  }
+async function requireAdmin(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
+  const { supabase, userId } = auth;
   const { data: profile, error: e2 } = await supabase
     .from("profiles")
     .select("is_admin")
-    .eq("user_id", data.user.id)
+    .eq("user_id", userId)
     .single();
 
   if (e2 || !profile?.is_admin) {
-    return { ok: false as const, status: 403 };
+    return NextResponse.json({ ok: false, error: "NAO_AUTORIZADO" }, { status: 403 });
   }
 
-  return { ok: true as const, status: 200 };
+  return null;
 }
-
-export async function handlePut(req: Request, params: { id: string } | Promise<{ id: string }>) {
-  const auth = await requireAdmin();
-  if (!auth.ok) {
-    return NextResponse.json({ ok: false, error: "NAO_AUTORIZADO" }, { status: auth.status });
-  }
+export async function handlePut(request: NextRequest, params: { id: string } | Promise<{ id: string }>) {
+  const adminCheck = await requireAdmin(request);
+  if (adminCheck) return adminCheck;
 
   const idStr = await resolveParamsId(params);
   const nivelId = Number(idStr);
@@ -45,7 +40,7 @@ export async function handlePut(req: Request, params: { id: string } | Promise<{
     return NextResponse.json({ ok: false, error: "ID_INVALIDO" }, { status: 400 });
   }
 
-  const body = await req.json().catch(() => null);
+  const body = await request.json().catch(() => null);
   const parsed = UpdateNivelSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: "PAYLOAD_INVALIDO", issues: parsed.error.issues }, { status: 400 });
@@ -88,3 +83,5 @@ export async function handlePut(req: Request, params: { id: string } | Promise<{
 
   return NextResponse.json({ ok: true, nivel: data }, { status: 200 });
 }
+
+

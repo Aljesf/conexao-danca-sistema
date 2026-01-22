@@ -1,18 +1,13 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
-export async function POST(_: Request, ctx: { params: Promise<{ id: string }> }) {
-  const denied = await guardApiByRole(_ as any);
+export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
-  const cookieStore = await cookies();
-  const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-  const { data: auth } = await supabaseAuth.auth.getUser();
-  if (!auth?.user) {
-    return NextResponse.json({ ok: false, error: "nao_autenticado" }, { status: 401 });
-  }
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
   const supabase = getSupabaseAdmin();
   const { id: rawId } = await ctx.params;
@@ -50,3 +45,4 @@ export async function POST(_: Request, ctx: { params: Promise<{ id: string }> })
 
   return NextResponse.json({ ok: true, data: { matricula_id: id, status: "ATIVA" } });
 }
+

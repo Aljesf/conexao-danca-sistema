@@ -1,9 +1,8 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 const PayloadSchema = z.object({
   pessoa_id: z.union([z.number().int().positive(), z.string().min(1)]),
@@ -32,11 +31,11 @@ function errorResponse(status: number, code: string, message: string, details?: 
   return NextResponse.json({ ok: false, code, message, details }, { status });
 }
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const raw = await req.json().catch(() => null);
+    const raw = await request.json().catch(() => null);
     const parsed = PayloadSchema.safeParse(raw);
 
     if (!parsed.success) {
@@ -63,19 +62,15 @@ export async function POST(req: Request) {
       .filter((value) => value.length > 0);
     const rolesCodigosValid = Array.from(new Set(rolesCodigos));
     const isAdmin = Boolean(parsed.data.is_admin);
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const cookieStore = await cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-
-    const { data: authData, error: authErr } = await supabase.auth.getUser();
-    if (authErr || !authData?.user) {
-      return errorResponse(401, "NAO_AUTENTICADO", "Usuario nao autenticado.");
-    }
+    const { supabase, userId } = auth;
 
     const { data: profile, error: profErr } = await supabase
       .from("profiles")
       .select("user_id, is_admin")
-      .eq("user_id", authData.user.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (profErr) {
@@ -346,3 +341,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+

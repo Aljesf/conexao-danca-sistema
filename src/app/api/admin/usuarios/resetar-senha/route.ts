@@ -1,19 +1,16 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const supabase = await getSupabaseServer();
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData?.user) {
-      return NextResponse.json({ ok: false, code: "NAO_AUTENTICADO" }, { status: 401 });
-    }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const userId = userData.user.id;
+    const { supabase, userId } = auth;
 
     const { data: adminRows, error: adminErr } = await supabase
       .from("usuario_roles")
@@ -33,7 +30,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, code: "SEM_PERMISSAO" }, { status: 403 });
     }
 
-    const body = await req.json().catch(() => null);
+    const body = await request.json().catch(() => null);
     const targetUserId = body?.user_id;
     const senha = body?.senha;
 
@@ -63,3 +60,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, code: "ERRO_INESPERADO", message: msg }, { status: 500 });
   }
 }
+

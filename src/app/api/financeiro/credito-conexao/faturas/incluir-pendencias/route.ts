@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import {
   ensureFaturaAberta,
@@ -16,20 +16,16 @@ type IncluirPendenciasPayload = {
 
 const DEFAULT_ORIGENS = ["LOJA"];
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const supabase = await getSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    if (!user) {
-      return NextResponse.json({ ok: false, error: "usuario_nao_autenticado" }, { status: 401 });
-    }
+    const { supabase } = auth;
 
-    const body = (await req.json().catch(() => null)) as IncluirPendenciasPayload | null;
+    const body = (await request.json().catch(() => null)) as IncluirPendenciasPayload | null;
     const contaId = body?.conta_conexao_id ? Number(body.conta_conexao_id) : NaN;
     if (!contaId || Number.isNaN(contaId)) {
       return NextResponse.json({ ok: false, error: "conta_conexao_id_obrigatorio" }, { status: 400 });
@@ -149,3 +145,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "erro_interno_incluir_pendencias" }, { status: 500 });
   }
 }
+
+

@@ -1,8 +1,8 @@
 ﻿// src/app/api/pessoas/[id]/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/supabase/api-auth"
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 import { normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 import type { Pessoa } from "@/types/pessoas";
@@ -147,7 +147,7 @@ async function carregarPessoaComNomes(id: string) {
 }
 
 // GET /api/pessoas/[id] -> detalhes da pessoa
-export async function GET(_req: Request, ctx: RouteParams) {
+export async function GET(request: NextRequest, ctx: RouteParams) {
   try {
     const { id } = await ctx.params;
     if (!id) {
@@ -156,17 +156,10 @@ export async function GET(_req: Request, ctx: RouteParams) {
         { status: 400 }
       );
     }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const supabase = await getSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json(
-        { error: "Usuário não autenticado." },
-        { status: 401 }
-      );
-    }
+    const { supabase, userId } = auth;
 
     const pessoa = await carregarPessoaComNomes(id);
 
@@ -191,7 +184,7 @@ export async function GET(_req: Request, ctx: RouteParams) {
 }
 
 // PUT /api/pessoas/[id] -> atualizar dados da pessoa
-export async function PUT(req: Request, ctx: RouteParams) {
+export async function PUT(request: NextRequest, ctx: RouteParams) {
   try {
     const { id } = await ctx.params;
     if (!id) {
@@ -201,7 +194,7 @@ export async function PUT(req: Request, ctx: RouteParams) {
       );
     }
 
-    const bodyUnknown = await req.json().catch(() => null);
+    const bodyUnknown = await request.json().catch(() => null);
     const parsed = PessoaUpdateSchema.safeParse(bodyUnknown);
     if (!parsed.success) {
       return NextResponse.json(
@@ -210,18 +203,11 @@ export async function PUT(req: Request, ctx: RouteParams) {
       );
     }
     const body = parsed.data;
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const supabase = await getSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user?.id) {
-      return NextResponse.json(
-        { error: "Usuario nao autenticado." },
-        { status: 401 }
-      );
-    }
-    const updatedBy = user.id;
+    const { supabase, userId } = auth;
+    const updatedBy = userId;
     const cpfValue = sanitizeCpfForDb(body.cpf);
     if (cpfValue) {
       const v = validateCpf(cpfValue);
@@ -310,5 +296,6 @@ export async function PUT(req: Request, ctx: RouteParams) {
     );
   }
 }
+
 
 

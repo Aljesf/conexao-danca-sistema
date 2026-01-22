@@ -1,9 +1,8 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type GerarMensalBody = {
   matricula_id?: number;
@@ -85,14 +84,14 @@ function buildVencimento(competencia: string, diaVencimento: number | null): str
 }
 
 async function resolverMensalidadePorTurma(
-  req: Request,
+  request: Request,
   cookieHeader: string,
   alunoId: number,
   turmaId: number,
   ano: number,
   tierOrdemOverride?: number | null,
 ): Promise<{ valor_centavos: number; descricao: string | null }> {
-  const resolveUrl = new URL("/api/matriculas/precos/resolver", req.url);
+  const resolveUrl = new URL("/api/matriculas/precos/resolver", request.url);
   resolveUrl.searchParams.set("aluno_id", String(alunoId));
   resolveUrl.searchParams.set("alvo_tipo", "TURMA");
   resolveUrl.searchParams.set("alvo_id", String(turmaId));
@@ -125,20 +124,16 @@ async function resolverMensalidadePorTurma(
   };
 }
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) {
-      return errJson("unauthorized", "Nao autenticado.", 401);
-    }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
     let body: GerarMensalBody;
     try {
-      body = (await req.json()) as GerarMensalBody;
+      body = (await request.json()) as GerarMensalBody;
     } catch {
       return errJson("bad_request", "JSON invalido.", 400);
     }
@@ -301,7 +296,7 @@ export async function POST(req: Request) {
 
       let resultado: { valor_centavos: number };
       try {
-        resultado = await resolverMensalidadePorTurma(req, cookieHeader, alunoId, turmaId, anoRef, ordem);
+        resultado = await resolverMensalidadePorTurma(request, cookieHeader, alunoId, turmaId, anoRef, ordem);
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : "erro_resolver_preco";
         return NextResponse.json(
@@ -447,3 +442,5 @@ export async function POST(req: Request) {
     return errJson("server_error", "Erro inesperado ao gerar lancamentos mensais.", 500, { message: msg });
   }
 }
+
+

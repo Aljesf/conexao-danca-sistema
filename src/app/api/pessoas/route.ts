@@ -1,7 +1,7 @@
-// src/app/api/pessoas/route.ts
-import { NextResponse } from "next/server";
+﻿// src/app/api/pessoas/route.ts
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 import { normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 
@@ -37,19 +37,14 @@ function sanitizeCpfForDb(cpfRaw: string | null | undefined): string | null {
   return cleaned.length === 0 ? null : cleaned;
 }
 
-export async function GET(req: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerSSR();
-    const url = new URL(req.url);
+    const url = new URL(request.url);
     const search = (url.searchParams.get("search") ?? "").trim();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return errorJson(401, { error: "Usuario nao autenticado." });
-    }
+    const { supabase, userId } = auth;
 
     if (search) {
       const like = `%${search}%`;
@@ -117,11 +112,14 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServerSSR();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const body = await req.json().catch(() => null);
+    const { supabase, userId } = auth;
+
+    const body = await request.json().catch(() => null);
     const parsed = PessoaUpsertSchema.safeParse(body);
     if (!parsed.success) {
       return errorJson(400, { error: "PAYLOAD_INVALIDO", issues: parsed.error.issues });
@@ -145,15 +143,7 @@ export async function POST(req: Request) {
       ativo,
     } = parsed.data;
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (authError || !user?.id) {
-      return errorJson(401, { error: "Usuario nao autenticado." });
-    }
-
-    const createdBy = user.id;
+    const createdBy = userId;
     const updatedBy = createdBy;
     const onlyDigits = (v: string) => (v || "").replace(/\D/g, "");
     const cpfValue = sanitizeCpfForDb(cpf);
@@ -245,7 +235,7 @@ export async function POST(req: Request) {
 
     await logAuditoria({
       supabase,
-      userId: user.id,
+      userId: userId,
       acao: "CRIAR_PESSOA",
       tabela: "pessoas",
       referencia: (data as any).id,
@@ -258,3 +248,7 @@ export async function POST(req: Request) {
     return errorJson(500, { error: "Erro interno ao criar pessoa." });
   }
 }
+
+
+
+

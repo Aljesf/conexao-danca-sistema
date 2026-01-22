@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
@@ -153,19 +153,15 @@ function nextDateForDay(day: number | null | undefined, from: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function POST(req: Request, { params }: RouteContext) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest, { params }: RouteContext) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "usuario_nao_autenticado" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const force = new URL(req.url).searchParams.get("force") === "true";
+  const force = new URL(request.url).searchParams.get("force") === "true";
   const { id } = await params;
   const faturaId = Number(id);
 
@@ -484,3 +480,5 @@ export async function POST(req: Request, { params }: RouteContext) {
     { status: 200 }
   );
 }
+
+

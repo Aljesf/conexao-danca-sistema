@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type CursoLivreRow = {
   id: number;
@@ -12,15 +12,11 @@ type CursoLivreRow = {
   idade_maxima: number | null;
 };
 
-export async function GET() {
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function GET(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("cursos_livres")
@@ -37,17 +33,13 @@ export async function GET() {
   return NextResponse.json({ cursos_livres: (data ?? []) as CursoLivreRow[] }, { status: 200 });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const payload: unknown = await req.json();
+  const payload: unknown = await request.json();
   if (!payload || typeof payload !== "object") {
     return NextResponse.json({ error: "payload_invalido" }, { status: 400 });
   }

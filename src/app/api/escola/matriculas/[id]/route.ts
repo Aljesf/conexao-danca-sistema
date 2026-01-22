@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -82,14 +81,10 @@ function errJson(code: ApiErrorCode, message: string, status: number, details?: 
   return okJson({ ok: false, error: code, message, details: details ?? null } satisfies ApiError, status);
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }> }) {
+export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: string }> }) {
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) {
-      return errJson("unauthorized", "Nao autenticado.", 401);
-    }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
     const params = await ctx.params;
     const matriculaId = toPositiveNumber(params.id);
@@ -442,3 +437,4 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
     });
   }
 }
+

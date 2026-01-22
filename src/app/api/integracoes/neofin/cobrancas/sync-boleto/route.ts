@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { getNeofinBilling, upsertNeofinBilling, type NeofinResult } from "@/lib/neofinClient";
 
 export const runtime = "nodejs";
@@ -120,7 +120,7 @@ function resolveLookupIdentifier(cobranca: Cobranca): string | null {
   return extracted.chargeId ?? cobranca.neofin_charge_id ?? null;
 }
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
     const supabase = await getSupabaseServer();
     const {
@@ -131,7 +131,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Usuario nao autenticado." }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => null)) as RequestPayload | null;
+    const body = (await request.json().catch(() => null)) as RequestPayload | null;
     const cobrancaId = body?.cobranca_id ? Number(body.cobranca_id) : NaN;
 
     if (!cobrancaId || Number.isNaN(cobrancaId)) {
@@ -185,7 +185,7 @@ export async function POST(req: Request) {
     }
 
   let identifier = resolveLookupIdentifier(cobranca);
-  // Se não existir charge, tenta criar
+  // Se nÃ£o existir charge, tenta criar
   if (!identifier) {
     const cpf = (cobranca.pessoa?.cpf || "").replace(/\D/g, "");
     if (!cpf) {
@@ -241,7 +241,7 @@ export async function POST(req: Request) {
   const neofinResult = await getNeofinBilling({ identifier });
 
     if (!neofinResult.ok) {
-      console.error("[Neofin sync boleto] erro ao consultar cobrança:", neofinResult);
+      console.error("[Neofin sync boleto] erro ao consultar cobranÃ§a:", neofinResult);
       return NextResponse.json(
         { ok: false, error: "erro_consultar_neofin", neofin: neofinResult },
         { status: neofinResult.status === 404 ? 404 : 502 }
@@ -316,3 +316,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+

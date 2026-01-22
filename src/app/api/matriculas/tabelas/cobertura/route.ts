@@ -1,8 +1,7 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 function badRequest(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null }, { status: 400 });
@@ -22,16 +21,14 @@ function getAdmin() {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const url = new URL(req.url);
+    const url = new URL(request.url);
     const ano = Number(url.searchParams.get("ano") || "");
     if (!ano) return badRequest("ano e obrigatorio.");
 
@@ -64,3 +61,4 @@ export async function GET(req: Request) {
     return serverError("Erro inesperado ao montar cobertura.", { message: e instanceof Error ? e.message : String(e) });
   }
 }
+

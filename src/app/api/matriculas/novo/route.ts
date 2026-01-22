@@ -281,7 +281,7 @@ function calcularPrimeiraCobranca(params: {
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireUser(request);
-    if ("response" in auth) return auth.response;
+    if (auth instanceof NextResponse) return auth;
 
     const { supabase, userId } = auth;
 

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type CursoRow = {
   id: number;
@@ -56,39 +56,34 @@ function asText(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-async function requireAdmin() {
-  const supabase = await getSupabaseRoute();
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
-  if (authErr || !authData?.user) {
-    return { ok: false as const, status: 401, error: "NAO_AUTENTICADO" };
-  }
+async function requireAdmin(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
+  const { supabase, userId } = auth;
   const { data: profile, error: profErr } = await supabase
     .from("profiles")
     .select("is_admin")
-    .eq("user_id", authData.user.id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (profErr) {
-    return { ok: false as const, status: 500, error: "ERRO_PERMISSAO", details: profErr.message };
+    return NextResponse.json(
+      { ok: false, error: "ERRO_PERMISSAO", details: profErr.message },
+      { status: 500 }
+    );
   }
 
   if (!profile?.is_admin) {
-    return { ok: false as const, status: 403, error: "SEM_PERMISSAO" };
+    return NextResponse.json({ ok: false, error: "SEM_PERMISSAO" }, { status: 403 });
   }
 
-  return { ok: true as const, status: 200 };
+  return null;
 }
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAdmin();
-    if (!auth.ok) {
-      return NextResponse.json(
-        { ok: false, error: auth.error, details: auth.details ?? null },
-        { status: auth.status }
-      );
-    }
+    const adminCheck = await requireAdmin(request);
+    if (adminCheck) return adminCheck;
 
     let admin;
     try {
@@ -210,17 +205,12 @@ export async function GET() {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const auth = await requireAdmin();
-    if (!auth.ok) {
-      return NextResponse.json(
-        { ok: false, error: auth.error, details: auth.details ?? null },
-        { status: auth.status }
-      );
-    }
+    const adminCheck = await requireAdmin(request);
+    if (adminCheck) return adminCheck;
 
-    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) {
       return NextResponse.json({ ok: false, error: "body_required" }, { status: 400 });
     }
@@ -269,3 +259,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "erro_interno", message: msg }, { status: 500 });
   }
 }
+

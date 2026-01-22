@@ -1,19 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export async function GET(request: NextRequest) {
-  const cookieStore = await cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return NextResponse.json({ ok: false, error: "nao_autenticado" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { searchParams } = new URL(request.url);
   const query = (searchParams.get("query") || "").trim();

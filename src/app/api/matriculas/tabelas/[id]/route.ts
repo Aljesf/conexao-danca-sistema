@@ -1,9 +1,8 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -433,11 +432,11 @@ async function resolveLegacyPayload(admin: ReturnType<typeof createClient>, alvo
   };
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const denied = await guardApiByRole(req as any);
+export async function PUT(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   const params = await ctx.params;
-  console.log("[PUT /api/matriculas/tabelas/:id] start", { id: params.id, method: req.method });
+  console.log("[PUT /api/matriculas/tabelas/:id] start", { id: params.id, method: request.method });
 
   try {
     const tabelaIdRaw = params.id;
@@ -445,15 +444,12 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     if (!Number.isFinite(tabelaId) || tabelaId <= 0) {
       return badRequest("ID invalido.", { tabelaId: tabelaIdRaw });
     }
-
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) return unauthorized("Nao autenticado.");
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
     let body: BodyPut;
     try {
-      body = (await req.json()) as BodyPut;
+      body = (await request.json()) as BodyPut;
     } catch (e: unknown) {
       console.error("[PUT /api/matriculas/tabelas/:id] JSON parse error", e);
       return badRequest("Payload invalido (JSON).", { message: e instanceof Error ? e.message : String(e) });
@@ -600,3 +596,4 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     return serverError("Erro inesperado ao atualizar tabela.", safeDetails(e));
   }
 }
+

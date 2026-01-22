@@ -1,20 +1,17 @@
-﻿import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { assertAdmin } from "@/lib/auth/assertAdmin";
-import { getSupabaseServer } from "@/lib/supabaseServer";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const supabase = await getSupabaseServer();
-    const { data: userData, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !userData?.user) {
-      return NextResponse.json({ ok: false, code: "NAO_AUTENTICADO" }, { status: 401 });
-    }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const userId = userData.user.id;
+    const { supabase, userId } = auth;
 
     const { data: adminRowsRaw, error: adminErr } = await supabase
       .from("usuario_roles")
@@ -226,7 +223,7 @@ export async function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const denied = await guardApiByRole(req as any);
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   const auth = await assertAdmin();
   if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
@@ -251,3 +248,4 @@ export async function PATCH(req: Request) {
 
   return NextResponse.json({ ok: true, profile: data });
 }
+

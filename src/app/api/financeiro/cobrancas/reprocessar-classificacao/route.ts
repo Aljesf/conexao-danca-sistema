@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { processarClassificacaoFinanceira } from "@/lib/financeiro/processarClassificacaoFinanceira";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
@@ -12,19 +12,15 @@ type Cobranca = {
   origem_id?: number | null;
 };
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "usuario_nao_autenticado" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const body = (await req.json().catch(() => null)) as { cobranca_id?: number } | null;
+  const body = (await request.json().catch(() => null)) as { cobranca_id?: number } | null;
   const cobrancaId = body?.cobranca_id ? Number(body.cobranca_id) : NaN;
 
   if (!cobrancaId || Number.isNaN(cobrancaId)) {
@@ -72,3 +68,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
+

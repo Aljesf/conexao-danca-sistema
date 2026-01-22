@@ -1,8 +1,7 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 
@@ -213,16 +212,14 @@ async function calcularModalidadesPorGrupo(
   return { ok: true, quantidadeModalidades, ordem: quantidadeModalidades };
 }
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: Request) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const url = new URL(req.url);
+    const url = new URL(request.url);
     const alunoId = Number(url.searchParams.get("aluno_id") || "");
     const alvoTipoRaw = String(url.searchParams.get("alvo_tipo") || "TURMA")
       .trim()
@@ -587,3 +584,4 @@ export async function GET(req: Request) {
     return serverError("Erro inesperado ao resolver preco.", { message: e instanceof Error ? e.message : String(e) });
   }
 }
+

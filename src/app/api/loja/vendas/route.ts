@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
@@ -189,8 +189,8 @@ function inferTipoTransacao(parcelas: number): CartaoTipoTransacao {
 }
 
 // GET de diagnostico simples
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: Request) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
     return json({ ok: true, route: "/api/loja/vendas", ts: new Date().toISOString() });
@@ -202,15 +202,17 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const supabase = await getSupabaseServerSSR();
-    const { data: authData } = await supabase.auth.getUser();
-    const usuarioId = authData?.user?.id ?? null;
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const bodyUnknown: unknown = await req.json().catch(() => null);
+    const { supabase, userId } = auth;
+    const usuarioId = userId ?? null;
+
+    const bodyUnknown: unknown = await request.json().catch(() => null);
     if (!isRecord(bodyUnknown)) {
       return NextResponse.json({ ok: false, error: "payload_invalido" }, { status: 400 });
     }
@@ -791,3 +793,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "erro_interno", details: msg }, { status: 500 });
   }
 }
+
+

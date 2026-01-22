@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,17 +18,13 @@ function normalizeTipo(value: string | undefined): string {
   return ["SALA", "PALCO", "AREA", "OUTRO"].includes(tipo) ? tipo : "SALA";
 }
 
-export async function GET(req: Request) {
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function GET(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const url = new URL(req.url);
+  const url = new URL(request.url);
   const localIdRaw = url.searchParams.get("local_id");
   const localId = localIdRaw ? Number(localIdRaw) : null;
 
@@ -52,17 +48,13 @@ export async function GET(req: Request) {
   return NextResponse.json({ ok: true, espacos: data ?? [] }, { status: 200 });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const body = (await req.json().catch(() => null)) as EspacoPayload | null;
+  const body = (await request.json().catch(() => null)) as EspacoPayload | null;
   const localId = Number(body?.local_id);
   const nome = body?.nome?.trim();
 
@@ -94,3 +86,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, espaco: data }, { status: 201 });
 }
+
+

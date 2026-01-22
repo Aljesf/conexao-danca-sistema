@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type CreatePayload = {
   app_context?: string | null;
@@ -23,18 +23,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-export async function GET(req: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    if (!user) {
-      return NextResponse.json({ ok: false, error: "usuario_nao_autenticado" }, { status: 401 });
-    }
+    const { supabase, userId } = auth;
 
-    const url = new URL(req.url);
+    const url = new URL(request.url);
     const limit = clampLimit(url.searchParams.get("limit"), 200);
 
     const { data, error } = await supabase
@@ -56,18 +52,14 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    if (!user) {
-      return NextResponse.json({ ok: false, error: "usuario_nao_autenticado" }, { status: 401 });
-    }
+    const { supabase, userId } = auth;
 
-    const body = (await req.json()) as Partial<CreatePayload>;
+    const body = (await request.json()) as Partial<CreatePayload>;
     const observacao = (body.observacao ?? "").trim();
 
     if (!observacao) {
@@ -75,7 +67,7 @@ export async function POST(req: Request) {
     }
 
     const payload: Record<string, unknown> = {
-      created_by: user.id,
+      created_by: userId,
       app_context: body.app_context ?? null,
       pathname: body.pathname ?? null,
       full_url: body.full_url ?? null,
@@ -103,3 +95,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 }
+
+

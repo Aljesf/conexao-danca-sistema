@@ -1,8 +1,7 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type CicloCobranca = "COBRANCA_UNICA" | "COBRANCA_EM_PARCELAS" | "COBRANCA_MENSAL";
 type TerminoCobranca = "FIM_TURMA_CURSO" | "FIM_PROJETO" | "FIM_ANO_LETIVO" | "DATA_ESPECIFICA";
@@ -58,36 +57,18 @@ function safeErrorDetails(e: unknown): Record<string, unknown> {
   return { message: String(e) };
 }
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    let supabaseAuth;
-    try {
-      const cookieStore = await cookies();
-      supabaseAuth = createRouteHandlerClient({
-        cookies: () => cookieStore,
-      });
-    } catch (e: unknown) {
-      console.error("[planos-pagamento][POST] erro ao criar supabaseAuth", e);
-      return serverError("Falha ao inicializar autenticação do Supabase (env/headers).", safeErrorDetails(e));
-    }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    let user: { id: string } | null = null;
-    try {
-      const { data, error: userErr } = await supabaseAuth.auth.getUser();
-      if (userErr || !data?.user) {
-        return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-      }
-      user = { id: data.user.id };
-    } catch (e: unknown) {
-      console.error("[planos-pagamento][POST] erro ao obter usuário", e);
-      return serverError("Falha ao validar sessão do usuário.", safeErrorDetails(e));
-    }
+    const { userId } = auth;
 
     let body: Body;
     try {
-      body = (await req.json()) as Body;
+      body = (await request.json()) as Body;
     } catch {
       return badRequest("JSON inválido.");
     }
@@ -166,9 +147,12 @@ export async function POST(req: Request) {
       return serverError("Falha ao criar plano de pagamento.", { error });
     }
 
-    return NextResponse.json({ ok: true, data, actor_user_id: user.id }, { status: 201 });
+    return NextResponse.json({ ok: true, data, actor_user_id: userId }, { status: 201 });
   } catch (e: unknown) {
     console.error("[planos-pagamento][POST] erro inesperado (catch final)", e);
     return serverError("Erro inesperado na API de planos de pagamento.", safeErrorDetails(e));
   }
 }
+
+
+

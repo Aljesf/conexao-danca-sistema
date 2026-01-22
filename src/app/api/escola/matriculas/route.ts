@@ -117,7 +117,7 @@ async function fetchMatriculas(admin: ReturnType<typeof getSupabaseAdmin>, param
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireUser(request);
-    if ("response" in auth) return auth.response;
+    if (auth instanceof NextResponse) return auth;
 
     const url = new URL(request.url);
     const ano = Number(url.searchParams.get("ano") || "");

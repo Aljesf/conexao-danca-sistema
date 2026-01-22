@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 function parseId(value: string | undefined): number | null {
   const n = Number(value);
@@ -7,7 +7,7 @@ function parseId(value: string | undefined): number | null {
   return n;
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ turmaId?: string; encontroId?: string }> }) {
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ turmaId?: string; encontroId?: string }> }) {
   const { turmaId: turmaIdRaw, encontroId: encontroIdRaw } = await ctx.params;
   const turmaId = parseId(turmaIdRaw);
   const encontroId = parseId(encontroIdRaw);
@@ -16,14 +16,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ turmaId?: s
     return NextResponse.json({ error: "parametros_invalidos" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "usuario_nao_autenticado" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { error } = await supabase
     .from("turma_encontros")

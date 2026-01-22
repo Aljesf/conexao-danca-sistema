@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type EncontroRow = {
   id: number;
@@ -16,21 +16,17 @@ function parseId(value: string | undefined): number | null {
   return n;
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ turmaId?: string }> }) {
+export async function GET(request: NextRequest, ctx: { params: Promise<{ turmaId?: string }> }) {
   const { turmaId: turmaIdRaw } = await ctx.params;
   const turmaId = parseId(turmaIdRaw);
   if (!turmaId) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "usuario_nao_autenticado" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("turma_encontros")
@@ -49,23 +45,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ turmaId?: stri
   return NextResponse.json({ encontros: (data ?? []) as EncontroRow[] }, { status: 200 });
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ turmaId?: string }> }) {
+export async function POST(request: NextRequest, ctx: { params: Promise<{ turmaId?: string }> }) {
   const { turmaId: turmaIdRaw } = await ctx.params;
   const turmaId = parseId(turmaIdRaw);
   if (!turmaId) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "usuario_nao_autenticado" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const payload: unknown = await req.json();
+  const payload: unknown = await request.json();
   if (!payload || typeof payload !== "object") {
     return NextResponse.json({ error: "payload_invalido" }, { status: 400 });
   }

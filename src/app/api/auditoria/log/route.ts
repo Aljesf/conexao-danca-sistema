@@ -1,9 +1,8 @@
 // src/app/api/auditoria/log/route.ts
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { resolverNomeDoUsuario } from "@/lib/auditoriaLog";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 // Rota interna que usa service role para registrar logs manuais
 const supabaseAdmin = createClient(
@@ -14,9 +13,9 @@ const supabaseAdmin = createClient(
   }
 );
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await request.json();
     const {
       acao,
       entidade,
@@ -36,19 +35,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const {
-      data: { user },
-    } = await supabaseAuth.auth.getUser();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const actingUserId = (usuarioId as string | undefined) || user?.id;
-    if (!actingUserId) {
-      return NextResponse.json(
-        { error: "Usuario nao autenticado." },
-        { status: 401 }
-      );
-    }
+    const actingUserId = (usuarioId as string | undefined) || auth.userId;
 
     const usuarioNome = await resolverNomeDoUsuario(actingUserId);
     const detalhes = {

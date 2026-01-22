@@ -1,9 +1,9 @@
-﻿import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { jsonError, zodToValidationError } from "@/lib/http/api-errors";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 const BeneficiarioCreateSchema = z.object({
   pessoa_id: z
@@ -47,8 +47,8 @@ async function findUltimaAseSubmission(supabase: ReturnType<typeof getSupabaseSe
   return (submission ?? null) as AseSubmission | null;
 }
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
     const supabase = getSupabaseServiceClient();
@@ -65,23 +65,17 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const authClient = await getSupabaseServer();
-    const { data: userData, error: userErr } = await authClient.auth.getUser();
-    if (userErr || !userData?.user?.id) {
-      return NextResponse.json(
-        { ok: false, codigo: "NAO_AUTENTICADO", message: "Nao autenticado." },
-        { status: 401 },
-      );
-    }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const userId = userData.user.id;
+    const { userId } = auth;
     const supabase = getSupabaseServiceClient();
 
-    const bodyUnknown = await req.json();
+    const bodyUnknown = await request.json();
     const body = BeneficiarioCreateSchema.parse(bodyUnknown);
 
     const analiseId = body.analise_id ? String(body.analise_id) : null;
@@ -273,3 +267,5 @@ export async function POST(req: Request) {
     return jsonError(zodToValidationError(err));
   }
 }
+
+

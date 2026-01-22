@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { markNeofinBillingAsPaid } from "@/lib/neofinClient";
 import { processarClassificacaoFinanceira } from "@/lib/financeiro/processarClassificacaoFinanceira";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -62,21 +62,17 @@ async function contarLancamentosDaFatura(
   return count ?? 0;
 }
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "usuario_nao_autenticado" }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const body = (await req.json().catch(() => null)) as RequestPayload | null;
+  const body = (await request.json().catch(() => null)) as RequestPayload | null;
   const cobrancaId = body?.cobranca_id ? Number(body.cobranca_id) : NaN;
-  const forceRateio = new URL(req.url).searchParams.get("force_rateio") === "true";
+  const forceRateio = new URL(request.url).searchParams.get("force_rateio") === "true";
   const dataPagamento =
     typeof body?.data_pagamento === "string" && body.data_pagamento
       ? body.data_pagamento
@@ -398,3 +394,5 @@ export async function POST(req: Request) {
     { status: 200 }
   );
 }
+
+

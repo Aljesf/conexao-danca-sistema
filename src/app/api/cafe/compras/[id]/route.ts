@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type CancelBody = { motivo?: string | null };
 
-export async function DELETE(req: Request, ctx: { params: { id: string } }) {
-  const denied = await guardApiByRole(req);
+export async function DELETE(request: NextRequest, ctx: { params: { id: string } }) {
+  const denied = await guardApiByRole(request);
   if (denied) return denied as unknown as NextResponse;
 
   const compraId = Number(ctx.params.id);
@@ -14,11 +14,13 @@ export async function DELETE(req: Request, ctx: { params: { id: string } }) {
     return NextResponse.json({ ok: false, error: "compra_id_invalido" }, { status: 400 });
   }
 
-  const supabase = getSupabaseServiceClient();
-  const auth = await (await getSupabaseServer()).auth.getUser();
-  const canceladaPor = auth.data?.user?.id ?? null;
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const body = (await req.json().catch(() => null)) as CancelBody | null;
+  const supabase = getSupabaseServiceClient();
+  const canceladaPor = auth.userId;
+
+  const body = (await request.json().catch(() => null)) as CancelBody | null;
   const motivo = body?.motivo?.trim() || null;
 
   const { data: compra, error: compraErr } = await supabase

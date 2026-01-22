@@ -1,9 +1,8 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 type AlvoOption = {
@@ -48,21 +47,14 @@ function isMissingRelation(err: unknown): boolean {
   return !!e && typeof e.code === "string" && e.code === "42P01";
 }
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) {
-      return NextResponse.json(
-        { ok: false, error: "unauthorized", message: "Nao autenticado.", details: null } satisfies ApiErr,
-        { status: 401 },
-      );
-    }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const url = new URL(req.url);
+    const url = new URL(request.url);
     const tipoRaw = String(url.searchParams.get("tipo") || "TURMA").toUpperCase();
 
     if (tipoRaw === "WORKSHOP") return badRequest("WORKSHOP nao e um tipo separado; use CURSO_LIVRE.");
@@ -246,3 +238,4 @@ export async function GET(req: Request) {
     return serverError("Erro inesperado ao listar alvos.", { message: e instanceof Error ? e.message : String(e) });
   }
 }
+

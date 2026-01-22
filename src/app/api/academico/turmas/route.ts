@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type TurmaRow = {
   turma_id: number;
@@ -19,8 +19,8 @@ type UnidadeExecucaoRow = {
   ativo: boolean | null;
 };
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
+export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
   const periodoLetivoIdRaw = url.searchParams.get("periodo_letivo_id");
   const curso = url.searchParams.get("curso");
 
@@ -36,14 +36,10 @@ export async function GET(req: Request) {
 
   const cursoNome = curso.trim();
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { data: turmasData, error: turmasErr } = await supabase
     .from("turmas")

@@ -1,39 +1,29 @@
-﻿import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { getSupabaseRoute } from "@/lib/supabaseRoute";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 const ParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
-async function requireAdmin() {
-  const supabase = await getSupabaseRoute();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data?.user) {
-    return { ok: false as const, status: 401 };
-  }
+export async function DELETE(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(request as any);
+  if (denied) return denied as any;
 
-  const { data: profile, error: e2 } = await supabase
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase, userId } = auth;
+  const { data: profile, error: profErr } = await supabase
     .from("profiles")
     .select("is_admin")
-    .eq("user_id", data.user.id)
+    .eq("user_id", userId)
     .single();
 
-  if (e2 || !profile?.is_admin) {
-    return { ok: false as const, status: 403 };
-  }
-
-  return { ok: true as const, status: 200 };
-}
-
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const denied = await guardApiByRole(_req as any);
-  if (denied) return denied as any;
-  const auth = await requireAdmin();
-  if (!auth.ok) {
-    return NextResponse.json({ ok: false, code: "NAO_AUTORIZADO" }, { status: auth.status });
+  if (profErr || !profile?.is_admin) {
+    return NextResponse.json({ ok: false, code: "NAO_AUTORIZADO" }, { status: 403 });
   }
 
   const { id } = await ctx.params;
@@ -44,7 +34,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       { status: 400 }
     );
   }
-
   let adminClient;
   try {
     adminClient = getSupabaseAdmin();
@@ -122,3 +111,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
   return NextResponse.json({ ok: true, id: nivelId }, { status: 200 });
 }
+
+
+

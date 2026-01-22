@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,15 +17,11 @@ function normalizeTipo(value: string | undefined): string {
   return tipo === "EXTERNO" ? "EXTERNO" : "INTERNO";
 }
 
-export async function GET() {
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function GET(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("locais")
@@ -39,17 +35,13 @@ export async function GET() {
   return NextResponse.json({ ok: true, locais: data ?? [] }, { status: 200 });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const body = (await req.json().catch(() => null)) as LocalPayload | null;
+  const body = (await request.json().catch(() => null)) as LocalPayload | null;
   const nome = body?.nome?.trim();
 
   if (!nome) {
@@ -76,3 +68,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, local: data }, { status: 201 });
 }
+
+

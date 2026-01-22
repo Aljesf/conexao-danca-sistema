@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type TurmaRow = {
   turma_id: number;
@@ -18,21 +18,17 @@ function parseId(param: string): number | null {
   return id;
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const cursoLivreId = parseId(id);
   if (!cursoLivreId) {
     return NextResponse.json({ error: "id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("turmas")
@@ -50,23 +46,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ turmas: (data ?? []) as TurmaRow[] }, { status: 200 });
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const cursoLivreId = parseId(id);
   if (!cursoLivreId) {
     return NextResponse.json({ error: "id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const payload: unknown = await req.json();
+  const payload: unknown = await request.json();
   if (!payload || typeof payload !== "object") {
     return NextResponse.json({ error: "payload_invalido" }, { status: 400 });
   }

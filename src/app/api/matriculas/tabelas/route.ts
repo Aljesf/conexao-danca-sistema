@@ -1,9 +1,8 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type PostgrestError } from "@supabase/supabase-js";
 import { resolveTurmaIdReal } from "@/app/api/_utils/resolveTurmaIdReal";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type AlvoTipo = "TURMA" | "CURSO_LIVRE" | "PROJETO";
 type ServicoTipo = "CURSO_REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
@@ -414,14 +413,12 @@ async function resolveLegacyPayload(admin: ReturnType<typeof createClient>, alvo
   };
 }
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function GET(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
     const admin = getAdmin();
 
@@ -442,18 +439,16 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function POST(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
     let body: BodyTabela;
     try {
-      body = (await req.json()) as BodyTabela;
+      body = (await request.json()) as BodyTabela;
     } catch (e: unknown) {
       return badRequest("JSON invalido.", { message: e instanceof Error ? e.message : String(e) });
     }
@@ -663,18 +658,16 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PUT(req: Request) {
-  const denied = await guardApiByRole(req as any);
+export async function PUT(request: NextRequest) {
+  const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
     let body: BodyTabela & { id?: number };
     try {
-      body = (await req.json()) as BodyTabela & { id?: number };
+      body = (await request.json()) as BodyTabela & { id?: number };
     } catch (e: unknown) {
       return badRequest("JSON invalido.", { message: e instanceof Error ? e.message : String(e) });
     }
@@ -810,3 +803,4 @@ export async function PUT(req: Request) {
     return serverError("Erro inesperado ao atualizar tabela.", { message: e instanceof Error ? e.message : String(e) });
   }
 }
+
