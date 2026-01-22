@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getUserOrThrow, canAccessTurma } from "../../../../_lib/auth";
 
 const zAulaId = z.coerce.number().int().positive();
 
-export async function POST(req: Request, ctx: { params: Promise<{ aulaId: string }> }) {
-  const auth = await getUserOrThrow();
+export async function POST(request: NextRequest, ctx: { params: Promise<{ aulaId: string }> }) {
+  const auth = await getUserOrThrow(request);
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
   const { aulaId: aulaIdRaw } = await ctx.params;
@@ -33,7 +33,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ aulaId: string
     return NextResponse.json({ ok: false, code: "CHAMADA_NAO_FECHADA" }, { status: 422 });
   }
 
-  const body = await req.json().catch(() => null);
+  const body = await request.json().catch(() => null);
   const schema = z.object({
     notas_pos_aula: z.string().trim().optional().nullable(),
   });

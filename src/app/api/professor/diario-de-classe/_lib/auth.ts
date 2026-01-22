@@ -1,24 +1,22 @@
-import type { User } from "@supabase/supabase-js";
 import { z } from "zod";
-import { getSupabaseRoute } from "@/lib/supabaseRoute";
+import type { NextRequest } from "next/server";
+import type { ApiAuthContext } from "@/lib/supabase/api-auth";
+import { requireUser } from "@/lib/supabase/api-auth";
 
-export type Supa = Awaited<ReturnType<typeof getSupabaseRoute>>;
+export type Supa = ApiAuthContext["supabase"];
+export type AuthUser = { id: string };
 
-async function getSupabaseServerClient(): Promise<Supa> {
-  return await getSupabaseRoute();
-}
-
-export async function getUserOrThrow():
-  Promise<
-    | { ok: true; supabase: Supa; user: User }
-    | { ok: false; status: number; code: "NAO_AUTENTICADO" }
-  > {
-  const supabase = await getSupabaseServerClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data?.user) {
+export async function getUserOrThrow(
+  request: NextRequest,
+): Promise<
+  | { ok: true; supabase: Supa; user: AuthUser }
+  | { ok: false; status: number; code: "NAO_AUTENTICADO" }
+> {
+  const auth = await requireUser(request);
+  if (auth instanceof Response) {
     return { ok: false, status: 401, code: "NAO_AUTENTICADO" };
   }
-  return { ok: true, supabase, user: data.user };
+  return { ok: true, supabase: auth.supabase, user: { id: auth.userId } };
 }
 
 export async function isAdminUser(supabase: Supa, userId: string): Promise<boolean> {

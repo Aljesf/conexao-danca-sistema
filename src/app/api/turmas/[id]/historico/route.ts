@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,23 +9,19 @@ function clampInt(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const turmaId = Number(id);
   if (!Number.isInteger(turmaId) || turmaId <= 0) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+  const { supabase } = auth;
 
-  const url = new URL(req.url);
+  const url = new URL(request.url);
   const limit = clampInt(Number(url.searchParams.get("limit") ?? "50"), 1, 200);
   const offset = clampInt(Number(url.searchParams.get("offset") ?? "0"), 0, 5000);
 

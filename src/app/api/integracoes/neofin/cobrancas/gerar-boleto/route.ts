@@ -126,14 +126,10 @@ function extractBillingInfo(body: NeofinResult["body"], fallbackId?: string): Ne
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await getSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    if (!user) {
-      return NextResponse.json({ ok: false, error: "Usuario nao autenticado." }, { status: 401 });
-    }
+    const { supabase } = auth;
 
     const body = (await request.json().catch(() => null)) as RequestPayload | null;
     const cobrancaId = body?.cobranca_id ? Number(body.cobranca_id) : NaN;

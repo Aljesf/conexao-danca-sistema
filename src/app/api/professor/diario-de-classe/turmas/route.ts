@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getColaboradorIdForUser, getUserOrThrow, isAdminUser } from "../_lib/auth";
 
@@ -50,13 +50,13 @@ function turmaTemAulaNoDia(dias: unknown, keys: { br3: string; en3: string; brFu
 /**
  * GET /api/professor/diario-de-classe/turmas
  */
-export async function GET(req: Request) {
-  const auth = await getUserOrThrow();
+export async function GET(request: NextRequest) {
+  const auth = await getUserOrThrow(request);
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
   const { supabase, user } = auth;
 
-  const url = new URL(req.url);
+  const url = new URL(request.url);
   const date = zDate.safeParse(url.searchParams.get("date") ?? undefined);
   const professorColaboradorId = zColabId.safeParse(
     url.searchParams.get("professorColaboradorId") ?? undefined

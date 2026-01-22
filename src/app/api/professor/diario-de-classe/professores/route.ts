@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getUserOrThrow, isAdminUser } from "../_lib/auth";
 
 type ColaboradorRow = {
@@ -7,8 +7,8 @@ type ColaboradorRow = {
   pessoa?: { nome?: string | null } | null;
 };
 
-export async function GET() {
-  const auth = await getUserOrThrow();
+export async function GET(request: NextRequest) {
+  const auth = await getUserOrThrow(request);
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
   const { supabase, user } = auth;

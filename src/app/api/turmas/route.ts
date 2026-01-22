@@ -1,7 +1,7 @@
 // src/app/api/turmas/route.ts
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 
 export const runtime = "nodejs";
@@ -291,14 +291,11 @@ function parseHorariosPorDia(
   return itens.filter((item): item is { day_of_week: number; dia_label: string; inicio: string; fim: string } => !!item);
 }
 
-export async function GET() {
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+export async function GET(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("turmas")
@@ -341,17 +338,14 @@ export async function GET() {
   return NextResponse.json({ data: rows });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const usuarioId = user?.id ?? null;
-  if (!usuarioId) {
-    return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-  }
+export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const payload = await req.json(); // { turma: {...}, horarios_por_dia: [...] }
+  const { supabase, userId } = auth;
+  const usuarioId = userId;
+
+  const payload = await request.json(); // { turma: {...}, horarios_por_dia: [...] }
   const niveisIdsRaw = Array.isArray(payload.niveis_ids) ? payload.niveis_ids : null;
   const niveisIds: number[] = [];
 

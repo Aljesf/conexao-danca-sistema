@@ -1,8 +1,8 @@
 ﻿// src/app/api/pessoas/[id]/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
-import { requireUser } from "@/lib/supabase/api-auth"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 import { normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 import type { Pessoa } from "@/types/pessoas";
@@ -111,9 +111,7 @@ async function resolverNomePorUserId(userId: string | null): Promise<string | nu
 }
 
 // Carrega a pessoa e adiciona created_by_name / updated_by_name
-async function carregarPessoaComNomes(id: string) {
-  const supabase = await getSupabaseServer();
-
+async function carregarPessoaComNomes(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
     .from("pessoas")
     .select(pessoaSelect)
@@ -159,9 +157,9 @@ export async function GET(request: NextRequest, ctx: RouteParams) {
     const auth = await requireUser(request);
     if (auth instanceof NextResponse) return auth;
 
-    const { supabase, userId } = auth;
+    const { supabase } = auth;
 
-    const pessoa = await carregarPessoaComNomes(id);
+    const pessoa = await carregarPessoaComNomes(supabase, id);
 
     if (!pessoa) {
       return NextResponse.json(
@@ -263,7 +261,7 @@ export async function PUT(request: NextRequest, ctx: RouteParams) {
       );
     }
 
-    const pessoaAtualizada = await carregarPessoaComNomes(id);
+    const pessoaAtualizada = await carregarPessoaComNomes(supabase, id);
 
     try {
       const usuarioNome = await resolverNomeDoUsuario(updatedBy);

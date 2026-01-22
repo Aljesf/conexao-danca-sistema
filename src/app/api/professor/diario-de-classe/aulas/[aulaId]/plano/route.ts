@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getUserOrThrow, canAccessTurma } from "../../../_lib/auth";
 
 const zAulaId = z.coerce.number().int().positive();
 
-export async function GET(_req: Request, ctx: { params: Promise<{ aulaId: string }> }) {
-  const auth = await getUserOrThrow();
+export async function GET(request: NextRequest, ctx: { params: Promise<{ aulaId: string }> }) {
+  const auth = await getUserOrThrow(request);
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
   const { aulaId: aulaIdRaw } = await ctx.params;

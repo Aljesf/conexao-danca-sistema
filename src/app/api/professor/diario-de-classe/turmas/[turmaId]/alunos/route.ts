@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { canAccessTurma, getUserOrThrow, zTurmaId } from "../../../_lib/auth";
 
 type TurmaAlunoRow = {
@@ -9,8 +9,8 @@ type TurmaAlunoRow = {
 /**
  * GET /api/professor/diario-de-classe/turmas/:turmaId/alunos
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ turmaId: string }> }) {
-  const auth = await getUserOrThrow();
+export async function GET(request: NextRequest, ctx: { params: Promise<{ turmaId: string }> }) {
+  const auth = await getUserOrThrow(request);
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
   const { turmaId: turmaIdRaw } = await ctx.params;

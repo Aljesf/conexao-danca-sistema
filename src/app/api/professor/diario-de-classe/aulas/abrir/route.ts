@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { canAccessTurma, getUserOrThrow, zDataAula, zTurmaId } from "../../_lib/auth";
 
@@ -12,11 +12,11 @@ const zBody = z.object({
 /**
  * POST /api/professor/diario-de-classe/aulas/abrir
  */
-export async function POST(req: Request) {
-  const auth = await getUserOrThrow();
+export async function POST(request: NextRequest) {
+  const auth = await getUserOrThrow(request);
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
-  const json = await req.json().catch(() => null);
+  const json = await request.json().catch(() => null);
   const body = zBody.safeParse(json);
   if (!body.success) {
     return NextResponse.json({ ok: false, code: "BODY_INVALIDO", issues: body.error.issues }, { status: 400 });

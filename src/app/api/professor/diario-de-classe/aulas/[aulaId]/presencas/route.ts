@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { canAccessTurma, getUserOrThrow } from "../../../_lib/auth";
 import type { Supa } from "../../../_lib/auth";
@@ -31,8 +31,8 @@ async function getAulaOrFail(params: { supabase: Supa; aulaId: number }) {
 /**
  * GET /api/professor/diario-de-classe/aulas/:aulaId/presencas
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ aulaId: string }> }) {
-  const auth = await getUserOrThrow();
+export async function GET(request: NextRequest, ctx: { params: Promise<{ aulaId: string }> }) {
+  const auth = await getUserOrThrow(request);
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
   const { aulaId: aulaIdRaw } = await ctx.params;
@@ -66,15 +66,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ aulaId: string
 /**
  * PUT /api/professor/diario-de-classe/aulas/:aulaId/presencas
  */
-export async function PUT(req: Request, ctx: { params: Promise<{ aulaId: string }> }) {
-  const auth = await getUserOrThrow();
+export async function PUT(request: NextRequest, ctx: { params: Promise<{ aulaId: string }> }) {
+  const auth = await getUserOrThrow(request);
   if (!auth.ok) return NextResponse.json(auth, { status: auth.status });
 
   const { aulaId: aulaIdRaw } = await ctx.params;
   const aulaId = zAulaId.safeParse(aulaIdRaw);
   if (!aulaId.success) return NextResponse.json({ ok: false, code: "AULA_ID_INVALIDO" }, { status: 400 });
 
-  const json = await req.json().catch(() => null);
+  const json = await request.json().catch(() => null);
   const body = zBodyPut.safeParse(json);
   if (!body.success) return NextResponse.json({ ok: false, code: "BODY_INVALIDO", issues: body.error.issues }, { status: 400 });
 

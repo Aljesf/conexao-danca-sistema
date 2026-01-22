@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,19 +12,13 @@ function buildIlike(q: string): string {
   return `%${q.replace(/%/g, "").replace(/_/g, "")}%`;
 }
 
-export async function GET(req: Request) {
-  const supabase = await getSupabaseServer();
+export async function GET(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
+  const { supabase } = auth;
 
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "nao_autenticado" }, { status: 401 });
-  }
-
-  const url = new URL(req.url);
+  const url = new URL(request.url);
   const q = sanitizeQuery(url.searchParams.get("q") ?? "");
   const qDigits = q.replace(/\D/g, "");
   const hasTextQuery = q.length >= 2;

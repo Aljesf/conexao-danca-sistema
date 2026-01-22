@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { normalizeCnpj, validateCnpj } from "@/lib/validators/cnpj";
 
 type Body = {
@@ -13,16 +13,14 @@ type Body = {
   observacoes?: string | null;
 };
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(request: NextRequest): Promise<Response> {
   try {
-    const supabase = await getSupabaseServer();
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
 
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) {
-      return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
-    }
+    const { supabase, userId } = auth;
 
-    const body = (await req.json().catch(() => null)) as Body | null;
+    const body = (await request.json().catch(() => null)) as Body | null;
     if (!body) {
       return NextResponse.json({ error: "Payload invalido." }, { status: 400 });
     }
@@ -77,8 +75,8 @@ export async function POST(req: Request): Promise<Response> {
         telefone_secundario: telefoneSecundario,
         observacoes,
         ativo: true,
-        created_by: auth.user.id,
-        updated_by: auth.user.id,
+        created_by: userId,
+        updated_by: userId,
       })
       .select("*")
       .single();

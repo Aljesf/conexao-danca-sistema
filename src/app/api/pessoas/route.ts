@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireUser(request);
     if (auth instanceof NextResponse) return auth;
 
-    const { supabase, userId } = auth;
+    const { supabase } = auth;
 
     if (search) {
       const like = `%${search}%`;

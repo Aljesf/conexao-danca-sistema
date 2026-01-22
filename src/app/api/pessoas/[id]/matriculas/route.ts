@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
 
 type RouteCtx = { params: Promise<{ id?: string }> };
@@ -45,7 +45,7 @@ function normalizeNumberArray(values: Array<number | null | undefined>): number[
   return Array.from(new Set(values.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)));
 }
 
-export async function GET(_req: Request, ctx: RouteCtx) {
+export async function GET(request: NextRequest, ctx: RouteCtx) {
   try {
     const { id } = await ctx.params;
     const pessoaId = Number(id);
@@ -53,13 +53,10 @@ export async function GET(_req: Request, ctx: RouteCtx) {
       return NextResponse.json({ error: "ID invalido." }, { status: 400 });
     }
 
-    const supabase = await getSupabaseServer();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Usuario nao autenticado." }, { status: 401 });
-    }
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
+
+    const { supabase } = auth;
 
     let data: unknown[] | null = null;
     let error: PostgrestError | null = null;
