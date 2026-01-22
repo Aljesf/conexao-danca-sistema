@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { requireUser, type ApiAuthContext } from "@/lib/supabase/api-auth";
 
 type EmissaoModelo = {
   modelo_id: number;
@@ -85,7 +85,7 @@ function resolveOperacao(tipoMatricula: string | null): { operacao: string; codi
   return { operacao: normalized || "DESCONHECIDA", codigos: normalized ? [normalized] : [] };
 }
 
-async function fetchConjuntos(supabase: Awaited<ReturnType<typeof getSupabaseServerSSR>>, codigos: string[]) {
+async function fetchConjuntos(supabase: ApiAuthContext["supabase"], codigos: string[]) {
   let query = supabase.from("documentos_conjuntos").select("id,codigo,nome,ativo").eq("ativo", true);
   if (codigos.length > 0) {
     query = query.in("codigo", codigos);
@@ -99,7 +99,7 @@ async function fetchConjuntos(supabase: Awaited<ReturnType<typeof getSupabaseSer
 }
 
 async function fetchGruposDoConjunto(
-  supabase: Awaited<ReturnType<typeof getSupabaseServerSSR>>,
+  supabase: ApiAuthContext["supabase"],
   conjuntoId: number,
 ) {
   const pivotCheck = await supabase.from("documentos_conjuntos_grupos").select("id").limit(1);
@@ -172,8 +172,11 @@ async function fetchGruposDoConjunto(
   return { data: gruposOut, error: null };
 }
 
-export async function GET(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { searchParams } = new URL(req.url);
 
   const matriculaIdRaw = searchParams.get("matriculaId");
@@ -312,3 +315,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ ok: true, data: { operacao, conjuntos: conjuntosOut } });
 }
+
+

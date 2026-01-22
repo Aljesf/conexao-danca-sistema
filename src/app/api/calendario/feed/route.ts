@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type CalendarOrigin = { tipo: string; id: string };
 
@@ -37,7 +37,7 @@ function toISODateOnly(v: unknown): string {
   return String(v ?? "");
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const start = searchParams.get("start"); // YYYY-MM-DD
   const end = searchParams.get("end"); // YYYY-MM-DD
@@ -50,7 +50,10 @@ export async function GET(req: Request) {
     );
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const items: CalendarItem[] = [];
 
@@ -193,3 +196,4 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ start, end, items });
 }
+

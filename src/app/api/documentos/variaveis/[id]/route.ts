@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type Origem =
   | "ALUNO"
@@ -62,7 +62,7 @@ function parseId(raw: string): number | null {
   return id;
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const variavelId = parseId(id);
 
@@ -70,7 +70,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "ID invalido." }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data, error } = await supabase
     .from("documentos_variaveis")
     .select("*")
@@ -84,7 +87,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ data }, { status: 200 });
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const variavelId = parseId(id);
 
@@ -120,7 +123,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     updatePayload.formato = validateFormato(tipoAtual as Tipo, body.formato ?? null);
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data, error } = await supabase
     .from("documentos_variaveis")
     .update(updatePayload)
@@ -135,7 +141,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   return NextResponse.json({ data }, { status: 200 });
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const variavelId = parseId(id);
 
@@ -143,7 +149,10 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "ID invalido." }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { error } = await supabase
     .from("documentos_variaveis")
     .update({ ativo: false })
@@ -155,3 +164,4 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
   return NextResponse.json({ ok: true }, { status: 200 });
 }
+

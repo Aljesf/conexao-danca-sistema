@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type PeriodoLetivoInput = {
   codigo: string;
@@ -16,11 +16,14 @@ function bad(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const includeInativos = searchParams.get("include_inativos") === "1";
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   let q = supabase
     .from("periodos_letivos")
@@ -35,8 +38,11 @@ export async function GET(req: Request) {
   return NextResponse.json({ items: data ?? [] });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServer();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json().catch(() => null)) as PeriodoLetivoInput | null;
   if (!body) return bad("JSON invalido.");
 
@@ -61,3 +67,4 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ id: data.id }, { status: 201 });
 }
+

@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type Pessoa = {
   id: number;
@@ -12,7 +12,7 @@ function badRequest(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
 
@@ -24,7 +24,10 @@ export async function GET(req: Request) {
   const day = d.getUTCDate();
   const month = d.getUTCMonth() + 1;
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("pessoas")
@@ -41,3 +44,4 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ date, items });
 }
+

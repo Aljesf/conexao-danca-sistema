@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { listarColecoes } from "@/lib/documentos/documentos-variaveis";
 
 type ColecaoColunaPayload = {
@@ -49,7 +49,7 @@ function parseColunas(raw: unknown): { value: ColecaoColunaPayload[] } {
   return { value: output };
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const ativoParam = url.searchParams.get("ativo");
@@ -68,8 +68,11 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as ColecaoPayload;
 
   const codigoRaw = typeof body.codigo === "string" ? body.codigo.trim() : "";
@@ -135,3 +138,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ data: { id: created.id } } satisfies ApiResp<unknown>, { status: 201 });
 }
+

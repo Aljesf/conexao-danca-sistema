@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +11,10 @@ export const dynamic = "force-dynamic";
  * refatorar este GET para buscar direto nessas tabelas.
  */
 export async function GET() {
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("vw_alunos")
@@ -31,11 +34,14 @@ export async function GET() {
  *
  * Novo fluxo:
  * 1) Insere na tabela `pessoas`
- * 2) Cria vínculo na tabela `pessoas_roles` com tipo_role = "ALUNO"
+ * 2) Cria vÃ­nculo na tabela `pessoas_roles` com tipo_role = "ALUNO"
  * 3) Retorna o objeto no formato que a tela espera
  */
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServer();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = await req.json();
 
   // 1) cria a pessoa na tabela `pessoas`
@@ -67,7 +73,7 @@ export async function POST(req: Request) {
     .insert([{ pessoa_id: pessoa.id, tipo_role: "ALUNO" }]);
 
   if (e2) {
-    // rollback simples: remove a pessoa recém-criada
+    // rollback simples: remove a pessoa recÃ©m-criada
     await supabase.from("pessoas").delete().eq("id", pessoa.id);
 
     return NextResponse.json(
@@ -83,7 +89,7 @@ export async function POST(req: Request) {
     email: pessoa.email,
     telefone: pessoa.telefone,
     data_nascimento: pessoa.nascimento,
-    // campos ainda não existentes na tabela, mas que podem ser úteis
+    // campos ainda nÃ£o existentes na tabela, mas que podem ser Ãºteis
     // para manter compatibilidade com a tela (ajuste conforme evoluir o schema)
     ativo: true,
     created_at: null,
@@ -91,3 +97,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ data: aluno }, { status: 201 });
 }
+

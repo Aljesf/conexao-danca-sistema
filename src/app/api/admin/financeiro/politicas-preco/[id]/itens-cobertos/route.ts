@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 function toInt(v: string): number | null {
@@ -8,10 +8,13 @@ function toInt(v: string): number | null {
   return Math.trunc(n);
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const denied = await guardApiByRole(_req as any);
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { id } = await ctx.params;
   const pid = toInt(id);
 
@@ -37,3 +40,4 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   return NextResponse.json({ itens });
 }
+

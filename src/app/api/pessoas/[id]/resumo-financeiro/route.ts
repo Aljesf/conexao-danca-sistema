@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type RouteParams = {
   params: Promise<{ id?: string }>;
@@ -57,7 +57,10 @@ export async function GET(_: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "pessoa_id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data: resumo, error: resumoErr } = await supabase
     .from("vw_pessoa_resumo_financeiro")
@@ -167,3 +170,4 @@ export async function GET(_: Request, { params }: RouteParams) {
 
   return NextResponse.json(payload);
 }
+

@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser, type ApiAuthContext } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 function parseId(param: string): number | null {
@@ -8,7 +8,7 @@ function parseId(param: string): number | null {
   return n;
 }
 
-async function resolvePoliticaPk(supabase: Awaited<ReturnType<typeof getSupabaseServerSSR>>) {
+async function resolvePoliticaPk(supabase: ApiAuthContext["supabase"]) {
   const { data, error } = await supabase
     .from("information_schema.columns")
     .select("column_name")
@@ -21,10 +21,13 @@ async function resolvePoliticaPk(supabase: Awaited<ReturnType<typeof getSupabase
   return "id";
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { id } = await ctx.params;
   const politicaId = parseId(id);
 
@@ -62,3 +65,4 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const politica = data ? { ...(data as Record<string, unknown>), id: (data as Record<string, unknown>)[pk] } : null;
   return NextResponse.json({ politica });
 }
+

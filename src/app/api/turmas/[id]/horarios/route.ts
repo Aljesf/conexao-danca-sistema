@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type HorarioInput = {
   dia_semana: number; // 0=Dom .. 6=Sab
@@ -37,14 +37,17 @@ function uniqHorarios(list: HorarioInput[]) {
   return Array.from(map.values());
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await ctx.params;
   const turmaId = Number(rawId);
   if (!Number.isFinite(turmaId)) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data, error } = await supabase
     .from("turmas_horarios")
     .select("day_of_week,inicio,fim")
@@ -65,7 +68,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ horarios });
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await ctx.params;
   const turmaId = Number(rawId);
   if (!Number.isFinite(turmaId)) {
@@ -101,7 +104,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const horarios = uniqHorarios(horariosIn);
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const del = await supabase.from("turmas_horarios").delete().eq("turma_id", turmaId);
   if (del.error) {
     return NextResponse.json({ error: "falha_ao_limpar_grade", details: del.error.message }, { status: 500 });
@@ -153,3 +159,4 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
   return NextResponse.json({ ok: true, turma_id: turmaId, total_horarios: horarios.length });
 }
+

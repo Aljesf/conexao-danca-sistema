@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type EventoInternoInput = {
   periodo_letivo_id?: number | null;
@@ -20,13 +20,16 @@ function badRequest(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const start = searchParams.get("start");
   const end = searchParams.get("end");
   const periodoLetivoId = searchParams.get("periodo_letivo_id");
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   let q = supabase
     .from("eventos_internos")
@@ -45,8 +48,11 @@ export async function GET(req: Request) {
   return NextResponse.json({ items: data ?? [] });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json().catch(() => null)) as EventoInternoInput | null;
   if (!body) return badRequest("JSON invalido.");
 
@@ -76,3 +82,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ id: data.id }, { status: 201 });
 }
+

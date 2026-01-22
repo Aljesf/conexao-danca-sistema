@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type ReconciliarResult = {
   cobranca_id: number;
@@ -11,7 +11,10 @@ type ReconciliarResult = {
 };
 
 export async function POST() {
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("vw_governanca_boletos_neofin")
@@ -64,3 +67,4 @@ export async function POST() {
 
   return NextResponse.json({ ok: true, atualizados: resultados, total: resultados.length });
 }
+

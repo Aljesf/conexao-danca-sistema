@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import type { DocumentoModeloFormato } from "@/lib/documentos/modelos.types";
 
 type DocumentoModeloUpdatePayload = {
@@ -32,10 +32,13 @@ function asText(input: unknown): string | null {
   return typeof input === "string" ? input : null;
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const modeloId = Number(id);
 
   if (!Number.isFinite(modeloId)) {
@@ -131,10 +134,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ data: { ...data, vinculos: vinculosOut } }, { status: 200 });
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const modeloId = Number(id);
 
   if (!Number.isFinite(modeloId)) {
@@ -325,3 +331,4 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
   return NextResponse.json({ data }, { status: 200 });
 }
+

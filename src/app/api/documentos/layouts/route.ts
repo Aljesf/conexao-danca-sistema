@@ -1,13 +1,16 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const onlyActive = url.searchParams.get("ativo") !== "0";
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   let q = supabase
     .from("documentos_layouts")
@@ -24,8 +27,11 @@ export async function GET(req: Request) {
   return NextResponse.json({ ok: true, data } satisfies ApiResp<unknown>);
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as Record<string, unknown>;
 
   const nome = String(body.nome || "").trim();
@@ -56,3 +62,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, data } satisfies ApiResp<unknown>, { status: 201 });
 }
+

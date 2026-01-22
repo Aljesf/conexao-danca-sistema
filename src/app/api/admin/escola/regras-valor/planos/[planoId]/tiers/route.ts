@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser, type ApiAuthContext } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type ErrorLike = { code?: string; message?: string } | null;
@@ -21,7 +21,7 @@ function isMissingColumn(err: ErrorLike) {
 }
 
 async function fetchTiers(
-  supabase: Awaited<ReturnType<typeof getSupabaseServerSSR>>,
+  supabase: ApiAuthContext["supabase"],
   politicaCol: "politica_id" | "politica_preco_id",
   planoId: number,
   grupoId: number | null,
@@ -31,10 +31,13 @@ async function fetchTiers(
   return query;
 }
 
-export async function GET(req: Request, ctx: { params: Promise<{ planoId: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ planoId: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { planoId } = await ctx.params;
   const pid = toInt(planoId);
   if (!pid) return NextResponse.json({ error: "planoId invalido." }, { status: 400 });
@@ -51,10 +54,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ planoId: string
   return NextResponse.json({ tiers: data ?? [] });
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ planoId: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ planoId: string }> }) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { planoId } = await ctx.params;
   const pid = toInt(planoId);
   if (!pid) return NextResponse.json({ error: "planoId invalido." }, { status: 400 });
@@ -116,3 +122,4 @@ export async function POST(req: Request, ctx: { params: Promise<{ planoId: strin
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
   return NextResponse.json({ tier: result.data }, { status: 201 });
 }
+

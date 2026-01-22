@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type ConjuntoCreate = {
   codigo: string;
@@ -36,10 +36,13 @@ function normCodigo(input: string): string {
   return input.trim().toUpperCase().replace(/\s+/g, "_");
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const includeGrupos = url.searchParams.get("include") === "grupos";
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data: conjuntos, error: errConj } = await supabase
     .from("documentos_conjuntos")
@@ -85,8 +88,11 @@ export async function GET(req: Request) {
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as ConjuntoCreate;
 
   if (!body?.codigo || !body?.nome) {
@@ -115,3 +121,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, data }, { status: 201 });
 }
+
+

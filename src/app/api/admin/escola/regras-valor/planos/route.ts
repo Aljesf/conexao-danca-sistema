@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 const PK = "politica_preco_id";
@@ -12,10 +12,13 @@ function mapPlano(row: Record<string, unknown>) {
   return { ...row, id: row[PK] };
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const url = new URL(req.url);
   const onlyAtivo = url.searchParams.get("ativo");
 
@@ -32,10 +35,13 @@ export async function GET(req: Request) {
   return NextResponse.json({ planos });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json().catch(() => null)) as
     | { nome?: unknown; descricao?: unknown; ativo?: unknown }
     | null;
@@ -64,3 +70,4 @@ export async function POST(req: Request) {
   const row = (data ?? {}) as Record<string, unknown>;
   return NextResponse.json({ plano: mapPlano(row) }, { status: 201 });
 }
+

@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type ListItem = {
   cobranca_id: number;
@@ -21,7 +21,7 @@ type ListItem = {
   ultimo_pagamento_em: string | null;
 };
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
   const status = searchParams.get("status");
@@ -30,7 +30,10 @@ export async function GET(req: Request) {
   const to = searchParams.get("to");
   const centroCustoId = searchParams.get("centro_custo_id");
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   let query = supabase
     .from("vw_governanca_boletos_neofin")
@@ -68,3 +71,4 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ ok: true, items: (data ?? []) as ListItem[] });
 }
+

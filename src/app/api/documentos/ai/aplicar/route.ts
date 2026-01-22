@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import type { AiAnalyzeResp } from "@/lib/documentos/ai.types";
 
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
@@ -26,8 +26,11 @@ function normalizeTipo(raw: unknown): TipoVariavel {
   return "TEXTO";
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as ApplyBody;
 
   const sugestao = body.sugestao;
@@ -157,3 +160,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, data: { ok: true } } satisfies ApiResp<unknown>);
 }
+
+

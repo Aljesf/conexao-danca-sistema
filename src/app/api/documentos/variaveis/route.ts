@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type Origem =
   | "ALUNO"
@@ -109,8 +109,11 @@ function parseJoinPath(raw: unknown): { value: JoinEdge[] | null; error?: string
   return { value: edges };
 }
 
-export async function GET(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const url = new URL(req.url);
   const ativoParam = url.searchParams.get("ativo");
 
@@ -134,8 +137,11 @@ export async function GET(req: Request) {
   return NextResponse.json({ data }, { status: 200 });
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as VariavelPayload;
 
   if (!body?.codigo || !body?.descricao || !isOrigem(body.origem) || !isTipo(body.tipo)) {
@@ -247,8 +253,11 @@ export async function POST(req: Request) {
   return NextResponse.json({ data }, { status: 201 });
 }
 
-export async function PUT(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function PUT(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as VariavelPayload;
 
   const id = typeof body.id === "number" ? body.id : Number(body.id);
@@ -391,8 +400,11 @@ export async function PUT(req: Request) {
   return NextResponse.json({ data }, { status: 200 });
 }
 
-export async function DELETE(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function DELETE(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as { id?: number };
   const id = typeof body?.id === "number" ? body.id : Number(body?.id);
 
@@ -408,3 +420,4 @@ export async function DELETE(req: Request) {
 
   return NextResponse.json({ ok: true }, { status: 200 });
 }
+

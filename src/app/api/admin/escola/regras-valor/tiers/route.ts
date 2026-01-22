@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type TierRow = {
@@ -49,10 +49,13 @@ function selectCols(politicaCol: "politica_id" | "politica_preco_id") {
   return `tier_id,tier_grupo_id,${politicaCol},tabela_id,tabela_item_id,ajuste_tipo,ajuste_valor_centavos,ordem,valor_centavos,ativo,created_at`;
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const url = new URL(req.url);
   const grupoId = toInt(url.searchParams.get("grupo_id"));
   const tabelaId = toInt(url.searchParams.get("tabela_id"));
@@ -94,10 +97,13 @@ export async function GET(req: Request) {
   return NextResponse.json({ tiers: tiers as TierRow[] });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
 
   const grupoId = toInt(body?.tier_grupo_id);
@@ -172,3 +178,4 @@ export async function POST(req: Request) {
   const row = mapPoliticaId((data ?? {}) as Record<string, unknown>, politicaCol);
   return NextResponse.json({ tier: row }, { status: 201 });
 }
+

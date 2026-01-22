@@ -1,15 +1,18 @@
-// src/app/api/turmas/[id]/route.ts
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿// src/app/api/turmas/[id]/route.ts
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function PUT(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const turmaId = Number(id);
-  const supabase = await getSupabaseServer();
-  const body = await _req.json(); // { turma: {...}, horarios: [...] }
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
+  const body = await req.json(); // { turma: {...}, horarios: [...] }
   const turmaPayload = { ...(body.turma ?? {}) } as Record<string, unknown>;
   for (const key of ["serie", "created_at", "updated_at", "created_by", "updated_by"]) {
     if (key in turmaPayload) {
@@ -37,7 +40,7 @@ export async function PUT(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // substitui horários
+  // substitui horÃ¡rios
   if (Array.isArray(body.horarios)) {
     await supabase.from("turmas_horarios").delete().eq("turma_id", turmaId);
 
@@ -55,13 +58,17 @@ export async function PUT(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ data });
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const turmaId = Number(id);
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { error } = await supabase.from("turmas").delete().eq("turma_id", turmaId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+
 
 

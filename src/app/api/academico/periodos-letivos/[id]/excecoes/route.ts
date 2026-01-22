@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type ExcecaoInput = {
   dominio: string;
@@ -18,7 +18,7 @@ function bad(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await ctx.params;
   const periodoId = Number(rawId);
   if (Number.isNaN(periodoId)) return bad("id invalido.");
@@ -31,7 +31,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!body.titulo?.trim()) return bad("titulo e obrigatorio.");
   if (!body.data_inicio?.trim()) return bad("data_inicio e obrigatorio.");
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const payload = {
     periodo_letivo_id: periodoId,
@@ -57,3 +60,4 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   return NextResponse.json({ id: data.id }, { status: 201 });
 }
+

@@ -1,11 +1,14 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(_req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { id } = await params;
   const faturaId = Number(id);
 
@@ -43,3 +46,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   return NextResponse.json({ ok: true, lancamentos });
 }
+
+

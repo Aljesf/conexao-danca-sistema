@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export async function GET() {
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data, error } = await supabase
     .from("vw_professores")
     .select("id, nome")
@@ -19,3 +22,4 @@ export async function GET() {
 
   return NextResponse.json({ professores: data ?? [] });
 }
+

@@ -1,16 +1,19 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 function bad(msg: string) {
   return NextResponse.json({ error: msg }, { status: 400 });
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await ctx.params;
   const id = Number(rawId);
   if (Number.isNaN(id)) return bad("id invalido.");
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data: pl, error: plErr } = await supabase
     .from("periodos_letivos")
@@ -41,7 +44,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ periodo: pl, faixas: faixas ?? [], excecoes: excecoes ?? [] });
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await ctx.params;
   const id = Number(rawId);
   if (Number.isNaN(id)) return bad("id invalido.");
@@ -49,7 +52,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return bad("JSON invalido.");
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const patch: Record<string, unknown> = {};
   const allowed = [
@@ -74,3 +80,4 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
   return NextResponse.json({ ok: true });
 }
+

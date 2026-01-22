@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser, type ApiAuthContext } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type PoliticaPrecoRow = {
@@ -15,7 +15,7 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-async function resolvePoliticaPk(supabase: Awaited<ReturnType<typeof getSupabaseServerSSR>>) {
+async function resolvePoliticaPk(supabase: ApiAuthContext["supabase"]) {
   const { data, error } = await supabase
     .from("information_schema.columns")
     .select("column_name")
@@ -28,10 +28,13 @@ async function resolvePoliticaPk(supabase: Awaited<ReturnType<typeof getSupabase
   return "id";
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const url = new URL(req.url);
   const ativoParam = url.searchParams.get("ativo");
   let ativoFilter: boolean | null = null;
@@ -67,10 +70,13 @@ export async function GET(req: Request) {
   return NextResponse.json({ politicas });
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const pk = await resolvePoliticaPk(supabase);
 
   const body = (await req.json().catch(() => null)) as
@@ -105,3 +111,4 @@ export async function POST(req: Request) {
   const politica = data ? { ...(data as Record<string, unknown>), id: (data as Record<string, unknown>)[pk] } : null;
   return NextResponse.json({ politica }, { status: 201 });
 }
+

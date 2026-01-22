@@ -1,4 +1,5 @@
-﻿import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const runtime = "nodejs";
@@ -11,7 +12,7 @@ function json(data: any, status = 200) {
   });
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
@@ -30,7 +31,10 @@ export async function GET(req: Request) {
       return json({ ok: false, error: "variante_id invalido." }, 400);
     }
 
-    const supabase = await getSupabaseServerSSR();
+    const auth = await requireUser(req);
+    if (auth instanceof NextResponse) return auth;
+
+    const { supabase } = auth;
 
     const selectFull = `
       id,
@@ -146,3 +150,8 @@ export async function GET(req: Request) {
     return json({ ok: false, error: String(err?.message || err) }, 500);
   }
 }
+
+
+
+
+

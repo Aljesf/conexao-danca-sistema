@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
-import { getSupabaseServer } from "@/lib/supabaseServer";
 
 type PessoaSearchRow = {
   id: number;
@@ -12,11 +12,14 @@ function sanitizeQuery(q: string): string {
   return q.trim().replace(/\s+/g, " ");
 }
 
-export async function GET(req: Request): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { searchParams } = new URL(req.url);
 
   const rawQ = searchParams.get("q") ?? "";
@@ -52,3 +55,5 @@ export async function GET(req: Request): Promise<Response> {
 
   return NextResponse.json({ pessoas });
 }
+
+

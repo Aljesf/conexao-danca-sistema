@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type PessoaRow = {
   id: number;
@@ -19,8 +19,11 @@ function norm(s: string): string {
   return s.trim();
 }
 
-export async function GET(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const url = new URL(req.url);
   const qRaw = url.searchParams.get("q") ?? "";
@@ -115,3 +118,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ data }, { status: 200 });
 }
+
+

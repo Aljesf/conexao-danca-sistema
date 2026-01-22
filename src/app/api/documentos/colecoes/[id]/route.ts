@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type ColecaoColunaPayload = {
   codigo?: string;
@@ -48,8 +48,11 @@ function parseColunas(raw: unknown): { value: ColecaoColunaPayload[] } {
   return { value: output };
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const supabase = await getSupabaseServerSSR();
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { id: rawId } = await ctx.params;
   const id = Number(rawId);
 
@@ -98,8 +101,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   );
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const supabase = await getSupabaseServerSSR();
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { id: rawId } = await ctx.params;
   const id = Number(rawId);
 
@@ -173,3 +179,4 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
   return NextResponse.json({ data: { id } } satisfies ApiResp<unknown>, { status: 200 });
 }
+

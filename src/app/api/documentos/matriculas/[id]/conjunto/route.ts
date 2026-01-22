@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type PutBody = { documento_conjunto_id: number | null };
 
@@ -10,7 +10,10 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     return NextResponse.json({ ok: false, message: "ID inválido." }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data, error } = await supabase
     .from("matriculas")
     .select("id, documento_conjunto_id")
@@ -21,7 +24,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const matriculaId = Number(id);
   if (!Number.isFinite(matriculaId)) {
@@ -31,7 +34,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const body = (await req.json()) as PutBody;
   const conjuntoId = body?.documento_conjunto_id;
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   if (conjuntoId !== null && typeof conjuntoId !== "number") {
     return NextResponse.json({ ok: false, message: "documento_conjunto_id inválido." }, { status: 400 });
@@ -49,3 +55,4 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   if (error) return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
+

@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
-export async function GET() {
-  const supabase = await getSupabaseServerSSR();
+export async function GET(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("documentos_emitidos")
@@ -16,3 +19,4 @@ export async function GET() {
 
   return NextResponse.json({ data }, { status: 200 });
 }
+

@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -125,7 +125,7 @@ async function resolveContextoMatriculaId(params: {
     return {
       ok: false as const,
       response: NextResponse.json(
-        { error: "contexto_tipo_invalido", message: "Contexto nao compatível com o tipo da turma." },
+        { error: "contexto_tipo_invalido", message: "Contexto nao compatÃ­vel com o tipo da turma." },
         { status: 400 },
       ),
     };
@@ -191,14 +191,17 @@ function parseHorariosPorDia(
   return itens.filter((item): item is { day_of_week: number; dia_label: string; inicio: string; fim: string } => !!item);
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const turmaId = Number(id);
   if (!Number.isInteger(turmaId) || turmaId <= 0) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data: turma, error } = await supabase
     .from("turmas")
     .select("*, espaco:espacos ( id, nome, tipo, capacidade, local_id, local:locais ( id, nome, tipo ) )")
@@ -225,15 +228,18 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ turma, horarios_por_dia: horariosPorDia }, { status: 200 });
 }
 
-export async function PUT(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await ctx.params;
   const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServer();
-  const body = await _req.json(); // { turma: {...}, horarios_por_dia: [...] }
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
+  const body = await req.json(); // { turma: {...}, horarios_por_dia: [...] }
   const turmaPayload = { ...(body.turma ?? body) } as Record<string, unknown>;
   for (const key of ["horarios_por_dia", "horarios"]) {
     if (key in turmaPayload) {
@@ -364,14 +370,18 @@ export async function PUT(_req: Request, ctx: { params: Promise<{ id: string }> 
   return NextResponse.json({ data, horarios_por_dia: horariosParsed }, { status: 200 });
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id: rawId } = await ctx.params;
   const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) {
     return NextResponse.json({ error: "turma_id_invalido" }, { status: 400 });
   }
-  const supabase = await getSupabaseServer();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { error } = await supabase.from("turmas").delete().eq("turma_id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
+

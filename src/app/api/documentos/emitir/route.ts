@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { requireUser } from "@/lib/supabase/api-auth";
 import {
   extractPlaceholderCodes,
   formatValue,
@@ -282,8 +282,11 @@ function normalizeManualVars(raw: Record<string, unknown>): Record<string, unkno
   return out;
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as EmitirDocumentoPayload;
   const documentoModeloId = Number(body.documento_modelo_id ?? body.contrato_modelo_id);
 
@@ -701,3 +704,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ data }, { status: 201 });
 }
+
+

@@ -1,5 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { criarCobrancaLocalEEnviarNeofin } from "@/lib/cobrancasNeofin";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
@@ -19,11 +19,14 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
  * - Cria vinculos em credito_conexao_fatura_lancamentos.
  * - Atualiza lancamentos para status = 'FATURADO'.
  */
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
-    const supabase = await getSupabaseServer();
+    const auth = await requireUser(req);
+    if (auth instanceof NextResponse) return auth;
+
+    const { supabase } = auth;
     const body = await req.json().catch(() => ({}));
 
     const contaConexaoId = Number(body.conta_conexao_id);
@@ -314,3 +317,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { requireUser } from "@/lib/supabase/api-auth";
 import {
   extractPlaceholderCodes,
   formatValue,
@@ -291,7 +291,7 @@ function normalizeManualVars(raw: Record<string, unknown>): Record<string, unkno
   return out;
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const matriculaId = Number(id);
   if (!Number.isFinite(matriculaId)) {
@@ -306,7 +306,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ ok: false, message: "documento_conjunto_id invalido." }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data: mat, error: matErr } = await supabase
     .from("matriculas")
@@ -819,3 +822,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     { status: 201 }
   );
 }
+
+

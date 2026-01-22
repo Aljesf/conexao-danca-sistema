@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { requireUser, type ApiAuthContext } from "@/lib/supabase/api-auth";
 
 type BodyPayload = {
   matricula_id?: number;
@@ -42,7 +42,7 @@ function resolveConteudo(modelo: ModeloRow): string {
   return md || html || modelo.titulo || "";
 }
 
-async function resolveModeloColumn(supabase: Awaited<ReturnType<typeof getSupabaseServerSSR>>) {
+async function resolveModeloColumn(supabase: ApiAuthContext["supabase"]) {
   const tryDocumento = await supabase.from("documentos_emitidos").select("documento_modelo_id").limit(1);
   if (!tryDocumento.error) return "documento_modelo_id" as const;
   if (!isSchemaMissing(tryDocumento.error)) {
@@ -54,8 +54,11 @@ async function resolveModeloColumn(supabase: Awaited<ReturnType<typeof getSupaba
   throw tryContrato.error;
 }
 
-export async function POST(req: Request) {
-  const supabase = await getSupabaseServerSSR();
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const body = (await req.json()) as BodyPayload;
 
   if (!body || typeof body !== "object") {
@@ -150,3 +153,5 @@ export async function POST(req: Request) {
     data: { created: novosIds.length, skipped: modeloIds.length - novosIds.length },
   });
 }
+
+

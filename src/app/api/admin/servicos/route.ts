@@ -53,7 +53,7 @@ function parseReferenciaId(input: unknown): number | null {
 
 // Observacao:
 // - Esta rota e ADMIN: usar SERVICE_ROLE para leitura e evitar travas de RLS.
-// - Caso voce ja tenha um helper padrao no projeto (ex.: getSupabaseServerSSR),
+// - Caso voce ja tenha um helper padrao no projeto (ex.: helper SSR padrao),
 //   pode substituir o createClient daqui por ele, mantendo a logica de tratamento.
 
 function getSupabaseAdminClient() {
@@ -241,3 +241,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "erro_interno", message }, { status: 500 });
   }
 }
+

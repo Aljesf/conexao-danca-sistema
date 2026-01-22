@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+import { requireUser } from "@/lib/supabase/api-auth";
 import { stripBackgroundStyles } from "@/lib/documentos/sanitizeHtml";
 import {
   extractPlaceholderCodes,
@@ -411,7 +411,7 @@ async function resolveEmitidoConteudo(params: {
   };
 }
 
-export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const docId = Number(id);
   if (!Number.isFinite(docId) || docId <= 0) {
@@ -425,7 +425,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const mode = url.searchParams.get("mode");
   const debugEnabled = process.env.DOCS_EMIT_DEBUG === "1" || url.searchParams.get("debug") === "1";
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data, error } = await supabase
     .from("documentos_emitidos")
     .select("*")
@@ -504,7 +507,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   return NextResponse.json({ ok: true, data: decoded } satisfies ApiResp<unknown>, { status: 200 });
 }
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const docId = Number(id);
   if (!Number.isFinite(docId) || docId <= 0) {
@@ -526,7 +529,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     );
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("documentos_emitidos")
@@ -546,7 +552,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   return NextResponse.json({ ok: true, data } satisfies ApiResp<unknown>);
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
     const docId = Number(id);
@@ -557,7 +563,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
     }
 
-    const supabase = await getSupabaseServerSSR();
+    const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
     const { data: doc, error: docErr } = await supabase
       .from("documentos_emitidos")
       .select("*")
@@ -636,3 +645,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     );
   }
 }
+
+

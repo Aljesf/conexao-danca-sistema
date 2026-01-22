@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type GrupoCreate = {
   codigo: string;
@@ -25,7 +25,10 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
     return NextResponse.json({ ok: false, message: "ID invalido." }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data, error } = await supabase
     .from("documentos_grupos")
     .select("*")
@@ -40,7 +43,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const conjuntoId = Number(id);
 
@@ -72,7 +75,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     papel,
   };
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   if (papel === "PRINCIPAL") {
     const { data: existente, error: principalErr } = await supabase
       .from("documentos_grupos")
@@ -105,3 +111,4 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   return NextResponse.json({ ok: true, data }, { status: 201 });
 }
+

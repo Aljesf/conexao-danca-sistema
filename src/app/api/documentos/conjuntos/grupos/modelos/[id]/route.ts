@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const linkId = Number(id);
 
@@ -38,7 +38,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     );
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("documentos_conjuntos_grupos_modelos")
@@ -65,7 +68,10 @@ export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> 
     );
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { error } = await supabase
     .from("documentos_conjuntos_grupos_modelos")
     .delete()
@@ -77,3 +83,4 @@ export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> 
 
   return NextResponse.json({ ok: true } satisfies ApiResp<unknown>);
 }
+

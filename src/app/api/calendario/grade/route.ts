@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type Turma = {
   turma_id: number;
@@ -20,11 +20,14 @@ type TurmaHorario = {
   fim: string;
 };
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const periodoLetivoId = searchParams.get("periodo_letivo_id");
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
 
   let turmasQ = supabase
     .from("turmas")
@@ -51,3 +54,4 @@ export async function GET(req: Request) {
     horarios: (horarios ?? []) as TurmaHorario[],
   });
 }
+

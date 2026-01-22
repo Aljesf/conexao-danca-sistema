@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 type GrupoUpdate = {
   codigo?: string;
@@ -25,7 +25,10 @@ export async function GET(_: Request, ctx: { params: Promise<{ grupoId: string }
     return NextResponse.json({ ok: false, message: "ID invalido." }, { status: 400 });
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   const { data, error } = await supabase
     .from("documentos_grupos")
     .select("*")
@@ -39,7 +42,7 @@ export async function GET(_: Request, ctx: { params: Promise<{ grupoId: string }
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
 
-export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string }> }) {
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ grupoId: string }> }) {
   const { grupoId } = await ctx.params;
   const id = Number(grupoId);
 
@@ -66,7 +69,10 @@ export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string
     patch.papel = body.papel;
   }
 
-  const supabase = await getSupabaseServerSSR();
+  const auth = await requireUser(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { supabase } = auth;
   if (body.papel === "PRINCIPAL") {
     const { data: grupoAtual, error: grupoErr } = await supabase
       .from("documentos_grupos")
@@ -111,3 +117,4 @@ export async function PUT(req: Request, ctx: { params: Promise<{ grupoId: string
 
   return NextResponse.json({ ok: true, data }, { status: 200 });
 }
+
