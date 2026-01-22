@@ -1,7 +1,5 @@
-﻿import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { guardApiByRole } from "@/lib/auth/roleGuard";
+﻿import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
@@ -281,26 +279,62 @@ function calcularPrimeiraCobranca(params: {
   };
 }
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const denied = await guardApiByRole(req as any);
-    if (denied) return denied as any;
-    const cookieStore = await cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    const admin = getSupabaseAdmin();
+    const response = NextResponse.next();
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
+          },
+        },
+      },
+    );
 
     const {
       data: { user },
       error: userErr,
     } = await supabase.auth.getUser();
 
-    if (userErr || !user) {
-      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    if (userErr) {
+      console.error("[api/matriculas/novo] auth.getUser error:", userErr);
     }
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "unauthorized", message: "Usuário não autenticado." },
+        { status: 401 },
+      );
+    }
+
+    const { data: isAdmin, error: adminErr } = await supabase.rpc("is_admin", { p_user_id: user.id });
+
+    if (adminErr) {
+      console.error("[api/matriculas/novo] rpc is_admin error:", adminErr);
+    }
+
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "forbidden", message: "Sem permissão para concluir matrícula." },
+        { status: 403 },
+      );
+    }
+
+    const admin = getSupabaseAdmin();
+    const cookieHeader = request.headers.get("cookie") ?? "";
 
     let body: BodyNovo;
     try {
-      body = (await req.json()) as BodyNovo;
+      body = (await request.json()) as BodyNovo;
     } catch {
       return badRequest("JSON invalido.");
     }
@@ -575,14 +609,14 @@ export async function POST(req: Request) {
   }
 
   if (!usarExecucoes && anoRef !== null) {
-    const resolveUrl = new URL("/api/matriculas/precos/resolver", req.url);
+    const resolveUrl = new URL("/api/matriculas/precos/resolver", request.url);
     resolveUrl.searchParams.set("aluno_id", String(pessoaId));
     resolveUrl.searchParams.set("alvo_tipo", "TURMA");
     resolveUrl.searchParams.set("alvo_id", String(vinculoId));
     resolveUrl.searchParams.set("ano", String(anoRef));
 
     const resolveRes = await fetch(resolveUrl.toString(), {
-      headers: { cookie: cookieStore.toString() },
+      headers: { cookie: cookieHeader },
     });
 
     let resolvePayload: { ok?: boolean; message?: string; details?: Record<string, unknown> } | null = null;
@@ -804,3 +838,7 @@ export async function POST(req: Request) {
     return jsonError("UNHANDLED_EXCEPTION", e, 500);
   }
 }
+
+
+
+
