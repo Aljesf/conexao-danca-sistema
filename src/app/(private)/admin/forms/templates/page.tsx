@@ -11,28 +11,38 @@ type TemplateRow = {
   updated_at: string;
 };
 
-async function getBaseUrl() {
-  const hdrs = await headers();
+function getBaseUrlFromHeaders(hdrs: Headers): string {
   const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host");
   const proto = hdrs.get("x-forwarded-proto") ?? "http";
-  const envBase = process.env.NEXT_PUBLIC_SITE_URL;
-  return envBase ?? (host ? `${proto}://${host}` : "");
+  if (!host) return "http://localhost:3000";
+  return `${proto}://${host}`;
 }
 
 async function fetchTemplates(): Promise<TemplateRow[]> {
-  const baseUrl = await getBaseUrl();
-  if (!baseUrl) return [];
-
   const hdrs = await headers();
   const cookie = hdrs.get("cookie") ?? "";
-  const res = await fetch(`${baseUrl}/api/admin/forms/templates`, {
-    cache: "no-store",
-    headers: { cookie },
-  });
-  if (!res.ok) return [];
+  const baseUrl = getBaseUrlFromHeaders(hdrs);
 
-  const json = (await res.json()) as { data?: TemplateRow[] };
-  return json.data ?? [];
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const res = await fetch(`${baseUrl}/api/admin/forms/templates`, {
+      cache: "no-store",
+      headers: { cookie },
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Falha ao carregar templates: HTTP ${res.status} ${txt}`);
+    }
+
+    const json = (await res.json()) as { data?: TemplateRow[] };
+    return json.data ?? [];
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export default async function AdminFormsTemplatesPage() {
