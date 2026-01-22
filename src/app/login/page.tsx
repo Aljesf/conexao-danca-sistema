@@ -1,9 +1,13 @@
-ï»¿import { getSystemSettings } from "@/lib/systemSettings";
+import { getSystemSettings } from "@/lib/systemSettings";
 import { SystemBranding } from "@/components/branding/SystemBranding";
-import LoginClient from "./LoginClient";
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams?: Record<string, string | string[] | undefined>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const settings = await getSystemSettings();
+  const erro = searchParams?.erro === "1";
 
   return (
     <main
@@ -41,9 +45,71 @@ export default async function LoginPage() {
           </div>
         </div>
 
-        <LoginClient />
+        {erro ? (
+          <div
+            style={{
+              marginBottom: 12,
+              borderRadius: 10,
+              border: "1px solid #fecaca",
+              background: "#fef2f2",
+              padding: "8px 12px",
+              fontSize: 13,
+              color: "#b91c1c",
+              textAlign: "center",
+            }}
+          >
+            E-mail ou senha inválidos.
+          </div>
+        ) : null}
+
+        <form action="/auth/login" method="post" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input
+            type="email"
+            name="email"
+            autoComplete="email"
+            required
+            defaultValue=""
+            placeholder="E-mail"
+            style={{
+              padding: 12,
+              width: "100%",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+            }}
+          />
+
+          <input
+            type="password"
+            name="password"
+            autoComplete="current-password"
+            required
+            defaultValue=""
+            placeholder="Senha"
+            style={{
+              padding: 12,
+              width: "100%",
+              borderRadius: 10,
+              border: "1px solid #e5e7eb",
+            }}
+          />
+
+          <button
+            type="submit"
+            style={{
+              padding: "12px 16px",
+              borderRadius: 10,
+              background: "#2563eb",
+              color: "#fff",
+              fontWeight: 700,
+              border: "none",
+              cursor: "pointer",
+              marginTop: 4,
+            }}
+          >
+            Entrar
+          </button>
+        </form>
       </div>
     </main>
   );
 }
-
