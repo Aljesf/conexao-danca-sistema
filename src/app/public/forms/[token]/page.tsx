@@ -4,7 +4,8 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import { PublicFormExperienceShell } from "@/components/forms/PublicFormExperienceShell";
-import PublicFormWizard, { type PublicQuestion } from "@/components/forms/PublicFormWizard";
+import PublicFormWizard from "@/components/forms/PublicFormWizard";
+import { mapTemplateToWizardProps, type PublicFormTemplateDto } from "@/lib/forms/publicFormAdapter";
 
 type Option = { id: string; valor: string; rotulo: string; ordem: number; ativo: boolean };
 type Question = {
@@ -274,7 +275,7 @@ export default function PublicFormTokenPage({
   const visibleQuestionBlocks = blocks.filter(
     (block) => block.tipo === "PERGUNTA" && isVisible(block)
   );
-  const wizardQuestions: PublicQuestion[] = visibleQuestionBlocks
+  const questionDtos = visibleQuestionBlocks
     .map((block) => {
       const q = block.form_questions ?? null;
       if (!q) return null;
@@ -283,29 +284,32 @@ export default function PublicFormTokenPage({
         .sort((a, b) => a.ordem - b.ordem)
         .map((o) => ({ value: o.valor, label: o.rotulo }));
 
-      let type: PublicQuestion["type"] = "short_text";
-      if (q.tipo === "textarea") type = "long_text";
-      else if (q.tipo === "text") type = "short_text";
-      else if (q.tipo === "number") type = "number";
-      else if (q.tipo === "date") type = "date";
-      else if (q.tipo === "single_choice") type = "single_choice";
-      else if (q.tipo === "multi_choice") type = "multi_choice";
-      else if (q.tipo === "scale") type = "scale";
-      else if (q.tipo === "boolean") type = "boolean";
-
       return {
         id: q.id,
-        code: q.codigo,
-        title: q.titulo,
-        description: q.descricao ?? q.ajuda ?? null,
-        type,
-        required: block.obrigatoria,
+        codigo: q.codigo,
+        titulo: q.titulo,
+        descricao: q.descricao ?? q.ajuda ?? null,
+        tipo: q.tipo,
+        obrigatoria: block.obrigatoria,
         options,
-        scaleMin: q.scale_min ?? null,
-        scaleMax: q.scale_max ?? null,
+        scale_min: q.scale_min ?? null,
+        scale_max: q.scale_max ?? null,
       };
     })
-    .filter((q): q is PublicQuestion => q !== null);
+    .filter((q): q is NonNullable<typeof q> => q !== null);
+
+  const wizardTemplate: PublicFormTemplateDto = {
+    id: data.template.id,
+    titulo: data.template.nome ?? null,
+    descricao: data.template.descricao ?? null,
+    header_image_url: data.template.header_image_url ?? null,
+    footer_image_url: data.template.footer_image_url ?? null,
+    intro_markdown: introMarkdown ?? null,
+    outro_markdown: outroMarkdown ?? null,
+    questions: questionDtos,
+  };
+
+  const wizardProps = mapTemplateToWizardProps(wizardTemplate);
 
   return (
     <PublicFormExperienceShell
@@ -359,19 +363,9 @@ export default function PublicFormTokenPage({
           ) : null}
 
           <PublicFormWizard
-            questions={wizardQuestions}
+            {...wizardProps}
             answers={answers}
             onAnswersChange={setAnswers}
-            headerMediaUrl={data.template.header_image_url ?? null}
-            footerMediaUrl={data.template.footer_image_url ?? null}
-            cover={{
-              title: data.template.nome ?? "Formulario",
-              subtitle: data.template.descricao ?? null,
-            }}
-            intro={{ markdown: introMarkdown }}
-            outro={{
-              markdown: outroMarkdown,
-            }}
             renderMarkdown={(content) => (
               <span dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(content) }} />
             )}

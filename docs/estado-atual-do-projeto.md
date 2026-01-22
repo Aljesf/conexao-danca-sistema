@@ -117,6 +117,9 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ### Loja - listas de demanda (itens)
 - /loja/listas-demanda/[id] (layout padrao, nomes no lugar de IDs, resumo e Destinatario opcional).
 
+### Formularios publicos
+- Formularios publicos padronizados com renderer canonico (PublicFormWizard) em todas as rotas publicas.
+
 
 ### Escola - Matrícula Nova / Liquidação
 - Resumo calcula total por múltiplas UEs (ex.: 220 + 180)
