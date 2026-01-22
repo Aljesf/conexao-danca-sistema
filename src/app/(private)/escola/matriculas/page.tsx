@@ -46,7 +46,14 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     data = { raw: text };
   }
   if (!res.ok) {
-    throw new Error(extractErrorMessage(data, res.status));
+    if (res.status === 401) {
+      const err = new Error("Sessão expirada. Refaça o login.");
+      (err as { status?: number }).status = 401;
+      throw err;
+    }
+    const err = new Error(extractErrorMessage(data, res.status));
+    (err as { status?: number }).status = res.status;
+    throw err;
   }
   return data as T;
 }
@@ -90,6 +97,7 @@ export default function EscolaMatriculasPage() {
   const [query, setQuery] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroAuth, setErroAuth] = useState(false);
   const [items, setItems] = useState<MatriculaListaItem[]>([]);
 
   useEffect(() => {
@@ -100,6 +108,7 @@ export default function EscolaMatriculasPage() {
         try {
           setLoading(true);
           setErro(null);
+          setErroAuth(false);
           const params = new URLSearchParams({ ano: String(ano) });
           if (query.trim()) params.set("query", query.trim());
           const data = await fetchJSON<MatriculasResp>(`/api/escola/matriculas?${params.toString()}`, {
@@ -111,6 +120,9 @@ export default function EscolaMatriculasPage() {
           if (!ativo) return;
           const name = e && typeof e === "object" && "name" in e ? String(e.name) : "";
           if (name === "AbortError") return;
+          const status =
+            e && typeof e === "object" && "status" in e ? Number((e as { status?: unknown }).status) : null;
+          setErroAuth(status === 401);
           setErro(e instanceof Error ? e.message : "Falha ao carregar matriculas.");
         } finally {
           if (ativo) setLoading(false);
@@ -202,7 +214,16 @@ export default function EscolaMatriculasPage() {
               </span>
             ) : null}
           </div>
-          {erro ? <div className="mt-2 text-sm text-rose-600">{erro}</div> : null}
+          {erro ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-rose-600">
+              <span>{erro}</span>
+              {erroAuth ? (
+                <Link className="text-rose-700 underline" href="/login">
+                  Ir para login
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
         </SectionCard>
 
         <SectionCard

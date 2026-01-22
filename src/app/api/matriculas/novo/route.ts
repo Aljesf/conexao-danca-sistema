@@ -1,7 +1,6 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
-
+import { requireUser } from "@/lib/supabase/api-auth";
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 
 type PlanoPagamentoMvp = {
@@ -281,42 +280,12 @@ function calcularPrimeiraCobranca(params: {
 
 export async function POST(request: NextRequest) {
   try {
-    const response = NextResponse.next();
+    const auth = await requireUser(request);
+    if ("response" in auth) return auth.response;
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              response.cookies.set(name, value, options);
-            });
-          },
-        },
-      },
-    );
+    const { supabase, userId } = auth;
 
-    const {
-      data: { user },
-      error: userErr,
-    } = await supabase.auth.getUser();
-
-    if (userErr) {
-      console.error("[api/matriculas/novo] auth.getUser error:", userErr);
-    }
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "unauthorized", message: "Usuário não autenticado." },
-        { status: 401 },
-      );
-    }
-
-    const { data: isAdmin, error: adminErr } = await supabase.rpc("is_admin", { p_user_id: user.id });
+    const { data: isAdmin, error: adminErr } = await supabase.rpc("is_admin", { p_user_id: userId });
 
     if (adminErr) {
       console.error("[api/matriculas/novo] rpc is_admin error:", adminErr);
@@ -762,7 +731,7 @@ export async function POST(request: NextRequest) {
       }
       excecaoPrimeiroPagamento = true;
       motivoExcecaoPrimeiroPagamento = motivo;
-      excecaoAutorizadaPor = user.id;
+      excecaoAutorizadaPor = userId;
       excecaoCriadaEm = new Date().toISOString();
       primeiraCobrancaStatus = "ADIADA_EXCECAO";
     } else {
@@ -785,8 +754,8 @@ export async function POST(request: NextRequest) {
     observacoes: body.observacoes ?? null,
     total_mensalidade_centavos: totalMensalidadeCentavos,
     status: "ATIVA",
-    created_by: user.id,
-    updated_by: user.id,
+    created_by: userId,
+    updated_by: userId,
     primeira_cobranca_tipo: primeiraCobranca?.tipo ?? undefined,
     primeira_cobranca_status: primeiraCobrancaStatus ?? undefined,
     primeira_cobranca_valor_centavos: primeiraCobranca?.valor_centavos ?? undefined,
@@ -838,6 +807,7 @@ export async function POST(request: NextRequest) {
     return jsonError("UNHANDLED_EXCEPTION", e, 500);
   }
 }
+
 
 
 

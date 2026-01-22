@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+﻿import { createServerClient } from "@supabase/ssr";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -55,3 +55,4 @@ export async function requireUser(request: NextRequest): Promise<ApiAuthOk | Api
 
   return { supabase, userId: user.id };
 }
+

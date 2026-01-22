@@ -1,9 +1,8 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { NextResponse, type NextRequest } from "next/server";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
+import { requireUser } from "@/lib/supabase/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -115,16 +114,12 @@ async function fetchMatriculas(admin: ReturnType<typeof getSupabaseAdmin>, param
   return query.order("id", { ascending: false }).limit(200);
 }
 
-export async function GET(req: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const supabaseAuth = createRouteHandlerClient({ cookies: () => cookieStore });
-    const { data: u } = await supabaseAuth.auth.getUser();
-    if (!u?.user) {
-      return errJson("unauthorized", "Nao autenticado.", 401);
-    }
+    const auth = await requireUser(request);
+    if ("response" in auth) return auth.response;
 
-    const url = new URL(req.url);
+    const url = new URL(request.url);
     const ano = Number(url.searchParams.get("ano") || "");
     const query = (url.searchParams.get("query") || "").trim();
     const pessoaId = toPositiveNumber(url.searchParams.get("pessoa_id"));
