@@ -1,10 +1,15 @@
 /* eslint-disable react/no-unescaped-entities */
+type SearchParamsValue = string | string[] | undefined;
+
 type LoginPageProps = {
-  searchParams?: Record<string, string | string[] | undefined>;
+  // Em Next 15, pode vir como Promise (Dynamic APIs). Vamos suportar ambos.
+  searchParams?: Promise<Record<string, SearchParamsValue>> | Record<string, SearchParamsValue>;
 };
 
-export default function LoginPage({ searchParams }: LoginPageProps) {
-  const erro = searchParams?.erro === "1";
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const resolved = searchParams instanceof Promise ? await searchParams : searchParams;
+
+  const erro = resolved?.erro === "1";
 
   return (
     <main className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-slate-100">
@@ -17,7 +22,7 @@ export default function LoginPage({ searchParams }: LoginPageProps) {
 
           {erro ? (
             <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              E-mail ou senha inválidos.
+              E-mail ou senha invï¿½lidos.
             </div>
           ) : null}
 
