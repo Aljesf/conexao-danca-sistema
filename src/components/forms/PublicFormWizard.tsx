@@ -240,11 +240,23 @@ function QuestionField({
               type="button"
               onClick={() => setAnswer(id, o.value)}
               className={[
-                "min-h-[52px] w-full rounded-xl border px-4 text-left text-base",
-                active ? "border-slate-900 bg-slate-50" : "bg-white",
+                "min-h-[56px] w-full rounded-xl border px-4 text-left text-base transition",
+                "flex items-center justify-between gap-4",
+                active
+                  ? "border-slate-900 bg-slate-900/[0.06] ring-2 ring-slate-900/20"
+                  : "border-slate-300 bg-white hover:bg-slate-50",
               ].join(" ")}
             >
-              {o.label}
+              <span className="leading-snug">{o.label}</span>
+              <span
+                className={[
+                  "flex h-5 w-5 items-center justify-center rounded-full border",
+                  active ? "border-slate-900 bg-slate-900" : "border-slate-300 bg-white",
+                ].join(" ")}
+                aria-hidden="true"
+              >
+                <span className={active ? "h-2 w-2 rounded-full bg-white" : "hidden"} />
+              </span>
             </button>
           );
         })}
@@ -271,14 +283,23 @@ function QuestionField({
                 setAnswer(id, Array.from(next));
               }}
               className={[
-                "min-h-[52px] w-full rounded-xl border px-4 text-left text-base",
-                active ? "border-slate-900 bg-slate-50" : "bg-white",
+                "min-h-[56px] w-full rounded-xl border px-4 text-left text-base transition",
+                "flex items-center justify-between gap-4",
+                active
+                  ? "border-slate-900 bg-slate-900/[0.06] ring-2 ring-slate-900/20"
+                  : "border-slate-300 bg-white hover:bg-slate-50",
               ].join(" ")}
             >
-              <span className="mr-2 inline-block align-middle">
-                <input type="checkbox" checked={active} readOnly />
+              <span className="leading-snug">{o.label}</span>
+              <span
+                className={[
+                  "flex h-5 w-5 items-center justify-center rounded-md border",
+                  active ? "border-slate-900 bg-slate-900" : "border-slate-300 bg-white",
+                ].join(" ")}
+                aria-hidden="true"
+              >
+                <span className={active ? "text-white text-sm leading-none" : "hidden"}>✓</span>
               </span>
-              <span className="align-middle">{o.label}</span>
             </button>
           );
         })}
