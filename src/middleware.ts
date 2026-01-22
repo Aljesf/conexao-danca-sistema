@@ -1,20 +1,42 @@
-﻿import { NextResponse, type NextRequest } from "next/server";
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 function startsWithAny(path: string, prefixes: string[]): boolean {
   return prefixes.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
-export async function middleware(req: NextRequest) {
-  if (req.nextUrl.pathname.startsWith("/api")) {
-    return NextResponse.next();
-  }
+function copyResponseCookies(source: NextResponse, target: NextResponse) {
+  source.cookies.getAll().forEach((cookie) => {
+    target.cookies.set(cookie);
+  });
+}
 
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
+export async function middleware(request: NextRequest) {
+  const response = NextResponse.next({ request });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    },
+  );
 
   const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user?.id) return res;
+
+  if (request.nextUrl.pathname.startsWith("/api")) {
+    return response;
+  }
+
+  if (!auth?.user?.id) return response;
 
   const { data: rows } = await supabase
     .from("usuario_roles")
@@ -27,9 +49,9 @@ export async function middleware(req: NextRequest) {
     .filter((r): r is { codigo: string; ativo: boolean | null } => Boolean(r?.codigo) && (r?.ativo ?? true))
     .map((r) => r.codigo);
 
-  if (roles.includes("ADMIN")) return res;
+  if (roles.includes("ADMIN")) return response;
 
-  const path = req.nextUrl.pathname;
+  const path = request.nextUrl.pathname;
 
   if (roles.includes("EQUIPE_CADASTRO_BASE")) {
     const allowPages = ["/pessoas", "/turmas", "/academico"];
@@ -44,16 +66,20 @@ export async function middleware(req: NextRequest) {
     ];
 
     if (startsWithAny(path, denyPages) || !startsWithAny(path, allowPages)) {
-      const url = req.nextUrl.clone();
+      const url = request.nextUrl.clone();
       url.pathname = "/pessoas";
       url.search = "";
-      return NextResponse.redirect(url);
+      const redirectResponse = NextResponse.redirect(url);
+      copyResponseCookies(response, redirectResponse);
+      return redirectResponse;
     }
   }
 
-  return res;
+  return response;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

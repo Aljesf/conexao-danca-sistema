@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import MovimentoButton from "@/components/MovimentoButton";
 import { NascMount } from "@/components/nasc/NascMount";
@@ -11,13 +10,13 @@ export default async function PrivateLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const supabase = createServerComponentClient({ cookies: () => cookieStore });
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (!user || error) {
     redirect("/login");
   }
 
