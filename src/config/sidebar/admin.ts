@@ -12,6 +12,7 @@ export const adminSidebar: SidebarSection[] = [
     title: "💰 Financeiro (Admin)",
     items: [
       { label: "📊 Dashboard financeiro", href: "/admin/financeiro" },
+      { label: "🧾 Folha - Colaboradores", href: "/admin/financeiro/folha/colaboradores" },
       { label: "🧾 Planos de preco (aluno)", href: "/admin/financeiro/planos-preco-alunos" },
       { label: "📥 Contas a receber", href: "/admin/financeiro/contas-receber" },
       { label: "📤 Contas a pagar", href: "/admin/financeiro/contas-pagar" },
