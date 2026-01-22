@@ -1,5 +1,5 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
-import { getSupabaseServer } from "@/lib/supabaseServer";
+import { getSupabaseServerAuth, getSupabaseServiceRole } from "@/lib/supabaseServer";
 
 type RolePermissoes = {
   allow?: { pages_prefix?: string[]; api_prefix?: string[] };
@@ -12,24 +12,30 @@ type RoleRow = {
   ativo: boolean | null;
 };
 
-async function getUserRoles(): Promise<string[]> {
-  const supabase = await getSupabaseServer();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user?.id) return [];
+async function getUserRoles(): Promise<{ roles: string[]; isAuthenticated: boolean }> {
+  const supabaseAuth = await getSupabaseServerAuth();
+  const {
+    data: { user },
+  } = await supabaseAuth.auth.getUser();
 
-  const { data, error } = await supabase
+  if (!user?.id) {
+    return { roles: [], isAuthenticated: false };
+  }
+
+  const supabaseAdmin = getSupabaseServiceRole();
+  const { data, error } = await supabaseAdmin
     .from("usuario_roles")
     .select("role:roles_sistema(codigo, permissoes, ativo)")
-    .eq("user_id", auth.user.id);
+    .eq("user_id", user.id);
 
-  if (error || !data) return [];
+  if (error || !data) return { roles: [], isAuthenticated: true };
 
   const roles = data
     .map((r) => (r as unknown as { role: RoleRow | null }).role)
     .filter((r): r is RoleRow => Boolean(r?.codigo) && (r?.ativo ?? true))
     .map((r) => r.codigo);
 
-  return Array.from(new Set(roles));
+  return { roles: Array.from(new Set(roles)), isAuthenticated: true };
 }
 
 function startsWithAny(path: string, prefixes: string[]): boolean {
@@ -39,8 +45,12 @@ function startsWithAny(path: string, prefixes: string[]): boolean {
 export async function guardApiByRole(req: NextRequest | Request): Promise<NextResponse | null> {
   const path = "nextUrl" in req ? req.nextUrl.pathname : new URL(req.url).pathname;
 
-  const roles = await getUserRoles();
+  const { roles, isAuthenticated } = await getUserRoles();
   if (roles.includes("ADMIN")) return null;
+
+  if (!isAuthenticated) {
+    return NextResponse.json({ error: "unauthorized", message: "Nao autenticado." }, { status: 401 });
+  }
 
   if (!roles.length) {
     return NextResponse.json({ error: "forbidden", message: "Sem permissao." }, { status: 403 });

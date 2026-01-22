@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { getSupabaseServiceRole } from "@/lib/supabaseServer";
 
 type CentroCustoPayload = {
   id?: number;
@@ -10,19 +10,14 @@ type CentroCustoPayload = {
   contextos_aplicaveis?: string[];
 };
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let supabaseAdmin = null as ReturnType<typeof getSupabaseServiceRole> | null;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.warn(
-    "[/api/financeiro/centros-custo] Variaveis NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY nao definidas."
-  );
+function getAdminClient() {
+  if (!supabaseAdmin) {
+    supabaseAdmin = getSupabaseServiceRole();
+  }
+  return supabaseAdmin;
 }
-
-const supabaseAdmin =
-  SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
-    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-    : null;
 
 function json(status: number, payload: any) {
   return NextResponse.json(payload, { status });
@@ -31,12 +26,10 @@ function json(status: number, payload: any) {
 export async function GET(_req: NextRequest) {
   const denied = await guardApiByRole(_req as any);
   if (denied) return denied as any;
-  if (!supabaseAdmin) {
-    return json(500, { ok: false, error: "Configuracao do Supabase ausente." });
-  }
+  const admin = getAdminClient();
 
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await admin
       .from("centros_custo")
       .select("id, nome, codigo, ativo, contextos_aplicaveis")
       .order("nome", { ascending: true });
@@ -53,9 +46,7 @@ export async function GET(_req: NextRequest) {
 export async function POST(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  if (!supabaseAdmin) {
-    return json(500, { ok: false, error: "Configuracao do Supabase ausente." });
-  }
+  const admin = getAdminClient();
 
   try {
     const body: CentroCustoPayload = await req.json();
@@ -68,7 +59,7 @@ export async function POST(req: NextRequest) {
       return json(400, { ok: false, error: "codigo_e_nome_obrigatorios" });
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await admin
       .from("centros_custo")
       .insert({ codigo, nome, ativo, contextos_aplicaveis: contextos })
       .select("id, codigo, nome, ativo, contextos_aplicaveis")
@@ -86,9 +77,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
-  if (!supabaseAdmin) {
-    return json(500, { ok: false, error: "Configuracao do Supabase ausente." });
-  }
+  const admin = getAdminClient();
 
   try {
     const body: CentroCustoPayload = await req.json();
@@ -103,7 +92,7 @@ export async function PUT(req: NextRequest) {
       updates.contextos_aplicaveis = Array.isArray(body.contextos_aplicaveis) ? body.contextos_aplicaveis : [];
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await admin
       .from("centros_custo")
       .update(updates)
       .eq("id", id)

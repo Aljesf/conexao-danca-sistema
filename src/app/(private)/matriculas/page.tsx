@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseServerAuth } from "@/lib/supabaseServer";
 
 type MatriculaRow = {
   id: number;
@@ -16,8 +15,7 @@ type MatriculaRow = {
 export const dynamic = "force-dynamic";
 
 export default async function MatriculasPage() {
-  const cookieStore = await cookies();
-  const supabase = createServerComponentClient({ cookies: () => cookieStore });
+  const supabase = await getSupabaseServerAuth();
 
   const { data, error } = await supabase
     .from("matriculas")

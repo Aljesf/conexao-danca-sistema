@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { getCookieStore } from "@/lib/nextCookies";
+import { getSupabaseServerAuth } from "@/lib/supabaseServer";
 
 async function supabaseServer() {
-  const cookieStore = await getCookieStore();
-  return createRouteHandlerClient({ cookies: () => cookieStore });
+  return await getSupabaseServerAuth();
 }
 
 function asText(value: unknown): string | null {
