@@ -1,18 +1,30 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-function startsWithAny(path: string, prefixes: string[]): boolean {
-  return prefixes.some((p) => path === p || path.startsWith(`${p}/`));
-}
+function isPublicPath(pathname: string): boolean {
+  // Ajuste aqui conforme seu projeto
+  const publicPaths = [
+    "/login",
+    "/logout",
+    "/auth",
+    "/auth/callback",
+    "/favicon.ico",
+  ];
 
-function copyResponseCookies(source: NextResponse, target: NextResponse) {
-  source.cookies.getAll().forEach((cookie) => {
-    target.cookies.set(cookie);
-  });
+  if (publicPaths.includes(pathname)) return true;
+
+  // Permite rotas publicas por prefixo, se existir no projeto
+  if (pathname.startsWith("/public")) return true;
+
+  return false;
 }
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({ request });
+  const pathname = request.nextUrl.pathname;
+
+  // Resposta base (onde o Supabase vai anexar cookies do refresh)
+  const baseResponse = NextResponse.next({ request });
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -23,59 +35,50 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
+            baseResponse.cookies.set(name, value, options);
           });
         },
       },
-    },
+    }
   );
 
-  const { data: auth } = await supabase.auth.getUser();
+  // Dispara refresh se necessario e garante que baseResponse receba os cookies atualizados
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (request.nextUrl.pathname.startsWith("/api")) {
-    return response;
+  const publicPath = isPublicPath(pathname);
+
+  // Se nao autenticado e tentando rota privada => /login
+  if (!user && !publicPath) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+
+    const redirectResponse = NextResponse.redirect(url);
+
+    // Copia cookies que foram atualizados no baseResponse para o redirectResponse
+    baseResponse.cookies.getAll().forEach((c) => {
+      redirectResponse.cookies.set(c.name, c.value, c);
+    });
+
+    return redirectResponse;
   }
 
-  if (!auth?.user?.id) return response;
+  // Se autenticado e acessando /login => /pessoas
+  if (user && pathname === "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/pessoas";
 
-  const { data: rows } = await supabase
-    .from("usuario_roles")
-    .select("role:roles_sistema(codigo, ativo)")
-    .eq("user_id", auth.user.id);
+    const redirectResponse = NextResponse.redirect(url);
 
-  type RoleRow = { role: { codigo: string; ativo: boolean | null } | null };
-  const roles = (rows ?? [])
-    .map((r) => (r as RoleRow).role)
-    .filter((r): r is { codigo: string; ativo: boolean | null } => Boolean(r?.codigo) && (r?.ativo ?? true))
-    .map((r) => r.codigo);
+    baseResponse.cookies.getAll().forEach((c) => {
+      redirectResponse.cookies.set(c.name, c.value, c);
+    });
 
-  if (roles.includes("ADMIN")) return response;
-
-  const path = request.nextUrl.pathname;
-
-  if (roles.includes("EQUIPE_CADASTRO_BASE")) {
-    const allowPages = ["/pessoas", "/turmas", "/academico"];
-    const denyPages = [
-      "/administracao",
-      "/admin",
-      "/loja",
-      "/cafe",
-      "/financeiro",
-      "/matriculas",
-      "/credito-conexao",
-    ];
-
-    if (startsWithAny(path, denyPages) || !startsWithAny(path, allowPages)) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/pessoas";
-      url.search = "";
-      const redirectResponse = NextResponse.redirect(url);
-      copyResponseCookies(response, redirectResponse);
-      return redirectResponse;
-    }
+    return redirectResponse;
   }
 
-  return response;
+  return baseResponse;
 }
 
 export const config = {

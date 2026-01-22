@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 import MovimentoButton from "@/components/MovimentoButton";
@@ -11,14 +10,7 @@ export default async function PrivateLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (!user || error) {
-    redirect("/login");
-  }
+  await supabase.auth.getUser();
 
   const systemSettings = await getSystemSettings();
 
