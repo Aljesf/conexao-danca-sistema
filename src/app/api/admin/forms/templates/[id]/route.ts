@@ -56,8 +56,18 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
     const patch: Record<string, unknown> = {};
 
-    if (body.nome !== undefined) patch.nome = String(body.nome ?? "").trim();
-    if (body.descricao !== undefined) patch.descricao = body.descricao ? String(body.descricao) : null;
+    if (body.nome !== undefined || body.titulo !== undefined) {
+      const rawNome = body.nome !== undefined ? body.nome : body.titulo;
+      const nome = String(rawNome ?? "").trim();
+      if (!nome) {
+        return NextResponse.json({ error: "titulo_obrigatorio" }, { status: 400 });
+      }
+      patch.nome = nome;
+    }
+
+    if (body.descricao !== undefined) {
+      patch.descricao = body.descricao ? String(body.descricao).trim() : null;
+    }
     if (body.header_image_url !== undefined) {
       patch.header_image_url = body.header_image_url ? String(body.header_image_url).trim() : null;
     }

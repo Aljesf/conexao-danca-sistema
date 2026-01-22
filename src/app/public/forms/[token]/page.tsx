@@ -313,6 +313,7 @@ export default function PublicFormTokenPage({
       subtitle={data.template.descricao ?? "Responda com calma e sinceridade."}
       headerImageUrl={null}
       introText={undefined}
+      hideHeader
       progress={{
         mode: "manual",
         totalRequired: 0,

@@ -114,6 +114,8 @@ export default function AdminFormsTemplatesEditorPage({
   const [footerImageUrl, setFooterImageUrl] = useState("");
   const [introTextMd, setIntroTextMd] = useState("");
   const [outroTextMd, setOutroTextMd] = useState("");
+  const [templateNome, setTemplateNome] = useState("");
+  const [templateDescricao, setTemplateDescricao] = useState("");
   const [headerUploadFile, setHeaderUploadFile] = useState<File | null>(null);
   const [footerUploadFile, setFooterUploadFile] = useState<File | null>(null);
   const [headerUploading, setHeaderUploading] = useState(false);
@@ -165,6 +167,8 @@ export default function AdminFormsTemplatesEditorPage({
 
       const template = aj.data.template;
       setTpl(template);
+      setTemplateNome(template.nome ?? "");
+      setTemplateDescricao(template.descricao ?? "");
       setHeaderImageUrl(template.header_image_url ?? "");
       setFooterImageUrl(template.footer_image_url ?? "");
       setIntroTextMd(template.intro_text_md ?? "");
@@ -271,10 +275,18 @@ export default function AdminFormsTemplatesEditorPage({
     setErr(null);
     setSavingTemplate(true);
     try {
+      const nome = templateNome.trim();
+      if (!nome) {
+        setErr("Informe o nome do template.");
+        return;
+      }
+
       const res = await fetch(`/api/admin/forms/templates/${templateId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          nome,
+          descricao: templateDescricao.trim() || null,
           header_image_url: headerImageUrl.trim() || null,
           footer_image_url: footerImageUrl.trim() || null,
           intro_text_md: introTextMd.trim() || null,
@@ -556,7 +568,7 @@ export default function AdminFormsTemplatesEditorPage({
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        title={tpl.nome}
+        title={templateNome.trim() || tpl.nome}
         description={`Status: ${tpl.status} | Versao: ${tpl.versao}`}
         actions={
           <div className="flex flex-wrap gap-2">
@@ -636,6 +648,31 @@ export default function AdminFormsTemplatesEditorPage({
       {err ? (
         <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">{err}</div>
       ) : null}
+
+      <SectionCard title="Dados do template" description="Nome e descricao exibidos no formulario publico.">
+        <div className="grid gap-4">
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium">Nome do template *</span>
+            <input
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={templateNome}
+              onChange={(e) => setTemplateNome(e.target.value)}
+              placeholder="Nome do formulario"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium">Descricao</span>
+            <textarea
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              rows={3}
+              value={templateDescricao}
+              onChange={(e) => setTemplateDescricao(e.target.value)}
+              placeholder="Descricao curta para o formulario."
+            />
+          </label>
+        </div>
+      </SectionCard>
 
       <SectionCard
         title="Cabecalho do formulario"
