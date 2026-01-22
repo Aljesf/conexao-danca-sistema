@@ -265,6 +265,11 @@ export default function PublicFormTokenPage({
     data.template.intro_text_md ??
     "Este formulario existe para entender seu contexto e melhorar nossas decisoes institucionais com responsabilidade.";
   const highlightMarkdown = data.template.outro_text_md ?? null;
+  const outroMarkdown =
+    highlightMarkdown &&
+    normalizeMd(highlightMarkdown) !== normalizeMd(introMarkdown ?? "")
+      ? highlightMarkdown
+      : null;
 
   const visibleQuestionBlocks = blocks.filter(
     (block) => block.tipo === "PERGUNTA" && isVisible(block)
@@ -306,7 +311,7 @@ export default function PublicFormTokenPage({
     <PublicFormExperienceShell
       title={data.template.nome ?? "Formulario"}
       subtitle={data.template.descricao ?? "Responda com calma e sinceridade."}
-      headerImageUrl={data.template.header_image_url ?? null}
+      headerImageUrl={null}
       introText={undefined}
       progress={{
         mode: "manual",
@@ -352,47 +357,25 @@ export default function PublicFormTokenPage({
             </div>
           ) : null}
 
-          {introMarkdown ? (
-            <div className="rounded-2xl border bg-white p-4 shadow-sm">
-              <div
-                className="text-sm text-slate-700"
-                dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(introMarkdown) }}
-              />
-            </div>
-          ) : null}
-
           <PublicFormWizard
             questions={wizardQuestions}
             answers={answers}
             onAnswersChange={setAnswers}
+            cover={{
+              imageUrl: data.template.header_image_url ?? null,
+              title: data.template.nome ?? "Formulario",
+              subtitle: data.template.descricao ?? null,
+            }}
+            intro={{ markdown: introMarkdown }}
+            outro={{
+              imageUrl: data.template.footer_image_url ?? null,
+              markdown: outroMarkdown,
+            }}
             renderMarkdown={(content) => (
               <span dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(content) }} />
             )}
             onSubmit={(nextAnswers) => submit(nextAnswers)}
           />
-
-          {data.template.footer_image_url ||
-          (highlightMarkdown &&
-            normalizeMd(highlightMarkdown) !== normalizeMd(introMarkdown ?? "")) ? (
-            <div className="rounded-2xl border bg-white p-4 shadow-sm grid gap-3">
-              {data.template.footer_image_url ? (
-                <div className="rounded-xl border bg-slate-50 p-3">
-                  <img
-                    src={data.template.footer_image_url}
-                    alt="Rodape do formulario"
-                    className="max-h-40 w-full object-contain"
-                  />
-                </div>
-              ) : null}
-              {highlightMarkdown &&
-              normalizeMd(highlightMarkdown) !== normalizeMd(introMarkdown ?? "") ? (
-                <div
-                  className="text-sm text-slate-700"
-                  dangerouslySetInnerHTML={{ __html: markdownToHtmlSimples(highlightMarkdown) }}
-                />
-              ) : null}
-            </div>
-          ) : null}
         </>
       )}
     </PublicFormExperienceShell>

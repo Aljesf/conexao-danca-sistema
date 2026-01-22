@@ -29,10 +29,34 @@ export type PublicQuestion = {
   scaleMax?: number | null;
 };
 
+type WizardCover = {
+  imageUrl?: string | null;
+  title?: string | null;
+  subtitle?: string | null;
+};
+
+type WizardOutro = {
+  imageUrl?: string | null;
+  markdown?: string | null;
+};
+
+type WizardIntro = {
+  markdown?: string | null;
+};
+
+type WizardStep =
+  | { kind: "cover"; cover: WizardCover }
+  | { kind: "intro"; intro: WizardIntro }
+  | { kind: "question"; question: PublicQuestion }
+  | { kind: "outro"; outro: WizardOutro };
+
 type Props = {
   questions: PublicQuestion[];
   onSubmit: (answers: Record<string, unknown>) => Promise<void>;
   renderMarkdown?: (content: string) => React.ReactNode;
+  cover?: WizardCover;
+  intro?: WizardIntro;
+  outro?: WizardOutro;
   answers?: Record<string, unknown>;
   onAnswersChange?: (answers: Record<string, unknown>) => void;
 };
@@ -45,17 +69,39 @@ export default function PublicFormWizard({
   questions,
   onSubmit,
   renderMarkdown,
+  cover,
+  intro,
+  outro,
   answers,
   onAnswersChange,
 }: Props) {
-  const total = questions.length;
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [localAnswers, setLocalAnswers] = useState<Record<string, unknown>>({});
 
   const resolvedAnswers = answers ?? localAnswers;
 
-  const q = questions[clamp(step, 0, Math.max(0, total - 1))];
+  const steps = useMemo<WizardStep[]>(() => {
+    const s: WizardStep[] = [];
+
+    const hasCover = Boolean(cover?.imageUrl || cover?.title || cover?.subtitle);
+    const hasIntro = Boolean(intro?.markdown && intro.markdown.trim().length > 0);
+    const hasOutro = Boolean(outro?.imageUrl || (outro?.markdown && outro.markdown.trim().length > 0));
+
+    if (hasCover) s.push({ kind: "cover", cover: cover ?? {} });
+    if (hasIntro) s.push({ kind: "intro", intro: intro ?? {} });
+
+    for (const q of questions) s.push({ kind: "question", question: q });
+
+    if (hasOutro) s.push({ kind: "outro", outro: outro ?? {} });
+
+    return s;
+  }, [questions, cover, intro, outro]);
+
+  const total = steps.length;
+  const stepItem = steps[clamp(step, 0, Math.max(0, total - 1))];
+  const isQuestion = stepItem?.kind === "question";
+  const headerLeftLabel = isQuestion ? "Pergunta" : "Etapa";
 
   const progressLabel = useMemo(() => {
     if (total <= 0) return "";
@@ -96,22 +142,86 @@ export default function PublicFormWizard({
   return (
     <div className="rounded-2xl border bg-white p-4 sm:p-6">
       <div className="mb-4 flex items-center justify-between">
-        <div className="text-xs font-semibold text-slate-500">Pergunta</div>
+        <div className="text-xs font-semibold text-slate-500">{headerLeftLabel}</div>
         <div className="text-xs font-semibold text-slate-700">{progressLabel}</div>
       </div>
 
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-900">{q.title}</h2>
-        {q.description ? (
-          <div className="mt-2 text-sm text-slate-600">
-            {renderMarkdown ? renderMarkdown(q.description) : q.description}
-          </div>
-        ) : null}
-      </div>
+      {stepItem?.kind === "cover" ? (
+        <div className="space-y-4">
+          {stepItem.cover.imageUrl ? (
+            <div className="overflow-hidden rounded-2xl border bg-white">
+              <img
+                src={stepItem.cover.imageUrl}
+                alt={stepItem.cover.title ?? "Capa"}
+                className="h-auto w-full object-cover"
+              />
+            </div>
+          ) : null}
 
-      <div className="mb-6">
-        <QuestionField question={q} value={resolvedAnswers[q.id]} setAnswer={setAnswer} />
-      </div>
+          {stepItem.cover.title ? (
+            <h2 className="text-xl font-semibold text-slate-900">{stepItem.cover.title}</h2>
+          ) : null}
+
+          {stepItem.cover.subtitle ? (
+            <p className="text-sm text-slate-600">{stepItem.cover.subtitle}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {stepItem?.kind === "intro" ? (
+        <div className="rounded-2xl border bg-slate-50 p-4">
+          <div className="prose max-w-none text-slate-700">
+            {stepItem.intro.markdown
+              ? renderMarkdown
+                ? renderMarkdown(stepItem.intro.markdown)
+                : stepItem.intro.markdown
+              : null}
+          </div>
+        </div>
+      ) : null}
+
+      {stepItem?.kind === "question" ? (
+        <>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">{stepItem.question.title}</h2>
+            {stepItem.question.description ? (
+              <div className="mt-2 text-sm text-slate-600">
+                {renderMarkdown ? renderMarkdown(stepItem.question.description) : stepItem.question.description}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mb-6">
+            <QuestionField
+              question={stepItem.question}
+              value={resolvedAnswers[stepItem.question.id]}
+              setAnswer={setAnswer}
+            />
+          </div>
+        </>
+      ) : null}
+
+      {stepItem?.kind === "outro" ? (
+        <div className="space-y-4">
+          {stepItem.outro.imageUrl ? (
+            <div className="overflow-hidden rounded-2xl border bg-white p-4">
+              <img
+                src={stepItem.outro.imageUrl}
+                alt="Agradecimento"
+                className="mx-auto h-auto max-h-40 w-auto object-contain"
+              />
+            </div>
+          ) : null}
+
+          {stepItem.outro.markdown ? (
+            <div className="rounded-2xl border bg-white p-4">
+              <div className="prose max-w-none text-slate-700">
+                {renderMarkdown ? renderMarkdown(stepItem.outro.markdown) : stepItem.outro.markdown}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex items-center justify-between gap-3">
         <button
@@ -298,7 +408,7 @@ function QuestionField({
                 ].join(" ")}
                 aria-hidden="true"
               >
-                <span className={active ? "text-white text-sm leading-none" : "hidden"}>✓</span>
+                <span className={active ? "text-white text-sm leading-none" : "hidden"}>x</span>
               </span>
             </button>
           );
