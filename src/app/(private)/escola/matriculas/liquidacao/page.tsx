@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 
 type FormaPagamento = {
   id: number;
@@ -120,7 +120,7 @@ export default function Page() {
   const router = useRouter();
   const routeParams = useParams();
   const searchParams = useSearchParams();
-  const supabase = useMemo(() => createClientComponentClient(), []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
   const routeIdRaw = routeParams?.id;
   const matriculaIdFromRoute = Array.isArray(routeIdRaw) ? routeIdRaw[0] : routeIdRaw ?? null;

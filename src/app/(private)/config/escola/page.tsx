@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import ContextConfigForm from "@/components/ContextConfigForm";
 
 type CentroCusto = {
@@ -10,7 +10,7 @@ type CentroCusto = {
 };
 
 export default function ConfigEscolaPage() {
-  const supabase = useMemo(() => createClientComponentClient(), []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
 
   const [centrosPadrao, setCentrosPadrao] = useState<CentroCusto[]>([]);
   const [centrosIntermediacao, setCentrosIntermediacao] = useState<CentroCusto[]>([]);

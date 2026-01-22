@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import { useRouter } from "next/navigation";
 
 function getHashParams(): Record<string, string> {
@@ -15,7 +15,7 @@ function getHashParams(): Record<string, string> {
 
 export default function DefinirSenhaPage() {
   const router = useRouter();
-  const supabase = useMemo(() => createClientComponentClient(), []);
+  const supabase = useMemo(() => getSupabaseBrowser(), []);
   const [loading, setLoading] = useState<boolean>(true);
   const [ready, setReady] = useState<boolean>(false);
   const [senha, setSenha] = useState<string>("");
