@@ -1,114 +1,61 @@
-import { getSystemSettings } from "@/lib/systemSettings";
-import { SystemBranding } from "@/components/branding/SystemBranding";
-
+/* eslint-disable react/no-unescaped-entities */
 type LoginPageProps = {
   searchParams?: Record<string, string | string[] | undefined>;
 };
 
-export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const settings = await getSystemSettings();
+export default function LoginPage({ searchParams }: LoginPageProps) {
   const erro = searchParams?.erro === "1";
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "linear-gradient(135deg, #f5f7fa 0%, #e4ecf5 100%)",
-        padding: 16,
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 420,
-          background: "#fff",
-          borderRadius: 16,
-          padding: 24,
-          boxShadow: "0 10px 40px rgba(0,0,0,0.08)",
-        }}
-      >
-        <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <SystemBranding
-              settings={settings}
-              variant="color"
-              showWordmark
-              showSystemName={false}
-              className="justify-center"
-            />
+    <main className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-slate-100">
+      <div className="mx-auto flex min-h-screen max-w-md items-center justify-center px-4">
+        <div className="w-full rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <div className="mb-4 text-center">
+            <div className="text-lg font-semibold text-slate-900">Conectarte</div>
+            <div className="text-sm text-slate-500">Acesso restrito</div>
           </div>
-          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 8 }}>
-            Acesso restrito
-          </div>
+
+          {erro ? (
+            <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              E-mail ou senha inválidos.
+            </div>
+          ) : null}
+
+          <form action="/auth/login" method="post" className="space-y-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                E-mail
+              </label>
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                required
+                className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-slate-300"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Senha
+              </label>
+              <input
+                type="password"
+                name="password"
+                autoComplete="current-password"
+                required
+                className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none ring-0 focus:border-slate-300"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+            >
+              Entrar
+            </button>
+          </form>
         </div>
-
-        {erro ? (
-          <div
-            style={{
-              marginBottom: 12,
-              borderRadius: 10,
-              border: "1px solid #fecaca",
-              background: "#fef2f2",
-              padding: "8px 12px",
-              fontSize: 13,
-              color: "#b91c1c",
-              textAlign: "center",
-            }}
-          >
-            E-mail ou senha inválidos.
-          </div>
-        ) : null}
-
-        <form action="/auth/login" method="post" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input
-            type="email"
-            name="email"
-            autoComplete="email"
-            required
-            defaultValue=""
-            placeholder="E-mail"
-            style={{
-              padding: 12,
-              width: "100%",
-              borderRadius: 10,
-              border: "1px solid #e5e7eb",
-            }}
-          />
-
-          <input
-            type="password"
-            name="password"
-            autoComplete="current-password"
-            required
-            defaultValue=""
-            placeholder="Senha"
-            style={{
-              padding: 12,
-              width: "100%",
-              borderRadius: 10,
-              border: "1px solid #e5e7eb",
-            }}
-          />
-
-          <button
-            type="submit"
-            style={{
-              padding: "12px 16px",
-              borderRadius: 10,
-              background: "#2563eb",
-              color: "#fff",
-              fontWeight: 700,
-              border: "none",
-              cursor: "pointer",
-              marginTop: 4,
-            }}
-          >
-            Entrar
-          </button>
-        </form>
       </div>
     </main>
   );
