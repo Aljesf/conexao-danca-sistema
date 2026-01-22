@@ -103,10 +103,10 @@ export const adminSidebar: SidebarSection[] = [
     id: "admin-colaboradores",
     title: "👥 Colaboradores",
     items: [
-      { label: "👥 Gestao de colaboradores", href: "/admin/colaboradores" },
-      { label: "🔗 Tipos de vinculo", href: "/admin/colaboradores/tipos-vinculo" },
-      { label: "🧰 Tipos de funcao", href: "/admin/colaboradores/tipos-funcao" },
-      { label: "🗓️ Jornadas de trabalho", href: "/admin/colaboradores/jornadas" },
+      { label: "👥 Gestao de colaboradores", href: "/admin/config/colaboradores" },
+      { label: "🔗 Tipos de vinculo", href: "/admin/config/colaboradores/tipos-vinculo" },
+      { label: "🧰 Tipos de funcao", href: "/admin/config/colaboradores/tipos-funcao" },
+      { label: "🗓️ Jornadas de trabalho", href: "/admin/config/colaboradores/jornadas" },
     ],
   },
   {
