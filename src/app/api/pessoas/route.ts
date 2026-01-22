@@ -1,8 +1,7 @@
 // src/app/api/pessoas/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { getCookieStore } from "@/lib/nextCookies";
+import { getSupabaseServerSSR } from "@/lib/supabaseServerSSR";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 import { normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 
@@ -40,8 +39,7 @@ function sanitizeCpfForDb(cpfRaw: string | null | undefined): string | null {
 
 export async function GET(req: Request) {
   try {
-    const cookieStore = await getCookieStore();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const supabase = await getSupabaseServerSSR();
     const url = new URL(req.url);
     const search = (url.searchParams.get("search") ?? "").trim();
 
@@ -121,8 +119,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const cookieStore = await getCookieStore();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    const supabase = await getSupabaseServerSSR();
 
     const body = await req.json().catch(() => null);
     const parsed = PessoaUpsertSchema.safeParse(body);
