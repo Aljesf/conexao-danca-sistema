@@ -119,6 +119,7 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 
 ### Formularios publicos
 - Formularios publicos padronizados com renderer canonico (PublicFormWizard) em todas as rotas publicas.
+- Rota publica antiga removida (mantida apenas a rota canonica).
 
 
 ### Escola - Matrícula Nova / Liquidação
