@@ -362,14 +362,14 @@ export default function PublicFormTokenPage({
             questions={wizardQuestions}
             answers={answers}
             onAnswersChange={setAnswers}
+            headerMediaUrl={data.template.header_image_url ?? null}
+            footerMediaUrl={data.template.footer_image_url ?? null}
             cover={{
-              imageUrl: data.template.header_image_url ?? null,
               title: data.template.nome ?? "Formulario",
               subtitle: data.template.descricao ?? null,
             }}
             intro={{ markdown: introMarkdown }}
             outro={{
-              imageUrl: data.template.footer_image_url ?? null,
               markdown: outroMarkdown,
             }}
             renderMarkdown={(content) => (

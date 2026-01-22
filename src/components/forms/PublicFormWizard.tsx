@@ -30,13 +30,11 @@ export type PublicQuestion = {
 };
 
 type WizardCover = {
-  imageUrl?: string | null;
   title?: string | null;
   subtitle?: string | null;
 };
 
 type WizardOutro = {
-  imageUrl?: string | null;
   markdown?: string | null;
 };
 
@@ -54,6 +52,8 @@ type Props = {
   questions: PublicQuestion[];
   onSubmit: (answers: Record<string, unknown>) => Promise<void>;
   renderMarkdown?: (content: string) => React.ReactNode;
+  headerMediaUrl?: string | null;
+  footerMediaUrl?: string | null;
   cover?: WizardCover;
   intro?: WizardIntro;
   outro?: WizardOutro;
@@ -69,6 +69,8 @@ export default function PublicFormWizard({
   questions,
   onSubmit,
   renderMarkdown,
+  headerMediaUrl,
+  footerMediaUrl,
   cover,
   intro,
   outro,
@@ -84,9 +86,9 @@ export default function PublicFormWizard({
   const steps = useMemo<WizardStep[]>(() => {
     const s: WizardStep[] = [];
 
-    const hasCover = Boolean(cover?.imageUrl || cover?.title || cover?.subtitle);
+    const hasCover = Boolean(cover?.title || cover?.subtitle);
     const hasIntro = Boolean(intro?.markdown && intro.markdown.trim().length > 0);
-    const hasOutro = Boolean(outro?.imageUrl || (outro?.markdown && outro.markdown.trim().length > 0));
+    const hasOutro = Boolean(outro?.markdown && outro.markdown.trim().length > 0);
 
     if (hasCover) s.push({ kind: "cover", cover: cover ?? {} });
     if (hasIntro) s.push({ kind: "intro", intro: intro ?? {} });
@@ -141,23 +143,23 @@ export default function PublicFormWizard({
 
   return (
     <div className="rounded-2xl border bg-white p-4 sm:p-6">
+      {headerMediaUrl ? (
+        <div className="mb-4 overflow-hidden rounded-2xl border bg-white">
+          <img
+            src={headerMediaUrl}
+            alt="Cabecalho"
+            className="h-auto w-full object-cover"
+          />
+        </div>
+      ) : null}
+
       <div className="mb-4 flex items-center justify-between">
         <div className="text-xs font-semibold text-slate-500">{headerLeftLabel}</div>
         <div className="text-xs font-semibold text-slate-700">{progressLabel}</div>
       </div>
 
       {stepItem?.kind === "cover" ? (
-        <div className="space-y-4">
-          {stepItem.cover.imageUrl ? (
-            <div className="overflow-hidden rounded-2xl border bg-white">
-              <img
-                src={stepItem.cover.imageUrl}
-                alt={stepItem.cover.title ?? "Capa"}
-                className="h-auto w-full object-cover"
-              />
-            </div>
-          ) : null}
-
+        <div className="space-y-3">
           {stepItem.cover.title ? (
             <h2 className="text-xl font-semibold text-slate-900">{stepItem.cover.title}</h2>
           ) : null}
@@ -169,7 +171,7 @@ export default function PublicFormWizard({
       ) : null}
 
       {stepItem?.kind === "intro" ? (
-        <div className="rounded-2xl border bg-slate-50 p-4">
+        <div className="space-y-3">
           <div className="prose max-w-none text-slate-700">
             {stepItem.intro.markdown
               ? renderMarkdown
@@ -203,18 +205,8 @@ export default function PublicFormWizard({
 
       {stepItem?.kind === "outro" ? (
         <div className="space-y-4">
-          {stepItem.outro.imageUrl ? (
-            <div className="overflow-hidden rounded-2xl border bg-white p-4">
-              <img
-                src={stepItem.outro.imageUrl}
-                alt="Agradecimento"
-                className="mx-auto h-auto max-h-40 w-auto object-contain"
-              />
-            </div>
-          ) : null}
-
           {stepItem.outro.markdown ? (
-            <div className="rounded-2xl border bg-white p-4">
+            <div className="space-y-3">
               <div className="prose max-w-none text-slate-700">
                 {renderMarkdown ? renderMarkdown(stepItem.outro.markdown) : stepItem.outro.markdown}
               </div>
@@ -223,7 +215,7 @@ export default function PublicFormWizard({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="mt-6 flex items-center justify-between px-1 pb-1">
         <button
           type="button"
           onClick={back}
@@ -253,6 +245,16 @@ export default function PublicFormWizard({
           </button>
         )}
       </div>
+
+      {footerMediaUrl ? (
+        <div className="mt-6 flex justify-center">
+          <img
+            src={footerMediaUrl}
+            alt="Rodape"
+            className="h-auto max-h-40 w-auto object-contain"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
