@@ -85,63 +85,84 @@ export async function GET(request: NextRequest) {
     }
 
     const rawUsers = data.users ?? [];
-
-    // Buscar vinculos em lote
     const userIds = rawUsers.map((u) => u.id).filter(Boolean);
-    const vinculos: Array<{
-      user_id: string;
-      pessoa_id: string | number | null;
-      pessoas?: { id: string | number; nome: string | null; email: string | null; cpf: string | null } | null;
-    }> = [];
 
-    if (userIds.length > 0) {
-      const { data: vincData, error: vincErr } = await supabase
-        .from("usuario_pessoa_vinculos")
-        .select("user_id,pessoa_id,pessoas:public.pessoas(id,nome,email,cpf)")
-        .in("user_id", userIds);
+    // 1) Busca profiles por user_id
+    const { data: profiles, error: profErr } = await supabase
+      .from("profiles")
+      .select("user_id, full_name, is_admin, pessoa_id")
+      .in("user_id", userIds);
 
-      if (vincErr) {
-        console.error("[api/admin/usuarios] vinculos error:", vincErr);
-      } else {
-        vinculos.push(...((vincData ?? []) as typeof vinculos));
-      }
+    if (profErr) {
+      console.error("[api/admin/usuarios] profiles error:", profErr);
     }
 
-    const vincMap = new Map<
+    const profMap = new Map<
       string,
-      {
-        pessoa_id: string | number | null;
-        pessoa: { id: string | number; nome: string | null; email: string | null; cpf: string | null } | null;
-      }
+      { full_name: string | null; is_admin: boolean | null; pessoa_id: number | string | null }
     >();
 
-    vinculos.forEach((v) => {
-      vincMap.set(String(v.user_id), {
-        pessoa_id: v.pessoa_id ?? null,
-        pessoa: v.pessoas ?? null,
+    (profiles ?? []).forEach((p) => {
+      profMap.set(String(p.user_id), {
+        full_name: p.full_name ?? null,
+        is_admin: p.is_admin ?? null,
+        pessoa_id: p.pessoa_id ?? null,
       });
     });
 
+    // 2) Busca pessoas em lote (pelo id real)
+    const pessoaIds = (profiles ?? [])
+      .map((p) => p.pessoa_id)
+      .filter((x) => x !== null && x !== undefined);
+
+    const pessoasMap = new Map<
+      string,
+      { id: number | string; nome: string | null; email: string | null; cpf: string | null }
+    >();
+
+    if (pessoaIds.length > 0) {
+      const { data: pessoas, error: pesErr } = await supabase
+        .from("pessoas")
+        .select("id, nome, email, cpf")
+        .in("id", pessoaIds as Array<number | string>);
+
+      if (pesErr) {
+        console.error("[api/admin/usuarios] pessoas error:", pesErr);
+      } else {
+        (pessoas ?? []).forEach((pp) => {
+          pessoasMap.set(String(pp.id), {
+            id: pp.id,
+            nome: pp.nome ?? null,
+            email: pp.email ?? null,
+            cpf: pp.cpf ?? null,
+          });
+        });
+      }
+    }
+
     const users = rawUsers.map((u) => {
-      const link = vincMap.get(u.id) ?? null;
-      const pessoa = link?.pessoa ?? null;
+      const prof = profMap.get(u.id) ?? null;
+      const pessoaId = prof?.pessoa_id ?? null;
+      const pessoa = pessoaId !== null ? pessoasMap.get(String(pessoaId)) ?? null : null;
 
       return {
-        // Compatibilidade com a UI:
+        // Compatibilidade com UI
         id: u.id,
         uid: u.id,
-        user_id: u.id,
 
         email: u.email ?? null,
         phone: (u.phone ?? null) as string | null,
         created_at: u.created_at ?? null,
         last_sign_in_at: u.last_sign_in_at ?? null,
 
-        // Vinculo com pessoa (se existir)
-        pessoaId: link?.pessoa_id ?? null,
-        pessoa_id: link?.pessoa_id ?? null,
+        // Profile
+        nome: prof?.full_name ?? null,
+        admin: prof?.is_admin ?? null,
+        is_admin: prof?.is_admin ?? null,
+
+        // Vinculo real (profiles -> pessoas)
+        pessoaId,
         pessoa,
-        nome: pessoa?.nome ?? null,
       };
     });
 
@@ -156,6 +177,14 @@ export async function GET(request: NextRequest) {
           perPage: limit,
           // o SDK nem sempre traz total; deixe opcional
           total: (data as unknown as { total?: number })?.total ?? null,
+        },
+        debug: {
+          rawUsersCount: rawUsers.length,
+          profilesCount: (profiles ?? []).length,
+          pessoaIdsCount: pessoaIds.length,
+          pessoaIdsSample: pessoaIds.slice(0, 10),
+          pessoasCount: pessoasMap.size,
+          pessoaKeysSample: Array.from(pessoasMap.keys()).slice(0, 10),
         },
       },
       { status: 200 }

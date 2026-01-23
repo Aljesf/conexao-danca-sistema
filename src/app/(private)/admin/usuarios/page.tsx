@@ -489,7 +489,7 @@ export default function AdminUsuariosPage() {
                     const uid = getUid(u);
                     const pessoaId = getPessoaId(u);
                     const nome = getPessoaNome(u);
-                    const isAdmin = Boolean(u.is_admin);
+                    const isAdmin = Boolean(u.is_admin ?? (u as { admin?: boolean | null }).admin);
                     const papeis = Array.isArray(u.papeis) ? u.papeis : [];
                     const visiveis = papeis.slice(0, 2);
                     const extras = papeis.length - visiveis.length;
