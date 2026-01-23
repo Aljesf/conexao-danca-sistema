@@ -87,8 +87,8 @@ export async function GET(request: NextRequest) {
     const rawUsers = data.users ?? [];
     const userIds = rawUsers.map((u) => u.id).filter(Boolean);
 
-    // 1) Busca profiles por user_id
-    const { data: profiles, error: profErr } = await supabase
+    // 1) Busca profiles por user_id (service role, sem RLS)
+    const { data: profiles, error: profErr } = await adminClient
       .from("profiles")
       .select("user_id, full_name, is_admin, pessoa_id")
       .in("user_id", userIds);
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     >();
 
     if (pessoaIds.length > 0) {
-      const { data: pessoas, error: pesErr } = await supabase
+      const { data: pessoas, error: pesErr } = await adminClient
         .from("pessoas")
         .select("id, nome, email, cpf")
         .in("id", pessoaIds as Array<number | string>);
