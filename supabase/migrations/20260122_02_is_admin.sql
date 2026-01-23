@@ -1,8 +1,6 @@
--- IMPORTANTE:
--- Nao usar DROP FUNCTION aqui, pois ha policies (RLS) dependentes.
--- Manter a assinatura e o nome do parametro como ja existe no banco: (uid uuid).
-
-create or replace function public.is_admin(uid uuid)
+-- Mantem assinatura com DEFAULT para nao quebrar objetos dependentes
+-- e para nao disparar erro de remocao de default.
+create or replace function public.is_admin(uid uuid default auth.uid())
 returns boolean
 language plpgsql
 stable
@@ -37,7 +35,7 @@ begin
       )
     $q$
     into v_is_admin
-      using uid;
+    using uid;
 
     return coalesce(v_is_admin, false);
   exception when undefined_table then

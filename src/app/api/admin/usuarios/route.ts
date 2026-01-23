@@ -84,10 +84,73 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Formato de retorno simples (ajuste se a UI espera outro shape)
+    const rawUsers = data.users ?? [];
+
+    // Buscar vinculos em lote
+    const userIds = rawUsers.map((u) => u.id).filter(Boolean);
+    const vinculos: Array<{
+      user_id: string;
+      pessoa_id: string | number | null;
+      pessoas?: { id: string | number; nome: string | null; email: string | null; cpf: string | null } | null;
+    }> = [];
+
+    if (userIds.length > 0) {
+      const { data: vincData, error: vincErr } = await supabase
+        .from("usuario_pessoa_vinculos")
+        .select("user_id,pessoa_id,pessoas:public.pessoas(id,nome,email,cpf)")
+        .in("user_id", userIds);
+
+      if (vincErr) {
+        console.error("[api/admin/usuarios] vinculos error:", vincErr);
+      } else {
+        vinculos.push(...((vincData ?? []) as typeof vinculos));
+      }
+    }
+
+    const vincMap = new Map<
+      string,
+      {
+        pessoa_id: string | number | null;
+        pessoa: { id: string | number; nome: string | null; email: string | null; cpf: string | null } | null;
+      }
+    >();
+
+    vinculos.forEach((v) => {
+      vincMap.set(String(v.user_id), {
+        pessoa_id: v.pessoa_id ?? null,
+        pessoa: v.pessoas ?? null,
+      });
+    });
+
+    const users = rawUsers.map((u) => {
+      const link = vincMap.get(u.id) ?? null;
+      const pessoa = link?.pessoa ?? null;
+
+      return {
+        // Compatibilidade com a UI:
+        id: u.id,
+        uid: u.id,
+        user_id: u.id,
+
+        email: u.email ?? null,
+        phone: (u.phone ?? null) as string | null,
+        created_at: u.created_at ?? null,
+        last_sign_in_at: u.last_sign_in_at ?? null,
+
+        // Vinculo com pessoa (se existir)
+        pessoaId: link?.pessoa_id ?? null,
+        pessoa_id: link?.pessoa_id ?? null,
+        pessoa,
+        nome: pessoa?.nome ?? null,
+      };
+    });
+
     return NextResponse.json(
       {
-        data: data.users,
+        // PADRAO ESPERADO PELO FRONT:
+        users,
+        // Alias opcional (nao faz mal e aumenta compatibilidade)
+        usuarios: users,
         meta: {
           page: Math.floor(offset / limit) + 1,
           perPage: limit,

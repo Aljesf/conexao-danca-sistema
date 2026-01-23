@@ -10,13 +10,27 @@ type RoleSistema = {
   ativo: boolean;
 };
 
+type PessoaResumo = {
+  id: string | number;
+  nome?: string | null;
+  email?: string | null;
+  cpf?: string | null;
+};
+
 type UsuarioRow = {
-  user_id: string;
-  pessoa_id: number | null;
-  nome: string | null;
+  id?: string;
+  uid?: string;
+  user_id?: string;
+  pessoaId?: string | number | null;
+  pessoa_id?: string | number | null;
+  pessoa?: PessoaResumo | null;
+  nome?: string | null;
   email: string | null;
-  is_admin: boolean;
-  papeis: Array<{ codigo: string; nome: string }>;
+  phone?: string | null;
+  created_at?: string | null;
+  last_sign_in_at?: string | null;
+  is_admin?: boolean;
+  papeis?: Array<{ codigo: string; nome: string }>;
 };
 
 async function apiJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
@@ -123,11 +137,25 @@ export default function AdminUsuariosPage() {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
+  const [vinculoOpen, setVinculoOpen] = useState(false);
+  const [vinculoUserId, setVinculoUserId] = useState<string | null>(null);
+  const [buscaPessoa, setBuscaPessoa] = useState("");
+  const [pessoasEncontradas, setPessoasEncontradas] = useState<PessoaResumo[]>([]);
+  const [pessoaSelecionadaId, setPessoaSelecionadaId] = useState<string | null>(null);
+  const [vinculoLoading, setVinculoLoading] = useState(false);
+  const [vinculoError, setVinculoError] = useState<string | null>(null);
+
   const shortUserId = (id: string) => {
     if (!id) return "";
     if (id.length <= 8) return id;
     return `${id.slice(0, 4)}...${id.slice(-4)}`;
   };
+
+  const getUid = (u: UsuarioRow) => u.uid ?? u.user_id ?? u.id ?? "";
+
+  const getPessoaId = (u: UsuarioRow) => u.pessoaId ?? u.pessoa_id ?? null;
+
+  const getPessoaNome = (u: UsuarioRow) => u.pessoa?.nome ?? u.nome ?? null;
 
   const getErrorMessage = (err: unknown, fallback: string) => {
     if (!err) return fallback;
@@ -177,6 +205,53 @@ export default function AdminUsuariosPage() {
       setLoading(false);
     }
   }
+
+  async function buscarPessoas(term: string) {
+    const qTerm = term.trim();
+    if (!qTerm) return [] as PessoaResumo[];
+    try {
+      const res = await fetch(`/api/admin/pessoas/search?q=${encodeURIComponent(qTerm)}`);
+      if (!res.ok) return [] as PessoaResumo[];
+      const json = (await res.json().catch(() => ({}))) as {
+        data?: PessoaResumo[];
+        pessoas?: PessoaResumo[];
+      };
+      return json.data ?? json.pessoas ?? [];
+    } catch {
+      return [] as PessoaResumo[];
+    }
+  }
+
+  async function vincularUsuario(userId: string, pessoaId: string) {
+    const res = await fetch(`/api/admin/usuarios/${encodeURIComponent(userId)}/vincular`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pessoa_id: pessoaId }),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Falha ao vincular (HTTP ${res.status}). ${txt}`);
+    }
+  }
+
+  function abrirModalVinculo(userId: string) {
+    setVinculoUserId(userId);
+    setBuscaPessoa("");
+    setPessoasEncontradas([]);
+    setPessoaSelecionadaId(null);
+    setVinculoError(null);
+    setVinculoOpen(true);
+  }
+
+  async function executarBuscaPessoa() {
+    setVinculoError(null);
+    const res = await buscarPessoas(buscaPessoa);
+    setPessoasEncontradas(res);
+    if (res.length === 0) {
+      setPessoaSelecionadaId(null);
+    }
+  }
+
   async function abrirModalRoles(u: UsuarioRow) {
     setModalUser(u);
     setModalOpen(true);
@@ -186,7 +261,8 @@ export default function AdminUsuariosPage() {
     setModalError(null);
     setModalSuccess(null);
     try {
-      const data = await apiJson<{ ok: true; roles: RoleSistema[] }>(`/api/admin/usuarios/${u.user_id}/roles`);
+      const uid = getUid(u);
+      const data = await apiJson<{ ok: true; roles: RoleSistema[] }>(`/api/admin/usuarios/${uid}/roles`);
       setModalRolesUser(data.roles || []);
     } catch (e) {
       setModalRolesUser([]);
@@ -198,12 +274,13 @@ export default function AdminUsuariosPage() {
 
   async function toggleAdmin(u: UsuarioRow, novo: boolean) {
     const prev = users;
-    setUsers((arr) => arr.map((x) => (x.user_id === u.user_id ? { ...x, is_admin: novo } : x)));
+    const uid = getUid(u);
+    setUsers((arr) => arr.map((x) => (getUid(x) === uid ? { ...x, is_admin: novo } : x)));
 
     try {
       await apiJson<{ ok: true; profile: any }>("/api/admin/usuarios", {
         method: "PATCH",
-        body: JSON.stringify({ user_id: u.user_id, is_admin: novo }),
+        body: JSON.stringify({ user_id: uid, is_admin: novo }),
       });
     } catch (e: any) {
       setUsers(prev); // rollback
@@ -218,7 +295,8 @@ export default function AdminUsuariosPage() {
     setModalError(null);
     setModalSuccess(null);
     try {
-      await apiJson<{ ok: true }>(`/api/admin/usuarios/${modalUser.user_id}/roles`, {
+      const uid = getUid(modalUser);
+      await apiJson<{ ok: true }>(`/api/admin/usuarios/${uid}/roles`, {
         method: "POST",
         body: JSON.stringify({ role_id: selectedRoleId }),
       });
@@ -248,7 +326,8 @@ export default function AdminUsuariosPage() {
     setModalError(null);
     setModalSuccess(null);
     try {
-      await apiJson<{ ok: true }>(`/api/admin/usuarios/${modalUser.user_id}/roles`, {
+      const uid = getUid(modalUser);
+      await apiJson<{ ok: true }>(`/api/admin/usuarios/${uid}/roles`, {
         method: "DELETE",
         body: JSON.stringify({ role_id: roleId }),
       });
@@ -301,9 +380,10 @@ export default function AdminUsuariosPage() {
 
     setResetLoading(true);
     try {
+      const uid = getUid(resetUser);
       await apiJson<{ ok: true }>("/api/admin/usuarios/resetar-senha", {
         method: "POST",
-        body: JSON.stringify({ user_id: resetUser.user_id, senha }),
+        body: JSON.stringify({ user_id: uid, senha }),
       });
       setResetSuccess("Senha redefinida com sucesso.");
       setTimeout(() => {
@@ -328,31 +408,7 @@ export default function AdminUsuariosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function criarUsuarioFromPessoa(pessoaIdPrefill?: number) {
-    const pessoaIdStr = window.prompt("Informe o ID da pessoa para criar o usuário", pessoaIdPrefill ? String(pessoaIdPrefill) : "");
-    if (!pessoaIdStr) return;
-    const pessoaId = Number(pessoaIdStr);
-    if (!pessoaId || Number.isNaN(pessoaId)) return;
-
-    const email = window.prompt("Email do usuário (obrigatório):") || "";
-    if (!email.trim()) return;
-    const senha = window.prompt("Senha inicial (obrigatória):") || "";
-    if (!senha.trim()) return;
-
-    try {
-      await apiJson("/api/usuarios/create-from-pessoa", {
-        method: "POST",
-        body: JSON.stringify({ pessoaId, email: email.trim(), senha: senha.trim() }),
-      });
-      await carregarUsuarios();
-      alert("Usuário criado e vinculado à pessoa.");
-    } catch (e: any) {
-      alert(e?.payload?.error || e?.payload?.details || e?.message || "Erro ao criar usuário a partir da pessoa.");
-    }
-  }
-
-
-    return (
+  return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white py-6 px-4">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -430,31 +486,36 @@ export default function AdminUsuariosPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {users.map((u) => {
+                    const uid = getUid(u);
+                    const pessoaId = getPessoaId(u);
+                    const nome = getPessoaNome(u);
+                    const isAdmin = Boolean(u.is_admin);
                     const papeis = Array.isArray(u.papeis) ? u.papeis : [];
                     const visiveis = papeis.slice(0, 2);
                     const extras = papeis.length - visiveis.length;
                     return (
-                      <tr key={u.user_id} className="hover:bg-slate-50/60">
+                      <tr key={uid || u.email || String(pessoaId ?? "")} className="hover:bg-slate-50/60">
                         <td className="px-6 py-4">
-                          {u.nome ? (
-                            <div className="font-semibold text-slate-900">{u.nome}</div>
+                          {nome ? (
+                            <div className="font-semibold text-slate-900">{nome}</div>
                           ) : (
                             <div className="flex flex-col">
                               <span className="font-semibold text-slate-700">Sem vínculo</span>
-                              <span className="text-xs text-slate-500">UID: {shortUserId(u.user_id)}</span>
+                              <span className="text-xs text-slate-500">UID: {shortUserId(uid)}</span>
                             </div>
                           )}
                         </td>
                         <td className="px-6 py-4 text-slate-600">{u.email ? u.email : "Sem vínculo"}</td>
                         <td className="px-6 py-4">
-                          {typeof u.pessoa_id === "number" ? (
-                            <a className="text-sky-700 hover:underline" href={`/pessoas/${u.pessoa_id}`}>
-                              Pessoa #{u.pessoa_id}
+                          {pessoaId ? (
+                            <a className="text-sky-700 hover:underline" href={`/pessoas/${pessoaId}`}>
+                              Pessoa #{pessoaId}
                             </a>
                           ) : (
                             <button
                               type="button"
-                              onClick={() => criarUsuarioFromPessoa()}
+                              onClick={() => uid && abrirModalVinculo(uid)}
+                              disabled={!uid}
                               className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                             >
                               Vincular...
@@ -464,13 +525,13 @@ export default function AdminUsuariosPage() {
                         <td className="px-6 py-4">
                           <button
                             type="button"
-                            onClick={() => toggleAdmin(u, !u.is_admin)}
+                            onClick={() => toggleAdmin(u, !isAdmin)}
                             title="Clique para alternar admin"
                             className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
-                              u.is_admin ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+                              isAdmin ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
                             }`}
                           >
-                            {u.is_admin ? "SIM" : "NÃO"}
+                            {isAdmin ? "SIM" : "NÃO"}
                           </button>
                         </td>
                         <td className="px-6 py-4">
@@ -498,10 +559,11 @@ export default function AdminUsuariosPage() {
                             >
                               Redefinir senha
                             </button>
-                            {!u.pessoa_id ? (
+                            {!pessoaId ? (
                               <button
                                 type="button"
-                                onClick={() => criarUsuarioFromPessoa()}
+                                onClick={() => uid && abrirModalVinculo(uid)}
+                                disabled={!uid}
                                 className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                               >
                                 Vincular...
@@ -533,7 +595,7 @@ export default function AdminUsuariosPage() {
           modalUser ? (
             <div className="flex flex-col gap-1">
               <span className="text-base font-semibold text-slate-900">Papéis do usuário</span>
-              <span className="text-xs text-slate-500">UID: {shortUserId(modalUser.user_id)}</span>
+              <span className="text-xs text-slate-500">UID: {shortUserId(getUid(modalUser))}</span>
             </div>
           ) : (
             <span className="text-base font-semibold text-slate-900">Papéis do usuário</span>
@@ -566,19 +628,26 @@ export default function AdminUsuariosPage() {
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pessoa</div>
               <div className="mt-1 text-sm text-slate-700">
-                {typeof modalUser.pessoa_id === "number" ? (
+                {getPessoaId(modalUser) ? (
                   <span className="inline-flex flex-wrap items-center gap-2">
-                    <Link className="text-sky-700 hover:underline" href={`/pessoas/${modalUser.pessoa_id}`}>
-                      Pessoa #{modalUser.pessoa_id}
+                    <Link className="text-sky-700 hover:underline" href={`/pessoas/${getPessoaId(modalUser)}`}>
+                      Pessoa #{getPessoaId(modalUser)}
                     </Link>
-                    {modalUser.nome ? <span className="text-slate-600">- {modalUser.nome}</span> : null}
+                    {getPessoaNome(modalUser) ? (
+                      <span className="text-slate-600">- {getPessoaNome(modalUser)}</span>
+                    ) : null}
                   </span>
                 ) : (
                   <span className="inline-flex flex-wrap items-center gap-2 text-slate-600">
                     <span>Sem vínculo.</span>
                     <button
                       type="button"
-                      onClick={() => criarUsuarioFromPessoa()}
+                      onClick={() => {
+                        const uid = getUid(modalUser);
+                        if (!uid) return;
+                        setModalOpen(false);
+                        abrirModalVinculo(uid);
+                      }}
                       className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-white"
                     >
                       Vincular...
@@ -647,12 +716,114 @@ export default function AdminUsuariosPage() {
       </Modal>
 
       <Modal
+        open={vinculoOpen}
+        title={<span className="text-base font-semibold text-slate-900">Vincular usuário a pessoa</span>}
+        onClose={() => {
+          setVinculoOpen(false);
+          setVinculoUserId(null);
+          setBuscaPessoa("");
+          setPessoasEncontradas([]);
+          setPessoaSelecionadaId(null);
+          setVinculoError(null);
+          setVinculoLoading(false);
+        }}
+      >
+        <div className="space-y-4">
+          {vinculoError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+              {vinculoError}
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+              placeholder="Buscar por nome, e-mail ou CPF..."
+              value={buscaPessoa}
+              onChange={(e) => setBuscaPessoa(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") executarBuscaPessoa();
+              }}
+            />
+            <button
+              type="button"
+              className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              onClick={executarBuscaPessoa}
+            >
+              Buscar
+            </button>
+          </div>
+
+          <div className="max-h-64 overflow-auto rounded-xl border border-slate-200">
+            {pessoasEncontradas.length === 0 ? (
+              <div className="p-3 text-sm text-slate-600">Nenhum resultado.</div>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {pessoasEncontradas.map((p) => (
+                  <li key={String(p.id)} className="flex items-center justify-between gap-3 p-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-slate-900">
+                        {p.nome ?? "(Sem nome)"}
+                      </div>
+                      <div className="truncate text-xs text-slate-600">
+                        {p.email ?? "-"} {p.cpf ? ` • CPF: ${p.cpf}` : ""}
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        name="pessoa"
+                        checked={pessoaSelecionadaId === String(p.id)}
+                        onChange={() => setPessoaSelecionadaId(String(p.id))}
+                      />
+                      Selecionar
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+              onClick={() => setVinculoOpen(false)}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!vinculoUserId || !pessoaSelecionadaId || vinculoLoading}
+              onClick={async () => {
+                if (!vinculoUserId || !pessoaSelecionadaId) return;
+                setVinculoLoading(true);
+                setVinculoError(null);
+                try {
+                  await vincularUsuario(vinculoUserId, pessoaSelecionadaId);
+                  setVinculoOpen(false);
+                  await carregarUsuarios();
+                } catch (e) {
+                  setVinculoError(getErrorMessage(e, "Falha ao vincular usuário."));
+                } finally {
+                  setVinculoLoading(false);
+                }
+              }}
+            >
+              {vinculoLoading ? "Vinculando..." : "Confirmar vínculo"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={resetOpen}
         title={
           resetUser ? (
             <div className="flex flex-col gap-1">
               <span className="text-base font-semibold text-slate-900">Redefinir senha</span>
-              <span className="text-xs text-slate-500">UID: {shortUserId(resetUser.user_id)}</span>
+              <span className="text-xs text-slate-500">UID: {shortUserId(getUid(resetUser))}</span>
             </div>
           ) : (
             <span className="text-base font-semibold text-slate-900">Redefinir senha</span>

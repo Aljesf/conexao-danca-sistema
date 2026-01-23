@@ -1,63 +1,129 @@
-﻿import { NextResponse } from "next/server";
-import { assertAdmin } from "@/lib/auth/assertAdmin";
-import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { NextResponse, type NextRequest } from "next/server";
+import { requireUser } from "@/lib/supabase/api-auth";
 
-export async function GET(_req: Request, ctx: { params: Promise<{ user_id: string }> }) {
-  const denied = await guardApiByRole(_req as any);
-  if (denied) return denied as any;
-  const auth = await assertAdmin();
-  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+async function requireAdmin(request: NextRequest) {
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return { response: auth };
 
-  const { user_id } = await ctx.params;
-  const { data: ur, error: urErr } = await auth.supabase.from("usuario_roles").select("user_id, role_id").eq("user_id", user_id);
-  if (urErr) return NextResponse.json({ ok: false, error: "erro_usuario_roles", details: urErr.message }, { status: 500 });
-
-  const roleIds = Array.from(new Set((ur || []).map((x) => x.role_id)));
-  const { data: roles, error: rolesErr } = await auth.supabase
-    .from("roles_sistema")
-    .select("id, codigo, nome, ativo")
-    .in("id", roleIds.length ? roleIds : ["00000000-0000-0000-0000-000000000000"]);
-  if (rolesErr) return NextResponse.json({ ok: false, error: "erro_roles_sistema", details: rolesErr.message }, { status: 500 });
-
-  return NextResponse.json({ ok: true, roles: roles || [] });
-}
-
-export async function POST(req: Request, ctx: { params: Promise<{ user_id: string }> }) {
-  const denied = await guardApiByRole(req as any);
-  if (denied) return denied as any;
-  const auth = await assertAdmin();
-  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
-
-  const { user_id } = await ctx.params;
-  const body = await req.json().catch(() => null);
-  const role_id = body?.role_id;
-
-  if (!role_id || typeof role_id !== "string") {
-    return NextResponse.json({ ok: false, error: "payload_invalido" }, { status: 400 });
+  const { supabase, userId } = auth;
+  const { data: isAdmin, error: adminErr } = await supabase.rpc("is_admin", { uid: userId });
+  if (adminErr) {
+    return {
+      response: NextResponse.json(
+        { error: "admin_check_failed", message: adminErr.message },
+        { status: 500 }
+      ),
+    };
+  }
+  if (!isAdmin) {
+    return {
+      response: NextResponse.json(
+        { error: "forbidden", message: "Acesso negado (admin obrigatório)." },
+        { status: 403 }
+      ),
+    };
   }
 
-  const { error } = await auth.supabase.from("usuario_roles").insert({ user_id, role_id });
-  if (error) return NextResponse.json({ ok: false, error: "erro_adicionar_role", details: error.message }, { status: 500 });
-
-  return NextResponse.json({ ok: true });
+  return { supabase };
 }
 
-export async function DELETE(req: Request, ctx: { params: Promise<{ user_id: string }> }) {
-  const denied = await guardApiByRole(req as any);
-  if (denied) return denied as any;
-  const auth = await assertAdmin();
-  if (!auth.ok) return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status });
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ user_id: string }> }
+) {
+  const { user_id } = await context.params;
 
-  const { user_id } = await ctx.params;
-  const body = await req.json().catch(() => null);
-  const role_id = body?.role_id;
-
-  if (!role_id || typeof role_id !== "string") {
-    return NextResponse.json({ ok: false, error: "payload_invalido" }, { status: 400 });
+  if (!user_id || user_id === "undefined" || user_id === "null") {
+    return NextResponse.json(
+      { error: "bad_request", message: "user_id inválido." },
+      { status: 400 }
+    );
   }
 
-  const { error } = await auth.supabase.from("usuario_roles").delete().eq("user_id", user_id).eq("role_id", role_id);
-  if (error) return NextResponse.json({ ok: false, error: "erro_remover_role", details: error.message }, { status: 500 });
+  const admin = await requireAdmin(request);
+  if ("response" in admin) return admin.response;
 
-  return NextResponse.json({ ok: true });
+  const { data, error } = await admin.supabase
+    .from("usuario_roles")
+    .select("role_id, roles_sistema:public.roles_sistema(id,codigo,nome,ativo)")
+    .eq("user_id", user_id);
+
+  if (error) {
+    return NextResponse.json(
+      { error: "db_error", message: error.message },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ roles: data ?? [] }, { status: 200 });
+}
+
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ user_id: string }> }
+) {
+  const { user_id } = await context.params;
+
+  if (!user_id || user_id === "undefined" || user_id === "null") {
+    return NextResponse.json(
+      { error: "bad_request", message: "user_id inválido." },
+      { status: 400 }
+    );
+  }
+
+  const admin = await requireAdmin(request);
+  if ("response" in admin) return admin.response;
+
+  const body = (await request.json().catch(() => null)) as { role_id?: string } | null;
+  const role_id = body?.role_id;
+  if (!role_id || typeof role_id !== "string") {
+    return NextResponse.json({ error: "payload_invalido" }, { status: 400 });
+  }
+
+  const { error } = await admin.supabase.from("usuario_roles").insert({ user_id, role_id });
+  if (error) {
+    return NextResponse.json(
+      { error: "erro_adicionar_role", details: error.message },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ user_id: string }> }
+) {
+  const { user_id } = await context.params;
+
+  if (!user_id || user_id === "undefined" || user_id === "null") {
+    return NextResponse.json(
+      { error: "bad_request", message: "user_id inválido." },
+      { status: 400 }
+    );
+  }
+
+  const admin = await requireAdmin(request);
+  if ("response" in admin) return admin.response;
+
+  const body = (await request.json().catch(() => null)) as { role_id?: string } | null;
+  const role_id = body?.role_id;
+  if (!role_id || typeof role_id !== "string") {
+    return NextResponse.json({ error: "payload_invalido" }, { status: 400 });
+  }
+
+  const { error } = await admin.supabase
+    .from("usuario_roles")
+    .delete()
+    .eq("user_id", user_id)
+    .eq("role_id", role_id);
+  if (error) {
+    return NextResponse.json(
+      { error: "erro_remover_role", details: error.message },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
 }
