@@ -285,7 +285,7 @@ export async function POST(request: NextRequest) {
 
     const { supabase, userId } = auth;
 
-    const { data: isAdmin, error: adminErr } = await supabase.rpc("is_admin", { p_user_id: userId });
+    const { data: isAdmin, error: adminErr } = await supabase.rpc("is_admin", { uid: userId });
 
     if (adminErr) {
       console.error("[api/matriculas/novo] rpc is_admin error:", adminErr);

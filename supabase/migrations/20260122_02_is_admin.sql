@@ -1,9 +1,8 @@
--- Garante idempotencia correta mudando assinatura do parametro
--- Necessario porque Postgres nao permite alterar nome de parametro via CREATE OR REPLACE
+-- IMPORTANTE:
+-- Nao usar DROP FUNCTION aqui, pois ha policies (RLS) dependentes.
+-- Manter a assinatura e o nome do parametro como ja existe no banco: (uid uuid).
 
-drop function if exists public.is_admin(uuid);
-
-create function public.is_admin(p_user_id uuid)
+create or replace function public.is_admin(uid uuid)
 returns boolean
 language plpgsql
 stable
@@ -17,7 +16,7 @@ begin
   begin
     execute 'select coalesce(is_admin,false) from public.profiles where user_id = $1'
       into v_is_admin
-      using p_user_id;
+      using uid;
     if v_is_admin then
       return true;
     end if;
@@ -38,7 +37,7 @@ begin
       )
     $q$
     into v_is_admin
-    using p_user_id;
+      using uid;
 
     return coalesce(v_is_admin, false);
   exception when undefined_table then

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     // 2) RBAC: exige admin
     const { data: isAdmin, error: adminErr } = await supabase.rpc("is_admin", {
-      p_user_id: userId,
+      uid: userId,
     });
 
     if (adminErr) {
