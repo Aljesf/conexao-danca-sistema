@@ -1,6 +1,6 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { requireUser } from "@/lib/supabase/api-auth";
+import { requirePermission } from "@/lib/auth/authorize";
 
 type CursoRow = {
   id: number;
@@ -56,34 +56,9 @@ function asText(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-async function requireAdmin(request: NextRequest) {
-  const auth = await requireUser(request);
-  if (auth instanceof NextResponse) return auth;
-
-  const { supabase, userId } = auth;
-  const { data: profile, error: profErr } = await supabase
-    .from("profiles")
-    .select("is_admin")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (profErr) {
-    return NextResponse.json(
-      { ok: false, error: "ERRO_PERMISSAO", details: profErr.message },
-      { status: 500 }
-    );
-  }
-
-  if (!profile?.is_admin) {
-    return NextResponse.json({ ok: false, error: "SEM_PERMISSAO" }, { status: 403 });
-  }
-
-  return null;
-}
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    const adminCheck = await requireAdmin(request);
-    if (adminCheck) return adminCheck;
+    await requirePermission({ kind: "ANY_AUTHENTICATED" });
 
     let admin;
     try {
@@ -199,16 +174,15 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ ok: true, data: payload }, { status: 200 });
   } catch (e: unknown) {
-    console.error("ERRO GET /academico/cursos:", e);
     const msg = e instanceof Error ? e.message : "Erro inesperado";
-    return NextResponse.json({ ok: false, code: "ERRO_GET_CURSOS", message: msg }, { status: 500 });
+    const status = msg === "Nao autenticado." ? 401 : 403;
+    return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const adminCheck = await requireAdmin(request);
-    if (adminCheck) return adminCheck;
+    await requirePermission({ kind: "TECH_ADMIN_OR_ROLE", roles: ["PROFESSOR", "ACADEMICO"] });
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) {
@@ -256,7 +230,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, data }, { status: 201 });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "erro_interno";
-    return NextResponse.json({ ok: false, error: "erro_interno", message: msg }, { status: 500 });
+    const status = msg === "Nao autenticado." ? 401 : 403;
+    return NextResponse.json({ ok: false, error: msg }, { status });
   }
 }
+
+
+
+
+
+
 
