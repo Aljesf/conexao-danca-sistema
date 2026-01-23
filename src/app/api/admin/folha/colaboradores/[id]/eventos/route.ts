@@ -66,7 +66,7 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
   }
 
   if ((folha as FolhaRow).status !== "ABERTA") {
-    return NextResponse.json({ ok: false, error: "folha_fechada" }, { status: 409 });
+    return NextResponse.json({ ok: false, error: "folha_fechada" }, { status: 400 });
   }
 
   const { data: evento, error } = await supabase

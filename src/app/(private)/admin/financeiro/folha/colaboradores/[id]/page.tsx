@@ -24,6 +24,14 @@ function fmtCentavos(v: number): string {
   return `R$ ${reais}`;
 }
 
+function parseReaisToCentavos(value: string): number | null {
+  const normalized = value.trim().replace(/\s+/g, "").replace(",", ".");
+  if (!normalized) return null;
+  const num = Number(normalized);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return Math.round(num * 100);
+}
+
 export default function FolhaColaboradorDetalhePage({ params }: { params: { id: string } }) {
   const folhaId = params.id;
 
@@ -62,8 +70,8 @@ export default function FolhaColaboradorDetalhePage({ params }: { params: { id: 
   }
 
   async function adicionarEvento() {
-    const valor = Number(novoValor);
-    if (!Number.isFinite(valor) || valor < 0) return;
+    const valorCentavos = parseReaisToCentavos(novoValor);
+    if (valorCentavos === null) return;
     if (!novoDescricao.trim()) return;
 
     await fetch(`/api/admin/folha/colaboradores/${folhaId}/eventos`, {
@@ -72,7 +80,7 @@ export default function FolhaColaboradorDetalhePage({ params }: { params: { id: 
       body: JSON.stringify({
         tipo: novoTipo,
         descricao: novoDescricao.trim(),
-        valor_centavos: Math.trunc(valor),
+        valor_centavos: valorCentavos,
       }),
     });
     setNovoDescricao("");
@@ -93,7 +101,7 @@ export default function FolhaColaboradorDetalhePage({ params }: { params: { id: 
         <div>
           <h1 className="text-xl font-semibold">Folha #{folhaId}</h1>
           <p className="text-sm text-muted-foreground">
-            {data ? `Competencia: ${data.competencia_ano_mes} · Status: ${data.status}` : "Carregando..."}
+            {data ? `Competencia: ${data.competencia_ano_mes} - Status: ${data.status}` : "Carregando..."}
           </p>
         </div>
 
@@ -144,12 +152,12 @@ export default function FolhaColaboradorDetalhePage({ params }: { params: { id: 
             value={novoDescricao}
             onChange={(e) => setNovoDescricao(e.target.value)}
           />
-          <label className="text-xs">Valor (centavos)</label>
+          <label className="text-xs">Valor (R$)</label>
           <input
             className="border rounded px-2 py-1 text-sm w-28"
             value={novoValor}
             onChange={(e) => setNovoValor(e.target.value)}
-            placeholder="0"
+            placeholder="0,00"
           />
           <button className="border rounded px-3 py-1 text-sm" onClick={() => void adicionarEvento()} disabled={!folhaAberta}>
             Adicionar
@@ -189,3 +197,4 @@ export default function FolhaColaboradorDetalhePage({ params }: { params: { id: 
     </div>
   );
 }
+

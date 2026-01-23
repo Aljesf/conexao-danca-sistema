@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type FolhaRow = {
   id: number;
@@ -10,6 +11,7 @@ type FolhaRow = {
 };
 
 export default function FolhaColaboradoresPage() {
+  const router = useRouter();
   const [competencia, setCompetencia] = useState<string>(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -33,13 +35,25 @@ export default function FolhaColaboradoresPage() {
 
   async function abrirFolha() {
     const raw = colaboradorId.trim();
-    if (!raw) return;
-    await fetch("/api/admin/folha/colaboradores", {
+    const colaboradorIdNum = Number(raw);
+    if (!raw || !Number.isFinite(colaboradorIdNum)) return;
+
+    const res = await fetch("/api/admin/folha/colaboradores", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competencia_ano_mes: competencia, colaborador_id: raw }),
+      body: JSON.stringify({ competencia_ano_mes: competencia, colaborador_id: colaboradorIdNum }),
     });
+
+    const json = (await res.json().catch(() => null)) as { data?: { id?: number } } | null;
+    const folhaId = json?.data?.id;
+
     setColaboradorId("");
+
+    if (folhaId) {
+      router.push(`/admin/financeiro/folha/colaboradores/${folhaId}`);
+      return;
+    }
+
     await load();
   }
 
@@ -103,7 +117,7 @@ export default function FolhaColaboradoresPage() {
                     <div className="text-xs">{r.status}</div>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    competencia: {r.competencia_ano_mes} · colaborador_id: {r.colaborador_id}
+                    competencia: {r.competencia_ano_mes} - colaborador_id: {r.colaborador_id}
                   </div>
                 </a>
               ))}
