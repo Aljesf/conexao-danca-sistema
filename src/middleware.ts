@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 function isPublicPath(pathname: string): boolean {
+  // APIs nao devem sofrer redirect para /login. A propria rota retorna JSON 401/403.
+  if (pathname.startsWith("/api")) return true;
+
   // Ajuste aqui conforme seu projeto
   const publicPaths = [
     "/login",
@@ -21,6 +24,11 @@ function isPublicPath(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  // Se for /api/**: nao mexer com redirect nem refresh; deixar a rota responder.
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next();
+  }
 
   // Resposta base (onde o Supabase vai anexar cookies do refresh)
   const baseResponse = NextResponse.next({ request });
@@ -83,6 +91,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -153,9 +153,12 @@ export default function PublicFormTokenPage({
       setSubmitted(false);
       try {
         const res = await fetch(`/api/public/forms/${token}`, { cache: "no-store" });
-        const json = (await res.json()) as { data?: Payload; error?: string };
-        if (!res.ok) throw new Error(json.error ?? "Falha ao carregar formulario.");
-        setData(json.data ?? null);
+        if (!res.ok) {
+          await res.text();
+          throw new Error(`Falha ao carregar formulario (HTTP ${res.status}).`);
+        }
+        const payload = (await res.json()) as { data?: Payload; error?: string };
+        setData(payload.data ?? null);
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Erro desconhecido.");
       } finally {

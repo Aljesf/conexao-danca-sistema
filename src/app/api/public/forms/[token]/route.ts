@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ token: string }> }) {
+export async function GET(request: NextRequest, ctx: { params: Promise<{ token: string }> }) {
   try {
-    const supabase = getSupabaseServiceClient();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll() {
+            // no-op
+          },
+        },
+      }
+    );
     const { token } = await ctx.params;
 
     const { data: submission, error: subErr } = await supabase
