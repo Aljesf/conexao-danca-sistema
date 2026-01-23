@@ -131,7 +131,7 @@ export default function TemplateResponsesPage() {
                     <td className="px-3 py-2">
                       <Link
                         className="text-indigo-600 hover:underline"
-                        href={`/admin/forms/responses/${it.id}`}
+                        href={`/admin/forms/submissions/${it.id}`}
                       >
                         Ver resposta
                       </Link>
