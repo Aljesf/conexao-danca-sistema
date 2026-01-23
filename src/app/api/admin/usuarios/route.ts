@@ -7,6 +7,13 @@ function getServiceRoleKey(): string | null {
   return process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE ?? null;
 }
 
+type PatchBody = {
+  userId?: string;
+  user_id?: string;
+  is_admin?: boolean;
+  isAdmin?: boolean;
+};
+
 export async function GET(request: NextRequest) {
   try {
     // 1) Autenticacao padrao (cookie -> user)
@@ -192,5 +199,117 @@ export async function GET(request: NextRequest) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro desconhecido";
     return NextResponse.json({ error: "internal_error", message: msg }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = await requireUser(request);
+    if (auth instanceof NextResponse) return auth;
+
+    const { userId: requesterId } = auth;
+
+    const serviceRoleKey = getServiceRoleKey();
+    if (!serviceRoleKey) {
+      return NextResponse.json(
+        {
+          error: "missing_service_role",
+          message:
+            "Variavel SUPABASE_SERVICE_ROLE_KEY (ou SUPABASE_SERVICE_ROLE) nao configurada no servidor.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const adminClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      serviceRoleKey,
+      {
+        cookies: {
+          getAll() {
+            return [];
+          },
+          setAll() {
+            // no-op
+          },
+        },
+      }
+    );
+
+    const { data: requesterProfile, error: reqErr } = await adminClient
+      .from("profiles")
+      .select("user_id, is_admin")
+      .eq("user_id", requesterId)
+      .maybeSingle();
+
+    if (reqErr) {
+      return NextResponse.json(
+        { error: "profile_check_failed", message: reqErr.message },
+        { status: 500 }
+      );
+    }
+
+    const requesterIsAdmin = Boolean(requesterProfile?.is_admin);
+    if (!requesterIsAdmin) {
+      return NextResponse.json(
+        { error: "forbidden", message: "Sem permissão para gerenciar administradores." },
+        { status: 403 }
+      );
+    }
+
+    const body = (await request.json().catch(() => null)) as PatchBody | null;
+    const targetUserId = body?.userId ?? body?.user_id ?? "";
+    const nextIsAdmin = body?.is_admin ?? body?.isAdmin;
+
+    if (!targetUserId || typeof targetUserId !== "string") {
+      return NextResponse.json({ error: "userId invalido." }, { status: 400 });
+    }
+    if (typeof nextIsAdmin !== "boolean") {
+      return NextResponse.json({ error: "is_admin invalido." }, { status: 400 });
+    }
+
+    let updatedProfile: { user_id: string; is_admin?: boolean | null; admin?: boolean | null } | null =
+      null;
+
+    const attemptBoth = await adminClient
+      .from("profiles")
+      .update({ is_admin: nextIsAdmin, admin: nextIsAdmin })
+      .eq("user_id", targetUserId)
+      .select("user_id, is_admin, admin")
+      .maybeSingle();
+
+    if (attemptBoth.error) {
+      const attemptSingle = await adminClient
+        .from("profiles")
+        .update({ is_admin: nextIsAdmin })
+        .eq("user_id", targetUserId)
+        .select("user_id, is_admin")
+        .maybeSingle();
+
+      if (attemptSingle.error) {
+        return NextResponse.json(
+          { error: "update_failed", message: attemptSingle.error.message },
+          { status: 500 }
+        );
+      }
+
+      updatedProfile = attemptSingle.data as typeof updatedProfile;
+    } else {
+      updatedProfile = attemptBoth.data as typeof updatedProfile;
+    }
+
+    if (!updatedProfile) {
+      return NextResponse.json({ error: "profile_not_found" }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      userId: updatedProfile.user_id,
+      is_admin: Boolean(updatedProfile.is_admin ?? updatedProfile.admin),
+      profile: updatedProfile,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro inesperado.";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
