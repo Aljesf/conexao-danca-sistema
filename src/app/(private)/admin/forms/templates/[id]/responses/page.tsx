@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -8,9 +8,12 @@ type Pessoa = { id: number; nome: string | null; telefone?: string | null; email
 type Item = {
   id: string;
   status: string;
+  status_operacional: string;
+  answered_count: number;
+  required_count: number;
   submitted_at: string | null;
   created_at: string;
-  pessoa_id: number;
+  pessoa_id: number | null;
   pessoas: Pessoa | null;
 };
 
@@ -21,11 +24,39 @@ export default function TemplateResponsesPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [q, setQ] = useState<string>("");
+  const [status, setStatus] = useState<string>("TODOS");
+
+  const statusTabs = useMemo(
+    () => [
+      { value: "TODOS", label: "Todos" },
+      { value: "PENDENTE", label: "Pendentes" },
+      { value: "EM_ANDAMENTO", label: "Em andamento" },
+      { value: "CONCLUIDO", label: "Concluidos" },
+    ],
+    []
+  );
+
+  const statusLabel = useMemo(
+    () => ({
+      PENDENTE: "Pendente",
+      EM_ANDAMENTO: "Em andamento",
+      CONCLUIDO: "Concluido",
+    }),
+    []
+  );
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch(`/api/forms/templates/${templateId}/responses`)
+    const params = new URLSearchParams();
+    const qq = q.trim();
+    if (status && status !== "TODOS") params.set("status", status);
+    if (qq) params.set("q", qq);
+    const qs = params.toString();
+    const url = qs
+      ? `/api/forms/templates/${templateId}/responses?${qs}`
+      : `/api/forms/templates/${templateId}/responses`;
+    fetch(url)
       .then((r) => r.json())
       .then((json) => {
         if (!alive) return;
@@ -38,13 +69,7 @@ export default function TemplateResponsesPage() {
     return () => {
       alive = false;
     };
-  }, [templateId]);
-
-  const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return items;
-    return items.filter((it) => (it.pessoas?.nome ?? "").toLowerCase().includes(qq));
-  }, [items, q]);
+  }, [templateId, status, q]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
@@ -52,7 +77,7 @@ export default function TemplateResponsesPage() {
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h1 className="text-xl font-semibold">Respostas do Formulário</h1>
+              <h1 className="text-xl font-semibold">Respostas do FormulÃ¡rio</h1>
               <p className="text-sm text-slate-600">
                 Veja quem respondeu e acesse cada resposta individual.
               </p>
@@ -79,7 +104,7 @@ export default function TemplateResponsesPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="text-sm text-slate-700">
               <span className="font-medium">Total:</span>{" "}
-              {loading ? "Carregando..." : filtered.length}
+              {loading ? "Carregando..." : items.length}
             </div>
             <div className="w-full md:w-80">
               <input
@@ -91,38 +116,75 @@ export default function TemplateResponsesPage() {
             </div>
           </div>
 
+          <div className="flex flex-wrap gap-2">
+            {statusTabs.map((tab) => {
+              const active = status === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setStatus(tab.value)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    active
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs uppercase text-slate-500">
                 <tr className="border-b">
                   <th className="px-3 py-2 text-left">Pessoa</th>
                   <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">Progresso</th>
                   <th className="px-3 py-2 text-left">Preenchido em</th>
-                  <th className="px-3 py-2 text-left">Ações</th>
+                  <th className="px-3 py-2 text-left">AÃ§Ãµes</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && !loading && (
+                {items.length === 0 && !loading && (
                   <tr>
-                    <td className="px-3 py-6 text-slate-500" colSpan={4}>
+                    <td className="px-3 py-6 text-slate-500" colSpan={5}>
                       Nenhuma resposta encontrada.
                     </td>
                   </tr>
                 )}
 
-                {filtered.map((it) => (
+                {items.map((it) => (
                   <tr key={it.id} className="border-b last:border-b-0 hover:bg-slate-50">
                     <td className="px-3 py-2">
                       <div className="font-medium text-slate-900">
-                        {it.pessoas?.nome ?? `Pessoa #${it.pessoa_id}`}
+                        {it.pessoas?.nome ?? (it.pessoa_id ? `Pessoa #${it.pessoa_id}` : "Pessoa")}
                       </div>
                       <div className="text-xs text-slate-500">
                         {it.pessoas?.telefone ?? ""}
-                        {it.pessoas?.telefone && it.pessoas?.email ? " • " : ""}
+                        {it.pessoas?.telefone && it.pessoas?.email ? " â€¢ " : ""}
                         {it.pessoas?.email ?? ""}
                       </div>
                     </td>
-                    <td className="px-3 py-2">{it.status}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+                          it.status_operacional === "CONCLUIDO"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : it.status_operacional === "EM_ANDAMENTO"
+                            ? "border-blue-200 bg-blue-50 text-blue-700"
+                            : "border-amber-200 bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {statusLabel[it.status_operacional as keyof typeof statusLabel] ??
+                          it.status_operacional}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {it.answered_count}/{it.required_count}
+                    </td>
                     <td className="px-3 py-2">
                       {it.submitted_at
                         ? new Date(it.submitted_at).toLocaleString("pt-BR")
@@ -141,7 +203,7 @@ export default function TemplateResponsesPage() {
 
                 {loading && (
                   <tr>
-                    <td className="px-3 py-6 text-slate-500" colSpan={4}>
+                    <td className="px-3 py-6 text-slate-500" colSpan={5}>
                       Carregando...
                     </td>
                   </tr>
@@ -154,3 +216,5 @@ export default function TemplateResponsesPage() {
     </div>
   );
 }
+
+

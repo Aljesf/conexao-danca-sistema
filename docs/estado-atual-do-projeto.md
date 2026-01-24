@@ -84,6 +84,10 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - API: POST /api/movimento/acoes.
 - API: POST /api/movimento/acoes/[id]/participantes.
 
+### Formularios - status operacional
+- Formularios - Status operacional derivado por view (PENDENTE/EM_ANDAMENTO/CONCLUIDO) + filtro na listagem.
+
+
 ### Loja - categorias e subcategorias
 - API: GET/POST /api/loja/categorias.
 - API: GET/POST /api/loja/subcategorias.
