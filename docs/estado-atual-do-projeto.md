@@ -126,6 +126,10 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - Rota publica antiga removida (mantida apenas a rota canonica).
 
 
+
+### Formularios - status e progresso
+- Formularios: status operacional via view com total_count/required_count e progresso correto na UI (answered/total) + correcao de warning de key.
+
 ### Escola - Matrícula Nova / Liquidação
 - Resumo calcula total por múltiplas UEs (ex.: 220 + 180)
 - Integração com Cartão Conexão gera cobrança/lançamento consolidado corretamente

@@ -178,8 +178,11 @@ export default function AdminFormsSubmissionPage({
                 answer.question?.codigo ??
                 "Pergunta";
               const code = answer.question?.codigo;
+              const key =
+                answer.id ??
+                `${submission.id ?? "sub"}:${answer.template_item_id ?? "item"}:${answer.question_id ?? "q"}`;
               return (
-                <div key={answer.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                <div key={key} className="rounded-md border border-slate-200 bg-slate-50 p-3">
                   <div className="text-sm font-medium text-slate-900">
                     {label}
                     {code ? <span className="ml-2 text-xs text-slate-500">({code})</span> : null}

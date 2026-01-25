@@ -23,6 +23,8 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       status,
       status_operacional,
       answered_count,
+      total_count,
+      answered_required_count,
       required_count,
       submitted_at,
       created_at,

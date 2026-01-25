@@ -10,6 +10,8 @@ type Item = {
   status: string;
   status_operacional: string;
   answered_count: number;
+  total_count: number;
+  answered_required_count: number;
   required_count: number;
   submitted_at: string | null;
   created_at: string;
@@ -156,50 +158,63 @@ export default function TemplateResponsesPage() {
                   </tr>
                 )}
 
-                {items.map((it) => (
-                  <tr key={it.id} className="border-b last:border-b-0 hover:bg-slate-50">
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-slate-900">
-                        {it.pessoas?.nome ?? (it.pessoa_id ? `Pessoa #${it.pessoa_id}` : "Pessoa")}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {it.pessoas?.telefone ?? ""}
-                        {it.pessoas?.telefone && it.pessoas?.email ? " â€¢ " : ""}
-                        {it.pessoas?.email ?? ""}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
-                          it.status_operacional === "CONCLUIDO"
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : it.status_operacional === "EM_ANDAMENTO"
-                            ? "border-blue-200 bg-blue-50 text-blue-700"
-                            : "border-amber-200 bg-amber-50 text-amber-700"
-                        }`}
-                      >
-                        {statusLabel[it.status_operacional as keyof typeof statusLabel] ??
-                          it.status_operacional}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-700">
-                      {it.answered_count}/{it.required_count}
-                    </td>
-                    <td className="px-3 py-2">
-                      {it.submitted_at
-                        ? new Date(it.submitted_at).toLocaleString("pt-BR")
-                        : "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <Link
-                        className="text-indigo-600 hover:underline"
-                        href={`/admin/forms/submissions/${it.id}`}
-                      >
-                        Ver resposta
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {items.map((it) => {
+                  const total = it.total_count ?? 0;
+                  const answered = it.answered_count ?? 0;
+                  const required = it.required_count ?? 0;
+                  const answeredReq = it.answered_required_count ?? 0;
+                  return (
+                    <tr key={it.id} className="border-b last:border-b-0 hover:bg-slate-50">
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-slate-900">
+                          {it.pessoas?.nome ?? (it.pessoa_id ? `Pessoa #${it.pessoa_id}` : "Pessoa")}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {it.pessoas?.telefone ?? ""}
+                          {it.pessoas?.telefone && it.pessoas?.email ? " â€¢ " : ""}
+                          {it.pessoas?.email ?? ""}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+                            it.status_operacional === "CONCLUIDO"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : it.status_operacional === "EM_ANDAMENTO"
+                              ? "border-blue-200 bg-blue-50 text-blue-700"
+                              : "border-amber-200 bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {statusLabel[it.status_operacional as keyof typeof statusLabel] ??
+                            it.status_operacional}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">
+                        <div className="font-medium text-slate-800">
+                          {answered}/{total}
+                        </div>
+                        {required > 0 ? (
+                          <div className="text-[11px] text-slate-500">
+                            Obrigatorias: {answeredReq}/{required}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2">
+                        {it.submitted_at
+                          ? new Date(it.submitted_at).toLocaleString("pt-BR")
+                          : "-"}
+                      </td>
+                      <td className="px-3 py-2">
+                        <Link
+                          className="text-indigo-600 hover:underline"
+                          href={`/admin/forms/submissions/${it.id}`}
+                        >
+                          Ver resposta
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
 
                 {loading && (
                   <tr>
