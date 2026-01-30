@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 
 type Params = { id: string };
 
-const allowedStatuses = new Set(["PENDENTE", "EM_ANDAMENTO", "CONCLUIDO", "TODOS"]);
+const allowedStatuses = new Set(["ENVIADO", "EM_ANDAMENTO", "CONCLUIDO", "TODOS"]);
 
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const supabase = await createClient();
@@ -23,9 +23,6 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       status,
       status_operacional,
       answered_count,
-      total_count,
-      answered_required_count,
-      required_count,
       submitted_at,
       created_at,
       pessoa_id,

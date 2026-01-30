@@ -84,9 +84,6 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - API: POST /api/movimento/acoes.
 - API: POST /api/movimento/acoes/[id]/participantes.
 
-### Formularios - status operacional
-- Formularios - Status operacional derivado por view (PENDENTE/EM_ANDAMENTO/CONCLUIDO) + filtro na listagem.
-
 
 ### Loja - categorias e subcategorias
 - API: GET/POST /api/loja/categorias.
@@ -125,10 +122,9 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - Formularios publicos padronizados com renderer canonico (PublicFormWizard) em todas as rotas publicas.
 - Rota publica antiga removida (mantida apenas a rota canonica).
 
+### Formularios - status canonico por envio
+- Formularios: status operacional baseado em submitted_at (evento de envio final) + UI exibe Respondidas: X e filtros por status.
 
-
-### Formularios - status e progresso
-- Formularios: status operacional via view com total_count/required_count e progresso correto na UI (answered/total) + correcao de warning de key.
 
 ### Escola - Matrícula Nova / Liquidação
 - Resumo calcula total por múltiplas UEs (ex.: 220 + 180)
@@ -300,6 +296,7 @@ Pendencias:
 ## Documentos normativos
 
 - Modulo Alunos - reestruturacao conceitual e plano de implementacao: docs/modulos/modulo-alunos-reestruturacao-conceito-e-implementacao.md
+
 
 
 

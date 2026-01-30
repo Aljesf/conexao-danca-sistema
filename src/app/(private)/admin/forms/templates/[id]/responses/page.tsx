@@ -10,9 +10,6 @@ type Item = {
   status: string;
   status_operacional: string;
   answered_count: number;
-  total_count: number;
-  answered_required_count: number;
-  required_count: number;
   submitted_at: string | null;
   created_at: string;
   pessoa_id: number | null;
@@ -31,7 +28,7 @@ export default function TemplateResponsesPage() {
   const statusTabs = useMemo(
     () => [
       { value: "TODOS", label: "Todos" },
-      { value: "PENDENTE", label: "Pendentes" },
+      { value: "ENVIADO", label: "Enviados" },
       { value: "EM_ANDAMENTO", label: "Em andamento" },
       { value: "CONCLUIDO", label: "Concluidos" },
     ],
@@ -40,7 +37,7 @@ export default function TemplateResponsesPage() {
 
   const statusLabel = useMemo(
     () => ({
-      PENDENTE: "Pendente",
+      ENVIADO: "Enviado",
       EM_ANDAMENTO: "Em andamento",
       CONCLUIDO: "Concluido",
     }),
@@ -159,10 +156,7 @@ export default function TemplateResponsesPage() {
                 )}
 
                 {items.map((it) => {
-                  const total = it.total_count ?? 0;
                   const answered = it.answered_count ?? 0;
-                  const required = it.required_count ?? 0;
-                  const answeredReq = it.answered_required_count ?? 0;
                   return (
                     <tr key={it.id} className="border-b last:border-b-0 hover:bg-slate-50">
                       <td className="px-3 py-2">
@@ -191,12 +185,10 @@ export default function TemplateResponsesPage() {
                       </td>
                       <td className="px-3 py-2 text-slate-700">
                         <div className="font-medium text-slate-800">
-                          {answered}/{total}
+                          {`Respondidas: ${answered}`}
                         </div>
-                        {required > 0 ? (
-                          <div className="text-[11px] text-slate-500">
-                            Obrigatorias: {answeredReq}/{required}
-                          </div>
+                        {it.submitted_at ? (
+                          <div className="text-[11px] text-slate-500">Enviado</div>
                         ) : null}
                       </td>
                       <td className="px-3 py-2">

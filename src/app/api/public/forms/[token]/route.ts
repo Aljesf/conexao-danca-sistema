@@ -164,6 +164,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ token: str
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const { error: submitErr } = await supabase
+      .from("form_submissions")
+      .update({ submitted_at: new Date().toISOString() })
+      .eq("id", submission.id);
+    if (submitErr) {
+      return NextResponse.json({ error: submitErr.message }, { status: 500 });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro inesperado";
