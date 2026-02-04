@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 type PessoaResumo = { id: number; nome: string | null };
@@ -19,9 +20,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     const supabase = getSupabaseServiceClient();
 
     const { data: submission, error: subErr } = await supabase
-      .from("form_submissions")
+      .from("form_submissions_status_v")
       .select(
-        "id, template_id, pessoa_id, responsavel_id, public_token, created_at, submitted_at"
+        "id, template_id, pessoa_id, responsavel_id, public_token, created_at, submitted_at, answered_count, status_auto, status_final, review_status, reviewed_at, reviewed_by, review_note"
       )
       .eq("id", id)
       .maybeSingle();
@@ -63,9 +64,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: ansErr.message }, { status: 500 });
     }
 
+    const reviewedByName =
+      submission?.reviewed_by ? await resolverNomeDoUsuario(String(submission.reviewed_by)) : null;
+
     return NextResponse.json({
       data: {
-        submission,
+        submission: submission
+          ? { ...submission, reviewed_by_name: reviewedByName }
+          : submission,
         pessoa: submission.pessoa_id ? pessoasById.get(Number(submission.pessoa_id)) ?? null : null,
         responsavel: submission.responsavel_id ? pessoasById.get(Number(submission.responsavel_id)) ?? null : null,
         answers: answers ?? [],

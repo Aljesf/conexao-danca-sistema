@@ -124,6 +124,9 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 
 ### Formularios - status canonico por envio
 - Formularios: status operacional baseado em submitted_at (evento de envio final) + UI exibe Respondidas: X e filtros por status.
+### Formularios - revisao manual
+- Formularios: revisao manual auditavel (review_status/reviewed_at/reviewed_by) + status_final priorizando revisao; filtros e acao "Marcar como OK".
+
 
 
 ### Escola - Matrícula Nova / Liquidação

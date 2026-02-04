@@ -4,6 +4,8 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
 
+type ReviewStatus = "PENDENTE_REVISAO" | "OK" | "AJUSTE_SOLICITADO" | "INVALIDADO";
+
 type Submission = {
   id: string;
   template_id: string;
@@ -13,6 +15,14 @@ type Submission = {
   public_token: string | null;
   created_at: string | null;
   submitted_at?: string | null;
+  answered_count?: number | null;
+  status_auto?: string | null;
+  status_final?: string | null;
+  review_status?: ReviewStatus | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  reviewed_by_name?: string | null;
+  review_note?: string | null;
 };
 
 type PessoaResumo = { id: number; nome: string | null };
@@ -74,6 +84,11 @@ export default function AdminFormsSubmissionPage({
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [data, setData] = useState<ApiResponse["data"] | null>(null);
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>("PENDENTE_REVISAO");
+  const [reviewNote, setReviewNote] = useState<string>("");
+  const [reviewSaving, setReviewSaving] = useState<boolean>(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewInfo, setReviewInfo] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +112,44 @@ export default function AdminFormsSubmissionPage({
   const answers = useMemo(() => data?.answers ?? [], [data]);
   const submission = data?.submission ?? null;
   const answersCount = answers.length;
+  const reviewedAtLabel = submission?.reviewed_at ? formatDate(submission.reviewed_at) : null;
+  const reviewedByLabel = submission?.reviewed_by_name ?? submission?.reviewed_by ?? null;
+
+  useEffect(() => {
+    if (!submission) return;
+    setReviewStatus(submission.review_status ?? "PENDENTE_REVISAO");
+    setReviewNote(submission.review_note ?? "");
+  }, [submission]);
+
+  async function salvarRevisao() {
+    if (!submission) return;
+    setReviewSaving(true);
+    setReviewError(null);
+    setReviewInfo(null);
+    try {
+      const res = await fetch(`/api/admin/forms/submissions/${submission.id}/review`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          review_status: reviewStatus,
+          review_note: reviewNote.trim() ? reviewNote.trim() : null,
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; error?: string; details?: string }
+        | null;
+      if (!res.ok || json?.ok === false) {
+        setReviewError(json?.error ?? json?.details ?? "Falha ao salvar revisao.");
+        return;
+      }
+      setReviewInfo("Revisao salva com sucesso.");
+      await load();
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : "Falha ao salvar revisao.");
+    } finally {
+      setReviewSaving(false);
+    }
+  }
 
   if (loading) return <div className="p-6 text-sm text-slate-600">Carregando...</div>;
   if (err && !data) return <div className="p-6 text-sm text-red-600">{err}</div>;
@@ -163,6 +216,63 @@ export default function AdminFormsSubmissionPage({
           >
             Resetar respostas
           </button>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Revisao manual" description="Defina o status e registre uma nota opcional.">
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-slate-700">Status da revisao</label>
+            <select
+              value={reviewStatus}
+              onChange={(e) => setReviewStatus(e.target.value as ReviewStatus)}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+            >
+              <option value="PENDENTE_REVISAO">Pendente revisao</option>
+              <option value="OK">OK</option>
+              <option value="AJUSTE_SOLICITADO">Precisa ajuste</option>
+              <option value="INVALIDADO">Invalidado</option>
+            </select>
+          </div>
+
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-slate-700">Nota</label>
+            <textarea
+              value={reviewNote}
+              onChange={(e) => setReviewNote(e.target.value)}
+              rows={3}
+              placeholder="Detalhe o motivo ou observacao da revisao."
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700"
+            />
+          </div>
+
+          {reviewError ? (
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {reviewError}
+            </div>
+          ) : null}
+
+          {reviewInfo ? (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              {reviewInfo}
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-xs text-slate-500">
+              {reviewedAtLabel || reviewedByLabel
+                ? `Ultima revisao: ${reviewedAtLabel ?? "-"}${reviewedByLabel ? ` • ${reviewedByLabel}` : ""}`
+                : "Sem revisao manual registrada."}
+            </div>
+            <button
+              type="button"
+              onClick={salvarRevisao}
+              disabled={reviewSaving}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {reviewSaving ? "Salvando..." : "Salvar revisao"}
+            </button>
+          </div>
         </div>
       </SectionCard>
 

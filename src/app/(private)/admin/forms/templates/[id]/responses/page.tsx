@@ -7,8 +7,9 @@ import { useParams } from "next/navigation";
 type Pessoa = { id: number; nome: string | null; telefone?: string | null; email?: string | null };
 type Item = {
   id: string;
-  status: string;
-  status_operacional: string;
+  status_auto: string;
+  status_final: string;
+  review_status: string | null;
   answered_count: number;
   submitted_at: string | null;
   created_at: string;
@@ -28,18 +29,23 @@ export default function TemplateResponsesPage() {
   const statusTabs = useMemo(
     () => [
       { value: "TODOS", label: "Todos" },
-      { value: "ENVIADO", label: "Enviados" },
+      { value: "NAO_INICIOU", label: "Nao iniciado" },
       { value: "EM_ANDAMENTO", label: "Em andamento" },
-      { value: "CONCLUIDO", label: "Concluídos" },
+      { value: "PENDENTE_REVISAO", label: "Pendente revisao" },
+      { value: "CONCLUIDO", label: "Concluidos (OK)" },
+      { value: "AJUSTE_SOLICITADO", label: "Precisa ajuste" },
     ],
     []
   );
 
   const statusLabel = useMemo(
     () => ({
-      ENVIADO: "Enviado",
+      NAO_INICIOU: "Nao iniciou",
       EM_ANDAMENTO: "Em andamento",
-      CONCLUIDO: "Concluído",
+      PENDENTE_REVISAO: "Pendente revisao",
+      CONCLUIDO: "Concluido",
+      AJUSTE_SOLICITADO: "Precisa ajuste",
+      INVALIDADO: "Invalidado",
     }),
     []
   );
@@ -175,15 +181,20 @@ export default function TemplateResponsesPage() {
                       <td className="px-3 py-2">
                         <span
                           className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
-                            it.status_operacional === "CONCLUIDO"
+                            it.status_final === "CONCLUIDO"
                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : it.status_operacional === "EM_ANDAMENTO"
+                              : it.status_final === "AJUSTE_SOLICITADO"
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : it.status_final === "INVALIDADO"
+                              ? "border-rose-200 bg-rose-50 text-rose-700"
+                              : it.status_final === "PENDENTE_REVISAO"
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : it.status_final === "EM_ANDAMENTO"
                               ? "border-blue-200 bg-blue-50 text-blue-700"
-                              : "border-amber-200 bg-amber-50 text-amber-700"
+                              : "border-slate-200 bg-slate-50 text-slate-700"
                           }`}
                         >
-                          {statusLabel[it.status_operacional as keyof typeof statusLabel] ??
-                            it.status_operacional}
+                          {statusLabel[it.status_final as keyof typeof statusLabel] ?? it.status_final}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-slate-700">

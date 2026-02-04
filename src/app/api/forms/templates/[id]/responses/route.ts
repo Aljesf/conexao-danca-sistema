@@ -3,7 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 
 type Params = { id: string };
 
-const allowedStatuses = new Set(["ENVIADO", "EM_ANDAMENTO", "CONCLUIDO", "TODOS"]);
+const allowedStatuses = new Set([
+  "TODOS",
+  "NAO_INICIOU",
+  "EM_ANDAMENTO",
+  "PENDENTE_REVISAO",
+  "CONCLUIDO",
+  "AJUSTE_SOLICITADO",
+  "INVALIDADO",
+]);
 
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const supabase = await createClient();
@@ -20,8 +28,9 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .select(
       `
       id,
-      status,
-      status_operacional,
+      status_auto,
+      status_final,
+      review_status,
       answered_count,
       submitted_at,
       created_at,
@@ -38,7 +47,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .order("submitted_at", { ascending: false, nullsFirst: false });
 
   if (statusFilter !== "TODOS") {
-    query = query.eq("status_operacional", statusFilter);
+    query = query.eq("status_final", statusFilter);
   }
 
   if (q) {
