@@ -74,12 +74,21 @@ export default function AdminMatriculasTestePage() {
   async function fetchPessoas(query: string): Promise<PessoaOption[]> {
     if (!query || query.trim().length < 2) return [];
     const res = await fetch(`/api/pessoas/busca?q=${encodeURIComponent(query.trim())}`);
-    const json = (await res.json().catch(() => ({}))) as ApiResponse;
-    if (!res.ok || json.ok === false) {
-      const msg = typeof json.error === "string" ? json.error : `HTTP_${res.status}`;
+    const json = (await res.json().catch(() => ({}))) as {
+      items?: PessoaOption[];
+      error?: string;
+      message?: string;
+    };
+    if (!res.ok) {
+      const msg =
+        typeof json.message === "string"
+          ? json.message
+          : typeof json.error === "string"
+            ? json.error
+            : `HTTP_${res.status}`;
       throw new Error(msg);
     }
-    return (json.pessoas as PessoaOption[]) ?? [];
+    return Array.isArray(json.items) ? json.items : [];
   }
 
   async function fetchTurmas(query: string): Promise<TurmaOption[]> {

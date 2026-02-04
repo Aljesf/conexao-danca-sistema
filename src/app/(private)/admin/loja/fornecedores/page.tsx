@@ -110,8 +110,8 @@ export default function AdminFornecedoresPage() {
           setPessoasResultados([]);
           return;
         }
-        const data = (await resp.json()) as { ok: boolean; pessoas: PessoaBusca[] };
-        setPessoasResultados(data.pessoas ?? []);
+        const data = (await resp.json()) as { items?: PessoaBusca[] };
+        setPessoasResultados(Array.isArray(data.items) ? data.items : []);
       } catch (err) {
         if (!controller.signal.aborted) {
           console.error("Erro na busca de pessoas:", err);

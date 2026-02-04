@@ -30,7 +30,7 @@ export default function TemplateResponsesPage() {
       { value: "TODOS", label: "Todos" },
       { value: "ENVIADO", label: "Enviados" },
       { value: "EM_ANDAMENTO", label: "Em andamento" },
-      { value: "CONCLUIDO", label: "Concluidos" },
+      { value: "CONCLUIDO", label: "Concluídos" },
     ],
     []
   );
@@ -39,7 +39,7 @@ export default function TemplateResponsesPage() {
     () => ({
       ENVIADO: "Enviado",
       EM_ANDAMENTO: "Em andamento",
-      CONCLUIDO: "Concluido",
+      CONCLUIDO: "Concluído",
     }),
     []
   );
@@ -157,6 +157,9 @@ export default function TemplateResponsesPage() {
 
                 {items.map((it) => {
                   const answered = it.answered_count ?? 0;
+                  const submittedAtLabel = it.submitted_at
+                    ? new Date(it.submitted_at).toLocaleString("pt-BR")
+                    : null;
                   return (
                     <tr key={it.id} className="border-b last:border-b-0 hover:bg-slate-50">
                       <td className="px-3 py-2">
@@ -187,14 +190,14 @@ export default function TemplateResponsesPage() {
                         <div className="font-medium text-slate-800">
                           {`Respondidas: ${answered}`}
                         </div>
-                        {it.submitted_at ? (
-                          <div className="text-[11px] text-slate-500">Enviado</div>
+                        {submittedAtLabel ? (
+                          <div className="text-[11px] text-slate-500">
+                            {`Enviado em ${submittedAtLabel}`}
+                          </div>
                         ) : null}
                       </td>
                       <td className="px-3 py-2">
-                        {it.submitted_at
-                          ? new Date(it.submitted_at).toLocaleString("pt-BR")
-                          : "-"}
+                        {submittedAtLabel ?? "-"}
                       </td>
                       <td className="px-3 py-2">
                         <Link

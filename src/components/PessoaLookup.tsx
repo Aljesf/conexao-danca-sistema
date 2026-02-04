@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 
 export type PessoaLookupItem = {
@@ -58,34 +58,38 @@ export default function PessoaLookup({
   const [loading, setLoading] = useState<boolean>(false);
   const [itens, setItens] = useState<PessoaLookupItem[]>([]);
   const [erro, setErro] = useState<string | null>(null);
-
-  const canSearch = useMemo(() => q.trim().length >= minChars, [q, minChars]);
+  const [info, setInfo] = useState<string | null>(null);
 
   async function buscar() {
     setErro(null);
+    setInfo(null);
     const term = q.trim();
     if (term.length < minChars) {
       setItens([]);
+      setInfo(`Digite pelo menos ${minChars} caracteres.`);
       return;
     }
     setLoading(true);
     try {
       const res = await fetch(`${apiPath}?q=${encodeURIComponent(term)}`);
-      const json = (await res.json()) as {
-        ok: boolean;
-        pessoas?: PessoaLookupItem[];
-        error?: string;
-        details?: string;
-      };
-      if (!json.ok) {
-        const msg = json.details
-          ? `${json.error ?? "erro"}: ${json.details}`
-          : json.error ?? "Falha na busca.";
-        throw new Error(msg);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { error?: string; message?: string }
+          | null;
+        const msg = body?.message ? String(body.message) : body?.error ?? "Falha na busca.";
+        setErro(msg);
+        setItens([]);
+        return;
       }
-      setItens(json.pessoas ?? []);
+      const json = (await res.json()) as { items?: PessoaLookupItem[] };
+      const items = Array.isArray(json.items) ? json.items : [];
+      setItens(items);
+      if (items.length === 0) {
+        setInfo("Nenhuma pessoa encontrada.");
+      }
     } catch (e: unknown) {
       setErro(e instanceof Error ? e.message : "Falha na busca.");
+      setItens([]);
     } finally {
       setLoading(false);
     }
@@ -99,18 +103,22 @@ export default function PessoaLookup({
         <div style={{ display: "flex", gap: 10 }}>
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              if (erro) setErro(null);
+              if (info) setInfo(null);
+            }}
             placeholder={placeholder}
             style={{ flex: 1, padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.12)" }}
           />
           <button
             onClick={buscar}
-            disabled={loading || !canSearch}
+            disabled={loading}
             style={{
               padding: "10px 12px",
               borderRadius: 10,
               border: "1px solid rgba(0,0,0,0.12)",
-              opacity: loading || !canSearch ? 0.6 : 1,
+              opacity: loading ? 0.6 : 1,
             }}
           >
             {loading ? "Buscando..." : "Buscar"}
@@ -118,6 +126,20 @@ export default function PessoaLookup({
         </div>
 
         {hint ? <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>{hint}</div> : null}
+
+        {info ? (
+          <div
+            style={{
+              marginTop: 10,
+              padding: 10,
+              borderRadius: 10,
+              border: "1px solid rgba(0,0,0,0.12)",
+              background: "rgba(0,0,0,0.04)",
+            }}
+          >
+            {info}
+          </div>
+        ) : null}
 
         {erro ? (
           <div
@@ -159,7 +181,11 @@ export default function PessoaLookup({
           {itens.map((p) => (
             <button
               key={p.id}
-              onClick={() => onChange(p)}
+              onClick={() => {
+                setErro(null);
+                setInfo(null);
+                onChange(p);
+              }}
               style={{
                 textAlign: "left",
                 padding: 10,

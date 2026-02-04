@@ -82,8 +82,8 @@ export default function PessoaSearchBox({
           setResultados([]);
           return;
         }
-        const data = (await resp.json()) as { ok: boolean; pessoas: PessoaSearchItem[] };
-        setResultados(data.pessoas ?? []);
+        const data = (await resp.json()) as { items?: PessoaSearchItem[] };
+        setResultados(Array.isArray(data.items) ? data.items : []);
       } catch {
         if (!controller.signal.aborted) {
           setResultados([]);

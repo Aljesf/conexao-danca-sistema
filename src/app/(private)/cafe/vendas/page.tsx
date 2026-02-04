@@ -325,8 +325,8 @@ export default function FrenteCaixaCafePage() {
           setResultadoComprador([]);
           return;
         }
-        const data = (await resp.json()) as { ok: boolean; pessoas: PessoaResumo[] };
-        setResultadoComprador(data.pessoas ?? []);
+        const data = (await resp.json()) as { items?: PessoaResumo[] };
+        setResultadoComprador(Array.isArray(data.items) ? data.items : []);
       } catch (e) {
         if (!controller.signal.aborted) {
           setResultadoComprador([]);
