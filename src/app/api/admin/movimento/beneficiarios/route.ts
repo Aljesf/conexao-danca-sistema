@@ -6,46 +6,12 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { requireUser } from "@/lib/supabase/api-auth";
 
 const BeneficiarioCreateSchema = z.object({
-  pessoa_id: z
-    .string()
-    .regex(/^\d+$/, "pessoa_id deve ser bigint em string numerica")
-    .optional(),
+  pessoa_id: z.string().regex(/^\d+$/, "pessoa_id deve ser bigint em string numerica"),
   analise_id: z.string().uuid().optional(),
-  contexto: z.enum(["ASE_18_PLUS", "ASE_MENOR"]).optional(),
-  responsavel_legal_pessoa_id: z.string().regex(/^\d+$/).optional(),
   resumo_institucional: z.string().optional(),
   observacoes: z.string().optional(),
   dados_complementares: z.record(z.unknown()).optional(),
 });
-
-type AseSubmission = {
-  id: string;
-  submitted_at: string | null;
-  template_id: string;
-};
-
-async function findUltimaAseSubmission(supabase: ReturnType<typeof getSupabaseServiceClient>, pessoaId: number) {
-  const { data: templates, error: tplErr } = await supabase
-    .from("form_templates")
-    .select("id")
-    .ilike("nome", "ASE%Movimento%");
-
-  if (tplErr) throw tplErr;
-  const templateIds = (templates ?? []).map((t) => t.id);
-  if (templateIds.length === 0) return null;
-
-  const { data: submission, error: subErr } = await supabase
-    .from("form_submissions")
-    .select("id,submitted_at,template_id")
-    .eq("pessoa_id", pessoaId)
-    .in("template_id", templateIds)
-    .order("submitted_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (subErr) throw subErr;
-  return (submission ?? null) as AseSubmission | null;
-}
 
 export async function GET(request: NextRequest) {
   const denied = await guardApiByRole(request as any);
@@ -79,63 +45,7 @@ export async function POST(request: NextRequest) {
     const body = BeneficiarioCreateSchema.parse(bodyUnknown);
 
     const analiseId = body.analise_id ? String(body.analise_id) : null;
-    const pessoaIdFromBody = body.pessoa_id ? String(body.pessoa_id) : null;
-    const responsavelId =
-      body.responsavel_legal_pessoa_id ? Number(body.responsavel_legal_pessoa_id) : null;
-
-    if (!analiseId && !pessoaIdFromBody) {
-      return NextResponse.json(
-        { ok: false, codigo: "VALIDACAO_INVALIDA", message: "Informe analise_id ou pessoa_id." },
-        { status: 400 },
-      );
-    }
-
-    let analise:
-      | {
-          id: string;
-          pessoa_id: number;
-          contexto: "ASE_18_PLUS" | "ASE_MENOR";
-          data_analise: string;
-        }
-      | null = null;
-
-    if (analiseId) {
-      const { data: analiseData, error: analiseErr } = await supabase
-        .from("movimento_analises_socioeconomicas")
-        .select("id,pessoa_id,contexto,data_analise")
-        .eq("id", analiseId)
-        .single();
-
-      if (analiseErr) {
-        return NextResponse.json(
-          { ok: false, codigo: "ANALISE_NAO_ENCONTRADA" },
-          { status: 404 },
-        );
-      }
-
-      analise = analiseData as {
-        id: string;
-        pessoa_id: number;
-        contexto: "ASE_18_PLUS" | "ASE_MENOR";
-        data_analise: string;
-      };
-    }
-
-    const pessoaId = analise ? String(analise.pessoa_id) : pessoaIdFromBody;
-
-    if (analise && pessoaIdFromBody && pessoaIdFromBody !== String(analise.pessoa_id)) {
-      return NextResponse.json(
-        { ok: false, codigo: "VALIDACAO_INVALIDA", message: "pessoa_id nao confere com analise." },
-        { status: 400 },
-      );
-    }
-
-    if (!pessoaId) {
-      return NextResponse.json(
-        { ok: false, codigo: "VALIDACAO_INVALIDA", message: "pessoa_id invalido." },
-        { status: 400 },
-      );
-    }
+    const pessoaId = String(body.pessoa_id);
 
     const pessoaIdNumber = Number(pessoaId);
     if (!Number.isFinite(pessoaIdNumber) || pessoaIdNumber <= 0) {
@@ -145,68 +55,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let aseSubmission: AseSubmission | null = null;
-    try {
-      aseSubmission = await findUltimaAseSubmission(supabase, pessoaIdNumber);
-    } catch (error) {
-      return NextResponse.json(
-        {
-          ok: false,
-          codigo: "ASE_TEMPLATES_ERRO",
-          message: error instanceof Error ? error.message : "Erro ao buscar ASE.",
-        },
-        { status: 500 },
-      );
-    }
-
-    if (!aseSubmission?.id || !aseSubmission.submitted_at) {
-      return NextResponse.json(
-        {
-          ok: false,
-          codigo: "ASE_REQUIRED",
-          message: "ASE pendente. Gere o link e colete a ASE antes de ativar como beneficiario.",
-        },
-        { status: 409 },
-      );
-    }
-
-    if (!analise) {
-      const contexto = body.contexto ?? "ASE_18_PLUS";
-
-      if (contexto === "ASE_MENOR" && (!responsavelId || Number.isNaN(responsavelId))) {
+    if (analiseId) {
+      const { data: analise, error: analiseErr } = await supabase
+        .from("movimento_analises_socioeconomicas")
+        .select("id,pessoa_id")
+        .eq("id", analiseId)
+        .maybeSingle();
+      if (analiseErr) {
         return NextResponse.json(
-          { ok: false, codigo: "VALIDACAO_INVALIDA", message: "ASE_MENOR exige responsavel legal." },
+          { ok: false, codigo: "ANALISE_NAO_ENCONTRADA" },
+          { status: 404 },
+        );
+      }
+      if (analise && Number(analise.pessoa_id) !== pessoaIdNumber) {
+        return NextResponse.json(
+          { ok: false, codigo: "VALIDACAO_INVALIDA", message: "pessoa_id nao confere com analise." },
           { status: 400 },
         );
       }
-
-      const { data: analiseData, error: analiseErr } = await supabase
-        .from("movimento_analises_socioeconomicas")
-        .insert({
-          pessoa_id: Number(pessoaId),
-          responsavel_legal_pessoa_id: contexto === "ASE_MENOR" ? responsavelId : null,
-          contexto,
-          status: "RASCUNHO",
-          respostas_json: {},
-          registrado_por_user_id: userId,
-        })
-        .select("id,pessoa_id,contexto,data_analise")
-        .single();
-
-      if (analiseErr) throw analiseErr;
-
-      analise = analiseData as {
-        id: string;
-        pessoa_id: number;
-        contexto: "ASE_18_PLUS" | "ASE_MENOR";
-        data_analise: string;
-      };
     }
 
-    if (!analise) {
+    const { data: existing, error: existingErr } = await supabase
+      .from("movimento_beneficiarios")
+      .select("id")
+      .eq("pessoa_id", pessoaIdNumber)
+      .maybeSingle();
+
+    if (existingErr) throw existingErr;
+    if (existing?.id) {
       return NextResponse.json(
-        { ok: false, codigo: "ANALISE_NAO_ENCONTRADA" },
-        { status: 500 },
+        {
+          ok: false,
+          codigo: "BENEFICIARIO_JA_EXISTE",
+          message: "Beneficiario ja cadastrado para esta pessoa.",
+        },
+        { status: 409 },
       );
     }
 
@@ -231,8 +114,8 @@ export async function POST(request: NextRequest) {
     }
 
     const relatorioSocioeconomico = JSON.stringify({
-      fonte: "analise_socioeconomica",
-      analise_id: analise.id,
+      fonte: "cadastro_manual",
+      analise_id: analiseId ?? null,
       pessoa_id: String(pessoa.id),
       snapshot_minimo: {
         nome: pessoa.nome ?? null,
@@ -241,18 +124,14 @@ export async function POST(request: NextRequest) {
         telefone: pessoa.telefone ?? null,
       },
       resumo_institucional: body.resumo_institucional ?? null,
-      observacao:
-        "Dados socioeconomicos completos ficam na ASE vinculada ao beneficiario.",
+      observacoes: body.observacoes ?? null,
     });
 
     const { data, error } = await supabase
       .from("movimento_beneficiarios")
       .insert({
-        pessoa_id: pessoaId,
-        analise_id: analise.id,
-        status: "APROVADO",
-        ase_submission_id: aseSubmission.id,
-        ase_submitted_at: aseSubmission.submitted_at,
+        pessoa_id: pessoaIdNumber,
+        analise_id: analiseId,
         relatorio_socioeconomico: relatorioSocioeconomico,
         dados_complementares: (body.dados_complementares ?? null) as unknown,
         observacoes: body.observacoes ?? null,

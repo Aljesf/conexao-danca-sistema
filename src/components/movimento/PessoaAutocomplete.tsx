@@ -4,10 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 export type PessoaSugestao = {
   id: string;
-  nome: string;
-  cpf: string | null;
-  email: string | null;
-  telefone: string | null;
+  label: string;
+  subLabel?: string | null;
 };
 
 type Props = {
@@ -25,35 +23,66 @@ export function PessoaAutocomplete({
   placeholder,
   criarHref,
 }: Props) {
-  const [q, setQ] = useState(value ? value.nome : "");
+  const [q, setQ] = useState(value ? value.label : "");
   const [items, setItems] = useState<PessoaSugestao[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
-    if (value) setQ(value.nome);
+    if (value) setQ(value.label);
   }, [value]);
 
   useEffect(() => {
     const term = q.trim();
-    if (term.length < 3) {
+    if (term.length < 2) {
       setItems([]);
       setOpen(false);
+      setErro(null);
+      setInfo(term.length === 0 ? null : "Digite pelo menos 2 caracteres para buscar.");
       return;
     }
 
     const t = setTimeout(async () => {
       setLoading(true);
+      setErro(null);
+      setInfo(null);
       try {
-        const res = await fetch(
-          `/api/admin/movimento/pessoas/buscar?q=${encodeURIComponent(term)}`
-        );
-        const json = (await res.json()) as {
-          ok: boolean;
-          data: PessoaSugestao[];
-        };
-        setItems(json.ok ? json.data : []);
+        const res = await fetch(`/api/search?q=${encodeURIComponent(term)}`);
+        const json = (await res.json().catch(() => null)) as
+          | {
+              ok?: boolean;
+              pessoas?: Array<{
+                id: number;
+                nome: string | null;
+                email: string | null;
+                cpf: string | null;
+                cnpj?: string | null;
+              }>;
+              error?: string;
+            }
+          | null;
+
+        if (!res.ok || !json?.ok) {
+          setErro("Falha na busca.");
+          setItems([]);
+          setOpen(false);
+          return;
+        }
+
+        const pessoas = Array.isArray(json.pessoas) ? json.pessoas : [];
+        const mapped: PessoaSugestao[] = pessoas.map((p) => {
+          const label = p.nome ?? `Pessoa #${p.id}`;
+          const subLabel = p.email ?? p.cpf ?? p.cnpj ?? (p.id ? `ID ${p.id}` : null);
+          return { id: String(p.id), label, subLabel };
+        });
+
+        setItems(mapped);
         setOpen(true);
+        if (mapped.length === 0) {
+          setInfo("Nenhuma pessoa encontrada.");
+        }
       } finally {
         setLoading(false);
       }
@@ -63,15 +92,13 @@ export function PessoaAutocomplete({
   }, [q]);
 
   const hint = useMemo(() => {
-    if (q.trim().length < 3) return "Digite pelo menos 3 letras para buscar.";
     if (loading) return "Buscando...";
-    if (open && items.length === 0) return "Nenhuma pessoa encontrada.";
     return null;
-  }, [q, loading, open, items.length]);
+  }, [loading]);
 
   function select(p: PessoaSugestao) {
     onChange(p);
-    setQ(p.nome);
+    setQ(p.label);
     setOpen(false);
   }
 
@@ -92,6 +119,8 @@ export function PessoaAutocomplete({
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
+            if (erro) setErro(null);
+            if (info) setInfo(null);
             if (value) onChange(null);
           }}
           placeholder={placeholder ?? "Digite nome, CPF ou email"}
@@ -133,11 +162,9 @@ export function PessoaAutocomplete({
                     className="cursor-pointer px-3 py-2 text-sm hover:bg-slate-50"
                     onClick={() => select(p)}
                   >
-                    <div className="font-medium text-slate-900">{p.nome}</div>
+                    <div className="font-medium text-slate-900">{p.label}</div>
                     <div className="text-xs text-slate-600">
-                      ID: {p.id}
-                      {p.cpf ? ` • CPF: ${p.cpf}` : ""}
-                      {p.email ? ` • ${p.email}` : ""}
+                      {p.subLabel ?? `ID: ${p.id}`}
                     </div>
                   </li>
                 ))}
@@ -148,11 +175,13 @@ export function PessoaAutocomplete({
       </div>
 
       {hint ? <div className="text-xs text-slate-500">{hint}</div> : null}
+      {info ? <div className="text-xs text-slate-500">{info}</div> : null}
+      {erro ? <div className="text-xs text-rose-600">{erro}</div> : null}
 
       {value ? (
         <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-          Selecionado: <span className="font-medium">{value.nome}</span> •
-          Pessoa ID: <span className="font-medium">{value.id}</span>
+          Selecionado: <span className="font-medium">{value.label}</span> - Pessoa ID:{" "}
+          <span className="font-medium">{value.id}</span>
         </div>
       ) : null}
     </div>
