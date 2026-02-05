@@ -8,29 +8,33 @@ type PessoaSugestao = { id: string; label: string };
 type PessoaApiItem = {
   id: number;
   nome?: string | null;
+  razao_social?: string | null;
+  nome_fantasia?: string | null;
   cpf?: string | null;
+  cnpj?: string | null;
   email?: string | null;
-  telefone?: string | null;
 };
 
 function buildPessoaLabel(pessoa: PessoaApiItem): string {
-  const parts = [pessoa.nome ?? "", pessoa.cpf ?? "", pessoa.email ?? "", pessoa.telefone ?? ""];
-  const label = parts.filter((value) => Boolean(value)).join(" - ");
+  const primary = pessoa.nome ?? pessoa.razao_social ?? pessoa.nome_fantasia ?? "";
+  const secondary = pessoa.email ?? pessoa.cpf ?? pessoa.cnpj ?? "";
+  const label = [primary, secondary].filter((value) => Boolean(value)).join(" - ");
   return label || `#${pessoa.id}`;
 }
 
 async function searchPessoasDefault(term: string): Promise<PessoaSugestao[]> {
   const query = term.trim();
-  if (!query) return [];
+  if (!query || query.length < 2) return [];
 
   try {
-    const res = await fetch(`/api/pessoas?search=${encodeURIComponent(query)}`, {
-      method: "GET",
-    });
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { method: "GET" });
     if (!res.ok) return [];
 
-    const json = (await res.json().catch(() => ({}))) as { pessoas?: PessoaApiItem[] };
-    const pessoas = Array.isArray(json?.pessoas) ? json.pessoas : [];
+    const json = (await res.json().catch(() => ({}))) as
+      | { ok?: boolean; pessoas?: PessoaApiItem[] }
+      | null;
+    if (!json?.ok) return [];
+    const pessoas = Array.isArray(json.pessoas) ? json.pessoas : [];
 
     return pessoas.map((pessoa) => ({
       id: String(pessoa.id),

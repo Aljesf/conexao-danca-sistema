@@ -1,22 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { CadastrarBeneficiarioForm } from "@/components/movimento/CadastrarBeneficiarioForm";
 
-type FormTipo = "RESPONSAVEL_LEGAL" | "ALUNO_MENOR" | "ALUNO_MAIOR";
-type ConcessaoStatus = "ATIVA" | "SUSPENSA" | "ENCERRADA";
 type AcaoTipo = "CAMPANHA" | "DOACAO" | "INTERCAMBIO" | "ACOLHIMENTO" | "EVENTO" | "OUTRA";
 
 type PessoaSugestao = {
   id: string;
   label: string;
-};
-
-type UpsertBeneficiarioResponse = {
-  ok: boolean;
-  error?: string;
-  beneficiario?: { id: string };
-  concessao?: { id: string } | null;
-  instancias?: Array<{ tipo: FormTipo; id: string }>;
 };
 
 type CreateAcaoResponse = {
@@ -52,31 +43,7 @@ export function MovimentoAcoesRapidasModal(props: {
   onClose: () => void;
   searchPessoas: (term: string) => Promise<PessoaSugestao[]>;
 }) {
-  const [aba, setAba] = useState<"BOLSA" | "ACAO">("BOLSA");
-
-  const [pessoaTerm, setPessoaTerm] = useState("");
-  const [pessoaSug, setPessoaSug] = useState<PessoaSugestao[]>([]);
-  const [pessoaId, setPessoaId] = useState<string>("");
-
-  const [respTerm, setRespTerm] = useState("");
-  const [respSug, setRespSug] = useState<PessoaSugestao[]>([]);
-  const [responsavelId, setResponsavelId] = useState<string>("");
-
-  const [ehMenor, setEhMenor] = useState<boolean>(false);
-
-  const [acionarA, setAcionarA] = useState<boolean>(false);
-  const [acionarB, setAcionarB] = useState<boolean>(false);
-  const [acionarC, setAcionarC] = useState<boolean>(false);
-
-  const [concessaoStatus, setConcessaoStatus] = useState<ConcessaoStatus>("ATIVA");
-
-  const [dataInicio, setDataInicio] = useState<string>("");
-  const [dataFim, setDataFim] = useState<string>("");
-  const [revisaoPrevista, setRevisaoPrevista] = useState<string>("");
-  const [diaVencCiclo, setDiaVencCiclo] = useState<number>(1);
-
-  const [justificativa, setJustificativa] = useState<string>("");
-  const [observacoes, setObservacoes] = useState<string>("");
+  const [aba, setAba] = useState<"BENEFICIARIO" | "ACAO">("BENEFICIARIO");
 
   const [acaoTipo, setAcaoTipo] = useState<AcaoTipo>("OUTRA");
   const [acaoTitulo, setAcaoTitulo] = useState<string>("");
@@ -94,7 +61,7 @@ export function MovimentoAcoesRapidasModal(props: {
 
   async function doSearchPessoas(term: string, setter: (value: PessoaSugestao[]) => void) {
     const trimmed = term.trim();
-    if (trimmed.length < 3) {
+    if (trimmed.length < 2) {
       setter([]);
       return;
     }
@@ -104,65 +71,6 @@ export function MovimentoAcoesRapidasModal(props: {
 
   function resetMessages() {
     setMsg(null);
-  }
-
-  async function onSalvarBolsa() {
-    resetMessages();
-
-    if (!pessoaId) {
-      setMsg({ kind: "err", text: "Selecione a pessoa beneficiaria." });
-      return;
-    }
-
-    if (ehMenor && !responsavelId) {
-      setMsg({ kind: "err", text: "Beneficiario menor: selecione o responsavel legal." });
-      return;
-    }
-
-    if (acionarA && !responsavelId) {
-      setMsg({ kind: "err", text: "Para acionar o formulario A, selecione o responsavel legal." });
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const diaVenc = Number.isFinite(diaVencCiclo)
-        ? Math.min(28, Math.max(1, Math.trunc(diaVencCiclo)))
-        : 1;
-
-      const payload = {
-        pessoa_id: pessoaId,
-        responsavel_id: responsavelId || null,
-        eh_menor: ehMenor,
-        acionar_form_responsavel: acionarA,
-        acionar_form_aluno_menor: acionarB,
-        acionar_form_aluno_maior: acionarC,
-        observacoes: observacoes || null,
-        concessao: {
-          status: concessaoStatus,
-          data_inicio: toISODateOrNull(dataInicio) ?? undefined,
-          data_fim: toISODateOrNull(dataFim),
-          revisao_prevista_em: toISODateOrNull(revisaoPrevista),
-          dia_vencimento_ciclo: diaVenc,
-          justificativa: justificativa || null,
-        },
-      };
-
-      const resp = await postJSON<UpsertBeneficiarioResponse>("/api/movimento/beneficiarios/upsert", payload);
-
-      if (!resp.ok) {
-        setMsg({ kind: "err", text: resp.error || "Falha ao salvar beneficiario." });
-        return;
-      }
-
-      const inst = resp.instancias?.map((x) => x.tipo).join(", ") || "nenhuma";
-      setMsg({ kind: "ok", text: `Salvo. Beneficiario: ${resp.beneficiario?.id}. Instancias: ${inst}.` });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro inesperado";
-      setMsg({ kind: "err", text: message });
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function onSalvarAcao() {
@@ -223,7 +131,7 @@ export function MovimentoAcoesRapidasModal(props: {
       <div className="absolute left-1/2 top-1/2 w-[92vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 p-6">
           <div>
-            <div className="text-xs font-semibold tracking-widest text-violet-500">MOVIMENTO CONEXAO DANCA</div>
+            <div className="text-xs font-semibold tracking-widest text-violet-500">MOVIMENTO CONEXAO BANCO</div>
             <div className="mt-1 text-2xl font-semibold">Acoes rapidas</div>
             <div className="mt-1 text-sm text-gray-500">Operacoes institucionais do Movimento.</div>
           </div>
@@ -239,15 +147,21 @@ export function MovimentoAcoesRapidasModal(props: {
         <div className="px-6">
           <div className="flex gap-2">
             <button
-              className={`rounded-full px-4 py-2 text-sm ${aba === "BOLSA" ? "bg-violet-600 text-white" : "bg-gray-100 hover:bg-gray-200"}`}
-              onClick={() => setAba("BOLSA")}
+              className={`rounded-full px-4 py-2 text-sm ${aba === "BENEFICIARIO" ? "bg-violet-600 text-white" : "bg-gray-100 hover:bg-gray-200"}`}
+              onClick={() => {
+                resetMessages();
+                setAba("BENEFICIARIO");
+              }}
               disabled={busy}
             >
-              Concessao de oportunidade
+              Cadastrar beneficiario
             </button>
             <button
               className={`rounded-full px-4 py-2 text-sm ${aba === "ACAO" ? "bg-pink-600 text-white" : "bg-gray-100 hover:bg-gray-200"}`}
-              onClick={() => setAba("ACAO")}
+              onClick={() => {
+                resetMessages();
+                setAba("ACAO");
+              }}
               disabled={busy}
             >
               Acao social
@@ -266,210 +180,9 @@ export function MovimentoAcoesRapidasModal(props: {
             </div>
           )}
 
-          {aba === "BOLSA" ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border p-4">
-                <div className="text-sm font-semibold">Beneficiario</div>
-
-                <label className="mt-3 block text-xs text-gray-500">Pessoa</label>
-                <input
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Digite nome, CPF ou email (min 3)"
-                  value={pessoaTerm}
-                  onChange={(e) => {
-                    setPessoaTerm(e.target.value);
-                    void doSearchPessoas(e.target.value, setPessoaSug);
-                  }}
-                  disabled={busy}
-                />
-                {pessoaSug.length > 0 && (
-                  <div className="mt-2 max-h-44 overflow-auto rounded-xl border">
-                    {pessoaSug.map((p) => (
-                      <button
-                        key={p.id}
-                        className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                        onClick={() => {
-                          setPessoaId(p.id);
-                          setPessoaTerm(p.label);
-                          setPessoaSug([]);
-                        }}
-                        disabled={busy}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-3 flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={ehMenor}
-                    onChange={(e) => setEhMenor(e.target.checked)}
-                    disabled={busy}
-                  />
-                  <span className="text-sm">Beneficiario e menor de idade</span>
-                </div>
-
-                <label className="mt-3 block text-xs text-gray-500">Responsavel legal (quando aplicavel)</label>
-                <input
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Digite nome, CPF ou email (min 3)"
-                  value={respTerm}
-                  onChange={(e) => {
-                    setRespTerm(e.target.value);
-                    void doSearchPessoas(e.target.value, setRespSug);
-                  }}
-                  disabled={busy}
-                />
-                {respSug.length > 0 && (
-                  <div className="mt-2 max-h-44 overflow-auto rounded-xl border">
-                    {respSug.map((p) => (
-                      <button
-                        key={p.id}
-                        className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                        onClick={() => {
-                          setResponsavelId(p.id);
-                          setRespTerm(p.label);
-                          setRespSug([]);
-                        }}
-                        disabled={busy}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <label className="mt-3 block text-xs text-gray-500">Observacoes</label>
-                <textarea
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  rows={3}
-                  value={observacoes}
-                  onChange={(e) => setObservacoes(e.target.value)}
-                  disabled={busy}
-                />
-
-                <div className="mt-4 rounded-xl bg-gray-50 p-3">
-                  <div className="text-xs font-semibold text-gray-600">Formularios (A/B/C)</div>
-                  <div className="mt-2 space-y-2 text-sm">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={acionarA}
-                        onChange={(e) => setAcionarA(e.target.checked)}
-                        disabled={busy}
-                      />
-                      <span>Formulario A (Responsavel legal)</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={acionarB}
-                        onChange={(e) => setAcionarB(e.target.checked)}
-                        disabled={busy}
-                      />
-                      <span>Formulario B (Aluno menor)</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={acionarC}
-                        onChange={(e) => setAcionarC(e.target.checked)}
-                        disabled={busy}
-                      />
-                      <span>Formulario C (Aluno 18+)</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border p-4">
-                <div className="text-sm font-semibold">Concessao de oportunidade (Movimento)</div>
-
-                <label className="mt-3 block text-xs text-gray-500">Status</label>
-                <select
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  value={concessaoStatus}
-                  onChange={(e) => setConcessaoStatus(e.target.value as ConcessaoStatus)}
-                  disabled={busy}
-                >
-                  <option value="ATIVA">ATIVA</option>
-                  <option value="SUSPENSA">SUSPENSA</option>
-                  <option value="ENCERRADA">ENCERRADA</option>
-                </select>
-
-                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div>
-                    <label className="block text-xs text-gray-500">Data de entrada no Movimento</label>
-                    <input
-                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                      type="date"
-                      value={dataInicio}
-                      onChange={(e) => setDataInicio(e.target.value)}
-                      disabled={busy}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500">Dia de vencimento do ciclo (padrao 1)</label>
-                    <input
-                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                      type="number"
-                      min={1}
-                      max={28}
-                      value={diaVencCiclo}
-                      onChange={(e) => setDiaVencCiclo(Number(e.target.value))}
-                      disabled={busy}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500">Fim</label>
-                    <input
-                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                      type="date"
-                      value={dataFim}
-                      onChange={(e) => setDataFim(e.target.value)}
-                      disabled={busy}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500">Revisao prevista</label>
-                    <input
-                      className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                      type="date"
-                      value={revisaoPrevista}
-                      onChange={(e) => setRevisaoPrevista(e.target.value)}
-                      disabled={busy}
-                    />
-                  </div>
-                </div>
-
-                <label className="mt-3 block text-xs text-gray-500">Justificativa</label>
-                <textarea
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  rows={4}
-                  value={justificativa}
-                  onChange={(e) => setJustificativa(e.target.value)}
-                  disabled={busy}
-                />
-
-                <div className="mt-4 flex justify-end gap-2">
-                  <button
-                    className="rounded-xl bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
-                    onClick={props.onClose}
-                    disabled={busy}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    className="rounded-xl bg-violet-600 px-4 py-2 text-sm text-white hover:bg-violet-700 disabled:opacity-50"
-                    onClick={() => void onSalvarBolsa()}
-                    disabled={busy}
-                  >
-                    Salvar
-                  </button>
-                </div>
-              </div>
+          {aba === "BENEFICIARIO" ? (
+            <div className="rounded-2xl border p-4">
+              <CadastrarBeneficiarioForm compact />
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -558,7 +271,7 @@ export function MovimentoAcoesRapidasModal(props: {
                 <label className="mt-3 block text-xs text-gray-500">Pessoa</label>
                 <input
                   className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-                  placeholder="Digite nome, CPF ou email (min 3)"
+                  placeholder="Digite nome, CPF ou email (min 2)"
                   value={acaoPessoaTerm}
                   onChange={(e) => {
                     setAcaoPessoaTerm(e.target.value);

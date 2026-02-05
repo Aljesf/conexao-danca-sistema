@@ -3,47 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  PessoaAutocomplete,
-  type PessoaSugestao,
-} from "@/components/movimento/PessoaAutocomplete";
+  CadastrarBeneficiarioForm,
+  type BeneficiarioItem,
+} from "@/components/movimento/CadastrarBeneficiarioForm";
 
-type Beneficiario = {
-  id: string;
-  pessoa_id: string;
-  status: "EM_ANALISE" | "APROVADO" | "SUSPENSO" | "ENCERRADO";
-  relatorio_socioeconomico: string;
-  exercicio_ano?: number | null;
-  valido_ate?: string | null;
-  observacoes?: string | null;
-  criado_em: string;
-};
+type Beneficiario = BeneficiarioItem;
 
 async function apiGet<T>(url: string): Promise<T> {
   const res = await fetch(url);
   return (await res.json()) as T;
 }
 
-async function apiPost<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return (await res.json()) as T;
-}
-
 export default function MovimentoBeneficiariosPage() {
-  const initialYear = new Date().getFullYear();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Beneficiario[]>([]);
   const [q, setQ] = useState("");
-
-  const [pessoa, setPessoa] = useState<PessoaSugestao | null>(null);
-  const [resumo, setResumo] = useState("");
-  const [obs, setObs] = useState("");
-  const [exercicioAno, setExercicioAno] = useState(String(initialYear));
-  const [validoAte, setValidoAte] = useState(`${initialYear}-12-31`);
-  const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -73,42 +47,6 @@ export default function MovimentoBeneficiariosPage() {
   }, [items, q]);
   const hojeIso = new Date().toISOString().slice(0, 10);
 
-  async function criarBeneficiario() {
-    setMsg(null);
-    if (!pessoa) {
-      setMsg("Selecione uma pessoa antes de criar o beneficiario.");
-      return;
-    }
-    const exercicioAnoNum = Number(exercicioAno);
-    const payload = {
-      pessoa_id: pessoa.id,
-      resumo_institucional: resumo.trim() || undefined,
-      observacoes: obs.trim() || undefined,
-      exercicio_ano:
-        exercicioAno.trim().length > 0 && Number.isFinite(exercicioAnoNum)
-          ? exercicioAnoNum
-          : undefined,
-      valido_ate: validoAte.trim() || undefined,
-    };
-
-    const r = await apiPost<{ ok: boolean; codigo?: string; message?: string; data?: Beneficiario }>(
-      "/api/admin/movimento/beneficiarios",
-      payload
-    );
-
-    if (!r.ok) {
-      setMsg(r.message ?? `Erro: ${r.codigo ?? "ERRO_INESPERADO"}`);
-      return;
-    }
-    if (r.data) {
-      setItems((prev) => [r.data, ...prev]);
-      setPessoa(null);
-      setResumo("");
-      setObs("");
-      setMsg("Beneficiario criado com sucesso.");
-    }
-  }
-
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 to-white px-4 py-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
@@ -135,68 +73,12 @@ export default function MovimentoBeneficiariosPage() {
 
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-3">
           <h2 className="text-lg font-semibold text-slate-800">Cadastrar beneficiario</h2>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="md:col-span-2">
-              <PessoaAutocomplete
-                label="Pessoa"
-                value={pessoa}
-                onChange={setPessoa}
-                placeholder="Digite nome, CPF ou email"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm">Exercicio (ano)</label>
-              <input
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                type="number"
-                value={exercicioAno}
-                onChange={(e) => setExercicioAno(e.target.value)}
-                placeholder={String(initialYear)}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm">Valido ate</label>
-              <input
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                type="date"
-                value={validoAte}
-                onChange={(e) => setValidoAte(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm">Resumo institucional</label>
-              <input
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={resumo}
-                onChange={(e) => setResumo(e.target.value)}
-                placeholder="Opcional"
-              />
-            </div>
-
-            <div className="md:col-span-3">
-              <label className="text-sm">Observacoes</label>
-              <input
-                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                value={obs}
-                onChange={(e) => setObs(e.target.value)}
-                placeholder="Opcional"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-              onClick={criarBeneficiario}
-            >
-              Cadastrar
-            </button>
-            {msg ? <span className="text-sm text-slate-600">{msg}</span> : null}
-          </div>
+          <CadastrarBeneficiarioForm
+            showTitle={false}
+            onSuccess={(data) => {
+              setItems((prev) => [data, ...prev]);
+            }}
+          />
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-3">
