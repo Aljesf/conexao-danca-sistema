@@ -36,6 +36,8 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - Migration: `20260114_235500_movimento_refactor_formularios_e_acoes.sql` (beneficiarios + concessoes + formularios A/B/C + acoes sociais).
 ### Movimento - beneficiarios sem requisito de ASE
 - Migration: 20260204_180047_movimento_beneficiarios_sem_requisito_ase.sql (remove travas/trigger de ASE).
+### Movimento - beneficiarios com exercicio e validade
+- Migration: 20260205_142435_movimento_beneficiarios_exercicio_validade.sql (adiciona exercicio_ano e valido_ate).
 
 
 ### Loja - codigo automatico de produto
@@ -88,6 +90,8 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - API: POST /api/movimento/acoes/[id]/participantes.
 ### Movimento - beneficiarios (cadastro manual)
 - API: POST /api/admin/movimento/beneficiarios (manual, sem ASE/formularios obrigatorios).
+### Movimento - beneficiarios (exercicio/validade)
+- API: POST /api/admin/movimento/beneficiarios (aceita exercicio_ano e valido_ate).
 
 
 
@@ -150,6 +154,8 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - Modal de acoes rapidas (bolsa/acao social) integrado ao botao flutuante do Movimento.
 ### Movimento - beneficiarios (busca padronizada)
 - /admin/movimento/beneficiarios: busca de pessoas alinhada ao top bar, com estado neutro para sem resultados.
+### Movimento - beneficiarios (UI e validade)
+- /admin/movimento/beneficiarios: textos atualizados para Movimento Conexao Banco e campos exercicio/validade no cadastro.
 
 
 ### Registro de Observacoes Operacionais (NASC)

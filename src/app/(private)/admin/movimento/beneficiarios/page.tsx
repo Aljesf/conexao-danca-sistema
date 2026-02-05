@@ -12,6 +12,8 @@ type Beneficiario = {
   pessoa_id: string;
   status: "EM_ANALISE" | "APROVADO" | "SUSPENSO" | "ENCERRADO";
   relatorio_socioeconomico: string;
+  exercicio_ano?: number | null;
+  valido_ate?: string | null;
   observacoes?: string | null;
   criado_em: string;
 };
@@ -31,6 +33,7 @@ async function apiPost<T>(url: string, body: unknown): Promise<T> {
 }
 
 export default function MovimentoBeneficiariosPage() {
+  const initialYear = new Date().getFullYear();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Beneficiario[]>([]);
   const [q, setQ] = useState("");
@@ -38,6 +41,8 @@ export default function MovimentoBeneficiariosPage() {
   const [pessoa, setPessoa] = useState<PessoaSugestao | null>(null);
   const [resumo, setResumo] = useState("");
   const [obs, setObs] = useState("");
+  const [exercicioAno, setExercicioAno] = useState(String(initialYear));
+  const [validoAte, setValidoAte] = useState(`${initialYear}-12-31`);
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,8 +65,13 @@ export default function MovimentoBeneficiariosPage() {
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return items;
-    return items.filter((b) => `${b.pessoa_id} ${b.status}`.toLowerCase().includes(term));
+    return items.filter((b) =>
+      `${b.pessoa_id} ${b.status} ${b.exercicio_ano ?? ""} ${b.valido_ate ?? ""}`
+        .toLowerCase()
+        .includes(term)
+    );
   }, [items, q]);
+  const hojeIso = new Date().toISOString().slice(0, 10);
 
   async function criarBeneficiario() {
     setMsg(null);
@@ -69,10 +79,16 @@ export default function MovimentoBeneficiariosPage() {
       setMsg("Selecione uma pessoa antes de criar o beneficiario.");
       return;
     }
+    const exercicioAnoNum = Number(exercicioAno);
     const payload = {
       pessoa_id: pessoa.id,
       resumo_institucional: resumo.trim() || undefined,
       observacoes: obs.trim() || undefined,
+      exercicio_ano:
+        exercicioAno.trim().length > 0 && Number.isFinite(exercicioAnoNum)
+          ? exercicioAnoNum
+          : undefined,
+      valido_ate: validoAte.trim() || undefined,
     };
 
     const r = await apiPost<{ ok: boolean; codigo?: string; message?: string; data?: Beneficiario }>(
@@ -99,7 +115,9 @@ export default function MovimentoBeneficiariosPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-lg font-semibold text-slate-800">Beneficiarios do Movimento</h1>
+              <h1 className="text-lg font-semibold text-slate-800">
+                Beneficiarios do Movimento Conexao Banco
+              </h1>
               <p className="text-sm text-slate-600">
                 Cadastro institucional (porta de entrada) para concessao de creditos.
               </p>
@@ -116,7 +134,7 @@ export default function MovimentoBeneficiariosPage() {
         </div>
 
         <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-3">
-          <h2 className="text-lg font-semibold text-slate-800">Novo beneficiario</h2>
+          <h2 className="text-lg font-semibold text-slate-800">Cadastrar beneficiario</h2>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="md:col-span-2">
@@ -125,6 +143,27 @@ export default function MovimentoBeneficiariosPage() {
                 value={pessoa}
                 onChange={setPessoa}
                 placeholder="Digite nome, CPF ou email"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm">Exercicio (ano)</label>
+              <input
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                type="number"
+                value={exercicioAno}
+                onChange={(e) => setExercicioAno(e.target.value)}
+                placeholder={String(initialYear)}
+              />
+            </div>
+
+            <div>
+              <label className="text-sm">Valido ate</label>
+              <input
+                className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                type="date"
+                value={validoAte}
+                onChange={(e) => setValidoAte(e.target.value)}
               />
             </div>
 
@@ -150,8 +189,11 @@ export default function MovimentoBeneficiariosPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50" onClick={criarBeneficiario}>
-              Criar
+            <button
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              onClick={criarBeneficiario}
+            >
+              Cadastrar
             </button>
             {msg ? <span className="text-sm text-slate-600">{msg}</span> : null}
           </div>
@@ -177,6 +219,9 @@ export default function MovimentoBeneficiariosPage() {
                   <tr className="border-b border-slate-200">
                     <th className="py-2 pr-4">Pessoa</th>
                     <th className="py-2 pr-4">Status</th>
+                    <th className="py-2 pr-4">Exercicio</th>
+                    <th className="py-2 pr-4">Valido ate</th>
+                    <th className="py-2 pr-4">Vigencia</th>
                     <th className="py-2 pr-4">Criado em</th>
                     <th className="py-2 pr-4">Acoes</th>
                   </tr>
@@ -184,17 +229,22 @@ export default function MovimentoBeneficiariosPage() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td className="py-3 text-slate-600" colSpan={4}>
+                      <td className="py-3 text-slate-600" colSpan={7}>
                         <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
                           Nenhum beneficiario encontrado.
                         </div>
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((b) => (
+                    filtered.map((b) => {
+                      const expirado = b.valido_ate ? b.valido_ate < hojeIso : false;
+                      return (
                       <tr key={b.id} className="border-b border-slate-100">
                         <td className="py-2 pr-4">{b.pessoa_id}</td>
                         <td className="py-2 pr-4">{b.status}</td>
+                        <td className="py-2 pr-4">{b.exercicio_ano ?? "-"}</td>
+                        <td className="py-2 pr-4">{b.valido_ate ?? "-"}</td>
+                        <td className="py-2 pr-4">{b.valido_ate ? (expirado ? "EXPIRADO" : "ATIVO") : "-"}</td>
                         <td className="py-2 pr-4">{new Date(b.criado_em).toLocaleString()}</td>
                         <td className="py-2 pr-4">
                           <Link className="rounded-md border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50" href={`/admin/movimento/beneficiarios/${b.id}`}>
@@ -202,7 +252,8 @@ export default function MovimentoBeneficiariosPage() {
                           </Link>
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>

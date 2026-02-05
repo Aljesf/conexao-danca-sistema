@@ -10,6 +10,8 @@ const BeneficiarioCreateSchema = z.object({
   analise_id: z.string().uuid().optional(),
   resumo_institucional: z.string().optional(),
   observacoes: z.string().optional(),
+  exercicio_ano: z.number().int().optional(),
+  valido_ate: z.string().optional(),
   dados_complementares: z.record(z.unknown()).optional(),
 });
 
@@ -46,6 +48,16 @@ export async function POST(request: NextRequest) {
 
     const analiseId = body.analise_id ? String(body.analise_id) : null;
     const pessoaId = String(body.pessoa_id);
+    const now = new Date();
+    const anoAtual = now.getFullYear();
+    const exercicioAno =
+      typeof body.exercicio_ano === "number" && Number.isFinite(body.exercicio_ano)
+        ? Math.trunc(body.exercicio_ano)
+        : anoAtual;
+    const validoAte =
+      typeof body.valido_ate === "string" && body.valido_ate.trim()
+        ? body.valido_ate
+        : `${exercicioAno}-12-31`;
 
     const pessoaIdNumber = Number(pessoaId);
     if (!Number.isFinite(pessoaIdNumber) || pessoaIdNumber <= 0) {
@@ -132,6 +144,8 @@ export async function POST(request: NextRequest) {
       .insert({
         pessoa_id: pessoaIdNumber,
         analise_id: analiseId,
+        exercicio_ano: exercicioAno,
+        valido_ate: validoAte,
         relatorio_socioeconomico: relatorioSocioeconomico,
         dados_complementares: (body.dados_complementares ?? null) as unknown,
         observacoes: body.observacoes ?? null,
