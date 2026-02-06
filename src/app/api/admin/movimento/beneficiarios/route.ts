@@ -6,7 +6,7 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { requireUser } from "@/lib/supabase/api-auth";
 
 const BeneficiarioCreateSchema = z.object({
-  pessoa_id: z.string().regex(/^\d+$/, "pessoa_id deve ser bigint em string numerica"),
+  pessoa_id: z.union([z.string(), z.number()]),
   analise_id: z.string().uuid().optional(),
   resumo_institucional: z.string().optional(),
   observacoes: z.string().optional(),
@@ -69,7 +69,8 @@ export async function POST(request: NextRequest) {
     const body = BeneficiarioCreateSchema.parse(bodyUnknown);
 
     const analiseId = body.analise_id ? String(body.analise_id) : null;
-    const pessoaId = String(body.pessoa_id);
+    const pessoaIdNumber =
+      typeof body.pessoa_id === "string" ? Number(body.pessoa_id) : body.pessoa_id;
     const now = new Date();
     const anoAtual = now.getFullYear();
     const exercicioAno =
@@ -81,10 +82,9 @@ export async function POST(request: NextRequest) {
         ? body.valido_ate
         : `${exercicioAno}-12-31`;
 
-    const pessoaIdNumber = Number(pessoaId);
-    if (!Number.isFinite(pessoaIdNumber) || pessoaIdNumber <= 0) {
+    if (!Number.isInteger(pessoaIdNumber) || pessoaIdNumber <= 0) {
       return NextResponse.json(
-        { ok: false, codigo: "VALIDACAO_INVALIDA", message: "pessoa_id invalido." },
+        { ok: false, codigo: "PESSOA_ID_INVALIDO", message: "pessoa_id invalido." },
         { status: 400 },
       );
     }

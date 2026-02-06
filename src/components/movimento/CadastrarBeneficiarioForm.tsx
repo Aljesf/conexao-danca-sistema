@@ -5,7 +5,7 @@ import { PessoaAutocomplete, type PessoaSugestao } from "@/components/movimento/
 
 export type BeneficiarioItem = {
   id: string;
-  pessoa_id: string;
+  pessoa_id: number | string;
   status: "EM_ANALISE" | "APROVADO" | "SUSPENSO" | "ENCERRADO";
   relatorio_socioeconomico: string;
   exercicio_ano?: number | null;
@@ -64,7 +64,8 @@ export function CadastrarBeneficiarioForm({ onSuccess, compact, showTitle }: Pro
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = Boolean(pessoaSel?.id) && !loading;
+  const pessoaIdNumber = pessoaSel?.id ? Number(pessoaSel.id) : NaN;
+  const canSubmit = Number.isInteger(pessoaIdNumber) && pessoaIdNumber > 0 && !loading;
 
   const detailBox = useMemo(() => {
     if (!pessoaDet) return null;
@@ -100,9 +101,15 @@ export function CadastrarBeneficiarioForm({ onSuccess, compact, showTitle }: Pro
       return;
     }
 
+    const pessoaIdPayload = Number(pessoaSel.id);
+    if (!Number.isInteger(pessoaIdPayload) || pessoaIdPayload <= 0) {
+      setErro("Pessoa invalida.");
+      return;
+    }
+
     const exercicioAnoNum = Number(exercicioAno);
     const payload = {
-      pessoa_id: pessoaSel.id,
+      pessoa_id: pessoaIdPayload,
       resumo_institucional: resumo.trim() || undefined,
       observacoes: observacoes.trim() || undefined,
       exercicio_ano:
@@ -126,11 +133,28 @@ export function CadastrarBeneficiarioForm({ onSuccess, compact, showTitle }: Pro
             data?: BeneficiarioItem;
             message?: string;
             codigo?: string;
+            error?: string;
+            details?: unknown;
+            hint?: unknown;
+            code?: unknown;
           }
         | null;
 
       if (!res.ok || !json?.ok) {
-        const msg = json?.message ?? (json?.codigo ? `Erro: ${json.codigo}` : "Falha ao cadastrar.");
+        const details =
+          typeof json?.details === "string"
+            ? json.details
+            : json?.details
+              ? JSON.stringify(json.details)
+              : null;
+        const hint = typeof json?.hint === "string" ? json.hint : null;
+        const code = typeof json?.code === "string" ? json.code : null;
+        const extra = [details, hint, code].filter(Boolean).join(" | ");
+        const msgBase =
+          json?.message ??
+          json?.error ??
+          (json?.codigo ? `Erro: ${json.codigo}` : "Falha ao cadastrar.");
+        const msg = extra ? `${msgBase} (${extra})` : msgBase;
         setErro(msg);
         return;
       }

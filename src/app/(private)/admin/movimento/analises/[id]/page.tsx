@@ -121,11 +121,29 @@ export default function AdminMovimentoAseDetalhePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           analise_id: row.id,
-          pessoa_id: String(row.pessoa_id),
+          pessoa_id: row.pessoa_id,
         }),
       });
-      const json = (await res.json()) as { ok: boolean; error?: string; codigo?: string };
-      if (!json.ok) throw new Error(json.error || json.codigo || "Falha ao cadastrar beneficiario.");
+      const json = (await res.json()) as
+        | {
+            ok?: boolean;
+            error?: string;
+            codigo?: string;
+            message?: string;
+            details?: unknown;
+          }
+        | null;
+      if (!json?.ok) {
+        const details =
+          typeof json?.details === "string"
+            ? json.details
+            : json?.details
+              ? JSON.stringify(json.details)
+              : null;
+        const msgBase =
+          json?.message ?? json?.error ?? json?.codigo ?? "Falha ao cadastrar beneficiario.";
+        throw new Error(details ? `${msgBase} (${details})` : msgBase);
+      }
       setMsg("Beneficiario cadastrado com sucesso.");
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Erro desconhecido");
