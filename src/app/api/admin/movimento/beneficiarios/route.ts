@@ -25,9 +25,19 @@ function supabaseErrorResponse(error: unknown, fallbackMessage: string) {
 
   console.error("[movimento/beneficiarios][POST] supabase_error:", error);
 
+  if (err?.code === "P0001") {
+    return NextResponse.json(
+      {
+        error: "validacao",
+        message: err?.message ?? fallbackMessage,
+      },
+      { status: 400 },
+    );
+  }
+
   return NextResponse.json(
     {
-      error: "ERRO_INESPERADO",
+      error: "falha_insert",
       message: err?.message ?? fallbackMessage,
       details: err?.details ?? null,
       hint: err?.hint ?? null,

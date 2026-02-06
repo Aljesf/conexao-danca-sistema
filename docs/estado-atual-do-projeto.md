@@ -39,6 +39,9 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ### Movimento - beneficiarios com exercicio e validade
 - Migration: 20260205_142435_movimento_beneficiarios_exercicio_validade.sql (adiciona exercicio_ano e valido_ate).
 
+### Movimento - beneficiarios (analise_id opcional)
+- Migration: 20260124_movimento_beneficiarios_analise_id_opcional.sql (permite cadastro sem analise_id).
+
 
 ### Loja - codigo automatico de produto
 - Migration: `20260115_130001_loja_produtos_codigo_auto.sql` (sequence + trigger para codigo EVID-XXXXXX-SLUG).
@@ -93,6 +96,9 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ### Movimento - beneficiarios (exercicio/validade)
 - API: POST /api/admin/movimento/beneficiarios (aceita exercicio_ano e valido_ate).
 
+
+### Movimento - beneficiarios (validacao banco)
+- API: POST /api/admin/movimento/beneficiarios retorna 400 quando validacao do banco (P0001).
 
 
 ### Loja - categorias e subcategorias
