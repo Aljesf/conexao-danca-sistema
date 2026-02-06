@@ -15,6 +15,28 @@ const BeneficiarioCreateSchema = z.object({
   dados_complementares: z.record(z.unknown()).optional(),
 });
 
+function supabaseErrorResponse(error: unknown, fallbackMessage: string) {
+  const err = error as {
+    message?: string;
+    details?: unknown;
+    hint?: unknown;
+    code?: unknown;
+  } | null;
+
+  console.error("[movimento/beneficiarios][POST] supabase_error:", error);
+
+  return NextResponse.json(
+    {
+      error: "ERRO_INESPERADO",
+      message: err?.message ?? fallbackMessage,
+      details: err?.details ?? null,
+      hint: err?.hint ?? null,
+      code: err?.code ?? null,
+    },
+    { status: 500 },
+  );
+}
+
 export async function GET(request: NextRequest) {
   const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
@@ -74,10 +96,7 @@ export async function POST(request: NextRequest) {
         .eq("id", analiseId)
         .maybeSingle();
       if (analiseErr) {
-        return NextResponse.json(
-          { ok: false, codigo: "ANALISE_NAO_ENCONTRADA" },
-          { status: 404 },
-        );
+        return supabaseErrorResponse(analiseErr, "Falha ao buscar analise socioeconomica.");
       }
       if (analise && Number(analise.pessoa_id) !== pessoaIdNumber) {
         return NextResponse.json(
@@ -93,7 +112,9 @@ export async function POST(request: NextRequest) {
       .eq("pessoa_id", pessoaIdNumber)
       .maybeSingle();
 
-    if (existingErr) throw existingErr;
+    if (existingErr) {
+      return supabaseErrorResponse(existingErr, "Falha ao verificar beneficiario existente.");
+    }
     if (existing?.id) {
       return NextResponse.json(
         {
@@ -112,10 +133,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (pessoaErr) {
-      return NextResponse.json(
-        { ok: false, codigo: "ERRO_BUSCAR_PESSOA", message: pessoaErr.message },
-        { status: 500 }
-      );
+      return supabaseErrorResponse(pessoaErr, "Falha ao buscar pessoa.");
     }
 
     if (!pessoa) {
@@ -154,10 +172,20 @@ export async function POST(request: NextRequest) {
       .select("*")
       .single();
 
-    if (error) throw error;
+    if (error) {
+      return supabaseErrorResponse(error, "Falha ao cadastrar beneficiario.");
+    }
     return NextResponse.json({ ok: true, data });
   } catch (err) {
-    return jsonError(zodToValidationError(err));
+    const mapped = zodToValidationError(err);
+    if (mapped.message === "VALIDACAO_INVALIDA") {
+      return NextResponse.json(
+        { ok: false, codigo: "VALIDACAO_INVALIDA", message: "Dados invalidos." },
+        { status: 400 },
+      );
+    }
+
+    return supabaseErrorResponse(err, "Falha ao cadastrar beneficiario.");
   }
 }
 
