@@ -1,7 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { jsonError, zodToValidationError } from "@/lib/http/api-errors";
+import { zodToValidationError } from "@/lib/http/api-errors";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { requireUser } from "@/lib/supabase/api-auth";
 
@@ -55,13 +55,32 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from("movimento_beneficiarios")
-      .select("*")
+      .select(
+        [
+          "id",
+          "pessoa_id",
+          "status",
+          "exercicio_ano",
+          "valido_ate",
+          "criado_em",
+          "pessoas (id,nome,cpf,email)",
+        ].join(","),
+      )
       .order("criado_em", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      return NextResponse.json(
+        { ok: false, error: "falha_listar", message: error.message, code: error.code ?? null },
+        { status: 500 },
+      );
+    }
     return NextResponse.json({ ok: true, data });
   } catch (err) {
-    return jsonError(err);
+    const msg = err instanceof Error ? err.message : "ERRO_INESPERADO";
+    return NextResponse.json(
+      { ok: false, error: "falha_listar", message: msg, code: null },
+      { status: 500 },
+    );
   }
 }
 

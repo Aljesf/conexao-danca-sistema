@@ -1,6 +1,5 @@
 ﻿import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireMovimentoAdmin } from "@/lib/auth/movimento-guard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { jsonError, zodToValidationError } from "@/lib/http/api-errors";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
@@ -19,22 +18,50 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   const denied = await guardApiByRole(_ as any);
   if (denied) return denied as any;
   try {
-    await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
     const { id } = await ctx.params;
 
     const { data, error } = await supabase
       .from("movimento_beneficiarios")
-      .select("*")
+      .select(
+        [
+          "id",
+          "pessoa_id",
+          "status",
+          "exercicio_ano",
+          "valido_ate",
+          "criado_em",
+          "relatorio_socioeconomico",
+          "observacoes",
+          "termo_consentimento_assinado",
+          "termo_participacao_assinado",
+          "contrato_assinado",
+          "pessoas (id,nome,cpf,email)",
+        ].join(","),
+      )
       .eq("id", id)
       .maybeSingle();
 
-    if (error) throw error;
-    if (!data) throw new Error("BENEFICIARIO_NAO_ENCONTRADO");
+    if (error) {
+      return NextResponse.json(
+        { ok: false, error: "falha_buscar", message: error.message, code: error.code ?? null },
+        { status: 500 },
+      );
+    }
+    if (!data) {
+      return NextResponse.json(
+        { ok: false, error: "nao_encontrado", message: "Beneficiario nao encontrado." },
+        { status: 404 },
+      );
+    }
 
     return NextResponse.json({ ok: true, data });
   } catch (err) {
-    return jsonError(err);
+    const msg = err instanceof Error ? err.message : "ERRO_INESPERADO";
+    return NextResponse.json(
+      { ok: false, error: "falha_buscar", message: msg, code: null },
+      { status: 500 },
+    );
   }
 }
 
@@ -42,7 +69,6 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
   try {
-    await requireMovimentoAdmin();
     const supabase = getSupabaseServiceClient();
     const { id } = await ctx.params;
 
@@ -63,7 +89,22 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
       .from("movimento_beneficiarios")
       .update(updatePayload)
       .eq("id", id)
-      .select("*")
+      .select(
+        [
+          "id",
+          "pessoa_id",
+          "status",
+          "exercicio_ano",
+          "valido_ate",
+          "criado_em",
+          "relatorio_socioeconomico",
+          "observacoes",
+          "termo_consentimento_assinado",
+          "termo_participacao_assinado",
+          "contrato_assinado",
+          "pessoas (id,nome,cpf,email)",
+        ].join(","),
+      )
       .maybeSingle();
 
     if (error) throw error;

@@ -5,15 +5,38 @@ import Link from "next/link";
 
 type Beneficiario = {
   id: string;
-  pessoa_id: string;
-  status: "EM_ANALISE" | "APROVADO" | "SUSPENSO" | "ENCERRADO";
+  pessoa_id: number | string;
+  status: string;
   relatorio_socioeconomico: string;
   observacoes?: string | null;
   termo_consentimento_assinado: boolean;
   termo_participacao_assinado: boolean;
   contrato_assinado: boolean;
   criado_em: string;
+  pessoas?: {
+    id: number;
+    nome?: string | null;
+    cpf?: string | null;
+    email?: string | null;
+  } | null;
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  EM_ANALISE: "Em analise",
+  APROVADO: "Aprovado",
+  SUSPENSO: "Suspenso",
+  ENCERRADO: "Encerrado",
+  ATIVO: "Ativo",
+  INATIVO: "Inativo",
+  OK: "Conferido",
+};
+
+function formatStatus(status: string | null | undefined) {
+  if (!status) return "-";
+  return STATUS_LABELS[status] ?? status;
+}
+
+type StatusAcao = "EM_ANALISE" | "APROVADO" | "SUSPENSO" | "ENCERRADO";
 
 async function apiGet<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -81,7 +104,7 @@ export default function BeneficiarioDetalhePage({ params }: { params: { id: stri
     }
   }
 
-  async function alterarStatus(status: Beneficiario["status"]) {
+  async function alterarStatus(status: StatusAcao) {
     setMsg(null);
     const r = await apiPost<{ ok: boolean; codigo?: string; data?: Beneficiario }>(
       `/api/admin/movimento/beneficiarios/${params.id}/status`,
@@ -121,8 +144,11 @@ export default function BeneficiarioDetalhePage({ params }: { params: { id: stri
             <div>
               <h1 className="text-lg font-semibold text-slate-800">Beneficiario</h1>
               <p className="text-sm text-slate-600">
-                Pessoa ID: <span className="font-medium">{item.pessoa_id}</span> | Status:{" "}
-                <span className="font-medium">{item.status}</span>
+                Pessoa:{" "}
+                <span className="font-medium">
+                  {item.pessoas?.nome ?? `#${item.pessoa_id}`}
+                </span>{" "}
+                | Status: <span className="font-medium">{formatStatus(item.status)}</span>
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-sm">
@@ -131,6 +157,12 @@ export default function BeneficiarioDetalhePage({ params }: { params: { id: stri
                 href="/admin/movimento/beneficiarios"
               >
                 Voltar
+              </Link>
+              <Link
+                className="rounded-md border border-slate-200 px-3 py-2 text-slate-700 hover:bg-slate-50"
+                href={`/pessoas/${item.pessoas?.id ?? item.pessoa_id}`}
+              >
+                Abrir pessoa
               </Link>
               <Link
                 className="rounded-md border border-slate-200 px-3 py-2 text-slate-700 hover:bg-slate-50"
@@ -181,7 +213,7 @@ export default function BeneficiarioDetalhePage({ params }: { params: { id: stri
                 className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 onClick={() => alterarStatus(s)}
               >
-                {s}
+                {formatStatus(s)}
               </button>
             ))}
           </div>

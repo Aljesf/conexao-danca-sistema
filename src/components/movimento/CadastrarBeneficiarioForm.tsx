@@ -12,6 +12,12 @@ export type BeneficiarioItem = {
   valido_ate?: string | null;
   observacoes?: string | null;
   criado_em: string;
+  pessoas?: {
+    id: number;
+    nome?: string | null;
+    cpf?: string | null;
+    email?: string | null;
+  } | null;
 };
 
 type PessoaDetalhe = {

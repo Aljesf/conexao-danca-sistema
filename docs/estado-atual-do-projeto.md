@@ -97,6 +97,10 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 - API: POST /api/admin/movimento/beneficiarios (aceita exercicio_ano e valido_ate).
 
 
+### Movimento - beneficiarios (listagem/detalhe)
+- API: GET /api/admin/movimento/beneficiarios (join com pessoas).
+- API: GET /api/admin/movimento/beneficiarios/[id] (detalhe corrigido).
+
 ### Movimento - beneficiarios (validacao banco)
 - API: POST /api/admin/movimento/beneficiarios retorna 400 quando validacao do banco (P0001).
 
@@ -163,6 +167,10 @@ Movimento Conexao Danca - acoes rapidas (bolsa/acao social)
 ### Movimento - beneficiarios (UI e validade)
 - /admin/movimento/beneficiarios: textos atualizados para Movimento Conexao Banco e campos exercicio/validade no cadastro.
 
+
+### Movimento - beneficiarios (lista/detalhe)
+- /admin/movimento/beneficiarios: lista com nome da pessoa e status legivel.
+- /admin/movimento/beneficiarios/[id]: detalhe com link para pessoa.
 
 ### Registro de Observacoes Operacionais (NASC)
 - Botao flutuante + API + export CSV (MVP)

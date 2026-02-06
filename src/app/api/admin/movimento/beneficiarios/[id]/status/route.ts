@@ -31,7 +31,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       .from("movimento_beneficiarios")
       .update(patch)
       .eq("id", id)
-      .select("*")
+      .select(
+        [
+          "id",
+          "pessoa_id",
+          "status",
+          "exercicio_ano",
+          "valido_ate",
+          "criado_em",
+          "relatorio_socioeconomico",
+          "observacoes",
+          "termo_consentimento_assinado",
+          "termo_participacao_assinado",
+          "contrato_assinado",
+          "pessoas (id,nome,cpf,email)",
+        ].join(","),
+      )
       .maybeSingle();
 
     if (error) throw error;

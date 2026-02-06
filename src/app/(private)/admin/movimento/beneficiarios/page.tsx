@@ -9,6 +9,21 @@ import {
 
 type Beneficiario = BeneficiarioItem;
 
+const STATUS_LABELS: Record<string, string> = {
+  EM_ANALISE: "Em analise",
+  APROVADO: "Aprovado",
+  SUSPENSO: "Suspenso",
+  ENCERRADO: "Encerrado",
+  ATIVO: "Ativo",
+  INATIVO: "Inativo",
+  OK: "Conferido",
+};
+
+function formatStatus(status: string | null | undefined) {
+  if (!status) return "-";
+  return STATUS_LABELS[status] ?? status;
+}
+
 async function apiGet<T>(url: string): Promise<T> {
   const res = await fetch(url);
   return (await res.json()) as T;
@@ -40,7 +55,7 @@ export default function MovimentoBeneficiariosPage() {
     const term = q.trim().toLowerCase();
     if (!term) return items;
     return items.filter((b) =>
-      `${b.pessoa_id} ${b.status} ${b.exercicio_ano ?? ""} ${b.valido_ate ?? ""}`
+      `${b.pessoa_id} ${b.status} ${formatStatus(b.status)} ${b.exercicio_ano ?? ""} ${b.valido_ate ?? ""} ${b.pessoas?.nome ?? ""} ${b.pessoas?.cpf ?? ""} ${b.pessoas?.email ?? ""}`
         .toLowerCase()
         .includes(term)
     );
@@ -119,11 +134,20 @@ export default function MovimentoBeneficiariosPage() {
                     </tr>
                   ) : (
                     filtered.map((b) => {
+                      const pessoaNome = b.pessoas?.nome ?? `Pessoa #${b.pessoa_id}`;
+                      const pessoaMeta = [b.pessoas?.cpf, b.pessoas?.email]
+                        .filter(Boolean)
+                        .join(" · ");
                       const expirado = b.valido_ate ? b.valido_ate < hojeIso : false;
                       return (
                       <tr key={b.id} className="border-b border-slate-100">
-                        <td className="py-2 pr-4">{b.pessoa_id}</td>
-                        <td className="py-2 pr-4">{b.status}</td>
+                        <td className="py-2 pr-4">
+                          <div className="font-medium text-slate-900">{pessoaNome}</div>
+                          {pessoaMeta ? (
+                            <div className="text-xs text-slate-500">{pessoaMeta}</div>
+                          ) : null}
+                        </td>
+                        <td className="py-2 pr-4">{formatStatus(b.status)}</td>
                         <td className="py-2 pr-4">{b.exercicio_ano ?? "-"}</td>
                         <td className="py-2 pr-4">{b.valido_ate ?? "-"}</td>
                         <td className="py-2 pr-4">{b.valido_ate ? (expirado ? "EXPIRADO" : "ATIVO") : "-"}</td>
