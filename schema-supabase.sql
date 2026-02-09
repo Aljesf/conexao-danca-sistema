@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2026-01-15T17:53:16.641Z
+-- Snapshot do schema gerado em 2026-02-09T18:37:20.084Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -61,6 +61,15 @@ CREATE TABLE public."alunos_turmas" (
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "user_id" uuid,
   "user_email" text
+);
+
+-- --------------------------------------------------
+-- Tabela: public."app_config"
+-- --------------------------------------------------
+CREATE TABLE public."app_config" (
+  "key" text NOT NULL,
+  "value" text NOT NULL,
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -148,6 +157,164 @@ CREATE TABLE public."bairros" (
   "ativo" boolean DEFAULT true,
   "created_at" timestamp with time zone DEFAULT now(),
   "updated_at" timestamp with time zone DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_compra_itens"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_compra_itens" (
+  "id" bigint NOT NULL,
+  "compra_id" bigint NOT NULL,
+  "insumo_id" bigint NOT NULL,
+  "quantidade" numeric NOT NULL,
+  "valor_total_centavos" integer NOT NULL DEFAULT 0,
+  "custo_unitario_centavos" integer NOT NULL DEFAULT 0,
+  "validade" date,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_compras"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_compras" (
+  "id" bigint NOT NULL,
+  "centro_custo_id" bigint NOT NULL,
+  "conta_financeira_id" bigint NOT NULL,
+  "categoria_financeira_id" bigint,
+  "onde_comprei" text NOT NULL,
+  "data_compra" date NOT NULL DEFAULT CURRENT_DATE,
+  "valor_total_centavos" integer NOT NULL DEFAULT 0,
+  "movimento_financeiro_id" bigint,
+  "observacoes" text,
+  "created_by" uuid,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "status" text NOT NULL DEFAULT 'ATIVA'::text,
+  "cancelada_em" timestamp with time zone,
+  "cancelada_por" uuid,
+  "motivo_cancelamento" text
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_insumo_movimentos"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_insumo_movimentos" (
+  "id" bigint NOT NULL,
+  "insumo_id" bigint NOT NULL,
+  "tipo" text NOT NULL,
+  "quantidade" numeric NOT NULL,
+  "custo_unitario_centavos" integer,
+  "validade" date,
+  "origem" text NOT NULL DEFAULT 'MANUAL'::text,
+  "referencia_id" bigint,
+  "observacoes" text,
+  "created_by" uuid,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_insumos"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_insumos" (
+  "id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "unidade_base" text NOT NULL,
+  "controla_validade" boolean NOT NULL DEFAULT false,
+  "validade_dias_padrao" integer,
+  "custo_unitario_estimado_centavos" integer NOT NULL DEFAULT 0,
+  "saldo_atual" numeric NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_produto_precos"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_produto_precos" (
+  "id" bigint NOT NULL,
+  "produto_id" bigint NOT NULL,
+  "tabela_preco_id" bigint NOT NULL,
+  "preco_centavos" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_produto_receitas"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_produto_receitas" (
+  "id" bigint NOT NULL,
+  "produto_id" bigint NOT NULL,
+  "insumo_id" bigint NOT NULL,
+  "quantidade" numeric NOT NULL,
+  "unidade" text NOT NULL,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_produtos"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_produtos" (
+  "id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "categoria" text NOT NULL DEFAULT 'GERAL'::text,
+  "unidade_venda" text NOT NULL DEFAULT 'un'::text,
+  "preco_venda_centavos" integer NOT NULL DEFAULT 0,
+  "preparado" boolean NOT NULL DEFAULT true,
+  "insumo_direto_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_tabelas_preco"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_tabelas_preco" (
+  "id" bigint NOT NULL,
+  "codigo" text NOT NULL,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "is_default" boolean NOT NULL DEFAULT false,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_venda_itens"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_venda_itens" (
+  "id" bigint NOT NULL,
+  "venda_id" bigint NOT NULL,
+  "produto_id" bigint NOT NULL,
+  "quantidade" numeric NOT NULL DEFAULT 1,
+  "preco_unitario_centavos" integer NOT NULL DEFAULT 0,
+  "total_centavos" integer NOT NULL DEFAULT 0
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_vendas"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_vendas" (
+  "id" bigint NOT NULL,
+  "pagador_pessoa_id" bigint,
+  "consumidor_pessoa_id" bigint,
+  "valor_total_centavos" integer NOT NULL DEFAULT 0,
+  "forma_pagamento" text NOT NULL,
+  "status_pagamento" text NOT NULL DEFAULT 'PAGO'::text,
+  "cobranca_id" bigint,
+  "observacoes" text,
+  "created_by" uuid,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "tabela_preco_id" bigint
 );
 
 -- --------------------------------------------------
@@ -1226,6 +1393,215 @@ CREATE TABLE public."financeiro_tiers" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."folha_pagamento_colaborador"
+-- --------------------------------------------------
+CREATE TABLE public."folha_pagamento_colaborador" (
+  "id" bigint NOT NULL DEFAULT nextval('folha_pagamento_colaborador_id_seq'::regclass),
+  "competencia_ano_mes" text NOT NULL,
+  "colaborador_id" bigint NOT NULL,
+  "status" text NOT NULL DEFAULT 'ABERTA'::text,
+  "data_fechamento" timestamp with time zone,
+  "data_pagamento" timestamp with time zone,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."folha_pagamento_eventos"
+-- --------------------------------------------------
+CREATE TABLE public."folha_pagamento_eventos" (
+  "id" bigint NOT NULL DEFAULT nextval('folha_pagamento_eventos_id_seq'::regclass),
+  "folha_pagamento_id" bigint NOT NULL,
+  "tipo" text NOT NULL,
+  "descricao" text NOT NULL,
+  "valor_centavos" integer NOT NULL,
+  "origem_tipo" text,
+  "origem_id" bigint,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_question_options"
+-- --------------------------------------------------
+CREATE TABLE public."form_question_options" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "question_id" uuid NOT NULL,
+  "valor" text NOT NULL,
+  "rotulo" text NOT NULL,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_questions"
+-- --------------------------------------------------
+CREATE TABLE public."form_questions" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "codigo" text NOT NULL,
+  "titulo" text NOT NULL,
+  "descricao" text,
+  "tipo" USER-DEFINED NOT NULL,
+  "ajuda" text,
+  "placeholder" text,
+  "min_num" numeric,
+  "max_num" numeric,
+  "min_len" integer,
+  "max_len" integer,
+  "scale_min" integer,
+  "scale_max" integer,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_response_answers"
+-- --------------------------------------------------
+CREATE TABLE public."form_response_answers" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "response_id" uuid NOT NULL,
+  "question_id" uuid NOT NULL,
+  "valor_texto" text,
+  "valor_numero" numeric,
+  "valor_boolean" boolean,
+  "valor_data" date,
+  "valor_opcao" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_response_selected_options"
+-- --------------------------------------------------
+CREATE TABLE public."form_response_selected_options" (
+  "response_answer_id" uuid NOT NULL,
+  "option_id" uuid NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_responses"
+-- --------------------------------------------------
+CREATE TABLE public."form_responses" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "template_id" uuid NOT NULL,
+  "pessoa_id" bigint NOT NULL,
+  "status" text NOT NULL DEFAULT 'COMPLETO'::text,
+  "started_at" timestamp with time zone,
+  "submitted_at" timestamp with time zone,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_submission_answers"
+-- --------------------------------------------------
+CREATE TABLE public."form_submission_answers" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "submission_id" uuid NOT NULL,
+  "template_item_id" uuid NOT NULL,
+  "question_id" uuid NOT NULL,
+  "value_text" text,
+  "value_number" numeric,
+  "value_bool" boolean,
+  "value_date" date,
+  "value_json" jsonb,
+  "question_titulo_snapshot" text NOT NULL,
+  "option_rotulos_snapshot" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_submissions"
+-- --------------------------------------------------
+CREATE TABLE public."form_submissions" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "template_id" uuid NOT NULL,
+  "template_versao" integer NOT NULL DEFAULT 1,
+  "pessoa_id" bigint,
+  "responsavel_id" bigint,
+  "public_token" text NOT NULL,
+  "status" text NOT NULL DEFAULT 'submitted'::text,
+  "submitted_at" timestamp with time zone,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "review_status" text,
+  "reviewed_at" timestamp with time zone,
+  "reviewed_by" uuid,
+  "review_note" text
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_template_blocos"
+-- --------------------------------------------------
+CREATE TABLE public."form_template_blocos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "template_id" uuid NOT NULL,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "tipo" text NOT NULL,
+  "question_id" uuid,
+  "titulo" text,
+  "texto_md" text,
+  "imagem_url" text,
+  "alinhamento" text,
+  "obrigatoria" boolean NOT NULL DEFAULT false,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_template_items"
+-- --------------------------------------------------
+CREATE TABLE public."form_template_items" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "template_id" uuid NOT NULL,
+  "question_id" uuid NOT NULL,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "obrigatoria" boolean NOT NULL DEFAULT false,
+  "cond_question_id" uuid,
+  "cond_equals_value" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_template_questions"
+-- --------------------------------------------------
+CREATE TABLE public."form_template_questions" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "template_id" uuid NOT NULL,
+  "question_id" uuid NOT NULL,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."form_templates"
+-- --------------------------------------------------
+CREATE TABLE public."form_templates" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "nome" text NOT NULL,
+  "descricao" text,
+  "status" USER-DEFINED NOT NULL DEFAULT 'draft'::form_template_status,
+  "versao" integer NOT NULL DEFAULT 1,
+  "published_at" timestamp with time zone,
+  "archived_at" timestamp with time zone,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "header_image_url" text,
+  "footer_image_url" text,
+  "intro_text_md" text,
+  "outro_text_md" text
+);
+
+-- --------------------------------------------------
 -- Tabela: public."formas_pagamento"
 -- --------------------------------------------------
 CREATE TABLE public."formas_pagamento" (
@@ -1422,7 +1798,8 @@ CREATE TABLE public."loja_listas_demanda_itens" (
   "criado_em" timestamp with time zone NOT NULL DEFAULT now(),
   "criado_por" uuid,
   "atualizado_em" timestamp with time zone NOT NULL DEFAULT now(),
-  "atualizado_por" uuid
+  "atualizado_por" uuid,
+  "pessoa_id" bigint
 );
 
 -- --------------------------------------------------
@@ -2044,6 +2421,25 @@ CREATE TABLE public."movimento_acoes" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."movimento_analises_socioeconomicas"
+-- --------------------------------------------------
+CREATE TABLE public."movimento_analises_socioeconomicas" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "pessoa_id" bigint NOT NULL,
+  "responsavel_legal_pessoa_id" bigint,
+  "data_analise" date NOT NULL DEFAULT CURRENT_DATE,
+  "contexto" text NOT NULL,
+  "registrado_por_user_id" uuid,
+  "status" text NOT NULL DEFAULT 'RASCUNHO'::text,
+  "respostas_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "resultado_status" text,
+  "observacao_institucional" text,
+  "data_sugerida_revisao" date,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."movimento_beneficiario_coberturas"
 -- --------------------------------------------------
 CREATE TABLE public."movimento_beneficiario_coberturas" (
@@ -2064,7 +2460,6 @@ CREATE TABLE public."movimento_beneficiario_coberturas" (
 -- --------------------------------------------------
 CREATE TABLE public."movimento_beneficiarios" (
   "id" uuid NOT NULL DEFAULT gen_random_uuid(),
-  "pessoa_id" uuid NOT NULL,
   "status" USER-DEFINED NOT NULL DEFAULT 'EM_ANALISE'::movimento_beneficiario_status,
   "relatorio_socioeconomico" text NOT NULL,
   "dados_complementares" jsonb,
@@ -2083,7 +2478,13 @@ CREATE TABLE public."movimento_beneficiarios" (
   "acionar_form_aluno_menor" boolean NOT NULL DEFAULT false,
   "acionar_form_aluno_maior" boolean NOT NULL DEFAULT false,
   "atualizado_em" timestamp with time zone,
-  "atualizado_por" uuid
+  "atualizado_por" uuid,
+  "analise_id" uuid,
+  "ase_submission_id" uuid,
+  "ase_submitted_at" timestamp with time zone,
+  "exercicio_ano" integer,
+  "valido_ate" date,
+  "pessoa_id" bigint NOT NULL
 );
 
 -- --------------------------------------------------
