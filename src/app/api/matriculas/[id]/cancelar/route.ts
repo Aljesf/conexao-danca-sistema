@@ -88,10 +88,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       await client.query("ROLLBACK");
       return NextResponse.json({ ok: false, error: "matricula_ja_cancelada" }, { status: 409 });
     }
-    if (statusAtual === "CONCLUIDA") {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ ok: false, error: "matricula_ja_concluida" }, { status: 409 });
-    }
+    const retificacaoDeConcluida = statusAtual === "CONCLUIDA";
 
     const cobrancasQuery = await client.query<CobrancaRow>(
       `
@@ -129,7 +126,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           updated_at = now()
         WHERE id = ANY($1::bigint[])
         `,
-        [idsParaCancelar, `Cancelamento matricula #${matriculaId}: ${motivo}`, userId],
+        [idsParaCancelar, `Cancelamento/retificacao matricula #${matriculaId}: ${motivo}`, userId],
       );
     }
 
@@ -263,6 +260,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
       lancamentos_cartao_cancelados_ids: lancamentosCartaoIds,
       faturas_cartao_recalculadas_qtd: faturasCartaoRecalculadas,
+      retificacao_de_concluida: retificacaoDeConcluida,
     };
 
     await client.query(
@@ -303,6 +301,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
           lancamentos_cartao_cancelados_qtd: lancamentosCartaoCancelados,
           faturas_cartao_recalculadas_qtd: faturasCartaoRecalculadas,
+          retificacao_de_concluida: retificacaoDeConcluida,
         }),
       ],
     );
@@ -318,6 +317,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
       lancamentos_cartao_cancelados_qtd: lancamentosCartaoCancelados,
       faturas_cartao_recalculadas_qtd: faturasCartaoRecalculadas,
+      retificacao_de_concluida: retificacaoDeConcluida,
     });
   } catch (e: unknown) {
     try {

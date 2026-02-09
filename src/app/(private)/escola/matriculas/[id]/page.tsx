@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateISO, formatDateTimeISO } from "@/lib/formatters/date";
-import { MatriculaAcoesEncerramento } from "./_components/MatriculaAcoesEncerramento";
+import { MatriculaAcoes } from "./_components/MatriculaAcoes";
 
 const uiBtnBase =
   "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-medium shadow-sm transition " +
@@ -672,13 +672,7 @@ export default function MatriculaDetalhePage() {
 
               <section className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
                 <h2 className="text-base font-semibold text-slate-800 md:text-lg">Acoes</h2>
-                <MatriculaAcoesEncerramento
-                  matriculaId={Number.isFinite(matriculaIdNum) ? matriculaIdNum : 0}
-                  disabled={
-                    !Number.isFinite(matriculaIdNum) ||
-                    ["CANCELADA", "CONCLUIDA"].includes(String(matricula?.status ?? "").toUpperCase())
-                  }
-                />
+                {Number.isFinite(matriculaIdNum) ? <MatriculaAcoes matriculaId={matriculaIdNum} /> : null}
               </section>
             </div>
           </div>
