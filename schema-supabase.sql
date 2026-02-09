@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2026-02-09T18:37:20.084Z
+-- Snapshot do schema gerado em 2026-02-09T20:06:36.783Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -2312,7 +2312,8 @@ CREATE TABLE public."matriculas" (
   "documento_conjunto_id" bigint,
   "total_mensalidade_centavos" integer NOT NULL DEFAULT 0,
   "rascunho_expira_em" timestamp with time zone,
-  "origem_valor" text
+  "origem_valor" text,
+  "movimento_concessao_id" uuid
 );
 
 -- --------------------------------------------------
