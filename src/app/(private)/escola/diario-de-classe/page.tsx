@@ -20,6 +20,9 @@ type Turma = {
 type Aluno = {
   aluno_pessoa_id: number;
   nome: string | null;
+  matricula_id?: number | null;
+  matricula_status?: string | null;
+  turma_aluno_status?: string | null;
 };
 
 type Aula = {
@@ -275,6 +278,7 @@ export default function DiarioDeClassePage() {
   const [notasPosAula, setNotasPosAula] = useState("");
 
   const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [alunosHistorico, setAlunosHistorico] = useState<Aluno[]>([]);
   const [presencasRegistradas, setPresencasRegistradas] = useState(0);
   const [linhas, setLinhas] = useState<LinhaChamada[]>([]);
 
@@ -390,6 +394,7 @@ export default function DiarioDeClassePage() {
       setNotasPosAula("");
       setLinhas([]);
       setAlunos([]);
+      setAlunosHistorico([]);
       setPresencasRegistradas(0);
       baselineRef.current = null;
 
@@ -398,7 +403,12 @@ export default function DiarioDeClassePage() {
       setStatus("PENDENTE");
       setErroMsg("");
 
-      const alunosRes = await fetchJson<{ ok: boolean; alunos: Aluno[] }>(
+      const alunosRes = await fetchJson<{
+        ok: boolean;
+        alunos?: Aluno[];
+        alunos_ativos?: Aluno[];
+        alunos_historico?: Aluno[];
+      }>(
         `/api/professor/diario-de-classe/turmas/${turmaId}/alunos`
       );
       if (!alive) return;
@@ -409,10 +419,16 @@ export default function DiarioDeClassePage() {
         return;
       }
 
-      const listaAlunos = Array.isArray(alunosRes.data.alunos)
-        ? alunosRes.data.alunos
+      const listaAlunos = Array.isArray(alunosRes.data.alunos_ativos)
+        ? alunosRes.data.alunos_ativos
+        : Array.isArray(alunosRes.data.alunos)
+          ? alunosRes.data.alunos
+        : [];
+      const listaHistorico = Array.isArray(alunosRes.data.alunos_historico)
+        ? alunosRes.data.alunos_historico
         : [];
       setAlunos(listaAlunos);
+      setAlunosHistorico(listaHistorico);
 
       const abrirRes = await fetchJson<{ ok: boolean; aula: Aula }>(
         "/api/professor/diario-de-classe/aulas/abrir",
@@ -449,9 +465,10 @@ export default function DiarioDeClassePage() {
       const presencas = Array.isArray(presRes.data.presencas)
         ? presRes.data.presencas
         : [];
-      setPresencasRegistradas(presencas.length);
       const mapPres = new Map<number, PresencaDb>();
       for (const p of presencas) mapPres.set(p.aluno_pessoa_id, p);
+      const presencasAtivos = listaAlunos.filter((a) => mapPres.has(a.aluno_pessoa_id)).length;
+      setPresencasRegistradas(presencasAtivos);
 
       const linhasMontadas = listaAlunos.map((a) =>
         mapPresencaToLinha(a, mapPres.get(a.aluno_pessoa_id))
@@ -725,7 +742,8 @@ export default function DiarioDeClassePage() {
       setLinhas(reconciliado);
       baselineRef.current = serializeLinhas(reconciliado);
       setSalvoOk(true);
-      setPresencasRegistradas(presencas.length);
+      const presencasAtivos = alunos.filter((a) => mapPres.has(a.aluno_pessoa_id)).length;
+      setPresencasRegistradas(presencasAtivos);
       setStatus("PRONTO");
     } catch (e: unknown) {
       setStatus("ERRO");
@@ -960,6 +978,7 @@ export default function DiarioDeClassePage() {
             turma={turmaSelecionada}
             turmaId={turmaId}
             alunosTotal={alunos.length}
+            historicoTotal={alunosHistorico.length}
             presencasRegistradas={presencasRegistradas}
             pendentesCount={pendentesCount}
             aulaFechada={aulaFechada}
@@ -1120,7 +1139,7 @@ export default function DiarioDeClassePage() {
                     </div>
                   ) : alunos.length === 0 ? (
                     <div className="text-sm text-muted-foreground">
-                      Nenhum aluno encontrado para esta turma.
+                      Nenhum aluno ativo para chamada nesta turma.
                     </div>
                   ) : (
                     <div className="overflow-hidden rounded-xl border">
@@ -1236,6 +1255,24 @@ export default function DiarioDeClassePage() {
                     </div>
                   )}
                 </div>
+
+                {alunosHistorico.length > 0 ? (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                    <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Historico (sem frequencia)
+                    </div>
+                    <div className="mt-2 grid gap-1 text-sm text-slate-700">
+                      {alunosHistorico.map((a) => (
+                        <div key={`hist-${a.aluno_pessoa_id}`} className="flex items-center justify-between gap-3">
+                          <span>{a.nome?.trim() || `Aluno ${a.aluno_pessoa_id}`}</span>
+                          <span className="text-xs text-slate-500">
+                            {String(a.matricula_status ?? "SEM_STATUS").toUpperCase()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs text-muted-foreground">
@@ -1625,6 +1662,7 @@ function TurmaPanel(props: {
   turma: Turma | null;
   turmaId: number | null;
   alunosTotal: number;
+  historicoTotal: number;
   presencasRegistradas: number;
   pendentesCount: number;
   aulaFechada: boolean;
@@ -1644,6 +1682,7 @@ function TurmaPanel(props: {
       <div className="mt-2 text-xs text-slate-500">Dias: {diasLabel} - Horario: {horario}</div>
       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
         <span>Total alunos: {props.alunosTotal}</span>
+        <span>Historico: {props.historicoTotal}</span>
         <span>Marcados: {props.presencasRegistradas}</span>
         <span>Pendentes: {props.pendentesCount}</span>
         <span>Status: {props.aulaFechada ? "FECHADA" : "PENDENTE"}</span>

@@ -61,6 +61,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
   const userId = auth.userId;
   const motivo = parsed.data.motivo.trim();
   const hoje = new Date().toISOString().slice(0, 10);
+  const competenciaAtual = hoje.slice(0, 7);
 
   const client = await pool.connect();
   try {
@@ -112,6 +113,9 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     const paraCancelar = computeCobrancasParaCancelar(cobrancasQuery.rows, hoje);
     const idsParaCancelar = paraCancelar.map((c) => Number(c.id));
     const valorCancelado = paraCancelar.reduce((acc, c) => acc + Number(c.valor_centavos || 0), 0);
+    let lancamentosCartaoCancelados = 0;
+    let faturasCartaoRecalculadas = 0;
+    let lancamentosCartaoIds: number[] = [];
 
     if (idsParaCancelar.length > 0) {
       await client.query(
@@ -128,6 +132,104 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         [idsParaCancelar, `Cancelamento matricula #${matriculaId}: ${motivo}`, userId],
       );
     }
+
+    // Cancelar previsoes futuras do Cartao Conexao ligadas a esta matricula.
+    // Criterio:
+    // - origem direta da matricula, ou
+    // - lancamento vinculado a cobranca cancelada no passo anterior
+    // - status pendente de faturamento, ou faturado em fatura ainda aberta
+    const lancamentosCartaoQuery = await client.query<{
+      id: number;
+      fatura_id: number | null;
+      fatura_status: string | null;
+    }>(
+      `
+      SELECT DISTINCT
+        l.id,
+        fl.fatura_id,
+        f.status AS fatura_status
+      FROM public.credito_conexao_lancamentos l
+      LEFT JOIN public.credito_conexao_fatura_lancamentos fl
+        ON fl.lancamento_id = l.id
+      LEFT JOIN public.credito_conexao_faturas f
+        ON f.id = fl.fatura_id
+      WHERE (
+        (COALESCE(upper(l.origem_sistema), '') = 'MATRICULA' AND l.origem_id = $1)
+        OR ($2::boolean AND l.cobranca_id = ANY($3::bigint[]))
+      )
+      AND (
+        $2::boolean
+        OR l.competencia IS NULL
+        OR l.competencia >= $4
+      )
+      AND (
+        COALESCE(upper(l.status), '') = 'PENDENTE_FATURA'
+        OR (
+          COALESCE(upper(l.status), '') = 'FATURADO'
+          AND COALESCE(upper(f.status), '') IN ('ABERTA', 'PENDENTE', 'EM_ABERTO')
+        )
+      )
+      FOR UPDATE OF l
+      `,
+      [
+        matriculaId,
+        idsParaCancelar.length > 0,
+        idsParaCancelar.length > 0 ? idsParaCancelar : [-1],
+        competenciaAtual,
+      ],
+    );
+
+    lancamentosCartaoIds = lancamentosCartaoQuery.rows
+      .map((r) => Number(r.id))
+      .filter((id) => Number.isFinite(id));
+
+    if (lancamentosCartaoIds.length > 0) {
+      await client.query(
+        `
+        UPDATE public.credito_conexao_lancamentos
+        SET status = 'CANCELADO',
+            updated_at = now()
+        WHERE id = ANY($1::bigint[])
+        `,
+        [lancamentosCartaoIds],
+      );
+
+      await client.query(
+        `
+        DELETE FROM public.credito_conexao_fatura_lancamentos
+        WHERE lancamento_id = ANY($1::bigint[])
+        `,
+        [lancamentosCartaoIds],
+      );
+
+      const faturaIds = Array.from(
+        new Set(
+          lancamentosCartaoQuery.rows
+            .map((r) => Number(r.fatura_id))
+            .filter((id) => Number.isFinite(id) && id > 0),
+        ),
+      );
+
+      if (faturaIds.length > 0) {
+        await client.query(
+          `
+          UPDATE public.credito_conexao_faturas f
+          SET valor_total_centavos = COALESCE((
+              SELECT SUM(l.valor_centavos)::int
+              FROM public.credito_conexao_fatura_lancamentos fl
+              JOIN public.credito_conexao_lancamentos l ON l.id = fl.lancamento_id
+              WHERE fl.fatura_id = f.id
+                AND COALESCE(upper(l.status), '') IN ('PENDENTE_FATURA', 'FATURADO')
+            ), 0),
+            updated_at = now()
+          WHERE f.id = ANY($1::bigint[])
+          `,
+          [faturaIds],
+        );
+        faturasCartaoRecalculadas = faturaIds.length;
+      }
+    }
+    lancamentosCartaoCancelados = lancamentosCartaoIds.length;
 
     const turmaAlunoResult = await client.query(
       `
@@ -159,6 +261,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     const payload = {
       cobrancas_canceladas_ids: idsParaCancelar,
       turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
+      lancamentos_cartao_cancelados_ids: lancamentosCartaoIds,
+      faturas_cartao_recalculadas_qtd: faturasCartaoRecalculadas,
     };
 
     await client.query(
@@ -197,6 +301,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           cobrancas_canceladas_qtd: idsParaCancelar.length,
           cobrancas_canceladas_valor_centavos: valorCancelado,
           turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
+          lancamentos_cartao_cancelados_qtd: lancamentosCartaoCancelados,
+          faturas_cartao_recalculadas_qtd: faturasCartaoRecalculadas,
         }),
       ],
     );
@@ -210,6 +316,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       cobrancas_canceladas_qtd: idsParaCancelar.length,
       cobrancas_canceladas_valor_centavos: valorCancelado,
       turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
+      lancamentos_cartao_cancelados_qtd: lancamentosCartaoCancelados,
+      faturas_cartao_recalculadas_qtd: faturasCartaoRecalculadas,
     });
   } catch (e: unknown) {
     try {

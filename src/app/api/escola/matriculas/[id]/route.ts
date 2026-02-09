@@ -63,6 +63,17 @@ type ItemMatriculaResumo = {
   ue_label: string | null;
 };
 
+type MatriculaEncerramentoResumo = {
+  id: number;
+  tipo: string | null;
+  motivo: string | null;
+  realizado_em: string | null;
+  realizado_por_user_id: string | null;
+  cobrancas_canceladas_qtd: number | null;
+  cobrancas_canceladas_valor_centavos: number | null;
+  payload: Record<string, unknown> | null;
+};
+
 function isSchemaMissing(err: unknown): boolean {
   const e = err as PostgrestError | null;
   return !!e && typeof e.code === "string" && (e.code === "42P01" || e.code === "42703");
@@ -328,6 +339,21 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: st
       return errJson("server_error", "Falha ao buscar documentos emitidos.", 500, { emitidosErr });
     }
 
+    const { data: encerramentosRaw, error: encerramentosErr } = await admin
+      .from("matriculas_encerramentos")
+      .select(
+        "id,tipo,motivo,realizado_em,realizado_por_user_id,cobrancas_canceladas_qtd,cobrancas_canceladas_valor_centavos,payload",
+      )
+      .eq("matricula_id", matriculaId)
+      .order("realizado_em", { ascending: false })
+      .limit(20);
+
+    if (encerramentosErr && !isSchemaMissing(encerramentosErr)) {
+      return errJson("server_error", "Falha ao buscar extrato de encerramento.", 500, { encerramentosErr });
+    }
+
+    const encerramentos = (encerramentosRaw ?? []) as MatriculaEncerramentoResumo[];
+
     const { data: turmasRaw, error: turmasErr } = await admin
       .from("turma_aluno")
       .select("turma:turmas(turma_id,nome), status")
@@ -425,9 +451,10 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: st
         financeiro_resumo: financeiroResumo,
         resumo_financeiro_cartao_conexao: resumoCartao,
         documentos_emitidos: (emitidos ?? []) as DocumentoEmitidoResumo[],
+        encerramentos,
         turmas_vinculadas: turmasVinculadas,
         itens_matricula: itensMatricula,
-        historico: [],
+        historico: encerramentos,
       },
       200,
     );

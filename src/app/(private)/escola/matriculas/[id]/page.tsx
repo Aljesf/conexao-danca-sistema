@@ -54,6 +54,16 @@ type MatriculaDetalheResp = {
     status_assinatura: string | null;
     created_at: string | null;
   }>;
+  encerramentos?: Array<{
+    id: number;
+    tipo: string | null;
+    motivo: string | null;
+    realizado_em: string | null;
+    realizado_por_user_id: string | null;
+    cobrancas_canceladas_qtd: number | null;
+    cobrancas_canceladas_valor_centavos: number | null;
+    payload: Record<string, unknown> | null;
+  }>;
   itens_matricula?: Array<{
     turma_id: number;
     turma_nome: string | null;
@@ -187,6 +197,7 @@ export default function MatriculaDetalhePage() {
   const resumo = data?.financeiro_resumo ?? null;
   const resumoCartao = data?.resumo_financeiro_cartao_conexao ?? null;
   const documentosEmitidos = data?.documentos_emitidos ?? [];
+  const encerramentos = data?.encerramentos ?? [];
   const itensMatricula = data?.itens_matricula ?? [];
   const verDocs = `/escola/matriculas/${id}/documentos`;
   const emitirDocs = `/escola/matriculas/${id}/documentos?emitir=1`;
@@ -211,6 +222,17 @@ export default function MatriculaDetalhePage() {
   }, [responsavelPessoaId, responsavelFinanceiroId]);
 
   const statusInfo = useMemo(() => badgeStatus(String(matricula?.status ?? "")), [matricula?.status]);
+  const ultimoEncerramento = useMemo(() => (encerramentos.length > 0 ? encerramentos[0] : null), [encerramentos]);
+  const encerramentoTipo = String(
+    matricula?.encerramento_tipo ?? ultimoEncerramento?.tipo ?? "",
+  ).toUpperCase();
+  const encerramentoMotivo = String(
+    matricula?.encerramento_motivo ?? ultimoEncerramento?.motivo ?? "",
+  ).trim();
+  const encerramentoEmRaw = String(
+    matricula?.encerramento_em ?? matricula?.data_encerramento ?? ultimoEncerramento?.realizado_em ?? "",
+  ).trim();
+  const exibirEncerramento = String(matricula?.status ?? "").toUpperCase() !== "ATIVA";
 
   useEffect(() => {
     let ativo = true;
@@ -407,6 +429,39 @@ export default function MatriculaDetalhePage() {
                     <span className="font-medium">{formatDateTimeISO(String(matricula?.created_at ?? ""))}</span>
                   </p>
                 </div>
+
+                {exibirEncerramento ? (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-sm text-slate-700">
+                    <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Encerramento
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      <div>
+                        <span className="text-slate-500">Tipo:</span>{" "}
+                        <span className="font-medium">{encerramentoTipo || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Motivo:</span>{" "}
+                        <span className="font-medium">{encerramentoMotivo || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Data:</span>{" "}
+                        <span className="font-medium">
+                          {encerramentoEmRaw ? formatDateTimeISO(encerramentoEmRaw) : "-"}
+                        </span>
+                      </div>
+                      {ultimoEncerramento ? (
+                        <div>
+                          <span className="text-slate-500">Extrato:</span>{" "}
+                          <span className="font-medium">
+                            {Number(ultimoEncerramento.cobrancas_canceladas_qtd ?? 0)} cobrancas /{" "}
+                            {formatBRLFromCents(Number(ultimoEncerramento.cobrancas_canceladas_valor_centavos ?? 0))}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-5 flex flex-wrap gap-2">
                   {Number.isFinite(alunoPessoaId) ? (
