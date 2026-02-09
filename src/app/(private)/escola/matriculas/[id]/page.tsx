@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateISO, formatDateTimeISO } from "@/lib/formatters/date";
+import { MatriculaAcoesEncerramento } from "./_components/MatriculaAcoesEncerramento";
 
 const uiBtnBase =
   "inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-medium shadow-sm transition " +
@@ -15,8 +16,6 @@ const uiBtnPrimary = uiBtnBase + " bg-violet-600 text-white hover:bg-violet-700"
 const uiBtnSoft = uiBtnBase + " border border-violet-100 bg-white/80 text-violet-700 hover:bg-violet-50";
 
 const uiBtnNeutral = uiBtnBase + " border border-slate-200 bg-white text-slate-700 hover:bg-slate-50";
-
-const uiBtnDanger = uiBtnBase + " border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100";
 
 type MatriculaDetalheResp = {
   ok: boolean;
@@ -618,24 +617,13 @@ export default function MatriculaDetalhePage() {
 
               <section className="rounded-3xl border border-violet-100 bg-white/95 p-6 shadow-sm backdrop-blur-sm">
                 <h2 className="text-base font-semibold text-slate-800 md:text-lg">Acoes</h2>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    className={uiBtnDanger}
-                    disabled
-                    title="TODO: conectar API de encerramento"
-                  >
-                    Encerrar
-                  </button>
-                  <button
-                    type="button"
-                    className={uiBtnNeutral}
-                    disabled
-                    title="TODO: conectar API de cancelamento"
-                  >
-                    Cancelar
-                  </button>
-                </div>
+                <MatriculaAcoesEncerramento
+                  matriculaId={Number.isFinite(matriculaIdNum) ? matriculaIdNum : 0}
+                  disabled={
+                    !Number.isFinite(matriculaIdNum) ||
+                    ["CANCELADA", "CONCLUIDA"].includes(String(matricula?.status ?? "").toUpperCase())
+                  }
+                />
               </section>
             </div>
           </div>
