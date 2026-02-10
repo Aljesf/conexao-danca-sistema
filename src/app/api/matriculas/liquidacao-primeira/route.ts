@@ -4,7 +4,8 @@ import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancame
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { requireUser } from "@/lib/supabase/api-auth";
 
-type LiquidacaoModo = "PAGAR_AGORA" | "LANCAR_NO_CARTAO" | "ADIAR_EXCECAO";
+type LiquidacaoModo = "PAGAR_AGORA" | "LANCAR_NO_CARTAO" | "ADIAR_EXCECAO" | "MOVIMENTO";
+type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
 
 type Payload = {
   matricula_id: number;
@@ -71,10 +72,322 @@ type ResolverResp = {
   error?: string;
 };
 
+type MatriculaSnapshot = {
+  id: number;
+  pessoa_id: number;
+  responsavel_financeiro_id: number;
+  primeira_cobranca_status: string | null;
+  primeira_cobranca_valor_centavos: number | null;
+  total_mensalidade_centavos: number | null;
+  ano_referencia: number | null;
+  data_inicio_vinculo: string | null;
+  data_matricula: string | null;
+  vinculo_id: number | null;
+  metodo_liquidacao: MetodoLiquidacao;
+  movimento_concessao_id: string | null;
+};
+
+type MovimentoConcessaoAtiva = {
+  id: string;
+  beneficiario_id: string;
+  dia_vencimento_ciclo: number;
+};
+
 function asInt(n: unknown): number | null {
   if (typeof n === "number" && Number.isFinite(n)) return Math.trunc(n);
   if (typeof n === "string" && n.trim() !== "" && !Number.isNaN(Number(n))) return Math.trunc(Number(n));
   return null;
+}
+
+function asPgErrorCode(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+function asPgErrorMessage(err: unknown): string {
+  if (!err || typeof err !== "object") return "erro_desconhecido";
+  const message = (err as { message?: unknown }).message;
+  return typeof message === "string" && message.trim() ? message : "erro_desconhecido";
+}
+
+function isSchemaMissingError(err: unknown): boolean {
+  const code = asPgErrorCode(err);
+  if (code === "42P01" || code === "42703") return true;
+  const msg = asPgErrorMessage(err).toLowerCase();
+  return msg.includes("does not exist") || msg.includes("relation") || msg.includes("column");
+}
+
+function asMetodoLiquidacao(value: unknown): MetodoLiquidacao {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (raw === "CARTAO_CONEXAO") return "CARTAO_CONEXAO";
+  if (raw === "COBRANCAS_LEGADO") return "COBRANCAS_LEGADO";
+  if (raw === "CREDITO_BOLSA") return "CREDITO_BOLSA";
+  if (raw === "OUTRO") return "OUTRO";
+  return "CARTAO_CONEXAO";
+}
+
+function asUuidOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)) {
+    return null;
+  }
+  return v;
+}
+
+async function fetchMatriculaById(params: {
+  supabase: SupabaseAdminClient;
+  matriculaId: number;
+}): Promise<{ matricula: MatriculaSnapshot | null; errorMessage?: string }> {
+  const { supabase, matriculaId } = params;
+  const { data, error } = await supabase.from("matriculas").select("*").eq("id", matriculaId).maybeSingle();
+  if (error) return { matricula: null, errorMessage: error.message };
+  if (!data) return { matricula: null };
+
+  const record = data as Record<string, unknown>;
+  const id = asInt(record.id);
+  const pessoaId = asInt(record.pessoa_id);
+  const respFinId = asInt(record.responsavel_financeiro_id);
+  if (!id || !pessoaId || !respFinId) return { matricula: null, errorMessage: "dados_matricula_invalidos" };
+
+  return {
+    matricula: {
+      id,
+      pessoa_id: pessoaId,
+      responsavel_financeiro_id: respFinId,
+      primeira_cobranca_status:
+        typeof record.primeira_cobranca_status === "string" ? record.primeira_cobranca_status : null,
+      primeira_cobranca_valor_centavos: asInt(record.primeira_cobranca_valor_centavos),
+      total_mensalidade_centavos: asInt(record.total_mensalidade_centavos),
+      ano_referencia: asInt(record.ano_referencia),
+      data_inicio_vinculo: asDateStr(record.data_inicio_vinculo),
+      data_matricula: asDateStr(record.data_matricula),
+      vinculo_id: asInt(record.vinculo_id),
+      metodo_liquidacao: asMetodoLiquidacao(record.metodo_liquidacao),
+      movimento_concessao_id: asUuidOrNull(record.movimento_concessao_id),
+    },
+  };
+}
+
+function isConcessaoAtivaHoje(concessao: {
+  status?: string | null;
+  data_inicio?: string | null;
+  data_fim?: string | null;
+}): boolean {
+  const status = typeof concessao.status === "string" ? concessao.status.toUpperCase() : "";
+  if (status !== "ATIVA") return false;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const inicio = asDateStr(concessao.data_inicio ?? null);
+  const fim = asDateStr(concessao.data_fim ?? null);
+  if (inicio && inicio > hoje) return false;
+  if (fim && fim < hoje) return false;
+  return true;
+}
+
+async function resolveMovimentoConcessaoAtiva(params: {
+  supabase: SupabaseAdminClient;
+  pessoaId: number;
+  movimentoConcessaoId: string | null;
+}): Promise<{ concessao: MovimentoConcessaoAtiva | null; error?: string; schemaMissing?: boolean }> {
+  const { supabase, pessoaId, movimentoConcessaoId } = params;
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  try {
+    if (movimentoConcessaoId) {
+      const { data: concessaoData, error: concessaoErr } = await supabase
+        .from("movimento_concessoes")
+        .select("id,beneficiario_id,status,data_inicio,data_fim,dia_vencimento_ciclo")
+        .eq("id", movimentoConcessaoId)
+        .maybeSingle();
+
+      if (concessaoErr) return { concessao: null, error: concessaoErr.message, schemaMissing: isSchemaMissingError(concessaoErr) };
+      if (!concessaoData) return { concessao: null, error: "movimento_concessao_nao_encontrada" };
+      if (!isConcessaoAtivaHoje(concessaoData as { status?: string; data_inicio?: string; data_fim?: string })) {
+        return { concessao: null, error: "movimento_concessao_inativa" };
+      }
+
+      const beneficiarioId = asUuidOrNull((concessaoData as { beneficiario_id?: unknown }).beneficiario_id);
+      if (!beneficiarioId) return { concessao: null, error: "movimento_concessao_invalida" };
+
+      const { data: benefData, error: benefErr } = await supabase
+        .from("movimento_beneficiarios")
+        .select("id,pessoa_id")
+        .eq("id", beneficiarioId)
+        .maybeSingle();
+
+      if (benefErr) return { concessao: null, error: benefErr.message, schemaMissing: isSchemaMissingError(benefErr) };
+      const pessoaIdConcessao = asInt((benefData as { pessoa_id?: unknown } | null)?.pessoa_id);
+      if (!benefData || pessoaIdConcessao !== pessoaId) {
+        return { concessao: null, error: "movimento_concessao_nao_pertence_ao_aluno" };
+      }
+
+      const diaVencimento = asInt((concessaoData as { dia_vencimento_ciclo?: unknown }).dia_vencimento_ciclo) ?? 1;
+      return {
+        concessao: {
+          id: String((concessaoData as { id?: unknown }).id),
+          beneficiario_id: beneficiarioId,
+          dia_vencimento_ciclo: Math.min(28, Math.max(1, diaVencimento)),
+        },
+      };
+    }
+
+    const { data: benefRows, error: benefErr } = await supabase
+      .from("movimento_beneficiarios")
+      .select("id")
+      .eq("pessoa_id", pessoaId);
+
+    if (benefErr) return { concessao: null, error: benefErr.message, schemaMissing: isSchemaMissingError(benefErr) };
+
+    const beneficiarioIds = (benefRows ?? [])
+      .map((row) => asUuidOrNull((row as { id?: unknown }).id))
+      .filter((id): id is string => !!id);
+
+    if (beneficiarioIds.length === 0) return { concessao: null, error: "movimento_sem_beneficiario" };
+
+    const { data: concessoes, error: concErr } = await supabase
+      .from("movimento_concessoes")
+      .select("id,beneficiario_id,status,data_inicio,data_fim,dia_vencimento_ciclo,criado_em")
+      .in("beneficiario_id", beneficiarioIds)
+      .eq("status", "ATIVA")
+      .order("criado_em", { ascending: false });
+
+    if (concErr) return { concessao: null, error: concErr.message, schemaMissing: isSchemaMissingError(concErr) };
+
+    const ativa = (concessoes ?? []).find((row) => {
+      const registro = row as { data_inicio?: string | null; data_fim?: string | null };
+      const inicio = asDateStr(registro.data_inicio ?? null);
+      const fim = asDateStr(registro.data_fim ?? null);
+      if (inicio && inicio > hoje) return false;
+      if (fim && fim < hoje) return false;
+      return true;
+    });
+
+    if (!ativa) return { concessao: null, error: "movimento_sem_concessao_ativa" };
+
+    const diaVencimento = asInt((ativa as { dia_vencimento_ciclo?: unknown }).dia_vencimento_ciclo) ?? 1;
+    const concessaoId = asUuidOrNull((ativa as { id?: unknown }).id);
+    const beneficiarioId = asUuidOrNull((ativa as { beneficiario_id?: unknown }).beneficiario_id);
+    if (!concessaoId || !beneficiarioId) return { concessao: null, error: "movimento_concessao_invalida" };
+
+    return {
+      concessao: {
+        id: concessaoId,
+        beneficiario_id: beneficiarioId,
+        dia_vencimento_ciclo: Math.min(28, Math.max(1, diaVencimento)),
+      },
+    };
+  } catch (err) {
+    return {
+      concessao: null,
+      error: asPgErrorMessage(err),
+      schemaMissing: isSchemaMissingError(err),
+    };
+  }
+}
+
+async function registrarConsumoInstitucionalMovimento(params: {
+  supabase: SupabaseAdminClient;
+  matriculaId: number;
+  pessoaId: number;
+  movimentoConcessaoId: string | null;
+  userId: string;
+  valorCentavos: number;
+  tipoPrimeira: Payload["tipo_primeira_cobranca"];
+}): Promise<
+  | {
+      ok: true;
+      concessao_id: string;
+      ciclo_id: string;
+      beneficiario_id: string;
+      competencia: string;
+    }
+  | { ok: false; status: number; error: string; details?: string }
+> {
+  const { supabase, matriculaId, pessoaId, movimentoConcessaoId, userId, valorCentavos, tipoPrimeira } = params;
+  const resolved = await resolveMovimentoConcessaoAtiva({ supabase, pessoaId, movimentoConcessaoId });
+  if (!resolved.concessao) {
+    if (resolved.schemaMissing) {
+      return {
+        ok: false,
+        status: 409,
+        error: "movimento_schema_indisponivel",
+        details: resolved.error ?? "Tabela/coluna do Movimento nao disponivel.",
+      };
+    }
+    return {
+      ok: false,
+      status: 409,
+      error: resolved.error ?? "movimento_sem_concessao_ativa",
+    };
+  }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const competencia = `${hoje.slice(0, 7)}-01`;
+  const dia = String(resolved.concessao.dia_vencimento_ciclo).padStart(2, "0");
+  const dtVencimento = `${hoje.slice(0, 7)}-${dia}`;
+  const observacoes = `Liquidacao institucional matricula #${matriculaId} (${tipoPrimeira}) valor=${valorCentavos}`;
+
+  const { data: cicloExist, error: cicloFindErr } = await supabase
+    .from("movimento_concessoes_ciclos")
+    .select("id")
+    .eq("concessao_id", resolved.concessao.id)
+    .eq("competencia", competencia)
+    .maybeSingle();
+
+  if (cicloFindErr) {
+    return {
+      ok: false,
+      status: isSchemaMissingError(cicloFindErr) ? 409 : 500,
+      error: isSchemaMissingError(cicloFindErr) ? "movimento_schema_indisponivel" : "movimento_falha_buscar_ciclo",
+      details: cicloFindErr.message,
+    };
+  }
+
+  const cicloIdExistente = asUuidOrNull((cicloExist as { id?: unknown } | null)?.id);
+  if (cicloIdExistente) {
+    return {
+      ok: true,
+      concessao_id: resolved.concessao.id,
+      ciclo_id: cicloIdExistente,
+      beneficiario_id: resolved.concessao.beneficiario_id,
+      competencia,
+    };
+  }
+
+  const { data: cicloNovo, error: cicloErr } = await supabase
+    .from("movimento_concessoes_ciclos")
+    .insert({
+      concessao_id: resolved.concessao.id,
+      competencia,
+      dt_vencimento: dtVencimento,
+      observacoes,
+      criado_por: userId,
+    })
+    .select("id")
+    .single();
+
+  if (cicloErr || !cicloNovo) {
+    return {
+      ok: false,
+      status: isSchemaMissingError(cicloErr) ? 409 : 500,
+      error: isSchemaMissingError(cicloErr) ? "movimento_schema_indisponivel" : "movimento_falha_registrar_consumo",
+      details: cicloErr?.message ?? "erro_desconhecido",
+    };
+  }
+
+  const cicloId = asUuidOrNull((cicloNovo as { id?: unknown }).id);
+  if (!cicloId) {
+    return { ok: false, status: 500, error: "movimento_ciclo_id_invalido" };
+  }
+
+  return {
+    ok: true,
+    concessao_id: resolved.concessao.id,
+    ciclo_id: cicloId,
+    beneficiario_id: resolved.concessao.beneficiario_id,
+    competencia,
+  };
 }
 
 async function resolverMensalidadePorTurma(params: {
@@ -805,23 +1118,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "modo_obrigatorio" }, { status: 400 });
   }
 
-  // 1) Carrega matricula (inclui valor herdado)
-  const { data: matricula, error: errMat } = await supabase
-    .from("matriculas")
-    .select(
-      "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_valor_centavos, total_mensalidade_centavos, ano_referencia, data_inicio_vinculo, data_matricula, vinculo_id",
-    )
-    .eq("id", matriculaId)
-    .single();
-
-  if (errMat || !matricula) {
+  // 1) Carrega matricula (inclui valor herdado, metodo de liquidacao e vinculo institucional)
+  const fetched = await fetchMatriculaById({ supabase, matriculaId });
+  if (!fetched.matricula) {
+    if (fetched.errorMessage) {
+      return NextResponse.json({ error: "falha_buscar_matricula", details: fetched.errorMessage }, { status: 500 });
+    }
     return NextResponse.json({ error: "matricula_nao_encontrada" }, { status: 404 });
   }
 
-  const alunoId = asInt(matricula.pessoa_id);
-  if (!alunoId) {
-    return NextResponse.json({ error: "aluno_id_invalido" }, { status: 400 });
-  }
+  const matricula = fetched.matricula;
+  const alunoId = matricula.pessoa_id;
+  const metodoLiquidacao = matricula.metodo_liquidacao;
+  const movimentoConcessaoId = matricula.movimento_concessao_id;
 
   const debugCartao: {
     executado: boolean;
@@ -844,18 +1153,24 @@ export async function POST(request: NextRequest) {
     periodo_fim: null,
   };
 
-  debugCartao.data_inicio_vinculo =
-    typeof matricula.data_inicio_vinculo === "string" ? matricula.data_inicio_vinculo : null;
+  debugCartao.data_inicio_vinculo = matricula.data_inicio_vinculo;
 
-  if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO"].includes(matricula.primeira_cobranca_status)) {
+  const primeiraStatus = (matricula.primeira_cobranca_status ?? "").toUpperCase();
+  if (metodoLiquidacao === "CREDITO_BOLSA" && primeiraStatus === "LIQUIDADO_INSTITUCIONAL") {
+    return NextResponse.json({
+      ok: true,
+      modo: "MOVIMENTO",
+      status: "JA_LIQUIDADO",
+      matricula_id: matricula.id,
+    });
+  }
+
+  if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO", "LIQUIDADO_INSTITUCIONAL"].includes(primeiraStatus)) {
     return NextResponse.json({ error: "matricula_ja_liquidada" }, { status: 409 });
   }
 
-  const vinculoId = asInt((matricula as { vinculo_id?: unknown }).vinculo_id);
-  const dataInicio =
-    asDateStr((matricula as { data_inicio_vinculo?: unknown }).data_inicio_vinculo) ??
-    asDateStr((matricula as { data_matricula?: unknown }).data_matricula) ??
-    null;
+  const vinculoId = matricula.vinculo_id;
+  const dataInicio = matricula.data_inicio_vinculo ?? matricula.data_matricula ?? null;
 
   const { data: execRows, error: execErr } = await supabase
     .from("matricula_execucao_valores")
@@ -1121,7 +1436,92 @@ export async function POST(request: NextRequest) {
 
   const valorPayload = asInt(body.valor_centavos);
   const valorHerdado = asInt(matricula.primeira_cobranca_valor_centavos);
+  const valorTotalMatricula = asInt(matricula.total_mensalidade_centavos);
   const valorFinal = valorPayload && valorPayload > 0 ? valorPayload : valorHerdado && valorHerdado > 0 ? valorHerdado : null;
+
+  if (metodoLiquidacao === "CREDITO_BOLSA") {
+    const valorInstitucional =
+      valorFinal && valorFinal > 0
+        ? valorFinal
+        : valorTotalMatricula && valorTotalMatricula > 0
+          ? valorTotalMatricula
+          : null;
+
+    if (!valorInstitucional) {
+      return NextResponse.json({ error: "valor_institucional_nao_resolvido" }, { status: 409 });
+    }
+
+    const registroMov = await registrarConsumoInstitucionalMovimento({
+      supabase,
+      matriculaId: matricula.id,
+      pessoaId: alunoId,
+      movimentoConcessaoId,
+      userId: auth.user.id,
+      valorCentavos: valorInstitucional,
+      tipoPrimeira: body.tipo_primeira_cobranca,
+    });
+
+    if (!registroMov.ok) {
+      return NextResponse.json(
+        { error: registroMov.error, details: registroMov.details ?? null },
+        { status: registroMov.status },
+      );
+    }
+
+    const dataLiquidacao = new Date().toISOString().slice(0, 10);
+    const { error: errUpd } = await supabase
+      .from("matriculas")
+      .update({
+        primeira_cobranca_tipo: body.tipo_primeira_cobranca,
+        primeira_cobranca_status: "LIQUIDADO_INSTITUCIONAL",
+        primeira_cobranca_valor_centavos: valorInstitucional,
+        primeira_cobranca_cobranca_id: null,
+        primeira_cobranca_recebimento_id: null,
+        primeira_cobranca_forma_pagamento_id: null,
+        primeira_cobranca_data_pagamento: dataLiquidacao,
+      })
+      .eq("id", matricula.id);
+
+    if (errUpd) {
+      return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
+    }
+
+    const ledgerLinha: LedgerInsert = {
+      matricula_id: matricula.id,
+      tipo: "OUTRO",
+      descricao: "Liquidacao institucional - Movimento",
+      valor_centavos: valorInstitucional,
+      vencimento: null,
+      data_evento: dataLiquidacao,
+      status: "PAGO",
+      origem_tabela: "movimento_concessoes_ciclos",
+      origem_id: null,
+    };
+
+    const cicloIdAsInt = asInt(registroMov.ciclo_id);
+    if (cicloIdAsInt) {
+      ledgerLinha.origem_id = cicloIdAsInt;
+    }
+
+    const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
+    if (ledgerErr) {
+      return NextResponse.json({ error: "falha_inserir_ledger", details: ledgerErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      modo: "MOVIMENTO",
+      status: "LIQUIDADO_INSTITUCIONAL",
+      matricula_id: matricula.id,
+      valor_centavos: valorInstitucional,
+      movimento: {
+        concessao_id: registroMov.concessao_id,
+        beneficiario_id: registroMov.beneficiario_id,
+        ciclo_id: registroMov.ciclo_id,
+        competencia: registroMov.competencia,
+      },
+    });
+  }
 
   if (body.modo === "PAGAR_AGORA") {
     const formaPagamentoId = asInt(body.forma_pagamento_id);

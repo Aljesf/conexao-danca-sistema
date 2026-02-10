@@ -19,6 +19,7 @@ type CriarMatriculaOperacionalBody = {
   mes_inicio_cobranca?: number; // 1..12
   gerar_prorata?: boolean; // default true
   metodo_liquidacao?: MetodoLiquidacao; // default CARTAO_CONEXAO
+  movimento_concessao_id?: string; // usado quando metodo_liquidacao = CREDITO_BOLSA
   itens?: Array<{ item_id: number; quantidade?: number }>;
 };
 
@@ -95,6 +96,19 @@ function clampInt(n: number, min: number, max: number): number {
 function parsePositiveInt(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) return null;
   return value;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isSchemaMissingPgError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  if (code === "42P01" || code === "42703") return true;
+  const message = (error as { message?: unknown }).message;
+  const msg = typeof message === "string" ? message.toLowerCase() : "";
+  return msg.includes("does not exist") || msg.includes("relation") || msg.includes("column");
 }
 
 function normalizeItensInput(value: unknown): ItemSelecionado[] | null {
@@ -300,7 +314,22 @@ export async function POST(req: Request) {
       );
     }
 
-    const metodoLiquidacao: MetodoLiquidacao = (body.metodo_liquidacao ?? "CARTAO_CONEXAO") as MetodoLiquidacao;
+    const metodoRaw = typeof body.metodo_liquidacao === "string" ? body.metodo_liquidacao.trim().toUpperCase() : "";
+    const metodoLiquidacao: MetodoLiquidacao =
+      metodoRaw === "COBRANCAS_LEGADO" || metodoRaw === "CREDITO_BOLSA" || metodoRaw === "OUTRO"
+        ? (metodoRaw as MetodoLiquidacao)
+        : "CARTAO_CONEXAO";
+
+    const movimentoConcessaoIdInputRaw =
+      typeof body.movimento_concessao_id === "string" ? body.movimento_concessao_id.trim() : "";
+    const movimentoConcessaoIdInput =
+      movimentoConcessaoIdInputRaw.length > 0 ? movimentoConcessaoIdInputRaw : null;
+    if (movimentoConcessaoIdInput && !isUuid(movimentoConcessaoIdInput)) {
+      return NextResponse.json(
+        { error: "payload_invalido", message: "movimento_concessao_id deve ser UUID valido." },
+        { status: 400 },
+      );
+    }
 
     const dataMatricula =
       body.data_matricula && typeof body.data_matricula === "string" ? body.data_matricula : null;
@@ -318,6 +347,19 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "configuracao_inexistente", message: "Nao existe configuracao ativa." }, { status: 422 });
       }
       const diaVenc = clampInt(config.vencimento_dia_padrao, 1, 28);
+      const { rows: colRows } = await client.query(
+        `
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'matriculas'
+            AND column_name = 'movimento_concessao_id'
+        ) AS has_column
+        `,
+      );
+      const hasMovimentoConcessaoColumn = colRows[0]?.has_column === true;
+      let movimentoConcessaoIdResolved: string | null = null;
 
       let servico: ServicoAtivo | null = null;
       let turmaId: number | null = turmaIdInput;
@@ -507,6 +549,51 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "responsavel_nao_encontrado" }, { status: 404 });
       }
 
+      if (metodoLiquidacao === "CREDITO_BOLSA") {
+        try {
+          const { rows: concessaoRows } = await client.query(
+            `
+            SELECT c.id::text AS id
+            FROM public.movimento_concessoes c
+            INNER JOIN public.movimento_beneficiarios b
+              ON b.id = c.beneficiario_id
+            WHERE b.pessoa_id = $1
+              AND c.status = 'ATIVA'
+              AND (c.data_inicio IS NULL OR c.data_inicio <= CURRENT_DATE)
+              AND (c.data_fim IS NULL OR c.data_fim >= CURRENT_DATE)
+              AND ($2::uuid IS NULL OR c.id = $2::uuid)
+            ORDER BY c.criado_em DESC
+            LIMIT 1
+            `,
+            [pessoaId, movimentoConcessaoIdInput],
+          );
+
+          if (concessaoRows.length === 0) {
+            await client.query("ROLLBACK");
+            return NextResponse.json(
+              {
+                error: "movimento_sem_concessao_ativa",
+                message: "Nao existe concessao ativa do Movimento para este aluno.",
+              },
+              { status: 409 },
+            );
+          }
+          movimentoConcessaoIdResolved = String(concessaoRows[0]?.id ?? "");
+        } catch (err) {
+          if (isSchemaMissingPgError(err)) {
+            await client.query("ROLLBACK");
+            return NextResponse.json(
+              {
+                error: "movimento_schema_indisponivel",
+                message: "Schema do Movimento indisponivel no banco remoto. Aplique as migrations do modulo.",
+              },
+              { status: 409 },
+            );
+          }
+          throw err;
+        }
+      }
+
       const { rows: matriculaExistente } = await client.query(
         `
         SELECT id
@@ -576,31 +663,55 @@ export async function POST(req: Request) {
 
       const tipoMatricula = servico?.tipo ?? "REGULAR";
 
+      const insertCols = [
+        "pessoa_id",
+        "responsavel_financeiro_id",
+        "tipo_matricula",
+        "vinculo_id",
+        "ano_referencia",
+        "data_matricula",
+        "status",
+        "metodo_liquidacao",
+        "servico_id",
+      ];
+      const insertValues: unknown[] = [
+        pessoaId,
+        responsavelFinanceiroId,
+        tipoMatricula,
+        vinculoId,
+        anoRef,
+        dataMatriculaEfetiva,
+        "ATIVA",
+        metodoLiquidacao,
+        servicoId ?? null,
+      ];
+
+      if (hasMovimentoConcessaoColumn) {
+        insertCols.push("movimento_concessao_id");
+        insertValues.push(movimentoConcessaoIdResolved);
+      }
+
+      const placeholders = insertValues.map((_, idx) => `$${idx + 1}`).join(",");
+      const returningCols = [
+        "id",
+        "pessoa_id",
+        "responsavel_financeiro_id",
+        "vinculo_id",
+        "ano_referencia",
+        "data_matricula",
+        "status",
+        "metodo_liquidacao",
+        "servico_id",
+      ];
+      if (hasMovimentoConcessaoColumn) returningCols.push("movimento_concessao_id");
+
       const { rows: matriculaRows } = await client.query(
         `
-        INSERT INTO public.matriculas (
-          pessoa_id,
-          responsavel_financeiro_id,
-          tipo_matricula,
-          vinculo_id,
-          ano_referencia,
-          data_matricula,
-          status,
-          metodo_liquidacao,
-          servico_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,'ATIVA',$7,$8)
-        RETURNING id, pessoa_id, responsavel_financeiro_id, vinculo_id, ano_referencia, data_matricula, status, metodo_liquidacao, servico_id
+        INSERT INTO public.matriculas (${insertCols.join(",")})
+        VALUES (${placeholders})
+        RETURNING ${returningCols.join(",")}
         `,
-        [
-          pessoaId,
-          responsavelFinanceiroId,
-          tipoMatricula,
-          vinculoId,
-          anoRef,
-          dataMatriculaEfetiva,
-          metodoLiquidacao,
-          servicoId ?? null,
-        ],
+        insertValues,
       );
 
       const matricula = matriculaRows[0];
@@ -814,6 +925,10 @@ export async function POST(req: Request) {
             data_matricula: String(matricula?.data_matricula),
             status: String(matricula?.status),
             metodo_liquidacao: String(matricula?.metodo_liquidacao ?? metodoLiquidacao),
+            movimento_concessao_id:
+              hasMovimentoConcessaoColumn && matricula?.movimento_concessao_id
+                ? String(matricula.movimento_concessao_id)
+                : movimentoConcessaoIdResolved,
           },
           turma_aluno: turmaAluno,
           itens: createdItens,

@@ -2,6 +2,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireUser } from "@/lib/supabase/api-auth";
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
+type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
 
 type PlanoPagamentoMvp = {
   id: number;
@@ -39,6 +40,8 @@ type BodyNovo = {
   pessoa_id: number;
   responsavel_financeiro_id: number;
   tipo_matricula: TipoMatricula;
+  metodo_liquidacao?: MetodoLiquidacao | null;
+  movimento_concessao_id?: string | null;
   vinculo_id: number;
   nivel_id?: number | null;
   vinculos_ids?: number[] | null;
@@ -100,6 +103,28 @@ function serverError(error_code: string, message: string, details?: Record<strin
 function parseDateOrNull(value: unknown): string | null {
   if (typeof value !== "string") return null;
   return value;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function parseMetodoLiquidacao(value: unknown): MetodoLiquidacao {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (raw === "CARTAO_CONEXAO") return "CARTAO_CONEXAO";
+  if (raw === "COBRANCAS_LEGADO") return "COBRANCAS_LEGADO";
+  if (raw === "CREDITO_BOLSA") return "CREDITO_BOLSA";
+  if (raw === "OUTRO") return "OUTRO";
+  return "CARTAO_CONEXAO";
+}
+
+function isSchemaMissingError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: unknown }).code;
+  if (code === "42P01" || code === "42703") return true;
+  const msgRaw = (err as { message?: unknown }).message;
+  const msg = typeof msgRaw === "string" ? msgRaw.toLowerCase() : "";
+  return msg.includes("does not exist") || msg.includes("relation") || msg.includes("column");
 }
 
 function normalizeIdArray(value: unknown): number[] | null {
@@ -307,6 +332,14 @@ export async function POST(request: NextRequest) {
     } catch {
       return badRequest("JSON invalido.");
     }
+
+  const metodoLiquidacao = parseMetodoLiquidacao(body.metodo_liquidacao);
+  const movimentoConcessaoIdRaw =
+    typeof body.movimento_concessao_id === "string" ? body.movimento_concessao_id.trim() : "";
+  const movimentoConcessaoIdInput = movimentoConcessaoIdRaw.length > 0 ? movimentoConcessaoIdRaw : null;
+  if (movimentoConcessaoIdInput && !isUuid(movimentoConcessaoIdInput)) {
+    return badRequest("movimento_concessao_id invalido.");
+  }
 
   const pessoaId = Number(body.pessoa_id);
   const respFinId = Number(body.responsavel_financeiro_id);
@@ -739,10 +772,81 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let movimentoConcessaoIdResolved: string | null = null;
+  if (metodoLiquidacao === "CREDITO_BOLSA") {
+    const hoje = new Date().toISOString().slice(0, 10);
+
+    const { data: beneficiarios, error: benefErr } = await admin
+      .from("movimento_beneficiarios")
+      .select("id")
+      .eq("pessoa_id", pessoaId);
+
+    if (benefErr) {
+      if (isSchemaMissingError(benefErr)) {
+        return conflict("Schema do Movimento indisponivel no remoto.", {
+          code: "MOVIMENTO_SCHEMA_INDISPONIVEL",
+          details: benefErr.message,
+        });
+      }
+      return serverError("MOVIMENTO_VALIDACAO_FAIL", "Falha ao validar beneficiario do Movimento.", { benefErr });
+    }
+
+    const beneficiarioIds = (beneficiarios ?? [])
+      .map((row) => {
+        const value = (row as { id?: unknown }).id;
+        return typeof value === "string" && isUuid(value) ? value : null;
+      })
+      .filter((id): id is string => !!id);
+
+    if (beneficiarioIds.length === 0) {
+      return conflict("Aluno sem beneficiario do Movimento.", { code: "movimento_sem_concessao_ativa" });
+    }
+
+    let query = admin
+      .from("movimento_concessoes")
+      .select("id,status,data_inicio,data_fim,beneficiario_id,criado_em")
+      .in("beneficiario_id", beneficiarioIds)
+      .eq("status", "ATIVA");
+
+    if (movimentoConcessaoIdInput) {
+      query = query.eq("id", movimentoConcessaoIdInput);
+    }
+
+    const { data: concessoes, error: concErr } = await query.order("criado_em", { ascending: false });
+
+    if (concErr) {
+      if (isSchemaMissingError(concErr)) {
+        return conflict("Schema do Movimento indisponivel no remoto.", {
+          code: "MOVIMENTO_SCHEMA_INDISPONIVEL",
+          details: concErr.message,
+        });
+      }
+      return serverError("MOVIMENTO_VALIDACAO_FAIL", "Falha ao validar concessao do Movimento.", { concErr });
+    }
+
+    const ativa = (concessoes ?? []).find((row) => {
+      const rec = row as { data_inicio?: string | null; data_fim?: string | null };
+      const inicio = rec.data_inicio ? String(rec.data_inicio).slice(0, 10) : null;
+      const fim = rec.data_fim ? String(rec.data_fim).slice(0, 10) : null;
+      if (inicio && inicio > hoje) return false;
+      if (fim && fim < hoje) return false;
+      return true;
+    });
+
+    if (!ativa) {
+      return conflict("Concessao ativa do Movimento nao encontrada para este aluno.", {
+        code: "movimento_sem_concessao_ativa",
+      });
+    }
+
+    movimentoConcessaoIdResolved = String((ativa as { id: string }).id);
+  }
+
   const insertPayload: Record<string, unknown> = {
     pessoa_id: pessoaId,
     responsavel_financeiro_id: respFinId,
     tipo_matricula: tipoMatricula,
+    metodo_liquidacao: metodoLiquidacao,
     vinculo_id: vinculoId,
     ano_referencia: anoRef,
     data_matricula: dataMatricula,
@@ -763,19 +867,29 @@ export async function POST(request: NextRequest) {
     motivo_excecao_primeiro_pagamento: motivoExcecaoPrimeiroPagamento ?? undefined,
     excecao_autorizada_por: excecaoAutorizadaPor ?? undefined,
     excecao_criada_em: excecaoCriadaEm ?? undefined,
+    movimento_concessao_id: movimentoConcessaoIdResolved ?? undefined,
   };
 
   for (const k of Object.keys(insertPayload)) {
     if (insertPayload[k] === undefined) delete insertPayload[k];
   }
 
-  const { data: matriculaCriada, error: insErr } = await supabase
+  const insertSelect =
+    "id, pessoa_id, responsavel_financeiro_id, tipo_matricula, metodo_liquidacao, vinculo_id, ano_referencia, data_matricula, data_inicio_vinculo, escola_tabela_preco_curso_id, plano_pagamento_id, forma_liquidacao_padrao, documento_modelo_id, status";
+
+  let { data: matriculaCriada, error: insErr } = await supabase
     .from("matriculas")
     .insert(insertPayload)
-    .select(
-      "id, pessoa_id, responsavel_financeiro_id, tipo_matricula, vinculo_id, ano_referencia, data_matricula, data_inicio_vinculo, escola_tabela_preco_curso_id, plano_pagamento_id, forma_liquidacao_padrao, documento_modelo_id, status",
-    )
+    .select(insertSelect)
     .single();
+
+  if (insErr && isSchemaMissingError(insErr) && Object.prototype.hasOwnProperty.call(insertPayload, "movimento_concessao_id")) {
+    const fallbackPayload = { ...insertPayload };
+    delete fallbackPayload.movimento_concessao_id;
+    const retry = await supabase.from("matriculas").insert(fallbackPayload).select(insertSelect).single();
+    matriculaCriada = retry.data;
+    insErr = retry.error;
+  }
 
   if (insErr) return serverError("CRIAR_MATRICULA_FAIL", "Falha ao criar matricula.", { insErr });
 

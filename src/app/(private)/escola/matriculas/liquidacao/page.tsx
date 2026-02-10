@@ -14,6 +14,8 @@ type MatriculaResumo = {
   id: number;
   pessoa_id: number;
   responsavel_financeiro_id: number;
+  metodo_liquidacao: string | null;
+  movimento_concessao_id: string | null;
   primeira_cobranca_status: string;
   primeira_cobranca_tipo: string | null;
   primeira_cobranca_valor_centavos: number | null;
@@ -135,7 +137,7 @@ export default function Page() {
 
   // Campos do ato
   const [tipoPrimeira, setTipoPrimeira] = useState<"ENTRADA_PRORATA" | "MENSALIDADE_CHEIA_CARTAO">("ENTRADA_PRORATA");
-  const [modo, setModo] = useState<"PAGAR_AGORA" | "LANCAR_NO_CARTAO" | "ADIAR_EXCECAO">("PAGAR_AGORA");
+  const [modo, setModo] = useState<"PAGAR_AGORA" | "LANCAR_NO_CARTAO" | "ADIAR_EXCECAO" | "MOVIMENTO">("PAGAR_AGORA");
   const [formaPagamentoId, setFormaPagamentoId] = useState<number | "">("");
   const [valorCentavos, setValorCentavos] = useState<string>("");
   const [dataPagamento, setDataPagamento] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -159,7 +161,7 @@ export default function Page() {
       const { data: m, error: mErr } = await supabase
         .from("matriculas")
         .select(
-          "id, pessoa_id, responsavel_financeiro_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos, data_inicio_vinculo, data_matricula",
+          "id, pessoa_id, responsavel_financeiro_id, metodo_liquidacao, movimento_concessao_id, primeira_cobranca_status, primeira_cobranca_tipo, primeira_cobranca_valor_centavos, total_mensalidade_centavos, data_inicio_vinculo, data_matricula",
         )
         .eq("id", idNum)
         .single();
@@ -171,10 +173,13 @@ export default function Page() {
       }
 
       setMatricula(m as MatriculaResumo);
-      if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO"].includes(String(m.primeira_cobranca_status))) {
+      if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO", "LIQUIDADO_INSTITUCIONAL"].includes(String(m.primeira_cobranca_status))) {
         setErro("Matricula ja liquidada.");
         setLoading(false);
         return;
+      }
+      if ((m as { metodo_liquidacao?: string | null }).metodo_liquidacao === "CREDITO_BOLSA") {
+        setModo("MOVIMENTO");
       }
       if (m.primeira_cobranca_tipo === "ENTRADA_PRORATA" || m.primeira_cobranca_tipo === "MENSALIDADE_CHEIA_CARTAO") {
         setTipoPrimeira(m.primeira_cobranca_tipo);
@@ -218,6 +223,7 @@ export default function Page() {
     }
   }, [modo, tipoPrimeira]);
 
+  const isMovimentoInstitucional = matricula?.metodo_liquidacao === "CREDITO_BOLSA";
   const precisaFormaPagamento = modo === "PAGAR_AGORA";
   const precisaMotivo = modo === "ADIAR_EXCECAO";
   const precisaVencimentoManual = modo === "ADIAR_EXCECAO";
@@ -242,12 +248,12 @@ export default function Page() {
 
     setErro(null);
 
-    if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO"].includes(String(matricula.primeira_cobranca_status))) {
+    if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO", "LIQUIDADO_INSTITUCIONAL"].includes(String(matricula.primeira_cobranca_status))) {
       setErro("Matricula ja liquidada.");
       return;
     }
 
-    if (!valorResolvido) {
+    if (!isMovimentoInstitucional && !valorResolvido) {
       setErro("Valor nao resolvido na matricula. Volte e gere a matricula novamente.");
       return;
     }
@@ -295,7 +301,7 @@ export default function Page() {
         body: JSON.stringify({
           matricula_id: matricula.id,
           tipo_primeira_cobranca: tipoPrimeira,
-          modo,
+          modo: isMovimentoInstitucional ? "MOVIMENTO" : modo,
           forma_pagamento_id: formaPagamentoId === "" ? undefined : formaPagamentoId,
           valor_centavos: precisaValor && valorResolvido ? Number(valorCentavos) : undefined,
           data_pagamento: dataPagamento,
@@ -310,6 +316,7 @@ export default function Page() {
         ok?: boolean;
         error?: string;
         status?: string;
+        modo?: string;
         debugCartao?: {
           executado: boolean;
           created_lancamentos: number;
@@ -341,6 +348,9 @@ export default function Page() {
       if (json?.status === "LANCADA_CARTAO") {
         alert("Lancado no Cartao Conexao. Verifique a fatura do periodo.");
       }
+      if (json?.modo === "MOVIMENTO" || json?.status === "LIQUIDADO_INSTITUCIONAL") {
+        alert("Liquidação institucional registrada no Movimento.");
+      }
 
       router.push(`/escola/matriculas/${matricula.id}`);
     } catch {
@@ -359,7 +369,7 @@ export default function Page() {
     );
   }
 
-  if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO"].includes(String(matricula?.primeira_cobranca_status))) {
+  if (["PAGA", "LANCADA_CARTAO", "ADIADA_EXCECAO", "LIQUIDADO_INSTITUCIONAL"].includes(String(matricula?.primeira_cobranca_status))) {
     return (
       <div className="p-6 max-w-3xl">
         <h1 className="text-xl font-semibold">Liquidacao da Matricula</h1>
@@ -380,10 +390,17 @@ export default function Page() {
     <div className="p-6 max-w-3xl">
       <h1 className="text-xl font-semibold">Liquidacao da Matricula (Ato)</h1>
 
-      <p className="text-sm text-muted-foreground mt-2">
-        Este valor refere-se a <strong>entrada no ato</strong>. A mensalidade recorrente sera cobrada separadamente via
-        <strong> Cartao Conexao</strong>.
-      </p>
+      {isMovimentoInstitucional ? (
+        <p className="text-sm text-muted-foreground mt-2">
+          Liquidação institucional configurada para esta matrícula. Não será criado recebimento presencial nem lançamento
+          no Cartão Conexão para a primeira liquidação.
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground mt-2">
+          Este valor refere-se a <strong>entrada no ato</strong>. A mensalidade recorrente sera cobrada separadamente
+          via <strong> Cartao Conexao</strong>.
+        </p>
+      )}
 
       <div className="mt-4 rounded-lg border p-3 text-sm text-slate-700">
         <div>
@@ -405,6 +422,15 @@ export default function Page() {
 
       <div className="mt-6 space-y-4">
         <div className="rounded-lg border p-4 space-y-3">
+          {isMovimentoInstitucional ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm text-emerald-900">
+              <div className="font-medium">Liquidação institucional - Movimento Conexão Dança</div>
+              <div className="mt-1">Concessão: {matricula?.movimento_concessao_id ?? "-"}</div>
+              <div className="mt-1">Valor referência: {formatCurrency(Number(valorCentavos || 0))}</div>
+            </div>
+          ) : null}
+
+          {!isMovimentoInstitucional ? (
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium">Tipo da primeira cobranca</label>
             <select
@@ -416,15 +442,18 @@ export default function Page() {
               <option value="MENSALIDADE_CHEIA_CARTAO">Mensalidade cheia (Cartao Conexao)</option>
             </select>
           </div>
+          ) : null}
 
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Acao no ato</label>
-            <select className="border rounded-md p-2" value={modo} onChange={(e) => setModo(e.target.value as typeof modo)}>
-              <option value="PAGAR_AGORA">Pagar agora (gera recebimento)</option>
-              <option value="LANCAR_NO_CARTAO">Lancar no Cartao Conexao (sem recebimento)</option>
-              <option value="ADIAR_EXCECAO">Excecao: adiar primeiro pagamento (auditoria)</option>
-            </select>
-          </div>
+          {!isMovimentoInstitucional ? (
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">Acao no ato</label>
+              <select className="border rounded-md p-2" value={modo} onChange={(e) => setModo(e.target.value as typeof modo)}>
+                <option value="PAGAR_AGORA">Pagar agora (gera recebimento)</option>
+                <option value="LANCAR_NO_CARTAO">Lancar no Cartao Conexao (sem recebimento)</option>
+                <option value="ADIAR_EXCECAO">Excecao: adiar primeiro pagamento (auditoria)</option>
+              </select>
+            </div>
+          ) : null}
 
           {modo === "PAGAR_AGORA" ? (
             <>
@@ -528,9 +557,15 @@ export default function Page() {
             <button
               className="px-4 py-2 rounded-md bg-black text-white disabled:opacity-50"
               onClick={onSalvar}
-              disabled={saving || !valorResolvido}
+              disabled={saving || (!isMovimentoInstitucional && !valorResolvido)}
             >
-              {saving ? "Salvando..." : modo === "ADIAR_EXCECAO" ? "Gerar cobranca" : "Confirmar liquidacao"}
+              {saving
+                ? "Salvando..."
+                : isMovimentoInstitucional
+                  ? "Confirmar liquidacao institucional"
+                  : modo === "ADIAR_EXCECAO"
+                    ? "Gerar cobranca"
+                    : "Confirmar liquidacao"}
             </button>
 
             <button className="px-4 py-2 rounded-md border" onClick={() => router.push(`/escola/matriculas/${matricula?.id ?? ""}`)} disabled={saving}>

@@ -4,7 +4,7 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 export const runtime = "nodejs";
 
-type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA";
+type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
 
 type MatriculaOperacionalDetalhe = {
   matricula: Record<string, unknown>;
@@ -133,6 +133,22 @@ export async function GET(_req: Request, ctx: { params: Promise<{ matriculaId?: 
         responsavel_financeiro: responsavel,
         turma,
         cobrancas,
+        lancamentos_cartao: [],
+      } as MatriculaOperacionalDetalhe;
+
+      return NextResponse.json(payload, { status: 200 });
+    }
+
+    if (metodo === "CREDITO_BOLSA" || metodo === "OUTRO") {
+      const payload: MatriculaOperacionalDetalhe = {
+        ok: true,
+        metodo_liquidacao: metodo,
+        matricula,
+        turma_aluno: turmaAluno,
+        aluno,
+        responsavel_financeiro: responsavel,
+        turma,
+        cobrancas: [],
         lancamentos_cartao: [],
       } as MatriculaOperacionalDetalhe;
 
