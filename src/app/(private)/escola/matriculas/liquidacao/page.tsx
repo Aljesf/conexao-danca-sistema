@@ -24,6 +24,14 @@ type MatriculaResumo = {
   data_matricula?: string | null;
 };
 
+type ExecucaoLiquidacao = {
+  turma_id: number;
+  nivel: string | null;
+  valor_mensal_centavos: number;
+  modelo_liquidacao: "FAMILIA" | "MOVIMENTO";
+  movimento_concessao_id: string | null;
+};
+
 type ProrataResumo = {
   competenciaInicial: string | null;
   competenciaMensalidade: string | null;
@@ -118,6 +126,38 @@ function calcularResumoPrimeiraCobranca(
   };
 }
 
+function asUuidOrNull(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const v = value.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)) {
+    return null;
+  }
+  return v;
+}
+
+function parseOrigemExecucao(origemValor: string | null): {
+  modelo_liquidacao: "FAMILIA" | "MOVIMENTO";
+  movimento_concessao_id: string | null;
+} {
+  if (!origemValor) return { modelo_liquidacao: "FAMILIA", movimento_concessao_id: null };
+  const raw = origemValor.toUpperCase();
+  if (raw.startsWith("MANUAL|MOVIMENTO")) {
+    const parts = origemValor.split("|");
+    return {
+      modelo_liquidacao: "MOVIMENTO",
+      movimento_concessao_id: asUuidOrNull(parts.length >= 3 ? parts[2] : null),
+    };
+  }
+  if (raw.startsWith("MANUAL_MOVIMENTO")) {
+    const parts = origemValor.split(":");
+    return {
+      modelo_liquidacao: "MOVIMENTO",
+      movimento_concessao_id: asUuidOrNull(parts.length >= 2 ? parts[1] : null),
+    };
+  }
+  return { modelo_liquidacao: "FAMILIA", movimento_concessao_id: null };
+}
+
 export default function Page() {
   const router = useRouter();
   const routeParams = useParams();
@@ -133,6 +173,7 @@ export default function Page() {
   const [erro, setErro] = useState<string | null>(null);
 
   const [matricula, setMatricula] = useState<MatriculaResumo | null>(null);
+  const [execucoes, setExecucoes] = useState<ExecucaoLiquidacao[]>([]);
   const [formas, setFormas] = useState<FormaPagamento[]>([]);
 
   // Campos do ato
@@ -185,12 +226,69 @@ export default function Page() {
         setTipoPrimeira(m.primeira_cobranca_tipo);
       }
 
+      const { data: execRows, error: execErr } = await supabase
+        .from("matricula_execucao_valores")
+        .select("turma_id,nivel,valor_mensal_centavos,origem_valor")
+        .eq("matricula_id", idNum)
+        .eq("ativo", true);
+
+      if (execErr) {
+        setErro(`Nao foi possivel carregar as execucoes da matricula: ${execErr.message}`);
+        setLoading(false);
+        return;
+      }
+
+      const execucoesNorm = (execRows ?? [])
+        .map((row) => {
+          const r = row as Record<string, unknown>;
+          const turmaId = Number(r.turma_id);
+          const valor = Number(r.valor_mensal_centavos);
+          if (!Number.isInteger(turmaId) || turmaId <= 0 || !Number.isFinite(valor) || valor < 0) return null;
+          const nivel = typeof r.nivel === "string" ? r.nivel : null;
+          const origem = typeof r.origem_valor === "string" ? r.origem_valor : null;
+          const origemParsed = parseOrigemExecucao(origem);
+          return {
+            turma_id: turmaId,
+            nivel,
+            valor_mensal_centavos: Math.trunc(valor),
+            modelo_liquidacao:
+              origemParsed.modelo_liquidacao === "MOVIMENTO" ||
+              String((m as { metodo_liquidacao?: string | null }).metodo_liquidacao ?? "").toUpperCase() ===
+                "CREDITO_BOLSA"
+                ? "MOVIMENTO"
+                : "FAMILIA",
+            movimento_concessao_id:
+              origemParsed.movimento_concessao_id ?? asUuidOrNull((m as { movimento_concessao_id?: string | null }).movimento_concessao_id ?? null),
+          } satisfies ExecucaoLiquidacao;
+        })
+        .filter((row): row is ExecucaoLiquidacao => !!row);
+
+      setExecucoes(execucoesNorm);
+
+      const totalFamiliaExecucoes = execucoesNorm
+        .filter((execucao) => execucao.modelo_liquidacao === "FAMILIA")
+        .reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
+      const totalMovimentoExecucoes = execucoesNorm
+        .filter((execucao) => execucao.modelo_liquidacao === "MOVIMENTO")
+        .reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
+
+      if (
+        execucoesNorm.length > 0 &&
+        execucoesNorm.every((execucao) => execucao.modelo_liquidacao === "MOVIMENTO")
+      ) {
+        setModo("MOVIMENTO");
+      }
+
       const valorSugeridoEntradaCentavos =
-        typeof m.primeira_cobranca_valor_centavos === "number"
-          ? m.primeira_cobranca_valor_centavos
-          : typeof m.total_mensalidade_centavos === "number"
-            ? m.total_mensalidade_centavos
-            : 0;
+        totalFamiliaExecucoes > 0
+          ? totalFamiliaExecucoes
+          : totalMovimentoExecucoes > 0
+            ? totalMovimentoExecucoes
+            : typeof m.primeira_cobranca_valor_centavos === "number"
+              ? m.primeira_cobranca_valor_centavos
+              : typeof m.total_mensalidade_centavos === "number"
+                ? m.total_mensalidade_centavos
+                : 0;
       const valorStr =
         typeof valorSugeridoEntradaCentavos === "number" ? String(valorSugeridoEntradaCentavos) : "";
       setValorCentavos(valorStr);
@@ -223,7 +321,27 @@ export default function Page() {
     }
   }, [modo, tipoPrimeira]);
 
-  const isMovimentoInstitucional = matricula?.metodo_liquidacao === "CREDITO_BOLSA";
+  const execucoesFamilia = useMemo(
+    () => execucoes.filter((execucao) => execucao.modelo_liquidacao === "FAMILIA"),
+    [execucoes],
+  );
+  const execucoesMovimento = useMemo(
+    () => execucoes.filter((execucao) => execucao.modelo_liquidacao === "MOVIMENTO"),
+    [execucoes],
+  );
+  const totalFamiliaExecucoes = useMemo(
+    () => execucoesFamilia.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0),
+    [execucoesFamilia],
+  );
+  const totalMovimentoExecucoes = useMemo(
+    () => execucoesMovimento.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0),
+    [execucoesMovimento],
+  );
+  const isMovimentoInstitucional =
+    execucoes.length > 0
+      ? execucoesMovimento.length > 0 && execucoesFamilia.length === 0
+      : matricula?.metodo_liquidacao === "CREDITO_BOLSA";
+  const isHibridoExecucoes = execucoesMovimento.length > 0 && execucoesFamilia.length > 0;
   const precisaFormaPagamento = modo === "PAGAR_AGORA";
   const precisaMotivo = modo === "ADIAR_EXCECAO";
   const precisaVencimentoManual = modo === "ADIAR_EXCECAO";
@@ -395,6 +513,11 @@ export default function Page() {
           Liquidação institucional configurada para esta matrícula. Não será criado recebimento presencial nem lançamento
           no Cartão Conexão para a primeira liquidação.
         </p>
+      ) : isHibridoExecucoes ? (
+        <p className="text-sm text-muted-foreground mt-2">
+          Matrícula híbrida: as execuções da família seguem o fluxo financeiro padrão e as execuções do Movimento são
+          liquidadas institucionalmente no mesmo confirmar.
+        </p>
       ) : (
         <p className="text-sm text-muted-foreground mt-2">
           Este valor refere-se a <strong>entrada no ato</strong>. A mensalidade recorrente sera cobrada separadamente
@@ -422,11 +545,39 @@ export default function Page() {
 
       <div className="mt-6 space-y-4">
         <div className="rounded-lg border p-4 space-y-3">
-          {isMovimentoInstitucional ? (
+          {execucoesMovimento.length > 0 ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm text-emerald-900">
               <div className="font-medium">Liquidação institucional - Movimento Conexão Dança</div>
-              <div className="mt-1">Concessão: {matricula?.movimento_concessao_id ?? "-"}</div>
-              <div className="mt-1">Valor referência: {formatCurrency(Number(valorCentavos || 0))}</div>
+              <div className="mt-1">
+                Concessão:{" "}
+                {execucoesMovimento.find((execucao) => !!execucao.movimento_concessao_id)?.movimento_concessao_id ??
+                  matricula?.movimento_concessao_id ??
+                  "-"}
+              </div>
+              <div className="mt-1">Valor institucional: {formatCurrency(totalMovimentoExecucoes)}</div>
+              <ul className="mt-2 list-disc pl-5 text-xs">
+                {execucoesMovimento.map((execucao) => (
+                  <li key={`mov-${execucao.turma_id}`}>
+                    Turma {execucao.turma_id}
+                    {execucao.nivel ? ` (${execucao.nivel})` : ""}: {formatCurrency(execucao.valor_mensal_centavos)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {execucoesFamilia.length > 0 ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 text-sm text-slate-700">
+              <div className="font-medium">Execuções Família</div>
+              <div className="mt-1">Total família: {formatCurrency(totalFamiliaExecucoes)}</div>
+              <ul className="mt-2 list-disc pl-5 text-xs">
+                {execucoesFamilia.map((execucao) => (
+                  <li key={`fam-${execucao.turma_id}`}>
+                    Turma {execucao.turma_id}
+                    {execucao.nivel ? ` (${execucao.nivel})` : ""}: {formatCurrency(execucao.valor_mensal_centavos)}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
@@ -475,7 +626,9 @@ export default function Page() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">Valor (centavos)</label>
+                  <label className="text-sm font-medium">
+                    {isHibridoExecucoes ? "Valor família (centavos)" : "Valor (centavos)"}
+                  </label>
                   <input
                     className="border rounded-md p-2"
                     inputMode="numeric"
@@ -493,7 +646,9 @@ export default function Page() {
 
           {modo === "LANCAR_NO_CARTAO" ? (
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Valor a lancar no Cartao (centavos)</label>
+              <label className="text-sm font-medium">
+                {isHibridoExecucoes ? "Valor família a lançar no Cartão (centavos)" : "Valor a lancar no Cartao (centavos)"}
+              </label>
               <input
                 className="border rounded-md p-2"
                 inputMode="numeric"
@@ -563,6 +718,8 @@ export default function Page() {
                 ? "Salvando..."
                 : isMovimentoInstitucional
                   ? "Confirmar liquidacao institucional"
+                  : isHibridoExecucoes
+                    ? "Confirmar liquidacao (familia + movimento)"
                   : modo === "ADIAR_EXCECAO"
                     ? "Gerar cobranca"
                     : "Confirmar liquidacao"}

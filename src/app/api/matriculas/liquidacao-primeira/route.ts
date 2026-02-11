@@ -754,10 +754,6 @@ function yearFromDate(dateYYYYMMDD: string): number {
   return Number(dateYYYYMMDD.slice(0, 4));
 }
 
-function monthFromDate(dateYYYYMMDD: string): number {
-  return Number(dateYYYYMMDD.slice(5, 7));
-}
-
 function buildPeriodo(ano: number, mes: number): string {
   return `${ano}-${String(mes).padStart(2, "0")}`;
 }
@@ -893,9 +889,42 @@ type ExecucaoManualResumo = {
   turma_id: number;
   nivel: string | null;
   valor_mensal_centavos: number;
+  modelo_liquidacao: "FAMILIA" | "MOVIMENTO";
+  movimento_concessao_id: string | null;
 };
 
-function normalizeExecucoesManuais(rows: unknown[]): ExecucaoManualResumo[] {
+function parseOrigemValorExecucao(origemValor: string | null): {
+  modelo_liquidacao: "FAMILIA" | "MOVIMENTO";
+  movimento_concessao_id: string | null;
+} {
+  if (!origemValor) {
+    return { modelo_liquidacao: "FAMILIA", movimento_concessao_id: null };
+  }
+  const raw = origemValor.trim().toUpperCase();
+  if (raw.startsWith("MANUAL|MOVIMENTO")) {
+    const partes = origemValor.split("|");
+    const concessaoRaw = partes.length >= 3 ? partes[2] : null;
+    return {
+      modelo_liquidacao: "MOVIMENTO",
+      movimento_concessao_id: asUuidOrNull(concessaoRaw),
+    };
+  }
+  if (raw.startsWith("MANUAL_MOVIMENTO")) {
+    const partes = origemValor.split(":");
+    const concessaoRaw = partes.length >= 2 ? partes[1] : null;
+    return {
+      modelo_liquidacao: "MOVIMENTO",
+      movimento_concessao_id: asUuidOrNull(concessaoRaw),
+    };
+  }
+  return { modelo_liquidacao: "FAMILIA", movimento_concessao_id: null };
+}
+
+function normalizeExecucoesManuais(
+  rows: unknown[],
+  defaultModelo: "FAMILIA" | "MOVIMENTO",
+  defaultConcessaoId: string | null,
+): ExecucaoManualResumo[] {
   return (rows ?? [])
     .map((row) => {
       const record = row as Record<string, unknown>;
@@ -903,7 +932,22 @@ function normalizeExecucoesManuais(rows: unknown[]): ExecucaoManualResumo[] {
       const valor = asInt(record.valor_mensal_centavos);
       if (!turmaId || valor === null || valor < 0) return null;
       const nivel = typeof record.nivel === "string" ? record.nivel.trim() : null;
-      return { turma_id: turmaId, nivel, valor_mensal_centavos: valor };
+      const origemValor = typeof record.origem_valor === "string" ? record.origem_valor : null;
+      const origemParsed = parseOrigemValorExecucao(origemValor);
+      const modeloDireto = typeof record.modelo_liquidacao === "string" ? record.modelo_liquidacao.trim().toUpperCase() : "";
+      const modelo = modeloDireto === "MOVIMENTO" || origemParsed.modelo_liquidacao === "MOVIMENTO"
+        ? "MOVIMENTO"
+        : defaultModelo;
+      const concessaoDireta = asUuidOrNull(record.movimento_concessao_id);
+      const concessao =
+        concessaoDireta ?? origemParsed.movimento_concessao_id ?? (modelo === "MOVIMENTO" ? defaultConcessaoId : null);
+      return {
+        turma_id: turmaId,
+        nivel,
+        valor_mensal_centavos: valor,
+        modelo_liquidacao: modelo,
+        movimento_concessao_id: concessao,
+      };
     })
     .filter((row): row is ExecucaoManualResumo => !!row);
 }
@@ -1174,7 +1218,7 @@ export async function POST(request: NextRequest) {
 
   const { data: execRows, error: execErr } = await supabase
     .from("matricula_execucao_valores")
-    .select("turma_id, nivel, valor_mensal_centavos")
+    .select("turma_id, nivel, valor_mensal_centavos, origem_valor")
     .eq("matricula_id", matriculaId)
     .eq("ativo", true);
 
@@ -1182,10 +1226,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "falha_buscar_execucoes", details: execErr.message }, { status: 500 });
   }
 
-  const execucoesManuais = normalizeExecucoesManuais(execRows ?? []);
+  const defaultModeloExecucao = metodoLiquidacao === "CREDITO_BOLSA" ? "MOVIMENTO" : "FAMILIA";
+  const execucoesManuais = normalizeExecucoesManuais(
+    execRows ?? [],
+    defaultModeloExecucao,
+    movimentoConcessaoId,
+  );
   const modoManual = execucoesManuais.length > 0;
-  const totalMensalidadeManual = execucoesManuais.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
-  const turmasManuais = Array.from(new Set(execucoesManuais.map((execucao) => execucao.turma_id)));
+  const execucoesFamilia = execucoesManuais.filter((execucao) => execucao.modelo_liquidacao === "FAMILIA");
+  const execucoesMovimento = execucoesManuais.filter((execucao) => execucao.modelo_liquidacao === "MOVIMENTO");
+  const totalFamiliaManual = execucoesFamilia.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
+  const totalMovimentoManual = execucoesMovimento.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
+  const turmasFamilia = Array.from(new Set(execucoesFamilia.map((execucao) => execucao.turma_id)));
   let cobrancasCriadasManual: Array<{ id: number; competencia_ano_mes: string }> = [];
   const gerarMensalidadesCartao = async (): Promise<
     | {
@@ -1200,15 +1252,18 @@ export async function POST(request: NextRequest) {
 
     try {
       if (modoManual) {
-        if (!totalMensalidadeManual || totalMensalidadeManual <= 0) {
-          return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
+        if (!totalFamiliaManual || totalFamiliaManual <= 0 || execucoesFamilia.length === 0) {
+          return {
+            cobrancasCriadasManual: [],
+            totalMensalidadeCentavos: 0,
+          };
         }
 
         const { competenciaMensalidade } = resolveCompetenciaMensalidade(dataInicio);
         const competenciaInicio = competenciaMensalidade;
 
         let competenciaFim = competenciaInicio;
-        const turmaReferencia = vinculoId ?? turmasManuais[0] ?? null;
+        const turmaReferencia = vinculoId ?? turmasFamilia[0] ?? null;
 
         if (turmaReferencia) {
           const { data: turmaRef, error: turmaErr } = await supabase
@@ -1243,8 +1298,8 @@ export async function POST(request: NextRequest) {
 
         debugCartao.periodo_inicio = competenciaInicio;
         debugCartao.periodo_fim = competenciaFim;
-        debugCartao.total_mensalidade_centavos = totalMensalidadeManual;
-        debugCartao.itens = execucoesManuais.map((execucao) => ({
+        debugCartao.total_mensalidade_centavos = totalFamiliaManual;
+        debugCartao.itens = execucoesFamilia.map((execucao) => ({
           turma_id: execucao.turma_id,
           ue_id: null,
           descricao: execucao.nivel ? `Nivel ${execucao.nivel}` : `Turma ${execucao.turma_id}`,
@@ -1273,8 +1328,8 @@ export async function POST(request: NextRequest) {
           pessoaId: matricula.responsavel_financeiro_id,
           matriculaId: matricula.id,
           alunoId,
-          execucoes: execucoesManuais,
-          totalCentavos: totalMensalidadeManual,
+          execucoes: execucoesFamilia,
+          totalCentavos: totalFamiliaManual,
           competenciaInicio,
           competenciaFim,
           diaVencimento: conta.dia_vencimento ?? 12,
@@ -1283,7 +1338,7 @@ export async function POST(request: NextRequest) {
         cobrancasGeradas = resultado.cobrancas;
         debugCartao.created_lancamentos += resultado.lancamentos;
         debugCartao.linked_faturas += resultado.lancamentos;
-        totalMensalidade = totalMensalidadeManual;
+        totalMensalidade = totalFamiliaManual;
       } else {
         const inicioVinculo = debugCartao.data_inicio_vinculo;
         const anoRef =
@@ -1437,38 +1492,153 @@ export async function POST(request: NextRequest) {
   const valorPayload = asInt(body.valor_centavos);
   const valorHerdado = asInt(matricula.primeira_cobranca_valor_centavos);
   const valorTotalMatricula = asInt(matricula.total_mensalidade_centavos);
-  const valorFinal = valorPayload && valorPayload > 0 ? valorPayload : valorHerdado && valorHerdado > 0 ? valorHerdado : null;
-
-  if (metodoLiquidacao === "CREDITO_BOLSA") {
-    const valorInstitucional =
-      valorFinal && valorFinal > 0
-        ? valorFinal
-        : valorTotalMatricula && valorTotalMatricula > 0
-          ? valorTotalMatricula
+  const valorFinal =
+    valorPayload && valorPayload > 0
+      ? valorPayload
+      : modoManual
+        ? totalFamiliaManual > 0
+          ? totalFamiliaManual
+          : null
+        : valorHerdado && valorHerdado > 0
+          ? valorHerdado
           : null;
+
+  type MovimentoRegistroResumo = {
+    concessao_id: string;
+    beneficiario_id: string;
+    ciclo_id: string;
+    competencia: string;
+    valor_centavos: number;
+    turmas: number[];
+  };
+
+  const registrarParteMovimento = async (valorInstitucional: number) => {
+    const grupos = new Map<string, { valor_centavos: number; turmas: number[] }>();
+
+    if (execucoesMovimento.length > 0) {
+      for (const execucao of execucoesMovimento) {
+        const concessaoId = execucao.movimento_concessao_id ?? movimentoConcessaoId;
+        if (!concessaoId) {
+          return NextResponse.json(
+            {
+              error: "movimento_concessao_id_obrigatorio_por_execucao",
+              details: { turma_id: execucao.turma_id },
+            },
+            { status: 409 },
+          );
+        }
+        const atual = grupos.get(concessaoId);
+        if (!atual) {
+          grupos.set(concessaoId, {
+            valor_centavos: execucao.valor_mensal_centavos,
+            turmas: [execucao.turma_id],
+          });
+        } else {
+          atual.valor_centavos += execucao.valor_mensal_centavos;
+          if (!atual.turmas.includes(execucao.turma_id)) atual.turmas.push(execucao.turma_id);
+        }
+      }
+    } else {
+      if (!movimentoConcessaoId) {
+        return NextResponse.json({ error: "movimento_concessao_id_obrigatorio" }, { status: 409 });
+      }
+      grupos.set(movimentoConcessaoId, { valor_centavos: valorInstitucional, turmas: [] });
+    }
+
+    const registrosMovimento: MovimentoRegistroResumo[] = [];
+    for (const [concessaoId, grupo] of grupos.entries()) {
+      const registroMov = await registrarConsumoInstitucionalMovimento({
+        supabase,
+        matriculaId: matricula.id,
+        pessoaId: alunoId,
+        movimentoConcessaoId: concessaoId,
+        userId: auth.user.id,
+        valorCentavos: grupo.valor_centavos,
+        tipoPrimeira: body.tipo_primeira_cobranca,
+      });
+
+      if (!registroMov.ok) {
+        return NextResponse.json(
+          { error: registroMov.error, details: registroMov.details ?? null },
+          { status: registroMov.status },
+        );
+      }
+
+      registrosMovimento.push({
+        concessao_id: registroMov.concessao_id,
+        beneficiario_id: registroMov.beneficiario_id,
+        ciclo_id: registroMov.ciclo_id,
+        competencia: registroMov.competencia,
+        valor_centavos: grupo.valor_centavos,
+        turmas: grupo.turmas,
+      });
+    }
+
+    const dataLiquidacao = new Date().toISOString().slice(0, 10);
+    const registroPorConcessao = new Map<string, MovimentoRegistroResumo>();
+    for (const registro of registrosMovimento) registroPorConcessao.set(registro.concessao_id, registro);
+
+    const linhasMovimento: LedgerInsert[] =
+      execucoesMovimento.length > 0
+        ? execucoesMovimento.map((execucao) => {
+            const concessaoId = execucao.movimento_concessao_id ?? movimentoConcessaoId ?? "";
+            const registro = registroPorConcessao.get(concessaoId) ?? registrosMovimento[0];
+            const cicloIdAsInt = registro ? asInt(registro.ciclo_id) : null;
+            const competencia = registro?.competencia ?? new Date().toISOString().slice(0, 7);
+            return {
+              matricula_id: matricula.id,
+              tipo: "OUTRO",
+              descricao: `Liquidacao institucional - Movimento (turma ${execucao.turma_id}, concessao ${concessaoId.slice(0, 8)}..., competencia ${competencia})`,
+              valor_centavos: execucao.valor_mensal_centavos,
+              vencimento: null,
+              data_evento: dataLiquidacao,
+              status: "PAGO",
+              origem_tabela: "movimento_concessoes_ciclos",
+              origem_id: cicloIdAsInt ?? null,
+            };
+          })
+        : registrosMovimento.map((registro) => ({
+            matricula_id: matricula.id,
+            tipo: "OUTRO",
+            descricao: `Liquidacao institucional - Movimento (concessao ${registro.concessao_id.slice(0, 8)}..., competencia ${registro.competencia})`,
+            valor_centavos: registro.valor_centavos,
+            vencimento: null,
+            data_evento: dataLiquidacao,
+            status: "PAGO",
+            origem_tabela: "movimento_concessoes_ciclos",
+            origem_id: asInt(registro.ciclo_id) ?? null,
+          }));
+
+    const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(linhasMovimento);
+    if (ledgerErr) {
+      return NextResponse.json({ error: "falha_inserir_ledger", details: ledgerErr.message }, { status: 500 });
+    }
+
+    return {
+      ok: true as const,
+      registros: registrosMovimento,
+      dataLiquidacao,
+    };
+  };
+
+  const somenteMovimentoNoManual = modoManual && execucoesMovimento.length > 0 && execucoesFamilia.length === 0;
+  if (metodoLiquidacao === "CREDITO_BOLSA" || somenteMovimentoNoManual) {
+    const valorInstitucional =
+      totalMovimentoManual > 0
+        ? totalMovimentoManual
+        : valorPayload && valorPayload > 0
+          ? valorPayload
+          : valorTotalMatricula && valorTotalMatricula > 0
+            ? valorTotalMatricula
+            : null;
 
     if (!valorInstitucional) {
       return NextResponse.json({ error: "valor_institucional_nao_resolvido" }, { status: 409 });
     }
 
-    const registroMov = await registrarConsumoInstitucionalMovimento({
-      supabase,
-      matriculaId: matricula.id,
-      pessoaId: alunoId,
-      movimentoConcessaoId,
-      userId: auth.user.id,
-      valorCentavos: valorInstitucional,
-      tipoPrimeira: body.tipo_primeira_cobranca,
-    });
+    const movimentoRes = await registrarParteMovimento(valorInstitucional);
+    if (movimentoRes instanceof NextResponse) return movimentoRes;
 
-    if (!registroMov.ok) {
-      return NextResponse.json(
-        { error: registroMov.error, details: registroMov.details ?? null },
-        { status: registroMov.status },
-      );
-    }
-
-    const dataLiquidacao = new Date().toISOString().slice(0, 10);
     const { error: errUpd } = await supabase
       .from("matriculas")
       .update({
@@ -1478,34 +1648,12 @@ export async function POST(request: NextRequest) {
         primeira_cobranca_cobranca_id: null,
         primeira_cobranca_recebimento_id: null,
         primeira_cobranca_forma_pagamento_id: null,
-        primeira_cobranca_data_pagamento: dataLiquidacao,
+        primeira_cobranca_data_pagamento: movimentoRes.dataLiquidacao,
       })
       .eq("id", matricula.id);
 
     if (errUpd) {
       return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
-    }
-
-    const ledgerLinha: LedgerInsert = {
-      matricula_id: matricula.id,
-      tipo: "OUTRO",
-      descricao: "Liquidacao institucional - Movimento",
-      valor_centavos: valorInstitucional,
-      vencimento: null,
-      data_evento: dataLiquidacao,
-      status: "PAGO",
-      origem_tabela: "movimento_concessoes_ciclos",
-      origem_id: null,
-    };
-
-    const cicloIdAsInt = asInt(registroMov.ciclo_id);
-    if (cicloIdAsInt) {
-      ledgerLinha.origem_id = cicloIdAsInt;
-    }
-
-    const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
-    if (ledgerErr) {
-      return NextResponse.json({ error: "falha_inserir_ledger", details: ledgerErr.message }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -1514,12 +1662,8 @@ export async function POST(request: NextRequest) {
       status: "LIQUIDADO_INSTITUCIONAL",
       matricula_id: matricula.id,
       valor_centavos: valorInstitucional,
-      movimento: {
-        concessao_id: registroMov.concessao_id,
-        beneficiario_id: registroMov.beneficiario_id,
-        ciclo_id: registroMov.ciclo_id,
-        competencia: registroMov.competencia,
-      },
+      movimento: movimentoRes.registros[0] ?? null,
+      movimento_registros: movimentoRes.registros,
     });
   }
 
@@ -1642,7 +1786,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
     }
 
-    if (body.tipo_primeira_cobranca === "ENTRADA_PRORATA") {
+    if (body.tipo_primeira_cobranca === "ENTRADA_PRORATA" && totalFamiliaManual > 0) {
       const cartaoResultado = await gerarMensalidadesCartao();
       if (cartaoResultado instanceof NextResponse) {
         return cartaoResultado;
@@ -1650,16 +1794,28 @@ export async function POST(request: NextRequest) {
       cobrancasCriadasManual = cartaoResultado.cobrancasCriadasManual;
     }
 
+    let movimentoMeta: MovimentoRegistroResumo | null = null;
+    let movimentoRegistros: MovimentoRegistroResumo[] = [];
+    if (totalMovimentoManual > 0) {
+      const movimentoRes = await registrarParteMovimento(totalMovimentoManual);
+      if (movimentoRes instanceof NextResponse) return movimentoRes;
+      movimentoMeta = movimentoRes.registros[0] ?? null;
+      movimentoRegistros = movimentoRes.registros;
+    }
+
     return NextResponse.json({
       ok: true,
       status: "PAGA",
       cobranca_id: cobranca.id,
       recebimento_id: receb.id,
+      movimento: movimentoMeta,
+      movimento_registros: movimentoRegistros,
       ...(modoManual
         ? {
             matricula_id: matricula.id,
-            total_mensalidade_centavos: totalMensalidadeManual,
-            turmas_ativadas: turmasManuais,
+            total_mensalidade_centavos: totalFamiliaManual,
+            total_movimento_centavos: totalMovimentoManual,
+            turmas_ativadas: turmasFamilia,
             cobrancas_criadas: cobrancasCriadasManual,
           }
         : {}),
@@ -1674,14 +1830,14 @@ export async function POST(request: NextRequest) {
     });
 
     if (modoManual) {
-      if (!totalMensalidadeManual || totalMensalidadeManual <= 0) {
+      if (!totalFamiliaManual || totalFamiliaManual <= 0 || execucoesFamilia.length === 0) {
         return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
       }
 
       const { competenciaMensalidade } = resolveCompetenciaMensalidade(dataInicio);
       const competenciaInicio = competenciaMensalidade;
       let competenciaFim = competenciaInicio;
-      const turmaReferencia = vinculoId ?? turmasManuais[0] ?? null;
+      const turmaReferencia = vinculoId ?? turmasFamilia[0] ?? null;
 
       if (turmaReferencia) {
         const { data: turmaRef, error: turmaErr } = await supabase
@@ -1732,8 +1888,8 @@ export async function POST(request: NextRequest) {
         pessoaId: matricula.responsavel_financeiro_id,
         matriculaId: matricula.id,
         alunoId,
-        execucoes: execucoesManuais,
-        totalCentavos: totalMensalidadeManual,
+        execucoes: execucoesFamilia,
+        totalCentavos: totalFamiliaManual,
         competenciaInicio,
         competenciaFim,
         diaVencimento: conta.dia_vencimento ?? 12,
@@ -1744,7 +1900,7 @@ export async function POST(request: NextRequest) {
         .update({
           primeira_cobranca_tipo: body.tipo_primeira_cobranca,
           primeira_cobranca_status: "LANCADA_CARTAO",
-          primeira_cobranca_valor_centavos: totalMensalidadeManual,
+          primeira_cobranca_valor_centavos: totalFamiliaManual,
           primeira_cobranca_data_pagamento: null,
         })
         .eq("id", matricula.id);
@@ -1753,13 +1909,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
       }
 
+      let movimentoMeta: MovimentoRegistroResumo | null = null;
+      let movimentoRegistros: MovimentoRegistroResumo[] = [];
+      if (totalMovimentoManual > 0) {
+        const movimentoRes = await registrarParteMovimento(totalMovimentoManual);
+        if (movimentoRes instanceof NextResponse) return movimentoRes;
+        movimentoMeta = movimentoRes.registros[0] ?? null;
+        movimentoRegistros = movimentoRes.registros;
+      }
+
       return NextResponse.json({
         ok: true,
         status: "LANCADA_CARTAO",
         matricula_id: matricula.id,
-        total_mensalidade_centavos: totalMensalidadeManual,
-        turmas_ativadas: turmasManuais,
+        total_mensalidade_centavos: totalFamiliaManual,
+        total_movimento_centavos: totalMovimentoManual,
+        turmas_ativadas: turmasFamilia,
         cobrancas_criadas: resultado.cobrancas,
+        movimento: movimentoMeta,
+        movimento_registros: movimentoRegistros,
       });
     }
 
@@ -1982,16 +2150,28 @@ export async function POST(request: NextRequest) {
       return cartaoResultado;
     }
 
+    let movimentoMeta: MovimentoRegistroResumo | null = null;
+    let movimentoRegistros: MovimentoRegistroResumo[] = [];
+    if (totalMovimentoManual > 0) {
+      const movimentoRes = await registrarParteMovimento(totalMovimentoManual);
+      if (movimentoRes instanceof NextResponse) return movimentoRes;
+      movimentoMeta = movimentoRes.registros[0] ?? null;
+      movimentoRegistros = movimentoRes.registros;
+    }
+
     return NextResponse.json({
       ok: true,
       modo: "EXCECAO_COBRANCA_AVULSA",
       cobranca_avulsa_id: cobranca.id,
       cartao_conta_id: debugCartao.conta_conexao_id ?? null,
       lancamentos_criados: debugCartao.created_lancamentos,
+      movimento: movimentoMeta,
+      movimento_registros: movimentoRegistros,
       ...(modoManual
         ? {
             total_mensalidade_centavos: cartaoResultado.totalMensalidadeCentavos,
-            turmas_ativadas: turmasManuais,
+            total_movimento_centavos: totalMovimentoManual,
+            turmas_ativadas: turmasFamilia,
             cobrancas_criadas: cartaoResultado.cobrancasCriadasManual,
           }
         : { total_mensalidade_centavos: cartaoResultado.totalMensalidadeCentavos }),

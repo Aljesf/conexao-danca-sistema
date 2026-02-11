@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireUser } from "@/lib/supabase/api-auth";
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
+type ModeloLiquidacaoExecucao = "FAMILIA" | "MOVIMENTO";
 
 type PlanoPagamentoMvp = {
   id: number;
@@ -27,6 +28,8 @@ type ExecucaoManualIn = {
   nivel?: string | null;
   nivel_id?: number | null;
   valor_mensal_centavos?: number | null;
+  modelo_liquidacao?: ModeloLiquidacaoExecucao | null;
+  movimento_concessao_id?: string | null;
 };
 
 type ExecucaoManual = {
@@ -34,6 +37,8 @@ type ExecucaoManual = {
   nivel: string;
   nivel_id: number | null;
   valor_mensal_centavos: number;
+  modelo_liquidacao: ModeloLiquidacaoExecucao;
+  movimento_concessao_id: string | null;
 };
 
 type BodyNovo = {
@@ -118,6 +123,11 @@ function parseMetodoLiquidacao(value: unknown): MetodoLiquidacao {
   return "CARTAO_CONEXAO";
 }
 
+function parseModeloLiquidacaoExecucao(value: unknown): ModeloLiquidacaoExecucao {
+  const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return raw === "MOVIMENTO" ? "MOVIMENTO" : "FAMILIA";
+}
+
 function isSchemaMissingError(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const code = (err as { code?: unknown }).code;
@@ -184,11 +194,18 @@ function parseExecucoes(value: unknown): ExecucaoManual[] | null {
     const nivelIdRaw = record.nivel_id;
     const nivelId = nivelIdRaw === undefined || nivelIdRaw === null ? null : Number(nivelIdRaw);
     if (nivelIdRaw !== undefined && nivelIdRaw !== null && (!Number.isInteger(nivelId) || nivelId <= 0)) return null;
+    const modeloLiquidacao = parseModeloLiquidacaoExecucao(record.modelo_liquidacao);
+    const movimentoConcessaoRaw =
+      typeof record.movimento_concessao_id === "string" ? record.movimento_concessao_id.trim() : "";
+    if (movimentoConcessaoRaw && !isUuid(movimentoConcessaoRaw)) return null;
+    const movimentoConcessaoId = movimentoConcessaoRaw.length > 0 ? movimentoConcessaoRaw : null;
     execucoes.push({
       turma_id: turmaId,
       nivel,
       nivel_id: Number.isInteger(nivelId) ? nivelId : null,
       valor_mensal_centavos: Math.trunc(valor),
+      modelo_liquidacao: modeloLiquidacao,
+      movimento_concessao_id: movimentoConcessaoId,
     });
   }
   return execucoes;
@@ -205,7 +222,18 @@ function isExecucaoManual(x: unknown): x is ExecucaoManual {
   const nivelIdRaw = record.nivel_id;
   if (nivelIdRaw !== undefined && nivelIdRaw !== null && !Number.isFinite(Number(nivelIdRaw))) return false;
   if (typeof record.nivel !== "string" && (nivelIdRaw === undefined || nivelIdRaw === null)) return false;
+  const concessaoRaw = record.movimento_concessao_id;
+  if (concessaoRaw !== undefined && concessaoRaw !== null && typeof concessaoRaw !== "string") return false;
   return true;
+}
+
+function buildOrigemValorExecucao(execucao: ExecucaoManual, fallbackConcessaoId: string | null): string {
+  if (execucao.modelo_liquidacao === "MOVIMENTO") {
+    const concessao = execucao.movimento_concessao_id ?? fallbackConcessaoId ?? "";
+    if (concessao) return `MANUAL|MOVIMENTO|${concessao}`;
+    return "MANUAL|MOVIMENTO";
+  }
+  return "MANUAL|FAMILIA";
 }
 
 function parsePoliticaPrimeiroPagamento(value: unknown): PoliticaPrimeiroPagamento | null {
@@ -333,7 +361,8 @@ export async function POST(request: NextRequest) {
       return badRequest("JSON invalido.");
     }
 
-  const metodoLiquidacao = parseMetodoLiquidacao(body.metodo_liquidacao);
+  const metodoLiquidacaoInput = parseMetodoLiquidacao(body.metodo_liquidacao);
+  let metodoLiquidacao = metodoLiquidacaoInput;
   const movimentoConcessaoIdRaw =
     typeof body.movimento_concessao_id === "string" ? body.movimento_concessao_id.trim() : "";
   const movimentoConcessaoIdInput = movimentoConcessaoIdRaw.length > 0 ? movimentoConcessaoIdRaw : null;
@@ -378,6 +407,23 @@ export async function POST(request: NextRequest) {
   const politicaModo = politicaPrimeiroPagamento?.modo ?? "PADRAO";
 
   const usarExecucoes = modoManual && execucoesIn.length > 0;
+  if (usarExecucoes) {
+    const temMovimento = execucoesIn.some((execucao) => execucao.modelo_liquidacao === "MOVIMENTO");
+    const temFamilia = execucoesIn.some((execucao) => execucao.modelo_liquidacao === "FAMILIA");
+    if (temMovimento) {
+      const semConcessao = execucoesIn.find(
+        (execucao) => execucao.modelo_liquidacao === "MOVIMENTO" && !execucao.movimento_concessao_id,
+      );
+      if (semConcessao) {
+        return badRequest("movimento_concessao_id_obrigatorio_por_execucao.", { turma_id: semConcessao.turma_id });
+      }
+    }
+    if (temMovimento && !temFamilia) {
+      metodoLiquidacao = "CREDITO_BOLSA";
+    } else {
+      metodoLiquidacao = "CARTAO_CONEXAO";
+    }
+  }
   const itensIn = usarExecucoes ? [] : itensParsed ?? [];
   const hasItens = !usarExecucoes && Object.prototype.hasOwnProperty.call(body as Record<string, unknown>, "itens");
   if (hasItens && itensIn.length === 0) {
@@ -773,7 +819,12 @@ export async function POST(request: NextRequest) {
   }
 
   let movimentoConcessaoIdResolved: string | null = null;
-  if (metodoLiquidacao === "CREDITO_BOLSA") {
+  const movimentoConcessoesPorTurma = new Map<number, string>();
+  const execucoesMovimento = usarExecucoes
+    ? execucoesValidas.filter((execucao) => execucao.modelo_liquidacao === "MOVIMENTO")
+    : [];
+  const precisaValidarMovimento = metodoLiquidacao === "CREDITO_BOLSA" || execucoesMovimento.length > 0;
+  if (precisaValidarMovimento) {
     const hoje = new Date().toISOString().slice(0, 10);
 
     const { data: beneficiarios, error: benefErr } = await admin
@@ -802,14 +853,21 @@ export async function POST(request: NextRequest) {
       return conflict("Aluno sem beneficiario do Movimento.", { code: "movimento_sem_concessao_ativa" });
     }
 
+    const idsSolicitados = new Set<string>();
+    if (movimentoConcessaoIdInput) idsSolicitados.add(movimentoConcessaoIdInput);
+    for (const execucao of execucoesMovimento) {
+      if (execucao.movimento_concessao_id) idsSolicitados.add(execucao.movimento_concessao_id);
+    }
+
     let query = admin
       .from("movimento_concessoes")
       .select("id,status,data_inicio,data_fim,beneficiario_id,criado_em")
       .in("beneficiario_id", beneficiarioIds)
       .eq("status", "ATIVA");
 
-    if (movimentoConcessaoIdInput) {
-      query = query.eq("id", movimentoConcessaoIdInput);
+    const idsSolicitadosList = Array.from(idsSolicitados);
+    if (idsSolicitadosList.length > 0) {
+      query = query.in("id", idsSolicitadosList);
     }
 
     const { data: concessoes, error: concErr } = await query.order("criado_em", { ascending: false });
@@ -824,7 +882,7 @@ export async function POST(request: NextRequest) {
       return serverError("MOVIMENTO_VALIDACAO_FAIL", "Falha ao validar concessao do Movimento.", { concErr });
     }
 
-    const ativa = (concessoes ?? []).find((row) => {
+    const ativasNoPeriodo = (concessoes ?? []).filter((row) => {
       const rec = row as { data_inicio?: string | null; data_fim?: string | null };
       const inicio = rec.data_inicio ? String(rec.data_inicio).slice(0, 10) : null;
       const fim = rec.data_fim ? String(rec.data_fim).slice(0, 10) : null;
@@ -833,13 +891,38 @@ export async function POST(request: NextRequest) {
       return true;
     });
 
-    if (!ativa) {
+    if (ativasNoPeriodo.length === 0) {
       return conflict("Concessao ativa do Movimento nao encontrada para este aluno.", {
         code: "movimento_sem_concessao_ativa",
       });
     }
 
-    movimentoConcessaoIdResolved = String((ativa as { id: string }).id);
+    const ativasById = new Map<string, { id: string }>();
+    for (const row of ativasNoPeriodo) {
+      const id = String((row as { id?: unknown }).id ?? "");
+      if (id) ativasById.set(id, { id });
+    }
+
+    if (idsSolicitadosList.length > 0) {
+      const faltantes = idsSolicitadosList.filter((id) => !ativasById.has(id));
+      if (faltantes.length > 0) {
+        return conflict("Concessao ativa do Movimento nao encontrada para este aluno.", {
+          code: "movimento_sem_concessao_ativa",
+          faltantes,
+        });
+      }
+      movimentoConcessaoIdResolved = idsSolicitadosList[0] ?? null;
+    } else {
+      movimentoConcessaoIdResolved = String((ativasNoPeriodo[0] as { id: string }).id);
+    }
+
+    for (const execucao of execucoesMovimento) {
+      if (execucao.movimento_concessao_id) {
+        movimentoConcessoesPorTurma.set(execucao.turma_id, execucao.movimento_concessao_id);
+      } else if (movimentoConcessaoIdResolved) {
+        movimentoConcessoesPorTurma.set(execucao.turma_id, movimentoConcessaoIdResolved);
+      }
+    }
   }
 
   const insertPayload: Record<string, unknown> = {
@@ -896,16 +979,53 @@ export async function POST(request: NextRequest) {
   const matriculaId = (matriculaCriada as { id: number }).id;
 
   if (usarExecucoes && execucoesValidas.length > 0) {
-    const rows = execucoesValidas.map((execucao) => ({
+    let hasModeloLiquidacaoColumn = false;
+    let hasMovimentoConcessaoExecColumn = false;
+    const { data: execCols, error: execColsErr } = await admin
+      .from("information_schema.columns")
+      .select("column_name")
+      .eq("table_schema", "public")
+      .eq("table_name", "matricula_execucao_valores")
+      .in("column_name", ["modelo_liquidacao", "movimento_concessao_id"]);
+
+    if (!execColsErr) {
+      hasModeloLiquidacaoColumn = (execCols ?? []).some((row) => (row as { column_name?: string }).column_name === "modelo_liquidacao");
+      hasMovimentoConcessaoExecColumn = (execCols ?? []).some(
+        (row) => (row as { column_name?: string }).column_name === "movimento_concessao_id",
+      );
+    }
+
+    const rowsBase = execucoesValidas.map((execucao) => ({
       matricula_id: matriculaId,
       turma_id: execucao.turma_id,
       nivel: execucao.nivel,
       valor_mensal_centavos: execucao.valor_mensal_centavos,
-      origem_valor: "MANUAL",
+      origem_valor: buildOrigemValorExecucao(
+        execucao,
+        movimentoConcessoesPorTurma.get(execucao.turma_id) ?? movimentoConcessaoIdResolved,
+      ),
       ativo: true,
     }));
 
-    const { error: execErr } = await admin.from("matricula_execucao_valores").insert(rows);
+    const rows = rowsBase.map((row, idx) => {
+      const execucao = execucoesValidas[idx];
+      const enriched: Record<string, unknown> = { ...row };
+      if (hasModeloLiquidacaoColumn) enriched.modelo_liquidacao = execucao.modelo_liquidacao;
+      if (hasMovimentoConcessaoExecColumn) {
+        enriched.movimento_concessao_id =
+          execucao.movimento_concessao_id ??
+          movimentoConcessoesPorTurma.get(execucao.turma_id) ??
+          movimentoConcessaoIdResolved ??
+          null;
+      }
+      return enriched;
+    });
+
+    let { error: execErr } = await admin.from("matricula_execucao_valores").insert(rows);
+    if (execErr && isSchemaMissingError(execErr) && (hasModeloLiquidacaoColumn || hasMovimentoConcessaoExecColumn)) {
+      const retry = await admin.from("matricula_execucao_valores").insert(rowsBase);
+      execErr = retry.error;
+    }
     if (execErr) {
       const msg = execErr.message ?? "";
       if (msg.includes("relation") && msg.includes("matricula_execucao_valores")) {

@@ -38,6 +38,8 @@ type MatriculaCarrinhoItem = {
   nivel_id: number | null;
   nivel_texto: string;
   valor_mensal_reais: string;
+  modelo_liquidacao: LiquidacaoOrigem;
+  movimento_concessao_id: string;
 };
 
 type CursoOpcao = {
@@ -134,6 +136,8 @@ function createCarrinhoItem(): MatriculaCarrinhoItem {
     nivel_id: null,
     nivel_texto: "",
     valor_mensal_reais: "",
+    modelo_liquidacao: "FAMILIA",
+    movimento_concessao_id: "",
   };
 }
 
@@ -288,9 +292,7 @@ export default function NovaMatriculaPage() {
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [dataInicioVinculo, setDataInicioVinculo] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [politicaModo, setPoliticaModo] = useState<"PADRAO" | "ADIAR_PARA_VENCIMENTO">("PADRAO");
-  const [liquidacaoOrigem, setLiquidacaoOrigem] = useState<LiquidacaoOrigem>("FAMILIA");
   const [concessoesMovimento, setConcessoesMovimento] = useState<MovimentoConcessaoAtiva[]>([]);
-  const [concessaoMovimentoId, setConcessaoMovimentoId] = useState<string>("");
   const [concessoesMovimentoLoading, setConcessoesMovimentoLoading] = useState(false);
   const [concessoesMovimentoErro, setConcessoesMovimentoErro] = useState<string | null>(null);
   const [motivoExcecao, setMotivoExcecao] = useState<string>("");
@@ -386,9 +388,15 @@ export default function NovaMatriculaPage() {
           turmaLabel,
           nivel: nivelNome.trim() || "-",
           valor: valorCentavos === null ? "-" : formatCurrency(valorCentavos),
+          modelo_liquidacao: item.modelo_liquidacao,
+          movimento_concessao_id: item.movimento_concessao_id || null,
         };
       }),
     [itensCarrinho, turmasDisponiveis, niveisPorTurma],
+  );
+  const temExecucaoMovimento = useMemo(
+    () => itensCarrinho.some((item) => item.modelo_liquidacao === "MOVIMENTO"),
+    [itensCarrinho],
   );
 
   const contextoObrigatorio = tipo === "REGULAR";
@@ -729,9 +737,8 @@ export default function NovaMatriculaPage() {
   useEffect(() => {
     let ativo = true;
 
-    if (liquidacaoOrigem !== "MOVIMENTO") {
+    if (!temExecucaoMovimento) {
       setConcessoesMovimento([]);
-      setConcessaoMovimentoId("");
       setConcessoesMovimentoErro(null);
       setConcessoesMovimentoLoading(false);
       return () => {
@@ -741,7 +748,6 @@ export default function NovaMatriculaPage() {
 
     if (!aluno?.id) {
       setConcessoesMovimento([]);
-      setConcessaoMovimentoId("");
       setConcessoesMovimentoErro("Selecione o aluno para buscar concessoes do Movimento.");
       setConcessoesMovimentoLoading(false);
       return () => {
@@ -758,15 +764,11 @@ export default function NovaMatriculaPage() {
         const lista = Array.isArray(resp.data) ? resp.data : [];
         setConcessoesMovimento(lista);
         if (lista.length === 0) {
-          setConcessaoMovimentoId("");
           setConcessoesMovimentoErro("Nenhuma concessao ativa encontrada para este aluno.");
-        } else {
-          setConcessaoMovimentoId((prev) => (prev && lista.some((item) => item.concessao_id === prev) ? prev : lista[0].concessao_id));
         }
       } catch (e: unknown) {
         if (!ativo) return;
         setConcessoesMovimento([]);
-        setConcessaoMovimentoId("");
         setConcessoesMovimentoErro(e instanceof Error ? e.message : "Falha ao buscar concessoes do Movimento.");
       } finally {
         if (ativo) setConcessoesMovimentoLoading(false);
@@ -776,7 +778,7 @@ export default function NovaMatriculaPage() {
     return () => {
       ativo = false;
     };
-  }, [aluno?.id, liquidacaoOrigem]);
+  }, [aluno?.id, temExecucaoMovimento]);
 
   function addItemCarrinho() {
     setItensCarrinho((prev) => [...prev, createCarrinhoItem()]);
@@ -795,11 +797,6 @@ export default function NovaMatriculaPage() {
 
     if (!aluno || !responsavel) {
       setErro("Selecione aluno e responsavel financeiro.");
-      return;
-    }
-
-    if (liquidacaoOrigem === "MOVIMENTO" && !concessaoMovimentoId) {
-      setErro("Selecione uma concessao ativa do Movimento para liquidacao institucional.");
       return;
     }
 
@@ -830,6 +827,14 @@ export default function NovaMatriculaPage() {
 
     if (!valoresOk) {
       setErro("Informe o valor mensal de todas as execucoes.");
+      return;
+    }
+
+    const execucoesMovimentoSemConcessao = itensCarrinho.filter(
+      (item) => item.modelo_liquidacao === "MOVIMENTO" && !item.movimento_concessao_id,
+    );
+    if (execucoesMovimentoSemConcessao.length > 0) {
+      setErro("Selecione a concessao ativa do Movimento em todas as execucoes institucionais.");
       return;
     }
 
@@ -874,6 +879,11 @@ export default function NovaMatriculaPage() {
                 nivel: nivelNome.trim(),
                 nivel_id: item.nivel_id ?? null,
                 valor_mensal_centavos: valorCentavos,
+                modelo_liquidacao: item.modelo_liquidacao,
+                movimento_concessao_id:
+                  item.modelo_liquidacao === "MOVIMENTO" && item.movimento_concessao_id
+                    ? item.movimento_concessao_id
+                    : null,
               };
             })
             .filter(
@@ -884,6 +894,8 @@ export default function NovaMatriculaPage() {
                 nivel: string;
                 nivel_id: number | null;
                 valor_mensal_centavos: number;
+                modelo_liquidacao: LiquidacaoOrigem;
+                movimento_concessao_id: string | null;
               } => !!execucao,
             )
         : [];
@@ -902,12 +914,19 @@ export default function NovaMatriculaPage() {
         throw new Error("Execucoes invalidas para concluir a matricula.");
       }
 
+      const execucoesMovimento = execucoesPayload.filter((execucao) => execucao.modelo_liquidacao === "MOVIMENTO");
+      const metodoLiquidacaoGlobal =
+        execucoesPayload.length > 0 && execucoesMovimento.length === execucoesPayload.length
+          ? "CREDITO_BOLSA"
+          : "CARTAO_CONEXAO";
+      const concessaoGlobal = execucoesMovimento[0]?.movimento_concessao_id ?? null;
+
       const payload: Record<string, unknown> = {
         pessoa_id: aluno.id,
         responsavel_financeiro_id: responsavel.id,
         tipo_matricula: tipo,
-        metodo_liquidacao: liquidacaoOrigem === "MOVIMENTO" ? "CREDITO_BOLSA" : "CARTAO_CONEXAO",
-        movimento_concessao_id: liquidacaoOrigem === "MOVIMENTO" ? concessaoMovimentoId : null,
+        metodo_liquidacao: metodoLiquidacaoGlobal,
+        movimento_concessao_id: concessaoGlobal,
         vinculo_id: vinculoPrincipalIdFinal,
         ...(vinculosIdsFinal.length > 1 ? { vinculos_ids: vinculosIdsFinal } : {}),
         itens: itensPayload,
@@ -1038,47 +1057,6 @@ export default function NovaMatriculaPage() {
                 </select>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Liquidação</label>
-                <select
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                  value={liquidacaoOrigem}
-                  onChange={(e) => setLiquidacaoOrigem(e.target.value as LiquidacaoOrigem)}
-                >
-                  <option value="FAMILIA">Família (fluxo padrão)</option>
-                  <option value="MOVIMENTO">Movimento (liquidação institucional)</option>
-                </select>
-              </div>
-
-              {liquidacaoOrigem === "MOVIMENTO" ? (
-                <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-                  <label className="text-sm font-medium">Concessão ativa do Movimento</label>
-                  <select
-                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                    value={concessaoMovimentoId}
-                    onChange={(e) => setConcessaoMovimentoId(e.target.value)}
-                    disabled={concessoesMovimentoLoading || concessoesMovimento.length === 0}
-                  >
-                    <option value="">Selecione...</option>
-                    {concessoesMovimento.map((concessao) => (
-                      <option key={concessao.concessao_id} value={concessao.concessao_id}>
-                        {`Concessao ${concessao.concessao_id.slice(0, 8)}... | Movimento ${concessao.percentual_movimento ?? 0}%`}
-                      </option>
-                    ))}
-                  </select>
-                  {concessoesMovimentoLoading ? (
-                    <p className="text-xs text-slate-500">Buscando concessoes ativas...</p>
-                  ) : null}
-                  {concessoesMovimentoErro ? (
-                    <p className="text-xs text-rose-600">{concessoesMovimentoErro}</p>
-                  ) : (
-                    <p className="text-xs text-slate-500">
-                      Sem recebimento presencial: a primeira liquidação será institucional (Movimento Conexão Dança).
-                    </p>
-                  )}
-                </div>
-              ) : null}
-
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Data da matricula</label>
@@ -1163,7 +1141,7 @@ export default function NovaMatriculaPage() {
                 <div>
                   <div className="text-sm font-medium">Cursos e turmas (multiplos)</div>
                   <div className="text-xs text-slate-500">
-                    Adicione um curso por vez e selecione a turma. O primeiro item vira a unidade principal.
+                    Adicione um curso por vez, selecione a turma e defina a liquidação de cada execução. O primeiro item vira a unidade principal.
                   </div>
                 </div>
                 <button
@@ -1350,6 +1328,64 @@ export default function NovaMatriculaPage() {
                         )}
                       </div>
                     </div>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium">Liquidação desta execução</label>
+                        <select
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                          value={item.modelo_liquidacao}
+                          onChange={(e) =>
+                            updateItemCarrinho(item.id, {
+                              modelo_liquidacao: e.target.value as LiquidacaoOrigem,
+                              movimento_concessao_id:
+                                e.target.value === "MOVIMENTO" ? item.movimento_concessao_id : "",
+                            })
+                          }
+                        >
+                          <option value="FAMILIA">Família (padrão)</option>
+                          <option value="MOVIMENTO">Movimento (institucional)</option>
+                        </select>
+                      </div>
+
+                      {item.modelo_liquidacao === "MOVIMENTO" ? (
+                        <div className="space-y-1">
+                          <label className="text-sm font-medium">Concessão ativa do Movimento</label>
+                          <select
+                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                            value={item.movimento_concessao_id}
+                            onChange={(e) => updateItemCarrinho(item.id, { movimento_concessao_id: e.target.value })}
+                            disabled={concessoesMovimentoLoading || concessoesMovimento.length === 0}
+                          >
+                            <option value="">Selecione...</option>
+                            {concessoesMovimento.map((concessao) => (
+                              <option key={concessao.concessao_id} value={concessao.concessao_id}>
+                                {`Concessao ${concessao.concessao_id.slice(0, 8)}... | Movimento ${concessao.percentual_movimento ?? 0}%`}
+                              </option>
+                            ))}
+                          </select>
+                          {concessoesMovimentoLoading ? (
+                            <p className="text-xs text-slate-500">Buscando concessoes ativas...</p>
+                          ) : null}
+                          {concessoesMovimentoErro ? (
+                            <p className="text-xs text-rose-600">{concessoesMovimentoErro}</p>
+                          ) : null}
+                          {item.modelo_liquidacao === "MOVIMENTO" && !item.movimento_concessao_id ? (
+                            <p className="text-xs text-rose-600">Selecione uma concessao ativa para esta execução.</p>
+                          ) : null}
+                          <div className="flex flex-wrap items-center gap-3 text-xs">
+                            {aluno?.id ? (
+                              <Link className="text-indigo-600 hover:underline" href={`/pessoas/${aluno.id}`}>
+                                Abrir pessoa
+                              </Link>
+                            ) : null}
+                            <Link className="text-indigo-600 hover:underline" href="/admin/movimento/beneficiarios">
+                              Abrir Movimento
+                            </Link>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 );
               })}
@@ -1400,11 +1436,11 @@ export default function NovaMatriculaPage() {
             <div>Responsavel: {responsavel?.nome ?? "Nao selecionado"}</div>
             <div>Tipo: {labelTipo(tipo)}</div>
             <div>
-              Liquidacao: {liquidacaoOrigem === "MOVIMENTO" ? "Movimento (institucional)" : "Familia (padrao)"}
+              Execucoes em família: {itensCarrinho.filter((item) => item.modelo_liquidacao === "FAMILIA").length}
             </div>
-            {liquidacaoOrigem === "MOVIMENTO" ? (
-              <div>Concessao Movimento: {concessaoMovimentoId ? `${concessaoMovimentoId.slice(0, 8)}...` : "-"}</div>
-            ) : null}
+            <div>
+              Execucoes no Movimento: {itensCarrinho.filter((item) => item.modelo_liquidacao === "MOVIMENTO").length}
+            </div>
             <div>
               Periodo letivo:{" "}
               {contextoObrigatorio ? (periodoSelecionado ? labelPeriodo(periodoSelecionado) : "-") : "Nao aplicavel"}
@@ -1422,7 +1458,8 @@ export default function NovaMatriculaPage() {
                       {execucoesResumo.map((execucao) => (
                         <li key={execucao.id}>
                           {execucao.idx + 1}a execucao: {execucao.turmaLabel} | Nivel: {execucao.nivel} | Valor:{" "}
-                          {execucao.valor}
+                          {execucao.valor} | Liquidação:{" "}
+                          {execucao.modelo_liquidacao === "MOVIMENTO" ? "Movimento" : "Família"}
                         </li>
                       ))}
                     </ul>
