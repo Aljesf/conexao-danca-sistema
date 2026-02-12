@@ -37,6 +37,7 @@ export default function FolhaColaboradorDetalhePage({ params }: { params: { id: 
 
   const [data, setData] = useState<FolhaDetalhe | null>(null);
   const [loading, setLoading] = useState(false);
+  const [adicionandoSalarioBase, setAdicionandoSalarioBase] = useState(false);
   const [novoTipo, setNovoTipo] = useState<"PROVENTO" | "DESCONTO">("DESCONTO");
   const [novoDescricao, setNovoDescricao] = useState("");
   const [novoValor, setNovoValor] = useState("");
@@ -88,6 +89,54 @@ export default function FolhaColaboradorDetalhePage({ params }: { params: { id: 
     await load();
   }
 
+  async function adicionarSalarioBaseCadastro() {
+    if (!data?.colaborador_id) return;
+
+    const jaExiste = (data.eventos ?? []).some(
+      (evento) => evento.tipo === "PROVENTO" && evento.origem_tipo === "REMUNERACAO_BASE",
+    );
+    if (jaExiste) {
+      window.alert("Ja existe evento de salario base nesta folha.");
+      return;
+    }
+
+    setAdicionandoSalarioBase(true);
+    try {
+      const remRes = await fetch(`/api/admin/colaboradores/${data.colaborador_id}/remuneracao`);
+      const remPayload = (await remRes.json().catch(() => null)) as
+        | { ok?: boolean; data?: { ativa?: { id: number; vigencia_inicio: string; salario_base_centavos: number } | null } }
+        | null;
+
+      const ativa = remRes.ok && remPayload?.ok ? remPayload.data?.ativa ?? null : null;
+      if (!ativa || !Number.isFinite(ativa.salario_base_centavos) || ativa.salario_base_centavos <= 0) {
+        window.alert("Nao existe remuneracao ativa valida para este colaborador.");
+        return;
+      }
+
+      const evRes = await fetch(`/api/admin/folha/colaboradores/${folhaId}/eventos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "PROVENTO",
+          descricao: `Salario base (${ativa.vigencia_inicio})`,
+          valor_centavos: ativa.salario_base_centavos,
+          origem_tipo: "REMUNERACAO_BASE",
+          origem_id: ativa.id,
+        }),
+      });
+
+      const evPayload = (await evRes.json().catch(() => null)) as { ok?: boolean; error?: string; detail?: string } | null;
+      if (!evRes.ok || !evPayload?.ok) {
+        window.alert(evPayload?.detail ?? evPayload?.error ?? "Falha ao adicionar salario base.");
+        return;
+      }
+
+      await load();
+    } finally {
+      setAdicionandoSalarioBase(false);
+    }
+  }
+
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,6 +164,13 @@ export default function FolhaColaboradorDetalhePage({ params }: { params: { id: 
           </button>
           <button className="border rounded px-3 py-1 text-sm" onClick={() => void fechar()} disabled={!folhaAberta}>
             Fechar folha
+          </button>
+          <button
+            className="border rounded px-3 py-1 text-sm"
+            onClick={() => void adicionarSalarioBaseCadastro()}
+            disabled={!folhaAberta || adicionandoSalarioBase}
+          >
+            {adicionandoSalarioBase ? "Adicionando..." : "Adicionar salario base do cadastro"}
           </button>
         </div>
       </div>

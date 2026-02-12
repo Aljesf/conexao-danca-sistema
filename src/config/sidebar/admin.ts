@@ -105,6 +105,7 @@ export const adminSidebar: SidebarSection[] = [
     title: "👥 Colaboradores",
     items: [
       { label: "👥 Gestao de colaboradores", href: "/admin/config/colaboradores" },
+      { label: "🧾 Folha de pagamento", href: "/admin/financeiro/folha/colaboradores" },
       { label: "🔗 Tipos de vinculo", href: "/admin/config/colaboradores/tipos-vinculo" },
       { label: "🧰 Tipos de funcao", href: "/admin/config/colaboradores/tipos-funcao" },
       { label: "🗓️ Jornadas de trabalho", href: "/admin/config/colaboradores/jornadas" },

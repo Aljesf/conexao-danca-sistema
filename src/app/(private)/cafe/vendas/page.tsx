@@ -119,6 +119,34 @@ type ContaConexao = {
 
 type TipoOperacaoCafe = "VENDA" | "ENTREGA_ADMIN";
 
+type TipoContaConexao = "ALUNO" | "COLABORADOR";
+
+type FormaPagamentoSelectOption = {
+  value: string;
+  ctxId: number;
+  label: string;
+  tipoContaConexao: TipoContaConexao | null;
+};
+
+function parseFormaPagamentoSelectValue(value: string): {
+  ctxId: number | null;
+  tipoContaConexao: TipoContaConexao | null;
+} {
+  if (!value) return { ctxId: null, tipoContaConexao: null };
+  const [ctxIdRaw, tipoContaRaw] = value.split("|");
+  const ctxId = Number(ctxIdRaw);
+  if (!Number.isFinite(ctxId)) return { ctxId: null, tipoContaConexao: null };
+  if (tipoContaRaw === "COLABORADOR") return { ctxId, tipoContaConexao: "COLABORADOR" };
+  if (tipoContaRaw === "ALUNO") return { ctxId, tipoContaConexao: "ALUNO" };
+  return { ctxId, tipoContaConexao: null };
+}
+
+function isFormaPagamentoCartaoConexao(f: FormaPagamentoContexto): boolean {
+  const tipoBase = (f.formas_pagamento?.tipo_base ?? "").toUpperCase();
+  const codigo = (f.formas_pagamento?.codigo ?? f.forma_pagamento_codigo ?? "").toUpperCase();
+  return tipoBase === "CARTAO_CONEXAO" || codigo.startsWith("CARTAO_CONEXAO");
+}
+
 // NOTA SOBRE O MODELO DE PAPEIS NO CAFE v0:
 // - "comprador" é a Pessoa que está realizando a compra/pagamento.
 // - "beneficiario" é a Pessoa que vai usar o produto (normalmente aluno), armazenada por item em cafe_venda_itens.beneficiario_pessoa_id.
@@ -138,7 +166,7 @@ export default function FrenteCaixaCafePage() {
   const [formasPagamentoCtx, setFormasPagamentoCtx] = useState<FormaPagamentoContexto[]>(
     [],
   );
-  const [formaPagamentoCtxId, setFormaPagamentoCtxId] = useState<number | "">("");
+  const [formaPagamentoCtxId, setFormaPagamentoCtxId] = useState<string>("");
 
   // cartão externo (maquininha)
   const [cartaoMaquinas, setCartaoMaquinas] = useState<MaquinaCartaoOpcao[]>([]);
@@ -411,8 +439,10 @@ export default function FrenteCaixaCafePage() {
         setFormasPagamentoCtx(ativas);
 
         if (!formaPagamentoCtxId && ativas.length > 0) {
-          setFormaPagamentoCtxId(ativas[0].id);
           const fp0 = ativas[0];
+          setFormaPagamentoCtxId(
+            isFormaPagamentoCartaoConexao(fp0) ? `${fp0.id}|ALUNO` : String(fp0.id),
+          );
           if (
             fp0.formas_pagamento?.tipo_base === "CARTAO" &&
             (fp0.cartao_maquina_id || fp0.cartao_maquinas?.id)
@@ -430,18 +460,67 @@ export default function FrenteCaixaCafePage() {
     carregarFormasPagamento();
   }, [centroCustoCafeId, formaPagamentoCtxId]);
 
+  function getRotuloFormaPagamento(f: FormaPagamentoContexto): string {
+    const codigo = (f.formas_pagamento?.codigo ?? f.forma_pagamento_codigo ?? "").toUpperCase();
+    if (codigo === "CARTAO_CONEXAO_COLAB") {
+      return "Cartao Conexao Colaborador";
+    }
+    if (codigo === "CARTAO_CONEXAO_ALUNO" || codigo === "CARTAO_CONEXAO") {
+      return "Cartao Conexao Aluno";
+    }
+    return f.descricao_exibicao;
+  }
+
+  const formasPagamentoOpcoes = useMemo<FormaPagamentoSelectOption[]>(() => {
+    return formasPagamentoCtx.flatMap((f) => {
+      if (isFormaPagamentoCartaoConexao(f)) {
+        return [
+          {
+            value: `${f.id}|ALUNO`,
+            ctxId: f.id,
+            label: "Cartao Conexao Aluno",
+            tipoContaConexao: "ALUNO",
+          },
+          {
+            value: `${f.id}|COLABORADOR`,
+            ctxId: f.id,
+            label: "Cartao Conexao Colaborador",
+            tipoContaConexao: "COLABORADOR",
+          },
+        ];
+      }
+      return [
+        {
+          value: String(f.id),
+          ctxId: f.id,
+          label: getRotuloFormaPagamento(f),
+          tipoContaConexao: null,
+        },
+      ];
+    });
+  }, [formasPagamentoCtx]);
+
+  const formaPagamentoSelecionadaOpcao = useMemo(() => {
+    if (!formaPagamentoCtxId) return null;
+    return formasPagamentoOpcoes.find((f) => f.value === formaPagamentoCtxId) ?? null;
+  }, [formaPagamentoCtxId, formasPagamentoOpcoes]);
+
   const formaPagamentoSelecionada = useMemo(() => {
-    if (!formaPagamentoCtxId || typeof formaPagamentoCtxId !== "number") return null;
+    if (!formaPagamentoSelecionadaOpcao?.ctxId) return null;
     return (
-      formasPagamentoCtx.find((f) => f.id === formaPagamentoCtxId) ?? null
+      formasPagamentoCtx.find((f) => f.id === formaPagamentoSelecionadaOpcao.ctxId) ??
+      null
     );
-  }, [formasPagamentoCtx, formaPagamentoCtxId]);
+  }, [formasPagamentoCtx, formaPagamentoSelecionadaOpcao]);
 
   // forma_pagamento interna usada pela API /api/cafe/vendas
   const formaPagamentoInterna = useMemo<
     "AVISTA" | "CREDITO" | "CREDIARIO_INTERNO" | "CARTAO_CONEXAO" | null
   >(() => {
     if (bloqueiaCobranca) return null;
+    if (formaPagamentoSelecionadaOpcao?.tipoContaConexao) {
+      return "CARTAO_CONEXAO";
+    }
     const tipoBase = formaPagamentoSelecionada?.formas_pagamento?.tipo_base;
     switch (tipoBase) {
       case "DINHEIRO":
@@ -455,23 +534,23 @@ export default function FrenteCaixaCafePage() {
       default:
         return null;
     }
-  }, [bloqueiaCobranca, formaPagamentoSelecionada]);
+  }, [bloqueiaCobranca, formaPagamentoSelecionada, formaPagamentoSelecionadaOpcao]);
 
   const isCredito = formaPagamentoInterna === "CREDITO";
   const isCrediarioInterno = formaPagamentoInterna === "CREDIARIO_INTERNO";
-  const isCartaoConexao = formaPagamentoInterna === "CARTAO_CONEXAO";
+  const isCartaoConexao =
+    Boolean(formaPagamentoSelecionadaOpcao?.tipoContaConexao) ||
+    (!!formaPagamentoSelecionada && isFormaPagamentoCartaoConexao(formaPagamentoSelecionada));
   const mostraTaxaCartao = !bloqueiaCobranca && isCartaoConexao;
   const totalExibido = bloqueiaCobranca ? 0 : totalFinalCentavos || subtotalCentavos;
 
   // Descobrir tipo de conta (ALUNO / COLABORADOR) para Cartão Conexão
-  const tipoContaConexao: "ALUNO" | "COLABORADOR" | null = useMemo(() => {
-    if (!isCartaoConexao || !formaPagamentoSelecionada?.formas_pagamento?.codigo) {
+  const tipoContaConexao: TipoContaConexao | null = useMemo(() => {
+    if (!isCartaoConexao) {
       return null;
     }
-    const codigo = formaPagamentoSelecionada.formas_pagamento.codigo;
-    if (codigo === "CARTAO_CONEXAO_COLAB") return "COLABORADOR";
-    return "ALUNO";
-  }, [isCartaoConexao, formaPagamentoSelecionada]);
+    return formaPagamentoSelecionadaOpcao?.tipoContaConexao ?? null;
+  }, [isCartaoConexao, formaPagamentoSelecionadaOpcao]);
   // ======== CARTÃO — REGRAS/BANDEIRAS/MAQUININHAS (externo) =========
   const regraCartaoSelecionada = useMemo(() => {
     const maquina = cartaoMaquinaId ? Number(cartaoMaquinaId) : null;
@@ -818,6 +897,14 @@ export default function FrenteCaixaCafePage() {
       return;
     }
 
+    if (!bloqueiaCobranca && isCartaoConexao && !tipoContaConexao) {
+      setMensagem(
+        "Selecione Cartao Conexao Aluno ou Cartao Conexao Colaborador antes de finalizar.",
+      );
+      setMensagemTipo("error");
+      return;
+    }
+
     if (
       !bloqueiaCobranca &&
       isCartaoConexao &&
@@ -827,6 +914,9 @@ export default function FrenteCaixaCafePage() {
       setMensagemTipo("error");
       return;
     }
+
+    const cartaoConexaoTipoContaPayload =
+      !bloqueiaCobranca && isCartaoConexao ? tipoContaConexao : null;
 
     const valor_total_centavos = bloqueiaCobranca ? 0 : totalFinalCentavos;
     const forma_pagamento = bloqueiaCobranca ? "SEM_COBRANCA" : formaPagamentoInterna;
@@ -850,11 +940,14 @@ export default function FrenteCaixaCafePage() {
         : null;
 
     const dados_cartao_conexao =
-      !bloqueiaCobranca && isCartaoConexao && contaConexaoId
+      !bloqueiaCobranca &&
+      isCartaoConexao &&
+      contaConexaoId &&
+      cartaoConexaoTipoContaPayload
         ? {
             conta_conexao_id: Number(contaConexaoId),
             parcelas: parcelasConexao,
-            tipo_conta: tipoContaConexao,
+            tipo_conta: cartaoConexaoTipoContaPayload,
             taxa_cartao_conexao_centavos: taxaCartaoConexaoCentavos,
           }
         : null;
@@ -882,8 +975,7 @@ export default function FrenteCaixaCafePage() {
       valor_total_centavos,
       taxa_cartao_conexao_centavos:
         !bloqueiaCobranca && isCartaoConexao ? taxaCartaoConexaoCentavos : 0,
-      cartao_conexao_tipo_conta:
-        !bloqueiaCobranca && isCartaoConexao ? tipoContaConexao : null,
+      cartao_conexao_tipo_conta: cartaoConexaoTipoContaPayload,
       numero_parcelas: !bloqueiaCobranca
         ? isCartaoConexao
           ? parcelasConexao
@@ -922,16 +1014,22 @@ export default function FrenteCaixaCafePage() {
       }
       const vendaId =
         json.data?.venda?.id || json.venda?.id || json.data?.id || json.data?.venda_id || null;
-      const redirectUrl =
-        json.redirect_url ||
-        json.data?.redirect_url ||
-        (vendaId ? `/cafe/vendas/${vendaId}` : null);
+      const redirectUrl = json.redirect_url || json.data?.redirect_url || null;
+      const isCafeVendasSubRoute =
+        typeof redirectUrl === "string" &&
+        (redirectUrl.startsWith("/cafe/vendas/") || redirectUrl.includes("/cafe/vendas/"));
       setMensagemTipo("success");
-      setMensagem("Venda registrada com sucesso.");
-      if (redirectUrl) {
+      setMensagem(
+        vendaId
+          ? `Venda registrada com sucesso (ID: ${vendaId}).`
+          : "Venda registrada com sucesso.",
+      );
+      if (isCafeVendasSubRoute) {
+        router.replace("/cafe/vendas");
+      } else if (redirectUrl) {
         router.push(redirectUrl);
       } else if (vendaId) {
-        router.push(`/cafe/vendas/${vendaId}`);
+        router.replace("/cafe/vendas");
       } else {
         console.warn("Venda registrada, mas URL de redirecionamento ausente.", json);
       }
@@ -1288,10 +1386,11 @@ export default function FrenteCaixaCafePage() {
             <select
               value={formaPagamentoCtxId ?? ""}
               onChange={(e) => {
-                const id = e.target.value ? Number(e.target.value) : "";
-                setFormaPagamentoCtxId(id);
-                if (id && typeof id === "number") {
-                  const f = formasPagamentoCtx.find((fp) => fp.id === id);
+                const selectedValue = e.target.value;
+                setFormaPagamentoCtxId(selectedValue);
+                const parsed = parseFormaPagamentoSelectValue(selectedValue);
+                if (parsed.ctxId) {
+                  const f = formasPagamentoCtx.find((fp) => fp.id === parsed.ctxId);
                   if (
                     f &&
                     f.formas_pagamento?.tipo_base === "CARTAO" &&
@@ -1307,9 +1406,9 @@ export default function FrenteCaixaCafePage() {
               disabled={bloqueiaCobranca}
             >
               <option value="">Selecione...</option>
-              {formasPagamentoCtx.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.descricao_exibicao}
+              {formasPagamentoOpcoes.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
                 </option>
               ))}
             </select>
