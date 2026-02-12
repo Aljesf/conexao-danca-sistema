@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2026-02-09T20:06:36.783Z
+-- Snapshot do schema gerado em 2026-02-12T16:19:00.674Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -460,7 +460,10 @@ CREATE TABLE public."cobrancas" (
   "data_prevista_pagamento" date,
   "data_inicio_encargos" date,
   "multa_percentual_aplicavel" numeric,
-  "juros_mora_percentual_mensal_aplicavel" numeric
+  "juros_mora_percentual_mensal_aplicavel" numeric,
+  "cancelada_em" timestamp with time zone,
+  "cancelada_motivo" text,
+  "cancelada_por_user_id" uuid
 );
 
 -- --------------------------------------------------
@@ -500,6 +503,40 @@ CREATE TABLE public."colaborador_jornada_dias" (
   "entrada_2" time without time zone,
   "saida_2" time without time zone,
   "ativo" boolean NOT NULL DEFAULT true
+);
+
+-- --------------------------------------------------
+-- Tabela: public."colaborador_pagamentos"
+-- --------------------------------------------------
+CREATE TABLE public."colaborador_pagamentos" (
+  "id" bigint NOT NULL DEFAULT nextval('colaborador_pagamentos_id_seq'::regclass),
+  "colaborador_id" bigint NOT NULL,
+  "tipo" text NOT NULL,
+  "competencia_ano_mes" text,
+  "data_pagamento" date NOT NULL,
+  "valor_centavos" integer NOT NULL,
+  "moeda" text NOT NULL DEFAULT 'BRL'::text,
+  "conta_financeira_id" bigint,
+  "observacoes" text,
+  "folha_pagamento_colaborador_id" bigint,
+  "folha_evento_id" bigint,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."colaborador_remuneracoes"
+-- --------------------------------------------------
+CREATE TABLE public."colaborador_remuneracoes" (
+  "id" bigint NOT NULL DEFAULT nextval('colaborador_remuneracoes_id_seq'::regclass),
+  "colaborador_id" bigint NOT NULL,
+  "vigencia_inicio" date NOT NULL,
+  "vigencia_fim" date,
+  "salario_base_centavos" integer NOT NULL DEFAULT 0,
+  "moeda" text NOT NULL DEFAULT 'BRL'::text,
+  "dia_pagamento_padrao" smallint,
+  "conta_financeira_padrao_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -2313,7 +2350,11 @@ CREATE TABLE public."matriculas" (
   "total_mensalidade_centavos" integer NOT NULL DEFAULT 0,
   "rascunho_expira_em" timestamp with time zone,
   "origem_valor" text,
-  "movimento_concessao_id" uuid
+  "movimento_concessao_id" uuid,
+  "encerramento_tipo" text,
+  "encerramento_motivo" text,
+  "encerramento_em" timestamp with time zone,
+  "encerramento_por_user_id" uuid
 );
 
 -- --------------------------------------------------
@@ -2328,6 +2369,21 @@ CREATE TABLE public."matriculas_compromissos_previstos" (
   "snapshot_json" jsonb NOT NULL,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."matriculas_encerramentos"
+-- --------------------------------------------------
+CREATE TABLE public."matriculas_encerramentos" (
+  "id" bigint NOT NULL DEFAULT nextval('matriculas_encerramentos_id_seq'::regclass),
+  "matricula_id" bigint NOT NULL,
+  "tipo" text NOT NULL,
+  "motivo" text NOT NULL,
+  "realizado_em" timestamp with time zone NOT NULL DEFAULT now(),
+  "realizado_por_user_id" uuid,
+  "cobrancas_canceladas_qtd" integer NOT NULL DEFAULT 0,
+  "cobrancas_canceladas_valor_centavos" integer NOT NULL DEFAULT 0,
+  "payload" jsonb
 );
 
 -- --------------------------------------------------
