@@ -23,6 +23,7 @@ const sidebarContextMap: Record<AnyContext, SidebarContext> = {
   loja: "loja",
   lanchonete: "cafe",
   administracao: "admin",
+  bolsas: "bolsas",
   cafe: "cafe",
   admin: "admin",
 };
@@ -32,6 +33,7 @@ const brandingContextMap: Record<AnyContext, ContextKey> = {
   loja: "loja",
   lanchonete: "lanchonete",
   administracao: "administracao",
+  bolsas: "bolsas",
   cafe: "lanchonete",
   admin: "administracao",
 };
@@ -41,6 +43,7 @@ const contextLabels: Record<SidebarContext, string> = {
   loja: "AJ Dance Store",
   cafe: "Ballet Caf\u00e9",
   admin: "Administra\u00e7\u00e3o do Sistema",
+  bolsas: "Bolsas & Projetos Sociais",
 };
 
 function Section({ id, title, items, defaultOpen = true }: SidebarSection) {

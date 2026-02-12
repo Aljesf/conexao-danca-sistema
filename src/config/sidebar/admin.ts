@@ -5,7 +5,10 @@ export const adminSidebar: SidebarSection[] = [
   {
     id: "admin-inicio",
     title: "🏠 Inicio",
-    items: [{ label: "🧭 Painel de administracao", href: "/admin" }],
+    items: [
+      { label: "🧭 Painel de administracao", href: "/admin" },
+      { label: "🎓 Bolsas & Projetos Sociais", href: "/bolsas" },
+    ],
   },
   {
     id: "admin-financeiro",
@@ -25,21 +28,16 @@ export const adminSidebar: SidebarSection[] = [
     ],
   },
   {
-    id: "admin-bolsas-projetos",
-    title: "🎓 Bolsas & Projetos Sociais (Admin)",
+    id: "admin-movimento-legado",
+    title: "🤝 Movimento (Legado)",
     items: [
-      { label: "🏠 Painel de bolsas", href: "/administracao/bolsas" },
-      { label: "🧩 Projetos sociais", href: "/administracao/bolsas/projetos" },
-      { label: "🏷️ Tipos de bolsa", href: "/administracao/bolsas/tipos" },
-      { label: "🎟️ Concessoes", href: "/administracao/bolsas/concessoes" },
-      { label: "📒 Ledger de investimento", href: "/administracao/bolsas/ledger" },
-      { label: "🗂️ Legado: Painel do Movimento", href: "/admin/movimento" },
-      { label: "🗂️ Legado: Analises socioeconomicas", href: "/admin/movimento/analises" },
-      { label: "🗂️ Legado: Beneficiarios", href: "/admin/movimento/beneficiarios" },
-      { label: "🗂️ Legado: Conceder creditos", href: "/admin/movimento/creditos" },
-      { label: "🗂️ Legado: Lotes", href: "/admin/movimento/lotes" },
-      { label: "🗂️ Legado: Saldos", href: "/admin/movimento/saldos" },
-      { label: "🗂️ Legado: Deficit institucional", href: "/admin/movimento/deficit" },
+      { label: "🗂️ Painel do Movimento", href: "/admin/movimento" },
+      { label: "🗂️ Analises socioeconomicas", href: "/admin/movimento/analises" },
+      { label: "🗂️ Beneficiarios", href: "/admin/movimento/beneficiarios" },
+      { label: "🗂️ Conceder creditos", href: "/admin/movimento/creditos" },
+      { label: "🗂️ Lotes", href: "/admin/movimento/lotes" },
+      { label: "🗂️ Saldos", href: "/admin/movimento/saldos" },
+      { label: "🗂️ Deficit institucional", href: "/admin/movimento/deficit" },
     ],
   },
   {

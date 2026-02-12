@@ -19,4 +19,5 @@ export type SidebarConfig = {
   loja: SidebarSection[];
   cafe: SidebarSection[];
   admin: SidebarSection[];
+  bolsas: SidebarSection[];
 };
