@@ -1,4 +1,4 @@
-﻿import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
@@ -125,6 +125,15 @@ function asMetodoLiquidacao(value: unknown): MetodoLiquidacao {
   if (raw === "CREDITO_BOLSA") return "CREDITO_BOLSA";
   if (raw === "OUTRO") return "OUTRO";
   return "CARTAO_CONEXAO";
+}
+
+function failAtualizarMatricula(err: unknown, context?: Record<string, unknown>) {
+  const detail = err instanceof Error ? err.message : asPgErrorMessage(err);
+  console.error("[matriculas/liquidacao-primeira] falha_atualizar_matricula:", err, context ?? {});
+  return NextResponse.json(
+    { ok: false, error: "falha_atualizar_matricula", detail, details: detail },
+    { status: 500 },
+  );
 }
 
 function asUuidOrNull(value: unknown): string | null {
@@ -1512,6 +1521,26 @@ export async function POST(request: NextRequest) {
           ? valorHerdado
           : null;
 
+  const familiaCentavos = modoManual
+    ? totalFamiliaManual
+    : metodoLiquidacao === "CREDITO_BOLSA"
+      ? 0
+      : valorFinal && valorFinal > 0
+        ? valorFinal
+        : valorTotalMatricula && valorTotalMatricula > 0
+          ? valorTotalMatricula
+          : 0;
+
+  const projetoSocialCentavos = modoManual
+    ? totalInstitucionalManual
+    : metodoLiquidacao === "CREDITO_BOLSA"
+      ? valorTotalMatricula && valorTotalMatricula > 0
+        ? valorTotalMatricula
+        : valorPayload && valorPayload > 0
+          ? valorPayload
+          : 0
+      : 0;
+
   type MovimentoRegistroResumo = {
     concessao_id: string;
     beneficiario_id: string;
@@ -1674,10 +1703,13 @@ export async function POST(request: NextRequest) {
   };
 
   const somenteMovimentoNoManual = modoManual && execucoesMovimento.length > 0 && execucoesFamilia.length === 0;
-  if (metodoLiquidacao === "CREDITO_BOLSA" || somenteMovimentoNoManual) {
+  const liquidacaoInstitucionalSemFamilia = familiaCentavos <= 0 && projetoSocialCentavos > 0;
+  if (metodoLiquidacao === "CREDITO_BOLSA" || somenteMovimentoNoManual || liquidacaoInstitucionalSemFamilia) {
     const valorInstitucional =
       totalInstitucionalManual > 0
         ? totalInstitucionalManual
+        : projetoSocialCentavos > 0
+          ? projetoSocialCentavos
         : valorPayload && valorPayload > 0
           ? valorPayload
           : valorTotalMatricula && valorTotalMatricula > 0
@@ -1704,9 +1736,7 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", matricula.id);
 
-    if (errUpd) {
-      return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
-    }
+    if (errUpd) return failAtualizarMatricula(errUpd, { matricula_id: matricula.id });
 
     return NextResponse.json({
       ok: true,
@@ -1714,6 +1744,10 @@ export async function POST(request: NextRequest) {
       status: "LIQUIDADO_INSTITUCIONAL",
       matricula_id: matricula.id,
       valor_centavos: valorInstitucional,
+      resumo_custeio: {
+        familia_centavos: Math.max(0, familiaCentavos),
+        projeto_social_centavos: Math.max(0, projetoSocialCentavos || valorInstitucional),
+      },
       movimento: movimentoRes.registros[0] ?? null,
       movimento_registros: movimentoRes.registros,
     });
@@ -1834,9 +1868,7 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", matricula.id);
 
-    if (errUpd) {
-      return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
-    }
+    if (errUpd) return failAtualizarMatricula(errUpd, { matricula_id: matricula.id });
 
     if (body.tipo_primeira_cobranca === "ENTRADA_PRORATA" && totalFamiliaManual > 0) {
       const cartaoResultado = await gerarMensalidadesCartao();
@@ -1957,9 +1989,7 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", matricula.id);
 
-      if (errUpd) {
-        return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
-      }
+      if (errUpd) return failAtualizarMatricula(errUpd, { matricula_id: matricula.id });
 
       let movimentoMeta: MovimentoRegistroResumo | null = null;
       let movimentoRegistros: MovimentoRegistroResumo[] = [];
@@ -2097,9 +2127,7 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", matricula.id);
 
-    if (errUpd) {
-      return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
-    }
+    if (errUpd) return failAtualizarMatricula(errUpd, { matricula_id: matricula.id });
 
     return NextResponse.json({ ok: true, status: "LANCADA_CARTAO", lancamento_cartao_id: lancamentoId });
   }
@@ -2193,9 +2221,7 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", matricula.id);
 
-    if (errUpd) {
-      return NextResponse.json({ error: "falha_atualizar_matricula", details: errUpd.message }, { status: 500 });
-    }
+    if (errUpd) return failAtualizarMatricula(errUpd, { matricula_id: matricula.id });
 
     const cartaoResultado = await gerarMensalidadesCartao();
     if (cartaoResultado instanceof NextResponse) {
@@ -2232,5 +2258,6 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ error: "modo_invalido" }, { status: 400 });
 }
+
 
 

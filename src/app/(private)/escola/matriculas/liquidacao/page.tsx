@@ -433,6 +433,8 @@ export default function Page() {
       const json = (await res.json()) as {
         ok?: boolean;
         error?: string;
+        detail?: string;
+        details?: string;
         status?: string;
         modo?: string;
         debugCartao?: {
@@ -447,8 +449,13 @@ export default function Page() {
 
       if (!res.ok) {
         const erroDebug = json?.debugCartao?.erro;
+        const erroDetail = json?.detail ?? json?.details;
         if (erroDebug) {
           setErro(`${json?.error ?? "Falha ao liquidar a primeira cobranca."} | ${erroDebug}`);
+          return;
+        }
+        if (erroDetail) {
+          setErro(`${json?.error ?? "Falha ao liquidar a primeira cobranca."} | ${erroDetail}`);
           return;
         }
         setErro(json?.error ?? "Falha ao liquidar a primeira cobranca.");
