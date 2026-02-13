@@ -2,10 +2,10 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { aplicarBolsaNaMatricula } from "@/lib/bolsas/aplicarBolsaNaMatricula";
-import { isBolsaConcessaoStatus, type BolsaConcessaoStatus } from "@/lib/bolsas/bolsasTypes";
+ 
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
-type ModeloLiquidacaoExecucao = "FAMILIA" | "MOVIMENTO";
+type ModeloLiquidacaoExecucao = "FAMILIA" | "BOLSA";
 
 type PlanoPagamentoMvp = {
   id: number;
@@ -30,8 +30,11 @@ type ExecucaoManualIn = {
   nivel?: string | null;
   nivel_id?: number | null;
   valor_mensal_centavos?: number | null;
-  modelo_liquidacao?: ModeloLiquidacaoExecucao | null;
-  movimento_concessao_id?: string | null;
+  liquidacao_tipo?: ModeloLiquidacaoExecucao | null;
+  bolsa?: {
+    projeto_social_id?: number | null;
+    bolsa_tipo_id?: number | null;
+  } | null;
 };
 
 type ExecucaoManual = {
@@ -39,8 +42,11 @@ type ExecucaoManual = {
   nivel: string;
   nivel_id: number | null;
   valor_mensal_centavos: number;
-  modelo_liquidacao: ModeloLiquidacaoExecucao;
-  movimento_concessao_id: string | null;
+  liquidacao_tipo: ModeloLiquidacaoExecucao;
+  bolsa: {
+    projeto_social_id: number;
+    bolsa_tipo_id: number;
+  } | null;
 };
 
 type BodyNovo = {
@@ -48,7 +54,6 @@ type BodyNovo = {
   responsavel_financeiro_id: number;
   tipo_matricula: TipoMatricula;
   metodo_liquidacao?: MetodoLiquidacao | null;
-  movimento_concessao_id?: string | null;
   vinculo_id: number;
   nivel_id?: number | null;
   vinculos_ids?: number[] | null;
@@ -65,12 +70,6 @@ type BodyNovo = {
   total_mensalidade_centavos?: number | null;
   execucoes?: ExecucaoManualIn[] | null;
   politica_primeiro_pagamento?: PoliticaPrimeiroPagamento | null;
-  is_bolsista?: boolean;
-  projeto_social_id?: number;
-  bolsa_tipo_id?: number;
-  bolsa_status?: BolsaConcessaoStatus;
-  bolsa_data_inicio?: string;
-  bolsa_data_fim?: string | null;
 };
 
 type MatriculaItemIn = {
@@ -131,16 +130,6 @@ function parsePositiveIntOrNull(value: unknown): number | null {
   return num;
 }
 
-function parseBolsaStatusOrNull(value: unknown): BolsaConcessaoStatus | null {
-  if (typeof value !== "string") return null;
-  const status = value.trim().toUpperCase();
-  return isBolsaConcessaoStatus(status) ? status : null;
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
 function parseMetodoLiquidacao(value: unknown): MetodoLiquidacao {
   const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
   if (raw === "CARTAO_CONEXAO") return "CARTAO_CONEXAO";
@@ -152,7 +141,7 @@ function parseMetodoLiquidacao(value: unknown): MetodoLiquidacao {
 
 function parseModeloLiquidacaoExecucao(value: unknown): ModeloLiquidacaoExecucao {
   const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return raw === "MOVIMENTO" ? "MOVIMENTO" : "FAMILIA";
+  return raw === "BOLSA" ? "BOLSA" : "FAMILIA";
 }
 
 function isSchemaMissingError(err: unknown): boolean {
@@ -221,18 +210,27 @@ function parseExecucoes(value: unknown): ExecucaoManual[] | null {
     const nivelIdRaw = record.nivel_id;
     const nivelId = nivelIdRaw === undefined || nivelIdRaw === null ? null : Number(nivelIdRaw);
     if (nivelIdRaw !== undefined && nivelIdRaw !== null && (!Number.isInteger(nivelId) || nivelId <= 0)) return null;
-    const modeloLiquidacao = parseModeloLiquidacaoExecucao(record.modelo_liquidacao);
-    const movimentoConcessaoRaw =
-      typeof record.movimento_concessao_id === "string" ? record.movimento_concessao_id.trim() : "";
-    if (movimentoConcessaoRaw && !isUuid(movimentoConcessaoRaw)) return null;
-    const movimentoConcessaoId = movimentoConcessaoRaw.length > 0 ? movimentoConcessaoRaw : null;
+    const liquidacaoTipo = parseModeloLiquidacaoExecucao(record.liquidacao_tipo ?? record.modelo_liquidacao);
+    const bolsaRaw = record.bolsa;
+    let bolsa: ExecucaoManual["bolsa"] = null;
+    if (liquidacaoTipo === "BOLSA") {
+      if (!bolsaRaw || typeof bolsaRaw !== "object") return null;
+      const bolsaRecord = bolsaRaw as Record<string, unknown>;
+      const projetoSocialId = parsePositiveIntOrNull(bolsaRecord.projeto_social_id);
+      const bolsaTipoId = parsePositiveIntOrNull(bolsaRecord.bolsa_tipo_id);
+      if (!projetoSocialId || !bolsaTipoId) return null;
+      bolsa = {
+        projeto_social_id: projetoSocialId,
+        bolsa_tipo_id: bolsaTipoId,
+      };
+    }
     execucoes.push({
       turma_id: turmaId,
       nivel,
       nivel_id: Number.isInteger(nivelId) ? nivelId : null,
       valor_mensal_centavos: Math.trunc(valor),
-      modelo_liquidacao: modeloLiquidacao,
-      movimento_concessao_id: movimentoConcessaoId,
+      liquidacao_tipo: liquidacaoTipo,
+      bolsa,
     });
   }
   return execucoes;
@@ -249,16 +247,22 @@ function isExecucaoManual(x: unknown): x is ExecucaoManual {
   const nivelIdRaw = record.nivel_id;
   if (nivelIdRaw !== undefined && nivelIdRaw !== null && !Number.isFinite(Number(nivelIdRaw))) return false;
   if (typeof record.nivel !== "string" && (nivelIdRaw === undefined || nivelIdRaw === null)) return false;
-  const concessaoRaw = record.movimento_concessao_id;
-  if (concessaoRaw !== undefined && concessaoRaw !== null && typeof concessaoRaw !== "string") return false;
+  const liquidacao = parseModeloLiquidacaoExecucao(record.liquidacao_tipo ?? record.modelo_liquidacao);
+  if (liquidacao === "BOLSA") {
+    const bolsaRaw = record.bolsa;
+    if (!bolsaRaw || typeof bolsaRaw !== "object") return false;
+    const bolsa = bolsaRaw as Record<string, unknown>;
+    if (!Number.isFinite(Number(bolsa.projeto_social_id))) return false;
+    if (!Number.isFinite(Number(bolsa.bolsa_tipo_id))) return false;
+  }
   return true;
 }
 
-function buildOrigemValorExecucao(execucao: ExecucaoManual, fallbackConcessaoId: string | null): string {
-  if (execucao.modelo_liquidacao === "MOVIMENTO") {
-    const concessao = execucao.movimento_concessao_id ?? fallbackConcessaoId ?? "";
-    if (concessao) return `MANUAL|MOVIMENTO|${concessao}`;
-    return "MANUAL|MOVIMENTO";
+function buildOrigemValorExecucao(execucao: ExecucaoManual): string {
+  if (execucao.liquidacao_tipo === "BOLSA") {
+    const projetoSocialId = execucao.bolsa?.projeto_social_id;
+    if (projetoSocialId) return `MANUAL|BOLSA|${projetoSocialId}`;
+    return "MANUAL|BOLSA";
   }
   return "MANUAL|FAMILIA";
 }
@@ -390,12 +394,6 @@ export async function POST(request: NextRequest) {
 
   const metodoLiquidacaoInput = parseMetodoLiquidacao(body.metodo_liquidacao);
   let metodoLiquidacao = metodoLiquidacaoInput;
-  const movimentoConcessaoIdRaw =
-    typeof body.movimento_concessao_id === "string" ? body.movimento_concessao_id.trim() : "";
-  const movimentoConcessaoIdInput = movimentoConcessaoIdRaw.length > 0 ? movimentoConcessaoIdRaw : null;
-  if (movimentoConcessaoIdInput && !isUuid(movimentoConcessaoIdInput)) {
-    return badRequest("movimento_concessao_id invalido.");
-  }
 
   const pessoaId = Number(body.pessoa_id);
   const respFinId = Number(body.responsavel_financeiro_id);
@@ -435,17 +433,9 @@ export async function POST(request: NextRequest) {
 
   const usarExecucoes = modoManual && execucoesIn.length > 0;
   if (usarExecucoes) {
-    const temMovimento = execucoesIn.some((execucao) => execucao.modelo_liquidacao === "MOVIMENTO");
-    const temFamilia = execucoesIn.some((execucao) => execucao.modelo_liquidacao === "FAMILIA");
-    if (temMovimento) {
-      const semConcessao = execucoesIn.find(
-        (execucao) => execucao.modelo_liquidacao === "MOVIMENTO" && !execucao.movimento_concessao_id,
-      );
-      if (semConcessao) {
-        return badRequest("movimento_concessao_id_obrigatorio_por_execucao.", { turma_id: semConcessao.turma_id });
-      }
-    }
-    if (temMovimento && !temFamilia) {
+    const temBolsa = execucoesIn.some((execucao) => execucao.liquidacao_tipo === "BOLSA");
+    const temFamilia = execucoesIn.some((execucao) => execucao.liquidacao_tipo === "FAMILIA");
+    if (temBolsa && !temFamilia) {
       metodoLiquidacao = "CREDITO_BOLSA";
     } else {
       metodoLiquidacao = "CARTAO_CONEXAO";
@@ -552,30 +542,6 @@ export async function POST(request: NextRequest) {
 
   const dataMatricula = parseDateOrNull(body.data_matricula) ?? null;
   const dataInicioVinculo = parseDateOrNull(body.data_inicio_vinculo) ?? dataMatricula ?? null;
-
-  const isBolsista = body.is_bolsista === true;
-  const projetoSocialId = parsePositiveIntOrNull(body.projeto_social_id);
-  const bolsaTipoId = parsePositiveIntOrNull(body.bolsa_tipo_id);
-  const bolsaStatus = parseBolsaStatusOrNull(body.bolsa_status) ?? "ATIVA";
-  const bolsaDataInicioInput = parseDateYmdOrNull(body.bolsa_data_inicio);
-  const bolsaDataFimInput = body.bolsa_data_fim === null ? null : parseDateYmdOrNull(body.bolsa_data_fim);
-
-  if (isBolsista) {
-    if (!projetoSocialId) return badRequest("projeto_social_id_obrigatorio_para_bolsista.");
-    if (!bolsaTipoId) return badRequest("bolsa_tipo_id_obrigatorio_para_bolsista.");
-    if (body.bolsa_status !== undefined && parseBolsaStatusOrNull(body.bolsa_status) === null) {
-      return badRequest("bolsa_status_invalido.");
-    }
-    if (body.bolsa_data_inicio !== undefined && bolsaDataInicioInput === null) {
-      return badRequest("bolsa_data_inicio_invalida.");
-    }
-    if (body.bolsa_data_fim !== undefined && body.bolsa_data_fim !== null && bolsaDataFimInput === null) {
-      return badRequest("bolsa_data_fim_invalida.");
-    }
-    if (bolsaDataInicioInput && bolsaDataFimInput && bolsaDataFimInput < bolsaDataInicioInput) {
-      return badRequest("bolsa_data_fim_menor_que_data_inicio.");
-    }
-  }
 
   const escolaTabelaPrecoCursoId = body.escola_tabela_preco_curso_id ?? null;
   const planoPagamentoId = body.plano_pagamento_id ?? null;
@@ -869,110 +835,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  let movimentoConcessaoIdResolved: string | null = null;
-  const movimentoConcessoesPorTurma = new Map<number, string>();
-  const execucoesMovimento = usarExecucoes
-    ? execucoesValidas.filter((execucao) => execucao.modelo_liquidacao === "MOVIMENTO")
+  const execucoesBolsa = usarExecucoes
+    ? execucoesValidas.filter((execucao) => execucao.liquidacao_tipo === "BOLSA")
     : [];
-  const precisaValidarMovimento = metodoLiquidacao === "CREDITO_BOLSA" || execucoesMovimento.length > 0;
-  if (precisaValidarMovimento) {
-    const hoje = new Date().toISOString().slice(0, 10);
-
-    const { data: beneficiarios, error: benefErr } = await admin
-      .from("movimento_beneficiarios")
-      .select("id")
-      .eq("pessoa_id", pessoaId);
-
-    if (benefErr) {
-      if (isSchemaMissingError(benefErr)) {
-        return conflict("Schema do Movimento indisponivel no remoto.", {
-          code: "MOVIMENTO_SCHEMA_INDISPONIVEL",
-          details: benefErr.message,
-        });
-      }
-      return serverError("MOVIMENTO_VALIDACAO_FAIL", "Falha ao validar beneficiario do Movimento.", { benefErr });
-    }
-
-    const beneficiarioIds = (beneficiarios ?? [])
-      .map((row) => {
-        const value = (row as { id?: unknown }).id;
-        return typeof value === "string" && isUuid(value) ? value : null;
-      })
-      .filter((id): id is string => !!id);
-
-    if (beneficiarioIds.length === 0) {
-      return conflict("Aluno sem beneficiario do Movimento.", { code: "movimento_sem_concessao_ativa" });
-    }
-
-    const idsSolicitados = new Set<string>();
-    if (movimentoConcessaoIdInput) idsSolicitados.add(movimentoConcessaoIdInput);
-    for (const execucao of execucoesMovimento) {
-      if (execucao.movimento_concessao_id) idsSolicitados.add(execucao.movimento_concessao_id);
-    }
-
-    let query = admin
-      .from("movimento_concessoes")
-      .select("id,status,data_inicio,data_fim,beneficiario_id,criado_em")
-      .in("beneficiario_id", beneficiarioIds)
-      .eq("status", "ATIVA");
-
-    const idsSolicitadosList = Array.from(idsSolicitados);
-    if (idsSolicitadosList.length > 0) {
-      query = query.in("id", idsSolicitadosList);
-    }
-
-    const { data: concessoes, error: concErr } = await query.order("criado_em", { ascending: false });
-
-    if (concErr) {
-      if (isSchemaMissingError(concErr)) {
-        return conflict("Schema do Movimento indisponivel no remoto.", {
-          code: "MOVIMENTO_SCHEMA_INDISPONIVEL",
-          details: concErr.message,
-        });
-      }
-      return serverError("MOVIMENTO_VALIDACAO_FAIL", "Falha ao validar concessao do Movimento.", { concErr });
-    }
-
-    const ativasNoPeriodo = (concessoes ?? []).filter((row) => {
-      const rec = row as { data_inicio?: string | null; data_fim?: string | null };
-      const inicio = rec.data_inicio ? String(rec.data_inicio).slice(0, 10) : null;
-      const fim = rec.data_fim ? String(rec.data_fim).slice(0, 10) : null;
-      if (inicio && inicio > hoje) return false;
-      if (fim && fim < hoje) return false;
-      return true;
-    });
-
-    if (ativasNoPeriodo.length === 0) {
-      return conflict("Concessao ativa do Movimento nao encontrada para este aluno.", {
-        code: "movimento_sem_concessao_ativa",
-      });
-    }
-
-    const ativasById = new Map<string, { id: string }>();
-    for (const row of ativasNoPeriodo) {
-      const id = String((row as { id?: unknown }).id ?? "");
-      if (id) ativasById.set(id, { id });
-    }
-
-    if (idsSolicitadosList.length > 0) {
-      const faltantes = idsSolicitadosList.filter((id) => !ativasById.has(id));
-      if (faltantes.length > 0) {
-        return conflict("Concessao ativa do Movimento nao encontrada para este aluno.", {
-          code: "movimento_sem_concessao_ativa",
-          faltantes,
-        });
-      }
-      movimentoConcessaoIdResolved = idsSolicitadosList[0] ?? null;
-    } else {
-      movimentoConcessaoIdResolved = String((ativasNoPeriodo[0] as { id: string }).id);
-    }
-
-    for (const execucao of execucoesMovimento) {
-      if (execucao.movimento_concessao_id) {
-        movimentoConcessoesPorTurma.set(execucao.turma_id, execucao.movimento_concessao_id);
-      } else if (movimentoConcessaoIdResolved) {
-        movimentoConcessoesPorTurma.set(execucao.turma_id, movimentoConcessaoIdResolved);
-      }
+  for (const execucao of execucoesBolsa) {
+    if (!execucao.bolsa?.projeto_social_id || !execucao.bolsa?.bolsa_tipo_id) {
+      return badRequest("execucao_bolsa_invalida.", { turma_id: execucao.turma_id });
     }
   }
 
@@ -1001,7 +869,6 @@ export async function POST(request: NextRequest) {
     motivo_excecao_primeiro_pagamento: motivoExcecaoPrimeiroPagamento ?? undefined,
     excecao_autorizada_por: excecaoAutorizadaPor ?? undefined,
     excecao_criada_em: excecaoCriadaEm ?? undefined,
-    movimento_concessao_id: movimentoConcessaoIdResolved ?? undefined,
   };
 
   for (const k of Object.keys(insertPayload)) {
@@ -1017,39 +884,28 @@ export async function POST(request: NextRequest) {
     .select(insertSelect)
     .single();
 
-  if (insErr && isSchemaMissingError(insErr) && Object.prototype.hasOwnProperty.call(insertPayload, "movimento_concessao_id")) {
-    const fallbackPayload = { ...insertPayload };
-    delete fallbackPayload.movimento_concessao_id;
-    const retry = await supabase.from("matriculas").insert(fallbackPayload).select(insertSelect).single();
-    matriculaCriada = retry.data;
-    insErr = retry.error;
-  }
-
   if (insErr) return serverError("CRIAR_MATRICULA_FAIL", "Falha ao criar matricula.", { insErr });
 
   const matriculaId = (matriculaCriada as { id: number }).id;
-  let bolsaAplicada:
-    | {
-        projeto_social_beneficiario_id: number;
-        bolsa_concessao_id: number;
-      }
-    | null = null;
+  const bolsasAplicadas: Array<{
+    turma_id: number;
+    projeto_social_beneficiario_id: number;
+    bolsa_concessao_id: number;
+    projeto_social_id: number;
+    bolsa_tipo_id: number;
+  }> = [];
 
   if (usarExecucoes && execucoesValidas.length > 0) {
     let hasModeloLiquidacaoColumn = false;
-    let hasMovimentoConcessaoExecColumn = false;
     const { data: execCols, error: execColsErr } = await admin
       .from("information_schema.columns")
       .select("column_name")
       .eq("table_schema", "public")
       .eq("table_name", "matricula_execucao_valores")
-      .in("column_name", ["modelo_liquidacao", "movimento_concessao_id"]);
+      .in("column_name", ["modelo_liquidacao"]);
 
     if (!execColsErr) {
       hasModeloLiquidacaoColumn = (execCols ?? []).some((row) => (row as { column_name?: string }).column_name === "modelo_liquidacao");
-      hasMovimentoConcessaoExecColumn = (execCols ?? []).some(
-        (row) => (row as { column_name?: string }).column_name === "movimento_concessao_id",
-      );
     }
 
     const rowsBase = execucoesValidas.map((execucao) => ({
@@ -1057,29 +913,19 @@ export async function POST(request: NextRequest) {
       turma_id: execucao.turma_id,
       nivel: execucao.nivel,
       valor_mensal_centavos: execucao.valor_mensal_centavos,
-      origem_valor: buildOrigemValorExecucao(
-        execucao,
-        movimentoConcessoesPorTurma.get(execucao.turma_id) ?? movimentoConcessaoIdResolved,
-      ),
+      origem_valor: buildOrigemValorExecucao(execucao),
       ativo: true,
     }));
 
     const rows = rowsBase.map((row, idx) => {
       const execucao = execucoesValidas[idx];
       const enriched: Record<string, unknown> = { ...row };
-      if (hasModeloLiquidacaoColumn) enriched.modelo_liquidacao = execucao.modelo_liquidacao;
-      if (hasMovimentoConcessaoExecColumn) {
-        enriched.movimento_concessao_id =
-          execucao.movimento_concessao_id ??
-          movimentoConcessoesPorTurma.get(execucao.turma_id) ??
-          movimentoConcessaoIdResolved ??
-          null;
-      }
+      if (hasModeloLiquidacaoColumn) enriched.modelo_liquidacao = execucao.liquidacao_tipo;
       return enriched;
     });
 
     let { error: execErr } = await admin.from("matricula_execucao_valores").insert(rows);
-    if (execErr && isSchemaMissingError(execErr) && (hasModeloLiquidacaoColumn || hasMovimentoConcessaoExecColumn)) {
+    if (execErr && isSchemaMissingError(execErr) && hasModeloLiquidacaoColumn) {
       const retry = await admin.from("matricula_execucao_valores").insert(rowsBase);
       execErr = retry.error;
     }
@@ -1093,26 +939,40 @@ export async function POST(request: NextRequest) {
       return jsonError("MANUAL_INSERT_EXECUCOES_FAIL", "Falha ao salvar valores manuais.", 500, { execErr });
     }
   }
-  if (isBolsista && projetoSocialId && bolsaTipoId) {
+  if (execucoesBolsa.length > 0) {
     const bolsaDataInicioDefault = parseDateYmdOrNull(dataMatricula) ?? new Date().toISOString().slice(0, 10);
-    try {
-      bolsaAplicada = await aplicarBolsaNaMatricula({
-        pessoa_id: pessoaId,
-        projeto_social_id: projetoSocialId,
-        bolsa_tipo_id: bolsaTipoId,
-        matricula_id: matriculaId,
-        turma_id: vinculoId,
-        data_inicio: bolsaDataInicioInput ?? bolsaDataInicioDefault,
-        data_fim: bolsaDataFimInput,
-        status: bolsaStatus,
-      });
-    } catch (bolsaErr) {
-      return serverError("APLICAR_BOLSA_NA_MATRICULA_FAIL", "Falha ao aplicar bolsa na matricula.", {
-        bolsaErr,
-        projeto_social_id: projetoSocialId,
-        bolsa_tipo_id: bolsaTipoId,
-        matricula_id: matriculaId,
-      });
+    for (const execucao of execucoesBolsa) {
+      const projetoSocialId = execucao.bolsa?.projeto_social_id;
+      const bolsaTipoId = execucao.bolsa?.bolsa_tipo_id;
+      if (!projetoSocialId || !bolsaTipoId) {
+        return badRequest("execucao_bolsa_invalida.", { turma_id: execucao.turma_id });
+      }
+      try {
+        const aplicada = await aplicarBolsaNaMatricula({
+          pessoa_id: pessoaId,
+          projeto_social_id: projetoSocialId,
+          bolsa_tipo_id: bolsaTipoId,
+          matricula_id: matriculaId,
+          turma_id: execucao.turma_id,
+          data_inicio: bolsaDataInicioDefault,
+          status: "ATIVA",
+        });
+        bolsasAplicadas.push({
+          turma_id: execucao.turma_id,
+          projeto_social_beneficiario_id: aplicada.projeto_social_beneficiario_id,
+          bolsa_concessao_id: aplicada.bolsa_concessao_id,
+          projeto_social_id: projetoSocialId,
+          bolsa_tipo_id: bolsaTipoId,
+        });
+      } catch (bolsaErr) {
+        return serverError("APLICAR_BOLSA_NA_MATRICULA_FAIL", "Falha ao aplicar bolsa na matricula.", {
+          bolsaErr,
+          turma_id: execucao.turma_id,
+          projeto_social_id: projetoSocialId,
+          bolsa_tipo_id: bolsaTipoId,
+          matricula_id: matriculaId,
+        });
+      }
     }
   }
 
@@ -1120,8 +980,7 @@ export async function POST(request: NextRequest) {
     {
       ok: true,
       matricula: matriculaCriada,
-      projeto_social_beneficiario_id: bolsaAplicada?.projeto_social_beneficiario_id ?? null,
-      bolsa_concessao_id: bolsaAplicada?.bolsa_concessao_id ?? null,
+      bolsa_aplicacoes: bolsasAplicadas,
     },
     { status: 201 },
   );

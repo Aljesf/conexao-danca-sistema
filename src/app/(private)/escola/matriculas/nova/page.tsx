@@ -38,8 +38,10 @@ type MatriculaCarrinhoItem = {
   nivel_id: number | null;
   nivel_texto: string;
   valor_mensal_reais: string;
-  modelo_liquidacao: LiquidacaoOrigem;
-  movimento_concessao_id: string;
+  liquidacao_tipo: LiquidacaoExecucao;
+  bolsa_projeto_busca: string;
+  bolsa_projeto_social_id: number | null;
+  bolsa_tipo_id: number | null;
 };
 
 type CursoOpcao = {
@@ -70,33 +72,18 @@ type TurmasResp = {
   turmas: TurmaOpcao[];
 };
 
-type LiquidacaoOrigem = "FAMILIA" | "MOVIMENTO";
-
-type MovimentoConcessaoAtiva = {
-  concessao_id: string;
-  beneficiario_id: string;
-  pessoa_id: number;
-  status: string;
-  data_inicio: string | null;
-  data_fim: string | null;
-  dia_vencimento_ciclo: number | null;
-  modelo_liquidacao: string | null;
-  percentual_movimento: number | null;
-  percentual_familia: number | null;
-};
-
-type MovimentoConcessoesResp = {
-  ok: boolean;
-  data?: MovimentoConcessaoAtiva[];
-  error?: string;
-  details?: string;
-};
+type LiquidacaoExecucao = "FAMILIA" | "BOLSA";
 
 type MatriculaResp = {
   ok: boolean;
   matricula?: { id: number };
-  projeto_social_beneficiario_id?: number | null;
-  bolsa_concessao_id?: number | null;
+  bolsa_aplicacoes?: Array<{
+    turma_id: number;
+    projeto_social_beneficiario_id: number;
+    bolsa_concessao_id: number;
+    projeto_social_id: number;
+    bolsa_tipo_id: number;
+  }>;
   message?: string;
   error?: string;
 };
@@ -152,8 +139,10 @@ function createCarrinhoItem(): MatriculaCarrinhoItem {
     nivel_id: null,
     nivel_texto: "",
     valor_mensal_reais: "",
-    modelo_liquidacao: "FAMILIA",
-    movimento_concessao_id: "",
+    liquidacao_tipo: "FAMILIA",
+    bolsa_projeto_busca: "Movimento Conexao Danca",
+    bolsa_projeto_social_id: null,
+    bolsa_tipo_id: null,
   };
 }
 
@@ -308,19 +297,12 @@ export default function NovaMatriculaPage() {
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [dataInicioVinculo, setDataInicioVinculo] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [politicaModo, setPoliticaModo] = useState<"PADRAO" | "ADIAR_PARA_VENCIMENTO">("PADRAO");
-  const [concessoesMovimento, setConcessoesMovimento] = useState<MovimentoConcessaoAtiva[]>([]);
-  const [concessoesMovimentoLoading, setConcessoesMovimentoLoading] = useState(false);
-  const [concessoesMovimentoErro, setConcessoesMovimentoErro] = useState<string | null>(null);
-  const [isBolsista, setIsBolsista] = useState(false);
-  const [projetoSocialBusca, setProjetoSocialBusca] = useState("Movimento Conexao Danca");
-  const [projetosSociais, setProjetosSociais] = useState<ProjetoSocialOpcao[]>([]);
-  const [projetosSociaisLoading, setProjetosSociaisLoading] = useState(false);
-  const [projetosSociaisErro, setProjetosSociaisErro] = useState<string | null>(null);
-  const [projetoSocialId, setProjetoSocialId] = useState<number | null>(null);
-  const [bolsaTipos, setBolsaTipos] = useState<BolsaTipoOpcao[]>([]);
-  const [bolsaTiposLoading, setBolsaTiposLoading] = useState(false);
-  const [bolsaTiposErro, setBolsaTiposErro] = useState<string | null>(null);
-  const [bolsaTipoId, setBolsaTipoId] = useState<number | null>(null);
+  const [projetosPorItem, setProjetosPorItem] = useState<Record<string, ProjetoSocialOpcao[]>>({});
+  const [projetosLoadingPorItem, setProjetosLoadingPorItem] = useState<Record<string, boolean>>({});
+  const [projetosErroPorItem, setProjetosErroPorItem] = useState<Record<string, string | null>>({});
+  const [bolsaTiposPorItem, setBolsaTiposPorItem] = useState<Record<string, BolsaTipoOpcao[]>>({});
+  const [bolsaTiposLoadingPorItem, setBolsaTiposLoadingPorItem] = useState<Record<string, boolean>>({});
+  const [bolsaTiposErroPorItem, setBolsaTiposErroPorItem] = useState<Record<string, string | null>>({});
   const [motivoExcecao, setMotivoExcecao] = useState<string>("");
   const [observacoes, setObservacoes] = useState<string>("");
   const [modoManualValores, setModoManualValores] = useState(false);
@@ -414,16 +396,26 @@ export default function NovaMatriculaPage() {
           turmaLabel,
           nivel: nivelNome.trim() || "-",
           valor: valorCentavos === null ? "-" : formatCurrency(valorCentavos),
-          modelo_liquidacao: item.modelo_liquidacao,
-          movimento_concessao_id: item.movimento_concessao_id || null,
+          liquidacao_tipo: item.liquidacao_tipo,
+          bolsa_projeto_social_id: item.bolsa_projeto_social_id,
+          bolsa_tipo_id: item.bolsa_tipo_id,
         };
       }),
     [itensCarrinho, turmasDisponiveis, niveisPorTurma],
   );
-  const temExecucaoMovimento = useMemo(
-    () => itensCarrinho.some((item) => item.modelo_liquidacao === "MOVIMENTO"),
+  const execucoesBolsaOk = useMemo(
+    () =>
+      itensCarrinho.every((item) => {
+        if (item.liquidacao_tipo !== "BOLSA") return true;
+        return Number.isFinite(item.bolsa_projeto_social_id ?? NaN) && Number.isFinite(item.bolsa_tipo_id ?? NaN);
+      }),
     [itensCarrinho],
   );
+  const temExecucaoBolsa = useMemo(
+    () => itensCarrinho.some((item) => item.liquidacao_tipo === "BOLSA"),
+    [itensCarrinho],
+  );
+  const bolsaModoOk = !temExecucaoBolsa || modoManualValores;
 
   const contextoObrigatorio = tipo === "REGULAR";
   const itensCompletosOk =
@@ -469,7 +461,8 @@ export default function NovaMatriculaPage() {
     niveisOk &&
     !niveisCarregando &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
-    (!isBolsista || (Number.isFinite(projetoSocialId ?? NaN) && Number.isFinite(bolsaTipoId ?? NaN))) &&
+    bolsaModoOk &&
+    execucoesBolsaOk &&
     (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0);
   const debugFlags = {
     aluno: !!aluno,
@@ -481,7 +474,8 @@ export default function NovaMatriculaPage() {
     valoresOk: !modoManualValores || valoresOk,
     niveisCarregando: !niveisCarregando,
     anoOk: tipo !== "REGULAR" || !!anoReferencia,
-    bolsaOk: !isBolsista || (Number.isFinite(projetoSocialId ?? NaN) && Number.isFinite(bolsaTipoId ?? NaN)),
+    bolsaModoOk,
+    bolsaOk: execucoesBolsaOk,
     excecaoOk: politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0,
   };
 
@@ -762,156 +756,67 @@ export default function NovaMatriculaPage() {
     }
   }, [tipo, turmaSelecionada]);
 
-  useEffect(() => {
-    let ativo = true;
-
-    if (!temExecucaoMovimento) {
-      setConcessoesMovimento([]);
-      setConcessoesMovimentoErro(null);
-      setConcessoesMovimentoLoading(false);
-      return () => {
-        ativo = false;
-      };
-    }
-
-    if (!aluno?.id) {
-      setConcessoesMovimento([]);
-      setConcessoesMovimentoErro("Selecione o aluno para buscar concessoes do Movimento.");
-      setConcessoesMovimentoLoading(false);
-      return () => {
-        ativo = false;
-      };
-    }
-
-    (async () => {
-      setConcessoesMovimentoLoading(true);
-      setConcessoesMovimentoErro(null);
-      try {
-        const resp = await fetchJSON<MovimentoConcessoesResp>(`/api/movimento/concessoes/ativas?pessoa_id=${aluno.id}`);
-        if (!ativo) return;
-        const lista = Array.isArray(resp.data) ? resp.data : [];
-        setConcessoesMovimento(lista);
-        if (lista.length === 0) {
-          setConcessoesMovimentoErro("Nenhuma concessao ativa encontrada para este aluno.");
-        }
-      } catch (e: unknown) {
-        if (!ativo) return;
-        setConcessoesMovimento([]);
-        setConcessoesMovimentoErro(e instanceof Error ? e.message : "Falha ao buscar concessoes do Movimento.");
-      } finally {
-        if (ativo) setConcessoesMovimentoLoading(false);
-      }
-    })();
-
-    return () => {
-      ativo = false;
-    };
-  }, [aluno?.id, temExecucaoMovimento]);
-
-  useEffect(() => {
-    let ativo = true;
-
-    if (!isBolsista) {
-      setProjetosSociais([]);
-      setProjetosSociaisErro(null);
-      setProjetosSociaisLoading(false);
-      setProjetoSocialId(null);
-      return () => {
-        ativo = false;
-      };
-    }
-
-    const query = projetoSocialBusca.trim();
+  async function buscarProjetosSociaisItem(itemId: string, nomeBusca: string) {
+    const query = nomeBusca.trim();
     if (query.length < 2) {
-      setProjetosSociais([]);
-      setProjetosSociaisErro(null);
-      setProjetosSociaisLoading(false);
-      setProjetoSocialId(null);
-      return () => {
-        ativo = false;
-      };
+      setProjetosPorItem((prev) => ({ ...prev, [itemId]: [] }));
+      setProjetosErroPorItem((prev) => ({ ...prev, [itemId]: "Digite ao menos 2 caracteres." }));
+      return;
     }
 
-    (async () => {
-      setProjetosSociaisLoading(true);
-      setProjetosSociaisErro(null);
-      try {
-        const resp = await fetchJSON<{ ok: boolean; data?: ProjetoSocialOpcao[] }>(
-          `/api/projetos-sociais/busca?nome=${encodeURIComponent(query)}`,
-        );
-        if (!ativo) return;
-        const lista = Array.isArray(resp.data) ? resp.data : [];
-        setProjetosSociais(lista);
-        if (lista.length === 0) {
-          setProjetoSocialId(null);
-          setProjetosSociaisErro("Nenhum projeto social encontrado.");
-          return;
-        }
-        setProjetoSocialId((prev) => {
-          if (prev && lista.some((item) => item.id === prev)) return prev;
-          return lista[0]?.id ?? null;
-        });
-      } catch (e: unknown) {
-        if (!ativo) return;
-        setProjetosSociais([]);
-        setProjetoSocialId(null);
-        setProjetosSociaisErro(e instanceof Error ? e.message : "Falha ao buscar projetos sociais.");
-      } finally {
-        if (ativo) setProjetosSociaisLoading(false);
+    setProjetosLoadingPorItem((prev) => ({ ...prev, [itemId]: true }));
+    setProjetosErroPorItem((prev) => ({ ...prev, [itemId]: null }));
+    try {
+      const resp = await fetchJSON<{ ok: boolean; data?: ProjetoSocialOpcao[] }>(
+        `/api/projetos-sociais/busca?nome=${encodeURIComponent(query)}`,
+      );
+      const lista = Array.isArray(resp.data) ? resp.data : [];
+      setProjetosPorItem((prev) => ({ ...prev, [itemId]: lista }));
+      if (lista.length === 0) {
+        setProjetosErroPorItem((prev) => ({ ...prev, [itemId]: "Nenhum projeto social encontrado." }));
       }
-    })();
+    } catch (e: unknown) {
+      setProjetosPorItem((prev) => ({ ...prev, [itemId]: [] }));
+      setProjetosErroPorItem((prev) => ({
+        ...prev,
+        [itemId]: e instanceof Error ? e.message : "Falha ao buscar projetos sociais.",
+      }));
+    } finally {
+      setProjetosLoadingPorItem((prev) => ({ ...prev, [itemId]: false }));
+    }
+  }
 
-    return () => {
-      ativo = false;
-    };
-  }, [isBolsista, projetoSocialBusca]);
-
-  useEffect(() => {
-    let ativo = true;
-
-    if (!isBolsista || !projetoSocialId) {
-      setBolsaTipos([]);
-      setBolsaTipoId(null);
-      setBolsaTiposErro(null);
-      setBolsaTiposLoading(false);
-      return () => {
-        ativo = false;
-      };
+  async function carregarTiposBolsaItem(itemId: string, projetoId: number | null) {
+    if (!projetoId) {
+      setBolsaTiposPorItem((prev) => ({ ...prev, [itemId]: [] }));
+      setBolsaTiposErroPorItem((prev) => ({ ...prev, [itemId]: null }));
+      return;
     }
 
-    (async () => {
-      setBolsaTiposLoading(true);
-      setBolsaTiposErro(null);
-      try {
-        const resp = await fetchJSON<{ ok: boolean; data?: BolsaTipoOpcao[] }>(
-          `/api/bolsas/tipos?projeto_social_id=${projetoSocialId}&ativo=true`,
-        );
-        if (!ativo) return;
-        const lista = Array.isArray(resp.data) ? resp.data : [];
-        setBolsaTipos(lista);
-        if (lista.length === 0) {
-          setBolsaTipoId(null);
-          setBolsaTiposErro("Nenhum tipo de bolsa ativo para este projeto.");
-          return;
-        }
-        setBolsaTipoId((prev) => {
-          if (prev && lista.some((item) => item.id === prev)) return prev;
-          return lista[0]?.id ?? null;
-        });
-      } catch (e: unknown) {
-        if (!ativo) return;
-        setBolsaTipos([]);
-        setBolsaTipoId(null);
-        setBolsaTiposErro(e instanceof Error ? e.message : "Falha ao carregar tipos de bolsa.");
-      } finally {
-        if (ativo) setBolsaTiposLoading(false);
+    setBolsaTiposLoadingPorItem((prev) => ({ ...prev, [itemId]: true }));
+    setBolsaTiposErroPorItem((prev) => ({ ...prev, [itemId]: null }));
+    try {
+      const resp = await fetchJSON<{ ok: boolean; data?: BolsaTipoOpcao[] }>(
+        `/api/bolsas/tipos?projeto_social_id=${projetoId}&ativo=true`,
+      );
+      const lista = Array.isArray(resp.data) ? resp.data : [];
+      setBolsaTiposPorItem((prev) => ({ ...prev, [itemId]: lista }));
+      if (lista.length === 0) {
+        setBolsaTiposErroPorItem((prev) => ({
+          ...prev,
+          [itemId]: "Nenhum tipo de bolsa ativo para este projeto.",
+        }));
       }
-    })();
-
-    return () => {
-      ativo = false;
-    };
-  }, [isBolsista, projetoSocialId]);
+    } catch (e: unknown) {
+      setBolsaTiposPorItem((prev) => ({ ...prev, [itemId]: [] }));
+      setBolsaTiposErroPorItem((prev) => ({
+        ...prev,
+        [itemId]: e instanceof Error ? e.message : "Falha ao carregar tipos de bolsa.",
+      }));
+    } finally {
+      setBolsaTiposLoadingPorItem((prev) => ({ ...prev, [itemId]: false }));
+    }
+  }
 
   function addItemCarrinho() {
     setItensCarrinho((prev) => [...prev, createCarrinhoItem()]);
@@ -919,6 +824,36 @@ export default function NovaMatriculaPage() {
 
   function removeItemCarrinho(id: string) {
     setItensCarrinho((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.id !== id)));
+    setProjetosPorItem((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setProjetosLoadingPorItem((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setProjetosErroPorItem((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setBolsaTiposPorItem((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setBolsaTiposLoadingPorItem((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setBolsaTiposErroPorItem((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   function updateItemCarrinho(id: string, patch: Partial<MatriculaCarrinhoItem>) {
@@ -963,11 +898,16 @@ export default function NovaMatriculaPage() {
       return;
     }
 
-    const execucoesMovimentoSemConcessao = itensCarrinho.filter(
-      (item) => item.modelo_liquidacao === "MOVIMENTO" && !item.movimento_concessao_id,
+    if (temExecucaoBolsa && !modoManualValores) {
+      setErro("Para usar bolsa por execução, ative \"Inserir valores manualmente\".");
+      return;
+    }
+
+    const execucoesBolsaInvalidas = itensCarrinho.filter(
+      (item) => item.liquidacao_tipo === "BOLSA" && (!item.bolsa_projeto_social_id || !item.bolsa_tipo_id),
     );
-    if (execucoesMovimentoSemConcessao.length > 0) {
-      setErro("Selecione a concessao ativa do Movimento em todas as execucoes institucionais.");
+    if (execucoesBolsaInvalidas.length > 0) {
+      setErro("Selecione projeto social e tipo de bolsa em todas as execuções com liquidação por bolsa.");
       return;
     }
 
@@ -979,17 +919,6 @@ export default function NovaMatriculaPage() {
     if (politicaModo === "ADIAR_PARA_VENCIMENTO" && !motivoExcecao.trim()) {
       setErro("Informe o motivo da excecao para adiar o primeiro pagamento.");
       return;
-    }
-
-    if (isBolsista) {
-      if (!projetoSocialId) {
-        setErro("Selecione o projeto social para bolsista.");
-        return;
-      }
-      if (!bolsaTipoId) {
-        setErro("Selecione o tipo de bolsa para bolsista.");
-        return;
-      }
     }
 
     setLoading(true);
@@ -1023,10 +952,15 @@ export default function NovaMatriculaPage() {
                 nivel: nivelNome.trim(),
                 nivel_id: item.nivel_id ?? null,
                 valor_mensal_centavos: valorCentavos,
-                modelo_liquidacao: item.modelo_liquidacao,
-                movimento_concessao_id:
-                  item.modelo_liquidacao === "MOVIMENTO" && item.movimento_concessao_id
-                    ? item.movimento_concessao_id
+                liquidacao_tipo: item.liquidacao_tipo,
+                bolsa:
+                  item.liquidacao_tipo === "BOLSA" &&
+                  Number.isFinite(item.bolsa_projeto_social_id ?? NaN) &&
+                  Number.isFinite(item.bolsa_tipo_id ?? NaN)
+                    ? {
+                        projeto_social_id: Number(item.bolsa_projeto_social_id),
+                        bolsa_tipo_id: Number(item.bolsa_tipo_id),
+                      }
                     : null,
               };
             })
@@ -1038,8 +972,8 @@ export default function NovaMatriculaPage() {
                 nivel: string;
                 nivel_id: number | null;
                 valor_mensal_centavos: number;
-                modelo_liquidacao: LiquidacaoOrigem;
-                movimento_concessao_id: string | null;
+                liquidacao_tipo: LiquidacaoExecucao;
+                bolsa: { projeto_social_id: number; bolsa_tipo_id: number } | null;
               } => !!execucao,
             )
         : [];
@@ -1058,19 +992,17 @@ export default function NovaMatriculaPage() {
         throw new Error("Execucoes invalidas para concluir a matricula.");
       }
 
-      const execucoesMovimento = execucoesPayload.filter((execucao) => execucao.modelo_liquidacao === "MOVIMENTO");
+      const execucoesBolsa = execucoesPayload.filter((execucao) => execucao.liquidacao_tipo === "BOLSA");
       const metodoLiquidacaoGlobal =
-        execucoesPayload.length > 0 && execucoesMovimento.length === execucoesPayload.length
+        execucoesPayload.length > 0 && execucoesBolsa.length === execucoesPayload.length
           ? "CREDITO_BOLSA"
           : "CARTAO_CONEXAO";
-      const concessaoGlobal = execucoesMovimento[0]?.movimento_concessao_id ?? null;
 
       const payload: Record<string, unknown> = {
         pessoa_id: aluno.id,
         responsavel_financeiro_id: responsavel.id,
         tipo_matricula: tipo,
         metodo_liquidacao: metodoLiquidacaoGlobal,
-        movimento_concessao_id: concessaoGlobal,
         vinculo_id: vinculoPrincipalIdFinal,
         ...(vinculosIdsFinal.length > 1 ? { vinculos_ids: vinculosIdsFinal } : {}),
         itens: itensPayload,
@@ -1079,14 +1011,6 @@ export default function NovaMatriculaPage() {
         data_inicio_vinculo: dataInicioVinculo,
         observacoes: observacoes.trim() || null,
       };
-
-      if (isBolsista && projetoSocialId && bolsaTipoId) {
-        payload.is_bolsista = true;
-        payload.projeto_social_id = projetoSocialId;
-        payload.bolsa_tipo_id = bolsaTipoId;
-        payload.bolsa_status = "ATIVA";
-        payload.bolsa_data_inicio = dataMatricula || new Date().toISOString().slice(0, 10);
-      }
 
       if (modoManualValores) {
         payload.execucoes = execucoesPayload;
@@ -1207,70 +1131,6 @@ export default function NovaMatriculaPage() {
                   <option value="CURSO_LIVRE">Curso livre</option>
                   <option value="PROJETO_ARTISTICO">Projeto artístico</option>
                 </select>
-              </div>
-
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <label className="flex items-center gap-2 text-sm font-medium">
-                  <input
-                    type="checkbox"
-                    checked={isBolsista}
-                    onChange={(e) => setIsBolsista(e.target.checked)}
-                  />
-                  Bolsista
-                </label>
-
-                {isBolsista ? (
-                  <div className="grid gap-3">
-                    <div className="space-y-1">
-                      <label className="text-sm font-medium">Projeto social (busca por nome)</label>
-                      <input
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                        value={projetoSocialBusca}
-                        onChange={(e) => setProjetoSocialBusca(e.target.value)}
-                        placeholder="Ex.: Movimento Conexao Danca"
-                      />
-                      <p className="text-xs text-slate-500">Digite 2+ caracteres para buscar.</p>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-sm font-medium">Projeto social</label>
-                      <select
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                        value={projetoSocialId ?? ""}
-                        onChange={(e) => setProjetoSocialId(e.target.value ? Number(e.target.value) : null)}
-                        disabled={projetosSociaisLoading || projetosSociais.length === 0}
-                      >
-                        <option value="">Selecione...</option>
-                        {projetosSociais.map((projeto) => (
-                          <option key={projeto.id} value={projeto.id}>
-                            {projeto.nome} (#{projeto.id})
-                          </option>
-                        ))}
-                      </select>
-                      {projetosSociaisLoading ? <p className="text-xs text-slate-500">Carregando projetos...</p> : null}
-                      {projetosSociaisErro ? <p className="text-xs text-rose-600">{projetosSociaisErro}</p> : null}
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-sm font-medium">Tipo de bolsa</label>
-                      <select
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                        value={bolsaTipoId ?? ""}
-                        onChange={(e) => setBolsaTipoId(e.target.value ? Number(e.target.value) : null)}
-                        disabled={!projetoSocialId || bolsaTiposLoading || bolsaTipos.length === 0}
-                      >
-                        <option value="">Selecione...</option>
-                        {bolsaTipos.map((tipoBolsa) => (
-                          <option key={tipoBolsa.id} value={tipoBolsa.id}>
-                            {tipoBolsa.nome} (#{tipoBolsa.id})
-                          </option>
-                        ))}
-                      </select>
-                      {bolsaTiposLoading ? <p className="text-xs text-slate-500">Carregando tipos de bolsa...</p> : null}
-                      {bolsaTiposErro ? <p className="text-xs text-rose-600">{bolsaTiposErro}</p> : null}
-                    </div>
-                  </div>
-                ) : null}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -1550,58 +1410,127 @@ export default function NovaMatriculaPage() {
                         <label className="text-sm font-medium">Liquidação desta execução</label>
                         <select
                           className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                          value={item.modelo_liquidacao}
+                          value={item.liquidacao_tipo}
                           onChange={(e) =>
                             updateItemCarrinho(item.id, {
-                              modelo_liquidacao: e.target.value as LiquidacaoOrigem,
-                              movimento_concessao_id:
-                                e.target.value === "MOVIMENTO" ? item.movimento_concessao_id : "",
+                              liquidacao_tipo: e.target.value as LiquidacaoExecucao,
+                              bolsa_tipo_id: e.target.value === "BOLSA" ? item.bolsa_tipo_id : null,
+                              bolsa_projeto_social_id:
+                                e.target.value === "BOLSA" ? item.bolsa_projeto_social_id : null,
                             })
                           }
                         >
                           <option value="FAMILIA">Família (padrão)</option>
-                          <option value="MOVIMENTO">Movimento (institucional)</option>
+                          <option value="BOLSA">Bolsa (Projeto Social)</option>
                         </select>
                       </div>
+                    </div>
 
-                      {item.modelo_liquidacao === "MOVIMENTO" ? (
-                        <div className="space-y-1">
-                          <label className="text-sm font-medium">Concessão ativa do Movimento</label>
-                          <select
-                            className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-                            value={item.movimento_concessao_id}
-                            onChange={(e) => updateItemCarrinho(item.id, { movimento_concessao_id: e.target.value })}
-                            disabled={concessoesMovimentoLoading || concessoesMovimento.length === 0}
-                          >
-                            <option value="">Selecione...</option>
-                            {concessoesMovimento.map((concessao) => (
-                              <option key={concessao.concessao_id} value={concessao.concessao_id}>
-                                {`Concessao ${concessao.concessao_id.slice(0, 8)}... | Movimento ${concessao.percentual_movimento ?? 0}%`}
-                              </option>
-                            ))}
-                          </select>
-                          {concessoesMovimentoLoading ? (
-                            <p className="text-xs text-slate-500">Buscando concessoes ativas...</p>
-                          ) : null}
-                          {concessoesMovimentoErro ? (
-                            <p className="text-xs text-rose-600">{concessoesMovimentoErro}</p>
-                          ) : null}
-                          {item.modelo_liquidacao === "MOVIMENTO" && !item.movimento_concessao_id ? (
-                            <p className="text-xs text-rose-600">Selecione uma concessao ativa para esta execução.</p>
-                          ) : null}
-                          <div className="flex flex-wrap items-center gap-3 text-xs">
-                            {aluno?.id ? (
-                              <Link className="text-indigo-600 hover:underline" href={`/pessoas/${aluno.id}`}>
-                                Abrir pessoa
-                              </Link>
+                    {item.liquidacao_tipo === "BOLSA" ? (
+                      <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="space-y-1">
+                            <label className="text-sm font-medium">Projeto social (busca por nome)</label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                                value={item.bolsa_projeto_busca}
+                                onChange={(e) =>
+                                  updateItemCarrinho(item.id, { bolsa_projeto_busca: e.target.value })
+                                }
+                                placeholder="Ex.: Movimento Conexao Danca"
+                              />
+                              <button
+                                type="button"
+                                className="rounded-xl border border-slate-200 px-3 py-2 text-xs hover:bg-white"
+                                onClick={() => void buscarProjetosSociaisItem(item.id, item.bolsa_projeto_busca)}
+                                disabled={(projetosLoadingPorItem[item.id] ?? false)}
+                              >
+                                Buscar
+                              </button>
+                            </div>
+                            {projetosLoadingPorItem[item.id] ? (
+                              <p className="text-xs text-slate-500">Buscando projetos...</p>
                             ) : null}
-                            <Link className="text-indigo-600 hover:underline" href="/admin/movimento/beneficiarios">
-                              Abrir Movimento
-                            </Link>
+                            {projetosErroPorItem[item.id] ? (
+                              <p className="text-xs text-rose-600">{projetosErroPorItem[item.id]}</p>
+                            ) : null}
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-sm font-medium">Projeto social</label>
+                            <select
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                              value={item.bolsa_projeto_social_id ?? ""}
+                              onChange={(e) => {
+                                const projetoId = e.target.value ? Number(e.target.value) : null;
+                                updateItemCarrinho(item.id, {
+                                  bolsa_projeto_social_id: projetoId,
+                                  bolsa_tipo_id: null,
+                                });
+                                void carregarTiposBolsaItem(item.id, projetoId);
+                              }}
+                              disabled={(projetosPorItem[item.id]?.length ?? 0) === 0}
+                            >
+                              <option value="">Selecione...</option>
+                              {(projetosPorItem[item.id] ?? []).map((projeto) => (
+                                <option key={projeto.id} value={projeto.id}>
+                                  {projeto.nome} (#{projeto.id})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1 md:col-span-2">
+                            <label className="text-sm font-medium">Tipo de bolsa</label>
+                            <select
+                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                              value={item.bolsa_tipo_id ?? ""}
+                              onChange={(e) =>
+                                updateItemCarrinho(item.id, {
+                                  bolsa_tipo_id: e.target.value ? Number(e.target.value) : null,
+                                })
+                              }
+                              disabled={!item.bolsa_projeto_social_id || (bolsaTiposPorItem[item.id]?.length ?? 0) === 0}
+                            >
+                              <option value="">Selecione...</option>
+                              {(bolsaTiposPorItem[item.id] ?? []).map((tipoBolsa) => (
+                                <option key={tipoBolsa.id} value={tipoBolsa.id}>
+                                  {tipoBolsa.nome} (#{tipoBolsa.id})
+                                </option>
+                              ))}
+                            </select>
+                            {bolsaTiposLoadingPorItem[item.id] ? (
+                              <p className="text-xs text-slate-500">Carregando tipos de bolsa...</p>
+                            ) : null}
+                            {bolsaTiposErroPorItem[item.id] ? (
+                              <p className="text-xs text-rose-600">{bolsaTiposErroPorItem[item.id]}</p>
+                            ) : null}
+                            {!bolsaTiposLoadingPorItem[item.id] &&
+                            item.bolsa_projeto_social_id &&
+                            (bolsaTiposPorItem[item.id]?.length ?? 0) === 0 ? (
+                              <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                                Nenhum tipo de bolsa ativo para este projeto.
+                                <div className="mt-2 flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    className="rounded-md border border-amber-300 bg-white px-2 py-1 hover:bg-amber-100"
+                                    onClick={() =>
+                                      window.open(
+                                        `/bolsas/tipos?projeto_social_id=${item.bolsa_projeto_social_id}`,
+                                        "_blank",
+                                      )
+                                    }
+                                  >
+                                    Cadastrar tipo de bolsa
+                                  </button>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
-                      ) : null}
-                    </div>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
@@ -1652,10 +1581,10 @@ export default function NovaMatriculaPage() {
             <div>Responsavel: {responsavel?.nome ?? "Nao selecionado"}</div>
             <div>Tipo: {labelTipo(tipo)}</div>
             <div>
-              Execucoes em família: {itensCarrinho.filter((item) => item.modelo_liquidacao === "FAMILIA").length}
+              Execuções em família: {itensCarrinho.filter((item) => item.liquidacao_tipo === "FAMILIA").length}
             </div>
             <div>
-              Execucoes no Movimento: {itensCarrinho.filter((item) => item.modelo_liquidacao === "MOVIMENTO").length}
+              Execuções em bolsa: {itensCarrinho.filter((item) => item.liquidacao_tipo === "BOLSA").length}
             </div>
             <div>
               Periodo letivo:{" "}
@@ -1674,8 +1603,7 @@ export default function NovaMatriculaPage() {
                       {execucoesResumo.map((execucao) => (
                         <li key={execucao.id}>
                           {execucao.idx + 1}a execucao: {execucao.turmaLabel} | Nivel: {execucao.nivel} | Valor:{" "}
-                          {execucao.valor} | Liquidação:{" "}
-                          {execucao.modelo_liquidacao === "MOVIMENTO" ? "Movimento" : "Família"}
+                          {execucao.valor} | Liquidação: {execucao.liquidacao_tipo === "BOLSA" ? "Bolsa" : "Família"}
                         </li>
                       ))}
                     </ul>
