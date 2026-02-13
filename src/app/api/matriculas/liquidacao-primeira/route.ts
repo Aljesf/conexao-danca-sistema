@@ -889,12 +889,12 @@ type ExecucaoManualResumo = {
   turma_id: number;
   nivel: string | null;
   valor_mensal_centavos: number;
-  modelo_liquidacao: "FAMILIA" | "MOVIMENTO";
+  modelo_liquidacao: "FAMILIA" | "MOVIMENTO" | "BOLSA";
   movimento_concessao_id: string | null;
 };
 
 function parseOrigemValorExecucao(origemValor: string | null): {
-  modelo_liquidacao: "FAMILIA" | "MOVIMENTO";
+  modelo_liquidacao: "FAMILIA" | "MOVIMENTO" | "BOLSA";
   movimento_concessao_id: string | null;
 } {
   if (!origemValor) {
@@ -909,6 +909,9 @@ function parseOrigemValorExecucao(origemValor: string | null): {
       movimento_concessao_id: asUuidOrNull(concessaoRaw),
     };
   }
+  if (raw.startsWith("MANUAL|BOLSA")) {
+    return { modelo_liquidacao: "BOLSA", movimento_concessao_id: null };
+  }
   if (raw.startsWith("MANUAL_MOVIMENTO")) {
     const partes = origemValor.split(":");
     const concessaoRaw = partes.length >= 2 ? partes[1] : null;
@@ -922,7 +925,7 @@ function parseOrigemValorExecucao(origemValor: string | null): {
 
 function normalizeExecucoesManuais(
   rows: unknown[],
-  defaultModelo: "FAMILIA" | "MOVIMENTO",
+  defaultModelo: "FAMILIA" | "MOVIMENTO" | "BOLSA",
   defaultConcessaoId: string | null,
 ): ExecucaoManualResumo[] {
   return (rows ?? [])
@@ -935,9 +938,12 @@ function normalizeExecucoesManuais(
       const origemValor = typeof record.origem_valor === "string" ? record.origem_valor : null;
       const origemParsed = parseOrigemValorExecucao(origemValor);
       const modeloDireto = typeof record.modelo_liquidacao === "string" ? record.modelo_liquidacao.trim().toUpperCase() : "";
-      const modelo = modeloDireto === "MOVIMENTO" || origemParsed.modelo_liquidacao === "MOVIMENTO"
-        ? "MOVIMENTO"
-        : defaultModelo;
+      const modelo =
+        modeloDireto === "MOVIMENTO" || origemParsed.modelo_liquidacao === "MOVIMENTO"
+          ? "MOVIMENTO"
+          : modeloDireto === "BOLSA" || origemParsed.modelo_liquidacao === "BOLSA"
+            ? "BOLSA"
+            : defaultModelo;
       const concessaoDireta = asUuidOrNull(record.movimento_concessao_id);
       const concessao =
         concessaoDireta ?? origemParsed.movimento_concessao_id ?? (modelo === "MOVIMENTO" ? defaultConcessaoId : null);
@@ -1226,7 +1232,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "falha_buscar_execucoes", details: execErr.message }, { status: 500 });
   }
 
-  const defaultModeloExecucao = metodoLiquidacao === "CREDITO_BOLSA" ? "MOVIMENTO" : "FAMILIA";
+  const defaultModeloExecucao = metodoLiquidacao === "CREDITO_BOLSA" ? "BOLSA" : "FAMILIA";
   const execucoesManuais = normalizeExecucoesManuais(
     execRows ?? [],
     defaultModeloExecucao,
@@ -1235,8 +1241,11 @@ export async function POST(request: NextRequest) {
   const modoManual = execucoesManuais.length > 0;
   const execucoesFamilia = execucoesManuais.filter((execucao) => execucao.modelo_liquidacao === "FAMILIA");
   const execucoesMovimento = execucoesManuais.filter((execucao) => execucao.modelo_liquidacao === "MOVIMENTO");
+  const execucoesBolsa = execucoesManuais.filter((execucao) => execucao.modelo_liquidacao === "BOLSA");
   const totalFamiliaManual = execucoesFamilia.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
   const totalMovimentoManual = execucoesMovimento.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
+  const totalBolsaManual = execucoesBolsa.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
+  const totalInstitucionalManual = totalMovimentoManual + totalBolsaManual;
   const turmasFamilia = Array.from(new Set(execucoesFamilia.map((execucao) => execucao.turma_id)));
   let cobrancasCriadasManual: Array<{ id: number; competencia_ano_mes: string }> = [];
   const gerarMensalidadesCartao = async (): Promise<
@@ -1514,18 +1523,14 @@ export async function POST(request: NextRequest) {
 
   const registrarParteMovimento = async (valorInstitucional: number) => {
     const grupos = new Map<string, { valor_centavos: number; turmas: number[] }>();
+    const semConcessao: Array<{ turma_id: number; valor_centavos: number }> = [];
 
     if (execucoesMovimento.length > 0) {
       for (const execucao of execucoesMovimento) {
         const concessaoId = execucao.movimento_concessao_id ?? movimentoConcessaoId;
         if (!concessaoId) {
-          return NextResponse.json(
-            {
-              error: "movimento_concessao_id_obrigatorio_por_execucao",
-              details: { turma_id: execucao.turma_id },
-            },
-            { status: 409 },
-          );
+          semConcessao.push({ turma_id: execucao.turma_id, valor_centavos: execucao.valor_mensal_centavos });
+          continue;
         }
         const atual = grupos.get(concessaoId);
         if (!atual) {
@@ -1540,7 +1545,27 @@ export async function POST(request: NextRequest) {
       }
     } else {
       if (!movimentoConcessaoId) {
-        return NextResponse.json({ error: "movimento_concessao_id_obrigatorio" }, { status: 409 });
+        const dataLiquidacao = new Date().toISOString().slice(0, 10);
+        const linhaInstitucional: LedgerInsert = {
+          matricula_id: matricula.id,
+          tipo: "OUTRO",
+          descricao: "Liquidacao institucional - Projeto Social",
+          valor_centavos: valorInstitucional,
+          vencimento: null,
+          data_evento: dataLiquidacao,
+          status: "PAGO",
+          origem_tabela: "bolsa_concessoes",
+          origem_id: null,
+        };
+        const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(linhaInstitucional);
+        if (ledgerErr) {
+          return NextResponse.json({ error: "falha_inserir_ledger", details: ledgerErr.message }, { status: 500 });
+        }
+        return {
+          ok: true as const,
+          registros: [] as MovimentoRegistroResumo[],
+          dataLiquidacao,
+        };
       }
       grupos.set(movimentoConcessaoId, { valor_centavos: valorInstitucional, turmas: [] });
     }
@@ -1575,6 +1600,7 @@ export async function POST(request: NextRequest) {
     }
 
     const dataLiquidacao = new Date().toISOString().slice(0, 10);
+    const totalSemConcessao = semConcessao.reduce((acc, row) => acc + row.valor_centavos, 0);
     const registroPorConcessao = new Map<string, MovimentoRegistroResumo>();
     for (const registro of registrosMovimento) registroPorConcessao.set(registro.concessao_id, registro);
 
@@ -1596,7 +1622,19 @@ export async function POST(request: NextRequest) {
               origem_tabela: "movimento_concessoes_ciclos",
               origem_id: cicloIdAsInt ?? null,
             };
-          })
+          }).concat(
+            semConcessao.map((execucao) => ({
+              matricula_id: matricula.id,
+              tipo: "OUTRO",
+              descricao: `Liquidacao institucional - Projeto Social (turma ${execucao.turma_id})`,
+              valor_centavos: execucao.valor_centavos,
+              vencimento: null,
+              data_evento: dataLiquidacao,
+              status: "PAGO",
+              origem_tabela: "bolsa_concessoes",
+              origem_id: null,
+            })),
+          )
         : registrosMovimento.map((registro) => ({
             matricula_id: matricula.id,
             tipo: "OUTRO",
@@ -1608,6 +1646,20 @@ export async function POST(request: NextRequest) {
             origem_tabela: "movimento_concessoes_ciclos",
             origem_id: asInt(registro.ciclo_id) ?? null,
           }));
+
+    if (execucoesMovimento.length === 0 && totalSemConcessao > 0) {
+      linhasMovimento.push({
+        matricula_id: matricula.id,
+        tipo: "OUTRO",
+        descricao: "Liquidacao institucional - Projeto Social",
+        valor_centavos: totalSemConcessao,
+        vencimento: null,
+        data_evento: dataLiquidacao,
+        status: "PAGO",
+        origem_tabela: "bolsa_concessoes",
+        origem_id: null,
+      });
+    }
 
     const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(linhasMovimento);
     if (ledgerErr) {
@@ -1624,8 +1676,8 @@ export async function POST(request: NextRequest) {
   const somenteMovimentoNoManual = modoManual && execucoesMovimento.length > 0 && execucoesFamilia.length === 0;
   if (metodoLiquidacao === "CREDITO_BOLSA" || somenteMovimentoNoManual) {
     const valorInstitucional =
-      totalMovimentoManual > 0
-        ? totalMovimentoManual
+      totalInstitucionalManual > 0
+        ? totalInstitucionalManual
         : valorPayload && valorPayload > 0
           ? valorPayload
           : valorTotalMatricula && valorTotalMatricula > 0
@@ -1796,8 +1848,8 @@ export async function POST(request: NextRequest) {
 
     let movimentoMeta: MovimentoRegistroResumo | null = null;
     let movimentoRegistros: MovimentoRegistroResumo[] = [];
-    if (totalMovimentoManual > 0) {
-      const movimentoRes = await registrarParteMovimento(totalMovimentoManual);
+    if (totalInstitucionalManual > 0) {
+      const movimentoRes = await registrarParteMovimento(totalInstitucionalManual);
       if (movimentoRes instanceof NextResponse) return movimentoRes;
       movimentoMeta = movimentoRes.registros[0] ?? null;
       movimentoRegistros = movimentoRes.registros;
@@ -1814,7 +1866,7 @@ export async function POST(request: NextRequest) {
         ? {
             matricula_id: matricula.id,
             total_mensalidade_centavos: totalFamiliaManual,
-            total_movimento_centavos: totalMovimentoManual,
+            total_movimento_centavos: totalInstitucionalManual,
             turmas_ativadas: turmasFamilia,
             cobrancas_criadas: cobrancasCriadasManual,
           }
@@ -1911,8 +1963,8 @@ export async function POST(request: NextRequest) {
 
       let movimentoMeta: MovimentoRegistroResumo | null = null;
       let movimentoRegistros: MovimentoRegistroResumo[] = [];
-      if (totalMovimentoManual > 0) {
-        const movimentoRes = await registrarParteMovimento(totalMovimentoManual);
+      if (totalInstitucionalManual > 0) {
+        const movimentoRes = await registrarParteMovimento(totalInstitucionalManual);
         if (movimentoRes instanceof NextResponse) return movimentoRes;
         movimentoMeta = movimentoRes.registros[0] ?? null;
         movimentoRegistros = movimentoRes.registros;
@@ -1923,7 +1975,7 @@ export async function POST(request: NextRequest) {
         status: "LANCADA_CARTAO",
         matricula_id: matricula.id,
         total_mensalidade_centavos: totalFamiliaManual,
-        total_movimento_centavos: totalMovimentoManual,
+        total_movimento_centavos: totalInstitucionalManual,
         turmas_ativadas: turmasFamilia,
         cobrancas_criadas: resultado.cobrancas,
         movimento: movimentoMeta,
@@ -2152,8 +2204,8 @@ export async function POST(request: NextRequest) {
 
     let movimentoMeta: MovimentoRegistroResumo | null = null;
     let movimentoRegistros: MovimentoRegistroResumo[] = [];
-    if (totalMovimentoManual > 0) {
-      const movimentoRes = await registrarParteMovimento(totalMovimentoManual);
+    if (totalInstitucionalManual > 0) {
+      const movimentoRes = await registrarParteMovimento(totalInstitucionalManual);
       if (movimentoRes instanceof NextResponse) return movimentoRes;
       movimentoMeta = movimentoRes.registros[0] ?? null;
       movimentoRegistros = movimentoRes.registros;
@@ -2170,7 +2222,7 @@ export async function POST(request: NextRequest) {
       ...(modoManual
         ? {
             total_mensalidade_centavos: cartaoResultado.totalMensalidadeCentavos,
-            total_movimento_centavos: totalMovimentoManual,
+            total_movimento_centavos: totalInstitucionalManual,
             turmas_ativadas: turmasFamilia,
             cobrancas_criadas: cartaoResultado.cobrancasCriadasManual,
           }

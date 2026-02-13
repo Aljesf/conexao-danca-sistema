@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PessoaSearchBox, { PessoaSearchItem } from "@/components/PessoaSearchBox";
+import { ProjetoSocialAutocomplete } from "@/components/bolsas/ProjetoSocialAutocomplete";
 import { SectionCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
 import ToolbarRow from "@/components/layout/ToolbarRow";
 
@@ -86,13 +87,6 @@ type MatriculaResp = {
   }>;
   message?: string;
   error?: string;
-};
-
-type ProjetoSocialOpcao = {
-  id: number;
-  nome: string;
-  descricao?: string | null;
-  ativo?: boolean | null;
 };
 
 type BolsaTipoOpcao = {
@@ -297,9 +291,6 @@ export default function NovaMatriculaPage() {
   const [dataMatricula, setDataMatricula] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [dataInicioVinculo, setDataInicioVinculo] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [politicaModo, setPoliticaModo] = useState<"PADRAO" | "ADIAR_PARA_VENCIMENTO">("PADRAO");
-  const [projetosPorItem, setProjetosPorItem] = useState<Record<string, ProjetoSocialOpcao[]>>({});
-  const [projetosLoadingPorItem, setProjetosLoadingPorItem] = useState<Record<string, boolean>>({});
-  const [projetosErroPorItem, setProjetosErroPorItem] = useState<Record<string, string | null>>({});
   const [bolsaTiposPorItem, setBolsaTiposPorItem] = useState<Record<string, BolsaTipoOpcao[]>>({});
   const [bolsaTiposLoadingPorItem, setBolsaTiposLoadingPorItem] = useState<Record<string, boolean>>({});
   const [bolsaTiposErroPorItem, setBolsaTiposErroPorItem] = useState<Record<string, string | null>>({});
@@ -756,36 +747,6 @@ export default function NovaMatriculaPage() {
     }
   }, [tipo, turmaSelecionada]);
 
-  async function buscarProjetosSociaisItem(itemId: string, nomeBusca: string) {
-    const query = nomeBusca.trim();
-    if (query.length < 2) {
-      setProjetosPorItem((prev) => ({ ...prev, [itemId]: [] }));
-      setProjetosErroPorItem((prev) => ({ ...prev, [itemId]: "Digite ao menos 2 caracteres." }));
-      return;
-    }
-
-    setProjetosLoadingPorItem((prev) => ({ ...prev, [itemId]: true }));
-    setProjetosErroPorItem((prev) => ({ ...prev, [itemId]: null }));
-    try {
-      const resp = await fetchJSON<{ ok: boolean; data?: ProjetoSocialOpcao[] }>(
-        `/api/projetos-sociais/busca?nome=${encodeURIComponent(query)}`,
-      );
-      const lista = Array.isArray(resp.data) ? resp.data : [];
-      setProjetosPorItem((prev) => ({ ...prev, [itemId]: lista }));
-      if (lista.length === 0) {
-        setProjetosErroPorItem((prev) => ({ ...prev, [itemId]: "Nenhum projeto social encontrado." }));
-      }
-    } catch (e: unknown) {
-      setProjetosPorItem((prev) => ({ ...prev, [itemId]: [] }));
-      setProjetosErroPorItem((prev) => ({
-        ...prev,
-        [itemId]: e instanceof Error ? e.message : "Falha ao buscar projetos sociais.",
-      }));
-    } finally {
-      setProjetosLoadingPorItem((prev) => ({ ...prev, [itemId]: false }));
-    }
-  }
-
   async function carregarTiposBolsaItem(itemId: string, projetoId: number | null) {
     if (!projetoId) {
       setBolsaTiposPorItem((prev) => ({ ...prev, [itemId]: [] }));
@@ -824,21 +785,6 @@ export default function NovaMatriculaPage() {
 
   function removeItemCarrinho(id: string) {
     setItensCarrinho((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.id !== id)));
-    setProjetosPorItem((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    setProjetosLoadingPorItem((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    setProjetosErroPorItem((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
     setBolsaTiposPorItem((prev) => {
       const next = { ...prev };
       delete next[id];
@@ -1429,57 +1375,20 @@ export default function NovaMatriculaPage() {
                     {item.liquidacao_tipo === "BOLSA" ? (
                       <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
                         <div className="grid gap-3 md:grid-cols-2">
-                          <div className="space-y-1">
-                            <label className="text-sm font-medium">Projeto social (busca por nome)</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                                value={item.bolsa_projeto_busca}
-                                onChange={(e) =>
-                                  updateItemCarrinho(item.id, { bolsa_projeto_busca: e.target.value })
-                                }
-                                placeholder="Ex.: Movimento Conexao Danca"
-                              />
-                              <button
-                                type="button"
-                                className="rounded-xl border border-slate-200 px-3 py-2 text-xs hover:bg-white"
-                                onClick={() => void buscarProjetosSociaisItem(item.id, item.bolsa_projeto_busca)}
-                                disabled={(projetosLoadingPorItem[item.id] ?? false)}
-                              >
-                                Buscar
-                              </button>
-                            </div>
-                            {projetosLoadingPorItem[item.id] ? (
-                              <p className="text-xs text-slate-500">Buscando projetos...</p>
-                            ) : null}
-                            {projetosErroPorItem[item.id] ? (
-                              <p className="text-xs text-rose-600">{projetosErroPorItem[item.id]}</p>
-                            ) : null}
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-sm font-medium">Projeto social</label>
-                            <select
-                              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
-                              value={item.bolsa_projeto_social_id ?? ""}
-                              onChange={(e) => {
-                                const projetoId = e.target.value ? Number(e.target.value) : null;
-                                updateItemCarrinho(item.id, {
-                                  bolsa_projeto_social_id: projetoId,
-                                  bolsa_tipo_id: null,
-                                });
-                                void carregarTiposBolsaItem(item.id, projetoId);
-                              }}
-                              disabled={(projetosPorItem[item.id]?.length ?? 0) === 0}
-                            >
-                              <option value="">Selecione...</option>
-                              {(projetosPorItem[item.id] ?? []).map((projeto) => (
-                                <option key={projeto.id} value={projeto.id}>
-                                  {projeto.nome} (#{projeto.id})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                          <ProjetoSocialAutocomplete
+                            label="Projeto social"
+                            valueId={item.bolsa_projeto_social_id}
+                            valueLabel={item.bolsa_projeto_busca}
+                            initialQuery={item.bolsa_projeto_busca}
+                            onChange={(projeto) => {
+                              updateItemCarrinho(item.id, {
+                                bolsa_projeto_busca: projeto?.nome ?? "",
+                                bolsa_projeto_social_id: projeto?.id ?? null,
+                                bolsa_tipo_id: null,
+                              });
+                              void carregarTiposBolsaItem(item.id, projeto?.id ?? null);
+                            }}
+                          />
 
                           <div className="space-y-1 md:col-span-2">
                             <label className="text-sm font-medium">Tipo de bolsa</label>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { ProjetoSocialAutocomplete } from "@/components/bolsas/ProjetoSocialAutocomplete";
 import type { BolsaTipoModo } from "@/lib/bolsas/bolsasTypes";
 
 type BolsaTipo = {
@@ -16,24 +18,26 @@ type BolsaTipo = {
 type ApiResp<T> = { ok: true; data: T } | { ok: false; error: string; detail?: string | null };
 
 export default function BolsasTiposPage() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<BolsaTipo[]>([]);
-  const [projetoId, setProjetoId] = useState<string>("");
+  const [projetoSelecionado, setProjetoSelecionado] = useState<{ id: number; nome: string } | null>(null);
   const [nome, setNome] = useState("");
   const [modo, setModo] = useState<BolsaTipoModo>("INTEGRAL");
   const [percentual, setPercentual] = useState<string>("");
   const [valorFinal, setValorFinal] = useState<string>("");
   const [msg, setMsg] = useState<string | null>(null);
 
-  const projetoIdNum = useMemo(() => Number(projetoId), [projetoId]);
-  const canLoad = useMemo(() => Number.isFinite(projetoIdNum) && projetoIdNum > 0, [projetoIdNum]);
+  const projetoIdNum = projetoSelecionado?.id ?? null;
+  const canLoad = useMemo(() => Number.isFinite(projetoIdNum ?? NaN) && Number(projetoIdNum) > 0, [projetoIdNum]);
   const canCreate = useMemo(() => canLoad && nome.trim().length >= 2, [canLoad, nome]);
 
-  async function load() {
-    if (!canLoad) return;
+  async function load(forcedProjetoId?: number) {
+    const projetoId = forcedProjetoId ?? projetoSelecionado?.id ?? null;
+    if (!projetoId || !Number.isFinite(projetoId) || projetoId <= 0) return;
     setLoading(true);
     setMsg(null);
-    const res = await fetch(`/api/bolsas/tipos?projeto_social_id=${projetoIdNum}&ativo=true`);
+    const res = await fetch(`/api/bolsas/tipos?projeto_social_id=${projetoId}&ativo=true`);
     const json = (await res.json()) as ApiResp<BolsaTipo[]>;
     if (!json.ok) setMsg(`${json.error}${json.detail ? `: ${json.detail}` : ""}`);
     else setItems(json.data);
@@ -46,7 +50,7 @@ export default function BolsasTiposPage() {
     setMsg(null);
 
     const payload: Record<string, unknown> = {
-      projeto_social_id: projetoIdNum,
+      projeto_social_id: projetoSelecionado?.id,
       nome: nome.trim(),
       modo,
       ativo: true,
@@ -74,8 +78,17 @@ export default function BolsasTiposPage() {
   }
 
   useEffect(() => {
+    const projetoQuery = Number(searchParams.get("projeto_social_id"));
+    if (Number.isFinite(projetoQuery) && projetoQuery > 0) {
+      setProjetoSelecionado((prev) => prev ?? { id: projetoQuery, nome: `Projeto #${projetoQuery}` });
+      void load(projetoQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  useEffect(() => {
     setItems([]);
-  }, [projetoId]);
+  }, [projetoSelecionado?.id]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
@@ -90,13 +103,16 @@ export default function BolsasTiposPage() {
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <h2 className="text-base font-semibold">Projeto social</h2>
           <div className="mt-3 flex flex-wrap items-end gap-2">
-            <div className="space-y-1">
-              <label className="text-sm">Projeto Social ID</label>
-              <input
-                className="w-48 rounded-md border px-3 py-2 text-sm"
-                value={projetoId}
-                onChange={(e) => setProjetoId(e.target.value)}
-                placeholder="Ex.: 1"
+            <div className="min-w-[320px] flex-1">
+              <ProjetoSocialAutocomplete
+                valueId={projetoSelecionado?.id ?? null}
+                valueLabel={projetoSelecionado?.nome ?? ""}
+                initialQuery={projetoSelecionado?.nome ?? ""}
+                onChange={(p) => {
+                  setProjetoSelecionado(p ? { id: p.id, nome: p.nome } : null);
+                  setItems([]);
+                  if (p) void load(p.id);
+                }}
               />
             </div>
             <button className="rounded-md border px-4 py-2 text-sm" disabled={!canLoad || loading} onClick={() => void load()}>
@@ -174,7 +190,7 @@ export default function BolsasTiposPage() {
                 {items.length === 0 ? (
                   <tr>
                     <td className="py-3 text-muted-foreground" colSpan={5}>
-                      Nenhum tipo carregado (informe o Projeto Social ID e clique em "Carregar tipos").
+                      Nenhum tipo carregado (selecione um Projeto Social e clique em "Carregar tipos").
                     </td>
                   </tr>
                 ) : null}
