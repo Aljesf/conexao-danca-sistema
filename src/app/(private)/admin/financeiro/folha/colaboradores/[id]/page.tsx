@@ -1,256 +1,470 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-type Evento = {
+type Folha = {
   id: number;
-  tipo: "PROVENTO" | "DESCONTO";
+  competencia: string;
+  status: string;
+  data_pagamento_prevista: string | null;
+};
+
+type ColaboradorResumo = {
+  colaborador_id: number;
+  nome: string;
+  proventos_centavos: number;
+  descontos_centavos: number;
+  liquido_centavos: number;
+};
+
+type Item = {
+  id: number;
+  folha_id: number;
+  colaborador_id: number;
+  colaborador_nome: string;
+  tipo_item: string;
   descricao: string;
   valor_centavos: number;
-  origem_tipo: string | null;
-  origem_id: number | null;
+  criado_automatico: boolean;
+  created_at: string;
 };
 
-type FolhaDetalhe = {
-  id: number;
-  competencia_ano_mes: string;
-  colaborador_id: number;
-  status: string;
-  eventos: Evento[];
-};
-
-function fmtCentavos(v: number): string {
-  const reais = (v / 100).toFixed(2).replace(".", ",");
-  return `R$ ${reais}`;
+function brlFromCentavos(v: number): string {
+  const n = v / 100;
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function parseReaisToCentavos(value: string): number | null {
   const normalized = value.trim().replace(/\s+/g, "").replace(",", ".");
   if (!normalized) return null;
   const num = Number(normalized);
-  if (!Number.isFinite(num) || num < 0) return null;
+  if (!Number.isFinite(num) || num <= 0) return null;
   return Math.round(num * 100);
 }
 
-export default function FolhaColaboradorDetalhePage({ params }: { params: { id: string } }) {
-  const folhaId = params.id;
+export default function FolhaDetalhePage({ params }: { params: { id: string } }) {
+  const folhaId = Number(params.id);
 
-  const [data, setData] = useState<FolhaDetalhe | null>(null);
+  const [folha, setFolha] = useState<Folha | null>(null);
+  const [colaboradores, setColaboradores] = useState<ColaboradorResumo[]>([]);
+  const [itens, setItens] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
-  const [adicionandoSalarioBase, setAdicionandoSalarioBase] = useState(false);
-  const [novoTipo, setNovoTipo] = useState<"PROVENTO" | "DESCONTO">("DESCONTO");
-  const [novoDescricao, setNovoDescricao] = useState("");
-  const [novoValor, setNovoValor] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [selectedColaboradorId, setSelectedColaboradorId] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [fechando, setFechando] = useState(false);
+  const [addingManual, setAddingManual] = useState(false);
+  const [addingSalarioBase, setAddingSalarioBase] = useState(false);
 
-  const totals = useMemo(() => {
-    const evs = data?.eventos ?? [];
-    const proventos = evs.filter((e) => e.tipo === "PROVENTO").reduce((a, e) => a + e.valor_centavos, 0);
-    const descontos = evs.filter((e) => e.tipo === "DESCONTO").reduce((a, e) => a + e.valor_centavos, 0);
-    return { proventos, descontos, liquido: proventos - descontos };
-  }, [data]);
+  const [tipoItem, setTipoItem] = useState<"PROVENTO" | "DESCONTO" | "ADIANTAMENTO_SALARIAL">("PROVENTO");
+  const [descricao, setDescricao] = useState("");
+  const [valorReais, setValorReais] = useState("");
 
-  async function load() {
+  const selectedColaborador = useMemo(
+    () => colaboradores.find((c) => c.colaborador_id === selectedColaboradorId) ?? null,
+    [colaboradores, selectedColaboradorId],
+  );
+
+  const itensFiltrados = useMemo(() => {
+    if (!selectedColaboradorId) return [];
+    return itens.filter((i) => i.colaborador_id === selectedColaboradorId);
+  }, [itens, selectedColaboradorId]);
+
+  async function loadDetalhes() {
+    if (!Number.isFinite(folhaId) || folhaId <= 0) return;
     setLoading(true);
+    setMessage(null);
     try {
-      const r = await fetch(`/api/admin/folha/colaboradores/${folhaId}`);
-      const j = await r.json();
-      setData(j?.data ?? null);
+      const res = await fetch(`/api/financeiro/folha/${folhaId}/detalhes`, { cache: "no-store" });
+      const json = (await res.json().catch(() => null)) as
+        | { folha?: Folha; colaboradores?: ColaboradorResumo[]; itens?: Item[]; error?: string }
+        | null;
+
+      if (!res.ok) {
+        setMessage(json?.error ?? "falha_carregar_detalhes");
+        setFolha(null);
+        setColaboradores([]);
+        setItens([]);
+        return;
+      }
+
+      const nextFolha = json?.folha ?? null;
+      const nextColabs = Array.isArray(json?.colaboradores) ? json.colaboradores : [];
+      const nextItens = Array.isArray(json?.itens) ? json.itens : [];
+
+      setFolha(nextFolha);
+      setColaboradores(nextColabs);
+      setItens(nextItens);
+
+      if (nextColabs.length === 0) {
+        setSelectedColaboradorId(null);
+      } else if (!selectedColaboradorId || !nextColabs.some((c) => c.colaborador_id === selectedColaboradorId)) {
+        setSelectedColaboradorId(nextColabs[0].colaborador_id);
+      }
     } finally {
       setLoading(false);
     }
   }
 
   async function importarFaturas() {
-    await fetch(`/api/admin/folha/colaboradores/${folhaId}/importar-faturas`, { method: "POST" });
-    await load();
+    if (!Number.isFinite(folhaId) || folhaId <= 0) return;
+    setImporting(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/financeiro/folha/${folhaId}/importar-cartao-conexao`, { method: "POST" });
+      const json = (await res.json().catch(() => null)) as
+        | { imported?: number; message?: string; error?: string }
+        | null;
+      if (!res.ok) {
+        setMessage(json?.error ?? "falha_importar_faturas");
+        return;
+      }
+      setMessage(`Importacao concluida: ${json?.imported ?? 0} itens.`);
+      await loadDetalhes();
+    } finally {
+      setImporting(false);
+    }
   }
 
-  async function fechar() {
-    await fetch(`/api/admin/folha/colaboradores/${folhaId}/fechar`, { method: "POST" });
-    await load();
+  async function fecharFolha() {
+    if (!Number.isFinite(folhaId) || folhaId <= 0) return;
+    setFechando(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/financeiro/folha/${folhaId}/fechar`, { method: "POST" });
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setMessage(json?.error ?? "falha_fechar_folha");
+        return;
+      }
+      setMessage("Folha fechada com sucesso.");
+      await loadDetalhes();
+    } finally {
+      setFechando(false);
+    }
   }
 
-  async function adicionarEvento() {
-    const valorCentavos = parseReaisToCentavos(novoValor);
-    if (valorCentavos === null) return;
-    if (!novoDescricao.trim()) return;
-
-    await fetch(`/api/admin/folha/colaboradores/${folhaId}/eventos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tipo: novoTipo,
-        descricao: novoDescricao.trim(),
-        valor_centavos: valorCentavos,
-      }),
-    });
-    setNovoDescricao("");
-    setNovoValor("");
-    await load();
-  }
-
-  async function adicionarSalarioBaseCadastro() {
-    if (!data?.colaborador_id) return;
-
-    const jaExiste = (data.eventos ?? []).some(
-      (evento) => evento.tipo === "PROVENTO" && evento.origem_tipo === "REMUNERACAO_BASE",
-    );
-    if (jaExiste) {
-      window.alert("Ja existe evento de salario base nesta folha.");
+  async function adicionarRubricaManual() {
+    if (!selectedColaboradorId) {
+      setMessage("Selecione um colaborador.");
       return;
     }
 
-    setAdicionandoSalarioBase(true);
+    const valorCentavos = parseReaisToCentavos(valorReais);
+    if (!valorCentavos) {
+      setMessage("Informe valor valido (R$).");
+      return;
+    }
+    if (!descricao.trim()) {
+      setMessage("Descricao obrigatoria.");
+      return;
+    }
+
+    setAddingManual(true);
+    setMessage(null);
     try {
-      const remRes = await fetch(`/api/admin/colaboradores/${data.colaborador_id}/remuneracao`);
-      const remPayload = (await remRes.json().catch(() => null)) as
-        | { ok?: boolean; data?: { ativa?: { id: number; vigencia_inicio: string; salario_base_centavos: number } | null } }
-        | null;
-
-      const ativa = remRes.ok && remPayload?.ok ? remPayload.data?.ativa ?? null : null;
-      if (!ativa || !Number.isFinite(ativa.salario_base_centavos) || ativa.salario_base_centavos <= 0) {
-        window.alert("Nao existe remuneracao ativa valida para este colaborador.");
-        return;
-      }
-
-      const evRes = await fetch(`/api/admin/folha/colaboradores/${folhaId}/eventos`, {
+      const res = await fetch(`/api/financeiro/folha/${folhaId}/itens/manual`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tipo: "PROVENTO",
-          descricao: `Salario base (${ativa.vigencia_inicio})`,
-          valor_centavos: ativa.salario_base_centavos,
-          origem_tipo: "REMUNERACAO_BASE",
-          origem_id: ativa.id,
+          colaborador_id: selectedColaboradorId,
+          tipo_item: tipoItem,
+          descricao: descricao.trim(),
+          valor_centavos: valorCentavos,
         }),
       });
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setMessage(json?.error ?? "falha_adicionar_rubrica");
+        return;
+      }
+      setDescricao("");
+      setValorReais("");
+      setMessage("Rubrica manual adicionada.");
+      await loadDetalhes();
+    } finally {
+      setAddingManual(false);
+    }
+  }
 
-      const evPayload = (await evRes.json().catch(() => null)) as { ok?: boolean; error?: string; detail?: string } | null;
-      if (!evRes.ok || !evPayload?.ok) {
-        window.alert(evPayload?.detail ?? evPayload?.error ?? "Falha ao adicionar salario base.");
+  async function adicionarSalarioBaseCadastro() {
+    if (!selectedColaboradorId) {
+      setMessage("Selecione um colaborador.");
+      return;
+    }
+
+    setAddingSalarioBase(true);
+    setMessage(null);
+    try {
+      const resumoRes = await fetch(`/api/admin/colaboradores/${selectedColaboradorId}/resumo-financeiro`, {
+        cache: "no-store",
+      });
+      const resumoJson = (await resumoRes.json().catch(() => null)) as
+        | { config_financeira?: { salario_base_centavos?: number } | null; error?: string }
+        | null;
+
+      if (!resumoRes.ok) {
+        setMessage(resumoJson?.error ?? "falha_buscar_config_colaborador");
         return;
       }
 
-      await load();
+      const salarioBase = Number(resumoJson?.config_financeira?.salario_base_centavos ?? 0);
+      if (!Number.isFinite(salarioBase) || salarioBase <= 0) {
+        setMessage("Colaborador sem salario base configurado.");
+        return;
+      }
+
+      const alreadyExists = itensFiltrados.some(
+        (i) => i.tipo_item === "PROVENTO" && i.descricao.toLowerCase().includes("salario base do cadastro"),
+      );
+      if (alreadyExists) {
+        setMessage("Ja existe rubrica de salario base do cadastro para este colaborador.");
+        return;
+      }
+
+      const res = await fetch(`/api/financeiro/folha/${folhaId}/itens/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          colaborador_id: selectedColaboradorId,
+          tipo_item: "PROVENTO",
+          descricao: "Salario base do cadastro",
+          valor_centavos: salarioBase,
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setMessage(json?.error ?? "falha_adicionar_salario_base");
+        return;
+      }
+
+      setMessage("Salario base do cadastro adicionado.");
+      await loadDetalhes();
     } finally {
-      setAdicionandoSalarioBase(false);
+      setAddingSalarioBase(false);
     }
   }
 
   useEffect(() => {
-    void load();
+    void loadDetalhes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folhaId]);
 
-  const folhaAberta = data?.status === "ABERTA";
-
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Folha #{folhaId}</h1>
-          <p className="text-sm text-muted-foreground">
-            {data ? `Competencia: ${data.competencia_ano_mes} - Status: ${data.status}` : "Carregando..."}
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-semibold">
+                {folha ? `Folha - Competencia ${folha.competencia}` : "Folha - Detalhes"}
+              </h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Status: <span className="font-medium">{folha?.status ?? "-"}</span> | Pagamento previsto:{" "}
+                <span className="font-medium">{folha?.data_pagamento_prevista ?? "-"}</span>
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-md border px-3 py-2 text-sm"
+                onClick={() => void importarFaturas()}
+                disabled={importing || folha?.status !== "ABERTA"}
+              >
+                {importing ? "Importando..." : "Importar faturas (Cartao Conexao)"}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border px-3 py-2 text-sm"
+                onClick={() => void fecharFolha()}
+                disabled={fechando || folha?.status !== "ABERTA"}
+              >
+                {fechando ? "Fechando..." : "Fechar folha"}
+              </button>
+              <Link href="/admin/financeiro/folha/colaboradores" className="rounded-md border px-3 py-2 text-sm">
+                Voltar
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <h2 className="text-base font-semibold">Resumo por colaborador</h2>
+          <div className="mt-4 overflow-x-auto">
+            {colaboradores.length === 0 ? (
+              <p className="text-sm text-slate-600">Nenhum item na folha ainda.</p>
+            ) : (
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Colaborador</th>
+                    <th className="px-3 py-2 text-right">Proventos</th>
+                    <th className="px-3 py-2 text-right">Descontos</th>
+                    <th className="px-3 py-2 text-right">Liquido</th>
+                    <th className="px-3 py-2 text-right">Acoes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {colaboradores.map((c) => (
+                    <tr key={c.colaborador_id} className="border-t">
+                      <td className="px-3 py-2">{c.nome}</td>
+                      <td className="px-3 py-2 text-right">{brlFromCentavos(c.proventos_centavos)}</td>
+                      <td className="px-3 py-2 text-right">{brlFromCentavos(c.descontos_centavos)}</td>
+                      <td className="px-3 py-2 text-right">{brlFromCentavos(c.liquido_centavos)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          className="rounded border px-3 py-1 text-xs"
+                          onClick={() => setSelectedColaboradorId(c.colaborador_id)}
+                        >
+                          Ver itens
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <h2 className="text-base font-semibold">Rubricas / Itens do colaborador selecionado</h2>
+
+          <p className="mt-2 text-xs text-slate-600">
+            Observacao de negocio: descontos so entram se existir fatura ABERTA na mesma competencia.
           </p>
-        </div>
 
-        <div className="flex gap-2">
-          <button
-            className="border rounded px-3 py-1 text-sm"
-            onClick={() => void importarFaturas()}
-            disabled={!folhaAberta}
-          >
-            Importar faturas (Cartao Conexao)
-          </button>
-          <button className="border rounded px-3 py-1 text-sm" onClick={() => void fechar()} disabled={!folhaAberta}>
-            Fechar folha
-          </button>
-          <button
-            className="border rounded px-3 py-1 text-sm"
-            onClick={() => void adicionarSalarioBaseCadastro()}
-            disabled={!folhaAberta || adicionandoSalarioBase}
-          >
-            {adicionandoSalarioBase ? "Adicionando..." : "Adicionar salario base do cadastro"}
-          </button>
-        </div>
-      </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="space-y-1 text-sm">
+              <span>Colaborador</span>
+              <select
+                className="w-full rounded-md border px-3 py-2"
+                value={selectedColaboradorId ?? ""}
+                onChange={(e) => setSelectedColaboradorId(Number(e.target.value) || null)}
+              >
+                <option value="">Selecione...</option>
+                {colaboradores.map((c) => (
+                  <option key={c.colaborador_id} value={c.colaborador_id}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="border rounded p-3">
-          <div className="text-xs text-muted-foreground">Proventos</div>
-          <div className="text-lg font-semibold">{fmtCentavos(totals.proventos)}</div>
-        </div>
-        <div className="border rounded p-3">
-          <div className="text-xs text-muted-foreground">Descontos</div>
-          <div className="text-lg font-semibold">{fmtCentavos(totals.descontos)}</div>
-        </div>
-        <div className="border rounded p-3">
-          <div className="text-xs text-muted-foreground">Liquido</div>
-          <div className="text-lg font-semibold">{fmtCentavos(totals.liquido)}</div>
-        </div>
-      </div>
-
-      <div className="border rounded p-3 space-y-2">
-        <div className="text-sm font-medium">Adicionar evento manual</div>
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs">Tipo</label>
-          <select
-            className="border rounded px-2 py-1 text-sm"
-            value={novoTipo}
-            onChange={(e) => setNovoTipo(e.target.value as "PROVENTO" | "DESCONTO")}
-          >
-            <option value="PROVENTO">PROVENTO</option>
-            <option value="DESCONTO">DESCONTO</option>
-          </select>
-          <label className="text-xs">Descricao</label>
-          <input
-            className="border rounded px-2 py-1 text-sm min-w-[220px]"
-            value={novoDescricao}
-            onChange={(e) => setNovoDescricao(e.target.value)}
-          />
-          <label className="text-xs">Valor (R$)</label>
-          <input
-            className="border rounded px-2 py-1 text-sm w-28"
-            value={novoValor}
-            onChange={(e) => setNovoValor(e.target.value)}
-            placeholder="0,00"
-          />
-          <button className="border rounded px-3 py-1 text-sm" onClick={() => void adicionarEvento()} disabled={!folhaAberta}>
-            Adicionar
-          </button>
-        </div>
-      </div>
-
-      <div className="border rounded">
-        <div className="p-3 border-b text-sm flex items-center justify-between">
-          <span>{loading ? "Carregando..." : `Eventos: ${data?.eventos?.length ?? 0}`}</span>
-          <button className="border rounded px-3 py-1 text-sm" onClick={() => void load()}>
-            Atualizar
-          </button>
-        </div>
-
-        <div className="p-3 space-y-2">
-          {(data?.eventos ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum evento registrado.</p>
-          ) : (
-            (data?.eventos ?? []).map((e) => (
-              <div key={e.id} className="border rounded p-3">
-                <div className="flex justify-between">
-                  <div className="text-sm font-medium">{e.tipo}</div>
-                  <div className="text-sm">{fmtCentavos(e.valor_centavos)}</div>
-                </div>
-                <div className="text-xs text-muted-foreground">{e.descricao}</div>
-                {e.origem_tipo ? (
-                  <div className="text-xs text-muted-foreground">
-                    origem: {e.origem_tipo} {e.origem_id ? `#${e.origem_id}` : ""}
-                  </div>
-                ) : null}
+          {selectedColaborador ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Proventos</div>
+                <div className="font-medium">{brlFromCentavos(selectedColaborador.proventos_centavos)}</div>
               </div>
-            ))
-          )}
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Descontos</div>
+                <div className="font-medium">{brlFromCentavos(selectedColaborador.descontos_centavos)}</div>
+              </div>
+              <div className="rounded-xl border p-3">
+                <div className="text-xs text-slate-500">Liquido</div>
+                <div className="font-medium">{brlFromCentavos(selectedColaborador.liquido_centavos)}</div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 overflow-x-auto rounded-xl border">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 text-left">Descricao</th>
+                  <th className="px-3 py-2 text-left">Tipo</th>
+                  <th className="px-3 py-2 text-right">Valor</th>
+                  <th className="px-3 py-2 text-left">Origem</th>
+                  <th className="px-3 py-2 text-left">Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itensFiltrados.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-3 text-slate-600" colSpan={5}>
+                      Nenhum item para o colaborador selecionado.
+                    </td>
+                  </tr>
+                ) : (
+                  itensFiltrados.map((item) => (
+                    <tr key={item.id} className="border-t">
+                      <td className="px-3 py-2">{item.descricao}</td>
+                      <td className="px-3 py-2">{item.tipo_item}</td>
+                      <td className="px-3 py-2 text-right">{brlFromCentavos(item.valor_centavos)}</td>
+                      <td className="px-3 py-2">{item.criado_automatico ? "Automatico" : "Manual"}</td>
+                      <td className="px-3 py-2">{item.created_at ? item.created_at.slice(0, 10) : "-"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 rounded-xl border p-4">
+            <h3 className="text-sm font-semibold">Adicionar rubrica manual</h3>
+            <div className="mt-3 grid gap-3 md:grid-cols-4">
+              <label className="space-y-1 text-sm">
+                <span>Tipo</span>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={tipoItem}
+                  onChange={(e) =>
+                    setTipoItem(e.target.value as "PROVENTO" | "DESCONTO" | "ADIANTAMENTO_SALARIAL")
+                  }
+                >
+                  <option value="PROVENTO">PROVENTO</option>
+                  <option value="DESCONTO">DESCONTO</option>
+                  <option value="ADIANTAMENTO_SALARIAL">ADIANTAMENTO_SALARIAL</option>
+                </select>
+              </label>
+              <label className="space-y-1 text-sm md:col-span-2">
+                <span>Descricao</span>
+                <input
+                  className="w-full rounded-md border px-3 py-2"
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  placeholder="Ex.: Ajuste mensal"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span>Valor (R$)</span>
+                <input
+                  className="w-full rounded-md border px-3 py-2"
+                  value={valorReais}
+                  onChange={(e) => setValorReais(e.target.value)}
+                  placeholder="0,00"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-60"
+                onClick={() => void adicionarRubricaManual()}
+                disabled={addingManual || !selectedColaboradorId || folha?.status !== "ABERTA"}
+              >
+                {addingManual ? "Adicionando..." : "Adicionar"}
+              </button>
+              <button
+                type="button"
+                className="rounded-md border px-4 py-2 text-sm disabled:opacity-60"
+                onClick={() => void adicionarSalarioBaseCadastro()}
+                disabled={addingSalarioBase || !selectedColaboradorId || folha?.status !== "ABERTA"}
+              >
+                {addingSalarioBase ? "Adicionando..." : "Adicionar salario base do cadastro"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 text-sm text-slate-600">
+            {loading ? "Carregando detalhes..." : message ?? ""}
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
