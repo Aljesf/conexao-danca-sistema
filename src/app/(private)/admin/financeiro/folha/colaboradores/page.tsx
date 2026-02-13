@@ -23,6 +23,7 @@ export default function FolhaColaboradoresPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [running, setRunning] = useState<"abrir" | "espelho" | null>(null);
+  const [importingFolhaId, setImportingFolhaId] = useState<number | null>(null);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -31,14 +32,12 @@ export default function FolhaColaboradoresPage() {
     return params.toString();
   }, [competencia, statusFiltro]);
 
-  async function load() {
+  async function fetchList() {
     setLoading(true);
     setMessage(null);
     try {
       const res = await fetch(`/api/financeiro/folha/listar?${queryString}`, { cache: "no-store" });
-      const json = (await res.json().catch(() => null)) as
-        | { folhas?: FolhaRow[]; error?: string }
-        | null;
+      const json = (await res.json().catch(() => null)) as { folhas?: FolhaRow[]; error?: string } | null;
 
       if (!res.ok) {
         setRows([]);
@@ -63,22 +62,16 @@ export default function FolhaColaboradoresPage() {
       const res = await fetch("/api/financeiro/folha/abrir", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          competencia,
-          dia_pagamento: 5,
-          pagamento_no_mes_seguinte: true,
-        }),
+        body: JSON.stringify({ competencia }),
       });
-      const json = (await res.json().catch(() => null)) as
-        | { folha?: { id: number }; error?: string }
-        | null;
+      const json = (await res.json().catch(() => null)) as { error?: string } | null;
 
       if (!res.ok) {
         setMessage(json?.error ?? "falha_abrir_folha");
         return;
       }
       setMessage(`Folha da competencia ${competencia} aberta/garantida.`);
-      await load();
+      await fetchList();
     } finally {
       setRunning(null);
     }
@@ -103,7 +96,7 @@ export default function FolhaColaboradoresPage() {
         }),
       });
       const json = (await res.json().catch(() => null)) as
-        | { ok?: boolean; meses?: number; imported_cartao_total?: number; error?: string }
+        | { meses?: number; imported_cartao_total?: number; error?: string }
         | null;
 
       if (!res.ok) {
@@ -114,14 +107,33 @@ export default function FolhaColaboradoresPage() {
       setMessage(
         `Espelho gerado (${json?.meses ?? 12} meses). Itens de cartao importados: ${json?.imported_cartao_total ?? 0}.`,
       );
-      await load();
+      await fetchList();
     } finally {
       setRunning(null);
     }
   }
 
+  async function importarCartao(folhaId: number) {
+    setImportingFolhaId(folhaId);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/financeiro/folha/${folhaId}/importar-cartao-conexao`, {
+        method: "POST",
+      });
+      const json = (await res.json().catch(() => null)) as { imported?: number; error?: string } | null;
+      if (!res.ok) {
+        setMessage(json?.error ?? "falha_importar_cartao");
+        return;
+      }
+      setMessage(`Folha #${folhaId}: ${json?.imported ?? 0} itens importados.`);
+      await fetchList();
+    } finally {
+      setImportingFolhaId(null);
+    }
+  }
+
   useEffect(() => {
-    void load();
+    void fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryString]);
 
@@ -175,7 +187,7 @@ export default function FolhaColaboradoresPage() {
             {running === "espelho" ? "Gerando..." : "Gerar espelho (12 meses)"}
           </button>
 
-          <button type="button" className="rounded border px-3 py-1 text-sm" onClick={() => void load()}>
+          <button type="button" className="rounded border px-3 py-1 text-sm" onClick={() => void fetchList()}>
             Atualizar
           </button>
         </div>
@@ -187,26 +199,49 @@ export default function FolhaColaboradoresPage() {
           {message ? <span className="text-xs text-muted-foreground">{message}</span> : null}
         </div>
 
-        <div className="p-3">
+        <div className="overflow-x-auto p-3">
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nenhuma folha encontrada com os filtros informados.</p>
           ) : (
-            <div className="space-y-2">
-              {rows.map((r) => (
-                <div key={r.id} className="flex items-center justify-between rounded border p-3">
-                  <div>
-                    <div className="text-sm font-medium">Folha #{r.id}</div>
-                    <div className="text-xs text-muted-foreground">
-                      competencia: {r.competencia} - status: {r.status} - pagamento previsto:{" "}
-                      {r.data_pagamento_prevista ?? "-"}
-                    </div>
-                  </div>
-                  <Link className="rounded border px-3 py-1 text-sm hover:bg-muted/30" href={`/admin/financeiro/folha/colaboradores/${r.id}`}>
-                    Abrir
-                  </Link>
-                </div>
-              ))}
-            </div>
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 text-left">ID</th>
+                  <th className="px-3 py-2 text-left">Competencia</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">Pagamento previsto</th>
+                  <th className="px-3 py-2 text-right">Acoes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="px-3 py-2">{r.id}</td>
+                    <td className="px-3 py-2">{r.competencia}</td>
+                    <td className="px-3 py-2">{r.status}</td>
+                    <td className="px-3 py-2">{r.data_pagamento_prevista ?? "-"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="inline-flex gap-2">
+                        <button
+                          type="button"
+                          className="rounded border px-3 py-1 text-xs hover:bg-muted/30 disabled:opacity-60"
+                          onClick={() => void importarCartao(r.id)}
+                          disabled={importingFolhaId === r.id}
+                        >
+                          {importingFolhaId === r.id ? "Importando..." : "Importar Cartao"}
+                        </button>
+                        <Link
+                          className="rounded border px-3 py-1 text-xs hover:bg-muted/30"
+                          href={`/admin/financeiro/folha/colaboradores/${r.id}`}
+                        >
+                          Abrir
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
