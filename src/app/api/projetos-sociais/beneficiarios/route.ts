@@ -14,6 +14,7 @@ type BeneficiarioRow = {
   observacoes: string | null;
   created_at: string;
   updated_at: string;
+  pessoas?: { id: number; nome: string } | null;
 };
 
 type PostBody = {
@@ -72,7 +73,7 @@ export async function GET(req: Request) {
     let query = supabase
       .from("projetos_sociais_beneficiarios")
       .select(
-        "id,projeto_social_id,pessoa_id,status,data_inicio,data_fim,origem_legado,legado_payload,observacoes,created_at,updated_at"
+        "id,projeto_social_id,pessoa_id,status,data_inicio,data_fim,origem_legado,observacoes,created_at,updated_at,pessoas(id,nome)"
       )
       .eq("projeto_social_id", projetoSocialId)
       .order("created_at", { ascending: false });

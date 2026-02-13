@@ -7,6 +7,7 @@ export const bolsasSidebar: SidebarSection[] = [
     items: [
       { label: "Painel", href: "/bolsas" },
       { label: "Projetos sociais", href: "/bolsas/projetos" },
+      { label: "Benefici\u00E1rios", href: "/bolsas/beneficiarios" },
       { label: "Tipos de bolsa", href: "/bolsas/tipos" },
       { label: "Concessoes", href: "/bolsas/concessoes" },
       { label: "Ledger de investimento", href: "/bolsas/ledger" },
