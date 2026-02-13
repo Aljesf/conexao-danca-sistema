@@ -43,6 +43,11 @@ type CartaoConexaoResumo = {
   }>;
 };
 
+type ResumoCusteio = {
+  familia_centavos: number;
+  projeto_social_centavos: number;
+};
+
 type DocumentoEmitidoResumo = {
   id: number;
   matricula_id: number | null;
@@ -82,6 +87,15 @@ function isSchemaMissing(err: unknown): boolean {
 function toPositiveNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function inferModeloLiquidacao(origemValor: unknown, fallback: unknown): "FAMILIA" | "BOLSA" {
+  const direto = typeof fallback === "string" ? fallback.trim().toUpperCase() : "";
+  if (direto === "BOLSA" || direto === "MOVIMENTO") return "BOLSA";
+  if (direto === "FAMILIA") return "FAMILIA";
+  const raw = typeof origemValor === "string" ? origemValor.trim().toUpperCase() : "";
+  if (raw.startsWith("MANUAL|BOLSA") || raw.startsWith("MANUAL|MOVIMENTO")) return "BOLSA";
+  return "FAMILIA";
 }
 
 function okJson<T>(payload: T, status = 200) {
@@ -257,6 +271,66 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: st
         proximo_vencimento: proximoVencimento,
         ultima_atualizacao: ultimaAtualizacao,
       };
+    }
+
+    let resumoCusteio: ResumoCusteio | null = null;
+    {
+      let execRows:
+        | Array<{ valor_mensal_centavos?: number | null; origem_valor?: string | null; modelo_liquidacao?: string | null }>
+        | null = null;
+
+      const withModelo = await admin
+        .from("matricula_execucao_valores")
+        .select("valor_mensal_centavos,origem_valor,modelo_liquidacao")
+        .eq("matricula_id", matriculaId)
+        .eq("ativo", true);
+
+      let execErr = withModelo.error;
+      if (!execErr) {
+        execRows = (withModelo.data ??
+          []) as Array<{ valor_mensal_centavos?: number | null; origem_valor?: string | null; modelo_liquidacao?: string | null }>;
+      } else if (isSchemaMissing(execErr)) {
+        const withoutModelo = await admin
+          .from("matricula_execucao_valores")
+          .select("valor_mensal_centavos,origem_valor")
+          .eq("matricula_id", matriculaId)
+          .eq("ativo", true);
+        execErr = withoutModelo.error;
+        if (!execErr) {
+          execRows = (withoutModelo.data ??
+            []) as Array<{ valor_mensal_centavos?: number | null; origem_valor?: string | null; modelo_liquidacao?: string | null }>;
+        }
+      }
+
+      if (execErr && !isSchemaMissing(execErr)) {
+        return errJson("server_error", "Falha ao calcular resumo de custeio.", 500, { execErr });
+      }
+
+      if ((execRows?.length ?? 0) > 0) {
+        let familia = 0;
+        let projeto = 0;
+        for (const row of execRows ?? []) {
+          const valorRaw = Number(row.valor_mensal_centavos ?? 0);
+          const valor = Number.isFinite(valorRaw) ? Math.max(0, Math.trunc(valorRaw)) : 0;
+          const modelo = inferModeloLiquidacao(row.origem_valor, row.modelo_liquidacao);
+          if (modelo === "BOLSA") projeto += valor;
+          else familia += valor;
+        }
+        resumoCusteio = {
+          familia_centavos: familia,
+          projeto_social_centavos: projeto,
+        };
+      } else {
+        const totalRaw = Number((matricula as { total_mensalidade_centavos?: unknown }).total_mensalidade_centavos ?? 0);
+        const total = Number.isFinite(totalRaw) ? Math.max(0, Math.trunc(totalRaw)) : 0;
+        const metodo = String((matricula as { metodo_liquidacao?: unknown }).metodo_liquidacao ?? "")
+          .trim()
+          .toUpperCase();
+        resumoCusteio =
+          metodo === "CREDITO_BOLSA"
+            ? { familia_centavos: 0, projeto_social_centavos: total }
+            : { familia_centavos: total, projeto_social_centavos: 0 };
+      }
     }
 
     let resumoCartao: CartaoConexaoResumo | null = null;
@@ -449,6 +523,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: st
         preco_aplicado: precoAplicado,
         plano_pagamento: planoPagamento ?? null,
         financeiro_resumo: financeiroResumo,
+        resumo_custeio: resumoCusteio,
         resumo_financeiro_cartao_conexao: resumoCartao,
         documentos_emitidos: (emitidos ?? []) as DocumentoEmitidoResumo[],
         encerramentos,

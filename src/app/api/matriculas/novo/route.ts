@@ -2,6 +2,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { aplicarBolsaNaMatricula } from "@/lib/bolsas/aplicarBolsaNaMatricula";
+import { calcularValorFamiliaCentavos, isBolsaTipoModo, type BolsaTipoModo } from "@/lib/bolsas/bolsasTypes";
  
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
@@ -47,6 +48,19 @@ type ExecucaoManual = {
     projeto_social_id: number;
     bolsa_tipo_id: number;
   } | null;
+};
+
+type ExecucaoPersistencia = {
+  turma_id: number;
+  nivel: string;
+  valor_mensal_centavos: number;
+  liquidacao_tipo: ModeloLiquidacaoExecucao;
+  origem_valor: string;
+};
+
+type ResumoCusteio = {
+  familia_centavos: number;
+  projeto_social_centavos: number;
 };
 
 type BodyNovo = {
@@ -805,6 +819,147 @@ export async function POST(request: NextRequest) {
   if (usarExecucoes) {
     totalMensalidadeCentavos = Math.trunc(totalMensalidadeManual);
   }
+  let totalMensalidadeFamiliaCentavos = totalMensalidadeCentavos;
+
+  const execucoesBolsa = usarExecucoes
+    ? execucoesValidas.filter((execucao) => execucao.liquidacao_tipo === "BOLSA")
+    : [];
+  for (const execucao of execucoesBolsa) {
+    if (!execucao.bolsa?.projeto_social_id || !execucao.bolsa?.bolsa_tipo_id) {
+      return badRequest("execucao_bolsa_invalida.", { turma_id: execucao.turma_id });
+    }
+  }
+
+  let resumoCusteio: ResumoCusteio = {
+    familia_centavos: 0,
+    projeto_social_centavos: 0,
+  };
+  let execucoesParaPersistir: ExecucaoPersistencia[] = [];
+
+  if (usarExecucoes) {
+    const bolsaTipoIds = Array.from(
+      new Set(
+        execucoesBolsa
+          .map((execucao) => execucao.bolsa?.bolsa_tipo_id ?? null)
+          .filter((id): id is number => Number.isInteger(id) && id > 0),
+      ),
+    );
+    const bolsaTiposMap = new Map<
+      number,
+      {
+        projeto_social_id: number;
+        modo: BolsaTipoModo;
+        percentual_desconto: number | null;
+        valor_final_familia_centavos: number | null;
+      }
+    >();
+
+    if (bolsaTipoIds.length > 0) {
+      const { data: bolsaTiposData, error: bolsaTiposErr } = await supabase
+        .from("bolsa_tipos")
+        .select("id,projeto_social_id,modo,percentual_desconto,valor_final_familia_centavos")
+        .in("id", bolsaTipoIds);
+
+      if (bolsaTiposErr) {
+        return serverError("VALIDAR_BOLSA_TIPOS_FAIL", "Falha ao validar tipos de bolsa.", { bolsaTiposErr });
+      }
+
+      for (const row of bolsaTiposData ?? []) {
+        const record = row as Record<string, unknown>;
+        const id = Number(record.id);
+        const projetoSocialId = Number(record.projeto_social_id);
+        const modoRaw = record.modo;
+        if (!Number.isInteger(id) || id <= 0) continue;
+        if (!Number.isInteger(projetoSocialId) || projetoSocialId <= 0) continue;
+        if (!isBolsaTipoModo(modoRaw)) continue;
+        const percentualRaw = record.percentual_desconto;
+        const valorFinalRaw = record.valor_final_familia_centavos;
+        bolsaTiposMap.set(id, {
+          projeto_social_id: projetoSocialId,
+          modo: modoRaw,
+          percentual_desconto:
+            typeof percentualRaw === "number" && Number.isFinite(percentualRaw) ? percentualRaw : null,
+          valor_final_familia_centavos:
+            typeof valorFinalRaw === "number" && Number.isFinite(valorFinalRaw)
+              ? Math.max(0, Math.trunc(valorFinalRaw))
+              : null,
+        });
+      }
+    }
+
+    for (const execucao of execucoesValidas) {
+      if (execucao.liquidacao_tipo === "FAMILIA") {
+        resumoCusteio.familia_centavos += execucao.valor_mensal_centavos;
+        execucoesParaPersistir.push({
+          turma_id: execucao.turma_id,
+          nivel: execucao.nivel,
+          valor_mensal_centavos: execucao.valor_mensal_centavos,
+          liquidacao_tipo: "FAMILIA",
+          origem_valor: "MANUAL|FAMILIA",
+        });
+        continue;
+      }
+
+      const projetoSocialId = execucao.bolsa?.projeto_social_id;
+      const bolsaTipoId = execucao.bolsa?.bolsa_tipo_id;
+      if (!projetoSocialId || !bolsaTipoId) {
+        return badRequest("execucao_bolsa_invalida.", { turma_id: execucao.turma_id });
+      }
+      const bolsaTipo = bolsaTiposMap.get(bolsaTipoId);
+      if (!bolsaTipo) {
+        return badRequest("bolsa_tipo_nao_encontrado.", { turma_id: execucao.turma_id, bolsa_tipo_id: bolsaTipoId });
+      }
+      if (bolsaTipo.projeto_social_id !== projetoSocialId) {
+        return badRequest("bolsa_tipo_nao_pertence_ao_projeto.", {
+          turma_id: execucao.turma_id,
+          projeto_social_id: projetoSocialId,
+          bolsa_tipo_id: bolsaTipoId,
+        });
+      }
+
+      const valorFamiliaCalculado = calcularValorFamiliaCentavos({
+        modo: bolsaTipo.modo,
+        valorContratadoCentavos: execucao.valor_mensal_centavos,
+        percentualDesconto: bolsaTipo.percentual_desconto,
+        valorFinalFamiliaCentavos: bolsaTipo.valor_final_familia_centavos,
+      });
+      const valorFamilia = Math.max(0, Math.min(execucao.valor_mensal_centavos, Math.trunc(valorFamiliaCalculado)));
+      const valorProjetoSocial = Math.max(0, execucao.valor_mensal_centavos - valorFamilia);
+
+      resumoCusteio.familia_centavos += valorFamilia;
+      resumoCusteio.projeto_social_centavos += valorProjetoSocial;
+
+      if (valorFamilia > 0) {
+        execucoesParaPersistir.push({
+          turma_id: execucao.turma_id,
+          nivel: execucao.nivel,
+          valor_mensal_centavos: valorFamilia,
+          liquidacao_tipo: "FAMILIA",
+          origem_valor: "MANUAL|FAMILIA",
+        });
+      }
+
+      if (valorProjetoSocial > 0) {
+        execucoesParaPersistir.push({
+          turma_id: execucao.turma_id,
+          nivel: execucao.nivel,
+          valor_mensal_centavos: valorProjetoSocial,
+          liquidacao_tipo: "BOLSA",
+          origem_valor: buildOrigemValorExecucao(execucao),
+        });
+      }
+    }
+
+    totalMensalidadeCentavos = resumoCusteio.familia_centavos + resumoCusteio.projeto_social_centavos;
+    totalMensalidadeFamiliaCentavos = resumoCusteio.familia_centavos;
+  } else {
+    const totalNormalizado = Math.max(0, Math.trunc(totalMensalidadeCentavos));
+    resumoCusteio =
+      metodoLiquidacao === "CREDITO_BOLSA"
+        ? { familia_centavos: 0, projeto_social_centavos: totalNormalizado }
+        : { familia_centavos: totalNormalizado, projeto_social_centavos: 0 };
+    totalMensalidadeFamiliaCentavos = resumoCusteio.familia_centavos;
+  }
 
   let primeiraCobranca: PrimeiraCobrancaCalc | null = null;
   let primeiraCobrancaStatus: string | null = null;
@@ -815,7 +970,7 @@ export async function POST(request: NextRequest) {
 
   if (usarExecucoes) {
     primeiraCobranca = calcularPrimeiraCobranca({
-      totalCentavos: totalMensalidadeCentavos,
+      totalCentavos: totalMensalidadeFamiliaCentavos,
       dataInicio: dataInicioVinculo,
       dataMatricula: dataMatricula,
     });
@@ -832,15 +987,6 @@ export async function POST(request: NextRequest) {
       primeiraCobrancaStatus = "ADIADA_EXCECAO";
     } else {
       primeiraCobrancaStatus = "PENDENTE";
-    }
-  }
-
-  const execucoesBolsa = usarExecucoes
-    ? execucoesValidas.filter((execucao) => execucao.liquidacao_tipo === "BOLSA")
-    : [];
-  for (const execucao of execucoesBolsa) {
-    if (!execucao.bolsa?.projeto_social_id || !execucao.bolsa?.bolsa_tipo_id) {
-      return badRequest("execucao_bolsa_invalida.", { turma_id: execucao.turma_id });
     }
   }
 
@@ -908,17 +1054,17 @@ export async function POST(request: NextRequest) {
       hasModeloLiquidacaoColumn = (execCols ?? []).some((row) => (row as { column_name?: string }).column_name === "modelo_liquidacao");
     }
 
-    const rowsBase = execucoesValidas.map((execucao) => ({
+    const rowsBase = execucoesParaPersistir.map((execucao) => ({
       matricula_id: matriculaId,
       turma_id: execucao.turma_id,
       nivel: execucao.nivel,
       valor_mensal_centavos: execucao.valor_mensal_centavos,
-      origem_valor: buildOrigemValorExecucao(execucao),
+      origem_valor: execucao.origem_valor,
       ativo: true,
     }));
 
     const rows = rowsBase.map((row, idx) => {
-      const execucao = execucoesValidas[idx];
+      const execucao = execucoesParaPersistir[idx];
       const enriched: Record<string, unknown> = { ...row };
       if (hasModeloLiquidacaoColumn) enriched.modelo_liquidacao = execucao.liquidacao_tipo;
       return enriched;
@@ -981,6 +1127,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       matricula: matriculaCriada,
       bolsa_aplicacoes: bolsasAplicadas,
+      resumo_custeio: resumoCusteio,
     },
     { status: 201 },
   );

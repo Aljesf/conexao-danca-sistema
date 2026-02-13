@@ -36,6 +36,10 @@ type MatriculaDetalheResp = {
     proximo_vencimento: string | null;
     ultima_atualizacao: string | null;
   } | null;
+  resumo_custeio?: {
+    familia_centavos: number;
+    projeto_social_centavos: number;
+  } | null;
   resumo_financeiro_cartao_conexao?: {
     parcelas_pendentes: number;
     proximo_vencimento: string | null;
@@ -206,6 +210,11 @@ export default function MatriculaDetalhePage() {
   const totalMensalidadeLabel = Number.isFinite(totalMensalidadeCentavos)
     ? formatBRLFromCents(totalMensalidadeCentavos)
     : "-";
+  const resumoCusteio = data?.resumo_custeio ?? null;
+  const custeioFamiliaCentavos = Number(resumoCusteio?.familia_centavos ?? (Number.isFinite(totalMensalidadeCentavos) ? totalMensalidadeCentavos : 0));
+  const custeioProjetoSocialCentavos = Number(resumoCusteio?.projeto_social_centavos ?? 0);
+  const temCusteioProjetoSocial = Number.isFinite(custeioProjetoSocialCentavos) && custeioProjetoSocialCentavos > 0;
+  const temCusteioFamilia = Number.isFinite(custeioFamiliaCentavos) && custeioFamiliaCentavos > 0;
   const cobrancaEntrada = useMemo(() => {
     if (!Number.isFinite(matriculaIdNum)) return null;
     const relacionadas = avulsas.filter(
@@ -532,18 +541,34 @@ export default function MatriculaDetalhePage() {
                     <div className="font-medium">Mensalidade consolidada</div>
                     <div className="text-muted-foreground">{totalMensalidadeLabel}</div>
                   </div>
-
+                  {temCusteioProjetoSocial ? (
+                    <div className="inline-flex w-fit items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      Projeto Social
+                    </div>
+                  ) : null}
                   <div className="text-muted-foreground">
-                    A mensalidade recorrente e cobrada via <strong>Cartao Conexao</strong> (faturas mensais).
-                    Use o painel de faturas para acompanhar o ciclo mensal.
+                    Custeio institucional:{" "}
+                    <span className="font-medium">{formatBRLFromCents(Math.max(0, Math.trunc(custeioProjetoSocialCentavos)))}</span>
                   </div>
 
-                  <Link
-                    className="inline-block text-sm font-medium text-blue-700 hover:underline"
-                    href="/admin/financeiro/credito-conexao/faturas"
-                  >
-                    Ver faturas do Cartao Conexao
-                  </Link>
+                  {temCusteioFamilia ? (
+                    <>
+                      <div className="text-muted-foreground">
+                        Parcela da familia via <strong>Cartao Conexao</strong>:{" "}
+                        <span className="font-medium">{formatBRLFromCents(Math.max(0, Math.trunc(custeioFamiliaCentavos)))}</span>.
+                      </div>
+                      <Link
+                        className="inline-block text-sm font-medium text-blue-700 hover:underline"
+                        href="/admin/financeiro/credito-conexao/faturas"
+                      >
+                        Ver faturas do Cartao Conexao
+                      </Link>
+                    </>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      Sem cobranca recorrente para familia nesta matricula (custeio institucional integral).
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap gap-2">
                     <Link
