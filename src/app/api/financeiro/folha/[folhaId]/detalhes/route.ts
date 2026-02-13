@@ -36,6 +36,26 @@ export async function GET(_req: Request, ctx: { params: Promise<{ folhaId: strin
     return NextResponse.json({ error: "folha_nao_encontrada" }, { status: 404 });
   }
 
+  const competenciaFolha = String(folha.competencia ?? "");
+
+  const { data: prevFolha, error: prevErr } = await supabase
+    .from("folha_pagamento")
+    .select("id,competencia")
+    .lt("competencia", competenciaFolha)
+    .order("competencia", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (prevErr) return NextResponse.json({ error: prevErr.message }, { status: 500 });
+
+  const { data: nextFolha, error: nextErr } = await supabase
+    .from("folha_pagamento")
+    .select("id,competencia")
+    .gt("competencia", competenciaFolha)
+    .order("competencia", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (nextErr) return NextResponse.json({ error: nextErr.message }, { status: 500 });
+
   const { data: itens, error: iErr } = await supabase
     .from("folha_pagamento_itens")
     .select("*")
@@ -103,6 +123,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ folhaId: strin
   return NextResponse.json(
     {
       folha,
+      prev_folha: prevFolha
+        ? { id: Number(prevFolha.id), competencia: String(prevFolha.competencia ?? "") }
+        : null,
+      next_folha: nextFolha
+        ? { id: Number(nextFolha.id), competencia: String(nextFolha.competencia ?? "") }
+        : null,
       colaboradores: colaboradoresResumo,
       itens: itensTyped.map((it) => ({
         ...it,

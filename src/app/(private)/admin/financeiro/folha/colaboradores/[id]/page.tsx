@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+type FolhaNav = {
+  id: number;
+  competencia: string;
+};
+
 type Folha = {
   id: number;
   competencia: string;
@@ -47,6 +52,8 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
   const folhaId = Number(params.id);
 
   const [folha, setFolha] = useState<Folha | null>(null);
+  const [prevFolha, setPrevFolha] = useState<FolhaNav | null>(null);
+  const [nextFolha, setNextFolha] = useState<FolhaNav | null>(null);
   const [colaboradores, setColaboradores] = useState<ColaboradorResumo[]>([]);
   const [itens, setItens] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
@@ -78,24 +85,35 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
     try {
       const res = await fetch(`/api/financeiro/folha/${folhaId}/detalhes`, { cache: "no-store" });
       const json = (await res.json().catch(() => null)) as
-        | { folha?: Folha; colaboradores?: ColaboradorResumo[]; itens?: Item[]; error?: string }
+        | {
+            folha?: Folha;
+            prev_folha?: FolhaNav | null;
+            next_folha?: FolhaNav | null;
+            colaboradores?: ColaboradorResumo[];
+            itens?: Item[];
+            error?: string;
+          }
         | null;
 
       if (!res.ok) {
         setMessage(json?.error ?? "falha_carregar_detalhes");
         setFolha(null);
+        setPrevFolha(null);
+        setNextFolha(null);
         setColaboradores([]);
         setItens([]);
         return;
       }
 
-      const nextFolha = json?.folha ?? null;
+      const nextFolhaData = json?.folha ?? null;
       const nextColabs = Array.isArray(json?.colaboradores) ? json.colaboradores : [];
-      const nextItens = Array.isArray(json?.itens) ? json.itens : [];
+      const nextItensData = Array.isArray(json?.itens) ? json.itens : [];
 
-      setFolha(nextFolha);
+      setFolha(nextFolhaData);
+      setPrevFolha(json?.prev_folha ?? null);
+      setNextFolha(json?.next_folha ?? null);
       setColaboradores(nextColabs);
-      setItens(nextItens);
+      setItens(nextItensData);
 
       if (nextColabs.length === 0) {
         setSelectedColaboradorId(null);
@@ -201,7 +219,14 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
         cache: "no-store",
       });
       const resumoJson = (await resumoRes.json().catch(() => null)) as
-        | { config_financeira?: { salario_base_centavos?: number } | null; error?: string }
+        | {
+            config_financeira?: {
+              tipo_remuneracao?: "MENSAL" | "HORISTA";
+              salario_base_centavos?: number;
+              valor_hora_centavos?: number;
+            } | null;
+            error?: string;
+          }
         | null;
 
       if (!resumoRes.ok) {
@@ -209,9 +234,18 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
         return;
       }
 
-      const salarioBase = Number(resumoJson?.config_financeira?.salario_base_centavos ?? 0);
-      if (!Number.isFinite(salarioBase) || salarioBase <= 0) {
-        setMessage("Colaborador sem salario base configurado.");
+      const tipoRem = resumoJson?.config_financeira?.tipo_remuneracao ?? "MENSAL";
+      const valor =
+        tipoRem === "HORISTA"
+          ? Number(resumoJson?.config_financeira?.valor_hora_centavos ?? 0)
+          : Number(resumoJson?.config_financeira?.salario_base_centavos ?? 0);
+
+      if (!Number.isFinite(valor) || valor <= 0) {
+        setMessage(
+          tipoRem === "HORISTA"
+            ? "Colaborador sem valor hora configurado."
+            : "Colaborador sem salario base configurado.",
+        );
         return;
       }
 
@@ -229,8 +263,8 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
         body: JSON.stringify({
           colaborador_id: selectedColaboradorId,
           tipo_item: "PROVENTO",
-          descricao: "Salario base do cadastro",
-          valor_centavos: salarioBase,
+          descricao: tipoRem === "HORISTA" ? "Valor hora do cadastro" : "Salario base do cadastro",
+          valor_centavos: valor,
         }),
       });
       const json = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -239,7 +273,7 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
         return;
       }
 
-      setMessage("Salario base do cadastro adicionado.");
+      setMessage("Rubrica de cadastro adicionada.");
       await loadDetalhes();
     } finally {
       setAddingSalarioBase(false);
@@ -258,7 +292,7 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-xl font-semibold">
-                {folha ? `Folha - Competencia ${folha.competencia}` : "Folha - Detalhes"}
+                {folha ? `Folha — Competência ${folha.competencia}` : "Folha — Competência"}
               </h1>
               <p className="mt-1 text-sm text-slate-600">
                 Status: <span className="font-medium">{folha?.status ?? "-"}</span> | Pagamento previsto:{" "}
@@ -266,6 +300,32 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {prevFolha ? (
+                <Link
+                  href={`/admin/financeiro/folha/colaboradores/${prevFolha.id}`}
+                  className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Anterior
+                </Link>
+              ) : (
+                <button className="rounded-md border px-3 py-2 text-sm opacity-50" disabled>
+                  Anterior
+                </button>
+              )}
+
+              {nextFolha ? (
+                <Link
+                  href={`/admin/financeiro/folha/colaboradores/${nextFolha.id}`}
+                  className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  Próxima
+                </Link>
+              ) : (
+                <button className="rounded-md border px-3 py-2 text-sm opacity-50" disabled>
+                  Próxima
+                </button>
+              )}
+
               <button
                 type="button"
                 className="rounded-md border px-3 py-2 text-sm"
@@ -330,7 +390,7 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
         </div>
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h2 className="text-base font-semibold">Rubricas / Itens do colaborador selecionado</h2>
+          <h2 className="text-base font-semibold">Rubricas do colaborador</h2>
 
           <p className="mt-2 text-xs text-slate-600">
             Observacao de negocio: descontos so entram se existir fatura ABERTA na mesma competencia.
@@ -408,7 +468,7 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
             <h3 className="text-sm font-semibold">Adicionar rubrica manual</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-4">
               <label className="space-y-1 text-sm">
-                <span>Tipo</span>
+                <span>Tipo de rubrica</span>
                 <select
                   className="w-full rounded-md border px-3 py-2"
                   value={tipoItem}
@@ -416,9 +476,9 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
                     setTipoItem(e.target.value as "PROVENTO" | "DESCONTO" | "ADIANTAMENTO_SALARIAL")
                   }
                 >
-                  <option value="PROVENTO">PROVENTO</option>
-                  <option value="DESCONTO">DESCONTO</option>
-                  <option value="ADIANTAMENTO_SALARIAL">ADIANTAMENTO_SALARIAL</option>
+                  <option value="PROVENTO">Provento</option>
+                  <option value="DESCONTO">Desconto</option>
+                  <option value="ADIANTAMENTO_SALARIAL">Adiantamento salarial</option>
                 </select>
               </label>
               <label className="space-y-1 text-sm md:col-span-2">
@@ -460,9 +520,7 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
             </div>
           </div>
 
-          <div className="mt-3 text-sm text-slate-600">
-            {loading ? "Carregando detalhes..." : message ?? ""}
-          </div>
+          <div className="mt-3 text-sm text-slate-600">{loading ? "Carregando detalhes..." : message ?? ""}</div>
         </div>
       </div>
     </div>

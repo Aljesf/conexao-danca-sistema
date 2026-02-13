@@ -9,6 +9,8 @@ type Body = {
   pagamento_no_mes_seguinte: boolean;
   politica_desconto_cartao: "DESCONTA_NA_FOLHA" | "NAO_DESCONTA" | "MANUAL";
   politica_corte_cartao: "POR_DIA_FECHAMENTO" | "SEM_CORTE";
+  tipo_remuneracao: "MENSAL" | "HORISTA";
+  valor_hora_centavos: number;
   salario_base_centavos: number;
 };
 
@@ -43,6 +45,11 @@ function asPoliticaCorte(value: unknown): "POR_DIA_FECHAMENTO" | "SEM_CORTE" {
   return "POR_DIA_FECHAMENTO";
 }
 
+function asTipoRemuneracao(value: unknown): "MENSAL" | "HORISTA" {
+  if (value === "MENSAL" || value === "HORISTA") return value;
+  return "MENSAL";
+}
+
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guardApiByRole(req);
   if (denied) return denied;
@@ -65,6 +72,8 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
     pagamento_no_mes_seguinte: asBool(body.pagamento_no_mes_seguinte, true),
     politica_desconto_cartao: asPoliticaDesconto(body.politica_desconto_cartao),
     politica_corte_cartao: asPoliticaCorte(body.politica_corte_cartao),
+    tipo_remuneracao: asTipoRemuneracao(body.tipo_remuneracao),
+    valor_hora_centavos: clampInt(Number(body.valor_hora_centavos ?? 0), 0, 999999999),
     salario_base_centavos: clampInt(Number(body.salario_base_centavos ?? 0), 0, 999999999),
   };
 

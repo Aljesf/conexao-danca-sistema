@@ -12,7 +12,9 @@ type ConfigFinanceira = {
   pagamento_no_mes_seguinte: boolean;
   politica_desconto_cartao: "DESCONTA_NA_FOLHA" | "NAO_DESCONTA" | "MANUAL";
   politica_corte_cartao: "POR_DIA_FECHAMENTO" | "SEM_CORTE";
+  tipo_remuneracao: "MENSAL" | "HORISTA";
   salario_base_centavos: number;
+  valor_hora_centavos: number;
   ativo: boolean;
 };
 
@@ -46,7 +48,9 @@ type ConfigForm = {
   pagamento_no_mes_seguinte: boolean;
   politica_desconto_cartao: "DESCONTA_NA_FOLHA" | "NAO_DESCONTA" | "MANUAL";
   politica_corte_cartao: "POR_DIA_FECHAMENTO" | "SEM_CORTE";
+  tipo_remuneracao: "MENSAL" | "HORISTA";
   salario_base_centavos: number;
+  valor_hora_centavos: number;
 };
 
 function brlFromCentavos(v: number): string {
@@ -62,7 +66,9 @@ function defaultConfigForm(): ConfigForm {
     pagamento_no_mes_seguinte: true,
     politica_desconto_cartao: "DESCONTA_NA_FOLHA",
     politica_corte_cartao: "POR_DIA_FECHAMENTO",
+    tipo_remuneracao: "MENSAL",
     salario_base_centavos: 0,
+    valor_hora_centavos: 0,
   };
 }
 
@@ -75,7 +81,9 @@ function toForm(cfg: ConfigFinanceira | null): ConfigForm {
     pagamento_no_mes_seguinte: cfg.pagamento_no_mes_seguinte,
     politica_desconto_cartao: cfg.politica_desconto_cartao,
     politica_corte_cartao: cfg.politica_corte_cartao,
+    tipo_remuneracao: cfg.tipo_remuneracao ?? "MENSAL",
     salario_base_centavos: cfg.salario_base_centavos ?? 0,
+    valor_hora_centavos: cfg.valor_hora_centavos ?? 0,
   };
 }
 
@@ -111,7 +119,6 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
     }
 
     if (Number.isFinite(colaboradorId) && colaboradorId > 0) void run();
-
     return () => {
       alive = false;
     };
@@ -129,7 +136,9 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
       pagamento_no_mes_seguinte: formConfig.pagamento_no_mes_seguinte,
       politica_desconto_cartao: formConfig.politica_desconto_cartao,
       politica_corte_cartao: formConfig.politica_corte_cartao,
+      tipo_remuneracao: formConfig.tipo_remuneracao,
       salario_base_centavos: Math.max(0, Math.trunc(formConfig.salario_base_centavos || 0)),
+      valor_hora_centavos: Math.max(0, Math.trunc(formConfig.valor_hora_centavos || 0)),
     };
 
     try {
@@ -145,8 +154,9 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
       if (!r.ok) throw new Error(j?.error ?? "falha_salvar_config");
       if (j?.config_financeira) {
         setResumo((prev) => (prev ? { ...prev, config_financeira: j.config_financeira ?? null } : prev));
+        setFormConfig(toForm(j.config_financeira ?? null));
       }
-      setConfigMsg("Configuracao financeira atualizada.");
+      setConfigMsg("Perfil de pagamento atualizado.");
       setEditMode(false);
     } catch (e) {
       setConfigMsg(e instanceof Error ? e.message : "erro_desconhecido");
@@ -161,9 +171,9 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-xl font-semibold">Colaborador - Visao Geral</h1>
+              <h1 className="text-xl font-semibold">Perfil do colaborador</h1>
               <p className="text-sm text-slate-600">
-                Central de configuracao do colaborador: vinculo, folha e Cartao Conexao (credito interno).
+                Informacoes gerais, cartao conexao e perfil de pagamento.
               </p>
             </div>
             <div className="flex gap-2">
@@ -205,9 +215,9 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold">Configuracao Financeira do Colaborador</h2>
+                  <h2 className="text-lg font-semibold">Perfil de pagamento</h2>
                   <p className="text-sm text-slate-600">
-                    Define se gera folha automaticamente e como o Cartao Conexao entra como desconto.
+                    Define regras da folha e tipo de remuneracao do colaborador.
                   </p>
                 </div>
                 <button
@@ -235,10 +245,25 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
                       {resumo.config_financeira?.dia_pagamento ?? "-"}{" "}
                       {resumo.config_financeira?.pagamento_no_mes_seguinte ? "(mes seguinte)" : "(mesmo mes)"}
                     </div>
-                    <div className="mt-3 text-xs text-slate-500">Salario base</div>
-                    <div className="text-sm text-slate-700">
-                      {brlFromCentavos(Number(resumo.config_financeira?.salario_base_centavos ?? 0))}
-                    </div>
+
+                    <div className="mt-3 text-xs text-slate-500">Tipo de remuneracao</div>
+                    <div className="text-sm text-slate-700">{resumo.config_financeira?.tipo_remuneracao ?? "MENSAL"}</div>
+
+                    {resumo.config_financeira?.tipo_remuneracao === "HORISTA" ? (
+                      <>
+                        <div className="mt-3 text-xs text-slate-500">Valor hora</div>
+                        <div className="text-sm text-slate-700">
+                          {brlFromCentavos(Number(resumo.config_financeira?.valor_hora_centavos ?? 0))}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mt-3 text-xs text-slate-500">Salario base</div>
+                        <div className="text-sm text-slate-700">
+                          {brlFromCentavos(Number(resumo.config_financeira?.salario_base_centavos ?? 0))}
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="rounded-xl border p-4">
@@ -317,17 +342,49 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
                     </label>
 
                     <label className="text-sm">
-                      Salario base (centavos)
-                      <input
+                      Tipo de remuneracao
+                      <select
                         className="mt-1 w-full rounded-md border px-3 py-2"
-                        type="number"
-                        min={0}
-                        value={formConfig.salario_base_centavos}
+                        value={formConfig.tipo_remuneracao}
                         onChange={(e) =>
-                          setFormConfig((prev) => ({ ...prev, salario_base_centavos: Number(e.target.value || 0) }))
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            tipo_remuneracao: e.target.value as "MENSAL" | "HORISTA",
+                          }))
                         }
-                      />
+                      >
+                        <option value="MENSAL">MENSAL</option>
+                        <option value="HORISTA">HORISTA</option>
+                      </select>
                     </label>
+
+                    {formConfig.tipo_remuneracao === "HORISTA" ? (
+                      <label className="text-sm">
+                        Valor hora (centavos)
+                        <input
+                          className="mt-1 w-full rounded-md border px-3 py-2"
+                          type="number"
+                          min={0}
+                          value={formConfig.valor_hora_centavos}
+                          onChange={(e) =>
+                            setFormConfig((prev) => ({ ...prev, valor_hora_centavos: Number(e.target.value || 0) }))
+                          }
+                        />
+                      </label>
+                    ) : (
+                      <label className="text-sm">
+                        Salario base (centavos)
+                        <input
+                          className="mt-1 w-full rounded-md border px-3 py-2"
+                          type="number"
+                          min={0}
+                          value={formConfig.salario_base_centavos}
+                          onChange={(e) =>
+                            setFormConfig((prev) => ({ ...prev, salario_base_centavos: Number(e.target.value || 0) }))
+                          }
+                        />
+                      </label>
+                    )}
 
                     <label className="text-sm">
                       Politica desconto cartao
