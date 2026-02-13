@@ -1215,7 +1215,7 @@ export async function POST(request: NextRequest) {
   debugCartao.data_inicio_vinculo = matricula.data_inicio_vinculo;
 
   const primeiraStatus = (matricula.primeira_cobranca_status ?? "").toUpperCase();
-  if (metodoLiquidacao === "CREDITO_BOLSA" && primeiraStatus === "LIQUIDADO_INSTITUCIONAL") {
+  if (metodoLiquidacao === "CREDITO_BOLSA" && (primeiraStatus === "LIQUIDADO_INSTITUCIONAL" || primeiraStatus === "PAGA")) {
     return NextResponse.json({
       ok: true,
       modo: "MOVIMENTO",
@@ -1727,12 +1727,13 @@ export async function POST(request: NextRequest) {
       .from("matriculas")
       .update({
         primeira_cobranca_tipo: body.tipo_primeira_cobranca,
-        primeira_cobranca_status: "LIQUIDADO_INSTITUCIONAL",
+        primeira_cobranca_status: "PAGA",
         primeira_cobranca_valor_centavos: valorInstitucional,
         primeira_cobranca_cobranca_id: null,
         primeira_cobranca_recebimento_id: null,
         primeira_cobranca_forma_pagamento_id: null,
         primeira_cobranca_data_pagamento: movimentoRes.dataLiquidacao,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", matricula.id);
 
@@ -1741,7 +1742,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       modo: "MOVIMENTO",
-      status: "LIQUIDADO_INSTITUCIONAL",
+      status: "PAGA",
       matricula_id: matricula.id,
       valor_centavos: valorInstitucional,
       resumo_custeio: {

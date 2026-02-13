@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { aplicarBolsaNaMatricula } from "@/lib/bolsas/aplicarBolsaNaMatricula";
 import { calcularValorFamiliaCentavos, isBolsaTipoModo, type BolsaTipoModo } from "@/lib/bolsas/bolsasTypes";
+import { liquidarPrimeiraMatricula } from "@/lib/matriculas/liquidarPrimeiraMatricula";
  
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
@@ -374,6 +375,127 @@ function calcularPrimeiraCobranca(params: {
     mes_base: month,
     mes_primeira_mensalidade: Math.min(12, month + 1),
   };
+}
+
+async function rollbackCompensatorioMatricula(params: {
+  supabase: ReturnType<typeof getSupabaseAdmin>;
+  matriculaId: number;
+  bolsaConcessaoIds: number[];
+}): Promise<{ ok: boolean; errors: string[] }> {
+  const { supabase, matriculaId, bolsaConcessaoIds } = params;
+  const errors: string[] = [];
+  const pushErr = (scope: string, err: unknown) => {
+    if (!err || isSchemaMissingError(err)) return;
+    const msg = err && typeof err === "object" && "message" in err ? String((err as { message?: unknown }).message ?? "erro") : "erro";
+    errors.push(`${scope}: ${msg}`);
+  };
+
+  const { data: cobrancasOrigemRows, error: cobrancasOrigemErr } = await supabase
+    .from("cobrancas")
+    .select("id")
+    .eq("origem_tipo", "MATRICULA")
+    .eq("origem_id", matriculaId);
+  pushErr("listar_cobrancas_origem", cobrancasOrigemErr);
+  const cobrancaIds = new Set<number>(
+    (cobrancasOrigemRows ?? [])
+      .map((row) => Number((row as { id?: unknown }).id))
+      .filter((id) => Number.isInteger(id) && id > 0),
+  );
+
+  const { data: lancRows, error: lancRowsErr } = await supabase
+    .from("credito_conexao_lancamentos")
+    .select("id,cobranca_id")
+    .eq("origem_sistema", "MATRICULA")
+    .eq("origem_id", matriculaId);
+  pushErr("listar_lancamentos_cartao", lancRowsErr);
+  const lancamentoIds = (lancRows ?? [])
+    .map((row) => Number((row as { id?: unknown }).id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  for (const row of lancRows ?? []) {
+    const cobrancaId = Number((row as { cobranca_id?: unknown }).cobranca_id);
+    if (Number.isInteger(cobrancaId) && cobrancaId > 0) cobrancaIds.add(cobrancaId);
+  }
+
+  const cobrancaIdsArr = Array.from(cobrancaIds);
+
+  const { error: eBolsaLedger } = await supabase.from("bolsa_ledger").delete().eq("matricula_id", matriculaId);
+  pushErr("delete_bolsa_ledger", eBolsaLedger);
+
+  const { error: eFinanceiroLinhas } = await supabase
+    .from("matriculas_financeiro_linhas")
+    .delete()
+    .eq("matricula_id", matriculaId);
+  pushErr("delete_matriculas_financeiro_linhas", eFinanceiroLinhas);
+
+  const { error: eTurmaAluno } = await supabase.from("turma_aluno").delete().eq("matricula_id", matriculaId);
+  pushErr("delete_turma_aluno", eTurmaAluno);
+
+  const { error: eCobrancaAvulsa } = await supabase
+    .from("financeiro_cobrancas_avulsas")
+    .delete()
+    .eq("origem_tipo", "MATRICULA_ENTRADA")
+    .eq("origem_id", matriculaId);
+  pushErr("delete_cobrancas_avulsas", eCobrancaAvulsa);
+
+  if (lancamentoIds.length > 0) {
+    const { error: eLinksFatura } = await supabase
+      .from("credito_conexao_fatura_lancamentos")
+      .delete()
+      .in("lancamento_id", lancamentoIds);
+    pushErr("delete_fatura_lancamentos", eLinksFatura);
+  }
+
+  if (lancamentoIds.length > 0) {
+    const { error: eLancamentos } = await supabase
+      .from("credito_conexao_lancamentos")
+      .delete()
+      .in("id", lancamentoIds);
+    pushErr("delete_lancamentos_cartao", eLancamentos);
+  }
+
+  if (cobrancaIdsArr.length > 0) {
+    const { error: eRecebimentos } = await supabase
+      .from("recebimentos")
+      .delete()
+      .in("cobranca_id", cobrancaIdsArr);
+    pushErr("delete_recebimentos", eRecebimentos);
+  }
+
+  if (cobrancaIdsArr.length > 0) {
+    const { error: eCobrancas } = await supabase.from("cobrancas").delete().in("id", cobrancaIdsArr);
+    pushErr("delete_cobrancas", eCobrancas);
+  }
+
+  const { error: eBolsaConcessoesMatricula } = await supabase
+    .from("bolsa_concessoes")
+    .delete()
+    .eq("matricula_id", matriculaId);
+  pushErr("delete_bolsa_concessoes_matricula", eBolsaConcessoesMatricula);
+
+  const bolsaConcessaoIdsUnicos = Array.from(
+    new Set(bolsaConcessaoIds.filter((id) => Number.isInteger(id) && id > 0)),
+  );
+  if (bolsaConcessaoIdsUnicos.length > 0) {
+    const { error: eBolsaConcessoesIds } = await supabase
+      .from("bolsa_concessoes")
+      .delete()
+      .in("id", bolsaConcessaoIdsUnicos);
+    pushErr("delete_bolsa_concessoes_ids", eBolsaConcessoesIds);
+  }
+
+  const { error: eExecucoes } = await supabase
+    .from("matricula_execucao_valores")
+    .delete()
+    .eq("matricula_id", matriculaId);
+  pushErr("delete_execucoes_manuais", eExecucoes);
+
+  const { error: eItens } = await supabase.from("matriculas_itens").delete().eq("matricula_id", matriculaId);
+  pushErr("delete_matriculas_itens", eItens);
+
+  const { error: eMatricula } = await supabase.from("matriculas").delete().eq("id", matriculaId);
+  pushErr("delete_matricula", eMatricula);
+
+  return { ok: errors.length === 0, errors };
 }
 
 export async function POST(request: NextRequest) {
@@ -1005,7 +1127,7 @@ export async function POST(request: NextRequest) {
     documento_modelo_id: documentoModeloId,
     observacoes: body.observacoes ?? null,
     total_mensalidade_centavos: totalMensalidadeCentavos,
-    status: "ATIVA",
+    status: "TRANCADA",
     created_by: userId,
     updated_by: userId,
     primeira_cobranca_tipo: primeiraCobranca?.tipo ?? undefined,
@@ -1040,6 +1162,19 @@ export async function POST(request: NextRequest) {
     projeto_social_id: number;
     bolsa_tipo_id: number;
   }> = [];
+  const rollbackAndServerError = async (errorCode: string, message: string, details?: Record<string, unknown>) => {
+    const rollback = await rollbackCompensatorioMatricula({
+      supabase: admin,
+      matriculaId,
+      bolsaConcessaoIds: bolsasAplicadas.map((item) => item.bolsa_concessao_id),
+    });
+    return serverError(errorCode, message, {
+      ...(details ?? {}),
+      rollback_ok: rollback.ok,
+      rollback_errors: rollback.errors,
+      matricula_id: matriculaId,
+    });
+  };
 
   if (usarExecucoes && execucoesValidas.length > 0) {
     let hasModeloLiquidacaoColumn = false;
@@ -1078,11 +1213,12 @@ export async function POST(request: NextRequest) {
     if (execErr) {
       const msg = execErr.message ?? "";
       if (msg.includes("relation") && msg.includes("matricula_execucao_valores")) {
-        return jsonError("TABELA_AUXILIAR_NAO_EXISTE", execErr, 400, {
+        return await rollbackAndServerError("TABELA_AUXILIAR_NAO_EXISTE", "Falha ao salvar execucoes da matricula.", {
           hint: "Aplique a migration SQL da tabela matricula_execucao_valores no Supabase.",
+          execErr,
         });
       }
-      return jsonError("MANUAL_INSERT_EXECUCOES_FAIL", "Falha ao salvar valores manuais.", 500, { execErr });
+      return await rollbackAndServerError("MANUAL_INSERT_EXECUCOES_FAIL", "Falha ao salvar valores manuais.", { execErr });
     }
   }
   if (execucoesBolsa.length > 0) {
@@ -1091,7 +1227,9 @@ export async function POST(request: NextRequest) {
       const projetoSocialId = execucao.bolsa?.projeto_social_id;
       const bolsaTipoId = execucao.bolsa?.bolsa_tipo_id;
       if (!projetoSocialId || !bolsaTipoId) {
-        return badRequest("execucao_bolsa_invalida.", { turma_id: execucao.turma_id });
+        return await rollbackAndServerError("EXECUCAO_BOLSA_INVALIDA", "Execucao de bolsa invalida.", {
+          turma_id: execucao.turma_id,
+        });
       }
       try {
         const aplicada = await aplicarBolsaNaMatricula({
@@ -1111,16 +1249,51 @@ export async function POST(request: NextRequest) {
           bolsa_tipo_id: bolsaTipoId,
         });
       } catch (bolsaErr) {
-        return serverError("APLICAR_BOLSA_NA_MATRICULA_FAIL", "Falha ao aplicar bolsa na matricula.", {
+        return await rollbackAndServerError("APLICAR_BOLSA_NA_MATRICULA_FAIL", "Falha ao aplicar bolsa na matricula.", {
           bolsaErr,
           turma_id: execucao.turma_id,
           projeto_social_id: projetoSocialId,
           bolsa_tipo_id: bolsaTipoId,
-          matricula_id: matriculaId,
         });
       }
     }
   }
+
+  const modoLiquidacaoAutomatica = resumoCusteio.familia_centavos <= 0 ? "MOVIMENTO" : "LANCAR_NO_CARTAO";
+  const tipoPrimeiraCobranca = primeiraCobranca?.tipo ?? "ENTRADA_PRORATA";
+  const liquidacaoAto = await liquidarPrimeiraMatricula({
+    baseUrl: new URL(request.url).origin,
+    cookieHeader,
+    matriculaId,
+    tipoPrimeiraCobranca,
+    modo: modoLiquidacaoAutomatica,
+    observacoes: body.observacoes ?? null,
+  });
+  if (!liquidacaoAto.ok) {
+    return await rollbackAndServerError("LIQUIDAR_PRIMEIRA_MATRICULA_FAIL", "Falha na liquidacao automatica do ato.", {
+      liquidacao_error: liquidacaoAto.error,
+      liquidacao_detail: liquidacaoAto.detail,
+      liquidacao_payload: liquidacaoAto.payload ?? null,
+    });
+  }
+
+  const { data: matriculaFinal, error: ativarErr } = await supabase
+    .from("matriculas")
+    .update({
+      status: "ATIVA",
+      updated_by: userId,
+    })
+    .eq("id", matriculaId)
+    .select(insertSelect)
+    .single();
+
+  if (ativarErr) {
+    return await rollbackAndServerError("ATIVAR_MATRICULA_FAIL", "Falha ao finalizar matricula apos liquidacao.", {
+      ativarErr,
+    });
+  }
+
+  matriculaCriada = matriculaFinal;
 
   return NextResponse.json(
     {
@@ -1128,6 +1301,7 @@ export async function POST(request: NextRequest) {
       matricula: matriculaCriada,
       bolsa_aplicacoes: bolsasAplicadas,
       resumo_custeio: resumoCusteio,
+      liquidacao_ato: liquidacaoAto.payload,
     },
     { status: 201 },
   );
