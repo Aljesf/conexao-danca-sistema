@@ -304,6 +304,44 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
   }
 
+  // Regra hard: conta COLABORADOR nao gera cobranca externa (Neofin/boleto).
+  if (tipoConta === "COLABORADOR") {
+    const { error: faturaUpdateError } = await supabase
+      .from("credito_conexao_faturas")
+      .update({
+        valor_total_centavos: total_centavos,
+        valor_taxas_centavos: taxa_centavos,
+        data_fechamento: fatura.data_fechamento ?? new Date().toISOString().slice(0, 10),
+        data_vencimento: vencimento,
+        status: "ABERTA",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", fatura.id);
+
+    if (faturaUpdateError) {
+      console.error("[fechar fatura] erro ao atualizar fatura COLABORADOR:", faturaUpdateError);
+      return NextResponse.json(
+        { ok: false, error: "erro_atualizar_fatura_colaborador" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        ok: true,
+        fatura_id: fatura.id,
+        cobranca_id: null,
+        cobranca_externa_gerada: false,
+        compras_centavos,
+        taxa_centavos,
+        total_centavos,
+        numero_parcelas,
+        regra_id: regra?.id ?? null,
+      },
+      { status: 200 }
+    );
+  }
+
   // Upsert da cobranca
   let cobrancaId = fatura.cobranca_id ?? null;
   const descricao = `Fatura Credito Conexao #${fatura.id} (${fatura.periodo_referencia})`;

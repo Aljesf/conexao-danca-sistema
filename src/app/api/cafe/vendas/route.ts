@@ -1,7 +1,9 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
+import { toCompetenciaYYYYMM } from "@/lib/financeiro/competencia";
+import { recalcularComprasFatura, vincularLancamentoNaFatura } from "@/lib/financeiro/creditoConexaoFaturas";
 
 type ProdutoRow = {
   id: number;
@@ -37,6 +39,8 @@ type CartaoTipoTransacao = "CREDITO_AVISTA" | "CREDITO_PARCELADO";
 type ContaConexaoResumo = {
   id: number;
   pessoa_titular_id: number;
+  tipo_conta: string | null;
+  dia_fechamento: number | null;
   dia_vencimento: number | null;
 };
 
@@ -125,11 +129,6 @@ function addDaysISODate(days: number): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function competenciaFromDate(value: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  return value.slice(0, 7);
-}
-
 function addCompetencia(base: string, offset: number): string {
   const [anoStr, mesStr] = base.split("-");
   const ano = Number(anoStr);
@@ -155,6 +154,65 @@ function buildVencimentoFromCompetencia(
   const mm = String(mes).padStart(2, "0");
   const dd = String(dia).padStart(2, "0");
   return `${ano}-${mm}-${dd}`;
+}
+
+async function ensureFaturaAbertaNaCompetencia(params: {
+  supabase: any;
+  contaConexaoId: number;
+  competencia: string;
+  diaVencimento: number | null;
+}): Promise<number> {
+  const { supabase, contaConexaoId, competencia, diaVencimento } = params;
+
+  const { data: existente, error: findErr } = await supabase
+    .from("credito_conexao_faturas")
+    .select("id,status,data_vencimento")
+    .eq("conta_conexao_id", contaConexaoId)
+    .eq("periodo_referencia", competencia)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (findErr) throw findErr;
+
+  const dataVencimento = buildVencimentoFromCompetencia(competencia, diaVencimento);
+
+  if (existente?.id) {
+    if (existente.status !== "ABERTA" || !existente.data_vencimento) {
+      const { error: updErr } = await supabase
+        .from("credito_conexao_faturas")
+        .update({
+          status: "ABERTA",
+          data_vencimento: existente.data_vencimento ?? dataVencimento,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existente.id);
+      if (updErr) throw updErr;
+    }
+    return Number(existente.id);
+  }
+
+  const { data: criada, error: createErr } = await supabase
+    .from("credito_conexao_faturas")
+    .insert({
+      conta_conexao_id: contaConexaoId,
+      periodo_referencia: competencia,
+      data_fechamento: todayISODate(),
+      data_vencimento: dataVencimento,
+      valor_total_centavos: 0,
+      valor_taxas_centavos: 0,
+      status: "ABERTA",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (createErr || !criada?.id) {
+    throw createErr ?? new Error("falha_criar_fatura_aberta");
+  }
+
+  return Number(criada.id);
 }
 
 function distribuirCentavos(total: number, parcelas: number): number[] {
@@ -727,7 +785,7 @@ export async function POST(req: Request) {
   if (isCartaoConexao && contaConexaoId && valorTotal > 0) {
     const { data: contaRow, error: contaErr } = await supabase
       .from("credito_conexao_contas")
-      .select("id, pessoa_titular_id, dia_vencimento")
+      .select("id, pessoa_titular_id, tipo_conta, dia_fechamento, dia_vencimento")
       .eq("id", contaConexaoId)
       .maybeSingle();
 
@@ -740,95 +798,30 @@ export async function POST(req: Request) {
     }
 
     const conta = contaRow as ContaConexaoResumo;
+    const contaTipo = (conta.tipo_conta ?? "").toUpperCase();
+    const isContaColaborador = contaTipo === "COLABORADOR";
     const pessoaTitularId = Number(conta.pessoa_titular_id);
     const pessoaCobrancaId = Number.isFinite(pessoaTitularId) && pessoaTitularId > 0
       ? pessoaTitularId
       : compradorId;
 
-    const competenciaBase = competenciaFromDate(todayISODate()) ?? new Date().toISOString().slice(0, 7);
+    const competenciaBase = toCompetenciaYYYYMM(new Date());
     const parcelas = Math.max(1, numeroParcelas);
     const totalVendaCentavos = Math.max(0, valorTotal);
     const taxaTotalCentavos = Math.max(0, taxaCartaoConexaoCentavos);
-    const baseTotalCentavos = Math.max(0, totalVendaCentavos - taxaTotalCentavos);
-    const parcelasBase = distribuirCentavos(baseTotalCentavos, parcelas);
-    const parcelasTaxa = distribuirCentavos(taxaTotalCentavos, parcelas);
-    const cobrancasCriadas: number[] = [];
-
-    const rollbackCartaoConexao = async () => {
-      if (cobrancasCriadas.length === 0) return;
-      await supabase
-        .from("credito_conexao_lancamentos")
-        .delete()
-        .in("cobranca_id", cobrancasCriadas);
-      await supabase.from("cobrancas").delete().in("id", cobrancasCriadas);
-    };
-
-    for (let i = 0; i < parcelas; i++) {
-      const competencia = addCompetencia(competenciaBase, i);
-      const valorBase = parcelasBase[i] ?? 0;
-      const valorTaxa = parcelasTaxa[i] ?? 0;
-      const valorParcela = valorBase + valorTaxa;
-      const vencimento = buildVencimentoFromCompetencia(
-        competencia,
-        conta.dia_vencimento ?? null
-      );
-
-      const descricao =
-        parcelas > 1 ? `Venda Cafe #${vendaId} (${i + 1}/${parcelas})` : `Venda Cafe #${vendaId}`;
-
-      const { data: cobranca, error: cobrErr } = await supabase
-        .from("cobrancas")
-        .insert({
-          pessoa_id: pessoaCobrancaId,
-          descricao,
-          valor_centavos: valorParcela,
-          vencimento,
-          status: "PENDENTE",
-          origem_tipo: "CAFE",
-          origem_id: vendaId,
-          origem_subtipo: "CARTAO_CONEXAO",
-          competencia_ano_mes: competencia,
-        })
-        .select("id")
-        .single();
-
-      if (cobrErr || !cobranca) {
-        await rollbackCartaoConexao();
-        await rollbackVenda();
-        return NextResponse.json(
-          { ok: false, error: "falha_criar_cobranca_cartao_conexao", details: cobrErr?.message ?? null },
-          { status: 500 }
-        );
-      }
-
-      const cobrancaId = Number((cobranca as { id?: number }).id);
-      if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) {
-        await rollbackCartaoConexao();
-        await rollbackVenda();
-        return NextResponse.json(
-          { ok: false, error: "cobranca_id_invalido" },
-          { status: 500 }
-        );
-      }
-
-      cobrancasCriadas.push(cobrancaId);
-
+    if (isContaColaborador) {
+      const referenciaItem = `cafe:venda:${vendaId}`;
+      const competencia = competenciaBase;
+      const descricao = `Venda Cafe #${vendaId}`;
       const composicaoJson: Record<string, unknown> = {
-        origem: "CAFE_PARCELADO",
+        origem: "CAFE_COLABORADOR",
         venda_id: vendaId,
-        parcela_numero: i + 1,
-        total_parcelas: parcelas,
         competencia,
-        valor_parcela_centavos: valorParcela,
-        valor_parcela_brl: (valorParcela / 100).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        }),
-        valor_base_centavos: valorBase,
-        taxa_centavos: valorTaxa,
         valor_total_venda_centavos: totalVendaCentavos,
         taxa_total_centavos: taxaTotalCentavos,
-        cartao_conexao_tipo_conta: cartaoConexaoTipoConta ?? null,
+        valor_lancamento_centavos: totalVendaCentavos,
+        cartao_conexao_tipo_conta: contaTipo,
+        cartao_conexao_tipo_conta_payload: cartaoConexaoTipoConta ?? null,
         itens: itensCalc.map((item) => ({
           produto_id: item.produto_id,
           quantidade: item.quantidade,
@@ -836,30 +829,211 @@ export async function POST(req: Request) {
         })),
       };
 
-      try {
-        await upsertLancamentoPorCobranca({
-          cobrancaId,
-          contaConexaoId,
-          competencia,
-          valorCentavos: valorParcela,
-          descricao,
-          origemSistema: "CAFE",
-          origemId: vendaId,
-          composicaoJson,
-        });
-      } catch (err) {
-        await rollbackCartaoConexao();
+      const { data: lancamentoExistente, error: lancFindErr } = await supabase
+        .from("credito_conexao_lancamentos")
+        .select("id")
+        .eq("conta_conexao_id", contaConexaoId)
+        .eq("origem_sistema", "CAFE")
+        .eq("origem_id", vendaId)
+        .eq("referencia_item", referenciaItem)
+        .maybeSingle();
+
+      if (lancFindErr) {
         await rollbackVenda();
-        const msg = err instanceof Error ? err.message : "erro_desconhecido";
         return NextResponse.json(
-          { ok: false, error: "falha_upsert_lancamento_cartao_conexao", details: msg },
+          { ok: false, error: "falha_buscar_lancamento_cartao_conexao", details: lancFindErr.message },
           { status: 500 }
         );
       }
-    }
 
-    if (cobrancasCriadas.length === 1) {
-      cobrancaIdParaVenda = cobrancasCriadas[0] ?? null;
+      const payloadLancamento = {
+        conta_conexao_id: contaConexaoId,
+        cobranca_id: null,
+        competencia,
+        referencia_item: referenciaItem,
+        valor_centavos: totalVendaCentavos,
+        descricao,
+        origem_sistema: "CAFE",
+        origem_id: vendaId,
+        composicao_json: composicaoJson,
+        numero_parcelas: parcelas,
+        status: "PENDENTE_FATURA",
+        data_lancamento: todayISODate(),
+      };
+
+      let lancamentoId: number | null = null;
+      let lancamentoCriado = false;
+
+      if (lancamentoExistente?.id) {
+        const { data: lancamentoAtualizado, error: lancUpdErr } = await supabase
+          .from("credito_conexao_lancamentos")
+          .update(payloadLancamento)
+          .eq("id", lancamentoExistente.id)
+          .select("id")
+          .single();
+
+        if (lancUpdErr || !lancamentoAtualizado?.id) {
+          await rollbackVenda();
+          return NextResponse.json(
+            { ok: false, error: "falha_atualizar_lancamento_cartao_conexao", details: lancUpdErr?.message ?? null },
+            { status: 500 }
+          );
+        }
+        lancamentoId = Number(lancamentoAtualizado.id);
+      } else {
+        const { data: lancamentoInserido, error: lancInsErr } = await supabase
+          .from("credito_conexao_lancamentos")
+          .insert(payloadLancamento)
+          .select("id")
+          .single();
+
+        if (lancInsErr || !lancamentoInserido?.id) {
+          await rollbackVenda();
+          return NextResponse.json(
+            { ok: false, error: "falha_criar_lancamento_cartao_conexao", details: lancInsErr?.message ?? null },
+            { status: 500 }
+          );
+        }
+        lancamentoCriado = true;
+        lancamentoId = Number(lancamentoInserido.id);
+      }
+
+      try {
+        const faturaId = await ensureFaturaAbertaNaCompetencia({
+          supabase,
+          contaConexaoId,
+          competencia,
+          diaVencimento: conta.dia_vencimento ?? null,
+        });
+        const vinculo = await vincularLancamentoNaFatura(supabase, faturaId, lancamentoId);
+        if (!vinculo.ok) {
+          throw vinculo.error ?? new Error("falha_vincular_lancamento_fatura");
+        }
+        await recalcularComprasFatura(supabase, faturaId);
+      } catch (err) {
+        if (lancamentoCriado && lancamentoId) {
+          await supabase.from("credito_conexao_lancamentos").delete().eq("id", lancamentoId);
+        }
+        await rollbackVenda();
+        const msg = err instanceof Error ? err.message : "erro_desconhecido";
+        return NextResponse.json(
+          { ok: false, error: "falha_vincular_lancamento_fatura_colaborador", details: msg },
+          { status: 500 }
+        );
+      }
+    } else {
+      const baseTotalCentavos = Math.max(0, totalVendaCentavos - taxaTotalCentavos);
+      const parcelasBase = distribuirCentavos(baseTotalCentavos, parcelas);
+      const parcelasTaxa = distribuirCentavos(taxaTotalCentavos, parcelas);
+      const cobrancasCriadas: number[] = [];
+
+      const rollbackCartaoConexao = async () => {
+        if (cobrancasCriadas.length === 0) return;
+        await supabase
+          .from("credito_conexao_lancamentos")
+          .delete()
+          .in("cobranca_id", cobrancasCriadas);
+        await supabase.from("cobrancas").delete().in("id", cobrancasCriadas);
+      };
+
+      for (let i = 0; i < parcelas; i++) {
+        const competencia = addCompetencia(competenciaBase, i);
+        const valorBase = parcelasBase[i] ?? 0;
+        const valorTaxa = parcelasTaxa[i] ?? 0;
+        const valorParcela = valorBase + valorTaxa;
+        const vencimento = buildVencimentoFromCompetencia(
+          competencia,
+          conta.dia_vencimento ?? null
+        );
+
+        const descricao =
+          parcelas > 1 ? `Venda Cafe #${vendaId} (${i + 1}/${parcelas})` : `Venda Cafe #${vendaId}`;
+
+        const { data: cobranca, error: cobrErr } = await supabase
+          .from("cobrancas")
+          .insert({
+            pessoa_id: pessoaCobrancaId,
+            descricao,
+            valor_centavos: valorParcela,
+            vencimento,
+            status: "PENDENTE",
+            origem_tipo: "CAFE",
+            origem_id: vendaId,
+            origem_subtipo: "CARTAO_CONEXAO",
+            competencia_ano_mes: competencia,
+          })
+          .select("id")
+          .single();
+
+        if (cobrErr || !cobranca) {
+          await rollbackCartaoConexao();
+          await rollbackVenda();
+          return NextResponse.json(
+            { ok: false, error: "falha_criar_cobranca_cartao_conexao", details: cobrErr?.message ?? null },
+            { status: 500 }
+          );
+        }
+
+        const cobrancaId = Number((cobranca as { id?: number }).id);
+        if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) {
+          await rollbackCartaoConexao();
+          await rollbackVenda();
+          return NextResponse.json(
+            { ok: false, error: "cobranca_id_invalido" },
+            { status: 500 }
+          );
+        }
+
+        cobrancasCriadas.push(cobrancaId);
+
+        const composicaoJson: Record<string, unknown> = {
+          origem: "CAFE_PARCELADO",
+          venda_id: vendaId,
+          parcela_numero: i + 1,
+          total_parcelas: parcelas,
+          competencia,
+          valor_parcela_centavos: valorParcela,
+          valor_parcela_brl: (valorParcela / 100).toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          }),
+          valor_base_centavos: valorBase,
+          taxa_centavos: valorTaxa,
+          valor_total_venda_centavos: totalVendaCentavos,
+          taxa_total_centavos: taxaTotalCentavos,
+          cartao_conexao_tipo_conta: cartaoConexaoTipoConta ?? null,
+          itens: itensCalc.map((item) => ({
+            produto_id: item.produto_id,
+            quantidade: item.quantidade,
+            total_centavos: item.total_centavos,
+          })),
+        };
+
+        try {
+          await upsertLancamentoPorCobranca({
+            cobrancaId,
+            contaConexaoId,
+            competencia,
+            valorCentavos: valorParcela,
+            descricao,
+            origemSistema: "CAFE",
+            origemId: vendaId,
+            composicaoJson,
+          });
+        } catch (err) {
+          await rollbackCartaoConexao();
+          await rollbackVenda();
+          const msg = err instanceof Error ? err.message : "erro_desconhecido";
+          return NextResponse.json(
+            { ok: false, error: "falha_upsert_lancamento_cartao_conexao", details: msg },
+            { status: 500 }
+          );
+        }
+      }
+
+      if (cobrancasCriadas.length === 1) {
+        cobrancaIdParaVenda = cobrancasCriadas[0] ?? null;
+      }
     }
   }
 

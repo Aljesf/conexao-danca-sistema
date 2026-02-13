@@ -1,17 +1,9 @@
+import { toCompetenciaYYYYMM } from "@/lib/financeiro/competencia";
+
 export type FolhaCompetenciaCalcInput = {
   data: Date;
   diaFechamento: number; // 1..31
 };
-
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-export function toCompetenciaYYYYMM(d: Date): string {
-  const y = d.getFullYear();
-  const m = d.getMonth() + 1;
-  return `${y}-${pad2(m)}`;
-}
 
 /**
  * Regra:
@@ -42,4 +34,3 @@ export function calcularDataPagamentoPrevista(
   const alvo = pagamentoNoMesSeguinte ? new Date(base.getFullYear(), base.getMonth() + 1, 1) : base;
   return new Date(alvo.getFullYear(), alvo.getMonth(), diaPagamento);
 }
-
