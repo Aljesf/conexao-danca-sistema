@@ -95,8 +95,24 @@ type MovimentoConcessoesResp = {
 type MatriculaResp = {
   ok: boolean;
   matricula?: { id: number };
+  projeto_social_beneficiario_id?: number | null;
+  bolsa_concessao_id?: number | null;
   message?: string;
   error?: string;
+};
+
+type ProjetoSocialOpcao = {
+  id: number;
+  nome: string;
+  descricao?: string | null;
+  ativo?: boolean | null;
+};
+
+type BolsaTipoOpcao = {
+  id: number;
+  projeto_social_id: number;
+  nome: string;
+  ativo: boolean;
 };
 
 type NivelOpcao = {
@@ -295,6 +311,16 @@ export default function NovaMatriculaPage() {
   const [concessoesMovimento, setConcessoesMovimento] = useState<MovimentoConcessaoAtiva[]>([]);
   const [concessoesMovimentoLoading, setConcessoesMovimentoLoading] = useState(false);
   const [concessoesMovimentoErro, setConcessoesMovimentoErro] = useState<string | null>(null);
+  const [isBolsista, setIsBolsista] = useState(false);
+  const [projetoSocialBusca, setProjetoSocialBusca] = useState("Movimento Conexao Danca");
+  const [projetosSociais, setProjetosSociais] = useState<ProjetoSocialOpcao[]>([]);
+  const [projetosSociaisLoading, setProjetosSociaisLoading] = useState(false);
+  const [projetosSociaisErro, setProjetosSociaisErro] = useState<string | null>(null);
+  const [projetoSocialId, setProjetoSocialId] = useState<number | null>(null);
+  const [bolsaTipos, setBolsaTipos] = useState<BolsaTipoOpcao[]>([]);
+  const [bolsaTiposLoading, setBolsaTiposLoading] = useState(false);
+  const [bolsaTiposErro, setBolsaTiposErro] = useState<string | null>(null);
+  const [bolsaTipoId, setBolsaTipoId] = useState<number | null>(null);
   const [motivoExcecao, setMotivoExcecao] = useState<string>("");
   const [observacoes, setObservacoes] = useState<string>("");
   const [modoManualValores, setModoManualValores] = useState(false);
@@ -443,6 +469,7 @@ export default function NovaMatriculaPage() {
     niveisOk &&
     !niveisCarregando &&
     (tipo !== "REGULAR" || !!anoReferencia) &&
+    (!isBolsista || (Number.isFinite(projetoSocialId ?? NaN) && Number.isFinite(bolsaTipoId ?? NaN))) &&
     (politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0);
   const debugFlags = {
     aluno: !!aluno,
@@ -454,6 +481,7 @@ export default function NovaMatriculaPage() {
     valoresOk: !modoManualValores || valoresOk,
     niveisCarregando: !niveisCarregando,
     anoOk: tipo !== "REGULAR" || !!anoReferencia,
+    bolsaOk: !isBolsista || (Number.isFinite(projetoSocialId ?? NaN) && Number.isFinite(bolsaTipoId ?? NaN)),
     excecaoOk: politicaModo !== "ADIAR_PARA_VENCIMENTO" || motivoExcecao.trim().length > 0,
   };
 
@@ -780,6 +808,111 @@ export default function NovaMatriculaPage() {
     };
   }, [aluno?.id, temExecucaoMovimento]);
 
+  useEffect(() => {
+    let ativo = true;
+
+    if (!isBolsista) {
+      setProjetosSociais([]);
+      setProjetosSociaisErro(null);
+      setProjetosSociaisLoading(false);
+      setProjetoSocialId(null);
+      return () => {
+        ativo = false;
+      };
+    }
+
+    const query = projetoSocialBusca.trim();
+    if (query.length < 2) {
+      setProjetosSociais([]);
+      setProjetosSociaisErro(null);
+      setProjetosSociaisLoading(false);
+      setProjetoSocialId(null);
+      return () => {
+        ativo = false;
+      };
+    }
+
+    (async () => {
+      setProjetosSociaisLoading(true);
+      setProjetosSociaisErro(null);
+      try {
+        const resp = await fetchJSON<{ ok: boolean; data?: ProjetoSocialOpcao[] }>(
+          `/api/projetos-sociais/busca?nome=${encodeURIComponent(query)}`,
+        );
+        if (!ativo) return;
+        const lista = Array.isArray(resp.data) ? resp.data : [];
+        setProjetosSociais(lista);
+        if (lista.length === 0) {
+          setProjetoSocialId(null);
+          setProjetosSociaisErro("Nenhum projeto social encontrado.");
+          return;
+        }
+        setProjetoSocialId((prev) => {
+          if (prev && lista.some((item) => item.id === prev)) return prev;
+          return lista[0]?.id ?? null;
+        });
+      } catch (e: unknown) {
+        if (!ativo) return;
+        setProjetosSociais([]);
+        setProjetoSocialId(null);
+        setProjetosSociaisErro(e instanceof Error ? e.message : "Falha ao buscar projetos sociais.");
+      } finally {
+        if (ativo) setProjetosSociaisLoading(false);
+      }
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [isBolsista, projetoSocialBusca]);
+
+  useEffect(() => {
+    let ativo = true;
+
+    if (!isBolsista || !projetoSocialId) {
+      setBolsaTipos([]);
+      setBolsaTipoId(null);
+      setBolsaTiposErro(null);
+      setBolsaTiposLoading(false);
+      return () => {
+        ativo = false;
+      };
+    }
+
+    (async () => {
+      setBolsaTiposLoading(true);
+      setBolsaTiposErro(null);
+      try {
+        const resp = await fetchJSON<{ ok: boolean; data?: BolsaTipoOpcao[] }>(
+          `/api/bolsas/tipos?projeto_social_id=${projetoSocialId}&ativo=true`,
+        );
+        if (!ativo) return;
+        const lista = Array.isArray(resp.data) ? resp.data : [];
+        setBolsaTipos(lista);
+        if (lista.length === 0) {
+          setBolsaTipoId(null);
+          setBolsaTiposErro("Nenhum tipo de bolsa ativo para este projeto.");
+          return;
+        }
+        setBolsaTipoId((prev) => {
+          if (prev && lista.some((item) => item.id === prev)) return prev;
+          return lista[0]?.id ?? null;
+        });
+      } catch (e: unknown) {
+        if (!ativo) return;
+        setBolsaTipos([]);
+        setBolsaTipoId(null);
+        setBolsaTiposErro(e instanceof Error ? e.message : "Falha ao carregar tipos de bolsa.");
+      } finally {
+        if (ativo) setBolsaTiposLoading(false);
+      }
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [isBolsista, projetoSocialId]);
+
   function addItemCarrinho() {
     setItensCarrinho((prev) => [...prev, createCarrinhoItem()]);
   }
@@ -846,6 +979,17 @@ export default function NovaMatriculaPage() {
     if (politicaModo === "ADIAR_PARA_VENCIMENTO" && !motivoExcecao.trim()) {
       setErro("Informe o motivo da excecao para adiar o primeiro pagamento.");
       return;
+    }
+
+    if (isBolsista) {
+      if (!projetoSocialId) {
+        setErro("Selecione o projeto social para bolsista.");
+        return;
+      }
+      if (!bolsaTipoId) {
+        setErro("Selecione o tipo de bolsa para bolsista.");
+        return;
+      }
     }
 
     setLoading(true);
@@ -935,6 +1079,14 @@ export default function NovaMatriculaPage() {
         data_inicio_vinculo: dataInicioVinculo,
         observacoes: observacoes.trim() || null,
       };
+
+      if (isBolsista && projetoSocialId && bolsaTipoId) {
+        payload.is_bolsista = true;
+        payload.projeto_social_id = projetoSocialId;
+        payload.bolsa_tipo_id = bolsaTipoId;
+        payload.bolsa_status = "ATIVA";
+        payload.bolsa_data_inicio = dataMatricula || new Date().toISOString().slice(0, 10);
+      }
 
       if (modoManualValores) {
         payload.execucoes = execucoesPayload;
@@ -1055,6 +1207,70 @@ export default function NovaMatriculaPage() {
                   <option value="CURSO_LIVRE">Curso livre</option>
                   <option value="PROJETO_ARTISTICO">Projeto artístico</option>
                 </select>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={isBolsista}
+                    onChange={(e) => setIsBolsista(e.target.checked)}
+                  />
+                  Bolsista
+                </label>
+
+                {isBolsista ? (
+                  <div className="grid gap-3">
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Projeto social (busca por nome)</label>
+                      <input
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        value={projetoSocialBusca}
+                        onChange={(e) => setProjetoSocialBusca(e.target.value)}
+                        placeholder="Ex.: Movimento Conexao Danca"
+                      />
+                      <p className="text-xs text-slate-500">Digite 2+ caracteres para buscar.</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Projeto social</label>
+                      <select
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        value={projetoSocialId ?? ""}
+                        onChange={(e) => setProjetoSocialId(e.target.value ? Number(e.target.value) : null)}
+                        disabled={projetosSociaisLoading || projetosSociais.length === 0}
+                      >
+                        <option value="">Selecione...</option>
+                        {projetosSociais.map((projeto) => (
+                          <option key={projeto.id} value={projeto.id}>
+                            {projeto.nome} (#{projeto.id})
+                          </option>
+                        ))}
+                      </select>
+                      {projetosSociaisLoading ? <p className="text-xs text-slate-500">Carregando projetos...</p> : null}
+                      {projetosSociaisErro ? <p className="text-xs text-rose-600">{projetosSociaisErro}</p> : null}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-sm font-medium">Tipo de bolsa</label>
+                      <select
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-100"
+                        value={bolsaTipoId ?? ""}
+                        onChange={(e) => setBolsaTipoId(e.target.value ? Number(e.target.value) : null)}
+                        disabled={!projetoSocialId || bolsaTiposLoading || bolsaTipos.length === 0}
+                      >
+                        <option value="">Selecione...</option>
+                        {bolsaTipos.map((tipoBolsa) => (
+                          <option key={tipoBolsa.id} value={tipoBolsa.id}>
+                            {tipoBolsa.nome} (#{tipoBolsa.id})
+                          </option>
+                        ))}
+                      </select>
+                      {bolsaTiposLoading ? <p className="text-xs text-slate-500">Carregando tipos de bolsa...</p> : null}
+                      {bolsaTiposErro ? <p className="text-xs text-rose-600">{bolsaTiposErro}</p> : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

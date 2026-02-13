@@ -1,6 +1,8 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireUser } from "@/lib/supabase/api-auth";
+import { aplicarBolsaNaMatricula } from "@/lib/bolsas/aplicarBolsaNaMatricula";
+import { isBolsaConcessaoStatus, type BolsaConcessaoStatus } from "@/lib/bolsas/bolsasTypes";
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
 type ModeloLiquidacaoExecucao = "FAMILIA" | "MOVIMENTO";
@@ -63,6 +65,12 @@ type BodyNovo = {
   total_mensalidade_centavos?: number | null;
   execucoes?: ExecucaoManualIn[] | null;
   politica_primeiro_pagamento?: PoliticaPrimeiroPagamento | null;
+  is_bolsista?: boolean;
+  projeto_social_id?: number;
+  bolsa_tipo_id?: number;
+  bolsa_status?: BolsaConcessaoStatus;
+  bolsa_data_inicio?: string;
+  bolsa_data_fim?: string | null;
 };
 
 type MatriculaItemIn = {
@@ -108,6 +116,25 @@ function serverError(error_code: string, message: string, details?: Record<strin
 function parseDateOrNull(value: unknown): string | null {
   if (typeof value !== "string") return null;
   return value;
+}
+
+function parseDateYmdOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function parsePositiveIntOrNull(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(num) || num <= 0) return null;
+  return num;
+}
+
+function parseBolsaStatusOrNull(value: unknown): BolsaConcessaoStatus | null {
+  if (typeof value !== "string") return null;
+  const status = value.trim().toUpperCase();
+  return isBolsaConcessaoStatus(status) ? status : null;
 }
 
 function isUuid(value: string): boolean {
@@ -525,6 +552,30 @@ export async function POST(request: NextRequest) {
 
   const dataMatricula = parseDateOrNull(body.data_matricula) ?? null;
   const dataInicioVinculo = parseDateOrNull(body.data_inicio_vinculo) ?? dataMatricula ?? null;
+
+  const isBolsista = body.is_bolsista === true;
+  const projetoSocialId = parsePositiveIntOrNull(body.projeto_social_id);
+  const bolsaTipoId = parsePositiveIntOrNull(body.bolsa_tipo_id);
+  const bolsaStatus = parseBolsaStatusOrNull(body.bolsa_status) ?? "ATIVA";
+  const bolsaDataInicioInput = parseDateYmdOrNull(body.bolsa_data_inicio);
+  const bolsaDataFimInput = body.bolsa_data_fim === null ? null : parseDateYmdOrNull(body.bolsa_data_fim);
+
+  if (isBolsista) {
+    if (!projetoSocialId) return badRequest("projeto_social_id_obrigatorio_para_bolsista.");
+    if (!bolsaTipoId) return badRequest("bolsa_tipo_id_obrigatorio_para_bolsista.");
+    if (body.bolsa_status !== undefined && parseBolsaStatusOrNull(body.bolsa_status) === null) {
+      return badRequest("bolsa_status_invalido.");
+    }
+    if (body.bolsa_data_inicio !== undefined && bolsaDataInicioInput === null) {
+      return badRequest("bolsa_data_inicio_invalida.");
+    }
+    if (body.bolsa_data_fim !== undefined && body.bolsa_data_fim !== null && bolsaDataFimInput === null) {
+      return badRequest("bolsa_data_fim_invalida.");
+    }
+    if (bolsaDataInicioInput && bolsaDataFimInput && bolsaDataFimInput < bolsaDataInicioInput) {
+      return badRequest("bolsa_data_fim_menor_que_data_inicio.");
+    }
+  }
 
   const escolaTabelaPrecoCursoId = body.escola_tabela_preco_curso_id ?? null;
   const planoPagamentoId = body.plano_pagamento_id ?? null;
@@ -977,6 +1028,12 @@ export async function POST(request: NextRequest) {
   if (insErr) return serverError("CRIAR_MATRICULA_FAIL", "Falha ao criar matricula.", { insErr });
 
   const matriculaId = (matriculaCriada as { id: number }).id;
+  let bolsaAplicada:
+    | {
+        projeto_social_beneficiario_id: number;
+        bolsa_concessao_id: number;
+      }
+    | null = null;
 
   if (usarExecucoes && execucoesValidas.length > 0) {
     let hasModeloLiquidacaoColumn = false;
@@ -1036,7 +1093,38 @@ export async function POST(request: NextRequest) {
       return jsonError("MANUAL_INSERT_EXECUCOES_FAIL", "Falha ao salvar valores manuais.", 500, { execErr });
     }
   }
-  return NextResponse.json({ ok: true, matricula: matriculaCriada }, { status: 201 });
+  if (isBolsista && projetoSocialId && bolsaTipoId) {
+    const bolsaDataInicioDefault = parseDateYmdOrNull(dataMatricula) ?? new Date().toISOString().slice(0, 10);
+    try {
+      bolsaAplicada = await aplicarBolsaNaMatricula({
+        pessoa_id: pessoaId,
+        projeto_social_id: projetoSocialId,
+        bolsa_tipo_id: bolsaTipoId,
+        matricula_id: matriculaId,
+        turma_id: vinculoId,
+        data_inicio: bolsaDataInicioInput ?? bolsaDataInicioDefault,
+        data_fim: bolsaDataFimInput,
+        status: bolsaStatus,
+      });
+    } catch (bolsaErr) {
+      return serverError("APLICAR_BOLSA_NA_MATRICULA_FAIL", "Falha ao aplicar bolsa na matricula.", {
+        bolsaErr,
+        projeto_social_id: projetoSocialId,
+        bolsa_tipo_id: bolsaTipoId,
+        matricula_id: matriculaId,
+      });
+    }
+  }
+
+  return NextResponse.json(
+    {
+      ok: true,
+      matricula: matriculaCriada,
+      projeto_social_beneficiario_id: bolsaAplicada?.projeto_social_beneficiario_id ?? null,
+      bolsa_concessao_id: bolsaAplicada?.bolsa_concessao_id ?? null,
+    },
+    { status: 201 },
+  );
   } catch (e: unknown) {
     return jsonError("UNHANDLED_EXCEPTION", e, 500);
   }
