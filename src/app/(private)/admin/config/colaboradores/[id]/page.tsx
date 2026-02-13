@@ -1,22 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+
+type ConfigFinanceira = {
+  id: number;
+  colaborador_id: number;
+  gera_folha: boolean;
+  dia_fechamento: number;
+  dia_pagamento: number;
+  pagamento_no_mes_seguinte: boolean;
+  politica_desconto_cartao: "DESCONTA_NA_FOLHA" | "NAO_DESCONTA" | "MANUAL";
+  politica_corte_cartao: "POR_DIA_FECHAMENTO" | "SEM_CORTE";
+  salario_base_centavos: number;
+  ativo: boolean;
+};
 
 type Resumo = {
   colaborador: { id: number; pessoa_id: number; tipo_vinculo_id: number | null; ativo: boolean };
   pessoa: { id: number; nome: string; cpf: string | null; telefone: string | null; email: string | null };
-  config_financeira: {
-    id: number;
-    colaborador_id: number;
-    gera_folha: boolean;
-    dia_fechamento: number;
-    dia_pagamento: number;
-    pagamento_no_mes_seguinte: boolean;
-    politica_desconto_cartao: string;
-    politica_corte_cartao: string;
-    ativo: boolean;
-  } | null;
+  config_financeira: ConfigFinanceira | null;
   cartao_conexao: {
     id: number;
     tipo_conta: string;
@@ -36,9 +39,44 @@ type Resumo = {
   }>;
 };
 
+type ConfigForm = {
+  gera_folha: boolean;
+  dia_fechamento: number;
+  dia_pagamento: number;
+  pagamento_no_mes_seguinte: boolean;
+  politica_desconto_cartao: "DESCONTA_NA_FOLHA" | "NAO_DESCONTA" | "MANUAL";
+  politica_corte_cartao: "POR_DIA_FECHAMENTO" | "SEM_CORTE";
+  salario_base_centavos: number;
+};
+
 function brlFromCentavos(v: number): string {
   const n = v / 100;
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function defaultConfigForm(): ConfigForm {
+  return {
+    gera_folha: false,
+    dia_fechamento: 31,
+    dia_pagamento: 5,
+    pagamento_no_mes_seguinte: true,
+    politica_desconto_cartao: "DESCONTA_NA_FOLHA",
+    politica_corte_cartao: "POR_DIA_FECHAMENTO",
+    salario_base_centavos: 0,
+  };
+}
+
+function toForm(cfg: ConfigFinanceira | null): ConfigForm {
+  if (!cfg) return defaultConfigForm();
+  return {
+    gera_folha: cfg.gera_folha,
+    dia_fechamento: cfg.dia_fechamento,
+    dia_pagamento: cfg.dia_pagamento,
+    pagamento_no_mes_seguinte: cfg.pagamento_no_mes_seguinte,
+    politica_desconto_cartao: cfg.politica_desconto_cartao,
+    politica_corte_cartao: cfg.politica_corte_cartao,
+    salario_base_centavos: cfg.salario_base_centavos ?? 0,
+  };
 }
 
 export default function ColaboradorDetalhesPage({ params }: { params: { id: string } }) {
@@ -46,6 +84,10 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
   const [loading, setLoading] = useState(true);
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configMsg, setConfigMsg] = useState<string | null>(null);
+  const [formConfig, setFormConfig] = useState<ConfigForm>(defaultConfigForm());
 
   useEffect(() => {
     let alive = true;
@@ -56,18 +98,62 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
         const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/resumo-financeiro`, { cache: "no-store" });
         const j = (await r.json()) as Partial<Resumo> & { error?: string };
         if (!r.ok) throw new Error(j?.error ?? "falha_carregar");
-        if (alive) setResumo(j as Resumo);
+        if (alive) {
+          const next = j as Resumo;
+          setResumo(next);
+          setFormConfig(toForm(next.config_financeira));
+        }
       } catch (e) {
         if (alive) setErro(e instanceof Error ? e.message : "erro_desconhecido");
       } finally {
         if (alive) setLoading(false);
       }
     }
-    if (Number.isFinite(colaboradorId)) void run();
+
+    if (Number.isFinite(colaboradorId) && colaboradorId > 0) void run();
+
     return () => {
       alive = false;
     };
   }, [colaboradorId]);
+
+  async function salvarConfig() {
+    if (!resumo || !Number.isFinite(colaboradorId) || colaboradorId <= 0) return;
+    setSavingConfig(true);
+    setConfigMsg(null);
+
+    const payload: ConfigForm = {
+      gera_folha: formConfig.gera_folha,
+      dia_fechamento: Math.max(1, Math.min(31, Math.trunc(formConfig.dia_fechamento || 31))),
+      dia_pagamento: Math.max(1, Math.min(31, Math.trunc(formConfig.dia_pagamento || 5))),
+      pagamento_no_mes_seguinte: formConfig.pagamento_no_mes_seguinte,
+      politica_desconto_cartao: formConfig.politica_desconto_cartao,
+      politica_corte_cartao: formConfig.politica_corte_cartao,
+      salario_base_centavos: Math.max(0, Math.trunc(formConfig.salario_base_centavos || 0)),
+    };
+
+    try {
+      const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/config-financeira`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = (await r.json().catch(() => null)) as
+        | { config_financeira?: ConfigFinanceira; error?: string }
+        | null;
+
+      if (!r.ok) throw new Error(j?.error ?? "falha_salvar_config");
+      if (j?.config_financeira) {
+        setResumo((prev) => (prev ? { ...prev, config_financeira: j.config_financeira ?? null } : prev));
+      }
+      setConfigMsg("Configuracao financeira atualizada.");
+      setEditMode(false);
+    } catch (e) {
+      setConfigMsg(e instanceof Error ? e.message : "erro_desconhecido");
+    } finally {
+      setSavingConfig(false);
+    }
+  }
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white p-6">
@@ -75,9 +161,9 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-xl font-semibold">Colaborador - Visão Geral</h1>
+              <h1 className="text-xl font-semibold">Colaborador - Visao Geral</h1>
               <p className="text-sm text-slate-600">
-                Central de configuração do colaborador: vínculo, folha e Cartão Conexão (crédito interno).
+                Central de configuracao do colaborador: vinculo, folha e Cartao Conexao (credito interno).
               </p>
             </div>
             <div className="flex gap-2">
@@ -97,14 +183,14 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
         ) : (
           <>
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold">Identificação</h2>
+              <h2 className="text-lg font-semibold">Identificacao</h2>
               <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div className="rounded-xl border p-4">
                   <div className="text-xs text-slate-500">Nome</div>
                   <div className="font-medium">{resumo.pessoa.nome}</div>
                   <div className="mt-2 text-xs text-slate-500">Contato</div>
                   <div className="text-sm text-slate-700">
-                    {resumo.pessoa.telefone ?? "-"} • {resumo.pessoa.email ?? "-"}
+                    {resumo.pessoa.telefone ?? "-"} - {resumo.pessoa.email ?? "-"}
                   </div>
                 </div>
                 <div className="rounded-xl border p-4">
@@ -117,52 +203,185 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
             </div>
 
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold">Configuração Financeira do Colaborador</h2>
-              <p className="text-sm text-slate-600">
-                Define se o colaborador gera folha automaticamente e como o Cartão Conexão entra como desconto.
-              </p>
-
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="rounded-xl border p-4">
-                  <div className="text-xs text-slate-500">Gera folha automaticamente</div>
-                  <div className="font-medium">{resumo.config_financeira?.gera_folha ? "Sim" : "Não"}</div>
-
-                  <div className="mt-3 text-xs text-slate-500">Fechamento / Pagamento</div>
-                  <div className="text-sm text-slate-700">
-                    Fecha dia {resumo.config_financeira?.dia_fechamento ?? "-"} • Paga dia{" "}
-                    {resumo.config_financeira?.dia_pagamento ?? "-"}{" "}
-                    {resumo.config_financeira?.pagamento_no_mes_seguinte ? "(mês seguinte)" : "(mesmo mês)"}
-                  </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-semibold">Configuracao Financeira do Colaborador</h2>
+                  <p className="text-sm text-slate-600">
+                    Define se gera folha automaticamente e como o Cartao Conexao entra como desconto.
+                  </p>
                 </div>
-
-                <div className="rounded-xl border p-4">
-                  <div className="text-xs text-slate-500">Política do Cartão Conexão</div>
-                  <div className="text-sm text-slate-700">
-                    {resumo.config_financeira?.politica_desconto_cartao ?? "-"} •{" "}
-                    {resumo.config_financeira?.politica_corte_cartao ?? "-"}
-                  </div>
-                  <div className="mt-3 text-xs text-slate-500">Ações rápidas</div>
-                  <div className="flex gap-2">
-                    <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/folha/colaboradores">
-                      Ir para Folha
-                    </Link>
-                    {resumo.cartao_conexao?.id && resumo.faturas_recentes?.[0]?.id ? (
-                      <Link
-                        className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
-                        href={`/admin/financeiro/credito-conexao/faturas/${resumo.faturas_recentes[0].id}`}
-                      >
-                        Ver última fatura
-                      </Link>
-                    ) : (
-                      <span className="text-sm text-slate-500">Sem Cartão Conexão COLABORADOR</span>
-                    )}
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                  onClick={() => {
+                    if (editMode) setFormConfig(toForm(resumo.config_financeira));
+                    setEditMode((v) => !v);
+                    setConfigMsg(null);
+                  }}
+                >
+                  {editMode ? "Cancelar edicao" : "Editar configuracao"}
+                </button>
               </div>
+
+              {!editMode ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border p-4">
+                    <div className="text-xs text-slate-500">Gera folha automaticamente</div>
+                    <div className="font-medium">{resumo.config_financeira?.gera_folha ? "Sim" : "Nao"}</div>
+
+                    <div className="mt-3 text-xs text-slate-500">Fechamento / Pagamento</div>
+                    <div className="text-sm text-slate-700">
+                      Fecha dia {resumo.config_financeira?.dia_fechamento ?? "-"} - Paga dia{" "}
+                      {resumo.config_financeira?.dia_pagamento ?? "-"}{" "}
+                      {resumo.config_financeira?.pagamento_no_mes_seguinte ? "(mes seguinte)" : "(mesmo mes)"}
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500">Salario base</div>
+                    <div className="text-sm text-slate-700">
+                      {brlFromCentavos(Number(resumo.config_financeira?.salario_base_centavos ?? 0))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border p-4">
+                    <div className="text-xs text-slate-500">Politica do Cartao Conexao</div>
+                    <div className="text-sm text-slate-700">
+                      {resumo.config_financeira?.politica_desconto_cartao ?? "-"} -{" "}
+                      {resumo.config_financeira?.politica_corte_cartao ?? "-"}
+                    </div>
+                    <div className="mt-3 text-xs text-slate-500">Acoes rapidas</div>
+                    <div className="flex gap-2">
+                      <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/folha/colaboradores">
+                        Ir para Folha
+                      </Link>
+                      {resumo.cartao_conexao?.id && resumo.faturas_recentes?.[0]?.id ? (
+                        <Link
+                          className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                          href={`/admin/financeiro/credito-conexao/faturas/${resumo.faturas_recentes[0].id}`}
+                        >
+                          Ver ultima fatura
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-slate-500">Sem Cartao Conexao COLABORADOR</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl border p-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={formConfig.gera_folha}
+                        onChange={(e) => setFormConfig((prev) => ({ ...prev, gera_folha: e.target.checked }))}
+                      />
+                      Gera folha automaticamente
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={formConfig.pagamento_no_mes_seguinte}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({ ...prev, pagamento_no_mes_seguinte: e.target.checked }))
+                        }
+                      />
+                      Pagamento no mes seguinte
+                    </label>
+
+                    <label className="text-sm">
+                      Dia de fechamento
+                      <input
+                        className="mt-1 w-full rounded-md border px-3 py-2"
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={formConfig.dia_fechamento}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({ ...prev, dia_fechamento: Number(e.target.value || 31) }))
+                        }
+                      />
+                    </label>
+
+                    <label className="text-sm">
+                      Dia de pagamento
+                      <input
+                        className="mt-1 w-full rounded-md border px-3 py-2"
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={formConfig.dia_pagamento}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({ ...prev, dia_pagamento: Number(e.target.value || 5) }))
+                        }
+                      />
+                    </label>
+
+                    <label className="text-sm">
+                      Salario base (centavos)
+                      <input
+                        className="mt-1 w-full rounded-md border px-3 py-2"
+                        type="number"
+                        min={0}
+                        value={formConfig.salario_base_centavos}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({ ...prev, salario_base_centavos: Number(e.target.value || 0) }))
+                        }
+                      />
+                    </label>
+
+                    <label className="text-sm">
+                      Politica desconto cartao
+                      <select
+                        className="mt-1 w-full rounded-md border px-3 py-2"
+                        value={formConfig.politica_desconto_cartao}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            politica_desconto_cartao: e.target.value as ConfigForm["politica_desconto_cartao"],
+                          }))
+                        }
+                      >
+                        <option value="DESCONTA_NA_FOLHA">DESCONTA_NA_FOLHA</option>
+                        <option value="NAO_DESCONTA">NAO_DESCONTA</option>
+                        <option value="MANUAL">MANUAL</option>
+                      </select>
+                    </label>
+
+                    <label className="text-sm md:col-span-2">
+                      Politica corte cartao
+                      <select
+                        className="mt-1 w-full rounded-md border px-3 py-2"
+                        value={formConfig.politica_corte_cartao}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({
+                            ...prev,
+                            politica_corte_cartao: e.target.value as ConfigForm["politica_corte_cartao"],
+                          }))
+                        }
+                      >
+                        <option value="POR_DIA_FECHAMENTO">POR_DIA_FECHAMENTO</option>
+                        <option value="SEM_CORTE">SEM_CORTE</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-60"
+                      onClick={() => void salvarConfig()}
+                      disabled={savingConfig}
+                    >
+                      {savingConfig ? "Salvando..." : "Salvar"}
+                    </button>
+                    {configMsg ? <span className="text-sm text-slate-700">{configMsg}</span> : null}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold">Cartão Conexão - Faturas recentes</h2>
+              <h2 className="text-lg font-semibold">Cartao Conexao - Faturas recentes</h2>
               {!resumo.cartao_conexao ? (
                 <div className="mt-3 text-sm text-slate-600">
                   Nenhuma conta do tipo COLABORADOR encontrada para esta pessoa.
@@ -174,11 +393,11 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
                   <table className="min-w-full text-sm">
                     <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                       <tr>
-                        <th className="px-3 py-2 text-left">Período</th>
+                        <th className="px-3 py-2 text-left">Periodo</th>
                         <th className="px-3 py-2 text-left">Status</th>
                         <th className="px-3 py-2 text-right">Valor</th>
                         <th className="px-3 py-2 text-left">Vinculada na folha</th>
-                        <th className="px-3 py-2 text-right">Ações</th>
+                        <th className="px-3 py-2 text-right">Acoes</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -206,4 +425,3 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
     </div>
   );
 }
-

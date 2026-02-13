@@ -2,140 +2,151 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 
 type FolhaRow = {
   id: number;
-  competencia_ano_mes: string;
-  colaborador_id: number;
-  colaborador_nome?: string | null;
+  competencia: string;
   status: string;
+  data_pagamento_prevista: string | null;
 };
 
-type ColaboradorOpcao = {
-  id: number;
-  pessoa_id: number | null;
-  nome: string;
-  ativo: boolean;
-};
-
-const STATUS_OPTIONS = ["", "ABERTA", "FECHADA", "PAGA"] as const;
+const STATUS_OPTIONS = ["", "ABERTA", "FECHADA", "PAGA", "CANCELADA"] as const;
 
 export default function FolhaColaboradoresPage() {
-  const router = useRouter();
   const [competencia, setCompetencia] = useState<string>(() => {
     const d = new Date();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     return `${d.getFullYear()}-${mm}`;
   });
   const [statusFiltro, setStatusFiltro] = useState<string>("");
-  const [colaboradorId, setColaboradorId] = useState<string>("");
-  const [colaboradores, setColaboradores] = useState<ColaboradorOpcao[]>([]);
   const [rows, setRows] = useState<FolhaRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingColaboradores, setLoadingColaboradores] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [running, setRunning] = useState<"abrir" | "espelho" | null>(null);
 
-  const qs = useMemo(() => {
-    const params = new URLSearchParams({ competencia });
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (/^\d{4}-\d{2}$/.test(competencia)) params.set("competencia", competencia);
     if (statusFiltro) params.set("status", statusFiltro);
-    if (colaboradorId) params.set("colaborador_id", colaboradorId);
     return params.toString();
-  }, [competencia, statusFiltro, colaboradorId]);
-
-  const colaboradorSelecionado = useMemo(
-    () => colaboradores.find((c) => String(c.id) === colaboradorId) ?? null,
-    [colaboradores, colaboradorId],
-  );
-
-  async function loadColaboradores() {
-    setLoadingColaboradores(true);
-    try {
-      const r = await fetch("/api/admin/colaboradores/opcoes");
-      const j = (await r.json().catch(() => null)) as { data?: ColaboradorOpcao[] } | null;
-      setColaboradores(Array.isArray(j?.data) ? j.data : []);
-    } finally {
-      setLoadingColaboradores(false);
-    }
-  }
+  }, [competencia, statusFiltro]);
 
   async function load() {
     setLoading(true);
+    setMessage(null);
     try {
-      const r = await fetch(`/api/admin/folha/colaboradores?${qs}`);
-      const j = (await r.json().catch(() => null)) as { data?: FolhaRow[] } | null;
-      setRows(Array.isArray(j?.data) ? j.data : []);
+      const res = await fetch(`/api/financeiro/folha/listar?${queryString}`, { cache: "no-store" });
+      const json = (await res.json().catch(() => null)) as
+        | { folhas?: FolhaRow[]; error?: string }
+        | null;
+
+      if (!res.ok) {
+        setRows([]);
+        setMessage(json?.error ?? "falha_listar_folhas");
+        return;
+      }
+      setRows(Array.isArray(json?.folhas) ? json.folhas : []);
     } finally {
       setLoading(false);
     }
   }
 
   async function abrirFolha() {
-    const colaboradorIdNum = Number(colaboradorId);
-    if (!Number.isFinite(colaboradorIdNum) || colaboradorIdNum <= 0) return;
-
-    const res = await fetch("/api/admin/folha/colaboradores", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competencia_ano_mes: competencia, colaborador_id: colaboradorIdNum }),
-    });
-
-    const json = (await res.json().catch(() => null)) as { data?: { id?: number } } | null;
-    const folhaId = json?.data?.id;
-
-    if (folhaId) {
-      router.push(`/admin/financeiro/folha/colaboradores/${folhaId}`);
+    if (!/^\d{4}-\d{2}$/.test(competencia)) {
+      setMessage("Informe competencia valida (YYYY-MM).");
       return;
     }
 
-    await load();
+    setRunning("abrir");
+    setMessage(null);
+    try {
+      const res = await fetch("/api/financeiro/folha/abrir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          competencia,
+          dia_pagamento: 5,
+          pagamento_no_mes_seguinte: true,
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { folha?: { id: number }; error?: string }
+        | null;
+
+      if (!res.ok) {
+        setMessage(json?.error ?? "falha_abrir_folha");
+        return;
+      }
+      setMessage(`Folha da competencia ${competencia} aberta/garantida.`);
+      await load();
+    } finally {
+      setRunning(null);
+    }
   }
 
-  useEffect(() => {
-    void loadColaboradores();
-  }, []);
+  async function gerarEspelho() {
+    if (!/^\d{4}-\d{2}$/.test(competencia)) {
+      setMessage("Informe competencia valida (YYYY-MM).");
+      return;
+    }
+
+    setRunning("espelho");
+    setMessage(null);
+    try {
+      const res = await fetch("/api/financeiro/folha/gerar-espelho", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          competencia_base: competencia,
+          meses: 12,
+          importar_cartao: true,
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; meses?: number; imported_cartao_total?: number; error?: string }
+        | null;
+
+      if (!res.ok) {
+        setMessage(json?.error ?? "falha_gerar_espelho");
+        return;
+      }
+
+      setMessage(
+        `Espelho gerado (${json?.meses ?? 12} meses). Itens de cartao importados: ${json?.imported_cartao_total ?? 0}.`,
+      );
+      await load();
+    } finally {
+      setRunning(null);
+    }
+  }
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qs]);
+  }, [queryString]);
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="space-y-4 p-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Folha - Colaboradores</h1>
           <p className="text-sm text-muted-foreground">
-            Abra e feche a folha por competência, com importação de descontos do Cartão Conexão.
+            Gerencie folhas por competencia, gere espelho e importe descontos do Cartao Conexao.
           </p>
         </div>
 
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-sm">Competência</label>
+          <label className="text-sm">Competencia</label>
           <input
-            className="border rounded px-2 py-1 text-sm"
+            className="rounded border px-2 py-1 text-sm"
             value={competencia}
             onChange={(e) => setCompetencia(e.target.value)}
             placeholder="YYYY-MM"
           />
 
-          <label className="text-sm">Colaborador</label>
-          <select
-            className="border rounded px-2 py-1 text-sm min-w-[240px]"
-            value={colaboradorId}
-            onChange={(e) => setColaboradorId(e.target.value)}
-            disabled={loadingColaboradores}
-          >
-            <option value="">Todos</option>
-            {colaboradores.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.nome} (#{c.id})
-              </option>
-            ))}
-          </select>
-
           <label className="text-sm">Status</label>
           <select
-            className="border rounded px-2 py-1 text-sm"
+            className="rounded border px-2 py-1 text-sm"
             value={statusFiltro}
             onChange={(e) => setStatusFiltro(e.target.value)}
           >
@@ -146,23 +157,34 @@ export default function FolhaColaboradoresPage() {
             ))}
           </select>
 
-          <button className="border rounded px-3 py-1 text-sm" onClick={() => void abrirFolha()} disabled={!colaboradorId}>
-            Abrir folha
+          <button
+            type="button"
+            className="rounded border px-3 py-1 text-sm"
+            onClick={() => void abrirFolha()}
+            disabled={running !== null}
+          >
+            {running === "abrir" ? "Abrindo..." : "Abrir folha"}
           </button>
-          <button className="border rounded px-3 py-1 text-sm" onClick={() => void load()}>
+
+          <button
+            type="button"
+            className="rounded border px-3 py-1 text-sm"
+            onClick={() => void gerarEspelho()}
+            disabled={running !== null}
+          >
+            {running === "espelho" ? "Gerando..." : "Gerar espelho (12 meses)"}
+          </button>
+
+          <button type="button" className="rounded border px-3 py-1 text-sm" onClick={() => void load()}>
             Atualizar
           </button>
-          {colaboradorSelecionado ? (
-            <Link className="border rounded px-3 py-1 text-sm" href={`/admin/colaboradores/${colaboradorSelecionado.id}`}>
-              Perfil do colaborador
-            </Link>
-          ) : null}
         </div>
       </div>
 
-      <div className="border rounded">
-        <div className="p-3 text-sm border-b flex items-center justify-between">
+      <div className="rounded border">
+        <div className="flex items-center justify-between border-b p-3 text-sm">
           <span>{loading ? "Carregando..." : `Folhas encontradas: ${rows.length}`}</span>
+          {message ? <span className="text-xs text-muted-foreground">{message}</span> : null}
         </div>
 
         <div className="p-3">
@@ -171,19 +193,18 @@ export default function FolhaColaboradoresPage() {
           ) : (
             <div className="space-y-2">
               {rows.map((r) => (
-                <a
-                  key={r.id}
-                  href={`/admin/financeiro/folha/colaboradores/${r.id}`}
-                  className="block border rounded p-3 hover:bg-muted/30"
-                >
-                  <div className="flex justify-between">
+                <div key={r.id} className="flex items-center justify-between rounded border p-3">
+                  <div>
                     <div className="text-sm font-medium">Folha #{r.id}</div>
-                    <div className="text-xs">{r.status}</div>
+                    <div className="text-xs text-muted-foreground">
+                      competencia: {r.competencia} - status: {r.status} - pagamento previsto:{" "}
+                      {r.data_pagamento_prevista ?? "-"}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    competência: {r.competencia_ano_mes} - colaborador: {r.colaborador_nome || `#${r.colaborador_id}`}
-                  </div>
-                </a>
+                  <Link className="rounded border px-3 py-1 text-sm hover:bg-muted/30" href={`/admin/financeiro/folha/colaboradores/${r.id}`}>
+                    Abrir
+                  </Link>
+                </div>
               ))}
             </div>
           )}
