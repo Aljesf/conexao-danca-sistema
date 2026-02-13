@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import Link from "next/link";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 
@@ -468,6 +469,12 @@ function ColaboradoresPage() {
                       <td className="px-3 py-2 text-slate-700">{c.ativo ? "Sim" : "Não"}</td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-2">
+                          <Link
+                            className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
+                            href={`/admin/config/colaboradores/${c.id}`}
+                          >
+                            Abrir
+                          </Link>
                           <button
                             className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700"
                             onClick={() => openEditModal(c)}

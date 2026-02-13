@@ -2,59 +2,7 @@ import { NextResponse } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
-type ColaboradorRow = {
-  id: number;
-  pessoa_id: number | null;
-  ativo: boolean | null;
-};
-
-type PessoaRow = {
-  id: number;
-  nome: string | null;
-  cpf: string | null;
-};
-
-type ContaConexaoRow = {
-  id: number;
-  pessoa_titular_id: number;
-  tipo_conta: string;
-  descricao_exibicao: string | null;
-  dia_fechamento: number | null;
-  dia_vencimento: number | null;
-  ativo: boolean | null;
-};
-
-type FaturaRow = {
-  id: number;
-  conta_conexao_id: number;
-  periodo_referencia: string;
-  data_vencimento: string | null;
-  valor_total_centavos: number;
-  valor_taxas_centavos: number;
-  status: string;
-  folha_pagamento_id: number | null;
-};
-
-type LancamentoRow = {
-  id: number;
-  conta_conexao_id: number;
-  origem_sistema: string;
-  origem_id: number | null;
-  descricao: string | null;
-  valor_centavos: number;
-  data_lancamento: string;
-  status: string;
-  competencia: string | null;
-  cobranca_id: number | null;
-};
-
-type FolhaRow = {
-  id: number;
-  competencia_ano_mes: string;
-  status: string;
-  data_fechamento: string | null;
-  data_pagamento: string | null;
-};
+type Params = { id: string };
 
 type FolhaEventoRow = {
   folha_pagamento_id: number;
@@ -63,15 +11,10 @@ type FolhaEventoRow = {
 };
 
 function toInt(value: string): number | null {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.trunc(parsed);
-}
-
-function competenciaAtual(): string {
-  const now = new Date();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}-${mm}`;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const out = Math.trunc(n);
+  return out > 0 ? out : null;
 }
 
 function monthBounds(competencia: string): { inicio: string; fim: string } {
@@ -84,174 +27,137 @@ function monthBounds(competencia: string): { inicio: string; fim: string } {
   return { inicio, fim };
 }
 
-function uniqueLancamentos(rows: LancamentoRow[]): LancamentoRow[] {
-  const map = new Map<number, LancamentoRow>();
-  for (const row of rows) {
-    map.set(row.id, row);
-  }
-  return Array.from(map.values());
+function competenciaAtual(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export async function GET(req: Request, ctx: { params: { id: string } }) {
+function isSchemaMissingError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: unknown }).code;
+  if (code === "42P01" || code === "42703") return true;
+  const message = (err as { message?: unknown }).message;
+  return typeof message === "string" && message.toLowerCase().includes("does not exist");
+}
+
+export async function GET(req: Request, ctx: { params: Params }) {
   const denied = await guardApiByRole(req);
   if (denied) return denied;
 
   const supabase = getSupabaseAdmin();
   const colaboradorId = toInt(ctx.params.id);
-  if (!colaboradorId || colaboradorId <= 0) {
-    return NextResponse.json({ ok: false, error: "colaborador_id_invalido" }, { status: 400 });
-  }
+  if (!colaboradorId) return NextResponse.json({ error: "colaborador_id_invalido" }, { status: 400 });
 
-  const { data: colaborador, error: colaboradorError } = await supabase
+  const { data: colab, error: colErr } = await supabase
     .from("colaboradores")
-    .select("id,pessoa_id,ativo")
+    .select("id,pessoa_id,tipo_vinculo_id,ativo")
     .eq("id", colaboradorId)
     .maybeSingle();
 
-  if (colaboradorError) {
-    return NextResponse.json(
-      { ok: false, error: "falha_buscar_colaborador", detail: colaboradorError.message },
-      { status: 500 },
-    );
+  if (colErr || !colab) return NextResponse.json({ error: "colaborador_nao_encontrado" }, { status: 404 });
+
+  const pessoaId = Number(colab.pessoa_id);
+  if (!Number.isFinite(pessoaId) || pessoaId <= 0) {
+    return NextResponse.json({ error: "pessoa_nao_encontrada" }, { status: 404 });
   }
 
-  if (!colaborador) {
-    return NextResponse.json({ ok: false, error: "colaborador_nao_encontrado" }, { status: 404 });
+  const { data: pessoa, error: pesErr } = await supabase
+    .from("pessoas")
+    .select("id,nome,cpf,telefone,email")
+    .eq("id", pessoaId)
+    .maybeSingle();
+
+  if (pesErr || !pessoa) return NextResponse.json({ error: pesErr?.message ?? "pessoa_nao_encontrada" }, { status: 500 });
+
+  let configFinanceira: Record<string, unknown> | null = null;
+  const { data: cfgData, error: cfgErr } = await supabase
+    .from("colaborador_config_financeira")
+    .select("*")
+    .eq("colaborador_id", colaboradorId)
+    .maybeSingle();
+
+  if (!cfgErr) {
+    configFinanceira = (cfgData as Record<string, unknown> | null) ?? null;
+  } else if (!isSchemaMissingError(cfgErr)) {
+    return NextResponse.json({ error: cfgErr.message }, { status: 500 });
   }
 
-  const colaboradorRow = colaborador as ColaboradorRow;
+  const { data: conta } = await supabase
+    .from("credito_conexao_contas")
+    .select("id,tipo_conta,descricao_exibicao,dia_fechamento,dia_vencimento,ativo,pessoa_titular_id")
+    .eq("pessoa_titular_id", pessoaId)
+    .eq("tipo_conta", "COLABORADOR")
+    .order("ativo", { ascending: false })
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
-  let pessoa: PessoaRow | null = null;
-  if (typeof colaboradorRow.pessoa_id === "number") {
-    const { data: pessoaData, error: pessoaError } = await supabase
-      .from("pessoas")
-      .select("id,nome,cpf")
-      .eq("id", colaboradorRow.pessoa_id)
-      .maybeSingle();
+  const contaId = conta ? Number(conta.id) : null;
+  const periodoAtual = competenciaAtual();
+  const { inicio, fim } = monthBounds(periodoAtual);
 
-    if (pessoaError) {
-      return NextResponse.json(
-        { ok: false, error: "falha_buscar_pessoa", detail: pessoaError.message },
-        { status: 500 },
-      );
-    }
+  let faturasRecentes: Array<Record<string, unknown>> = [];
+  let faturaAbertaAtual: Record<string, unknown> | null = null;
+  let lancamentosMes: Array<Record<string, unknown>> = [];
+  let ultimasDespesas: Array<Record<string, unknown>> = [];
 
-    if (pessoaData) {
-      pessoa = pessoaData as PessoaRow;
-    }
-  }
-
-  let conta: ContaConexaoRow | null = null;
-  if (pessoa?.id) {
-    const { data: contasData, error: contaError } = await supabase
-      .from("credito_conexao_contas")
-      .select("id,pessoa_titular_id,tipo_conta,descricao_exibicao,dia_fechamento,dia_vencimento,ativo")
-      .eq("tipo_conta", "COLABORADOR")
-      .eq("pessoa_titular_id", pessoa.id)
-      .order("ativo", { ascending: false })
-      .order("id", { ascending: true })
-      .limit(1);
-
-    if (contaError) {
-      return NextResponse.json(
-        { ok: false, error: "falha_buscar_conta_conexao", detail: contaError.message },
-        { status: 500 },
-      );
-    }
-
-    conta = ((contasData ?? [])[0] as ContaConexaoRow | undefined) ?? null;
-  }
-
-  const compAtual = competenciaAtual();
-  const { inicio, fim } = monthBounds(compAtual);
-
-  let faturaAbertaAtual: FaturaRow | null = null;
-  let lancamentosMes: LancamentoRow[] = [];
-  let ultimasDespesas: LancamentoRow[] = [];
-
-  if (conta?.id) {
-    const { data: faturasData, error: faturaError } = await supabase
+  if (contaId && Number.isFinite(contaId)) {
+    const { data: faturasAtual } = await supabase
       .from("credito_conexao_faturas")
-      .select(
-        "id,conta_conexao_id,periodo_referencia,data_vencimento,valor_total_centavos,valor_taxas_centavos,status,folha_pagamento_id",
-      )
-      .eq("conta_conexao_id", conta.id)
-      .eq("periodo_referencia", compAtual)
+      .select("id,periodo_referencia,valor_total_centavos,status,data_fechamento,data_vencimento,folha_pagamento_id")
+      .eq("conta_conexao_id", contaId)
+      .eq("periodo_referencia", periodoAtual)
       .in("status", ["ABERTA", "PENDENTE", "EM_ABERTO"])
       .order("id", { ascending: false })
       .limit(1);
 
-    if (faturaError) {
-      return NextResponse.json(
-        { ok: false, error: "falha_buscar_fatura_aberta", detail: faturaError.message },
-        { status: 500 },
-      );
-    }
+    faturaAbertaAtual = ((faturasAtual ?? [])[0] as Record<string, unknown> | undefined) ?? null;
 
-    faturaAbertaAtual = ((faturasData ?? [])[0] as FaturaRow | undefined) ?? null;
+    const { data: faturas } = await supabase
+      .from("credito_conexao_faturas")
+      .select("id,periodo_referencia,valor_total_centavos,status,data_fechamento,data_vencimento,folha_pagamento_id")
+      .eq("conta_conexao_id", contaId)
+      .order("id", { ascending: false })
+      .limit(6);
+    faturasRecentes = (faturas ?? []) as Array<Record<string, unknown>>;
 
-    const { data: lancamentosCompetencia, error: lancCompError } = await supabase
+    const { data: lancamentosComComp } = await supabase
       .from("credito_conexao_lancamentos")
-      .select(
-        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,competencia,cobranca_id",
-      )
-      .eq("conta_conexao_id", conta.id)
-      .eq("competencia", compAtual)
+      .select("id,descricao,origem_sistema,valor_centavos,data_lancamento,competencia,cobranca_id,status")
+      .eq("conta_conexao_id", contaId)
+      .eq("competencia", periodoAtual)
       .not("status", "eq", "CANCELADO")
       .order("id", { ascending: false });
 
-    if (lancCompError) {
-      return NextResponse.json(
-        { ok: false, error: "falha_buscar_lancamentos_competencia", detail: lancCompError.message },
-        { status: 500 },
-      );
-    }
-
-    const { data: lancamentosSemCompetencia, error: lancSemCompError } = await supabase
+    const { data: lancamentosSemComp } = await supabase
       .from("credito_conexao_lancamentos")
-      .select(
-        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,competencia,cobranca_id",
-      )
-      .eq("conta_conexao_id", conta.id)
+      .select("id,descricao,origem_sistema,valor_centavos,data_lancamento,competencia,cobranca_id,status")
+      .eq("conta_conexao_id", contaId)
       .is("competencia", null)
       .gte("data_lancamento", inicio)
       .lte("data_lancamento", fim)
       .not("status", "eq", "CANCELADO")
       .order("id", { ascending: false });
 
-    if (lancSemCompError) {
-      return NextResponse.json(
-        { ok: false, error: "falha_buscar_lancamentos_mes_sem_competencia", detail: lancSemCompError.message },
-        { status: 500 },
-      );
+    const unicos = new Map<number, Record<string, unknown>>();
+    for (const row of [...(lancamentosComComp ?? []), ...(lancamentosSemComp ?? [])]) {
+      const id = Number((row as { id?: unknown }).id);
+      if (Number.isFinite(id) && id > 0) unicos.set(id, row as Record<string, unknown>);
     }
+    lancamentosMes = Array.from(unicos.values());
 
-    lancamentosMes = uniqueLancamentos([
-      ...((lancamentosCompetencia ?? []) as LancamentoRow[]),
-      ...((lancamentosSemCompetencia ?? []) as LancamentoRow[]),
-    ]);
-
-    const { data: ultimosLancamentos, error: ultimosError } = await supabase
+    const { data: ultimos } = await supabase
       .from("credito_conexao_lancamentos")
-      .select(
-        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,competencia,cobranca_id",
-      )
-      .eq("conta_conexao_id", conta.id)
+      .select("id,descricao,origem_sistema,valor_centavos,data_lancamento,competencia,cobranca_id,status")
+      .eq("conta_conexao_id", contaId)
       .not("status", "eq", "CANCELADO")
       .order("data_lancamento", { ascending: false })
       .order("id", { ascending: false })
       .limit(10);
-
-    if (ultimosError) {
-      return NextResponse.json(
-        { ok: false, error: "falha_buscar_ultimas_despesas", detail: ultimosError.message },
-        { status: 500 },
-      );
-    }
-
-    ultimasDespesas = (ultimosLancamentos ?? []) as LancamentoRow[];
+    ultimasDespesas = (ultimos ?? []) as Array<Record<string, unknown>>;
   }
 
+  let folhasRecentes: Array<Record<string, unknown>> = [];
   const { data: folhasData, error: folhasError } = await supabase
     .from("folha_pagamento_colaborador")
     .select("id,competencia_ano_mes,status,data_fechamento,data_pagamento")
@@ -260,16 +166,19 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
     .order("id", { ascending: false })
     .limit(6);
 
-  if (folhasError) {
-    return NextResponse.json(
-      { ok: false, error: "falha_buscar_folhas", detail: folhasError.message },
-      { status: 500 },
-    );
+  if (folhasError && !isSchemaMissingError(folhasError)) {
+    return NextResponse.json({ error: folhasError.message }, { status: 500 });
   }
 
-  const folhas = (folhasData ?? []) as FolhaRow[];
-  const folhaIds = folhas.map((f) => f.id);
+  const folhas = ((folhasData ?? []) as Array<Record<string, unknown>>).map((f) => ({
+    id: Number(f.id),
+    competencia_ano_mes: String(f.competencia_ano_mes ?? ""),
+    status: String(f.status ?? ""),
+    data_fechamento: (f.data_fechamento as string | null) ?? null,
+    data_pagamento: (f.data_pagamento as string | null) ?? null,
+  }));
 
+  const folhaIds = folhas.map((f) => f.id).filter((id) => Number.isFinite(id) && id > 0);
   const eventosMap = new Map<number, { proventos: number; descontos: number }>();
   if (folhaIds.length > 0) {
     const { data: eventosData, error: eventosError } = await supabase
@@ -277,25 +186,19 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
       .select("folha_pagamento_id,tipo,valor_centavos")
       .in("folha_pagamento_id", folhaIds);
 
-    if (eventosError) {
-      return NextResponse.json(
-        { ok: false, error: "falha_buscar_eventos_folha", detail: eventosError.message },
-        { status: 500 },
-      );
+    if (eventosError && !isSchemaMissingError(eventosError)) {
+      return NextResponse.json({ error: eventosError.message }, { status: 500 });
     }
 
     for (const evento of (eventosData ?? []) as FolhaEventoRow[]) {
       const acc = eventosMap.get(evento.folha_pagamento_id) ?? { proventos: 0, descontos: 0 };
-      if (evento.tipo === "PROVENTO") {
-        acc.proventos += Number(evento.valor_centavos ?? 0);
-      } else {
-        acc.descontos += Number(evento.valor_centavos ?? 0);
-      }
+      if (evento.tipo === "PROVENTO") acc.proventos += Number(evento.valor_centavos ?? 0);
+      else acc.descontos += Number(evento.valor_centavos ?? 0);
       eventosMap.set(evento.folha_pagamento_id, acc);
     }
   }
 
-  const folhasRecentes = folhas.map((folha) => {
+  folhasRecentes = folhas.map((folha) => {
     const totais = eventosMap.get(folha.id) ?? { proventos: 0, descontos: 0 };
     return {
       ...folha,
@@ -307,35 +210,74 @@ export async function GET(req: Request, ctx: { params: { id: string } }) {
 
   const totalMesCentavos = lancamentosMes.reduce((acc, row) => acc + Number(row.valor_centavos ?? 0), 0);
 
-  return NextResponse.json({
-    ok: true,
-    data: {
+  const payloadCompat = {
+    colaborador: {
+      id: Number(colab.id),
+      ativo: colab.ativo !== false,
+      pessoa_id: Number(colab.pessoa_id),
+      pessoa_nome: (pessoa.nome as string | null) ?? null,
+      pessoa_cpf: (pessoa.cpf as string | null) ?? null,
+    },
+    conta_conexao: conta
+      ? {
+          id: Number(conta.id),
+          tipo_conta: String(conta.tipo_conta),
+          descricao_exibicao: (conta.descricao_exibicao as string | null) ?? null,
+          dia_fechamento: Number(conta.dia_fechamento ?? 0),
+          dia_vencimento: (conta.dia_vencimento as number | null) ?? null,
+          ativo: conta.ativo !== false,
+        }
+      : null,
+    periodo_atual: periodoAtual,
+    fatura_aberta_atual: faturaAbertaAtual,
+    lancamentos_mes: {
+      competencia: periodoAtual,
+      quantidade: lancamentosMes.length,
+      total_centavos: totalMesCentavos,
+    },
+    ultimas_despesas: ultimasDespesas,
+    folhas_recentes: folhasRecentes,
+  };
+
+  return NextResponse.json(
+    {
       colaborador: {
-        id: colaboradorRow.id,
-        ativo: colaboradorRow.ativo !== false,
-        pessoa_id: colaboradorRow.pessoa_id,
-        pessoa_nome: pessoa?.nome ?? null,
-        pessoa_cpf: pessoa?.cpf ?? null,
+        id: Number(colab.id),
+        pessoa_id: Number(colab.pessoa_id),
+        tipo_vinculo_id: (colab.tipo_vinculo_id as number | null) ?? null,
+        ativo: colab.ativo !== false,
       },
-      conta_conexao: conta
+      pessoa: {
+        id: Number(pessoa.id),
+        nome: (pessoa.nome as string | null) ?? null,
+        cpf: (pessoa.cpf as string | null) ?? null,
+        telefone: (pessoa.telefone as string | null) ?? null,
+        email: (pessoa.email as string | null) ?? null,
+      },
+      config_financeira: configFinanceira,
+      cartao_conexao: conta
         ? {
-            id: conta.id,
-            tipo_conta: conta.tipo_conta,
-            descricao_exibicao: conta.descricao_exibicao,
-            dia_fechamento: conta.dia_fechamento,
-            dia_vencimento: conta.dia_vencimento,
+            id: Number(conta.id),
+            tipo_conta: String(conta.tipo_conta),
+            descricao_exibicao: (conta.descricao_exibicao as string | null) ?? null,
+            dia_fechamento: Number(conta.dia_fechamento ?? 0),
+            dia_vencimento: (conta.dia_vencimento as number | null) ?? null,
             ativo: conta.ativo !== false,
           }
         : null,
-      periodo_atual: compAtual,
-      fatura_aberta_atual: faturaAbertaAtual,
-      lancamentos_mes: {
-        competencia: compAtual,
-        quantidade: lancamentosMes.length,
-        total_centavos: totalMesCentavos,
-      },
-      ultimas_despesas: ultimasDespesas,
-      folhas_recentes: folhasRecentes,
+      faturas_recentes: faturasRecentes.map((f) => ({
+        id: Number(f.id),
+        periodo_referencia: String(f.periodo_referencia ?? ""),
+        valor_total_centavos: Number(f.valor_total_centavos ?? 0),
+        status: String(f.status ?? ""),
+        data_fechamento: (f.data_fechamento as string | null) ?? "",
+        data_vencimento: (f.data_vencimento as string | null) ?? null,
+        folha_pagamento_id: (f.folha_pagamento_id as number | null) ?? null,
+      })),
+      ok: true,
+      data: payloadCompat,
     },
-  });
+    { status: 200 },
+  );
 }
+
