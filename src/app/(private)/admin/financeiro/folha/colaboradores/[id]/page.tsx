@@ -332,7 +332,7 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
                 onClick={() => void importarFaturas()}
                 disabled={importing || folha?.status !== "ABERTA"}
               >
-                {importing ? "Importando..." : "Importar faturas (Cartao Conexao)"}
+                {importing ? "Reprocessando..." : "Reprocessar cartao (debug)"}
               </button>
               <button
                 type="button"

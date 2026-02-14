@@ -910,6 +910,23 @@ export async function POST(req: Request) {
           throw vinculo.error ?? new Error("falha_vincular_lancamento_fatura");
         }
         await recalcularComprasFatura(supabase, faturaId);
+
+        const { data: faturaSyncMeta, error: faturaSyncMetaErr } = await supabase
+          .from("credito_conexao_faturas")
+          .select("id, folha_pagamento_id")
+          .eq("id", faturaId)
+          .maybeSingle();
+        if (faturaSyncMetaErr) {
+          throw faturaSyncMetaErr;
+        }
+        if (faturaSyncMeta?.folha_pagamento_id) {
+          const { error: syncErr } = await supabase.rpc("sync_credito_fatura_para_folha", {
+            p_fatura_id: faturaId,
+          });
+          if (syncErr) {
+            console.error("[POST /api/cafe/vendas] falha_sync_credito_fatura_para_folha:", syncErr);
+          }
+        }
       } catch (err) {
         if (lancamentoCriado && lancamentoId) {
           await supabase.from("credito_conexao_lancamentos").delete().eq("id", lancamentoId);

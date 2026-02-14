@@ -94,6 +94,7 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
   const [erro, setErro] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [creatingContaCartao, setCreatingContaCartao] = useState(false);
   const [configMsg, setConfigMsg] = useState<string | null>(null);
   const [formConfig, setFormConfig] = useState<ConfigForm>(defaultConfigForm());
 
@@ -162,6 +163,35 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
       setConfigMsg(e instanceof Error ? e.message : "erro_desconhecido");
     } finally {
       setSavingConfig(false);
+    }
+  }
+
+  async function recarregarResumo() {
+    if (!Number.isFinite(colaboradorId) || colaboradorId <= 0) return;
+    const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/resumo-financeiro`, { cache: "no-store" });
+    const j = (await r.json()) as Partial<Resumo> & { error?: string };
+    if (!r.ok) throw new Error(j?.error ?? "falha_carregar");
+    const next = j as Resumo;
+    setResumo(next);
+    setFormConfig(toForm(next.config_financeira));
+  }
+
+  async function criarContaCartaoColaborador() {
+    if (!Number.isFinite(colaboradorId) || colaboradorId <= 0) return;
+    setCreatingContaCartao(true);
+    setConfigMsg(null);
+    try {
+      const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/criar-conta-colaborador`, {
+        method: "POST",
+      });
+      const j = (await r.json().catch(() => null)) as { error?: string } | null;
+      if (!r.ok) throw new Error(j?.error ?? "falha_criar_conta_colaborador");
+      await recarregarResumo();
+      setConfigMsg("Conta do Cartao Conexao (COLABORADOR) criada/validada.");
+    } catch (e) {
+      setConfigMsg(e instanceof Error ? e.message : "erro_desconhecido");
+    } finally {
+      setCreatingContaCartao(false);
     }
   }
 
@@ -440,8 +470,20 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold">Cartao Conexao - Faturas recentes</h2>
               {!resumo.cartao_conexao ? (
-                <div className="mt-3 text-sm text-slate-600">
-                  Nenhuma conta do tipo COLABORADOR encontrada para esta pessoa.
+                <div className="mt-3 space-y-3">
+                  <div className="text-sm text-slate-600">
+                    Nenhuma conta do tipo COLABORADOR encontrada para esta pessoa.
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                    disabled={creatingContaCartao}
+                    onClick={() => void criarContaCartaoColaborador()}
+                  >
+                    {creatingContaCartao
+                      ? "Criando conta..."
+                      : "Criar conta do Cartao (COLABORADOR)"}
+                  </button>
                 </div>
               ) : resumo.faturas_recentes.length === 0 ? (
                 <div className="mt-3 text-sm text-slate-600">Nenhuma fatura recente.</div>
