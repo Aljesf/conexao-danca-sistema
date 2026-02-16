@@ -54,6 +54,7 @@ export const adminSidebar: SidebarSection[] = [
     items: [
       { label: "🏦 Contas", href: "/admin/financeiro/credito-conexao/contas" },
       { label: "🧾 Faturas", href: "/admin/financeiro/credito-conexao/faturas" },
+      { label: "💸 Cobrancas (ALUNO)", href: "/admin/financeiro/credito-conexao/cobrancas" },
       { label: "⚙️ Configuracoes", href: "/admin/financeiro/credito-conexao/configuracoes" },
     ],
   },

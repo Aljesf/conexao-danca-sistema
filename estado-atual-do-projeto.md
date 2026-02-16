@@ -103,3 +103,63 @@ UI/UX:
 - `/admin/governanca/cobrancas/[id]`:
   - Acoes "Abrir no NeoFin" e "Sincronizar com NeoFin".
   - Exibicao de status local e preview resumido do ultimo payload NeoFin.
+
+---
+
+## Atualizacoes recentes (Painel de Cobrancas do Cartao Conexao ALUNO) - 2026-02-16
+
+SQL:
+- Sem alteracoes de SQL nesta etapa.
+
+API:
+- Nova rota `GET /api/financeiro/credito-conexao/cobrancas`:
+  - Lista exclusiva de cobrancas do Cartao Conexao ALUNO.
+  - Fonte: `credito_conexao_faturas` (ALUNO) + `cobrancas` vinculadas por `origem_tipo/origem_id`.
+  - Retorna somente cobrancas consolidadas (`neofin_charge_id` preenchido).
+  - Implementada abordagem de 2 passos (faturas -> cobrancas por origem) para evitar dependencia de join relacional direto no Supabase.
+
+UX/Paineis:
+- Nova tela `/admin/financeiro/credito-conexao/cobrancas`:
+  - Colunas operacionais de fatura + cobranca + NeoFin.
+  - Acoes: abrir fatura e detalhar cobranca.
+- Sidebar Admin atualizada:
+  - Item novo em Credito Conexao: `Cobrancas (ALUNO)`.
+
+Rotas de fatura:
+- `POST /api/financeiro/credito-conexao/faturas/[id]/fechar`:
+  - Retorno padronizado inclui `fatura_id`, `status_fatura`, `cobranca_id`, `neofin_charge_id`.
+  - Tentativa de status `FECHADA` com fallback compativel para `ABERTA` quando o check do banco antigo nao permite `FECHADA`.
+- `POST /api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca`:
+  - Retorno padronizado inclui `fatura_id`, `status_fatura`, `cobranca_id`, `neofin_charge_id`, `message`.
+  - Quando ja existe cobranca, retorna HTTP 200 com mensagem explicita.
+
+Tela de detalhe da fatura:
+- Botao `Fechar fatura e gerar cobranca` com tratamento de erro detalhado (`status HTTP + mensagem backend`).
+- Modal `Gerar cobranca agora` com tratamento de erro detalhado e refresh de dados via `router.refresh()` + reload de dados da tela.
+- Logs de erro em dev:
+  - `console.error("fechar-fatura erro", { status, body })`
+  - `console.error("gerar-cobranca erro", { status, body })`
+
+---
+
+## Atualizacoes recentes (Vencimento manual + descricao de cobranca) - 2026-02-16
+
+API:
+- `POST /api/financeiro/credito-conexao/faturas/[id]/fechar`:
+  - Agora aceita override manual por data completa: `vencimento_iso` (`YYYY-MM-DD`), com `dia_vencimento`, `salvar_preferencia` e `force`.
+  - Se o vencimento calculado cair no passado em operacao manual e sem override/force, retorna erro orientando informar `vencimento_iso` futuro.
+  - Retorno padronizado inclui: `fatura_id`, `status_fatura`, `cobranca_id`, `neofin_charge_id`, `vencimento_iso`.
+- `POST /api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca`:
+  - Mesmas regras de override manual e validacao de vencimento.
+  - Retorno inclui ids + `vencimento_iso` + `message` para feedback direto na UI.
+
+Descricao de cobranca:
+- Novo util `src/lib/financeiro/cobranca/descricao.ts` para gerar descricao mais informativa e truncada antes do envio ao provider.
+- Padrao aplicado: contexto de mensalidade + periodo + fatura + extras de itens (limitados e truncados).
+
+UI:
+- `/admin/financeiro/credito-conexao/faturas/[id]`:
+  - Acao de fechar agora abre modal com `input type="date"` (override manual).
+  - Modal de gerar cobranca agora tambem usa `input type="date"` (sem select apenas de dia).
+  - Toasts de sucesso exibem `cobranca_id` e `vencimento_iso`.
+  - Bloco operacional "Cobranca gerada" visivel mesmo quando status da fatura permanece `ABERTA` por compatibilidade de regra legada.

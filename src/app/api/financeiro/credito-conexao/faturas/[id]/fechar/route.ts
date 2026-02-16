@@ -1,529 +1,471 @@
-﻿import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
-import { upsertNeofinBilling } from "@/lib/neofinClient";
-import { calcularDataVencimento } from "@/lib/financeiro/creditoConexao/vencimento";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { calcularDataVencimento } from "@/lib/financeiro/creditoConexao/vencimento";
+import { getCobrancaProvider } from "@/lib/financeiro/cobranca/providers";
+import type { CobrancaProviderCode } from "@/lib/financeiro/cobranca/providers/types";
+import { buildDescricaoCobranca } from "@/lib/financeiro/cobranca/descricao";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-type Fatura = {
+type Body = {
+  vencimento_iso?: string;
+  dia_vencimento?: number;
+  salvar_preferencia?: boolean;
+  force?: boolean;
+};
+
+type FaturaConta = {
+  tipo_conta: string | null;
+  pessoa_titular_id: number | null;
+  dia_vencimento: number | null;
+  dia_vencimento_preferido: number | null;
+} | null;
+
+type FaturaRow = {
   id: number;
   conta_conexao_id: number;
   periodo_referencia: string;
+  status: string;
   data_fechamento: string | null;
   data_vencimento: string | null;
   valor_total_centavos: number;
-  valor_taxas_centavos: number;
-  status: string;
   cobranca_id: number | null;
-  conta?: {
-    tipo_conta: string;
-    dia_fechamento: number | null;
-    dia_vencimento: number | null;
-    pessoa_titular_id: number;
-  } | null;
-  lancamentos?: Array<{
-    lancamento: {
-      valor_centavos: number;
-      numero_parcelas: number | null;
-      origem_sistema: string | null;
-      origem_id: number | null;
-    } | null;
-  }> | null;
+  conta: FaturaConta;
 };
 
-type RegraParcelas = {
-  id: number;
-  numero_parcelas_min: number;
-  numero_parcelas_max: number;
-  valor_minimo_centavos: number;
-  taxa_percentual: number;
-  taxa_fixa_centavos: number;
-  centro_custo_id: number | null;
+type ConfigCobrancaRow = {
+  provider_ativo: string | null;
+  dias_permitidos_vencimento: number[] | null;
 };
 
-type PessoaTitular = {
+type CobrancaRow = {
   id: number;
-  nome: string;
-  cpf: string | null;
-  email: string | null;
-  telefone: string | null;
+  neofin_charge_id: string | null;
 };
 
 const ORIGEM_TIPO_CANONICA = "FATURA_CREDITO_CONEXAO";
 const ORIGEM_TIPOS_COMPATIVEIS = [ORIGEM_TIPO_CANONICA, "CREDITO_CONEXAO_FATURA"];
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function firstNonEmptyString(...values: Array<unknown>): string | null {
-  for (const value of values) {
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
+function isStatusCheckError(errorMessage: string | null | undefined): boolean {
+  const msg = (errorMessage ?? "").toLowerCase();
+  return msg.includes("credito_conexao_faturas_status_chk") || msg.includes("check constraint");
+}
+
+function localTodayIso(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function isValidIsoDate(input: string): boolean {
+  if (!ISO_DATE_RE.test(input)) return false;
+  const parsed = new Date(`${input}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.toISOString().slice(0, 10) === input;
+}
+
+function clampDiaVencimento(dia: number): number {
+  if (dia < 1) return 1;
+  if (dia > 28) return 28;
+  return Math.trunc(dia);
+}
+
+function selecionarDiaPermitido(preferido: number, permitidos: number[] | null | undefined): number {
+  const diasValidos = Array.from(
+    new Set(
+      (permitidos ?? [])
+        .map((d) => Number(d))
+        .filter((d) => Number.isFinite(d))
+        .map((d) => clampDiaVencimento(d)),
+    ),
+  ).sort((a, b) => a - b);
+
+  if (diasValidos.length === 0) return clampDiaVencimento(preferido);
+  if (diasValidos.includes(preferido)) return preferido;
+  if (diasValidos.includes(12)) return 12;
+  return diasValidos[0];
+}
+
+async function calcularTotalEItens(supabase: any, faturaId: number, fallbackValorTotal: number) {
+  const { data: vinculos, error: vincErr } = await supabase
+    .from("credito_conexao_fatura_lancamentos")
+    .select("lancamento:credito_conexao_lancamentos(valor_centavos,descricao)")
+    .eq("fatura_id", faturaId);
+
+  if (vincErr) throw new Error(vincErr.message);
+
+  const itensDescricao: string[] = [];
+  const totalVinculos = (vinculos ?? []).reduce((acc: number, row: any) => {
+    const valor = Number(row?.lancamento?.valor_centavos ?? 0);
+    const descricao = String(row?.lancamento?.descricao ?? "").trim();
+    if (descricao) itensDescricao.push(descricao);
+    return acc + (Number.isFinite(valor) ? valor : 0);
+  }, 0);
+
+  const valorFallback = Number(fallbackValorTotal);
+  const total = totalVinculos > 0 ? Math.trunc(totalVinculos) : Math.max(Math.trunc(valorFallback || 0), 0);
+
+  return {
+    totalCentavos: total,
+    itensDescricao,
+  };
+}
+
+async function resolveCobrancaExistente(supabase: any, fatura: FaturaRow): Promise<CobrancaRow | null> {
+  if (fatura.cobranca_id && Number.isFinite(Number(fatura.cobranca_id))) {
+    const { data } = await supabase
+      .from("cobrancas")
+      .select("id,neofin_charge_id")
+      .eq("id", Number(fatura.cobranca_id))
+      .maybeSingle<CobrancaRow>();
+    if (data) return data;
+  }
+
+  const { data } = await supabase
+    .from("cobrancas")
+    .select("id,neofin_charge_id")
+    .in("origem_tipo", ORIGEM_TIPOS_COMPATIVEIS)
+    .eq("origem_id", fatura.id)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<CobrancaRow>();
+
+  return data ?? null;
+}
+
+async function upsertCobrancaLocal(supabase: any, args: {
+  cobrancaExistente: CobrancaRow | null;
+  pessoaId: number;
+  descricao: string;
+  valorCentavos: number;
+  vencimentoIso: string;
+  faturaId: number;
+}) {
+  const payload = {
+    pessoa_id: args.pessoaId,
+    descricao: args.descricao,
+    valor_centavos: args.valorCentavos,
+    moeda: "BRL",
+    vencimento: args.vencimentoIso,
+    status: "PENDENTE",
+    metodo_pagamento: "BOLETO",
+    origem_tipo: ORIGEM_TIPO_CANONICA,
+    origem_id: args.faturaId,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (args.cobrancaExistente?.id) {
+    const { error } = await supabase
+      .from("cobrancas")
+      .update(payload)
+      .eq("id", args.cobrancaExistente.id);
+    if (error) throw new Error(`erro_atualizar_cobranca:${error.message}`);
+    return args.cobrancaExistente.id;
+  }
+
+  const { data, error } = await supabase
+    .from("cobrancas")
+    .insert(payload)
+    .select("id")
+    .single<{ id: number }>();
+
+  if (error || !data?.id) throw new Error(`erro_criar_cobranca:${error?.message ?? "sem_id"}`);
+  return data.id;
+}
+
+async function updateFaturaComStatusCompativel(
+  supabase: any,
+  faturaId: number,
+  payload: {
+    cobranca_id: number;
+    data_fechamento: string;
+    data_vencimento: string;
+    valor_total_centavos: number;
+    updated_at: string;
+  },
+  statusDesejado: "FECHADA" | "ABERTA" | "PAGA",
+): Promise<{ ok: true; statusAplicado: string } | { ok: false; error: string }> {
+  const { data, error } = await supabase
+    .from("credito_conexao_faturas")
+    .update({ ...payload, status: statusDesejado })
+    .eq("id", faturaId)
+    .select("status")
+    .single();
+
+  if (!error) {
+    return { ok: true, statusAplicado: data?.status ?? statusDesejado };
+  }
+
+  if (statusDesejado === "FECHADA" && isStatusCheckError(error.message)) {
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from("credito_conexao_faturas")
+      .update({ ...payload, status: "ABERTA" })
+      .eq("id", faturaId)
+      .select("status")
+      .single();
+
+    if (!fallbackError) {
+      return { ok: true, statusAplicado: fallbackData?.status ?? "ABERTA" };
     }
+    return { ok: false, error: fallbackError.message };
   }
-  return null;
-}
 
-function extractBillingInfo(body: any, fallbackId?: string) {
-  const candidates: any[] = [];
-  if (Array.isArray(body)) candidates.push(...body);
-  if (body && typeof body === "object") {
-    if (Array.isArray(body.billings)) candidates.push(...body.billings);
-    if (Array.isArray(body.data)) candidates.push(...body.data);
-    if (Array.isArray(body.data?.billings)) candidates.push(...body.data.billings);
-  }
-  const billing = candidates.find((b) => b && typeof b === "object") ?? (body && typeof body === "object" ? body : null);
-
-  const chargeId =
-    firstNonEmptyString(
-      billing?.id,
-      billing?.billing_id,
-      billing?.charge_id,
-      billing?.integration_identifier,
-      billing?.integrationIdentifier,
-      body?.billing_id,
-      body?.charge_id,
-      body?.integration_identifier,
-      fallbackId
-    ) ?? null;
-
-  const paymentLink =
-    firstNonEmptyString(
-      billing?.payment_link,
-      billing?.payment_url,
-      billing?.link_pagamento,
-      billing?.url,
-      billing?.link,
-      billing?.billet_url,
-      billing?.boleto_url,
-      body?.payment_link,
-      body?.payment_url
-    ) ?? null;
-
-  const digitableLine =
-    firstNonEmptyString(
-      billing?.digitable_line,
-      billing?.linha_digitavel,
-      billing?.digitableLine,
-      billing?.boleto_linha_digitavel,
-      billing?.boleto_digitable_line,
-      billing?.barcode,
-      billing?.bar_code,
-      body?.digitable_line,
-      body?.linha_digitavel
-    ) ?? null;
-
-  return { chargeId, paymentLink, digitableLine };
-}
-
-function chooseRegraParcelas(
-  regras: RegraParcelas[],
-  numeroParcelas: number,
-  valorTotal: number
-): RegraParcelas | null {
-  const candidatas = regras.filter((r) => {
-    const min = Number(r.numero_parcelas_min ?? 0);
-    const max = Number(r.numero_parcelas_max ?? 0);
-    const vmin = Number(r.valor_minimo_centavos ?? 0);
-    return numeroParcelas >= min && numeroParcelas <= max && valorTotal >= vmin;
-  });
-
-  candidatas.sort((a, b) => {
-    const vminA = Number(a.valor_minimo_centavos ?? 0);
-    const vminB = Number(b.valor_minimo_centavos ?? 0);
-    if (vminA !== vminB) return vminB - vminA; // maior valor_minimo primeiro
-    const faixaA =
-      Number(a.numero_parcelas_max ?? 0) - Number(a.numero_parcelas_min ?? 0);
-    const faixaB =
-      Number(b.numero_parcelas_max ?? 0) - Number(b.numero_parcelas_min ?? 0);
-    if (faixaA !== faixaB) return faixaA - faixaB; // faixa mais estreita primeiro
-    return Number(b.numero_parcelas_max ?? 0) - Number(a.numero_parcelas_max ?? 0);
-  });
-
-  return candidatas[0] ?? null;
+  return { ok: false, error: error.message };
 }
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
   const denied = await guardApiByRole(request as any);
   if (denied) return denied as any;
+
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
-
   const { supabase } = auth;
 
-  const force = new URL(request.url).searchParams.get("force") === "true";
   const { id } = await params;
   const faturaId = Number(id);
-
   if (!faturaId || Number.isNaN(faturaId)) {
     return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
   }
 
-  console.log("[fechar fatura] iniciando", { faturaId, force });
+  const body = (await request.json().catch(() => ({}))) as Body;
+  const force = body.force === true;
+  const salvarPreferencia = body.salvar_preferencia === true;
+  const vencimentoManual = typeof body.vencimento_iso === "string" ? body.vencimento_iso.trim() : "";
 
-  const { data: fatura, error: faturaError } = await supabase
+  if (vencimentoManual && !isValidIsoDate(vencimentoManual)) {
+    return NextResponse.json(
+      { ok: false, error: "vencimento_iso_invalido", message: "Use o formato YYYY-MM-DD." },
+      { status: 400 },
+    );
+  }
+
+  const { data: fatura, error: faturaErr } = await supabase
     .from("credito_conexao_faturas")
     .select(
       `
       id,
       conta_conexao_id,
       periodo_referencia,
+      status,
       data_fechamento,
       data_vencimento,
       valor_total_centavos,
-      valor_taxas_centavos,
-      status,
       cobranca_id,
       conta:credito_conexao_contas (
         tipo_conta,
-        dia_fechamento,
+        pessoa_titular_id,
         dia_vencimento,
-        pessoa_titular_id
-      ),
-      lancamentos:credito_conexao_fatura_lancamentos (
-        lancamento:credito_conexao_lancamentos (
-          valor_centavos,
-          numero_parcelas,
-          origem_sistema,
-          origem_id
-        )
+        dia_vencimento_preferido
       )
-    `
+    `,
     )
     .eq("id", faturaId)
-    .maybeSingle<Fatura>();
+    .maybeSingle<FaturaRow>();
 
-  if (faturaError || !fatura) {
-    console.error("[fechar fatura] fatura_nao_encontrada", faturaError);
+  if (faturaErr || !fatura) {
     return NextResponse.json({ ok: false, error: "fatura_nao_encontrada" }, { status: 404 });
   }
 
-  if (fatura.status === "PAGA") {
-    return NextResponse.json({ ok: false, error: "fatura_ja_paga" }, { status: 400 });
+  if (!fatura.conta?.pessoa_titular_id) {
+    return NextResponse.json({ ok: false, error: "titular_indefinido" }, { status: 500 });
   }
 
-  if (!fatura.conta?.pessoa_titular_id) {
+  if (fatura.conta?.tipo_conta === "COLABORADOR") {
     return NextResponse.json(
-      { ok: false, error: "titular_indefinido" },
-      { status: 500 }
+      { ok: false, error: "conta_colaborador_sem_cobranca_externa" },
+      { status: 409 },
     );
   }
 
-  const lancamentos = (fatura.lancamentos ?? []).map((l) => l.lancamento).filter(Boolean) as any[];
-  if (!lancamentos.length) {
+  const competencia = String(fatura.periodo_referencia ?? "");
+  if (!/^\d{4}-\d{2}$/.test(competencia)) {
+    return NextResponse.json({ ok: false, error: "periodo_referencia_invalido" }, { status: 400 });
+  }
+
+  const { data: cfgGlobal } = await supabase
+    .from("financeiro_config_cobranca")
+    .select("provider_ativo,dias_permitidos_vencimento")
+    .is("unidade_id", null)
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle<ConfigCobrancaRow>();
+
+  const diaBody = Number(body.dia_vencimento);
+  const diaInput = Number.isFinite(diaBody) ? clampDiaVencimento(diaBody) : null;
+  const diaBase = diaInput ?? Number(fatura.conta?.dia_vencimento_preferido ?? fatura.conta?.dia_vencimento ?? 12);
+  const diaCalculado = selecionarDiaPermitido(clampDiaVencimento(diaBase), cfgGlobal?.dias_permitidos_vencimento);
+  const vencimentoCalculado = calcularDataVencimento({
+    competenciaAnoMes: competencia,
+    diaPreferido: diaCalculado,
+    forcarUltimoVencimentoDia12: true,
+  });
+
+  const hojeIso = localTodayIso();
+  if (!vencimentoManual && !force && vencimentoCalculado < hojeIso) {
     return NextResponse.json(
       {
         ok: false,
-        error: "fatura_sem_lancamentos",
-        message: "Nao e possivel fechar a fatura do Credito Conexao sem lancamentos de consumo.",
+        error: "vencimento_calculado_no_passado",
+        message: "Vencimento calculado ja passou. Informe vencimento_iso futuro para operacao manual.",
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  const compras_centavos = lancamentos.reduce(
-    (sum, l) => sum + Number(l?.valor_centavos ?? 0),
-    0
-  );
-  const numero_parcelas = Math.max(
-    1,
-    ...lancamentos
-      .map((l) => Number(l?.numero_parcelas || 0))
-      .filter((n) => Number.isFinite(n) && n > 0)
-  );
-
-  const tipoConta = fatura.conta?.tipo_conta ?? null;
-  if (!tipoConta) {
-    return NextResponse.json({ ok: false, error: "tipo_conta_indefinido" }, { status: 500 });
-  }
-
-  const { data: regras, error: regrasError } = await supabase
-    .from("credito_conexao_regras_parcelas")
-    .select(
-      `
-      id,
-      numero_parcelas_min,
-      numero_parcelas_max,
-      valor_minimo_centavos,
-      taxa_percentual,
-      taxa_fixa_centavos,
-      centro_custo_id
-    `
-    )
-    .eq("tipo_conta", tipoConta)
-    .eq("ativo", true);
-
-  if (regrasError) {
-    console.error("[fechar fatura] erro ao buscar regras de parcelamento:", regrasError);
-    return NextResponse.json(
-      { ok: false, error: "erro_buscar_regras_parcelamento" },
-      { status: 500 }
-    );
-  }
-
-  const regra = chooseRegraParcelas((regras as RegraParcelas[]) ?? [], numero_parcelas, compras_centavos);
-  if (!regra) {
-    console.warn("[fechar fatura] regra de parcelamento nao encontrada; taxa = 0", {
-      faturaId,
-      tipoConta,
-      numero_parcelas,
-      compras_centavos,
-    });
-  }
-
-  const taxa_centavos =
-    regra && compras_centavos > 0
-      ? Math.max(
-          Math.round(compras_centavos * Number(regra.taxa_percentual ?? 0) / 100) +
-            Number(regra.taxa_fixa_centavos ?? 0),
-          0
-        )
-      : 0;
-
-  const total_centavos = compras_centavos + taxa_centavos;
-
-  const now = new Date();
-  let vencimento = fatura.data_vencimento ?? null;
-  if (!vencimento) {
-    if (tipoConta === "ALUNO" && /^\d{4}-\d{2}$/.test(fatura.periodo_referencia)) {
-      const diaPreferido = Number(fatura.conta?.dia_vencimento ?? 12);
-      vencimento = calcularDataVencimento({
-        competenciaAnoMes: fatura.periodo_referencia,
-        diaPreferido,
-        forcarUltimoVencimentoDia12: true,
-      });
-    } else {
-      const d = new Date(now);
-      d.setDate(d.getDate() + 7);
-      vencimento = d.toISOString().slice(0, 10);
-    }
-  }
-
-  // Regra hard: conta COLABORADOR nao gera cobranca externa.
-  if (tipoConta === "COLABORADOR") {
-    const { error: faturaUpdateError } = await supabase
-      .from("credito_conexao_faturas")
-      .update({
-        valor_total_centavos: total_centavos,
-        valor_taxas_centavos: taxa_centavos,
-        data_fechamento: fatura.data_fechamento ?? new Date().toISOString().slice(0, 10),
-        data_vencimento: vencimento,
-        status: "ABERTA",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", fatura.id);
-
-    if (faturaUpdateError) {
-      console.error("[fechar fatura] erro ao atualizar fatura COLABORADOR:", faturaUpdateError);
-      return NextResponse.json(
-        { ok: false, error: "erro_atualizar_fatura_colaborador" },
-        { status: 500 }
-      );
-    }
-
+  const vencimentoEfetivo = vencimentoManual || vencimentoCalculado;
+  if (!force && vencimentoEfetivo < hojeIso) {
     return NextResponse.json(
       {
-        ok: true,
-        fatura_id: fatura.id,
-        cobranca_id: null,
-        cobranca_externa_gerada: false,
-        compras_centavos,
-        taxa_centavos,
-        total_centavos,
-        numero_parcelas,
-        regra_id: regra?.id ?? null,
+        ok: false,
+        error: "vencimento_iso_no_passado",
+        message: "Informe um vencimento futuro para operacao manual.",
       },
-      { status: 200 }
+      { status: 400 },
     );
   }
 
-  // Upsert da cobranca
-  let cobrancaId = fatura.cobranca_id ?? null;
-  if (!cobrancaId) {
-    const { data: cobrancaOrigem } = await supabase
-      .from("cobrancas")
-      .select("id")
-      .in("origem_tipo", ORIGEM_TIPOS_COMPATIVEIS)
-      .eq("origem_id", fatura.id)
-      .order("id", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (cobrancaOrigem?.id) {
-      cobrancaId = Number(cobrancaOrigem.id);
-    }
-  }
-  const descricao = `Fatura Credito Conexao #${fatura.id} (${fatura.periodo_referencia})`;
+  if (salvarPreferencia) {
+    const diaPreferencia =
+      diaInput ??
+      (vencimentoEfetivo ? Number(vencimentoEfetivo.split("-")[2]) : null);
 
-  if (!cobrancaId || force) {
-    if (cobrancaId && force) {
-      const { data: cobrancaAtualizada, error: updateCobrancaError } = await supabase
-        .from("cobrancas")
-        .update({
-          pessoa_id: fatura.conta.pessoa_titular_id,
-          descricao,
-          valor_centavos: total_centavos,
-          moeda: "BRL",
-          vencimento,
-          status: "PENDENTE",
-          origem_tipo: ORIGEM_TIPO_CANONICA,
-          origem_id: fatura.id,
-        })
-        .eq("id", cobrancaId)
-        .select("id")
-        .maybeSingle();
-
-      if (updateCobrancaError || !cobrancaAtualizada) {
-        console.error("[fechar fatura] erro ao atualizar cobranca existente:", updateCobrancaError);
-        return NextResponse.json(
-          { ok: false, error: "erro_atualizar_cobranca" },
-          { status: 500 }
-        );
-      }
-    } else {
-      const { data: novaCobranca, error: cobrancaError } = await supabase
-        .from("cobrancas")
-        .insert({
-          pessoa_id: fatura.conta.pessoa_titular_id,
-          descricao,
-          valor_centavos: total_centavos,
-          moeda: "BRL",
-          vencimento,
-          status: "PENDENTE",
-          origem_tipo: ORIGEM_TIPO_CANONICA,
-          origem_id: fatura.id,
-        })
-        .select("id")
-        .maybeSingle();
-
-      if (cobrancaError || !novaCobranca) {
-        console.error("[fechar fatura] erro ao criar cobranca:", cobrancaError);
-        return NextResponse.json(
-          { ok: false, error: "erro_criar_cobranca" },
-          { status: 500 }
-        );
-      }
-      cobrancaId = novaCobranca.id;
-    }
-  }
-
-  const { data: cobrancaRow, error: cobrancaRowErr } = await supabase
-    .from("cobrancas")
-    .select("id, neofin_charge_id, link_pagamento, linha_digitavel, neofin_payload, descricao, valor_centavos, vencimento")
-    .eq("id", cobrancaId)
-    .maybeSingle();
-
-  if (cobrancaRowErr || !cobrancaRow) {
-    console.error("[fechar fatura] erro ao buscar cobranca para integracao:", cobrancaRowErr);
-    return NextResponse.json({ ok: false, error: "cobranca_nao_encontrada" }, { status: 500 });
-  }
-
-  // Integracao de cobranca (provedor atual: Neofin): garantir charge/links
-  if (!cobrancaId) {
-    return NextResponse.json({ ok: false, error: "cobranca_nao_criada" }, { status: 500 });
-  }
-
-  const { data: pessoaTitular, error: pessoaErr } = await supabase
-    .from("pessoas")
-    .select("id, nome, cpf, email, telefone")
-    .eq("id", fatura.conta.pessoa_titular_id)
-    .maybeSingle<PessoaTitular>();
-
-  if (pessoaErr || !pessoaTitular || !pessoaTitular.cpf) {
-    console.error("[fechar fatura] pessoa titular sem CPF ou erro ao buscar:", pessoaErr);
-    return NextResponse.json(
-      { ok: false, error: "titular_sem_cpf", details: pessoaErr?.message ?? null },
-      { status: 500 }
-    );
-  }
-
-  const cpfLimpo = (pessoaTitular.cpf || "").replace(/\D/g, "");
-  const integrationIdentifier = `cobranca-${cobrancaId}`;
-
-  if (!cobrancaRow.neofin_charge_id || force) {
-    const neofinResult = await upsertNeofinBilling({
-      integrationIdentifier,
-      amountCentavos: total_centavos,
-      dueDate: vencimento,
-      description: cobrancaRow.descricao ?? descricao,
-      customer: {
-        nome: pessoaTitular.nome,
-        cpf: cpfLimpo,
-        email: pessoaTitular.email ?? undefined,
-        telefone: pessoaTitular.telefone ?? undefined,
-      },
-    });
-
-    if (!neofinResult.ok) {
-      console.error("[fechar fatura] erro ao criar charge na Neofin:", neofinResult);
+    if (!diaPreferencia || diaPreferencia < 1 || diaPreferencia > 28) {
       return NextResponse.json(
-        { ok: false, error: "erro_neofin_criar_cobranca", details: neofinResult },
-        { status: 502 }
+        {
+          ok: false,
+          error: "dia_vencimento_preferencia_invalido",
+          message: "Para salvar preferencia, o dia deve estar entre 1 e 28.",
+        },
+        { status: 400 },
       );
     }
 
-    const info = extractBillingInfo(neofinResult.body, integrationIdentifier);
-    const { error: updCobrancaNeofin } = await supabase
-      .from("cobrancas")
-      .update({
-        neofin_charge_id: info.chargeId ?? integrationIdentifier,
-        link_pagamento: info.paymentLink ?? null,
-        linha_digitavel: info.digitableLine ?? null,
-        neofin_payload: neofinResult.body ?? null,
-      })
-      .eq("id", cobrancaId);
+    const { error: prefErr } = await supabase
+      .from("credito_conexao_contas")
+      .update({ dia_vencimento_preferido: diaPreferencia })
+      .eq("id", fatura.conta_conexao_id);
 
-    if (updCobrancaNeofin) {
-      console.error("[fechar fatura] erro ao salvar dados da Neofin na cobranca:", updCobrancaNeofin);
+    if (prefErr) {
       return NextResponse.json(
-        { ok: false, error: "erro_salvar_dados_neofin", details: updCobrancaNeofin?.message ?? null },
-        { status: 500 }
+        { ok: false, error: "erro_salvar_preferencia_vencimento", detail: prefErr.message },
+        { status: 500 },
       );
     }
   }
 
-  const { error: faturaUpdateError } = await supabase
-    .from("credito_conexao_faturas")
-    .update({
-      valor_total_centavos: total_centavos,
-      valor_taxas_centavos: taxa_centavos,
-      data_fechamento: fatura.data_fechamento ?? new Date().toISOString().slice(0, 10),
-      data_vencimento: vencimento,
-      status: "ABERTA",
-      cobranca_id: cobrancaId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", fatura.id);
-
-  if (faturaUpdateError) {
-    console.error("[fechar fatura] erro ao atualizar fatura:", faturaUpdateError);
+  let totalEItens: { totalCentavos: number; itensDescricao: string[] };
+  try {
+    totalEItens = await calcularTotalEItens(supabase, fatura.id, fatura.valor_total_centavos);
+  } catch (err) {
     return NextResponse.json(
-      { ok: false, error: "erro_atualizar_fatura" },
-      { status: 500 }
+      { ok: false, error: "erro_buscar_lancamentos_fatura", detail: err instanceof Error ? err.message : null },
+      { status: 500 },
     );
   }
 
-  console.log("[fechar fatura] concluido", {
-    faturaId,
-    cobrancaId,
-    compras_centavos,
-    taxa_centavos,
-    total_centavos,
-    numero_parcelas,
-    regra_id: regra?.id ?? null,
+  if (totalEItens.totalCentavos <= 0) {
+    return NextResponse.json({ ok: false, error: "fatura_sem_valor_para_cobranca" }, { status: 400 });
+  }
+
+  const descricao = buildDescricaoCobranca({
+    contexto: "FATURA_CREDITO_CONEXAO",
+    faturaId: fatura.id,
+    periodo: competencia,
+    itensDescricao: totalEItens.itensDescricao,
   });
 
-  return NextResponse.json(
+  const providerCode = (cfgGlobal?.provider_ativo ?? "NEOFIN") as CobrancaProviderCode;
+  let cobrancaExistente = await resolveCobrancaExistente(supabase, fatura);
+
+  const cobrancaId = await upsertCobrancaLocal(supabase, {
+    cobrancaExistente,
+    pessoaId: Number(fatura.conta.pessoa_titular_id),
+    descricao,
+    valorCentavos: totalEItens.totalCentavos,
+    vencimentoIso: vencimentoEfetivo,
+    faturaId: fatura.id,
+  });
+
+  if (!cobrancaExistente || cobrancaExistente.id !== cobrancaId) {
+    const { data: recarregada } = await supabase
+      .from("cobrancas")
+      .select("id,neofin_charge_id")
+      .eq("id", cobrancaId)
+      .maybeSingle<CobrancaRow>();
+    cobrancaExistente = recarregada ?? null;
+  }
+
+  let neofinChargeId = cobrancaExistente?.neofin_charge_id ?? null;
+  if (!neofinChargeId || force) {
+    try {
+      const provider = getCobrancaProvider(providerCode);
+      const out = await provider.criarCobranca({
+        pessoaId: Number(fatura.conta.pessoa_titular_id),
+        descricao,
+        valorCentavos: totalEItens.totalCentavos,
+        vencimentoISO: vencimentoEfetivo,
+        referenciaInterna: { tipo: "FATURA_CREDITO_CONEXAO", id: fatura.id },
+      });
+      neofinChargeId = out.providerCobrancaId;
+
+      const { error: updProviderErr } = await supabase
+        .from("cobrancas")
+        .update({
+          neofin_charge_id: out.providerCobrancaId,
+          neofin_payload: out.payload ?? null,
+          link_pagamento: out.linkPagamento ?? null,
+          linha_digitavel: out.linhaDigitavel ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", cobrancaId);
+
+      if (updProviderErr) {
+        return NextResponse.json(
+          { ok: false, error: "erro_salvar_cobranca_provider", detail: updProviderErr.message },
+          { status: 500 },
+        );
+      }
+    } catch (err) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "erro_criar_cobranca_provider",
+          detail: err instanceof Error ? err.message : "erro_provider_desconhecido",
+        },
+        { status: 502 },
+      );
+    }
+  }
+
+  const statusDesejado = fatura.status === "PAGA" ? "PAGA" : "FECHADA";
+  const statusFatura = await updateFaturaComStatusCompativel(
+    supabase,
+    fatura.id,
     {
-      ok: true,
-      fatura_id: fatura.id,
       cobranca_id: cobrancaId,
-      compras_centavos,
-      taxa_centavos,
-      total_centavos,
-      numero_parcelas,
-      regra_id: regra?.id ?? null,
+      data_fechamento: fatura.data_fechamento ?? localTodayIso(),
+      data_vencimento: vencimentoEfetivo,
+      valor_total_centavos: totalEItens.totalCentavos,
+      updated_at: new Date().toISOString(),
     },
-    { status: 200 }
+    statusDesejado,
   );
+
+  if (!statusFatura.ok) {
+    return NextResponse.json(
+      { ok: false, error: "erro_atualizar_fatura", detail: statusFatura.error },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    fatura_id: fatura.id,
+    status_fatura: statusFatura.statusAplicado,
+    cobranca_id: cobrancaId,
+    neofin_charge_id: neofinChargeId,
+    vencimento_iso: vencimentoEfetivo,
+  });
 }
-
-
