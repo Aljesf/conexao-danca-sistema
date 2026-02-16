@@ -312,6 +312,11 @@ export default function FaturaDetalhePage() {
 
       const json = (await res.json().catch(() => null)) as ApiActionResponse | null;
       if (!res.ok || !json?.ok) {
+        if (res.status === 401) {
+          setToast({ tipo: "erro", mensagem: "Sessao expirada. Faca login novamente." });
+          window.location.href = "/login";
+          return;
+        }
         if (process.env.NODE_ENV !== "production") {
           console.error("fechar-fatura erro", { status: res.status, body: json });
         }
@@ -387,6 +392,11 @@ export default function FaturaDetalhePage() {
       const json = (await res.json().catch(() => null)) as ApiActionResponse | null;
 
       if (!res.ok || !json?.ok) {
+        if (res.status === 401) {
+          setToast({ tipo: "erro", mensagem: "Sessao expirada. Faca login novamente." });
+          window.location.href = "/login";
+          return;
+        }
         if (process.env.NODE_ENV !== "production") {
           console.error("gerar-cobranca erro", { status: res.status, body: json });
         }

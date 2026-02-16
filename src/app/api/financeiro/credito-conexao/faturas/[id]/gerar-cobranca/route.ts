@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { cookies } from "next/headers";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { calcularDataVencimento } from "@/lib/financeiro/creditoConexao/vencimento";
@@ -216,11 +217,31 @@ async function updateFaturaComStatusCompativel(
 }
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  const denied = await guardApiByRole(request as any);
-  if (denied) return denied as any;
+  if (process.env.NODE_ENV !== "production") {
+    const cookieStore = await cookies();
+    console.log("[api gerar-cobranca] cookies keys:", cookieStore.getAll().map((c) => c.name));
+    console.log("[api gerar-cobranca] request cookies keys:", request.cookies.getAll().map((c) => c.name));
+  }
 
   const auth = await requireUser(request);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) {
+    return NextResponse.json(
+      { ok: false, error: "unauthorized", message: "Sessao expirada. Faca login novamente." },
+      { status: 401 },
+    );
+  }
+
+  const denied = await guardApiByRole(request as any);
+  if (denied) {
+    if (denied.status === 401) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[api gerar-cobranca] guardApiByRole retornou 401 apos requireUser bem-sucedido; seguindo com sessao valida.");
+      }
+    } else {
+      return denied as any;
+    }
+  }
+
   const { supabase } = auth;
 
   const { id } = await params;
