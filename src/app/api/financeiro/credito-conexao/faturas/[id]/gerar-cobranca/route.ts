@@ -50,6 +50,12 @@ const ORIGEM_TIPO_CANONICA = "FATURA_CREDITO_CONEXAO";
 const ORIGEM_TIPOS_COMPATIVEIS = [ORIGEM_TIPO_CANONICA, "CREDITO_CONEXAO_FATURA"];
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+function dbg(label: string, payload: Record<string, unknown>) {
+  const force = process.env.DEBUG_CREDITO_CONEXAO === "1";
+  if (!force && process.env.NODE_ENV === "production") return;
+  console.log(`[DBG gerar] ${label}`, payload);
+}
+
 function isStatusCheckError(errorMessage: string | null | undefined): boolean {
   const msg = (errorMessage ?? "").toLowerCase();
   return msg.includes("credito_conexao_faturas_status_chk") || msg.includes("check constraint");
@@ -112,6 +118,7 @@ async function calcularTotalEItens(supabase: any, faturaId: number, fallbackValo
   return {
     totalCentavos: total,
     itensDescricao,
+    itensCount: Array.isArray(vinculos) ? vinculos.length : 0,
   };
 }
 
@@ -299,9 +306,25 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     .eq("id", faturaId)
     .maybeSingle<FaturaRow>();
 
+  dbg("select_fatura", {
+    faturaId,
+    hasFatura: Boolean(fatura),
+    err: faturaErr?.message ?? null,
+  });
+
   if (faturaErr || !fatura) {
-    return NextResponse.json({ ok: false, error: "fatura_nao_encontrada" }, { status: 404 });
+    dbg("fatura_not_found", { faturaId, pid: process.pid, err: faturaErr?.message ?? null });
+    return NextResponse.json(
+      { ok: false, error: "not_found", message: "Fatura nao encontrada" },
+      { status: 404 },
+    );
   }
+
+  dbg("select_conta", {
+    contaId: fatura.conta_conexao_id ?? null,
+    hasConta: Boolean(fatura.conta),
+    err: null,
+  });
 
   if (!fatura.conta?.pessoa_titular_id) {
     return NextResponse.json({ ok: false, error: "titular_indefinido" }, { status: 500 });
@@ -390,10 +413,20 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     }
   }
 
-  let totalEItens: { totalCentavos: number; itensDescricao: string[] };
+  let totalEItens: { totalCentavos: number; itensDescricao: string[]; itensCount: number };
   try {
     totalEItens = await calcularTotalEItens(supabaseAdmin, fatura.id, fatura.valor_total_centavos);
+    dbg("select_itens", {
+      faturaId,
+      itensCount: totalEItens.itensCount,
+      err: null,
+    });
   } catch (err) {
+    dbg("select_itens", {
+      faturaId,
+      itensCount: null,
+      err: err instanceof Error ? err.message : "erro_desconhecido",
+    });
     return NextResponse.json(
       { ok: false, error: "erro_buscar_lancamentos_fatura", detail: err instanceof Error ? err.message : null },
       { status: 500 },
