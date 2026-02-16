@@ -366,3 +366,29 @@ UI:
   - `src/app/(private)/admin/governanca/boletos-neofin/page.tsx` atualizado para linguagem "Cobrancas (Provedor)"
   - filtro por provider/status
   - `src/app/api/governanca/boletos-neofin/route.ts` inclui campo `provider` e filtro `provider`
+
+---
+
+## Atualizacao 2026-02-16 (Credito Conexao)
+
+### SQL
+- Migration adicionada: `supabase/migrations/20260216070000_add_dia_vencimento_preferido_credito_conexao_contas.sql`.
+- Objetivo: garantir coluna `credito_conexao_contas.dia_vencimento_preferido` com check `1..28` (aceitando `null`).
+
+### API
+- Endpoints ajustados para evitar erro mascarado de "fatura nao encontrada":
+  - `src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts`
+  - `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`
+- Busca da conta passou a ser separada da busca da fatura; erro de query agora retorna `500` com detalhe.
+- `404` fica restrito a fatura realmente inexistente.
+- `dia_vencimento_preferido` permanece tratado como opcional (`null`) com validacao `1..28` ao salvar preferencia.
+
+### Frontend
+- Ajuste de robustez no ID da rota da fatura:
+  - `src/app/(private)/admin/financeiro/credito-conexao/faturas/[id]/page.tsx`
+- Removeu diagnostico temporario (`/api/health`) dos handlers de fechar/gerar cobranca.
+
+### Validacao
+- `npm run build`: OK.
+- `npm run lint`: falha por erros preexistentes em outros modulos (nao relacionados a este ajuste).
+- Aplicacao da migration nao executada localmente neste ambiente: `supabase` CLI nao instalado (`command not found`).
