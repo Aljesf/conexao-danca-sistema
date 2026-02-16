@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const contaIdParam = searchParams.get("conta_conexao_id");
-    const statusParam = searchParams.get("status"); // ABERTA, PAGA, EM_ATRASO, CANCELADA ou null
+    const statusParam = searchParams.get("status"); // ABERTA, FECHADA, PAGA, EM_ATRASO, CANCELADA ou null
     const periodoParam = searchParams.get("periodo_referencia"); // YYYY-MM
 
     let query = supabase

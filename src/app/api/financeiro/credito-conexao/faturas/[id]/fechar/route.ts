@@ -501,7 +501,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     fatura.id,
     {
       cobranca_id: cobrancaId,
-      data_fechamento: fatura.data_fechamento ?? localTodayIso(),
+      data_fechamento: localTodayIso(),
       data_vencimento: vencimentoEfetivo,
       valor_total_centavos: totalEItens.totalCentavos,
       updated_at: new Date().toISOString(),

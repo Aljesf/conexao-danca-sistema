@@ -399,3 +399,36 @@ UI:
 
 ### Paginas / componentes concluidos
 - Dropdown de Contexto (topo): alinhado ao padrao do Sidebar com emojis e config centralizada em `src/config/contextosConfig.ts`.
+
+---
+
+## Atualizacao 2026-02-16 (Fechamento mensal configuravel de faturas)
+
+### SQL
+- Nova migration: `supabase/migrations/20260216190000_financeiro_config_fechamento_faturas.sql`.
+- Nova tabela singleton `public.financeiro_config` com:
+  - `id=1` como registro canonico.
+  - `dia_fechamento_faturas` (1..28), default `1`.
+  - trigger de `updated_at` com `public.set_updated_at()`.
+- Compatibilidade de status em faturas:
+  - check `credito_conexao_faturas_status_chk` atualizado para aceitar `FECHADA`.
+
+### API
+- Nova rota `GET|POST /api/financeiro/config`:
+  - GET retorna `dia_fechamento_faturas`.
+  - POST salva `dia_fechamento_faturas` validando `1..28`.
+- Nova rota `POST /api/financeiro/credito-conexao/faturas/fechamento-automatico`:
+  - le configuracao de fechamento mensal em `financeiro_config`.
+  - respeita o dia configurado (ou `force=true`).
+  - retorna lote elegivel de faturas `ABERTA` (ALUNO, competencia anterior ao periodo atual) em `dry_run`.
+- Ajuste nas rotas unitarias de fatura:
+  - `/api/financeiro/credito-conexao/faturas/[id]/fechar`
+  - `/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca`
+  - ambas agora gravam `data_fechamento` no dia efetivo da operacao.
+
+### UI
+- Nova pagina: `/admin/financeiro/configuracoes`
+  - campo de configuracao para `dia_fechamento_faturas`.
+  - leitura/salvamento via `/api/financeiro/config`.
+- Sidebar Admin atualizado com item:
+  - `Configuracoes do financeiro` em `src/config/sidebar/admin.ts`.
