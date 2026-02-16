@@ -6,6 +6,7 @@ import { calcularDataVencimento } from "@/lib/financeiro/creditoConexao/vencimen
 import { getCobrancaProvider } from "@/lib/financeiro/cobranca/providers";
 import type { CobrancaProviderCode } from "@/lib/financeiro/cobranca/providers/types";
 import { buildDescricaoCobranca } from "@/lib/financeiro/cobranca/descricao";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -245,17 +246,18 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     }
   }
 
-  const { supabase } = auth;
+  const supabaseUser = auth.supabase;
   const {
     data: { user },
     error: userErr,
-  } = await supabase.auth.getUser();
+  } = await supabaseUser.auth.getUser();
   if (userErr || !user) {
     return NextResponse.json(
       { ok: false, error: "unauthorized", message: "Sessao expirada. Faca login novamente." },
       { status: 401 },
     );
   }
+  const supabaseAdmin = createAdminClient();
 
   const faturaId = Number(id);
   if (!faturaId || Number.isNaN(faturaId)) {
@@ -274,7 +276,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     );
   }
 
-  const { data: fatura, error: faturaErr } = await supabase
+  const { data: fatura, error: faturaErr } = await supabaseAdmin
     .from("credito_conexao_faturas")
     .select(
       `
@@ -317,7 +319,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ ok: false, error: "periodo_referencia_invalido" }, { status: 400 });
   }
 
-  const { data: cfgGlobal } = await supabase
+  const { data: cfgGlobal } = await supabaseAdmin
     .from("financeiro_config_cobranca")
     .select("provider_ativo,dias_permitidos_vencimento")
     .is("unidade_id", null)
@@ -375,7 +377,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       );
     }
 
-    const { error: prefErr } = await supabase
+    const { error: prefErr } = await supabaseAdmin
       .from("credito_conexao_contas")
       .update({ dia_vencimento_preferido: diaPreferencia })
       .eq("id", fatura.conta_conexao_id);
@@ -390,7 +392,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
 
   let totalEItens: { totalCentavos: number; itensDescricao: string[] };
   try {
-    totalEItens = await calcularTotalEItens(supabase, fatura.id, fatura.valor_total_centavos);
+    totalEItens = await calcularTotalEItens(supabaseAdmin, fatura.id, fatura.valor_total_centavos);
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: "erro_buscar_lancamentos_fatura", detail: err instanceof Error ? err.message : null },
@@ -410,11 +412,11 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
   });
 
   const providerCode = (cfgGlobal?.provider_ativo ?? "NEOFIN") as CobrancaProviderCode;
-  const cobrancaExistente = await resolveCobrancaExistente(supabase, fatura);
+  const cobrancaExistente = await resolveCobrancaExistente(supabaseAdmin, fatura);
 
   if (cobrancaExistente?.neofin_charge_id && !force) {
     const statusFatura = await updateFaturaComStatusCompativel(
-      supabase,
+      supabaseAdmin,
       fatura.id,
       {
         cobranca_id: cobrancaExistente.id,
@@ -433,7 +435,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       );
     }
 
-    await supabase
+    await supabaseAdmin
       .from("cobrancas")
       .update({
         descricao,
@@ -456,7 +458,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
 
   let cobrancaId: number;
   try {
-    cobrancaId = await upsertCobrancaLocal(supabase, {
+    cobrancaId = await upsertCobrancaLocal(supabaseAdmin, {
       cobrancaExistente,
       pessoaId: Number(fatura.conta.pessoa_titular_id),
       descricao,
@@ -483,7 +485,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     });
     neofinChargeId = out.providerCobrancaId;
 
-    const { error: updProviderErr } = await supabase
+    const { error: updProviderErr } = await supabaseAdmin
       .from("cobrancas")
       .update({
         neofin_charge_id: out.providerCobrancaId,
@@ -512,7 +514,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
   }
 
   const statusFatura = await updateFaturaComStatusCompativel(
-    supabase,
+    supabaseAdmin,
     fatura.id,
     {
       cobranca_id: cobrancaId,
