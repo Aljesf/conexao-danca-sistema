@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 
 type Pessoa = {
@@ -41,7 +41,7 @@ export default function GovernancaCobrancaDetalhePage() {
   const [item, setItem] = useState<Cobranca | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/cobrancas", { method: "GET" });
@@ -55,11 +55,11 @@ export default function GovernancaCobrancaDetalhePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     if (Number.isFinite(id) && id > 0) void carregar();
-  }, [id]);
+  }, [id, carregar]);
 
   const titulo = useMemo(() => {
     if (!item) return `CobranÃ§a #${Number.isFinite(id) ? id : "-"}`;
