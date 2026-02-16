@@ -5,12 +5,25 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 type ProdutoUpdate = {
   nome?: string;
   categoria?: string;
+  categoria_id?: number | null;
+  subcategoria_id?: number | null;
   unidade_venda?: string;
   preco_venda_centavos?: number;
   preparado?: boolean;
   insumo_direto_id?: number | null;
   ativo?: boolean;
 };
+
+function asIntOrNull(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const n = Math.trunc(value);
+  return n > 0 ? n : null;
+}
+
+function isMissingCafeCategoriaColumnError(message: string | null | undefined): boolean {
+  const msg = (message ?? "").toLowerCase();
+  return (msg.includes("categoria_id") || msg.includes("subcategoria_id")) && msg.includes("column");
+}
 
 export async function GET(req: Request, ctx: { params: { id: string } }) {
   const denied = await guardApiByRole(req);
@@ -66,17 +79,91 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
     payload.insumo_direto_id = insumoDiretoId;
   }
 
+  const supabase = getSupabaseServiceClient();
+
+  const categoriaId = body.categoria_id === null ? null : asIntOrNull(body.categoria_id);
+  if (body.categoria_id !== undefined) {
+    if (body.categoria_id !== null && !categoriaId) {
+      return NextResponse.json({ error: "categoria_id_invalido" }, { status: 400 });
+    }
+    if (categoriaId) {
+      const { data: categoria, error: catErr } = await supabase
+        .from("cafe_categorias")
+        .select("id,nome")
+        .eq("id", categoriaId)
+        .maybeSingle();
+
+      if (catErr) {
+        return NextResponse.json({ error: "erro_validar_categoria", detail: catErr.message }, { status: 500 });
+      }
+      if (!categoria) {
+        return NextResponse.json({ error: "categoria_id_invalido" }, { status: 400 });
+      }
+
+      payload.categoria_id = categoriaId;
+      payload.categoria = String((categoria as { nome?: string | null }).nome ?? "GERAL");
+    } else {
+      payload.categoria_id = null;
+    }
+  }
+
+  const subcategoriaId = body.subcategoria_id === null ? null : asIntOrNull(body.subcategoria_id);
+  if (body.subcategoria_id !== undefined) {
+    if (body.subcategoria_id !== null && !subcategoriaId) {
+      return NextResponse.json({ error: "subcategoria_id_invalido" }, { status: 400 });
+    }
+
+    if (subcategoriaId) {
+      const { data: sub, error: subErr } = await supabase
+        .from("cafe_subcategorias")
+        .select("id,categoria_id")
+        .eq("id", subcategoriaId)
+        .maybeSingle();
+
+      if (subErr) {
+        return NextResponse.json({ error: "erro_validar_subcategoria", detail: subErr.message }, { status: 500 });
+      }
+      if (!sub) {
+        return NextResponse.json({ error: "subcategoria_id_invalido" }, { status: 400 });
+      }
+
+      const categoriaIdEfetiva = (payload.categoria_id as number | null | undefined) ?? categoriaId;
+      if (
+        categoriaIdEfetiva &&
+        Number((sub as { categoria_id?: number | null }).categoria_id) !== categoriaIdEfetiva
+      ) {
+        return NextResponse.json({ error: "subcategoria_nao_pertence_categoria" }, { status: 400 });
+      }
+
+      payload.subcategoria_id = subcategoriaId;
+    } else {
+      payload.subcategoria_id = null;
+    }
+  }
+
   if (Object.keys(payload).length === 0) {
     return NextResponse.json({ error: "nada_para_atualizar" }, { status: 400 });
   }
 
-  const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("cafe_produtos")
     .update(payload)
     .eq("id", produtoId)
     .select("*")
     .maybeSingle();
+
+  if (error && isMissingCafeCategoriaColumnError(error.message)) {
+    delete payload.categoria_id;
+    delete payload.subcategoria_id;
+    const fallback = await supabase
+      .from("cafe_produtos")
+      .update(payload)
+      .eq("id", produtoId)
+      .select("*")
+      .maybeSingle();
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: "produto_nao_encontrado" }, { status: 404 });

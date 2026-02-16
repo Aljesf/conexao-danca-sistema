@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import PessoaLookup, { PessoaLookupItem } from "@/components/PessoaLookup";
 import { useRouter } from "next/navigation";
+import { useCafeCategorias } from "@/lib/cafe/useCafeCategorias";
 
 type PessoaResumo = {
   id: number;
@@ -20,6 +21,10 @@ type ProdutoResumo = {
   nome: string;
   codigo?: string | null;
   preco_venda_centavos: number;
+  categoria?: string | null;
+  categoria_id?: number | null;
+  subcategoria_id?: number | null;
+  unidade_venda?: string | null;
 };
 
 type TabelaPreco = {
@@ -96,7 +101,35 @@ type CentroCustoResumo = {
   contextos_aplicaveis?: string[] | null;
 };
 
-type ApiResponse<T = any> = { ok?: boolean; error?: string; data?: T };
+type ApiResponse<T = unknown> = { ok?: boolean; error?: string; data?: T };
+
+type ApiPagination = {
+  page?: number;
+  pageSize?: number;
+  total?: number;
+};
+
+type VendaCreateResponse = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  details?: {
+    code?: string;
+    message?: string;
+  };
+  redirect_url?: string | null;
+  venda?: {
+    id?: number | null;
+  } | null;
+  data?: {
+    venda?: {
+      id?: number | null;
+    } | null;
+    id?: number | null;
+    venda_id?: number | null;
+    redirect_url?: string | null;
+  } | null;
+};
 
 type RegraParcelamento = {
   id: number;
@@ -153,6 +186,7 @@ function isFormaPagamentoCartaoConexao(f: FormaPagamentoContexto): boolean {
 
 export default function FrenteCaixaCafePage() {
   const router = useRouter();
+  const { categorias, loading: catsLoading } = useCafeCategorias();
 
   const [comprador, setComprador] = useState<PessoaResumo | null>(null);
   const [itens, setItens] = useState<ItemCaixa[]>([]);
@@ -215,8 +249,10 @@ export default function FrenteCaixaCafePage() {
 
   // busca produtos
   const [buscaProduto, setBuscaProduto] = useState("");
-  const [resultadoProduto, setResultadoProduto] = useState<ProdutoResumo[]>([]);
-  const [buscandoProduto, setBuscandoProduto] = useState(false);
+  const [catalogoProdutos, setCatalogoProdutos] = useState<ProdutoResumo[]>([]);
+  const [carregandoCatalogoProdutos, setCarregandoCatalogoProdutos] = useState(false);
+  const [categoriaId, setCategoriaId] = useState<number | null>(null);
+  const [subcategoriaId, setSubcategoriaId] = useState<number | null>(null);
 
   // helpers
   function formatCurrency(cents: number) {
@@ -316,9 +352,11 @@ export default function FrenteCaixaCafePage() {
         const ativas = (lista as TabelaPreco[]).filter((t) => t?.ativo ?? true);
         if (!cancelado) {
           setTabelasPreco(ativas);
-          if (!tabelaPrecoId && ativas.length > 0) {
+          if (ativas.length > 0) {
             const def = ativas.find((t) => t.is_default) ?? ativas[0];
-            setTabelaPrecoId(def.id);
+            setTabelaPrecoId((atual) =>
+              atual === "" || !ativas.some((t) => t.id === atual) ? def.id : atual,
+            );
           }
         }
       } catch (e) {
@@ -355,7 +393,7 @@ export default function FrenteCaixaCafePage() {
         }
         const data = (await resp.json()) as { items?: PessoaResumo[] };
         setResultadoComprador(Array.isArray(data.items) ? data.items : []);
-      } catch (e) {
+      } catch {
         if (!controller.signal.aborted) {
           setResultadoComprador([]);
         }
@@ -367,45 +405,101 @@ export default function FrenteCaixaCafePage() {
     return () => controller.abort();
   }, [buscaComprador]);
 
-  // busca produtos
+  // catalogo de produtos para navegação rápida no PDV
   useEffect(() => {
-    const term = buscaProduto.trim();
-    if (term.length < 2) {
-      setResultadoProduto([]);
-      return;
-    }
     const tabelaParam =
       tabelaPrecoId && typeof tabelaPrecoId === "number"
         ? `&tabela_preco_id=${tabelaPrecoId}`
         : "";
     const controller = new AbortController();
+
     async function run() {
-      setBuscandoProduto(true);
+      setCarregandoCatalogoProdutos(true);
       try {
-        const resp = await fetch(
-          `/api/cafe/produtos?search=${encodeURIComponent(term)}&pageSize=20${tabelaParam}`,
-          { signal: controller.signal },
-        );
-        if (!resp.ok) {
-          setResultadoProduto([]);
+        const response = await fetch(`/api/cafe/produtos?page=1&pageSize=200${tabelaParam}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          setCatalogoProdutos([]);
           return;
         }
-        const data = (await resp.json()) as ApiResponse<{
+        const payload = (await response.json()) as ApiResponse<{
           items: ProdutoResumo[];
-          pagination: any;
+          pagination: ApiPagination;
         }>;
-        if (data.ok && data.data?.items) setResultadoProduto(data.data.items);
-      } catch (e) {
+        if (payload.ok && Array.isArray(payload.data?.items)) {
+          setCatalogoProdutos(payload.data.items);
+        } else {
+          setCatalogoProdutos([]);
+        }
+      } catch {
         if (!controller.signal.aborted) {
-          setResultadoProduto([]);
+          setCatalogoProdutos([]);
         }
       } finally {
-        setBuscandoProduto(false);
+        if (!controller.signal.aborted) {
+          setCarregandoCatalogoProdutos(false);
+        }
       }
     }
-    run();
+
+    void run();
     return () => controller.abort();
-  }, [buscaProduto, tabelaPrecoId]);
+  }, [tabelaPrecoId]);
+
+  useEffect(() => {
+    if (categoriaId !== null || categorias.length === 0) return;
+    setCategoriaId(categorias[0]!.id);
+    setSubcategoriaId(null);
+  }, [categorias, categoriaId]);
+
+  const subcategoriasSelecionadas = useMemo(() => {
+    if (categoriaId === null) return [];
+    const categoria = categorias.find((item) => item.id === categoriaId);
+    return categoria?.subcategorias ?? [];
+  }, [categorias, categoriaId]);
+
+  const produtosFiltrados = useMemo(() => {
+    const term = buscaProduto.trim().toLowerCase();
+    const categoriaSelecionada = categorias.find((item) => item.id === categoriaId) ?? null;
+    const categoriaSlugSelecionada = categoriaSelecionada?.slug ?? null;
+    const categoriaNomeSelecionada = categoriaSelecionada?.nome.toLowerCase() ?? null;
+
+    return catalogoProdutos.filter((produto) => {
+      if (categoriaId !== null) {
+        if (typeof produto.categoria_id === "number") {
+          if (produto.categoria_id !== categoriaId) return false;
+        } else if (categoriaSlugSelecionada || categoriaNomeSelecionada) {
+          const categoriaLegacy = String(produto.categoria ?? "")
+            .trim()
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/\s+/g, "-");
+
+          if (
+            categoriaSlugSelecionada &&
+            categoriaLegacy !== categoriaSlugSelecionada &&
+            categoriaLegacy !== categoriaNomeSelecionada
+          ) {
+            return false;
+          }
+        }
+      }
+
+      if (subcategoriaId !== null) {
+        if (typeof produto.subcategoria_id !== "number" || produto.subcategoria_id !== subcategoriaId) {
+          return false;
+        }
+      }
+
+      if (!term) return true;
+
+      const nome = (produto.nome ?? "").toLowerCase();
+      const codigo = String(produto.codigo ?? "").toLowerCase();
+      return nome.includes(term) || codigo.includes(term);
+    });
+  }, [buscaProduto, catalogoProdutos, categorias, categoriaId, subcategoriaId]);
 
   const totalVenda = useMemo(
     () => itens.reduce((sum, i) => sum + i.quantidade * i.precoUnitarioCentavos, 0),
@@ -710,12 +804,20 @@ export default function FrenteCaixaCafePage() {
           `/api/financeiro/credito-conexao/contas?tipo_conta=${tipoContaConexao}`,
           { credentials: "include" },
         );
-        const json = await resp.json();
+        const json = (await resp.json()) as { contas?: unknown[] };
         if (cancelado) return;
 
-        const contas: ContaConexao[] = (json.contas ?? []).filter(
-          (c: any) => c?.pessoa_titular_id === comprador.id && (c?.ativo ?? true),
-        );
+        const contasRaw = Array.isArray(json.contas) ? json.contas : [];
+        const contas: ContaConexao[] = contasRaw
+          .filter(
+            (row): row is ContaConexao =>
+              typeof row === "object" &&
+              row !== null &&
+              "id" in row &&
+              "pessoa_titular_id" in row &&
+              "tipo_conta" in row,
+          )
+          .filter((conta) => conta.pessoa_titular_id === comprador.id && (conta.ativo ?? true));
         setContasConexao(contas);
 
         if (contas.length === 1) {
@@ -994,9 +1096,9 @@ export default function FrenteCaixaCafePage() {
       });
 
       const rawText = await res.text();
-      let json: any = {};
+      let json: VendaCreateResponse = {};
       try {
-        json = rawText ? JSON.parse(rawText) : {};
+        json = rawText ? (JSON.parse(rawText) as VendaCreateResponse) : {};
       } catch {
         json = {};
       }
@@ -1149,32 +1251,101 @@ export default function FrenteCaixaCafePage() {
                 value={buscaProduto}
                 onChange={(e) => setBuscaProduto(e.target.value)}
                 className="border rounded-md px-3 py-1.5 text-sm"
-                placeholder="Buscar produto (2+ caracteres)"
+                placeholder="Buscar produto"
               />
               <span className="text-xs text-gray-500">
                 Clique no produto para adicionar
               </span>
             </div>
           </div>
-          {buscandoProduto && (
-            <p className="text-[11px] text-gray-500">Buscando produtos...</p>
-          )}
-          <div className="grid md:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-                {resultadoProduto.map((p) => (
+
+          <div className="rounded-xl border bg-slate-50 p-2">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-xs font-medium text-slate-700">Categorias</div>
+              {(catsLoading || carregandoCatalogoProdutos) && (
+                <div className="text-[11px] text-slate-500">Carregando...</div>
+              )}
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {categorias.map((categoria) => {
+                const active = categoria.id === categoriaId;
+                return (
                   <button
-                    key={p.id}
+                    key={categoria.id}
                     type="button"
-                    onClick={() => adicionarProdutoAoCarrinho(p)}
-                    className="border rounded-md px-3 py-2 text-left text-sm hover:bg-gray-50"
+                    onClick={() => {
+                      setCategoriaId(categoria.id);
+                      setSubcategoriaId(null);
+                    }}
+                    className={[
+                      "whitespace-nowrap rounded-full border px-3 py-1.5 text-xs",
+                      active ? "bg-slate-900 text-white" : "bg-white text-slate-700 hover:bg-slate-100",
+                    ].join(" ")}
                   >
-                <p className="font-semibold text-gray-800">{p.nome}</p>
+                    {categoria.nome}
+                  </button>
+                );
+              })}
+            </div>
+
+            {subcategoriasSelecionadas.length > 0 && (
+              <div className="mt-1 flex gap-2 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setSubcategoriaId(null)}
+                  className={[
+                    "whitespace-nowrap rounded-full border px-3 py-1 text-[11px]",
+                    subcategoriaId === null
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-700 hover:bg-slate-100",
+                  ].join(" ")}
+                >
+                  Todas
+                </button>
+                {subcategoriasSelecionadas.map((subcategoria) => (
+                  <button
+                    key={subcategoria.id}
+                    type="button"
+                    onClick={() => setSubcategoriaId(subcategoria.id)}
+                    className={[
+                      "whitespace-nowrap rounded-full border px-3 py-1 text-[11px]",
+                      subcategoriaId === subcategoria.id
+                        ? "bg-slate-900 text-white"
+                        : "bg-white text-slate-700 hover:bg-slate-100",
+                    ].join(" ")}
+                  >
+                    {subcategoria.nome}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {produtosFiltrados.map((produto) => (
+              <button
+                key={produto.id}
+                type="button"
+                onClick={() => adicionarProdutoAoCarrinho(produto)}
+                className="rounded-xl border bg-white px-3 py-2 text-left text-sm shadow-sm hover:bg-gray-50 active:scale-[0.99]"
+              >
+                <p className="font-semibold text-gray-800">{produto.nome}</p>
                 <p className="text-xs text-gray-500">
-                  {p.codigo ? `(${p.codigo}) ` : ""}
-                  {formatCurrency(p.preco_venda_centavos)}
+                  {produto.codigo ? `(${produto.codigo}) ` : ""}
+                  {produto.unidade_venda ?? "un"}
+                </p>
+                <p className="mt-1 text-sm font-bold text-slate-900">
+                  {formatCurrency(produto.preco_venda_centavos)}
                 </p>
               </button>
             ))}
           </div>
+          {produtosFiltrados.length === 0 && !carregandoCatalogoProdutos && (
+            <div className="rounded-lg border border-dashed p-3 text-center text-xs text-slate-500">
+              Nenhum produto encontrado para este filtro.
+            </div>
+          )}
 
           <div className="overflow-x-auto border rounded-lg">
             <table className="min-w-full text-sm">
@@ -1699,7 +1870,26 @@ function CadastroPessoaRapidaModal({
     setErro(null);
     setSalvando(true);
     try {
-      const payload: any = {
+      const payload: {
+        tipo_pessoa: "FISICA" | "JURIDICA";
+        nome: string;
+        cpf: string;
+        cnpj: string;
+        razao_social: string;
+        nome_fantasia: string;
+        telefone: string;
+        email: string;
+        endereco: {
+          logradouro: string;
+          numero: string;
+          complemento: string;
+          bairro: string;
+          cidade: string;
+          uf: string;
+          cep: string;
+          referencia: string;
+        };
+      } = {
         tipo_pessoa: tipoPessoa,
         nome: nome || razaoSocial || nomeFantasia,
         cpf,
@@ -1736,7 +1926,7 @@ function CadastroPessoaRapidaModal({
       } else {
         setErro("Cadastro retornou resposta inesperada.");
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErro("Erro inesperado ao cadastrar pessoa.");
       console.error(e);
     } finally {

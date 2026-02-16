@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/layout/PageHeader";
 import SectionCard from "@/components/layout/SectionCard";
+import { useCafeCategorias } from "@/lib/cafe/useCafeCategorias";
 
 type Insumo = {
   id: number;
@@ -14,6 +15,10 @@ type Produto = {
   id: number;
   nome: string;
   categoria: string;
+  categoria_id: number | null;
+  subcategoria_id: number | null;
+  categoria_nome?: string | null;
+  subcategoria_nome?: string | null;
   unidade_venda: string;
   preco_venda_centavos: number;
   preparado: boolean;
@@ -61,6 +66,7 @@ function parseBRLToCentavos(input: string): number {
 }
 
 export default function CafeProdutosPage() {
+  const { categorias, loading: categoriasLoading, error: categoriasError } = useCafeCategorias();
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,16 +75,33 @@ export default function CafeProdutosPage() {
 
   const [novoNome, setNovoNome] = useState("");
   const [novoPrecoBRL, setNovoPrecoBRL] = useState<string>("0,00");
-  const [novoCategoria, setNovoCategoria] = useState("");
+  const [novaCategoriaId, setNovaCategoriaId] = useState<number | "">("");
+  const [novaSubcategoriaId, setNovaSubcategoriaId] = useState<number | "">("");
   const [novoUnidadeVenda, setNovoUnidadeVenda] = useState("un");
   const [novoPreparado, setNovoPreparado] = useState(true);
   const [novoInsumoDiretoId, setNovoInsumoDiretoId] = useState<string>("");
+
+  const [editCategoriaId, setEditCategoriaId] = useState<number | "">("");
+  const [editSubcategoriaId, setEditSubcategoriaId] = useState<number | "">("");
+  const [salvandoClassificacao, setSalvandoClassificacao] = useState(false);
 
   const [selectedProdutoId, setSelectedProdutoId] = useState<number | null>(null);
   const selectedProduto = useMemo(() => {
     if (!Array.isArray(produtos)) return null;
     return produtos.find((p) => p.id === selectedProdutoId) ?? null;
   }, [produtos, selectedProdutoId]);
+
+  const novaSubcategorias = useMemo(() => {
+    if (!novaCategoriaId) return [];
+    const categoria = categorias.find((c) => c.id === Number(novaCategoriaId));
+    return categoria?.subcategorias ?? [];
+  }, [categorias, novaCategoriaId]);
+
+  const editSubcategorias = useMemo(() => {
+    if (!editCategoriaId) return [];
+    const categoria = categorias.find((c) => c.id === Number(editCategoriaId));
+    return categoria?.subcategorias ?? [];
+  }, [categorias, editCategoriaId]);
 
   const [receitaItens, setReceitaItens] = useState<ReceitaItem[]>([]);
   const [receitaLoading, setReceitaLoading] = useState(false);
@@ -132,7 +155,7 @@ export default function CafeProdutosPage() {
     }
   }
 
-  async function loadPrecos(produtoId: number) {
+  const loadPrecos = useCallback(async (produtoId: number) => {
     setPrecosLoading(true);
     setPrecosError(null);
     try {
@@ -164,7 +187,7 @@ export default function CafeProdutosPage() {
     } finally {
       setPrecosLoading(false);
     }
-  }
+  }, [selectedProduto?.preco_venda_centavos, tabelasPreco]);
 
   async function loadReceita(produtoId: number) {
     setReceitaLoading(true);
@@ -194,7 +217,39 @@ export default function CafeProdutosPage() {
     if (selectedProdutoId && tabelasPreco.length > 0) {
       void loadPrecos(selectedProdutoId);
     }
-  }, [selectedProdutoId, tabelasPreco]);
+  }, [selectedProdutoId, tabelasPreco, loadPrecos]);
+
+  useEffect(() => {
+    if (!selectedProduto) {
+      setEditCategoriaId("");
+      setEditSubcategoriaId("");
+      return;
+    }
+    setEditCategoriaId(selectedProduto.categoria_id ?? "");
+    setEditSubcategoriaId(selectedProduto.subcategoria_id ?? "");
+  }, [selectedProduto]);
+
+  useEffect(() => {
+    if (!novaCategoriaId) {
+      setNovaSubcategoriaId("");
+      return;
+    }
+    const subcatValida = novaSubcategorias.some((s) => s.id === Number(novaSubcategoriaId));
+    if (!subcatValida) {
+      setNovaSubcategoriaId("");
+    }
+  }, [novaCategoriaId, novaSubcategoriaId, novaSubcategorias]);
+
+  useEffect(() => {
+    if (!editCategoriaId) {
+      setEditSubcategoriaId("");
+      return;
+    }
+    const subcatValida = editSubcategorias.some((s) => s.id === Number(editSubcategoriaId));
+    if (!subcatValida) {
+      setEditSubcategoriaId("");
+    }
+  }, [editCategoriaId, editSubcategoriaId, editSubcategorias]);
 
 
   async function criarProduto() {
@@ -202,6 +257,10 @@ export default function CafeProdutosPage() {
     setMessage(null);
     if (!novoNome.trim()) {
       setError("Nome obrigatorio.");
+      return;
+    }
+    if (!novaCategoriaId) {
+      setError("Categoria obrigatoria.");
       return;
     }
     const precoCentavos = parseBRLToCentavos(novoPrecoBRL);
@@ -216,12 +275,20 @@ export default function CafeProdutosPage() {
       return;
     }
 
+    const categoria = categorias.find((c) => c.id === Number(novaCategoriaId));
+    if (!categoria) {
+      setError("Categoria invalida.");
+      return;
+    }
+
     const res = await fetch("/api/cafe/produtos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nome: novoNome,
-        categoria: novoCategoria,
+        categoria: categoria.nome,
+        categoria_id: Number(novaCategoriaId),
+        subcategoria_id: novaSubcategoriaId ? Number(novaSubcategoriaId) : null,
         unidade_venda: novoUnidadeVenda,
         preco_venda_centavos: precoCentavos,
         preparado: novoPreparado,
@@ -237,7 +304,8 @@ export default function CafeProdutosPage() {
 
     setNovoNome("");
     setNovoPrecoBRL("0,00");
-    setNovoCategoria("");
+    setNovaCategoriaId("");
+    setNovaSubcategoriaId("");
     setNovoUnidadeVenda("un");
     setNovoPreparado(true);
     setNovoInsumoDiretoId("");
@@ -325,6 +393,50 @@ export default function CafeProdutosPage() {
     }
   }
 
+  async function salvarClassificacaoProduto() {
+    if (!selectedProduto) return;
+
+    if (!editCategoriaId) {
+      setError("Categoria obrigatoria para atualizar o produto.");
+      return;
+    }
+
+    const categoria = categorias.find((c) => c.id === Number(editCategoriaId));
+    if (!categoria) {
+      setError("Categoria invalida.");
+      return;
+    }
+
+    setSalvandoClassificacao(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const res = await fetch(`/api/cafe/produtos/${selectedProduto.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categoria: categoria.nome,
+          categoria_id: Number(editCategoriaId),
+          subcategoria_id: editSubcategoriaId ? Number(editSubcategoriaId) : null,
+        }),
+      });
+
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Falha ao atualizar categoria do produto.");
+        return;
+      }
+
+      setMessage("Classificacao do produto atualizada.");
+      await loadProdutos();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar classificacao.");
+    } finally {
+      setSalvandoClassificacao(false);
+    }
+  }
+
   const insumoOptions = useMemo(() => insumos, [insumos]);
   const tabelaDefault = tabelasPreco.find((t) => t.ativo && t.is_default) ?? null;
   const precoFallback = selectedProduto
@@ -343,6 +455,7 @@ export default function CafeProdutosPage() {
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {message ? <div className="text-sm text-emerald-700">{message}</div> : null}
+      {categoriasError ? <div className="text-sm text-amber-700">Categorias: {categoriasError}</div> : null}
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
         <div className="space-y-6">
@@ -367,12 +480,35 @@ export default function CafeProdutosPage() {
               </div>
               <div>
                 <label className="text-sm font-medium">Categoria</label>
-                <input
+                <select
                   className="mt-1 w-full rounded-md border p-2"
-                  value={novoCategoria}
-                  onChange={(e) => setNovoCategoria(e.target.value)}
-                  placeholder="GERAL"
-                />
+                  value={novaCategoriaId}
+                  onChange={(e) => setNovaCategoriaId(e.target.value ? Number(e.target.value) : "")}
+                  disabled={categoriasLoading}
+                >
+                  <option value="">Selecione...</option>
+                  {categorias.map((categoria) => (
+                    <option key={categoria.id} value={categoria.id}>
+                      {categoria.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Subcategoria (opcional)</label>
+                <select
+                  className="mt-1 w-full rounded-md border p-2"
+                  value={novaSubcategoriaId}
+                  onChange={(e) => setNovaSubcategoriaId(e.target.value ? Number(e.target.value) : "")}
+                  disabled={!novaCategoriaId}
+                >
+                  <option value="">--</option>
+                  {novaSubcategorias.map((subcategoria) => (
+                    <option key={subcategoria.id} value={subcategoria.id}>
+                      {subcategoria.nome}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-sm font-medium">Unidade venda</label>
@@ -432,6 +568,7 @@ export default function CafeProdutosPage() {
                   <tr>
                     <th className="px-2 py-2 text-left">Nome</th>
                     <th className="px-2 py-2 text-left">Categoria</th>
+                    <th className="px-2 py-2 text-left">Subcategoria</th>
                     <th className="px-2 py-2 text-right">Preco fallback</th>
                   </tr>
                 </thead>
@@ -445,7 +582,8 @@ export default function CafeProdutosPage() {
                       onClick={() => setSelectedProdutoId(p.id)}
                     >
                       <td className="px-2 py-2">{p.nome}</td>
-                      <td className="px-2 py-2">{p.categoria}</td>
+                      <td className="px-2 py-2">{p.categoria_nome ?? p.categoria}</td>
+                      <td className="px-2 py-2">{p.subcategoria_nome ?? "-"}</td>
                       <td className="px-2 py-2 text-right">{formatBRLFromCentavos(p.preco_venda_centavos)}</td>
                     </tr>
                   ))}
@@ -458,6 +596,53 @@ export default function CafeProdutosPage() {
 
         {selectedProduto ? (
           <div className="space-y-6">
+            <SectionCard title="Categoria do produto">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">Categoria</label>
+                  <select
+                    className="mt-1 w-full rounded-md border p-2"
+                    value={editCategoriaId}
+                    onChange={(e) => setEditCategoriaId(e.target.value ? Number(e.target.value) : "")}
+                    disabled={salvandoClassificacao || categoriasLoading}
+                  >
+                    <option value="">Selecione...</option>
+                    {categorias.map((categoria) => (
+                      <option key={categoria.id} value={categoria.id}>
+                        {categoria.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Subcategoria (opcional)</label>
+                  <select
+                    className="mt-1 w-full rounded-md border p-2"
+                    value={editSubcategoriaId}
+                    onChange={(e) => setEditSubcategoriaId(e.target.value ? Number(e.target.value) : "")}
+                    disabled={salvandoClassificacao || !editCategoriaId}
+                  >
+                    <option value="">--</option>
+                    {editSubcategorias.map((subcategoria) => (
+                      <option key={subcategoria.id} value={subcategoria.id}>
+                        {subcategoria.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <button
+                  className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-60"
+                  onClick={() => void salvarClassificacaoProduto()}
+                  disabled={salvandoClassificacao}
+                >
+                  {salvandoClassificacao ? "Salvando..." : "Salvar categoria/subcategoria"}
+                </button>
+              </div>
+            </SectionCard>
+
             <SectionCard title="Precos por tabela">
               {precosError ? <p className="text-sm text-red-600">{precosError}</p> : null}
               {precosMessage ? <p className="text-sm text-emerald-700">{precosMessage}</p> : null}

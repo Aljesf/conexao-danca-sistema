@@ -432,3 +432,49 @@ UI:
   - leitura/salvamento via `/api/financeiro/config`.
 - Sidebar Admin atualizado com item:
   - `Configuracoes do financeiro` em `src/config/sidebar/admin.ts`.
+
+---
+
+## Atualizacao 2026-02-16 (Cafe - Categorias, Subcategorias e PDV por botoes)
+
+### SQL
+- Nova migration: `supabase/migrations/20260216203000_cafe_categorias_subcategorias.sql`.
+- Criadas as tabelas:
+  - `public.cafe_categorias`
+  - `public.cafe_subcategorias`
+- Ajustes em `public.cafe_produtos`:
+  - `categoria_id` (FK para `cafe_categorias`)
+  - `subcategoria_id` (FK para `cafe_subcategorias`)
+- Compatibilidade mantida com o campo legado textual `categoria`.
+- Backfill inicial executavel via migration:
+  - cria categorias a partir de `cafe_produtos.categoria`
+  - preenche `cafe_produtos.categoria_id` quando vazio.
+
+### APIs
+- Novas rotas de categorias do Cafe:
+  - `GET|POST|PUT /api/cafe/categorias`
+  - `GET|POST /api/cafe/categorias/[id]/subcategorias`
+  - `PUT /api/cafe/subcategorias`
+- Rotas de produtos do Cafe atualizadas:
+  - `POST /api/cafe/produtos` agora aceita `categoria_id` e `subcategoria_id`
+  - `PUT /api/cafe/produtos/[id]` agora aceita `categoria_id` e `subcategoria_id`
+  - `GET /api/cafe/produtos` retorna `categoria_id`, `subcategoria_id`, `categoria_nome` e `subcategoria_nome`.
+- Guard/seguranca:
+  - rotas novas seguem padrao com `guardApiByRole`.
+
+### UI
+- Novo tipo compartilhado:
+  - `src/types/cafeCategorias.ts`.
+- Novo hook de categorias:
+  - `src/lib/cafe/useCafeCategorias.ts`.
+- PDV Cafe (`/cafe/vendas`) atualizado para fluxo de toque rapido:
+  - barra horizontal de categorias
+  - barra de subcategorias quando aplicavel
+  - grade mobile-first de produtos clicaveis para adicionar item.
+- Admin Cafe Produtos (`/admin/cafe/produtos`) atualizado:
+  - criacao de produto com categoria obrigatoria e subcategoria opcional
+  - edicao de classificacao (categoria/subcategoria) por produto selecionado.
+
+### Validacao
+- Lint escopado dos arquivos deste patch: OK.
+- `npm run build`: OK.
