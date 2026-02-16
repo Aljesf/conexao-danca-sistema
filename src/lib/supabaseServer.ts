@@ -33,7 +33,7 @@ export async function getSupabaseServerAuth() {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
-          cookieStore.set(name, value, options as CookieOptions);
+          cookieStore.set(name, value, { ...(options as CookieOptions), path: "/" });
         });
       },
     },

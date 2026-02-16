@@ -20,7 +20,7 @@ export async function requireUser(request: NextRequest): Promise<ApiAuthContext 
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
+            response.cookies.set(name, value, { ...options, path: "/" });
           });
         },
       },
@@ -43,7 +43,8 @@ export async function requireUser(request: NextRequest): Promise<ApiAuthContext 
     );
 
     response.cookies.getAll().forEach((c) => {
-      unauthorized.cookies.set(c.name, c.value, c);
+      const { name, value, ...options } = c;
+      unauthorized.cookies.set(name, value, { ...options, path: "/" });
     });
 
     return unauthorized;

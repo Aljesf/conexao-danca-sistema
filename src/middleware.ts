@@ -43,7 +43,7 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
-            baseResponse.cookies.set(name, value, options);
+            baseResponse.cookies.set(name, value, { ...options, path: "/" });
           });
         },
       },
@@ -66,7 +66,8 @@ export async function middleware(request: NextRequest) {
 
     // Copia cookies que foram atualizados no baseResponse para o redirectResponse
     baseResponse.cookies.getAll().forEach((c) => {
-      redirectResponse.cookies.set(c.name, c.value, c);
+      const { name, value, ...options } = c;
+      redirectResponse.cookies.set(name, value, { ...options, path: "/" });
     });
 
     return redirectResponse;
@@ -80,7 +81,8 @@ export async function middleware(request: NextRequest) {
     const redirectResponse = NextResponse.redirect(url);
 
     baseResponse.cookies.getAll().forEach((c) => {
-      redirectResponse.cookies.set(c.name, c.value, c);
+      const { name, value, ...options } = c;
+      redirectResponse.cookies.set(name, value, { ...options, path: "/" });
     });
 
     return redirectResponse;

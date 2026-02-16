@@ -18,7 +18,7 @@ export async function loginAction(formData: FormData) {
         getAll: () => cookieStore.getAll(),
         setAll: (cookiesToSet) => {
           cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options);
+            cookieStore.set(name, value, { ...options, path: "/" });
           });
         },
       },
