@@ -181,9 +181,10 @@ function validarVencimentoUI(vencimentoIso: string, salvarPreferencia: boolean):
 }
 
 export default function FaturaDetalhePage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id?: string | string[] }>();
   const router = useRouter();
-  const faturaId = Number(params?.id);
+  const rawId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const faturaId = Number(rawId);
 
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<FaturaDetalheData | null>(null);
@@ -277,15 +278,6 @@ export default function FaturaDetalhePage() {
   }
 
   async function fecharFaturaEGerarCobranca() {
-    // Diagnostico: confirma que /api/health responde no mesmo servidor (pid)
-    try {
-      const h = await fetch("/api/health", { cache: "no-store" });
-      const hj = await h.json().catch(() => ({}));
-      console.log("[health]", { status: h.status, body: hj });
-    } catch (e) {
-      console.error("[health] falhou", e);
-    }
-
     if (!Number.isFinite(faturaId)) {
       setToast({ tipo: "erro", mensagem: "ID da fatura invalido." });
       return;
@@ -375,15 +367,6 @@ export default function FaturaDetalhePage() {
   }
 
   async function gerarCobrancaAgora() {
-    // Diagnostico: confirma que /api/health responde no mesmo servidor (pid)
-    try {
-      const h = await fetch("/api/health", { cache: "no-store" });
-      const hj = await h.json().catch(() => ({}));
-      console.log("[health]", { status: h.status, body: hj });
-    } catch (e) {
-      console.error("[health] falhou", e);
-    }
-
     if (!Number.isFinite(faturaId)) {
       setToast({ tipo: "erro", mensagem: "ID da fatura invalido." });
       return;

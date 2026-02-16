@@ -16,12 +16,12 @@ type Body = {
   force?: boolean;
 };
 
-type FaturaConta = {
+type ContaRow = {
   tipo_conta: string | null;
   pessoa_titular_id: number | null;
   dia_vencimento: number | null;
   dia_vencimento_preferido: number | null;
-} | null;
+};
 
 type FaturaRow = {
   id: number;
@@ -32,7 +32,6 @@ type FaturaRow = {
   data_vencimento: string | null;
   valor_total_centavos: number;
   cobranca_id: number | null;
-  conta: FaturaConta;
 };
 
 type ConfigCobrancaRow = {
@@ -292,30 +291,44 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       data_fechamento,
       data_vencimento,
       valor_total_centavos,
-      cobranca_id,
-      conta:credito_conexao_contas (
-        tipo_conta,
-        pessoa_titular_id,
-        dia_vencimento,
-        dia_vencimento_preferido
-      )
+      cobranca_id
     `,
     )
     .eq("id", faturaId)
     .maybeSingle<FaturaRow>();
 
-  if (faturaErr || !fatura) {
+  if (faturaErr) {
+    return NextResponse.json(
+      { ok: false, error: "erro_buscar_fatura", detail: faturaErr.message },
+      { status: 500 },
+    );
+  }
+
+  if (!fatura) {
     return NextResponse.json(
       { ok: false, error: "not_found", message: "Fatura nao encontrada" },
       { status: 404 },
     );
   }
 
-  if (!fatura.conta?.pessoa_titular_id) {
+  const { data: conta, error: contaErr } = await supabaseAdmin
+    .from("credito_conexao_contas")
+    .select("tipo_conta,pessoa_titular_id,dia_vencimento,dia_vencimento_preferido")
+    .eq("id", fatura.conta_conexao_id)
+    .maybeSingle<ContaRow>();
+
+  if (contaErr) {
+    return NextResponse.json(
+      { ok: false, error: "erro_buscar_conta_fatura", detail: contaErr.message },
+      { status: 500 },
+    );
+  }
+
+  if (!conta?.pessoa_titular_id) {
     return NextResponse.json({ ok: false, error: "titular_indefinido" }, { status: 500 });
   }
 
-  if (fatura.conta?.tipo_conta === "COLABORADOR") {
+  if (conta?.tipo_conta === "COLABORADOR") {
     return NextResponse.json(
       { ok: false, error: "conta_colaborador_sem_cobranca_externa" },
       { status: 409 },
@@ -337,7 +350,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
 
   const diaBody = Number(body.dia_vencimento);
   const diaInput = Number.isFinite(diaBody) ? clampDiaVencimento(diaBody) : null;
-  const diaBase = diaInput ?? Number(fatura.conta?.dia_vencimento_preferido ?? fatura.conta?.dia_vencimento ?? 12);
+  const diaBase = diaInput ?? Number(conta?.dia_vencimento_preferido ?? conta?.dia_vencimento ?? 12);
   const diaCalculado = selecionarDiaPermitido(clampDiaVencimento(diaBase), cfgGlobal?.dias_permitidos_vencimento);
   const vencimentoCalculado = calcularDataVencimento({
     competenciaAnoMes: competencia,
@@ -424,7 +437,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
 
   const cobrancaId = await upsertCobrancaLocal(supabaseAdmin, {
     cobrancaExistente,
-    pessoaId: Number(fatura.conta.pessoa_titular_id),
+    pessoaId: Number(conta.pessoa_titular_id),
     descricao,
     valorCentavos: totalEItens.totalCentavos,
     vencimentoIso: vencimentoEfetivo,
@@ -445,7 +458,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     try {
       const provider = getCobrancaProvider(providerCode);
       const out = await provider.criarCobranca({
-        pessoaId: Number(fatura.conta.pessoa_titular_id),
+        pessoaId: Number(conta.pessoa_titular_id),
         descricao,
         valorCentavos: totalEItens.totalCentavos,
         vencimentoISO: vencimentoEfetivo,
