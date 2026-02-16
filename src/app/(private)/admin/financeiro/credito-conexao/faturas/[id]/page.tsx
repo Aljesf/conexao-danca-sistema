@@ -277,6 +277,15 @@ export default function FaturaDetalhePage() {
   }
 
   async function fecharFaturaEGerarCobranca() {
+    // Diagnostico: confirma que /api/health responde no mesmo servidor (pid)
+    try {
+      const h = await fetch("/api/health", { cache: "no-store" });
+      const hj = await h.json().catch(() => ({}));
+      console.log("[health]", { status: h.status, body: hj });
+    } catch (e) {
+      console.error("[health] falhou", e);
+    }
+
     if (!Number.isFinite(faturaId)) {
       setToast({ tipo: "erro", mensagem: "ID da fatura invalido." });
       return;
@@ -358,6 +367,15 @@ export default function FaturaDetalhePage() {
   }
 
   async function gerarCobrancaAgora() {
+    // Diagnostico: confirma que /api/health responde no mesmo servidor (pid)
+    try {
+      const h = await fetch("/api/health", { cache: "no-store" });
+      const hj = await h.json().catch(() => ({}));
+      console.log("[health]", { status: h.status, body: hj });
+    } catch (e) {
+      console.error("[health] falhou", e);
+    }
+
     if (!Number.isFinite(faturaId)) {
       setToast({ tipo: "erro", mensagem: "ID da fatura invalido." });
       return;

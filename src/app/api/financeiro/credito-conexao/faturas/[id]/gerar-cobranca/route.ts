@@ -216,7 +216,10 @@ async function updateFaturaComStatusCompativel(
   return { ok: false, error: error.message };
 }
 
-export async function POST(request: NextRequest, { params }: RouteContext) {
+export async function POST(request: NextRequest, ctx: RouteContext) {
+  const { id } = await ctx.params;
+  console.log("[HIT] POST /gerar-cobranca", { id, ts: new Date().toISOString(), pid: process.pid });
+
   if (process.env.NODE_ENV !== "production") {
     const cookieStore = await cookies();
     console.log("[api gerar-cobranca] cookies keys:", cookieStore.getAll().map((c) => c.name));
@@ -254,7 +257,6 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  const { id } = await params;
   const faturaId = Number(id);
   if (!faturaId || Number.isNaN(faturaId)) {
     return NextResponse.json({ ok: false, error: "id_invalido" }, { status: 400 });
