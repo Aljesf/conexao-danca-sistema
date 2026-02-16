@@ -321,6 +321,13 @@ export default function FaturaDetalhePage() {
 
       const json = (await res.json().catch(() => null)) as ApiActionResponse | null;
       if (!res.ok || !json?.ok) {
+        if (res.status === 403) {
+          setToast({
+            tipo: "erro",
+            mensagem: "[403] Sem permissão. Troque o contexto para Administração do Sistema e tente novamente.",
+          });
+          return;
+        }
         if (res.status === 401) {
           setToast({ tipo: "erro", mensagem: "Sessão expirada. Faça login novamente." });
           window.location.href = "/login";
@@ -410,6 +417,13 @@ export default function FaturaDetalhePage() {
       const json = (await res.json().catch(() => null)) as ApiActionResponse | null;
 
       if (!res.ok || !json?.ok) {
+        if (res.status === 403) {
+          setToast({
+            tipo: "erro",
+            mensagem: "[403] Sem permissão. Troque o contexto para Administração do Sistema e tente novamente.",
+          });
+          return;
+        }
         if (res.status === 401) {
           setToast({ tipo: "erro", mensagem: "Sessão expirada. Faça login novamente." });
           window.location.href = "/login";

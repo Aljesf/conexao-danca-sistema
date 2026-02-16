@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { createClient } from "@/lib/supabase/server";
 import { calcularDataVencimento } from "@/lib/financeiro/creditoConexao/vencimento";
 import { getCobrancaProvider } from "@/lib/financeiro/cobranca/providers";
 import type { CobrancaProviderCode } from "@/lib/financeiro/cobranca/providers/types";
@@ -50,11 +51,12 @@ const ORIGEM_TIPO_CANONICA = "FATURA_CREDITO_CONEXAO";
 const ORIGEM_TIPOS_COMPATIVEIS = [ORIGEM_TIPO_CANONICA, "CREDITO_CONEXAO_FATURA"];
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function dbg(label: string, payload: Record<string, unknown>) {
+function dbgAlways(label: string, payload: Record<string, unknown>) {
   const force = process.env.DEBUG_CREDITO_CONEXAO === "1";
   if (!force && process.env.NODE_ENV === "production") return;
   console.log(`[DBG fechar] ${label}`, payload);
 }
+const dbg = dbgAlways;
 
 function isStatusCheckError(errorMessage: string | null | undefined): boolean {
   const msg = (errorMessage ?? "").toLowerCase();
@@ -227,6 +229,21 @@ async function updateFaturaComStatusCompativel(
 export async function POST(request: NextRequest, ctx: RouteContext) {
   const { id } = await ctx.params;
   console.log("[HIT] POST /fechar", { id, ts: new Date().toISOString(), pid: process.pid });
+  dbgAlways("env", {
+    nodeEnv: process.env.NODE_ENV,
+    debug: process.env.DEBUG_CREDITO_CONEXAO,
+    pid: process.pid,
+    faturaId: id,
+  });
+
+  const supabaseSession = await createClient();
+  const { data: userData, error: authGetUserErr } = await supabaseSession.auth.getUser();
+  dbgAlways("auth_getUser", {
+    hasUser: Boolean(userData?.user),
+    userId: userData?.user?.id ?? null,
+    email: userData?.user?.email ?? null,
+    err: authGetUserErr?.message ?? null,
+  });
 
   if (process.env.NODE_ENV !== "production") {
     const cookieStore = await cookies();
@@ -242,13 +259,46 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     );
   }
 
-  const denied = await guardApiByRole(request as any);
+  let denied: NextResponse | null = null;
+  try {
+    denied = await guardApiByRole(request as any);
+  } catch (error) {
+    dbgAlways("guard_exception", {
+      message: error instanceof Error ? error.message : String(error),
+      faturaId: id,
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "forbidden",
+        message: "Sem permissao para fechar fatura neste contexto/role.",
+      },
+      { status: 403 },
+    );
+  }
+
   if (denied) {
+    dbgAlways("guard_denied", {
+      status: denied.status,
+      faturaId: id,
+      debug: process.env.DEBUG_CREDITO_CONEXAO,
+    });
     if (denied.status === 401) {
       if (process.env.NODE_ENV !== "production") {
         console.warn("[api fechar] guardApiByRole retornou 401 apos requireUser bem-sucedido; seguindo com sessao valida.");
       }
     } else {
+      if (process.env.DEBUG_CREDITO_CONEXAO === "1") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "forbidden",
+            message: "Sem permissao para fechar fatura neste contexto/role.",
+            original_status: denied.status,
+          },
+          { status: 403 },
+        );
+      }
       return denied as any;
     }
   }
