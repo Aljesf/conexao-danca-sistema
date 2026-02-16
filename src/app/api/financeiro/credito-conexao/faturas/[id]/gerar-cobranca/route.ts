@@ -284,9 +284,10 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       debug: process.env.DEBUG_CREDITO_CONEXAO,
     });
     if (denied.status === 401) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("[api gerar-cobranca] guardApiByRole retornou 401 apos requireUser bem-sucedido; seguindo com sessao valida.");
-      }
+      return NextResponse.json(
+        { ok: false, error: "unauthorized", message: "Sessao expirada. Faca login novamente." },
+        { status: 401 },
+      );
     } else {
       if (process.env.DEBUG_CREDITO_CONEXAO === "1") {
         return NextResponse.json(
