@@ -72,3 +72,34 @@ Pendencias futuras:
 - Encargos e integracao contabil completa (INSS, DARF, provisoes).
 - Fechamento mensal em lote de folha por competencia.
 - Painel operacional completo de jornada/ponto integrado a folha.
+
+---
+
+## Atualizacoes recentes (Governanca de Cobrancas + UX Fatura) - 2026-02-16
+
+SQL:
+- Sem mudancas de schema nesta etapa.
+
+API:
+- Nova rota `GET /api/governanca/cobrancas`:
+  - Padrao de governanca para listagem de cobrancas.
+  - Nao filtra "somente integradas" por padrao (mostra tambem cobrancas sem `neofin_charge_id`).
+  - Retorna campos operacionais: `id`, `pessoa_nome`, `descricao`, `vencimento`, `valor_centavos`, `status`, `neofin_charge_id`, `link_pagamento`, `linha_digitavel`, `created_at`.
+- Nova rota `GET /api/governanca/cobrancas/[id]`:
+  - Detalhe de cobranca para auditoria, incluindo `neofin_payload`.
+- Nova rota `GET|POST /api/governanca/cobrancas/[id]/sincronizar-neofin`:
+  - Consulta estado remoto na NeoFin via `getNeofinBilling`.
+  - Atualiza status local, payload e dados de pagamento (`link_pagamento`/`linha_digitavel`) quando disponiveis.
+
+UI/UX:
+- `/admin/financeiro/credito-conexao/faturas/[id]`:
+  - Novo botao primario "Fechar fatura e gerar cobranca" quando a fatura estiver `ABERTA`.
+  - Modal "Gerar cobranca agora" com tratamento de erro real do backend (mensagem legivel em toast local).
+  - Removida exibicao crua de codigos de erro no fluxo do modal.
+- `/admin/governanca/cobrancas`:
+  - Padronizado para consumir `/api/governanca/cobrancas`.
+  - Corrigidos textos/encoding e filtro NeoFin com default em "Todos".
+  - Layout responsivo com container de tabela em `overflow-x-auto`.
+- `/admin/governanca/cobrancas/[id]`:
+  - Acoes "Abrir no NeoFin" e "Sincronizar com NeoFin".
+  - Exibicao de status local e preview resumido do ultimo payload NeoFin.
