@@ -392,3 +392,10 @@ UI:
 - `npm run build`: OK.
 - `npm run lint`: falha por erros preexistentes em outros modulos (nao relacionados a este ajuste).
 - Aplicacao da migration nao executada localmente neste ambiente: `supabase` CLI nao instalado (`command not found`).
+
+---
+
+## Atualizacao 2026-02-16 (UI Contexto)
+
+### Paginas / componentes concluidos
+- Dropdown de Contexto (topo): alinhado ao padrao do Sidebar com emojis e config centralizada em `src/config/contextosConfig.ts`.

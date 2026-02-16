@@ -2,53 +2,8 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { useBranding, type ContextKey } from "@/context/BrandingContext";
-
-type ContextOption = {
-  key: ContextKey;
-  label: string;
-  subtitle: string;
-  href: string;
-  icon: string;
-};
-
-const OPTIONS: ContextOption[] = [
-  {
-    key: "escola",
-    label: "Escola",
-    subtitle: "Operacao academica e matriculas",
-    href: "/escola",
-    icon: "??",
-  },
-  {
-    key: "loja",
-    label: "AJ Dance Store",
-    subtitle: "Vendas e estoque da loja",
-    href: "/loja",
-    icon: "???",
-  },
-  {
-    key: "lanchonete",
-    label: "Ballet Cafe",
-    subtitle: "Operacao e vendas do cafe",
-    href: "/cafe",
-    icon: "?",
-  },
-  {
-    key: "administracao",
-    label: "Administracao do Sistema",
-    subtitle: "Configuracoes e governanca",
-    href: "/admin",
-    icon: "???",
-  },
-  {
-    key: "bolsas",
-    label: "Bolsas & Projetos Sociais",
-    subtitle: "Gestao de bolsas e projetos sociais",
-    href: "/bolsas",
-    icon: "??",
-  },
-];
+import { useBranding } from "@/context/BrandingContext";
+import { CONTEXTOS_CONFIG, detectContextByPathname, type AppContextItem } from "@/config/contextosConfig";
 
 export default function ContextSelector() {
   const { activeContext, setActiveContext, configs } = useBranding();
@@ -56,11 +11,13 @@ export default function ContextSelector() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const currentOption = OPTIONS.find((opt) => opt.key === activeContext);
+  const currentOption = CONTEXTOS_CONFIG.find((opt) => opt.brandingKey === activeContext);
+  const activeByPath = detectContextByPathname(pathname);
+  const active = activeByPath ?? currentOption ?? null;
   const current = configs[activeContext];
 
-  function choose(opt: ContextOption) {
-    setActiveContext(opt.key);
+  function choose(opt: AppContextItem) {
+    setActiveContext(opt.brandingKey);
     setOpen(false);
     if (pathname !== opt.href) {
       router.push(opt.href);
@@ -70,22 +27,28 @@ export default function ContextSelector() {
   return (
     <div style={{ position: "relative" }}>
       <button type="button" className="ctx-select" onClick={() => setOpen((v) => !v)}>
-        <span>{currentOption?.icon ?? "???"}</span>
+        <span className="text-lg leading-none">{active?.emoji ?? "🧭"}</span>
         <div style={{ textAlign: "left" }}>
           <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.1 }}>Contexto</div>
-          <strong>{current.displayName || currentOption?.label}</strong>
+          <strong>{current.displayName || active?.label || "Selecionar contexto"}</strong>
         </div>
-        <span style={{ marginLeft: "auto", color: "#7c3aed" }}>?</span>
+        <span style={{ marginLeft: "auto", color: "#7c3aed" }}>▾</span>
       </button>
 
       {open ? (
         <div className="ctx-menu">
-          {OPTIONS.map((opt) => (
-            <button key={opt.key} type="button" className="ctx-item" onClick={() => choose(opt)}>
-              <span>{opt.icon}</span>
+          {CONTEXTOS_CONFIG.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              className="ctx-item"
+              onClick={() => choose(opt)}
+              aria-current={active?.key === opt.key ? "page" : undefined}
+            >
+              <span className="text-lg leading-none">{opt.emoji}</span>
               <div style={{ textAlign: "left" }}>
                 <div style={{ fontWeight: 700 }}>{opt.label}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>{opt.subtitle}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{opt.description}</div>
               </div>
             </button>
           ))}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { sidebarConfig, type SidebarItem, type SidebarSection } from "@/config/sidebarConfig";
+import { CONTEXTOS_CONFIG } from "@/config/contextosConfig";
 import { useBranding, type ContextKey } from "@/context/BrandingContext";
 import UserBadge from "./UserBadge";
 
@@ -38,12 +39,20 @@ const brandingContextMap: Record<AnyContext, ContextKey> = {
   admin: "administracao",
 };
 
+const sidebarToContextKey: Record<SidebarContext, "ESCOLA" | "LOJA" | "CAFE" | "ADMIN" | "BOLSAS"> = {
+  escola: "ESCOLA",
+  loja: "LOJA",
+  cafe: "CAFE",
+  admin: "ADMIN",
+  bolsas: "BOLSAS",
+};
+
 const contextLabels: Record<SidebarContext, string> = {
-  escola: "Conex\u00e3o Dan\u00e7a",
-  loja: "AJ Dance Store",
-  cafe: "Ballet Caf\u00e9",
-  admin: "Administra\u00e7\u00e3o do Sistema",
-  bolsas: "Bolsas & Projetos Sociais",
+  escola: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.escola)?.label ?? "Escola",
+  loja: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.loja)?.label ?? "AJ Dance Store",
+  cafe: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.cafe)?.label ?? "Ballet Cafe",
+  admin: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.admin)?.label ?? "Administracao do Sistema",
+  bolsas: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.bolsas)?.label ?? "Bolsas & Projetos Sociais",
 };
 
 function Section({ id, title, items, defaultOpen = true }: SidebarSection) {
