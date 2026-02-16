@@ -243,6 +243,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   }
 
   const { supabase } = auth;
+  const {
+    data: { user },
+    error: userErr,
+  } = await supabase.auth.getUser();
+  if (userErr || !user) {
+    return NextResponse.json(
+      { ok: false, error: "unauthorized", message: "Sessao expirada. Faca login novamente." },
+      { status: 401 },
+    );
+  }
 
   const { id } = await params;
   const faturaId = Number(id);

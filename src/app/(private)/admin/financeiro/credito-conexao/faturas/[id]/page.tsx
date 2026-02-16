@@ -313,7 +313,7 @@ export default function FaturaDetalhePage() {
       const json = (await res.json().catch(() => null)) as ApiActionResponse | null;
       if (!res.ok || !json?.ok) {
         if (res.status === 401) {
-          setToast({ tipo: "erro", mensagem: "Sessao expirada. Faca login novamente." });
+          setToast({ tipo: "erro", mensagem: "Sessão expirada. Faça login novamente." });
           window.location.href = "/login";
           return;
         }
@@ -393,7 +393,7 @@ export default function FaturaDetalhePage() {
 
       if (!res.ok || !json?.ok) {
         if (res.status === 401) {
-          setToast({ tipo: "erro", mensagem: "Sessao expirada. Faca login novamente." });
+          setToast({ tipo: "erro", mensagem: "Sessão expirada. Faça login novamente." });
           window.location.href = "/login";
           return;
         }
