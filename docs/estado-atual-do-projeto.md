@@ -332,3 +332,37 @@ Pendencias:
 
 
 
+
+---
+
+## Atualizacao recente (2026-02-14) - Cobranca por Provedor
+
+SQL:
+- Migration `supabase/migrations/20260214_01_financeiro_cobranca_provider.sql` criada.
+- Nova tabela `public.financeiro_config_cobranca` (provider ativo + dias permitidos de vencimento).
+- Nova coluna `public.credito_conexao_contas.dia_vencimento_preferido` (1..28) com constraint e comentario.
+
+API:
+- Nova interface plugavel de provider:
+  - `src/lib/financeiro/cobranca/providers/types.ts`
+  - `src/lib/financeiro/cobranca/providers/index.ts`
+  - `src/lib/financeiro/cobranca/providers/neofinProvider.ts`
+- Novo util central de vencimento:
+  - `src/lib/financeiro/creditoConexao/vencimento.ts`
+- Novo endpoint manual por fatura:
+  - `POST /api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca`
+  - Arquivo: `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`
+- Ajuste na rota de fechamento da fatura (`/fechar`):
+  - reforco de idempotencia por `origem_tipo=CREDITO_CONEXAO_FATURA` + `origem_id`
+  - calculo de vencimento do aluno usando util central
+  - terminologia de erro atualizada para cobranca
+
+UI:
+- Detalhe da fatura (`src/app/(private)/admin/financeiro/credito-conexao/faturas/[id]/page.tsx`):
+  - botao "Gerar cobranca agora"
+  - modal com dia 1..28 + opcao "Salvar como preferencia"
+  - chamada do endpoint `/gerar-cobranca`
+- Governanca de cobrancas por provedor:
+  - `src/app/(private)/admin/governanca/boletos-neofin/page.tsx` atualizado para linguagem "Cobrancas (Provedor)"
+  - filtro por provider/status
+  - `src/app/api/governanca/boletos-neofin/route.ts` inclui campo `provider` e filtro `provider`

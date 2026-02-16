@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
+import { calcularDataVencimento } from "@/lib/financeiro/creditoConexao/vencimento";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -48,6 +49,9 @@ type PessoaTitular = {
   email: string | null;
   telefone: string | null;
 };
+
+const ORIGEM_TIPO_CANONICA = "FATURA_CREDITO_CONEXAO";
+const ORIGEM_TIPOS_COMPATIVEIS = [ORIGEM_TIPO_CANONICA, "CREDITO_CONEXAO_FATURA"];
 
 function firstNonEmptyString(...values: Array<unknown>): string | null {
   for (const value of values) {
@@ -136,21 +140,6 @@ function chooseRegraParcelas(
   });
 
   return candidatas[0] ?? null;
-}
-
-function nextDateForDay(day: number | null | undefined, from: Date): string {
-  if (!day || day < 1 || day > 31) {
-    const d = new Date(from);
-    d.setDate(d.getDate() + 7);
-    return d.toISOString().slice(0, 10);
-  }
-  const d = new Date(from);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(day);
-  if (d < from) {
-    d.setMonth(d.getMonth() + 1);
-  }
-  return d.toISOString().slice(0, 10);
 }
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
@@ -295,8 +284,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   const now = new Date();
   let vencimento = fatura.data_vencimento ?? null;
   if (!vencimento) {
-    if (tipoConta === "ALUNO" && fatura.conta?.dia_vencimento) {
-      vencimento = nextDateForDay(fatura.conta.dia_vencimento, now);
+    if (tipoConta === "ALUNO" && /^\d{4}-\d{2}$/.test(fatura.periodo_referencia)) {
+      const diaPreferido = Number(fatura.conta?.dia_vencimento ?? 12);
+      vencimento = calcularDataVencimento({
+        competenciaAnoMes: fatura.periodo_referencia,
+        diaPreferido,
+        forcarUltimoVencimentoDia12: true,
+      });
     } else {
       const d = new Date(now);
       d.setDate(d.getDate() + 7);
@@ -304,7 +298,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
   }
 
-  // Regra hard: conta COLABORADOR nao gera cobranca externa (Neofin/boleto).
+  // Regra hard: conta COLABORADOR nao gera cobranca externa.
   if (tipoConta === "COLABORADOR") {
     const { error: faturaUpdateError } = await supabase
       .from("credito_conexao_faturas")
@@ -344,6 +338,19 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
   // Upsert da cobranca
   let cobrancaId = fatura.cobranca_id ?? null;
+  if (!cobrancaId) {
+    const { data: cobrancaOrigem } = await supabase
+      .from("cobrancas")
+      .select("id")
+      .in("origem_tipo", ORIGEM_TIPOS_COMPATIVEIS)
+      .eq("origem_id", fatura.id)
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (cobrancaOrigem?.id) {
+      cobrancaId = Number(cobrancaOrigem.id);
+    }
+  }
   const descricao = `Fatura Credito Conexao #${fatura.id} (${fatura.periodo_referencia})`;
 
   if (!cobrancaId || force) {
@@ -357,7 +364,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           moeda: "BRL",
           vencimento,
           status: "PENDENTE",
-          origem_tipo: "CREDITO_CONEXAO_FATURA",
+          origem_tipo: ORIGEM_TIPO_CANONICA,
           origem_id: fatura.id,
         })
         .eq("id", cobrancaId)
@@ -381,7 +388,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           moeda: "BRL",
           vencimento,
           status: "PENDENTE",
-          origem_tipo: "CREDITO_CONEXAO_FATURA",
+          origem_tipo: ORIGEM_TIPO_CANONICA,
           origem_id: fatura.id,
         })
         .select("id")
@@ -409,7 +416,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ ok: false, error: "cobranca_nao_encontrada" }, { status: 500 });
   }
 
-  // IntegraÇõÇœo Neofin: garantir charge/links
+  // Integracao de cobranca (provedor atual: Neofin): garantir charge/links
   if (!cobrancaId) {
     return NextResponse.json({ ok: false, error: "cobranca_nao_criada" }, { status: 500 });
   }
@@ -448,7 +455,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!neofinResult.ok) {
       console.error("[fechar fatura] erro ao criar charge na Neofin:", neofinResult);
       return NextResponse.json(
-        { ok: false, error: "erro_neofin_criar_boleto", details: neofinResult },
+        { ok: false, error: "erro_neofin_criar_cobranca", details: neofinResult },
         { status: 502 }
       );
     }

@@ -19,12 +19,14 @@ type ListItem = {
   cobranca_atualizada_em: string;
   total_recebido_centavos: number;
   ultimo_pagamento_em: string | null;
+  provider: "NEOFIN";
 };
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
   const status = searchParams.get("status");
+  const provider = (searchParams.get("provider") ?? "").toUpperCase();
   const q = searchParams.get("q");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
@@ -69,6 +71,15 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, items: (data ?? []) as ListItem[] });
+  if (provider && provider !== "NEOFIN") {
+    return NextResponse.json({ ok: true, items: [] as ListItem[] });
+  }
+
+  const items = ((data ?? []) as Omit<ListItem, "provider">[]).map((row) => ({
+    ...row,
+    provider: "NEOFIN" as const,
+  }));
+
+  return NextResponse.json({ ok: true, items });
 }
 

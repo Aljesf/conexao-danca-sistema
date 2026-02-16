@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
@@ -62,8 +62,8 @@ export default function GovernancaCobrancaDetalhePage() {
   }, [id]);
 
   const titulo = useMemo(() => {
-    if (!item) return `Cobrança #${Number.isFinite(id) ? id : "-"}`;
-    return `Cobrança #${item.id} — ${item.pessoa?.nome ?? "Pessoa"}`;
+    if (!item) return `CobranÃ§a #${Number.isFinite(id) ? id : "-"}`;
+    return `CobranÃ§a #${item.id} â€” ${item.pessoa?.nome ?? "Pessoa"}`;
   }, [item, id]);
 
   return (
@@ -81,7 +81,7 @@ export default function GovernancaCobrancaDetalhePage() {
             Voltar
           </Link>
           <Link className="rounded-md border px-3 py-2 text-sm" href="/admin/governanca/boletos-neofin">
-            Boletos (NeoFin)
+            Cobrancas (Provedor)
           </Link>
         </div>
       </div>
@@ -90,7 +90,7 @@ export default function GovernancaCobrancaDetalhePage() {
         {loading && <div className="text-sm text-muted-foreground">Carregando...</div>}
 
         {!loading && !item && (
-          <div className="text-sm text-muted-foreground">Cobrança não encontrada.</div>
+          <div className="text-sm text-muted-foreground">CobranÃ§a nÃ£o encontrada.</div>
         )}
 
         {!loading && item && (
@@ -99,7 +99,7 @@ export default function GovernancaCobrancaDetalhePage() {
               <div className="text-xs text-muted-foreground">Pessoa</div>
               <div className="font-medium">{item.pessoa?.nome ?? "-"}</div>
               <div className="text-xs text-muted-foreground">
-                CPF: {item.pessoa?.cpf ?? "-"} • Email: {item.pessoa?.email ?? "-"} • Tel:{" "}
+                CPF: {item.pessoa?.cpf ?? "-"} â€¢ Email: {item.pessoa?.email ?? "-"} â€¢ Tel:{" "}
                 {item.pessoa?.telefone ?? "-"}
               </div>
             </div>
@@ -123,11 +123,11 @@ export default function GovernancaCobrancaDetalhePage() {
             <div>
               <div className="text-xs text-muted-foreground">Status</div>
               <div className="font-medium">{item.status}</div>
-              <div className="text-xs text-muted-foreground">Método: {item.metodo_pagamento ?? "-"}</div>
+              <div className="text-xs text-muted-foreground">MÃ©todo: {item.metodo_pagamento ?? "-"}</div>
             </div>
 
             <div className="md:col-span-2">
-              <div className="text-xs text-muted-foreground">Descrição</div>
+              <div className="text-xs text-muted-foreground">DescriÃ§Ã£o</div>
               <div className="font-medium">{item.descricao}</div>
             </div>
 
@@ -144,7 +144,7 @@ export default function GovernancaCobrancaDetalhePage() {
             </div>
 
             <div className="md:col-span-2 text-xs text-muted-foreground">
-              created_at: {item.created_at} • updated_at: {item.updated_at}
+              created_at: {item.created_at} â€¢ updated_at: {item.updated_at}
             </div>
           </div>
         )}
@@ -152,3 +152,4 @@ export default function GovernancaCobrancaDetalhePage() {
     </div>
   );
 }
+

@@ -73,6 +73,20 @@ export default function FaturaDetalhePage() {
   const [data, setData] = useState<FaturaDetalheData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openIds, setOpenIds] = useState<Record<number, boolean>>({});
+  const [modalCobrancaOpen, setModalCobrancaOpen] = useState(false);
+  const [diaVencimento, setDiaVencimento] = useState<number>(12);
+  const [salvarPreferencia, setSalvarPreferencia] = useState(true);
+  const [gerandoCobranca, setGerandoCobranca] = useState(false);
+  const [acaoMsg, setAcaoMsg] = useState<string | null>(null);
+
+  const diaVencimentoOptions = useMemo(() => Array.from({ length: 28 }, (_, i) => i + 1), []);
+
+  function extrairDia(vencimento: string | null | undefined): number {
+    if (!vencimento || !/^\d{4}-\d{2}-\d{2}$/.test(vencimento)) return 12;
+    const dia = Number(vencimento.split("-")[2]);
+    if (!Number.isFinite(dia)) return 12;
+    return Math.max(1, Math.min(28, Math.trunc(dia)));
+  }
 
   useEffect(() => {
     if (!Number.isFinite(id)) {
@@ -93,6 +107,7 @@ export default function FaturaDetalhePage() {
           return;
         }
         setData(json.data ?? null);
+        setDiaVencimento(extrairDia(json.data?.fatura?.data_vencimento));
       } catch {
         setError("falha_inesperada");
         setData(null);
@@ -110,6 +125,46 @@ export default function FaturaDetalhePage() {
     [lancamentos],
   );
 
+  async function gerarCobrancaAgora(force = false) {
+    if (!Number.isFinite(id)) {
+      setAcaoMsg("fatura_id_invalido");
+      return;
+    }
+    setGerandoCobranca(true);
+    setAcaoMsg(null);
+    try {
+      const res = await fetch(`/api/financeiro/credito-conexao/faturas/${id}/gerar-cobranca`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dia_vencimento: diaVencimento,
+          salvar_preferencia: salvarPreferencia,
+          force,
+        }),
+      });
+      const json = (await res.json().catch(() => null)) as
+        | { ok?: boolean; error?: string; message?: string; cobranca_id?: number; detail?: string }
+        | null;
+
+      if (!res.ok || !json?.ok) {
+        setAcaoMsg(json?.detail ? `${json?.error ?? "falha_gerar_cobranca"}: ${json.detail}` : (json?.error ?? "falha_gerar_cobranca"));
+        return;
+      }
+
+      setAcaoMsg(
+        json?.message === "cobranca_ja_existente"
+          ? `Cobranca ja existente (#${json?.cobranca_id ?? "-"})`
+          : `Cobranca gerada com sucesso (#${json?.cobranca_id ?? "-"})`,
+      );
+      setModalCobrancaOpen(false);
+      window.location.reload();
+    } catch {
+      setAcaoMsg("falha_inesperada_gerar_cobranca");
+    } finally {
+      setGerandoCobranca(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white p-6">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -117,6 +172,7 @@ export default function FaturaDetalhePage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Fatura do Cartao Conexao</CardTitle>
             <div className="flex gap-2">
+              <Button onClick={() => setModalCobrancaOpen(true)}>Gerar cobranca agora</Button>
               <Button variant="secondary" onClick={() => router.back()}>
                 Voltar
               </Button>
@@ -176,6 +232,13 @@ export default function FaturaDetalhePage() {
             )}
           </CardContent>
         </Card>
+        {acaoMsg ? (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-sm">{acaoMsg}</div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader>
@@ -225,6 +288,57 @@ export default function FaturaDetalhePage() {
           </CardContent>
         </Card>
       </div>
+      {modalCobrancaOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-md rounded-xl border bg-white p-4 shadow-lg">
+            <h2 className="text-base font-semibold">Gerar cobranca</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Defina o vencimento (1..28). Se ja existir cobranca, a chamada e idempotente.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <label className="block text-sm">
+                <span className="mb-1 block">Dia de vencimento</span>
+                <select
+                  className="w-full rounded-md border px-3 py-2"
+                  value={diaVencimento}
+                  onChange={(e) => setDiaVencimento(Number(e.target.value))}
+                  disabled={gerandoCobranca}
+                >
+                  {diaVencimentoOptions.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={salvarPreferencia}
+                  onChange={(e) => setSalvarPreferencia(e.target.checked)}
+                  disabled={gerandoCobranca}
+                />
+                Salvar como preferencia da conta
+              </label>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setModalCobrancaOpen(false)}
+                disabled={gerandoCobranca}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={() => void gerarCobrancaAgora(false)} disabled={gerandoCobranca}>
+                {gerandoCobranca ? "Gerando..." : "Confirmar"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

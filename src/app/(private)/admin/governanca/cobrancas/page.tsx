@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
@@ -50,7 +50,7 @@ export default function GovernancaCobrancasPage() {
       setItems(data);
     } catch (e) {
       console.error(e);
-      alert("Falha ao carregar cobranças (ver console).");
+      alert("Falha ao carregar cobranÃ§as (ver console).");
     } finally {
       setLoading(false);
     }
@@ -99,9 +99,9 @@ export default function GovernancaCobrancasPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Cobranças — Governança</h1>
+        <h1 className="text-2xl font-semibold">CobranÃ§as â€” GovernanÃ§a</h1>
         <p className="text-sm text-muted-foreground">
-          Visão auditável de cobranças/boletos (subiram) e status de pagamento (desceram). Esta
+          VisÃ£o auditÃ¡vel de cobranÃ§as/boletos (subiram) e status de pagamento (desceram). Esta
           tela reutiliza /api/cobrancas.
         </p>
       </div>
@@ -112,7 +112,7 @@ export default function GovernancaCobrancasPage() {
             <label className="text-xs text-muted-foreground">Busca</label>
             <input
               className="w-full rounded-md border px-3 py-2 text-sm"
-              placeholder="Nome, descrição, ID, charge..."
+              placeholder="Nome, descriÃ§Ã£o, ID, charge..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -157,9 +157,9 @@ export default function GovernancaCobrancasPage() {
             <Link
               className="rounded-md border px-3 py-2 text-sm"
               href="/admin/governanca/boletos-neofin"
-              title="Painel específico da NeoFin (view + reconciliação)"
+              title="Painel especifico de cobrancas por provedor (view + reconciliacao)"
             >
-              Boletos (NeoFin)
+              Cobrancas (Provedor)
             </Link>
 
             <div className="ml-auto text-sm text-muted-foreground flex gap-4">
@@ -196,12 +196,12 @@ export default function GovernancaCobrancasPage() {
               <tr className="text-left">
                 <th className="p-3">ID</th>
                 <th className="p-3">Pessoa</th>
-                <th className="p-3">Descrição</th>
+                <th className="p-3">DescriÃ§Ã£o</th>
                 <th className="p-3">Vencimento</th>
                 <th className="p-3">Valor</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">NeoFin</th>
-                <th className="p-3">Ações</th>
+                <th className="p-3">AÃ§Ãµes</th>
               </tr>
             </thead>
             <tbody>
@@ -237,7 +237,7 @@ export default function GovernancaCobrancasPage() {
               {filtrados.length === 0 && !loading && (
                 <tr>
                   <td className="p-6 text-muted-foreground" colSpan={8}>
-                    Nenhuma cobrança encontrada com os filtros atuais.
+                    Nenhuma cobranÃ§a encontrada com os filtros atuais.
                   </td>
                 </tr>
               )}
@@ -255,3 +255,4 @@ export default function GovernancaCobrancasPage() {
     </div>
   );
 }
+
