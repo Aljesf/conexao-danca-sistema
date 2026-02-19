@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
 import type { StatusTurma, TipoTurma, TurnoTurma } from "@/types/turmas";
 
 type Curso = { id: number; nome: string };
@@ -40,6 +39,9 @@ type CursosApiResponse = {
 };
 type ProfessoresApiResponse = {
   professores?: Professor[];
+};
+type NiveisApiResponse = {
+  niveis?: Nivel[];
 };
 
 const TIPOS_TURMA: TipoTurma[] = ["REGULAR", "CURSO_LIVRE", "ENSAIO"];
@@ -162,7 +164,6 @@ function montarNomeTurma(params: {
 
 export default function NovaTurmaPage() {
   const router = useRouter();
-  const supabase = getSupabaseBrowser();
 
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -170,7 +171,8 @@ export default function NovaTurmaPage() {
   const [tipoTurma, setTipoTurma] = useState<TipoTurma>("REGULAR");
 
   const [cursos, setCursos] = useState<Curso[]>([]);
-  const [cursoId, setCursoId] = useState<string>("");
+  const [selectedCursoId, setSelectedCursoId] = useState<number | null>(null);
+  const [selectedCursoNome, setSelectedCursoNome] = useState<string>("");
 
   const [niveis, setNiveis] = useState<Nivel[]>([]);
   const [niveisSelecionados, setNiveisSelecionados] = useState<string[]>([]);
@@ -348,42 +350,30 @@ export default function NovaTurmaPage() {
   useEffect(() => {
     let active = true;
     async function carregarNiveis() {
-      if (!cursoId) {
+      if (!selectedCursoId) {
         setNiveis([]);
         setNiveisSelecionados([]);
         return;
       }
 
-      const cursoIdNum = Number(cursoId);
-      const { data: niveisData, error: niveisError } = await supabase
-        .from("niveis")
-        .select("id, nome, curso_id, idade_minima, idade_maxima")
-        .eq("curso_id", cursoIdNum)
-        .order("ordem", { ascending: true });
-
-      if (niveisError) {
-        const { data: niveisFallback, error: niveisFallbackError } = await supabase
-          .from("niveis")
-          .select("id, nome, curso_id, idade_minima, idade_maxima")
-          .eq("curso_id", cursoIdNum)
-          .order("nome", { ascending: true });
-        if (niveisFallbackError) {
-          console.error("Erro ao carregar niveis:", niveisFallbackError);
-          if (active) setNiveis([]);
-          return;
-        }
-        if (active) setNiveis(niveisFallback ?? []);
+      const resp = await fetch(`/api/escola/academico/cursos/${selectedCursoId}/niveis`, { cache: "no-store" });
+      if (!resp.ok) {
+        console.error("Falha ao carregar niveis:", resp.status);
+        if (active) setNiveis([]);
         return;
       }
 
-      if (active) setNiveis(niveisData ?? []);
+      const data = (await resp.json()) as NiveisApiResponse;
+      if (active) {
+        setNiveis(Array.isArray(data.niveis) ? data.niveis : []);
+      }
     }
 
     void carregarNiveis();
     return () => {
       active = false;
     };
-  }, [cursoId, supabase]);
+  }, [selectedCursoId]);
 
   useEffect(() => {
     let active = true;
@@ -416,7 +406,35 @@ export default function NovaTurmaPage() {
     };
   }, [localId]);
 
-  const cursoSelecionado = useMemo(() => cursos.find((c) => String(c.id) === cursoId) ?? null, [cursos, cursoId]);
+  const onCursoChange = (cursoIdValue: string) => {
+    const id = Number(cursoIdValue);
+    setNiveisSelecionados([]);
+    if (!Number.isFinite(id) || id <= 0) {
+      setSelectedCursoId(null);
+      setSelectedCursoNome("");
+      return;
+    }
+    setSelectedCursoId(id);
+    const curso = cursos.find((c) => c.id === id);
+    setSelectedCursoNome(curso?.nome ?? "");
+  };
+
+  useEffect(() => {
+    if (!selectedCursoId) {
+      if (selectedCursoNome) setSelectedCursoNome("");
+      return;
+    }
+    const curso = cursos.find((c) => c.id === selectedCursoId);
+    if (!curso) {
+      setSelectedCursoId(null);
+      setSelectedCursoNome("");
+      return;
+    }
+    if (curso.nome !== selectedCursoNome) {
+      setSelectedCursoNome(curso.nome);
+    }
+  }, [cursos, selectedCursoId, selectedCursoNome]);
+
   const niveisSelecionadosObjs = useMemo(
     () => niveis.filter((n) => niveisSelecionados.includes(String(n.id))),
     [niveis, niveisSelecionados],
@@ -448,13 +466,13 @@ export default function NovaTurmaPage() {
   const nomeGerado = useMemo(
     () =>
       montarNomeTurma({
-        curso: cursoSelecionado?.nome ?? null,
+        curso: selectedCursoNome || null,
         nivelResumo,
         turno: turnoSelecionado || null,
         dias: diasLabels,
         ano: anoReferencia,
       }),
-    [cursoSelecionado, nivelResumo, turnoSelecionado, diasLabels, anoReferencia],
+    [selectedCursoNome, nivelResumo, turnoSelecionado, diasLabels, anoReferencia],
   );
   const professoresUnicos = useMemo(() => {
     const map = new Map<number, Professor>();
@@ -515,7 +533,7 @@ export default function NovaTurmaPage() {
     setSaving(true);
 
     try {
-      if (!cursoId) {
+      if (!selectedCursoId) {
         setErro("Selecione um curso.");
         setSaving(false);
         return;
@@ -531,7 +549,9 @@ export default function NovaTurmaPage() {
         return;
       }
 
-      const cursoTexto = cursoSelecionado?.nome ?? "";
+      const cursoTexto =
+        selectedCursoNome ||
+        (selectedCursoId ? cursos.find((c) => c.id === selectedCursoId)?.nome ?? "" : "");
       const nivelTexto = nivelResumo;
       const niveisIdsPayload = Array.from(
         new Set(
@@ -741,11 +761,8 @@ export default function NovaTurmaPage() {
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Curso</label>
             <select
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-              value={cursoId}
-              onChange={(e) => {
-                setCursoId(e.target.value);
-                setNiveisSelecionados([]);
-              }}
+              value={selectedCursoId ? String(selectedCursoId) : ""}
+              onChange={(e) => onCursoChange(e.target.value)}
             >
               <option value="">-</option>
               {cursos.map((c) => (
@@ -805,7 +822,7 @@ export default function NovaTurmaPage() {
             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Nivel (pode ser mais de um nivel, ex.: Nivel 1 / Nivel 2)
             </label>
-              {cursoId ? (
+              {selectedCursoId ? (
                 <div className="flex flex-wrap gap-2">
                   {niveis.length === 0 && <span className="text-xs text-slate-500">Nenhum nivel para este curso.</span>}
                   {niveis.map((n) => (
