@@ -66,7 +66,12 @@ function parseBRLToCentavos(input: string): number {
 }
 
 export default function CafeProdutosPage() {
-  const { categorias, loading: categoriasLoading, error: categoriasError } = useCafeCategorias();
+  const {
+    categorias,
+    loading: categoriasLoading,
+    error: categoriasError,
+    reload: reloadCategorias,
+  } = useCafeCategorias();
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -348,6 +353,38 @@ export default function CafeProdutosPage() {
     await loadReceita(selectedProdutoId);
   }
 
+  async function criarCategoriaRapida() {
+    const nome = window.prompt("Nome da nova categoria:");
+    if (!nome || nome.trim().length < 2) return;
+
+    setError(null);
+    setMessage(null);
+
+    const res = await fetch("/api/cafe/categorias", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: nome.trim(), ordem: 0 }),
+    });
+
+    const json = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      categoria?: { id?: number };
+    };
+    if (!res.ok) {
+      setError(json.error ?? "Falha ao criar categoria.");
+      return;
+    }
+
+    await reloadCategorias();
+
+    const categoriaId = Number(json.categoria?.id);
+    if (Number.isFinite(categoriaId) && categoriaId > 0) {
+      setNovaCategoriaId(categoriaId);
+      setNovaSubcategoriaId("");
+    }
+    setMessage("Categoria criada com sucesso.");
+  }
+
   async function salvarPrecos() {
     if (!selectedProdutoId) return;
     setPrecosError(null);
@@ -494,6 +531,24 @@ export default function CafeProdutosPage() {
                   ))}
                 </select>
               </div>
+              <div className="md:col-span-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-xs hover:bg-slate-50"
+                  onClick={() =>
+                    window.open("/admin/cafe/categorias", "_blank", "noopener,noreferrer")
+                  }
+                >
+                  Gerenciar categorias
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-xs hover:bg-slate-50"
+                  onClick={() => void criarCategoriaRapida()}
+                >
+                  + Nova categoria
+                </button>
+              </div>
               <div>
                 <label className="text-sm font-medium">Subcategoria (opcional)</label>
                 <select
@@ -613,6 +668,24 @@ export default function CafeProdutosPage() {
                       </option>
                     ))}
                   </select>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md border px-3 py-2 text-xs hover:bg-slate-50"
+                      onClick={() =>
+                        window.open("/admin/cafe/categorias", "_blank", "noopener,noreferrer")
+                      }
+                    >
+                      Gerenciar categorias
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border px-3 py-2 text-xs hover:bg-slate-50"
+                      onClick={() => void criarCategoriaRapida()}
+                    >
+                      + Nova categoria
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Subcategoria (opcional)</label>

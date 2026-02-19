@@ -9,7 +9,7 @@ export default function AdminCafeHomePage() {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <a href="/admin/cafe/insumos" className="rounded-xl border bg-white p-5 shadow-sm hover:bg-slate-50">
             <div className="text-sm font-semibold">Insumos</div>
             <div className="mt-1 text-sm text-slate-600">Cadastro, abastecimento manual e movimentos.</div>
@@ -18,6 +18,16 @@ export default function AdminCafeHomePage() {
           <a href="/admin/cafe/produtos" className="rounded-xl border bg-white p-5 shadow-sm hover:bg-slate-50">
             <div className="text-sm font-semibold">Produtos</div>
             <div className="mt-1 text-sm text-slate-600">Cardapio: produto, preco e receita.</div>
+          </a>
+
+          <a
+            href="/admin/cafe/categorias"
+            className="rounded-xl border bg-white p-5 shadow-sm hover:bg-slate-50"
+          >
+            <div className="text-sm font-semibold">Categorias</div>
+            <div className="mt-1 text-sm text-slate-600">
+              Organize categorias, desative e mova produtos entre elas.
+            </div>
           </a>
 
           <a

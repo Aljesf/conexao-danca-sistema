@@ -478,3 +478,28 @@ UI:
 ### Validacao
 - Lint escopado dos arquivos deste patch: OK.
 - `npm run build`: OK.
+---
+
+## Atualizacao 2026-02-16 (Admin Categorias do Cafe)
+
+### API
+- `GET /api/cafe/categorias` atualizado com suporte a `include_inativas=1`.
+- Novo endpoint `POST /api/cafe/categorias/[id]/mover-produtos`:
+  - move produtos de uma categoria para outra
+  - limpa `subcategoria_id` para evitar vinculo invalido no destino.
+
+### UI
+- Nova tela administrativa: `/admin/cafe/categorias`.
+  - listar categorias ativas/inativas
+  - criar categoria
+  - renomear categoria
+  - desativar/reativar categoria
+  - mover produtos entre categorias.
+- Hub Admin Cafe (`/admin/cafe`) com novo atalho para `Categorias`.
+- Tela de produtos (`/admin/cafe/produtos`) com atalhos:
+  - `Gerenciar categorias`
+  - `+ Nova categoria` (criacao rapida por prompt, com recarga e selecao da nova categoria).
+
+### Validacao
+- Lint escopado dos arquivos alterados: OK.
+- `npm run build`: OK.

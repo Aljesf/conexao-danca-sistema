@@ -24,13 +24,18 @@ export async function GET(req: Request) {
   if (denied) return denied as unknown as NextResponse;
 
   const supabase = getSupabaseServiceClient();
+  const url = new URL(req.url);
+  const includeInativas = url.searchParams.get("include_inativas") === "1";
 
-  const { data: categorias, error: catErr } = await supabase
+  let categoriasQuery = supabase
     .from("cafe_categorias")
     .select("id,centro_custo_id,nome,slug,ordem,ativo")
-    .eq("ativo", true)
     .order("ordem", { ascending: true })
     .order("nome", { ascending: true });
+  if (!includeInativas) {
+    categoriasQuery = categoriasQuery.eq("ativo", true);
+  }
+  const { data: categorias, error: catErr } = await categoriasQuery;
 
   if (catErr) {
     return NextResponse.json(
@@ -55,13 +60,16 @@ export async function GET(req: Request) {
   let subcategorias: SubcategoriaRow[] = [];
   let subErr: { message: string } | null = null;
   if (categoriaIds.length > 0) {
-    const result = await supabase
+    let subcategoriasQuery = supabase
       .from("cafe_subcategorias")
       .select("id,categoria_id,nome,slug,ordem,ativo")
       .in("categoria_id", categoriaIds)
-      .eq("ativo", true)
       .order("ordem", { ascending: true })
       .order("nome", { ascending: true });
+    if (!includeInativas) {
+      subcategoriasQuery = subcategoriasQuery.eq("ativo", true);
+    }
+    const result = await subcategoriasQuery;
 
     subcategorias = (result.data ?? []) as SubcategoriaRow[];
     subErr = result.error ? { message: result.error.message } : null;

@@ -135,6 +135,46 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
     // - origem direta da matricula, ou
     // - lancamento vinculado a cobranca cancelada no passo anterior
     // - status pendente de faturamento, ou faturado em fatura ainda aberta
+    const lancamentosFilterParams = [
+      matriculaId,
+      idsParaCancelar.length > 0,
+      idsParaCancelar.length > 0 ? idsParaCancelar : [-1],
+      competenciaAtual,
+    ];
+
+    // Lock pessimista das linhas-base de lancamentos (sem DISTINCT).
+    await client.query(
+      `
+      SELECT l.id
+      FROM public.credito_conexao_lancamentos l
+      WHERE (
+        (COALESCE(upper(l.origem_sistema), '') = 'MATRICULA' AND l.origem_id = $1)
+        OR ($2::boolean AND l.cobranca_id = ANY($3::bigint[]))
+      )
+      AND (
+        $2::boolean
+        OR l.competencia IS NULL
+        OR l.competencia >= $4
+      )
+      AND (
+        COALESCE(upper(l.status), '') = 'PENDENTE_FATURA'
+        OR (
+          COALESCE(upper(l.status), '') = 'FATURADO'
+          AND EXISTS (
+            SELECT 1
+            FROM public.credito_conexao_fatura_lancamentos fl
+            JOIN public.credito_conexao_faturas f
+              ON f.id = fl.fatura_id
+            WHERE fl.lancamento_id = l.id
+              AND COALESCE(upper(f.status), '') IN ('ABERTA', 'PENDENTE', 'EM_ABERTO')
+          )
+        )
+      )
+      FOR UPDATE OF l
+      `,
+      lancamentosFilterParams,
+    );
+
     const lancamentosCartaoQuery = await client.query<{
       id: number;
       fatura_id: number | null;
@@ -166,14 +206,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
           AND COALESCE(upper(f.status), '') IN ('ABERTA', 'PENDENTE', 'EM_ABERTO')
         )
       )
-      FOR UPDATE OF l
       `,
-      [
-        matriculaId,
-        idsParaCancelar.length > 0,
-        idsParaCancelar.length > 0 ? idsParaCancelar : [-1],
-        competenciaAtual,
-      ],
+      lancamentosFilterParams,
     );
 
     lancamentosCartaoIds = lancamentosCartaoQuery.rows
