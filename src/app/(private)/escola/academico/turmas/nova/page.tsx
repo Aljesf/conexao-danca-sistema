@@ -358,7 +358,8 @@ export default function NovaTurmaPage() {
 
       const resp = await fetch(`/api/escola/academico/cursos/${selectedCursoId}/niveis`, { cache: "no-store" });
       if (!resp.ok) {
-        console.error("Falha ao carregar niveis:", resp.status);
+        const erroBody = await resp.text();
+        console.error("Falha ao carregar niveis:", resp.status, erroBody);
         if (active) setNiveis([]);
         return;
       }

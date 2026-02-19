@@ -1,84 +1,58 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { requirePermission } from "@/lib/auth/authorize";
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
-type NivelRow = {
-  id: number;
-  nome: string;
-  curso_id: number | null;
-  idade_minima: number | null;
-  idade_maxima: number | null;
-  faixa_etaria_sugerida: string | null;
-  pre_requisito_nivel_id: number | null;
-  observacoes: string | null;
-  ordem?: number | null;
-};
+type Params = { id: string };
 
-function asId(value: string): number | null {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return parsed;
-}
+type SbErr = { message: string; hint?: string | null; code?: string | null };
 
-export async function GET(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  try {
-    const { id: idRaw } = await ctx.params;
-    const cursoId = asId(idRaw);
-    if (!cursoId) {
-      return NextResponse.json({ error: "curso_id_invalido" }, { status: 400 });
-    }
+export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
+  const supabase = await createClient();
 
-    await requirePermission({ kind: "ANY_AUTHENTICATED" });
-
-    let admin;
-    try {
-      admin = getSupabaseAdmin();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "ENV_NAO_CONFIGURADA";
-      return NextResponse.json(
-        { error: "ENV_NAO_CONFIGURADA", details: msg, curso_id: cursoId, fonte: "niveis" },
-        { status: 500 },
-      );
-    }
-
-    const selectCols =
-      "id,nome,curso_id,idade_minima,idade_maxima,faixa_etaria_sugerida,pre_requisito_nivel_id,observacoes,ordem";
-
-    const { data: orderedData, error: orderedError } = await admin
-      .from("niveis")
-      .select(selectCols)
-      .eq("curso_id", cursoId)
-      .order("ordem", { ascending: true });
-
-    if (!orderedError) {
-      return NextResponse.json({ niveis: orderedData ?? [] }, { status: 200 });
-    }
-
-    const { data: fallbackData, error: fallbackError } = await admin
-      .from("niveis")
-      .select(selectCols)
-      .eq("curso_id", cursoId)
-      .order("nome", { ascending: true });
-
-    if (fallbackError) {
-      return NextResponse.json(
-        {
-          error: "erro_listar_niveis",
-          details: fallbackError.message,
-          hint: (fallbackError as { hint?: string }).hint ?? null,
-          code: (fallbackError as { code?: string }).code ?? null,
-          curso_id: cursoId,
-          fonte: "niveis",
-        },
-        { status: 500 },
-      );
-    }
-
-    const niveis = (fallbackData ?? []) as NivelRow[];
-    return NextResponse.json({ niveis }, { status: 200 });
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : "erro_interno";
-    const status = message === "Nao autenticado." ? 401 : 403;
-    return NextResponse.json({ error: message }, { status });
+  const params = await ctx.params;
+  const cursoId = Number(params.id);
+  if (!Number.isFinite(cursoId)) {
+    return NextResponse.json({ error: "curso_id_invalido" }, { status: 400 });
   }
+
+  // 1) Tenta view (se existir)
+  const q1 = await supabase
+    .from("vw_niveis_ativos")
+    .select("id, nome")
+    .eq("curso_id", cursoId)
+    .order("nome", { ascending: true });
+
+  if (!q1.error) {
+    return NextResponse.json({ niveis: q1.data ?? [], fonte: "vw_niveis_ativos" });
+  }
+
+  // Log no servidor
+  console.error("[niveis] view vw_niveis_ativos indisponivel", { cursoId, error: q1.error });
+
+  // 2) Fallback: tabela "niveis" sem depender de colunas opcionais
+  const q2 = await supabase
+    .from("niveis")
+    .select("id, nome")
+    .eq("curso_id", cursoId)
+    .order("nome", { ascending: true });
+
+  if (!q2.error) {
+    return NextResponse.json({ niveis: q2.data ?? [], fonte: "niveis" });
+  }
+
+  console.error("[niveis] erro na tabela niveis", { cursoId, error: q2.error });
+
+  const e1 = q1.error as unknown as SbErr;
+  const e2 = q2.error as unknown as SbErr;
+
+  return NextResponse.json(
+    {
+      error: "erro_listar_niveis",
+      curso_id: cursoId,
+      tentativas: [
+        { fonte: "vw_niveis_ativos", details: e1.message, hint: e1.hint ?? null, code: e1.code ?? null },
+        { fonte: "niveis", details: e2.message, hint: e2.hint ?? null, code: e2.code ?? null },
+      ],
+    },
+    { status: 500 },
+  );
 }
