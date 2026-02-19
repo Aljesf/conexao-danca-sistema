@@ -34,6 +34,13 @@ type PeriodoLetivo = {
   inicio_letivo_janeiro: string | null;
   ativo: boolean;
 };
+type CursosApiResponse = {
+  cursos?: Curso[];
+  data?: Array<{ id: number; nome: string }>;
+};
+type ProfessoresApiResponse = {
+  professores?: Professor[];
+};
 
 const TIPOS_TURMA: TipoTurma[] = ["REGULAR", "CURSO_LIVRE", "ENSAIO"];
 const TURNOS: TurnoTurma[] = ["MANHA", "TARDE", "NOITE", "INTEGRAL"];
@@ -199,32 +206,49 @@ export default function NovaTurmaPage() {
   const [nomeManual, setNomeManual] = useState("");
 
   useEffect(() => {
+    let active = true;
+
     async function carregar() {
-      const { data: cursosData, error: cursosError } = await supabase.from("cursos").select("id, nome").order("nome");
-      if (cursosError) console.error("Erro ao carregar cursos:", cursosError);
-      setCursos(cursosData ?? []);
+      const resCursos = await fetch("/api/escola/academico/cursos", { cache: "no-store" });
+      if (!resCursos.ok) {
+        console.error("Falha ao carregar cursos:", resCursos.status);
+      }
+      const cursosData = resCursos.ok
+        ? ((await resCursos.json()) as CursosApiResponse)
+        : ({ cursos: [] } as CursosApiResponse);
+      const cursosLista = Array.isArray(cursosData.cursos)
+        ? cursosData.cursos
+        : Array.isArray(cursosData.data)
+          ? cursosData.data
+          : [];
+      if (active) {
+        setCursos(cursosLista);
+      }
 
       const locaisResp = await fetch("/api/locais");
       if (locaisResp.ok) {
         const locaisJson = (await locaisResp.json()) as { locais?: Local[] };
-        setLocais(locaisJson.locais ?? []);
+        if (active) setLocais(locaisJson.locais ?? []);
       } else {
         console.error("Erro ao carregar locais");
       }
 
-      const { data: profsData, error: profsError } = await supabase
-        .from("vw_professores")
-        .select("id, nome")
-        .eq("ativo", true)
-        .order("nome", { ascending: true });
-      if (profsError) {
-        console.error("Erro ao carregar professores:", profsError);
-      } else {
-        setProfessores(profsData ?? []);
+      const resProf = await fetch("/api/escola/academico/professores", { cache: "no-store" });
+      if (!resProf.ok) {
+        console.error("Falha ao carregar professores:", resProf.status);
+      }
+      const professoresData = resProf.ok
+        ? ((await resProf.json()) as ProfessoresApiResponse)
+        : ({ professores: [] } as ProfessoresApiResponse);
+      if (active) {
+        setProfessores(professoresData.professores ?? []);
       }
     }
     void carregar();
-  }, [supabase]);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (tipoTurma !== "REGULAR") {
