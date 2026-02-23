@@ -503,3 +503,27 @@ UI:
 ### Validacao
 - Lint escopado dos arquivos alterados: OK.
 - `npm run build`: OK.
+---
+
+## Atualizacao 2026-02-20 (NASC - Triagem Admin de Suporte)
+
+### SQL
+- Migration criada: `supabase/migrations/20260220_01_nasc_observacoes_triagem_admin.sql`.
+- Ajustes em `public.nasc_observacoes`:
+  - `status` com estados `ABERTO | EM_ANALISE | EM_ANDAMENTO | RESOLVIDO | FECHADO`
+  - `triagem_notas`
+  - `updated_at` + trigger de atualizacao
+- Indices adicionados para triagem: `status` e `updated_at desc`.
+
+### API
+- `GET /api/admin/suporte/tickets` para inbox de triagem (filtro por `status` e `q`).
+- `GET /api/admin/suporte/tickets/[id]` para detalhe tecnico do relato.
+- `PUT /api/admin/suporte/tickets/[id]` para atualizar status e notas de triagem.
+
+### UI
+- Nova lista administrativa: `/administracao/suporte`.
+- Nova pagina de detalhe: `/administracao/suporte/[id]`.
+- Atalho no sidebar admin em Governanca & Auditoria: `Suporte (NASC)`.
+
+### Observacao
+- O botao flutuante existente (`/api/nasc/observacoes`) foi mantido como canal de entrada dos relatos.
