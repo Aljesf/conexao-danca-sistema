@@ -527,3 +527,11 @@ UI:
 
 ### Observacao
 - O botao flutuante existente (`/api/nasc/observacoes`) foi mantido como canal de entrada dos relatos.
+
+---
+
+## Atualizacao 2026-02-23 (App Professor - Agenda de Hoje)
+
+- App Professor (mobile): criado em `apps/professor-app` (Expo + TypeScript + navegacao basica).
+- SQL: criada funcao `fn_dia_semana_pt(date)` e view `vw_professor_agenda_hoje` para agenda do professor no dia atual.
+- API: criada rota `GET /api/professor/agenda/hoje` retornando `{ aulas: [...] }` filtrada pelo professor logado.
