@@ -64,6 +64,7 @@ export const adminSidebar: SidebarSection[] = [
     title: "📄 Documentos",
     items: [
       { label: "🆕 Novo documento", href: "/admin/config/documentos" },
+      { label: "🧾 Novo recibo", href: "/admin/config/documentos/novo-recibo" },
       { label: "🧩 Modelos", href: "/admin/config/documentos/modelos" },
       { label: "🔣 Variaveis", href: "/admin/config/documentos/variaveis" },
       { label: "🗂️ Colecoes", href: "/admin/config/documentos/colecoes" },

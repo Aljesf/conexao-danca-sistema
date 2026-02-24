@@ -47,6 +47,15 @@ export default function AdminConfigDocumentosHome() {
           </SystemSectionCard>
         </Link>
 
+        <Link href="/admin/config/documentos/novo-recibo" className="block">
+          <SystemSectionCard
+            title="Novo recibo de mensalidade"
+            description="Emita recibo por cobranca ou recebimento com texto pronto."
+          >
+            <p className="text-sm text-slate-600">Fluxo rapido para comprovante de mensalidade no financeiro.</p>
+          </SystemSectionCard>
+        </Link>
+
         <Link href="/admin/config/documentos/variaveis" className="block">
           <SystemSectionCard
             title="Variaveis de documento"
