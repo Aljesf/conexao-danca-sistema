@@ -1,5 +1,4 @@
 begin;
-
 do $$
 declare
   v_def text;
@@ -41,10 +40,8 @@ begin
 
   raise notice 'Constraint atualizada: agora permite LIQUIDADO_INSTITUCIONAL.';
 end $$;
-
 commit;
-
 -- Validacao rapida (opcional no SQL Editor):
 -- select conname, pg_get_constraintdef(oid)
 -- from pg_constraint
--- where conname = 'matriculas_primeira_cobranca_status_chk';
+-- where conname = 'matriculas_primeira_cobranca_status_chk';;

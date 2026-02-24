@@ -20,10 +20,8 @@ CREATE TABLE IF NOT EXISTS public.cursos_livres (
   created_by uuid NULL,
   updated_by uuid NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_cursos_livres_status ON public.cursos_livres(status);
 CREATE INDEX IF NOT EXISTS idx_cursos_livres_datas ON public.cursos_livres(data_inicio, data_fim);
-
 -- ==========================================
 -- 2) Turmas: vinculo opcional com Curso Livre
 -- ==========================================
@@ -31,7 +29,6 @@ CREATE INDEX IF NOT EXISTS idx_cursos_livres_datas ON public.cursos_livres(data_
 -- Uma turma CURSO_LIVRE pode apontar para um curso_livre (agrupador).
 ALTER TABLE public.turmas
 ADD COLUMN IF NOT EXISTS curso_livre_id bigint NULL;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -43,9 +40,7 @@ BEGIN
     ON DELETE SET NULL;
   END IF;
 END$$;
-
 CREATE INDEX IF NOT EXISTS idx_turmas_curso_livre_id ON public.turmas(curso_livre_id);
-
 -- ==========================================
 -- 3) Precificacao - tabela de precos (1 ativa)
 -- ==========================================
@@ -61,15 +56,12 @@ CREATE TABLE IF NOT EXISTS public.escola_precos_cursos_livres (
   created_by uuid NULL,
   updated_by uuid NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_escola_precos_cl_curso ON public.escola_precos_cursos_livres(curso_livre_id);
 CREATE INDEX IF NOT EXISTS idx_escola_precos_cl_ativo ON public.escola_precos_cursos_livres(curso_livre_id, ativo);
-
 -- Garantir 1 tabela ativa por curso_livre
 CREATE UNIQUE INDEX IF NOT EXISTS ux_escola_precos_cl_ativo_por_curso
 ON public.escola_precos_cursos_livres(curso_livre_id)
 WHERE ativo = true;
-
 -- ==========================================
 -- 4) Precificacao - itens/tiers
 -- ==========================================
@@ -89,10 +81,8 @@ CREATE TABLE IF NOT EXISTS public.escola_precos_cursos_livres_itens (
   created_by uuid NULL,
   updated_by uuid NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_escola_precos_cl_itens_tabela ON public.escola_precos_cursos_livres_itens(tabela_preco_id);
 CREATE INDEX IF NOT EXISTS idx_escola_precos_cl_itens_ativo ON public.escola_precos_cursos_livres_itens(tabela_preco_id, ativo);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_escola_precos_cl_itens_codigo
 ON public.escola_precos_cursos_livres_itens(tabela_preco_id, codigo);
-
--- [FIM DO BLOCO]
+-- [FIM DO BLOCO];

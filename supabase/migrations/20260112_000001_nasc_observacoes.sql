@@ -3,7 +3,6 @@
 -- Tabela canonica para observacoes operacionais contextualizadas
 
 BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.nasc_observacoes (
   id                 bigserial PRIMARY KEY,
   created_at         timestamptz NOT NULL DEFAULT now(),
@@ -24,21 +23,15 @@ CREATE TABLE IF NOT EXISTS public.nasc_observacoes (
   viewport_json      jsonb NOT NULL DEFAULT '{}'::jsonb,
   context_json       jsonb NOT NULL DEFAULT '{}'::jsonb
 );
-
 CREATE INDEX IF NOT EXISTS idx_nasc_observacoes_created_at
   ON public.nasc_observacoes (created_at DESC);
-
 CREATE INDEX IF NOT EXISTS idx_nasc_observacoes_created_by
   ON public.nasc_observacoes (created_by);
-
 CREATE INDEX IF NOT EXISTS idx_nasc_observacoes_pathname
   ON public.nasc_observacoes (pathname);
-
 CREATE INDEX IF NOT EXISTS idx_nasc_observacoes_context_json_gin
   ON public.nasc_observacoes USING gin (context_json);
-
 ALTER TABLE public.nasc_observacoes ENABLE ROW LEVEL SECURITY;
-
 -- MVP: qualquer usuario autenticado pode inserir e ler.
 DO $$
 BEGIN
@@ -68,5 +61,4 @@ BEGIN
       USING (true);
   END IF;
 END $$;
-
 COMMIT;

@@ -1,5 +1,4 @@
 BEGIN;
-
 -- =========================================
 -- MIGRATION: Templates de Formulario por Blocos
 -- =========================================
@@ -13,7 +12,6 @@ ALTER TABLE public.form_templates
   ADD COLUMN IF NOT EXISTS footer_image_url text,
   ADD COLUMN IF NOT EXISTS intro_text_md text,
   ADD COLUMN IF NOT EXISTS outro_text_md text;
-
 -- (B) Tabela de blocos (form builder)
 CREATE TABLE IF NOT EXISTS public.form_template_blocos (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -42,8 +40,6 @@ CREATE TABLE IF NOT EXISTS public.form_template_blocos (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS ix_form_template_blocos_template_ordem
   ON public.form_template_blocos (template_id, ordem);
-
 COMMIT;

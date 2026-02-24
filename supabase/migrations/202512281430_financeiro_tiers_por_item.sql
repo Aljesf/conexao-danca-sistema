@@ -1,12 +1,10 @@
 BEGIN;
-
 -- Vincular tiers a tabela de preco + item (ajuste por item)
 ALTER TABLE public.financeiro_tiers
   ADD COLUMN IF NOT EXISTS tabela_id bigint NULL,
   ADD COLUMN IF NOT EXISTS tabela_item_id bigint NULL,
   ADD COLUMN IF NOT EXISTS ajuste_tipo text NULL,
   ADD COLUMN IF NOT EXISTS ajuste_valor_centavos integer NULL;
-
 -- CHECK basico para ajuste_tipo (texto)
 DO $$
 BEGIN
@@ -19,7 +17,6 @@ BEGIN
       CHECK (ajuste_tipo IS NULL OR ajuste_tipo IN ('override','percentual','fixo'));
   END IF;
 END $$;
-
 -- FKs para tabela e item (ajuste conforme schema real)
 DO $$
 BEGIN
@@ -41,7 +38,6 @@ BEGIN
       ON DELETE RESTRICT;
   END IF;
 END $$;
-
 -- Migracao do valor_centavos existente para ajuste (override)
 DO $$
 BEGIN
@@ -57,9 +53,7 @@ BEGIN
     WHERE valor_centavos IS NOT NULL;
   END IF;
 END $$;
-
 -- Indice para o resolver
 CREATE INDEX IF NOT EXISTS idx_financeiro_tiers_lookup
   ON public.financeiro_tiers (tabela_id, tabela_item_id, ativo, ordem);
-
 COMMIT;

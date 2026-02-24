@@ -1,5 +1,4 @@
 ﻿BEGIN;
-
 -- =========================================================
 -- Seed oficial da ASE (Movimento Conexão Dança)
 -- Fonte: "Metodologia de Análise Socioeconômica Unificada por Contexto"
@@ -31,7 +30,6 @@ ON CONFLICT (codigo) DO UPDATE SET
   ajuda = EXCLUDED.ajuda,
   ativo = EXCLUDED.ativo,
   updated_at = now();
-
 -- opções R1
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -43,7 +41,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r1_tempo_participacao'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções R3/R4/R5/R8
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -59,7 +56,6 @@ WHERE q.codigo IN (
   'ase_menor_r8_condicao_pagamento_integral'
 )
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- R3 tem texto diferente
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -71,7 +67,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r3_rotina_permanencia'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções R6
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -84,7 +79,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r6_renda_faixa'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções R7
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -98,7 +92,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r7_fonte_renda'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções R9 (sim/não)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -109,7 +102,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r9_declara_necessidade_apoio'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções R10
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -124,7 +116,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r10_identidade_racial'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções R13 (sim/não)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -135,7 +126,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r13_reconhece_compromisso_familiar'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções R15 (multi)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -147,7 +137,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r15_ciencia_institucional'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções R16 (multi)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -159,7 +148,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_r16_declaracao_final_autorizacao'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- 2) PERGUNTAS BLOCO A (Aluno menor) — A1..A7
 INSERT INTO public.form_questions (codigo, titulo, descricao, tipo, ajuda, ativo)
 VALUES
@@ -177,7 +165,6 @@ ON CONFLICT (codigo) DO UPDATE SET
   ajuda = EXCLUDED.ajuda,
   ativo = EXCLUDED.ativo,
   updated_at = now();
-
 -- opções A2
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -189,7 +176,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_a2_como_se_sente'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções A3
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -202,7 +188,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_a3_oque_a_danca_e'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções A4
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -214,7 +199,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_a4_participacao_nas_aulas'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções A5
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -226,7 +210,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_a5_desejo_continuar'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções A6
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -237,7 +220,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_menor_a6_compromisso_aluno'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- 3) PERGUNTAS BLOCO 18+ (Aluno maior) — M1..M14
 INSERT INTO public.form_questions (codigo, titulo, descricao, tipo, ajuda, ativo)
 VALUES
@@ -262,7 +244,6 @@ ON CONFLICT (codigo) DO UPDATE SET
   ajuda = EXCLUDED.ajuda,
   ativo = EXCLUDED.ativo,
   updated_at = now();
-
 -- opções M1
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -275,7 +256,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_18_m1_ocupacao_principal'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções M2 (mesmas faixas)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -288,7 +268,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_18_m2_renda_faixa'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções M3 (sim/parcialmente/não)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -300,7 +279,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo IN ('ase_18_m3_condicao_pagamento_integral','ase_18_m9_necessita_apoio_percepcao')
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções M4 (sim/não)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -311,7 +289,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_18_m4_declara_necessidade_apoio'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções M5
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -322,7 +299,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_18_m5_tempo_no_conexao'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções M8
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -334,7 +310,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_18_m8_frequencia_compromisso'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções M10
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -349,7 +324,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_18_m10_identidade_racial'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções M13 (multi)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -361,7 +335,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_18_m13_ciencia_institucional'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- opções M14 (multi) — declaração final (modelo simples para o digital; assinatura no impresso)
 INSERT INTO public.form_question_options (question_id, valor, rotulo, ordem, ativo)
 SELECT q.id, v.valor, v.rotulo, v.ordem, true
@@ -373,7 +346,6 @@ JOIN (VALUES
 ) AS v(valor, rotulo, ordem) ON true
 WHERE q.codigo = 'ase_18_m14_declaracao_final'
 ON CONFLICT (question_id, valor) DO UPDATE SET rotulo = EXCLUDED.rotulo, ordem = EXCLUDED.ordem, ativo = true, updated_at = now();
-
 -- =========================================================
 -- 4) TEMPLATES oficiais
 -- =========================================================
@@ -383,13 +355,11 @@ INSERT INTO public.form_templates (nome, descricao, status, versao, published_at
 VALUES
   ('ASE — Movimento — 18+ (Aluno maior)', 'Análise Socioeconômica (ASE) — contexto aluno maior de idade.', 'published', 1, now())
 ON CONFLICT DO NOTHING;
-
 -- ASE-MENOR
 INSERT INTO public.form_templates (nome, descricao, status, versao, published_at)
 VALUES
   ('ASE — Movimento — MENOR (Responsável + Aluno)', 'Análise Socioeconômica (ASE) — contexto aluno menor, com voz do responsável e voz do aluno.', 'published', 1, now())
 ON CONFLICT DO NOTHING;
-
 -- Obter IDs dos templates
 WITH t AS (
   SELECT id, nome FROM public.form_templates
@@ -399,7 +369,6 @@ WITH t AS (
   )
 )
 SELECT 1;
-
 -- Limpar itens anteriores (se existirem) e recriar (idempotente)
 DELETE FROM public.form_template_items
 WHERE template_id IN (
@@ -409,7 +378,6 @@ WHERE template_id IN (
     'ASE — Movimento — MENOR (Responsável + Aluno)'
   )
 );
-
 -- Itens ASE-18+
 INSERT INTO public.form_template_items (template_id, question_id, ordem, obrigatoria, cond_question_id, cond_equals_value)
 SELECT
@@ -444,7 +412,6 @@ CROSS JOIN LATERAL (
   SELECT cq.id AS cond_qid
 ) x
 WHERE tpl.nome = 'ASE — Movimento — 18+ (Aluno maior)';
-
 -- Itens ASE-MENOR (R1..R16, A1..A7)
 INSERT INTO public.form_template_items (template_id, question_id, ordem, obrigatoria, cond_question_id, cond_equals_value)
 SELECT
@@ -488,5 +455,4 @@ CROSS JOIN LATERAL (
   SELECT cq.id AS cond_qid
 ) x
 WHERE tpl.nome = 'ASE — Movimento — MENOR (Responsável + Aluno)';
-
 COMMIT;

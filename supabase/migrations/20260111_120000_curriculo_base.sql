@@ -17,12 +17,9 @@ CREATE TABLE IF NOT EXISTS public.historico_academico (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_historico_academico_pessoa ON public.historico_academico(pessoa_id);
-
 COMMENT ON TABLE public.historico_academico IS
 'Formacoes internas do curriculo. Inicialmente manual; depois sera alimentado automaticamente ao concluir turmas/matriculas.';
-
 -- 2) Formacoes externas (cursos externos + certificado opcional)
 CREATE TABLE IF NOT EXISTS public.curriculo_formacoes_externas (
   id BIGSERIAL PRIMARY KEY,
@@ -38,12 +35,9 @@ CREATE TABLE IF NOT EXISTS public.curriculo_formacoes_externas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_curriculo_formacoes_externas_pessoa ON public.curriculo_formacoes_externas(pessoa_id);
-
 COMMENT ON TABLE public.curriculo_formacoes_externas IS
 'Formacoes externas do curriculo (flexivel; nem todos os campos sao obrigatorios).';
-
 -- 3) Experiencias artisticas (itens manuais)
 CREATE TABLE IF NOT EXISTS public.curriculo_experiencias_artisticas (
   id BIGSERIAL PRIMARY KEY,
@@ -57,8 +51,6 @@ CREATE TABLE IF NOT EXISTS public.curriculo_experiencias_artisticas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_curriculo_experiencias_artisticas_pessoa ON public.curriculo_experiencias_artisticas(pessoa_id);
-
 COMMENT ON TABLE public.curriculo_experiencias_artisticas IS
 'Experiencias artisticas do curriculo (manual).';

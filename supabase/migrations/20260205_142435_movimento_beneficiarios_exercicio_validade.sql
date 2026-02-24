@@ -1,5 +1,4 @@
 ﻿BEGIN;
-
 -- Exercicio (ano) + validade (data) para cadastro institucional do Movimento Conexao Banco
 -- Regra: beneficiario e manual. Exercicio serve para relatorios; validade para expiracao automatica.
 
@@ -21,16 +20,13 @@ BEGIN
       ADD COLUMN valido_ate date;
   END IF;
 END $$;
-
 -- Defaults suaves (nao quebra historico)
 -- exercicio_ano: ano atual, quando NULL
 -- valido_ate: 31/12 do ano do exercicio, quando NULL e exercicio_ano nao nulo
 UPDATE public.movimento_beneficiarios
 SET exercicio_ano = EXTRACT(YEAR FROM NOW())::int
 WHERE exercicio_ano IS NULL;
-
 UPDATE public.movimento_beneficiarios
 SET valido_ate = make_date(exercicio_ano, 12, 31)
 WHERE valido_ate IS NULL AND exercicio_ano IS NOT NULL;
-
 COMMIT;

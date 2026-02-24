@@ -7,12 +7,10 @@
 ALTER TABLE public.loja_produtos
 ADD COLUMN IF NOT EXISTS fornecedor_principal_id BIGINT
 REFERENCES public.loja_fornecedores(id);
-
 -- Datas de cadastro e atualização (se ainda não existirem)
 ALTER TABLE public.loja_produtos
 ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
 -- Função genérica para updated_at, caso não exista
 DO $$
 BEGIN
@@ -29,7 +27,6 @@ BEGIN
   END IF;
 END;
 $$;
-
 -- Trigger para atualizar updated_at em loja_produtos
 DO $$
 BEGIN

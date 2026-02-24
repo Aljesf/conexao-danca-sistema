@@ -1,5 +1,4 @@
 BEGIN;
-
 -- Garantir que nada no banco exige ASE/formulario para criar beneficiario.
 -- (Mudanca de regra: beneficiario do Movimento e cadastro manual.)
 
@@ -28,7 +27,6 @@ BEGIN
     EXECUTE 'ALTER TABLE public.movimento_beneficiarios ALTER COLUMN ase_submitted_at DROP NOT NULL';
   END IF;
 END $$;
-
 -- 2) Remover CHECK constraint que imponha ASE (se existir com qualquer nome conhecido)
 DO $$
 DECLARE
@@ -44,7 +42,6 @@ BEGIN
     EXECUTE format('ALTER TABLE public.movimento_beneficiarios DROP CONSTRAINT %I', c.conname);
   END LOOP;
 END $$;
-
 -- 3) Remover trigger que bloqueie insert/update por ASE (se existir)
 DO $$
 DECLARE
@@ -65,5 +62,4 @@ BEGIN
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON public.movimento_beneficiarios', t.tgname);
   END LOOP;
 END $$;
-
 COMMIT;

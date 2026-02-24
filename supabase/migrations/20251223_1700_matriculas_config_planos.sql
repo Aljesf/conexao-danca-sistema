@@ -5,7 +5,6 @@
 -- =====================================================================================
 
 begin;
-
 -- 1) Configuracao global do modulo de matriculas
 create table if not exists public.matricula_configuracoes (
   id bigint generated always as identity primary key,
@@ -23,11 +22,9 @@ create table if not exists public.matricula_configuracoes (
   created_by uuid,
   updated_by uuid
 );
-
 create unique index if not exists matricula_configuracoes_ativo_uniq
 on public.matricula_configuracoes (ativo)
 where ativo = true;
-
 insert into public.matricula_configuracoes (
   ativo, vencimento_dia_padrao, mes_referencia_dias, parcelas_padrao, moeda
 )
@@ -35,7 +32,6 @@ select true, 4, 30, 12, 'BRL'
 where not exists (
   select 1 from public.matricula_configuracoes where ativo = true
 );
-
 -- 2) Planos de matricula (ANUIDADE)
 create table if not exists public.matricula_planos (
   id bigint generated always as identity primary key,
@@ -54,10 +50,8 @@ create table if not exists public.matricula_planos (
   created_by uuid,
   updated_by uuid
 );
-
 create index if not exists matricula_planos_ativo_idx
 on public.matricula_planos (ativo);
-
 -- 3) Tabela de precos por turma e ano (ADMIN)
 create table if not exists public.matricula_precos_turma (
   id bigint generated always as identity primary key,
@@ -74,23 +68,20 @@ create table if not exists public.matricula_precos_turma (
   created_by uuid,
   updated_by uuid
 );
-
 create unique index if not exists matricula_precos_turma_uniq
 on public.matricula_precos_turma (turma_id, ano_referencia)
 where ativo = true;
-
 create index if not exists matricula_precos_turma_lookup_idx
 on public.matricula_precos_turma (ano_referencia, turma_id, ativo);
-
 create index if not exists matricula_precos_turma_plano_idx
 on public.matricula_precos_turma (plano_id);
-
 -- 4) Ajustes em cobrancas para parcelamento e prorata
 alter table public.cobrancas
   add column if not exists parcela_numero smallint,
   add column if not exists total_parcelas smallint,
   add column if not exists origem_subtipo text, -- 'ANUIDADE_PARCELA' | 'PRORATA_AJUSTE' | etc.
-  add column if not exists competencia_ano_mes text; -- 'YYYY-MM'
+  add column if not exists competencia_ano_mes text;
+-- 'YYYY-MM'
 
 do $$
 begin
@@ -116,15 +107,11 @@ begin
   end if;
 end
 $$;
-
 create index if not exists cobrancas_origem_idx
 on public.cobrancas (origem_tipo, origem_id);
-
 create index if not exists cobrancas_parcelas_idx
 on public.cobrancas (origem_tipo, origem_id, total_parcelas, parcela_numero);
-
 commit;
-
 -- =====================================================================================
 -- Fim da migration
--- =====================================================================================
+-- =====================================================================================;

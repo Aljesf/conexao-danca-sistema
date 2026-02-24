@@ -6,12 +6,10 @@
 -- - cpf, quando presente, deve ser unico.
 
 begin;
-
 -- 1) Normalizar dados existentes: remover mascara e espacos
 update public.pessoas
 set cpf = nullif(regexp_replace(coalesce(cpf, ''), '\D', '', 'g'), '')
 where cpf is not null;
-
 -- 2) Garantir que CPF presente tenha 11 digitos (formato)
 do $$
 begin
@@ -25,7 +23,6 @@ begin
       check (cpf is null or cpf ~ '^\d{11}$');
   end if;
 end $$;
-
 -- 3) Unicidade (parcial): apenas quando cpf nao e nulo
 do $$
 begin
@@ -42,5 +39,4 @@ begin
       where cpf is not null;
   end if;
 end $$;
-
 commit;

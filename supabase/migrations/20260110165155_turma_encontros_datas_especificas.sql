@@ -11,8 +11,6 @@ CREATE TABLE IF NOT EXISTS public.turma_encontros (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE INDEX IF NOT EXISTS idx_turma_encontros_turma ON public.turma_encontros(turma_id);
 CREATE INDEX IF NOT EXISTS idx_turma_encontros_data ON public.turma_encontros(data);
-
--- [FIM DO BLOCO]
+-- [FIM DO BLOCO];

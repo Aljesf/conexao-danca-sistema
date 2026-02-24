@@ -1,0 +1,30 @@
+﻿node.exe : Initialising login role...
+No linha:1 caractere:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Initialising login role...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+failed to connect as temp role: failed to connect to `host=aws-1-sa-east-1.pooler.supabase.com 
+user=cli_login_postgres.bhbohlhathgogvflggdl database=postgres`: server error (FATAL: Circuit breaker open: Too many 
+authentication errors (SQLSTATE XX000))
+Retry (3/8): failed to connect as temp role: failed to connect to `host=aws-1-sa-east-1.pooler.supabase.com 
+user=cli_login_postgres.bhbohlhathgogvflggdl database=postgres`: server error (FATAL: Circuit breaker open: Too many 
+authentication errors (SQLSTATE XX000))
+Retry (4/8): failed to connect as temp role: failed to connect to `host=aws-1-sa-east-1.pooler.supabase.com 
+user=cli_login_postgres.bhbohlhathgogvflggdl database=postgres`: server error (FATAL: Circuit breaker open: Too many 
+authentication errors (SQLSTATE XX000))
+Retry (5/8): failed to connect as temp role: failed to connect to `host=aws-1-sa-east-1.pooler.supabase.com 
+user=cli_login_postgres.bhbohlhathgogvflggdl database=postgres`: server error (FATAL: Circuit breaker open: Too many 
+authentication errors (SQLSTATE XX000))
+Retry (6/8): failed to connect as temp role: failed to connect to `host=aws-1-sa-east-1.pooler.supabase.com 
+user=cli_login_postgres.bhbohlhathgogvflggdl database=postgres`: server error (FATAL: Circuit breaker open: Too many 
+authentication errors (SQLSTATE XX000))
+Retry (7/8): failed to connect as temp role: failed to connect to `host=aws-1-sa-east-1.pooler.supabase.com 
+user=cli_login_postgres.bhbohlhathgogvflggdl database=postgres`: server error (FATAL: Circuit breaker open: Too many 
+authentication errors (SQLSTATE XX000))
+Retry (8/8): failed to connect as temp role: failed to connect to `host=aws-1-sa-east-1.pooler.supabase.com 
+user=cli_login_postgres.bhbohlhathgogvflggdl database=postgres`: server error (FATAL: Circuit breaker open: Too many 
+authentication errors (SQLSTATE XX000))
+Connect to your database by setting the env var: SUPABASE_DB_PASSWORD
+

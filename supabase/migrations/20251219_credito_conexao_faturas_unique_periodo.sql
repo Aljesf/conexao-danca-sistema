@@ -13,7 +13,6 @@
 
 -- [INICIO DO BLOCO] Supabase SQL Editor (query unica) (linha 1)
 BEGIN;
-
 ------------------------------------------------------------
 -- A) CREDITO CONEXAO (Cartao Conexao) - zerar testes
 -- Mantem: credito_conexao_contas
@@ -22,7 +21,6 @@ BEGIN;
 DELETE FROM public.credito_conexao_fatura_lancamentos;
 DELETE FROM public.credito_conexao_faturas;
 DELETE FROM public.credito_conexao_lancamentos;
-
 ------------------------------------------------------------
 -- B) LOJA (somente vendas vinculadas ao Cartao Conexao)
 -- Se voce testou o Cartao Conexao pela Loja, isso limpa as vendas de teste.
@@ -33,30 +31,25 @@ DELETE FROM public.loja_venda_itens i
 USING public.loja_vendas v
 WHERE i.venda_id = v.id
   AND v.conta_conexao_id IS NOT NULL;
-
 -- 2) Remover cabecalhos dessas vendas
 DELETE FROM public.loja_vendas
 WHERE conta_conexao_id IS NOT NULL;
-
 ------------------------------------------------------------
 -- C) CARTAO DE CREDITO (maquininhas/recebiveis) - zerar testes
 ------------------------------------------------------------
 
 -- 1) Recebiveis de cartao (tabela propria)
 DELETE FROM public.cartao_recebiveis;
-
 -- 2) Recebimentos com metadados de cartao (somente os que tem cartao_*)
 DELETE FROM public.recebimentos
 WHERE cartao_maquina_id IS NOT NULL
    OR cartao_bandeira_id IS NOT NULL
    OR cartao_numero_parcelas IS NOT NULL;
-
 -- 3) Pagamentos de contas a pagar com metadados de cartao (somente os que tem cartao_*)
 DELETE FROM public.contas_pagar_pagamentos
 WHERE cartao_maquina_id IS NOT NULL
    OR cartao_bandeira_id IS NOT NULL
    OR cartao_numero_parcelas IS NOT NULL;
-
 ------------------------------------------------------------
 -- D) COBRANCAS NEOFIM / NEOFIM (apenas as do contexto do cartao)
 -- Remove tambem recebimentos atrelados, para nao sobrar FK.
@@ -77,7 +70,6 @@ WITH alvo AS (
 DELETE FROM public.recebimentos r
 USING alvo a
 WHERE r.cobranca_id = a.id;
-
 WITH alvo AS (
   SELECT c.id
   FROM public.cobrancas c
@@ -93,7 +85,6 @@ WITH alvo AS (
 DELETE FROM public.cobrancas c
 USING alvo a
 WHERE c.id = a.id;
-
 ------------------------------------------------------------
 -- E) GARANTIAS DE INTEGRIDADE PARA O MODULO (indices)
 ------------------------------------------------------------
@@ -112,7 +103,6 @@ BEGIN
     ';
   END IF;
 END$$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -127,9 +117,7 @@ BEGIN
     ';
   END IF;
 END$$;
-
 COMMIT;
-
 -- ========================================================
 -- CHECK (rapido no SQL Editor)
 -- ========================================================
@@ -139,4 +127,4 @@ COMMIT;
 -- SELECT COUNT(*) FROM public.credito_conexao_fatura_lancamentos;
 --
 -- Deve retornar 0 (se voce so testou cartao):
--- SELECT COUNT(*) FROM public.cartao_recebiveis;
+-- SELECT COUNT(*) FROM public.cartao_recebiveis;;

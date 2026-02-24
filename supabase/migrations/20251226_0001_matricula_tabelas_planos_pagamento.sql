@@ -1,5 +1,4 @@
 BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.matricula_tabelas (
   id BIGSERIAL PRIMARY KEY,
   produto_tipo TEXT NOT NULL,
@@ -11,7 +10,6 @@ CREATE TABLE IF NOT EXISTS public.matricula_tabelas (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -36,16 +34,12 @@ BEGIN
       CHECK (referencia_tipo IN ('TURMA', 'PRODUTO', 'PROJETO'));
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_matricula_tabelas_ativo
   ON public.matricula_tabelas (ativo);
-
 CREATE INDEX IF NOT EXISTS idx_matricula_tabelas_produto_ano
   ON public.matricula_tabelas (produto_tipo, ano_referencia);
-
 CREATE INDEX IF NOT EXISTS idx_matricula_tabelas_referencia
   ON public.matricula_tabelas (referencia_tipo, referencia_id, ano_referencia);
-
 CREATE TABLE IF NOT EXISTS public.matricula_tabela_itens (
   id BIGSERIAL PRIMARY KEY,
   tabela_id BIGINT NOT NULL REFERENCES public.matricula_tabelas(id) ON DELETE CASCADE,
@@ -58,7 +52,6 @@ CREATE TABLE IF NOT EXISTS public.matricula_tabela_itens (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -94,10 +87,8 @@ BEGIN
       UNIQUE (tabela_id, codigo_item);
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_matricula_tabela_itens_ativo
   ON public.matricula_tabela_itens (tabela_id, ativo);
-
 CREATE TABLE IF NOT EXISTS public.matricula_planos_pagamento (
   id BIGSERIAL PRIMARY KEY,
   titulo TEXT NOT NULL,
@@ -108,7 +99,6 @@ CREATE TABLE IF NOT EXISTS public.matricula_planos_pagamento (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -133,8 +123,6 @@ BEGIN
       CHECK (numero_parcelas IS NULL OR numero_parcelas > 0);
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_matricula_planos_pagamento_ativo
   ON public.matricula_planos_pagamento (ativo);
-
 COMMIT;

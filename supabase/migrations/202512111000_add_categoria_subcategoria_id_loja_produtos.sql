@@ -4,7 +4,6 @@
 
 ALTER TABLE public.loja_produtos
 ADD COLUMN IF NOT EXISTS categoria_subcategoria_id bigint;
-
 -- FK para a tabela de subcategorias oficiais da Loja.
 DO $$
 BEGIN
@@ -24,10 +23,8 @@ BEGIN
       ON DELETE SET NULL;
   END IF;
 END $$;
-
 -- Indice para facilitar relatorios e joins.
 CREATE INDEX IF NOT EXISTS idx_loja_produtos_categoria_subcategoria
   ON public.loja_produtos (categoria_subcategoria_id);
-
 COMMENT ON COLUMN public.loja_produtos.categoria_subcategoria_id IS
   'Subcategoria oficial da loja (loja_produto_categoria_subcategoria.id). Usada para centro de custo e categorias financeiras.';

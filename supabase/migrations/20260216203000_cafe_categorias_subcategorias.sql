@@ -1,5 +1,4 @@
 begin;
-
 create table if not exists public.cafe_categorias (
   id bigserial primary key,
   centro_custo_id integer null references public.centros_custo(id) on delete set null,
@@ -10,13 +9,10 @@ create table if not exists public.cafe_categorias (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create unique index if not exists ux_cafe_categorias_centro_slug
   on public.cafe_categorias ((coalesce(centro_custo_id, 0)), slug);
-
 create index if not exists idx_cafe_categorias_ativo_ordem
   on public.cafe_categorias (ativo, ordem, nome);
-
 create table if not exists public.cafe_subcategorias (
   id bigserial primary key,
   categoria_id bigint not null references public.cafe_categorias(id) on delete cascade,
@@ -28,20 +24,16 @@ create table if not exists public.cafe_subcategorias (
   updated_at timestamptz not null default now(),
   unique (categoria_id, slug)
 );
-
 create index if not exists idx_cafe_subcategorias_cat_ativo_ordem
   on public.cafe_subcategorias (categoria_id, ativo, ordem, nome);
-
 drop trigger if exists trg_cafe_categorias_updated_at on public.cafe_categorias;
 create trigger trg_cafe_categorias_updated_at
 before update on public.cafe_categorias
 for each row execute function public.set_updated_at();
-
 drop trigger if exists trg_cafe_subcategorias_updated_at on public.cafe_subcategorias;
 create trigger trg_cafe_subcategorias_updated_at
 before update on public.cafe_subcategorias
 for each row execute function public.set_updated_at();
-
 do $$
 begin
   if exists (
@@ -63,7 +55,6 @@ begin
       on public.cafe_produtos (subcategoria_id);
   end if;
 end $$;
-
 do $$
 declare
   r record;
@@ -112,11 +103,8 @@ begin
     end loop;
   end if;
 end $$;
-
 comment on table public.cafe_categorias is
   'Categorias canonicas do Ballet Cafe.';
-
 comment on table public.cafe_subcategorias is
   'Subcategorias do Ballet Cafe por categoria.';
-
 commit;

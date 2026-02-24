@@ -1,5 +1,4 @@
 begin;
-
 create or replace function public.admin_schema_snapshot()
 returns jsonb
 language plpgsql
@@ -89,11 +88,8 @@ begin
   );
 end;
 $$;
-
 revoke all on function public.admin_schema_snapshot() from public;
 revoke all on function public.admin_schema_snapshot() from anon;
 revoke all on function public.admin_schema_snapshot() from authenticated;
-
 commit;
-
 select pg_notify('pgrst', 'reload schema');

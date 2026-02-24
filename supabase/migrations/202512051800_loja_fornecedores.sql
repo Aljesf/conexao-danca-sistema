@@ -33,23 +33,16 @@ CREATE TABLE IF NOT EXISTS public.loja_fornecedores (
 
   CONSTRAINT loja_fornecedores_pessoa_unique UNIQUE (pessoa_id)
 );
-
 COMMENT ON TABLE public.loja_fornecedores IS
   'Pessoas que atuam como fornecedores da Loja (AJ Dance Store). Wrapper de pessoas.id.';
-
 COMMENT ON COLUMN public.loja_fornecedores.pessoa_id IS
   'FK para pessoas.id. A Pessoa pode ser física ou jurídica (fornecedor).';
-
 COMMENT ON COLUMN public.loja_fornecedores.codigo_interno IS
   'Código interno do fornecedor na Loja (opcional).';
-
 CREATE INDEX IF NOT EXISTS idx_loja_fornecedores_pessoa
   ON public.loja_fornecedores (pessoa_id);
-
 CREATE INDEX IF NOT EXISTS idx_loja_fornecedores_ativo
   ON public.loja_fornecedores (ativo);
-
-
 -- ===========================================
 -- 3) TABELA loja_fornecedor_precos
 -- Histórico de preços de custo por fornecedor e produto
@@ -65,33 +58,24 @@ CREATE TABLE IF NOT EXISTS public.loja_fornecedor_precos (
   observacoes            TEXT,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 COMMENT ON TABLE public.loja_fornecedor_precos IS
   'Histórico de preços de custo de produtos por fornecedor (régua de preços da Loja v0).';
-
 COMMENT ON COLUMN public.loja_fornecedor_precos.preco_custo_centavos IS
   'Preço de custo em centavos (inteiro).';
-
 COMMENT ON COLUMN public.loja_fornecedor_precos.data_referencia IS
   'Data de referência do preço de custo (negociação/compra).';
-
 CREATE INDEX IF NOT EXISTS idx_loja_fornecedor_precos_fornecedor
   ON public.loja_fornecedor_precos (fornecedor_id);
-
 CREATE INDEX IF NOT EXISTS idx_loja_fornecedor_precos_produto
   ON public.loja_fornecedor_precos (produto_id);
-
 CREATE INDEX IF NOT EXISTS idx_loja_fornecedor_precos_data
   ON public.loja_fornecedor_precos (data_referencia DESC);
-
 CREATE INDEX IF NOT EXISTS idx_loja_fornecedor_precos_fornecedor_produto_data
   ON public.loja_fornecedor_precos (fornecedor_id, produto_id, data_referencia DESC);
-
-
 -- ===========================================
 -- 4) NOTAS FINAIS
 -- - Não altera tabelas existentes (loja_produtos, loja_vendas, etc.).
 -- - Fornecedor é sempre uma Pessoa em pessoas.id, alinhado ao modelo padrão.
 -- - A tabela loja_fornecedor_precos guarda histórico de preços de custo
 --   e pode ser usada futuramente para relatórios, Estoque e Loja v1.
--- ===========================================
+-- ===========================================;

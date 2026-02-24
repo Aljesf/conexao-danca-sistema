@@ -1,5 +1,4 @@
 BEGIN;
-
 -- Role para equipe popular cadastros-base, sem operar matricula/financeiro/credito.
 INSERT INTO public.roles_sistema (codigo, nome, descricao, editavel, permissoes, ativo)
 SELECT
@@ -28,7 +27,6 @@ SELECT
 WHERE NOT EXISTS (
   SELECT 1 FROM public.roles_sistema WHERE codigo = 'EQUIPE_CADASTRO_BASE'
 );
-
 -- Funcao opcional: atribuir role a um user_id (caso voce use scripts/admin depois)
 CREATE OR REPLACE FUNCTION public.assign_role_to_user(p_user_id uuid, p_role_codigo text)
 RETURNS void
@@ -55,7 +53,6 @@ BEGIN
   );
 END;
 $$;
-
 -- Funcao opcional: atribuir role por e-mail (quando o Auth do usuario ja existe)
 CREATE OR REPLACE FUNCTION public.assign_role_to_email(p_email text, p_role_codigo text)
 RETURNS void
@@ -78,5 +75,4 @@ BEGIN
   PERFORM public.assign_role_to_user(v_user_id, p_role_codigo);
 END;
 $$;
-
 COMMIT;

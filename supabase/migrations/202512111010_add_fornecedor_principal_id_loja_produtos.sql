@@ -3,7 +3,6 @@
 
 ALTER TABLE public.loja_produtos
 ADD COLUMN IF NOT EXISTS fornecedor_principal_id bigint;
-
 -- Cria FK apenas se ainda nao existir (idempotente).
 DO $$
 BEGIN
@@ -20,10 +19,8 @@ BEGIN
       ON DELETE SET NULL;
   END IF;
 END $$;
-
 -- Indice para consultas por fornecedor principal.
 CREATE INDEX IF NOT EXISTS idx_loja_produtos_fornecedor_principal
   ON public.loja_produtos (fornecedor_principal_id);
-
 COMMENT ON COLUMN public.loja_produtos.fornecedor_principal_id IS
   'Fornecedor principal do produto (opcional). Liga com public.loja_fornecedores(id).';

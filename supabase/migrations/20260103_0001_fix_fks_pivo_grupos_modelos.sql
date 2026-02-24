@@ -1,5 +1,4 @@
 begin;
-
 do $$
 begin
   if not exists (
@@ -13,7 +12,6 @@ begin
       on delete cascade;
   end if;
 end $$;
-
 do $$
 begin
   if not exists (
@@ -27,7 +25,5 @@ begin
       on delete cascade;
   end if;
 end $$;
-
 commit;
-
 select pg_notify('pgrst', 'reload schema');

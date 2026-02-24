@@ -28,10 +28,8 @@ BEGIN
       ADD COLUMN cancelada_por_user_id uuid NULL;
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_cobrancas_cancelada_em
   ON public.cobrancas (cancelada_em);
-
 -- 2) Campos em matriculas (minimo canonico)
 DO $$
 BEGIN
@@ -75,7 +73,6 @@ BEGIN
       ADD COLUMN data_encerramento date NULL;
   END IF;
 END $$;
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -87,10 +84,8 @@ BEGIN
       CHECK (encerramento_tipo IS NULL OR encerramento_tipo IN ('CONCLUIDA', 'CANCELADA'));
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_matriculas_encerramento_tipo
   ON public.matriculas (encerramento_tipo);
-
 -- 3) Extrato (auditoria propria)
 CREATE TABLE IF NOT EXISTS public.matriculas_encerramentos (
   id bigserial PRIMARY KEY,
@@ -103,6 +98,5 @@ CREATE TABLE IF NOT EXISTS public.matriculas_encerramentos (
   cobrancas_canceladas_valor_centavos integer NOT NULL DEFAULT 0,
   payload jsonb NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_matriculas_encerramentos_matricula_id
   ON public.matriculas_encerramentos (matricula_id);

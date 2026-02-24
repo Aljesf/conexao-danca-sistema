@@ -7,7 +7,6 @@
 -- =============================================================================
 
 begin;
-
 -- 1) Projetos Sociais
 create table if not exists public.projetos_sociais (
   id bigserial primary key,
@@ -18,10 +17,8 @@ create table if not exists public.projetos_sociais (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create index if not exists idx_projetos_sociais_ativo on public.projetos_sociais (ativo);
 create index if not exists idx_projetos_sociais_escola on public.projetos_sociais (escola_id);
-
 -- 2) Tipos de Bolsa (configuráveis)
 -- modos:
 -- INTEGRAL => familia_paga = 0
@@ -48,10 +45,8 @@ create table if not exists public.bolsa_tipos (
       (modo = 'VALOR_FINAL_FAMILIA' and percentual_desconto is null and valor_final_familia_centavos is not null)
     )
 );
-
 create index if not exists idx_bolsa_tipos_projeto on public.bolsa_tipos (projeto_social_id);
 create index if not exists idx_bolsa_tipos_ativo on public.bolsa_tipos (ativo);
-
 -- 3) Concessões (bolsa aplicada a uma pessoa/aluno, com vigência e status)
 -- Observação: matrícula pode nascer antes/depois; por isso matricula_id é opcional agora.
 create table if not exists public.bolsa_concessoes (
@@ -74,11 +69,9 @@ create table if not exists public.bolsa_concessoes (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create index if not exists idx_bolsa_concessoes_pessoa on public.bolsa_concessoes (pessoa_id);
 create index if not exists idx_bolsa_concessoes_status on public.bolsa_concessoes (status);
 create index if not exists idx_bolsa_concessoes_projeto on public.bolsa_concessoes (projeto_social_id);
-
 -- 4) Ledger institucional (Investimento em Bolsas)
 -- Um registro por competência (YYYY-MM) por pessoa/turma/matrícula (quando houver)
 -- Origem do contratado:
@@ -109,7 +102,6 @@ create table if not exists public.bolsa_ledger (
   constraint chk_bolsa_ledger_investimento
     check (valor_investimento_centavos = greatest(valor_contratado_centavos - valor_familia_centavos, 0))
 );
-
 create index if not exists idx_bolsa_ledger_competencia on public.bolsa_ledger (competencia);
 create index if not exists idx_bolsa_ledger_pessoa on public.bolsa_ledger (pessoa_id);
 create index if not exists idx_bolsa_ledger_projeto on public.bolsa_ledger (projeto_social_id);
@@ -117,5 +109,4 @@ create index if not exists idx_bolsa_ledger_concessao on public.bolsa_ledger (bo
 create index if not exists idx_bolsa_ledger_turma on public.bolsa_ledger (turma_id);
 create index if not exists idx_bolsa_ledger_matricula on public.bolsa_ledger (matricula_id);
 create index if not exists idx_bolsa_ledger_comp_gin on public.bolsa_ledger using gin (composicao_json);
-
 commit;

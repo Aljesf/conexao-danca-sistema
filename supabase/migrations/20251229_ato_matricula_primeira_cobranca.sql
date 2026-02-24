@@ -11,7 +11,6 @@ alter table public.matriculas
   add column if not exists motivo_excecao_primeiro_pagamento text,
   add column if not exists excecao_autorizada_por uuid,
   add column if not exists excecao_criada_em timestamptz;
-
 -- 2) Checks simples (sem TYPE enum, para flexibilidade no MVP)
 do $$
 begin
@@ -39,7 +38,6 @@ begin
       ));
   end if;
 end $$;
-
 -- 3) FKs (se as tabelas existirem)
 do $$
 begin
@@ -70,12 +68,9 @@ begin
       on delete set null;
   end if;
 end $$;
-
 -- 4) Indices
 create index if not exists idx_matriculas_primeira_cobranca_status
   on public.matriculas (primeira_cobranca_status);
-
 create index if not exists idx_matriculas_primeira_cobranca_tipo
   on public.matriculas (primeira_cobranca_tipo);
-
 select pg_notify('pgrst', 'reload schema');

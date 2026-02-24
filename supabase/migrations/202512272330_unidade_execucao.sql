@@ -1,5 +1,4 @@
 BEGIN;
-
 -- 1) Unidade de Execucao (canonico)
 -- - Representa qualquer subdivisao do "servico" (turma, grupo, elenco, coreografia, personagem...)
 -- - Neste momento, fazemos backfill a partir de turmas (origem_tipo='TURMA').
@@ -15,7 +14,6 @@ CREATE TABLE IF NOT EXISTS public.escola_unidades_execucao (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 -- FK para servico (tabela ja existente)
 DO $$
 BEGIN
@@ -26,17 +24,13 @@ BEGIN
       ON DELETE CASCADE;
   END IF;
 END$$;
-
 CREATE INDEX IF NOT EXISTS idx_escola_unidades_execucao_servico_id
   ON public.escola_unidades_execucao(servico_id);
-
 CREATE INDEX IF NOT EXISTS idx_escola_unidades_execucao_origem
   ON public.escola_unidades_execucao(origem_tipo, origem_id);
-
 -- Unicidade para evitar duplicar a mesma origem dentro do mesmo servico
 CREATE UNIQUE INDEX IF NOT EXISTS uq_escola_unidades_execucao_origem
   ON public.escola_unidades_execucao(servico_id, origem_tipo, origem_id);
-
 -- 2) Backfill: criar Unidade de Execucao a partir de turmas
 -- Pressuposto: turmas.produto_id ja existe e esta preenchido (servico_id = produto_id)
 INSERT INTO public.escola_unidades_execucao (servico_id, denominacao, nome, origem_tipo, origem_id)
@@ -55,7 +49,6 @@ WHERE t.produto_id IS NOT NULL
       AND ue.origem_tipo = 'TURMA'
       AND ue.origem_id = t.turma_id
   );
-
 -- 3) Pivot: Tabela de Precos -> Unidades de Execucao (0..N)
 -- Regra de interpretacao:
 -- - se nao houver linhas para tabela_id => tabela vale para TODAS as unidades daquele servico
@@ -65,7 +58,6 @@ CREATE TABLE IF NOT EXISTS public.matricula_tabelas_unidades_execucao (
   unidade_execucao_id bigint NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'matricula_tabelas_unidades_execucao_tabela_id_fkey') THEN
@@ -84,11 +76,8 @@ BEGIN
       ON DELETE CASCADE;
   END IF;
 END$$;
-
 CREATE UNIQUE INDEX IF NOT EXISTS uq_matricula_tabelas_unidades_execucao
   ON public.matricula_tabelas_unidades_execucao(tabela_id, unidade_execucao_id);
-
 CREATE INDEX IF NOT EXISTS idx_matricula_tabelas_unidades_execucao_tabela
   ON public.matricula_tabelas_unidades_execucao(tabela_id);
-
 COMMIT;

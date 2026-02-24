@@ -1,5 +1,4 @@
 BEGIN;
-
 CREATE TABLE IF NOT EXISTS public.colaborador_remuneracoes (
   id bigserial PRIMARY KEY,
   colaborador_id bigint NOT NULL REFERENCES public.colaboradores(id) ON DELETE CASCADE,
@@ -12,14 +11,11 @@ CREATE TABLE IF NOT EXISTS public.colaborador_remuneracoes (
   ativo boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_colaborador_remuneracoes_unica_ativa
   ON public.colaborador_remuneracoes (colaborador_id)
   WHERE ativo = true;
-
 CREATE INDEX IF NOT EXISTS idx_colaborador_remuneracoes_colaborador_vigencia
   ON public.colaborador_remuneracoes (colaborador_id, vigencia_inicio DESC);
-
 CREATE TABLE IF NOT EXISTS public.colaborador_pagamentos (
   id bigserial PRIMARY KEY,
   colaborador_id bigint NOT NULL REFERENCES public.colaboradores(id) ON DELETE CASCADE,
@@ -34,7 +30,6 @@ CREATE TABLE IF NOT EXISTS public.colaborador_pagamentos (
   folha_evento_id bigint NULL REFERENCES public.folha_pagamento_eventos(id),
   created_at timestamptz NOT NULL DEFAULT now()
 );
-
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -50,11 +45,8 @@ BEGIN
       );
   END IF;
 END $$;
-
 CREATE INDEX IF NOT EXISTS idx_colaborador_pagamentos_colaborador_data
   ON public.colaborador_pagamentos (colaborador_id, data_pagamento DESC);
-
 CREATE INDEX IF NOT EXISTS idx_colaborador_pagamentos_competencia
   ON public.colaborador_pagamentos (competencia_ano_mes);
-
 COMMIT;

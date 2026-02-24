@@ -7,7 +7,6 @@ BEGIN
     CREATE TYPE public.loja_lista_demanda_status AS ENUM ('ATIVA', 'ENCERRADA');
   END IF;
 END $$;
-
 -- 2) Tabela de listas (cabecalho)
 CREATE TABLE IF NOT EXISTS public.loja_listas_demanda (
   id                bigserial PRIMARY KEY,
@@ -26,10 +25,8 @@ CREATE TABLE IF NOT EXISTS public.loja_listas_demanda (
   encerrada_em      timestamptz NULL,
   encerrada_por     uuid NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_loja_listas_demanda_status ON public.loja_listas_demanda (status);
 CREATE INDEX IF NOT EXISTS idx_loja_listas_demanda_bloqueada ON public.loja_listas_demanda (bloqueada);
-
 -- 3) Tabela de itens
 CREATE TABLE IF NOT EXISTS public.loja_listas_demanda_itens (
   id                    bigserial PRIMARY KEY,
@@ -48,10 +45,8 @@ CREATE TABLE IF NOT EXISTS public.loja_listas_demanda_itens (
   atualizado_em         timestamptz NOT NULL DEFAULT now(),
   atualizado_por        uuid NULL
 );
-
 CREATE INDEX IF NOT EXISTS idx_loja_listas_demanda_itens_lista ON public.loja_listas_demanda_itens (lista_id);
 CREATE INDEX IF NOT EXISTS idx_loja_listas_demanda_itens_produto ON public.loja_listas_demanda_itens (produto_id);
-
 -- 4) FK condicional para variacoes (se existir tabela de variantes)
 DO $$
 BEGIN
@@ -71,7 +66,6 @@ BEGIN
     END IF;
   END IF;
 END $$;
-
 -- 5) Regra de integridade do item: ou tem produto_id ou descricao_livre
 DO $$
 BEGIN

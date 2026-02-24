@@ -11,11 +11,9 @@ create table if not exists public.turma_professores (
   inserted_at timestamptz default now(),
   updated_at timestamptz default now()
 );
-
 create unique index if not exists idx_turma_professores_principal
 on public.turma_professores (turma_id)
 where principal = true and data_fim is null;
-
 create or replace function public.set_updated_at_turma_professores()
 returns trigger as $$
 begin
@@ -23,7 +21,6 @@ begin
   return new;
 end;
 $$ language plpgsql;
-
 create trigger trg_updated_at_turma_professores
 before update on public.turma_professores
 for each row

@@ -6,5 +6,4 @@
 
 DROP TABLE IF EXISTS public.escola_precos_cursos_livres_itens;
 DROP TABLE IF EXISTS public.escola_precos_cursos_livres;
-
--- [FIM DO BLOCO]
+-- [FIM DO BLOCO];

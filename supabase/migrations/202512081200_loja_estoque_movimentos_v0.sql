@@ -14,9 +14,7 @@ CREATE TABLE IF NOT EXISTS public.loja_estoque_movimentos (
   created_at timestamptz NOT NULL DEFAULT now(),
   created_by uuid REFERENCES public.profiles(user_id)
 );
-
 CREATE INDEX IF NOT EXISTS idx_loja_estoque_movimentos_produto
   ON public.loja_estoque_movimentos (produto_id);
-
 CREATE INDEX IF NOT EXISTS idx_loja_estoque_movimentos_created_at
   ON public.loja_estoque_movimentos (created_at);

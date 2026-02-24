@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS public.loja_pedidos_compra (
   created_by uuid REFERENCES public.profiles(user_id),
   updated_by uuid REFERENCES public.profiles(user_id)
 );
-
 -- Itens do pedido
 CREATE TABLE IF NOT EXISTS public.loja_pedidos_compra_itens (
   id bigserial PRIMARY KEY,
@@ -27,7 +26,6 @@ CREATE TABLE IF NOT EXISTS public.loja_pedidos_compra_itens (
   preco_custo_centavos integer NOT NULL DEFAULT 0,
   observacoes text
 );
-
 -- Recebimentos (podem ser parciais)
 CREATE TABLE IF NOT EXISTS public.loja_pedidos_compra_recebimentos (
   id bigserial PRIMARY KEY,
@@ -41,19 +39,14 @@ CREATE TABLE IF NOT EXISTS public.loja_pedidos_compra_recebimentos (
   created_at timestamptz NOT NULL DEFAULT now(),
   created_by uuid REFERENCES public.profiles(user_id)
 );
-
 -- Índices auxiliares
 CREATE INDEX IF NOT EXISTS idx_loja_pedidos_compra_fornecedor
   ON public.loja_pedidos_compra (fornecedor_id);
-
 CREATE INDEX IF NOT EXISTS idx_loja_pedidos_compra_status
   ON public.loja_pedidos_compra (status);
-
 CREATE INDEX IF NOT EXISTS idx_loja_pedidos_compra_itens_pedido
   ON public.loja_pedidos_compra_itens (pedido_id);
-
 CREATE INDEX IF NOT EXISTS idx_loja_pedidos_compra_recebimentos_pedido
   ON public.loja_pedidos_compra_recebimentos (pedido_id);
-
 CREATE INDEX IF NOT EXISTS idx_loja_pedidos_compra_recebimentos_produto
   ON public.loja_pedidos_compra_recebimentos (produto_id);

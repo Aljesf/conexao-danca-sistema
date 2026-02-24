@@ -11,10 +11,8 @@ CREATE TABLE IF NOT EXISTS public.curriculos_institucionais (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (pessoa_id)
 );
-
 COMMENT ON TABLE public.curriculos_institucionais IS
 'Habilita curriculo academico (aluno) ou institucional (nao-aluno) para pessoas.';
-
 -- 2) Grupos administrativos de alunos
 CREATE TABLE IF NOT EXISTS public.aluno_grupos (
   id BIGSERIAL PRIMARY KEY,
@@ -29,10 +27,8 @@ CREATE TABLE IF NOT EXISTS public.aluno_grupos (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 COMMENT ON TABLE public.aluno_grupos IS
 'Agrupamentos administrativos manuais de alunos (nao pedagogicos).';
-
 CREATE TABLE IF NOT EXISTS public.aluno_grupo_membros (
   id BIGSERIAL PRIMARY KEY,
   grupo_id BIGINT NOT NULL REFERENCES public.aluno_grupos(id) ON DELETE CASCADE,
@@ -45,10 +41,8 @@ CREATE TABLE IF NOT EXISTS public.aluno_grupo_membros (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (grupo_id, pessoa_id)
 );
-
 COMMENT ON TABLE public.aluno_grupo_membros IS
 'Vinculo entre grupos administrativos e pessoas (alunos).';
-
 -- 3) View canonica - lista de alunos
 CREATE OR REPLACE VIEW public.vw_alunos_canonico AS
 SELECT DISTINCT
@@ -62,8 +56,6 @@ JOIN public.pessoas_roles pr
   ON pr.pessoa_id = p.id
   AND pr.role = 'ALUNO'
 WHERE p.ativo = true;
-
 COMMENT ON VIEW public.vw_alunos_canonico IS
 'View canônica de alunos baseada em role ALUNO. Não depende de campos legados opcionais.';
-
--- [FIM DO BLOCO]
+-- [FIM DO BLOCO];

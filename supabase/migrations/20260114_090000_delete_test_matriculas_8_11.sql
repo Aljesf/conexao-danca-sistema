@@ -5,24 +5,20 @@
 -- NAO apaga pessoas.
 
 BEGIN;
-
 -- 0) Lista-alvo
 CREATE TEMP TABLE tmp_matriculas_delete (id bigint PRIMARY KEY) ON COMMIT DROP;
 INSERT INTO tmp_matriculas_delete (id) VALUES (8), (9), (10), (11);
-
 -- 1) Conferencia (antes de apagar)
 -- (Voce pode rodar e olhar o resultado no SQL Editor; nao interrompe o script.)
 SELECT 'MATRICULAS_ALVO' AS _tag, m.*
 FROM public.matriculas m
 JOIN tmp_matriculas_delete t ON t.id = m.id
 ORDER BY m.id;
-
 -- 2) Coletar IDs financeiros diretos guardados na matricula (se existirem)
 CREATE TEMP TABLE tmp_cobrancas_delete (id bigint PRIMARY KEY) ON COMMIT DROP;
 CREATE TEMP TABLE tmp_recebimentos_delete (id bigint PRIMARY KEY) ON COMMIT DROP;
 CREATE TEMP TABLE tmp_credito_lanc_delete (id bigint PRIMARY KEY) ON COMMIT DROP;
 CREATE TEMP TABLE tmp_credito_faturas_candidatas (id bigint PRIMARY KEY) ON COMMIT DROP;
-
 DO $$
 BEGIN
 -- 2.1) Cobranca/Recebimento diretos na matricula (primeira cobranca)
@@ -108,12 +104,10 @@ IF to_regclass('public.recebimentos') IS NOT NULL THEN
   END IF;
 END IF;
 END $$;
-
 -- 3) Remover vinculos operacionais de turma
 -- 3.1) turma_aluno (tem matricula_id no schema)
 DELETE FROM public.turma_aluno ta
 WHERE ta.matricula_id IN (SELECT id FROM tmp_matriculas_delete);
-
 -- 3.2) Outras tabelas do dominio Matriculas que podem existir (guardas)
 DO $$
 BEGIN
@@ -132,7 +126,6 @@ END IF;
 
 -- Se houver outras tabelas com FK matricula_id, repetir o padrao aqui.
 END $$;
-
 -- 4) Cartao Conexao: desvincular e deletar lancamentos e (opcionalmente) faturas vazias
 DO $$
 BEGIN
@@ -184,7 +177,6 @@ AND to_regclass('public.credito_conexao_fatura_lancamentos') IS NOT NULL THEN
   $q$;
 END IF;
 END $$;
-
 -- 5) Financeiro: apagar recebimentos e cobrancas detectadas
 DO $$
 BEGIN
@@ -202,7 +194,6 @@ IF to_regclass('public.cobrancas') IS NOT NULL THEN
   $q$;
 END IF;
 END $$;
-
 -- 6) Auditoria / logs (se existirem e se tiverem referencia)
 DO $$
 BEGIN
@@ -230,14 +221,11 @@ IF to_regclass('public.auditoria_logs') IS NOT NULL THEN
   END IF;
 END IF;
 END $$;
-
 -- 7) Apagar a matricula (por ultimo)
 DELETE FROM public.matriculas
 WHERE id IN (SELECT id FROM tmp_matriculas_delete);
-
 -- 8) Conferencia (depois de apagar)
 SELECT 'MATRICULAS_RESTANTES' AS _tag, m.*
 FROM public.matriculas m
 WHERE m.id IN (8,9,10,11);
-
 COMMIT;

@@ -1,20 +1,15 @@
 BEGIN;
-
 -- 1) Indexes (non-breaking)
 CREATE INDEX IF NOT EXISTS idx_cobrancas_neofin_charge_id
 ON public.cobrancas (neofin_charge_id)
 WHERE neofin_charge_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_cobrancas_status_vencimento
 ON public.cobrancas (status, vencimento);
-
 CREATE INDEX IF NOT EXISTS idx_cobrancas_created_at
 ON public.cobrancas (created_at);
-
 CREATE INDEX IF NOT EXISTS idx_recebimentos_cobranca_id
 ON public.recebimentos (cobranca_id)
 WHERE cobranca_id IS NOT NULL;
-
 -- 2) View: NeoFin boletos with receivement aggregations
 CREATE OR REPLACE VIEW public.vw_governanca_boletos_neofin AS
 SELECT
@@ -61,5 +56,4 @@ GROUP BY
   c.neofin_payload,
   c.created_at,
   c.updated_at;
-
 COMMIT;

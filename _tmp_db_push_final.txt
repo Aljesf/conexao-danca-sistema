@@ -1,0 +1,13 @@
+﻿node.exe : Initialising login role...
+No linha:1 caractere:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Initialising login role...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Connecting to remote database...
+failed to connect to postgres: failed to connect to `host=aws-1-sa-east-1.pooler.supabase.com 
+user=cli_login_postgres.bhbohlhathgogvflggdl database=postgres`: failed SASL auth (FATAL: password authentication 
+failed for user "cli_login_postgres" (SQLSTATE 28P01))
+Try rerunning the command with --debug to troubleshoot the error.
+

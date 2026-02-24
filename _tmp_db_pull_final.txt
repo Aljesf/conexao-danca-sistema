@@ -1,0 +1,196 @@
+﻿node.exe : Initialising login role...
+No linha:1 caractere:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Initialising login role...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Connecting to remote database...
+Skipping migration 2025-12-03-01_relax_matriculas_planos_contratos.sql... (file name must match pattern 
+"<timestamp>_name.sql")
+Skipping migration 2025-12-12_loja_estoque_movimentos.sql... (file name must match pattern "<timestamp>_name.sql")
+Skipping migration 2025-12-12_loja_estoque_movimentos_motivo.sql... (file name must match pattern 
+"<timestamp>_name.sql")
+The remote database's migration history does not match local files in supabase\migrations directory.
+
+Make sure your local git repo is up-to-date. If the error persists, try repairing the migration history table:
+supabase migration repair --status applied 20251202
+supabase migration repair --status applied 20251207
+supabase migration repair --status applied 20251207
+supabase migration repair --status applied 20251209
+supabase migration repair --status applied 20251209
+supabase migration repair --status applied 20251209
+supabase migration repair --status applied 20251210
+supabase migration repair --status applied 20251210
+supabase migration repair --status applied 20251210
+supabase migration repair --status applied 20251210
+supabase migration repair --status applied 20251210
+supabase migration repair --status applied 20251210
+supabase migration repair --status applied 20251210
+supabase migration repair --status applied 20251211
+supabase migration repair --status applied 20251211
+supabase migration repair --status applied 20251215
+supabase migration repair --status applied 20251215
+supabase migration repair --status applied 20251219
+supabase migration repair --status applied 20251223
+supabase migration repair --status applied 20251223
+supabase migration repair --status applied 20251224
+supabase migration repair --status applied 20251224
+supabase migration repair --status applied 20251224
+supabase migration repair --status applied 20251225
+supabase migration repair --status applied 20251225
+supabase migration repair --status applied 20251225
+supabase migration repair --status applied 20251225
+supabase migration repair --status applied 20251225
+supabase migration repair --status applied 20251225
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251226
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251227
+supabase migration repair --status applied 20251228
+supabase migration repair --status applied 20251230
+supabase migration repair --status applied 20251230
+supabase migration repair --status applied 20251230
+supabase migration repair --status applied 20251230
+supabase migration repair --status applied 20251230
+supabase migration repair --status applied 20260101
+supabase migration repair --status applied 20260101
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260102
+supabase migration repair --status applied 20260103
+supabase migration repair --status applied 20260103
+supabase migration repair --status applied 20260103
+supabase migration repair --status applied 20260103
+supabase migration repair --status applied 20260104
+supabase migration repair --status applied 20260104
+supabase migration repair --status applied 20260104
+supabase migration repair --status applied 20260104
+supabase migration repair --status applied 20260105
+supabase migration repair --status applied 20260105
+supabase migration repair --status applied 20260105
+supabase migration repair --status applied 20260105
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260106
+supabase migration repair --status applied 20260107
+supabase migration repair --status applied 20260107
+supabase migration repair --status applied 20260107
+supabase migration repair --status applied 20260108
+supabase migration repair --status applied 20260109
+supabase migration repair --status applied 20260110
+supabase migration repair --status applied 20260110
+supabase migration repair --status applied 20260112
+supabase migration repair --status applied 20260112
+supabase migration repair --status applied 20260112
+supabase migration repair --status applied 20260113
+supabase migration repair --status applied 20260113
+supabase migration repair --status applied 20260113
+supabase migration repair --status applied 20260113
+supabase migration repair --status applied 20260113
+supabase migration repair --status applied 20260113
+supabase migration repair --status applied 20260113
+supabase migration repair --status applied 20260114
+supabase migration repair --status applied 20260114
+supabase migration repair --status applied 20260115
+supabase migration repair --status applied 20260115
+supabase migration repair --status applied 20260115
+supabase migration repair --status applied 20260115
+supabase migration repair --status applied 20260115
+supabase migration repair --status applied 20260115
+supabase migration repair --status applied 20260116
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260119
+supabase migration repair --status applied 20260120
+supabase migration repair --status applied 20260120
+supabase migration repair --status applied 20260121
+supabase migration repair --status applied 20260121
+supabase migration repair --status applied 20260121
+supabase migration repair --status applied 20260122
+supabase migration repair --status applied 20260122
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260124
+supabase migration repair --status applied 20260209
+supabase migration repair --status applied 20260209
+supabase migration repair --status applied 20260209
+supabase migration repair --status applied 20260212
+supabase migration repair --status applied 20260212
+supabase migration repair --status applied 20260212
+supabase migration repair --status applied 20260213
+supabase migration repair --status applied 20260213
+supabase migration repair --status applied 20260213
+supabase migration repair --status applied 20260213
+supabase migration repair --status applied 20260213
+supabase migration repair --status applied 20260213
+supabase migration repair --status applied 20260213
+supabase migration repair --status applied 2026
+supabase migration repair --status applied 2026
+
+

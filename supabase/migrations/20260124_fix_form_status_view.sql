@@ -31,6 +31,5 @@ select
 from public.form_submissions s
 left join required req on req.submission_id = s.id
 left join answered ans on ans.submission_id = s.id;
-
 comment on view public.form_submissions_status_v is
 'Canonical operational status for submissions: PENDENTE/EM_ANDAMENTO/CONCLUIDO derived from answers and template.';

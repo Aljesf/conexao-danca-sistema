@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS public.loja_vendas (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
 -- Tabela de itens da venda
 CREATE TABLE IF NOT EXISTS public.loja_venda_itens (
   id bigserial PRIMARY KEY,
@@ -40,16 +39,13 @@ CREATE TABLE IF NOT EXISTS public.loja_venda_itens (
   beneficiario_pessoa_id bigint REFERENCES public.pessoas(id),
   observacoes text
 );
-
 -- Garantir colunas criadas quando tabela ja existia
 ALTER TABLE public.loja_vendas
 ADD COLUMN IF NOT EXISTS cobranca_id bigint REFERENCES public.cobrancas(id),
 ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
 ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
-
 ALTER TABLE public.loja_venda_itens
 ADD COLUMN IF NOT EXISTS observacoes text;
-
 -- Funcao generica para updated_at
 DO $$
 BEGIN
@@ -64,7 +60,6 @@ BEGIN
   END IF;
 END;
 $$;
-
 -- Trigger updated_at em loja_vendas
 DO $$
 BEGIN
@@ -78,7 +73,6 @@ BEGIN
   END IF;
 END;
 $$;
-
 -- Indices auxiliares
 CREATE INDEX IF NOT EXISTS idx_loja_vendas_cliente ON public.loja_vendas (cliente_pessoa_id);
 CREATE INDEX IF NOT EXISTS idx_loja_vendas_data ON public.loja_vendas (data_venda);

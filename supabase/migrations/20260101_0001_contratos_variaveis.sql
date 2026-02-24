@@ -1,5 +1,4 @@
 begin;
-
 create table if not exists public.contratos_variaveis (
   id bigint generated always as identity primary key,
   codigo text not null unique,
@@ -22,7 +21,5 @@ create table if not exists public.contratos_variaveis (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 commit;
-
 select pg_notify('pgrst', 'reload schema');

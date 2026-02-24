@@ -2,7 +2,6 @@
 -- turmas.dias_semana (text[]) + hora_inicio/hora_fim + professor_id + status
 
 begin;
-
 -- Funcao: converte date -> dia da semana em PT-BR no formato canonico
 create or replace function public.fn_dia_semana_pt(p_data date)
 returns text
@@ -19,10 +18,8 @@ as $$
     when 7 then 'Domingo'
   end;
 $$;
-
 comment on function public.fn_dia_semana_pt(date) is
 'Dado uma data, retorna o nome do dia da semana em PT-BR (Segunda..Domingo) compativel com turmas.dias_semana.';
-
 -- View: agenda de hoje para TODOS os professores
 -- (a API filtra pelo professor logado)
 create or replace view public.vw_professor_agenda_hoje as
@@ -51,8 +48,6 @@ where
 order by
   t.hora_inicio asc,
   t.nome asc;
-
 comment on view public.vw_professor_agenda_hoje is
 'Agenda do dia atual (current_date) para turmas ATIVAS. Filtrar por professor_id na API.';
-
 commit;

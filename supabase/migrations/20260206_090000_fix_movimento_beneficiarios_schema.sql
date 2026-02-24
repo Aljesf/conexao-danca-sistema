@@ -1,12 +1,10 @@
 BEGIN;
-
 -- 1) Garantir tabela base (se ja existir, nao faz nada)
 CREATE TABLE IF NOT EXISTS public.movimento_beneficiarios (
   id bigserial PRIMARY KEY,
   pessoa_id bigint NOT NULL,
   criado_em timestamptz NOT NULL DEFAULT now()
 );
-
 -- 2) Garantir FK pessoa_id -> pessoas.id (se existir pessoas)
 DO $$
 BEGIN
@@ -29,7 +27,6 @@ BEGIN
     END IF;
   END IF;
 END $$;
-
 -- 3) Garantir colunas do cadastro manual
 DO $$
 BEGIN
@@ -61,14 +58,11 @@ BEGIN
     ALTER TABLE public.movimento_beneficiarios ADD COLUMN valido_ate date;
   END IF;
 END $$;
-
 -- 4) Defaults (nao quebra historico)
 UPDATE public.movimento_beneficiarios
 SET exercicio_ano = EXTRACT(YEAR FROM NOW())::int
 WHERE exercicio_ano IS NULL;
-
 UPDATE public.movimento_beneficiarios
 SET valido_ate = make_date(exercicio_ano, 12, 31)
 WHERE valido_ate IS NULL AND exercicio_ano IS NOT NULL;
-
 COMMIT;

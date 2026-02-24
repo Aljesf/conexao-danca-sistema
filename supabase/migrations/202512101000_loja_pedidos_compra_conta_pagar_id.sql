@@ -5,4 +5,3 @@
 
 ALTER TABLE IF NOT EXISTS public.loja_pedidos_compra
 ADD COLUMN IF NOT EXISTS conta_pagar_id bigint REFERENCES public.contas_pagar(id);
-

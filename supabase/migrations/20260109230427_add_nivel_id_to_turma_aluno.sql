@@ -3,7 +3,6 @@
 -- 1) Adiciona coluna para registrar o nivel cursado na turma
 ALTER TABLE public.turma_aluno
 ADD COLUMN IF NOT EXISTS nivel_id bigint NULL;
-
 -- 2) FK para niveis (ajuste o nome da PK/coluna se seu schema for diferente)
 DO $$
 BEGIN
@@ -18,9 +17,7 @@ BEGIN
     ON DELETE SET NULL;
   END IF;
 END$$;
-
 -- 3) Indice para performance
 CREATE INDEX IF NOT EXISTS idx_turma_aluno_nivel_id
 ON public.turma_aluno(nivel_id);
-
--- [FIM DO BLOCO]
+-- [FIM DO BLOCO];
