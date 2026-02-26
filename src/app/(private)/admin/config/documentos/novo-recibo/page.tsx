@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import * as React from "react";
 import Link from "next/link";
+import { ReciboBusca } from "@/components/documentos/ReciboBusca";
 import { SystemContextCard } from "@/components/system/SystemContextCard";
 import { SystemHelpCard } from "@/components/system/SystemHelpCard";
 import { SystemPage } from "@/components/system/SystemPage";
@@ -27,15 +28,26 @@ function isPositiveIntegerLike(raw: string): boolean {
 }
 
 export default function AdminDocumentosNovoReciboPage() {
-  const [cobrancaId, setCobrancaId] = useState("");
-  const [recebimentoId, setRecebimentoId] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const [resp, setResp] = useState<ApiRespOk | null>(null);
+  const [cobrancaId, setCobrancaId] = React.useState("");
+  const [recebimentoId, setRecebimentoId] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+  const [resp, setResp] = React.useState<ApiRespOk | null>(null);
 
-  const canSubmit = useMemo(() => {
+  const canSubmit = React.useMemo(() => {
     return isPositiveIntegerLike(cobrancaId) || isPositiveIntegerLike(recebimentoId);
   }, [cobrancaId, recebimentoId]);
+
+  function handleSelect(sel: { tipo: "COBRANCA" | "RECEBIMENTO"; id: number }) {
+    setErro(null);
+    if (sel.tipo === "COBRANCA") {
+      setCobrancaId(String(sel.id));
+      setRecebimentoId("");
+      return;
+    }
+    setRecebimentoId(String(sel.id));
+    setCobrancaId("");
+  }
 
   async function gerarRecibo() {
     setLoading(true);
@@ -81,8 +93,8 @@ export default function AdminDocumentosNovoReciboPage() {
 
       <SystemHelpCard
         items={[
-          "Use Cobranca ID como caminho principal.",
-          "Use Recebimento ID quando quiser emitir pelo pagamento especifico.",
+          "Busque por nome, CPF, telefone, competencia ou ID.",
+          "Selecione uma cobranca ou recebimento para preencher automaticamente.",
           "A API gera texto renderizado e salva em Documentos Emitidos.",
         ]}
       />
@@ -106,31 +118,35 @@ export default function AdminDocumentosNovoReciboPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="text-sm font-medium">Cobranca ID (recomendado)</label>
-            <div className="mt-1">
-              <Input
-                value={cobrancaId}
-                onChange={(e) => setCobrancaId(e.target.value)}
-                placeholder="Ex.: 1234"
-                inputMode="numeric"
-              />
-            </div>
-            <p className="mt-1 text-xs text-slate-600">Usa a cobranca para resolver pagador, competencia e referencia.</p>
-          </div>
+        <div className="space-y-4">
+          <ReciboBusca onSelect={(sel) => handleSelect(sel)} />
 
-          <div>
-            <label className="text-sm font-medium">Recebimento ID (alternativo)</label>
-            <div className="mt-1">
-              <Input
-                value={recebimentoId}
-                onChange={(e) => setRecebimentoId(e.target.value)}
-                placeholder="Ex.: 9876"
-                inputMode="numeric"
-              />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">Cobranca ID (auto)</label>
+              <div className="mt-1">
+                <Input
+                  value={cobrancaId}
+                  onChange={(e) => setCobrancaId(e.target.value)}
+                  placeholder="Selecionado pela busca"
+                  inputMode="numeric"
+                />
+              </div>
+              <p className="mt-1 text-xs text-slate-600">Recomendado para emitir recibo por cobranca.</p>
             </div>
-            <p className="mt-1 text-xs text-slate-600">Usa um pagamento especifico para preencher data e forma de pagamento.</p>
+
+            <div>
+              <label className="text-sm font-medium">Recebimento ID (auto)</label>
+              <div className="mt-1">
+                <Input
+                  value={recebimentoId}
+                  onChange={(e) => setRecebimentoId(e.target.value)}
+                  placeholder="Selecionado pela busca"
+                  inputMode="numeric"
+                />
+              </div>
+              <p className="mt-1 text-xs text-slate-600">Use para emitir recibo de um pagamento especifico.</p>
+            </div>
           </div>
         </div>
       </SystemSectionCard>
