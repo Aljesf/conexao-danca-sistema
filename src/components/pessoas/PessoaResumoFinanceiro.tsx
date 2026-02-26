@@ -119,6 +119,8 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
     } catch (err) {
       const message = err instanceof Error ? err.message : "erro_carregar_resumo";
       setError(message);
+      setData(null);
+      setAvulsas([]);
     } finally {
       setLoading(false);
     }
@@ -171,187 +173,196 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
     }
   }
 
-  if (loading) {
-    return <div className="text-sm text-muted-foreground">Carregando resumo financeiro...</div>;
-  }
-  if (error) {
-    return <div className="text-sm text-red-600">Falha ao carregar resumo financeiro: {error}</div>;
-  }
-  if (!data) {
-    return <div className="text-sm text-muted-foreground">Sem dados.</div>;
-  }
-
-  const isOutroResponsavel = data.responsavel_financeiro_id !== data.pessoa_id;
+  const isOutroResponsavel = data ? data.responsavel_financeiro_id !== data.pessoa_id : false;
+  const pessoaTitularIdRecibos = data?.responsavel_financeiro_id ?? pessoaId;
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Responsavel financeiro</CardTitle>
-          <CardDescription>
-            {isOutroResponsavel ? (
-              <>
-                Pagador identificado:{" "}
-                <Link className="text-slate-900 underline" href={`/pessoas/${data.responsavel_financeiro_id}`}>
-                  {responsavelLabel}
-                </Link>
-              </>
-            ) : (
-              <>A propria pessoa e o responsavel financeiro.</>
-            )}
-          </CardDescription>
-        </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Cobrancas avulsas</CardTitle>
-          <CardDescription>
-            Cobrancas geradas manualmente para excecoes (fora do Cartao Conexao).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {avulsasError ? (
-            <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
-              {avulsasError}
-            </div>
-          ) : null}
-
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="py-2 text-left">Cobranca</th>
-                  <th className="py-2 text-left">Vencimento</th>
-                  <th className="py-2 text-left">Status</th>
-                  <th className="py-2 text-left">Meio</th>
-                  <th className="py-2 text-right">Valor</th>
-                  <th className="py-2 text-left">Motivo</th>
-                  <th className="py-2 text-right">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {avulsas.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-3 text-muted-foreground">
-                      Nenhuma cobranca avulsa encontrada.
-                    </td>
-                  </tr>
-                ) : (
-                  avulsas.map((c) => {
-                    const vencida =
-                      c.vencimento && c.vencimento < new Date().toISOString().slice(0, 10);
-                    return (
-                      <tr key={c.id} className="border-t">
-                        <td className="py-2">#{c.id}</td>
-                        <td className="py-2">{c.vencimento}</td>
-                        <td className="py-2">
-                          {vencida && c.status === "PENDENTE"
-                            ? statusBadge("VENCIDA", "warning")
-                            : statusBadge(c.status, "neutral")}
-                        </td>
-                        <td className="py-2">{c.meio}</td>
-                        <td className="py-2 text-right">{formatBRLFromCentavos(c.valor_centavos)}</td>
-                        <td className="py-2">{c.motivo_excecao}</td>
-                        <td className="py-2 text-right">
-                          {c.status === "PENDENTE" ? (
-                            <Button
-                              variant="secondary"
-                              onClick={() => {
-                                setPayCobrancaId(c.id);
-                                setPayValor(c.valor_centavos);
-                                setPayMetodo("PIX");
-                                setPayComprovante("");
-                                setPayOpen(true);
-                              }}
-                            >
-                              Registrar recebimento
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Cartao Conexao (faturas)</CardTitle>
-          <CardDescription>
-            Faturas pendentes: {data.agregados.faturas_pendentes_qtd} - Total:{" "}
-            {formatBRLFromCentavos(data.agregados.faturas_pendentes_total_centavos)} - Em atraso:{" "}
-            {data.agregados.faturas_vencidas_qtd}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="py-2 text-left">Fatura</th>
-                  <th className="py-2 text-left">Competencia</th>
-                  <th className="py-2 text-left">Vencimento</th>
-                  <th className="py-2 text-left">Status</th>
-                  <th className="py-2 text-right">Total</th>
-                  <th className="py-2 text-right">Abrir</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.faturas_credito_conexao.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-3 text-muted-foreground">
-                      Nenhuma fatura pendente do Cartao Conexao encontrada.
-                    </td>
-                  </tr>
-                ) : (
-                  data.faturas_credito_conexao.map((f) => {
-                    const semValor = (f.valor_total_centavos ?? 0) <= 0;
-                    const atrasada = f.vencida && !semValor;
-                    const statusLabel = semValor ? "SEM LANCAMENTOS" : f.status;
-                    return (
-                      <tr key={f.id} className="border-t">
-                        <td className="py-2">#{f.id}</td>
-                        <td className="py-2">{f.periodo_referencia}</td>
-                        <td className="py-2">{f.data_vencimento ?? "-"}</td>
-                        <td className="py-2">
-                          {atrasada ? statusBadge("EM ATRASO", "warning") : statusBadge(statusLabel, "neutral")}
-                        </td>
-                        <td className="py-2 text-right">
-                          {formatBRLFromCentavos(f.valor_total_centavos)}
-                        </td>
-                        <td className="py-2 text-right">
-                          <Link
-                            className="rounded-lg border px-3 py-1 text-sm hover:bg-slate-50"
-                            href={`/administracao/financeiro/credito-conexao/faturas/${f.id}`}
-                          >
-                            Abrir
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-2 text-xs text-muted-foreground">
-            Observacao: o link de fatura usa a rota do admin financeiro. Se a rota real for diferente, ajuste.
-          </div>
-        </CardContent>
-      </Card>
-
-      {data.responsavel_financeiro_id ? (
-        <RecibosContaConexao pessoaTitularId={data.responsavel_financeiro_id} />
+      {loading ? (
+        <div className="text-sm text-muted-foreground">Carregando resumo financeiro...</div>
       ) : null}
 
-      {payOpen && payCobrancaId ? (
+      {error ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Resumo financeiro legado indisponivel no momento: {error}
+        </div>
+      ) : null}
+
+      {!loading && !data ? (
+        <div className="text-sm text-muted-foreground">
+          Alguns blocos do resumo antigo nao puderam ser carregados.
+        </div>
+      ) : null}
+
+      {data ? (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Responsavel financeiro</CardTitle>
+              <CardDescription>
+                {isOutroResponsavel ? (
+                  <>
+                    Pagador identificado:{" "}
+                    <Link className="text-slate-900 underline" href={`/pessoas/${data.responsavel_financeiro_id}`}>
+                      {responsavelLabel}
+                    </Link>
+                  </>
+                ) : (
+                  <>A propria pessoa e o responsavel financeiro.</>
+                )}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Cobrancas avulsas</CardTitle>
+              <CardDescription>
+                Cobrancas geradas manualmente para excecoes (fora do Cartao Conexao).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {avulsasError ? (
+                <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">
+                  {avulsasError}
+                </div>
+              ) : null}
+
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="py-2 text-left">Cobranca</th>
+                      <th className="py-2 text-left">Vencimento</th>
+                      <th className="py-2 text-left">Status</th>
+                      <th className="py-2 text-left">Meio</th>
+                      <th className="py-2 text-right">Valor</th>
+                      <th className="py-2 text-left">Motivo</th>
+                      <th className="py-2 text-right">Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {avulsas.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-3 text-muted-foreground">
+                          Nenhuma cobranca avulsa encontrada.
+                        </td>
+                      </tr>
+                    ) : (
+                      avulsas.map((c) => {
+                        const vencida =
+                          c.vencimento && c.vencimento < new Date().toISOString().slice(0, 10);
+                        return (
+                          <tr key={c.id} className="border-t">
+                            <td className="py-2">#{c.id}</td>
+                            <td className="py-2">{c.vencimento}</td>
+                            <td className="py-2">
+                              {vencida && c.status === "PENDENTE"
+                                ? statusBadge("VENCIDA", "warning")
+                                : statusBadge(c.status, "neutral")}
+                            </td>
+                            <td className="py-2">{c.meio}</td>
+                            <td className="py-2 text-right">{formatBRLFromCentavos(c.valor_centavos)}</td>
+                            <td className="py-2">{c.motivo_excecao}</td>
+                            <td className="py-2 text-right">
+                              {c.status === "PENDENTE" ? (
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setPayCobrancaId(c.id);
+                                    setPayValor(c.valor_centavos);
+                                    setPayMetodo("PIX");
+                                    setPayComprovante("");
+                                    setPayOpen(true);
+                                  }}
+                                >
+                                  Registrar recebimento
+                                </Button>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Cartao Conexao (faturas)</CardTitle>
+              <CardDescription>
+                Faturas pendentes: {data.agregados.faturas_pendentes_qtd} - Total:{" "}
+                {formatBRLFromCentavos(data.agregados.faturas_pendentes_total_centavos)} - Em atraso:{" "}
+                {data.agregados.faturas_vencidas_qtd}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="py-2 text-left">Fatura</th>
+                      <th className="py-2 text-left">Competencia</th>
+                      <th className="py-2 text-left">Vencimento</th>
+                      <th className="py-2 text-left">Status</th>
+                      <th className="py-2 text-right">Total</th>
+                      <th className="py-2 text-right">Abrir</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.faturas_credito_conexao.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-3 text-muted-foreground">
+                          Nenhuma fatura pendente do Cartao Conexao encontrada.
+                        </td>
+                      </tr>
+                    ) : (
+                      data.faturas_credito_conexao.map((f) => {
+                        const semValor = (f.valor_total_centavos ?? 0) <= 0;
+                        const atrasada = f.vencida && !semValor;
+                        const statusLabel = semValor ? "SEM LANCAMENTOS" : f.status;
+                        return (
+                          <tr key={f.id} className="border-t">
+                            <td className="py-2">#{f.id}</td>
+                            <td className="py-2">{f.periodo_referencia}</td>
+                            <td className="py-2">{f.data_vencimento ?? "-"}</td>
+                            <td className="py-2">
+                              {atrasada ? statusBadge("EM ATRASO", "warning") : statusBadge(statusLabel, "neutral")}
+                            </td>
+                            <td className="py-2 text-right">
+                              {formatBRLFromCentavos(f.valor_total_centavos)}
+                            </td>
+                            <td className="py-2 text-right">
+                              <Link
+                                className="rounded-lg border px-3 py-1 text-sm hover:bg-slate-50"
+                                href={`/administracao/financeiro/credito-conexao/faturas/${f.id}`}
+                              >
+                                Abrir
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Observacao: o link de fatura usa a rota do admin financeiro. Se a rota real for diferente, ajuste.
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
+
+      <RecibosContaConexao pessoaTitularId={pessoaTitularIdRecibos} />
+
+      {data && payOpen && payCobrancaId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow">
             <div className="font-semibold">Registrar recebimento</div>

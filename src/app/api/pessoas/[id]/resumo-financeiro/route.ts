@@ -50,7 +50,7 @@ function isVencida(dataVencimento: string | null, hojeISO: string): boolean {
   return data < hoje;
 }
 
-export async function GET(_: Request, { params }: RouteParams) {
+export async function GET(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   const pessoaId = Number(id);
   if (!Number.isFinite(pessoaId) || pessoaId <= 0) {
