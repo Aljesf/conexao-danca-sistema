@@ -15,8 +15,57 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const contaIdParam = searchParams.get("conta_conexao_id");
+    const titularPessoaIdParam = searchParams.get("titular_pessoa_id");
     const statusParam = searchParams.get("status"); // ABERTA, FECHADA, PAGA, EM_ATRASO, CANCELADA ou null
     const periodoParam = searchParams.get("periodo_referencia"); // YYYY-MM
+    const contaId = contaIdParam ? Number(contaIdParam) : null;
+    const titularPessoaId = titularPessoaIdParam ? Number(titularPessoaIdParam) : null;
+
+    if (contaIdParam && (!Number.isInteger(contaId) || Number(contaId) <= 0)) {
+      return NextResponse.json(
+        { ok: false, error: "conta_conexao_id_invalido" },
+        { status: 400 },
+      );
+    }
+
+    if (
+      titularPessoaIdParam &&
+      (!Number.isInteger(titularPessoaId) || Number(titularPessoaId) <= 0)
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "titular_pessoa_id_invalido" },
+        { status: 400 },
+      );
+    }
+
+    let contaIdsDoTitular: number[] | null = null;
+    if (titularPessoaId) {
+      const { data: contas, error: contasError } = await supabase
+        .from("credito_conexao_contas")
+        .select("id")
+        .eq("pessoa_titular_id", titularPessoaId)
+        .eq("ativo", true);
+
+      if (contasError) {
+        console.error("Erro ao listar contas por titular em Crédito Conexão", contasError);
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "erro_listar_contas_titular_credito_conexao",
+            details: contasError.message,
+          },
+          { status: 500 },
+        );
+      }
+
+      contaIdsDoTitular = (contas ?? [])
+        .map((row) => Number((row as { id?: number }).id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+      if (contaIdsDoTitular.length === 0) {
+        return NextResponse.json({ ok: true, faturas: [] });
+      }
+    }
 
     let query = supabase
       .from("credito_conexao_faturas")
@@ -48,8 +97,13 @@ export async function GET(req: NextRequest) {
       .order("periodo_referencia", { ascending: false })
       .order("id", { ascending: false });
 
-    if (contaIdParam) {
-      query = query.eq("conta_conexao_id", Number(contaIdParam));
+    if (contaId) {
+      if (contaIdsDoTitular && !contaIdsDoTitular.includes(contaId)) {
+        return NextResponse.json({ ok: true, faturas: [] });
+      }
+      query = query.eq("conta_conexao_id", contaId);
+    } else if (contaIdsDoTitular) {
+      query = query.in("conta_conexao_id", contaIdsDoTitular);
     }
 
     if (periodoParam) {

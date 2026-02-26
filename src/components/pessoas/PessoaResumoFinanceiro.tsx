@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { RecibosContaConexao } from "@/components/documentos/RecibosContaConexao";
 
 type ResumoFinanceiro = {
   pessoa_id: number;
@@ -345,6 +346,10 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
           </div>
         </CardContent>
       </Card>
+
+      {data.responsavel_financeiro_id ? (
+        <RecibosContaConexao pessoaTitularId={data.responsavel_financeiro_id} />
+      ) : null}
 
       {payOpen && payCobrancaId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
