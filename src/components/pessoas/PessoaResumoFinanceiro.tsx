@@ -265,7 +265,13 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                             <td className="py-2 text-right">{formatBRLFromCentavos(c.valor_centavos)}</td>
                             <td className="py-2">{c.motivo_excecao}</td>
                             <td className="py-2 text-right">
-                              {c.status === "PENDENTE" ? (
+                              <div className="flex justify-end gap-2">
+                                <Link
+                                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                                  href={`/administracao/financeiro/cobrancas-avulsas/${c.id}`}
+                                >
+                                  Descricao
+                                </Link>
                                 <Button
                                   variant="secondary"
                                   onClick={() => {
@@ -275,12 +281,11 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                                     setPayComprovante("");
                                     setPayOpen(true);
                                   }}
+                                  disabled={c.status !== "PENDENTE"}
                                 >
                                   Registrar recebimento
                                 </Button>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">-</span>
-                              )}
+                              </div>
                             </td>
                           </tr>
                         );

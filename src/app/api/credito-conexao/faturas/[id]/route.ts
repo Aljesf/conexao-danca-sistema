@@ -25,6 +25,10 @@ type LancamentoRow = {
   composicao_json: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
+  aluno_pessoa_id?: number | null;
+  aluno_nome?: string | null;
+  responsavel_financeiro_nome?: string | null;
+  cobranca_fatura_id?: number | null;
 };
 
 type ContaRow = {
@@ -39,6 +43,14 @@ type PessoaRow = {
   nome: string | null;
   cpf: string | null;
   email: string | null;
+};
+
+type LancamentoEnriquecidoRow = {
+  lancamento_id: number;
+  aluno_pessoa_id: number | null;
+  aluno_nome: string | null;
+  responsavel_financeiro_nome: string | null;
+  cobranca_fatura_id: number | null;
 };
 
 export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -92,6 +104,33 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
       );
     }
     lancamentos = (l ?? []) as LancamentoRow[];
+  }
+
+  if (lancamentos.length > 0) {
+    const { data: enriquecidos, error: enrErr } = await supabase
+      .from("vw_credito_conexao_fatura_itens_enriquecida")
+      .select(
+        "lancamento_id,aluno_pessoa_id,aluno_nome,responsavel_financeiro_nome,cobranca_fatura_id",
+      )
+      .eq("fatura_id", faturaId);
+
+    if (!enrErr && enriquecidos) {
+      const map = new Map<number, LancamentoEnriquecidoRow>();
+      for (const row of enriquecidos as LancamentoEnriquecidoRow[]) {
+        map.set(Number(row.lancamento_id), row);
+      }
+      lancamentos = lancamentos.map((row) => {
+        const extra = map.get(Number(row.id));
+        if (!extra) return row;
+        return {
+          ...row,
+          aluno_pessoa_id: extra.aluno_pessoa_id,
+          aluno_nome: extra.aluno_nome,
+          responsavel_financeiro_nome: extra.responsavel_financeiro_nome,
+          cobranca_fatura_id: extra.cobranca_fatura_id,
+        };
+      });
+    }
   }
 
   const faturaRow = fatura as FaturaRow;

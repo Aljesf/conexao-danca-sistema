@@ -520,9 +520,15 @@ export default function MatriculaDetalhePage() {
                       <div className="text-muted-foreground">
                         Valor: {formatBRLFromCents(Number(cobrancaEntrada.valor_centavos))}
                       </div>
-                      {cobrancaEntrada.status === "PENDENTE" ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Link
+                          className={uiBtnNeutral}
+                          href={`/administracao/financeiro/cobrancas-avulsas/${cobrancaEntrada.id}`}
+                        >
+                          Descricao
+                        </Link>
                         <button
-                          className={`mt-2 ${uiBtnPrimary}`}
+                          className={uiBtnPrimary}
                           onClick={() => {
                             setPayCobrancaId(cobrancaEntrada.id);
                             setPayValor(cobrancaEntrada.valor_centavos);
@@ -530,10 +536,11 @@ export default function MatriculaDetalhePage() {
                             setPayComprovante("");
                             setPayOpen(true);
                           }}
+                          disabled={cobrancaEntrada.status !== "PENDENTE"}
                         >
                           Registrar recebimento
                         </button>
-                      ) : null}
+                      </div>
                     </div>
                   ) : null}
 

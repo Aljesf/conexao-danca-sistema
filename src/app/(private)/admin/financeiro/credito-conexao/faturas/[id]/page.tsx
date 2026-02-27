@@ -44,6 +44,10 @@ type LancamentoRow = {
   composicao_json: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
+  aluno_pessoa_id?: number | null;
+  aluno_nome?: string | null;
+  responsavel_financeiro_nome?: string | null;
+  cobranca_fatura_id?: number | null;
 };
 
 type FaturaDetalheData = {
@@ -572,10 +576,23 @@ export default function FaturaDetalhePage() {
                   <div key={l.id} className="rounded-lg border bg-white p-3">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <div className="text-sm font-semibold">{l.descricao ?? "Lancamento"}</div>
+                        <div className="text-sm font-semibold">
+                          {(() => {
+                            const descricao = l.descricao ?? "Lancamento";
+                            const competencia = l.competencia ?? "-";
+                            const alunoLabel =
+                              (l.aluno_nome ?? "").trim() ||
+                              (l.aluno_pessoa_id ? `Aluno #${l.aluno_pessoa_id}` : "");
+                            const pareceMensalidade =
+                              descricao.toLowerCase().includes("mensalidade") || Boolean(alunoLabel);
+                            if (!pareceMensalidade) return descricao;
+                            return `Mensalidade ${competencia} - ${alunoLabel || "Aluno"} - matricula`;
+                          })()}
+                        </div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          ID: {l.id} | Competencia: {l.competencia ?? "-"} | Ref: {l.referencia_item ?? "-"} | Status:{" "}
-                          {l.status ?? "-"}
+                          ID: {l.id} | Competencia: {l.competencia ?? "-"} | Ref:{" "}
+                          {l.cobranca_fatura_id ? `cobranca #${l.cobranca_fatura_id}` : l.referencia_item ?? "-"} |{" "}
+                          Status: {l.status ?? "-"}
                         </div>
                       </div>
                       <div className="text-sm font-semibold">{brlFromCentavos(Number(l.valor_centavos ?? 0))}</div>

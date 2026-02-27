@@ -53,7 +53,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: false, error: "fatura_nao_encontrada" }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true, fatura: data });
+  let itens: Array<Record<string, unknown>> = [];
+  const { data: itensData } = await supabase
+    .from("vw_credito_conexao_fatura_itens_enriquecida")
+    .select(
+      "lancamento_id,descricao,valor_centavos,competencia_ano_mes,status_lancamento,aluno_pessoa_id,aluno_nome,responsavel_financeiro_nome,cobranca_fatura_id",
+    )
+    .eq("fatura_id", faturaId)
+    .order("lancamento_id", { ascending: true });
+
+  if (Array.isArray(itensData)) {
+    itens = itensData as Array<Record<string, unknown>>;
+  }
+
+  return NextResponse.json({ ok: true, fatura: data, itens });
 }
 
 
