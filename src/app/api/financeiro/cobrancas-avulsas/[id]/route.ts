@@ -23,10 +23,8 @@ export async function GET(
 
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
-    .from("financeiro_cobrancas_avulsas")
-    .select(
-      "id,pessoa_id,origem_tipo,origem_id,valor_centavos,vencimento,status,meio,motivo_excecao,observacao,criado_em,pago_em",
-    )
+    .from("vw_financeiro_cobranca_avulsa_detalhe")
+    .select("*")
     .eq("id", id)
     .maybeSingle();
 

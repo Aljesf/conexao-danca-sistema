@@ -6,9 +6,16 @@ import { useParams, useRouter } from "next/navigation";
 
 type CobrancaAvulsa = {
   id: number;
-  pessoa_id: number;
+  pessoa_id?: number;
+  pagador_pessoa_id?: number;
+  pagador_nome?: string | null;
+  pagador_cpf?: string | null;
+  pagador_telefone?: string | null;
   origem_tipo: string | null;
   origem_id: number | null;
+  matricula_id?: number | null;
+  aluno_pessoa_id?: number | null;
+  aluno_nome?: string | null;
   valor_centavos: number;
   vencimento: string | null;
   status: string;
@@ -21,6 +28,20 @@ type CobrancaAvulsa = {
 
 function brlFromCentavos(v: number): string {
   return (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatOrigemTipo(v: string | null | undefined): string {
+  const raw = (v ?? "").trim();
+  if (!raw) return "--";
+  const upper = raw.toUpperCase();
+  if (upper === "MATRICULA_ENTRADA") return "Matricula (Entrada)";
+  if (upper === "MATRICULA") return "Matricula";
+  if (upper.startsWith("MATRICULA")) return "Matricula";
+  return raw
+    .toLowerCase()
+    .split("_")
+    .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+    .join(" ");
 }
 
 export default function Page() {
@@ -80,7 +101,7 @@ export default function Page() {
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || `erro_http_${res.status}`);
       }
-      setCobranca(json.cobranca as CobrancaAvulsa);
+      await load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "falha_ao_salvar";
       setErro(message);
@@ -104,11 +125,6 @@ export default function Page() {
       setErro(message);
     }
   }
-
-  const origemLabel =
-    cobranca?.origem_tipo && cobranca?.origem_id
-      ? `${cobranca.origem_tipo} #${cobranca.origem_id}`
-      : (cobranca?.origem_tipo ?? "--");
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">
@@ -136,26 +152,77 @@ export default function Page() {
         <div className="text-sm text-slate-600">Nao encontrado.</div>
       ) : (
         <div className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="text-sm">
-              <div className="text-slate-500">Pessoa</div>
-              <div className="font-medium">#{cobranca.pessoa_id}</div>
-            </div>
-            <div className="text-sm">
-              <div className="text-slate-500">Origem</div>
-              <div className="font-medium">{origemLabel}</div>
-            </div>
-            <div className="text-sm">
-              <div className="text-slate-500">Valor</div>
-              <div className="font-medium">
-                {brlFromCentavos(Number(cobranca.valor_centavos || 0))}
+          {(() => {
+            const pagadorId = Number(cobranca.pagador_pessoa_id ?? cobranca.pessoa_id ?? 0);
+            const pagadorNome = (cobranca.pagador_nome ?? "").trim() || `Pessoa #${pagadorId}`;
+            const alunoId = Number(cobranca.aluno_pessoa_id ?? 0);
+            const alunoNome = (cobranca.aluno_nome ?? "").trim() || `Aluno #${alunoId}`;
+            const origemTipo = formatOrigemTipo(cobranca.origem_tipo);
+            const origemIdLabel = cobranca.origem_id ? `(#${cobranca.origem_id})` : "(#--)";
+
+            return (
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <div className="text-sm">
+                    <div className="text-slate-500">Responsavel financeiro</div>
+                    <div className="text-base font-semibold text-slate-900">
+                      {pagadorNome} <span className="font-normal text-slate-500">({`#${pagadorId}`})</span>
+                    </div>
+                    {pagadorId > 0 ? (
+                      <Link
+                        className="text-xs text-slate-600 underline hover:text-slate-800"
+                        href={`/pessoas/${pagadorId}`}
+                      >
+                        Abrir responsavel ({`#${pagadorId}`})
+                      </Link>
+                    ) : null}
+                  </div>
+
+                  {alunoId > 0 ? (
+                    <div className="text-sm">
+                      <div className="text-slate-500">Aluno/Beneficiario</div>
+                      <div className="text-base font-semibold text-slate-900">
+                        {alunoNome} <span className="font-normal text-slate-500">({`#${alunoId}`})</span>
+                      </div>
+                      <Link
+                        className="text-xs text-slate-600 underline hover:text-slate-800"
+                        href={`/pessoas/${alunoId}`}
+                      >
+                        Abrir aluno ({`#${alunoId}`})
+                      </Link>
+                    </div>
+                  ) : null}
+
+                  <div className="text-sm">
+                    <div className="text-slate-500">Origem</div>
+                    <div className="text-base font-semibold text-slate-900">
+                      {origemTipo} <span className="font-normal text-slate-500">{origemIdLabel}</span>
+                    </div>
+                    {cobranca.matricula_id ? (
+                      <Link
+                        className="text-xs text-slate-600 underline hover:text-slate-800"
+                        href={`/escola/matriculas/${cobranca.matricula_id}`}
+                      >
+                        Abrir matricula ({`#${cobranca.matricula_id}`})
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center">
+                  <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
+                    <div className="text-sm text-slate-600">Valor</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">
+                      {brlFromCentavos(Number(cobranca.valor_centavos || 0))}
+                    </div>
+                    <div className="mt-2 text-xs text-slate-600">
+                      Status: <span className="font-semibold text-slate-800">{cobranca.status}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="text-sm">
-              <div className="text-slate-500">Status</div>
-              <div className="font-medium">{cobranca.status}</div>
-            </div>
-          </div>
+            );
+          })()}
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="text-sm text-slate-700">
@@ -168,7 +235,7 @@ export default function Page() {
               />
             </label>
             <label className="text-sm text-slate-700">
-              Meio (texto)
+              Meio de pagamento (informativo)
               <input
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
                 value={meio}
@@ -209,14 +276,6 @@ export default function Page() {
               </button>
             </div>
           </div>
-
-          {cobranca.pessoa_id ? (
-            <div className="pt-2 text-sm">
-              <Link className="underline" href={`/administracao/pessoas/${cobranca.pessoa_id}`}>
-                Abrir pessoa #{cobranca.pessoa_id}
-              </Link>
-            </div>
-          ) : null}
         </div>
       )}
     </div>
