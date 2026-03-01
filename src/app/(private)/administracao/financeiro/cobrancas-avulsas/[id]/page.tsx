@@ -30,6 +30,19 @@ function brlFromCentavos(v: number): string {
   return (v / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function centavosToReaisInput(v: number): string {
+  return (v / 100).toFixed(2).replace(".", ",");
+}
+
+function parseReaisInputToCentavos(v: string): number | null {
+  const raw = v.trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/\s+/g, "").replace(/\./g, "").replace(",", ".");
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100);
+}
+
 function formatOrigemTipo(v: string | null | undefined): string {
   const raw = (v ?? "").trim();
   if (!raw) return "--";
@@ -55,6 +68,8 @@ export default function Page() {
   const [vencimento, setVencimento] = React.useState("");
   const [meio, setMeio] = React.useState("");
   const [observacao, setObservacao] = React.useState("");
+  const [valorReais, setValorReais] = React.useState("");
+  const [motivoValor, setMotivoValor] = React.useState("");
 
   async function load() {
     try {
@@ -70,6 +85,8 @@ export default function Page() {
       setVencimento(c.vencimento ?? "");
       setMeio(c.meio ?? "");
       setObservacao(c.observacao ?? "");
+      setValorReais(centavosToReaisInput(Number(c.valor_centavos ?? 0)));
+      setMotivoValor("");
     } catch (e) {
       const message = e instanceof Error ? e.message : "falha_ao_carregar_cobranca";
       setErro(message);
@@ -92,14 +109,36 @@ export default function Page() {
     if (!cobranca) return;
     try {
       setErro(null);
+      const valorCentavos = parseReaisInputToCentavos(valorReais);
+      if (valorCentavos === null || valorCentavos < 0) {
+        setErro("valor_invalido");
+        return;
+      }
+      const valorAtual = Number(cobranca.valor_centavos ?? 0);
+      const valorAlterado = valorCentavos !== valorAtual;
+      const motivo = motivoValor.trim();
+      if (valorAlterado && !motivo) {
+        setErro("motivo_obrigatorio_valor");
+        return;
+      }
+
+      const payload: Record<string, unknown> = { vencimento, meio, observacao };
+      if (valorAlterado) {
+        payload.valor_centavos = valorCentavos;
+        payload.motivo_valor = motivo;
+      }
+
       const res = await fetch(`/api/financeiro/cobrancas-avulsas/${cobranca.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vencimento, meio, observacao }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || `erro_http_${res.status}`);
+      }
+      if (json?.warning) {
+        setErro(String(json.warning));
       }
       await load();
     } catch (e) {
@@ -159,6 +198,8 @@ export default function Page() {
             const alunoNome = (cobranca.aluno_nome ?? "").trim() || `Aluno #${alunoId}`;
             const origemTipo = formatOrigemTipo(cobranca.origem_tipo);
             const origemIdLabel = cobranca.origem_id ? `(#${cobranca.origem_id})` : "(#--)";
+            const statusUpper = String(cobranca.status ?? "").toUpperCase();
+            const bloqueadoValor = statusUpper === "PAGO" || statusUpper === "CANCELADO";
 
             return (
               <div className="grid gap-6 md:grid-cols-2">
@@ -209,16 +250,47 @@ export default function Page() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center">
-                  <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
-                    <div className="text-sm text-slate-600">Valor</div>
-                    <div className="mt-1 text-3xl font-extrabold text-slate-900">
-                      {brlFromCentavos(Number(cobranca.valor_centavos || 0))}
-                    </div>
-                    <div className="mt-2 text-xs text-slate-600">
-                      Status: <span className="font-semibold text-slate-800">{cobranca.status}</span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-center">
+                    <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
+                      <div className="text-sm text-slate-600">Valor</div>
+                      <div className="mt-1 text-3xl font-extrabold text-slate-900">
+                        {brlFromCentavos(Number(cobranca.valor_centavos || 0))}
+                      </div>
+                      <div className="mt-2 text-xs text-slate-600">
+                        Status: <span className="font-semibold text-slate-800">{cobranca.status}</span>
+                      </div>
                     </div>
                   </div>
+
+                  <label className="block text-sm text-slate-700">
+                    Editar valor (R$)
+                    <input
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                      value={valorReais}
+                      onChange={(e) => setValorReais(e.target.value)}
+                      placeholder="84,15"
+                      disabled={bloqueadoValor}
+                    />
+                  </label>
+
+                  <label className="block text-sm text-slate-700">
+                    Motivo da alteracao do valor (obrigatorio)
+                    <textarea
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                      rows={2}
+                      value={motivoValor}
+                      onChange={(e) => setMotivoValor(e.target.value)}
+                      placeholder="Descreva o motivo da alteracao..."
+                      disabled={bloqueadoValor}
+                    />
+                  </label>
+
+                  {bloqueadoValor ? (
+                    <div className="text-xs text-slate-500">
+                      Edicao de valor bloqueada para cobrancas com status {statusUpper}.
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );

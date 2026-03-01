@@ -8,6 +8,11 @@ function asString(value: unknown): string | null {
   return s.length > 0 ? s : null;
 }
 
+function asInt(value: unknown): number | null {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
@@ -58,11 +63,24 @@ export async function PATCH(
   const vencimento = asString(body.vencimento);
   const meio = asString(body.meio);
   const observacao = asString(body.observacao);
+  const valorCentavos = asInt(body.valor_centavos);
+  const motivoValor = asString(body.motivo_valor);
 
   const patch: Record<string, unknown> = {};
   if (vencimento) patch.vencimento = vencimento;
   if (meio) patch.meio = meio;
   if (Object.prototype.hasOwnProperty.call(body, "observacao")) patch.observacao = observacao;
+
+  const alterandoValor = valorCentavos !== null;
+  if (alterandoValor) {
+    if (valorCentavos < 0) {
+      return NextResponse.json({ ok: false, error: "valor_invalido" }, { status: 400 });
+    }
+    if (!motivoValor) {
+      return NextResponse.json({ ok: false, error: "motivo_obrigatorio_valor" }, { status: 400 });
+    }
+    patch.valor_centavos = valorCentavos;
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json(
@@ -74,7 +92,7 @@ export async function PATCH(
   const supabase = getSupabaseAdmin();
   const { data: atual, error: atualErr } = await supabase
     .from("financeiro_cobrancas_avulsas")
-    .select("id,status")
+    .select("id,status,valor_centavos")
     .eq("id", id)
     .maybeSingle();
 
@@ -96,13 +114,13 @@ export async function PATCH(
     );
   }
 
+  const valorAnterior = Number((atual as { valor_centavos?: unknown }).valor_centavos ?? 0);
+
   const { data, error } = await supabase
     .from("financeiro_cobrancas_avulsas")
     .update(patch)
     .eq("id", id)
-    .select(
-      "id,pessoa_id,origem_tipo,origem_id,valor_centavos,vencimento,status,meio,motivo_excecao,observacao,criado_em,pago_em",
-    )
+    .select("*")
     .single();
 
   if (error) {
@@ -110,6 +128,31 @@ export async function PATCH(
       { ok: false, error: "db_erro", detail: error.message },
       { status: 500 },
     );
+  }
+
+  if (alterandoValor) {
+    const valorNovo = Number((data as { valor_centavos?: unknown }).valor_centavos ?? 0);
+    if (valorNovo !== valorAnterior) {
+      const { error: audErr } = await supabase
+        .from("financeiro_cobrancas_avulsas_auditoria")
+        .insert({
+          cobranca_avulsa_id: id,
+          campo: "valor_centavos",
+          valor_anterior: String(valorAnterior),
+          valor_novo: String(valorNovo),
+          motivo: motivoValor!,
+          criado_por: null,
+        });
+
+      if (audErr) {
+        return NextResponse.json({
+          ok: true,
+          cobranca: data,
+          warning: "auditoria_falhou",
+          warning_detail: audErr.message,
+        });
+      }
+    }
   }
 
   return NextResponse.json({ ok: true, cobranca: data });
