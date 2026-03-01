@@ -14,6 +14,7 @@ import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPe
 import FormulariosInternosCard from "@/components/pessoas/FormulariosInternosCard";
 import MovimentoMcdCard from "@/components/pessoas/MovimentoMcdCard";
 import { PessoaResumoFinanceiro } from "@/components/pessoas/PessoaResumoFinanceiro";
+import { VinculosFinanceirosManager } from "@/components/pessoas/VinculosFinanceirosManager";
 import { BairroPicker } from "@/components/enderecos/BairroPicker";
 import { CidadePicker } from "@/components/enderecos/CidadePicker";
 import { getSupabaseBrowser } from "@/lib/supabaseBrowser";
@@ -437,7 +438,7 @@ export default function PessoaDetalhesPage() {
     { id: "observacoes_pedagogicas", label: "Observacoes pedagogicas", icon: "" },
     { id: "contato", label: "Informacoes de contato", icon: "" },
     { id: "endereco", label: "Endereco", icon: "" },
-    { id: "vinculos", label: "Vinculos no sistema", icon: "" },
+    { id: "vinculos", label: "Vínculos", icon: "" },
     { id: "resumo", label: "Resumo financeiro", icon: "" },
     { id: "sistema", label: "Dados do sistema", icon: "" },
     { id: "formularios_internos", label: "Formulários Internos", icon: "" },
@@ -1205,9 +1206,9 @@ export default function PessoaDetalhesPage() {
               {abaAtiva === "vinculos" && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Vinculos no sistema
+                    Vínculos
                   </h2>
-                  <p className="text-slate-600">Nenhum vinculo cadastrado ainda.</p>
+                  <VinculosFinanceirosManager pessoaId={pessoa.id} />
                 </div>
               )}
 
