@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 import { formatBRLFromCents } from "@/lib/formatters/money";
@@ -11,6 +12,7 @@ type Cobranca = {
   valor_centavos: number;
   vencimento: string | null;
   status: string;
+  situacao_saas?: "QUITADA" | "EM_ABERTO" | "VENCIDA" | null;
   competencia_ano_mes?: string | null;
   bucket_vencimento?: string | null;
   dias_atraso?: number;
@@ -35,6 +37,7 @@ type ContaReceberSaasRow = {
   saldo_aberto_centavos: number;
   competencia_ano_mes: string | null;
   dias_atraso: number;
+  situacao_saas: "QUITADA" | "EM_ABERTO" | "VENCIDA";
   bucket_vencimento: string | null;
 };
 
@@ -122,7 +125,8 @@ type FormaPagamento = {
 type MaquinaOp = { id: number; nome?: string | null };
 type BandeiraOp = { id: number; nome?: string | null; codigo?: string | null };
 
-const STATUS_OPCOES = ["TODOS", "PENDENTE", "RECEBIDO", "PAGO"] as const;
+const SITUACAO_OPCOES = ["TODAS", "VENCIDA", "EM_ABERTO", "QUITADA"] as const;
+const STATUS_INTERNO_OPCOES = ["TODOS", "PENDENTE", "RECEBIDO", "PAGO", "PAGA"] as const;
 type QuickPreset = "VENCIDAS" | "A_VENCER_7" | "A_VENCER_30" | "MES_ATUAL" | "PROXIMO_MES" | "LIMPAR";
 
 function hojeISO() {
@@ -141,10 +145,13 @@ function anoMesProximo() {
 }
 
 export default function ContasReceberPage() {
+  const pessoaHref = (id: number) => `/pessoas/${id}`;
+
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFiltro, setStatusFiltro] = useState<(typeof STATUS_OPCOES)[number]>("TODOS");
+  const [situacaoFiltro, setSituacaoFiltro] = useState<(typeof SITUACAO_OPCOES)[number]>("TODAS");
+  const [statusInternoFiltro, setStatusInternoFiltro] = useState<(typeof STATUS_INTERNO_OPCOES)[number]>("TODOS");
   const [bucketFiltro, setBucketFiltro] = useState<string>("");
   const [competenciaFiltro, setCompetenciaFiltro] = useState<string>("");
   const [dataInicio, setDataInicio] = useState("");
@@ -186,12 +193,15 @@ export default function ContasReceberPage() {
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (statusFiltro && statusFiltro !== "TODOS") params.set("status", statusFiltro);
+      if (situacaoFiltro && situacaoFiltro !== "TODAS") params.set("situacao", situacaoFiltro);
+      if (statusInternoFiltro && statusInternoFiltro !== "TODOS") params.set("status", statusInternoFiltro);
       if (bucketFiltro) params.set("bucket", bucketFiltro);
       if (competenciaFiltro) params.set("competencia", competenciaFiltro);
       if (dataInicio) params.set("vencimento_inicio", dataInicio);
       if (dataFim) params.set("vencimento_fim", dataFim);
-      params.set("somente_abertas", "1");
+      if (situacaoFiltro === "VENCIDA" || situacaoFiltro === "EM_ABERTO") {
+        params.set("somente_abertas", "1");
+      }
       params.set("page", "1");
       params.set("page_size", "100");
 
@@ -212,6 +222,7 @@ export default function ContasReceberPage() {
           valor_centavos: Number(row.valor_total_centavos || 0),
           vencimento: row.data_vencimento,
           status: row.status_cobranca || "PENDENTE",
+          situacao_saas: row.situacao_saas,
           pessoa_id: row.pessoa_id,
           pessoa_nome: row.pessoa_nome,
           total_recebido_centavos: Number(row.valor_recebido_centavos || 0),
@@ -230,7 +241,7 @@ export default function ContasReceberPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFiltro, bucketFiltro, competenciaFiltro, dataInicio, dataFim]);
+  }, [situacaoFiltro, statusInternoFiltro, bucketFiltro, competenciaFiltro, dataInicio, dataFim]);
 
   const loadDevedores = useCallback(async () => {
     setDevedoresLoading(true);
@@ -260,7 +271,7 @@ export default function ContasReceberPage() {
     setAvulsasError(null);
     try {
       const params = new URLSearchParams();
-      const statusMap = statusFiltro === "RECEBIDO" ? "PAGO" : statusFiltro;
+      const statusMap = statusInternoFiltro === "RECEBIDO" ? "PAGO" : statusInternoFiltro;
       if (statusMap && statusMap !== "TODOS") params.set("status", statusMap);
       if (dataInicio) params.set("data_inicio", dataInicio);
       if (dataFim) params.set("data_fim", dataFim);
@@ -278,7 +289,7 @@ export default function ContasReceberPage() {
     } finally {
       setAvulsasLoading(false);
     }
-  }, [statusFiltro, dataInicio, dataFim]);
+  }, [statusInternoFiltro, dataInicio, dataFim]);
 
   const loadRefs = useCallback(async () => {
     setRefsLoading(true);
@@ -321,6 +332,7 @@ export default function ContasReceberPage() {
 
   function aplicarPreset(p: QuickPreset) {
     if (p === "LIMPAR") {
+      setSituacaoFiltro("TODAS");
       setBucketFiltro("");
       setCompetenciaFiltro("");
       setDataInicio("");
@@ -329,6 +341,7 @@ export default function ContasReceberPage() {
     }
 
     if (p === "VENCIDAS") {
+      setSituacaoFiltro("VENCIDA");
       setBucketFiltro("VENCIDA");
       setCompetenciaFiltro("");
       setDataInicio("");
@@ -337,6 +350,7 @@ export default function ContasReceberPage() {
     }
 
     if (p === "A_VENCER_7") {
+      setSituacaoFiltro("EM_ABERTO");
       setBucketFiltro("A_VENCER_7");
       setCompetenciaFiltro("");
       setDataInicio("");
@@ -345,6 +359,7 @@ export default function ContasReceberPage() {
     }
 
     if (p === "A_VENCER_30") {
+      setSituacaoFiltro("EM_ABERTO");
       setBucketFiltro("A_VENCER_30");
       setCompetenciaFiltro("");
       setDataInicio("");
@@ -353,6 +368,7 @@ export default function ContasReceberPage() {
     }
 
     if (p === "MES_ATUAL") {
+      setSituacaoFiltro("TODAS");
       setCompetenciaFiltro(anoMesAtual());
       setBucketFiltro("");
       setDataInicio("");
@@ -360,6 +376,7 @@ export default function ContasReceberPage() {
       return;
     }
 
+    setSituacaoFiltro("TODAS");
     setCompetenciaFiltro(anoMesProximo());
     setBucketFiltro("");
     setDataInicio("");
@@ -581,15 +598,27 @@ export default function ContasReceberPage() {
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-5">
           <label className="text-sm text-slate-700">
-            Status
+            Situacao (SaaS)
             <select
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={statusFiltro}
-              onChange={(e) => setStatusFiltro(e.target.value as (typeof STATUS_OPCOES)[number])}
+              value={situacaoFiltro}
+              onChange={(e) => setSituacaoFiltro(e.target.value as (typeof SITUACAO_OPCOES)[number])}
             >
-              {STATUS_OPCOES.map((s) => (
+              {SITUACAO_OPCOES.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-slate-700">
+            Status interno (opcional)
+            <select
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              value={statusInternoFiltro}
+              onChange={(e) => setStatusInternoFiltro(e.target.value as (typeof STATUS_INTERNO_OPCOES)[number])}
+            >
+              {STATUS_INTERNO_OPCOES.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </select>
@@ -739,7 +768,7 @@ export default function ContasReceberPage() {
                   <th className="px-3 py-2 text-left">Vencimento</th>
                   <th className="px-3 py-2 text-left">Competencia/Bucket</th>
                   <th className="px-3 py-2 text-right">Valor</th>
-                  <th className="px-3 py-2 text-center">Status</th>
+                  <th className="px-3 py-2 text-center">Situacao</th>
                   <th className="px-3 py-2 text-left">Origem</th>
                   <th className="px-3 py-2 text-center">Acoes</th>
                 </tr>
@@ -749,15 +778,25 @@ export default function ContasReceberPage() {
                   const isAvulsa = item.tipo === "AVULSA";
                   const cobranca = item.cobranca;
                   const avulsa = item.avulsa;
+                  const pessoaId = cobranca?.pessoa_id ?? avulsa?.pessoa_id ?? null;
                   const vencidaAvulsa =
                     avulsa?.vencimento && avulsa.vencimento < hojeISO() && avulsa.status === "PENDENTE";
                   const statusLabel = vencidaAvulsa ? "VENCIDA" : item.status;
+                  const situacaoLabel = cobranca?.situacao_saas ?? statusLabel;
                   const canReceiveCobranca =
                     cobranca && !(cobranca.status === "RECEBIDO" || cobranca.saldo_centavos <= 0);
                   return (
                     <tr key={`${item.tipo}-${item.id}`} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="px-3 py-2 text-slate-700">{isAvulsa ? "Avulsa" : "Cobranca"}</td>
-                      <td className="px-3 py-2 text-slate-700">{item.pessoa_label}</td>
+                      <td className="px-3 py-2 text-slate-700">
+                        {pessoaId ? (
+                          <Link href={pessoaHref(pessoaId)} className="font-medium hover:underline">
+                            {item.pessoa_label}
+                          </Link>
+                        ) : (
+                          item.pessoa_label
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-slate-700">
                         {item.vencimento ? formatDateISO(item.vencimento) : "-"}
                       </td>
@@ -766,7 +805,9 @@ export default function ContasReceberPage() {
                           <div>
                             <div>Comp: {cobranca.competencia_ano_mes || "--"}</div>
                             <div>Bucket: {cobranca.bucket_vencimento || "--"}</div>
-                            {Number(cobranca.dias_atraso || 0) > 0 ? (
+                            {cobranca.situacao_saas === "VENCIDA" &&
+                            Number(cobranca.saldo_centavos || 0) > 0 &&
+                            Number(cobranca.dias_atraso || 0) > 0 ? (
                               <div className="text-rose-600">{cobranca.dias_atraso} dia(s) em atraso</div>
                             ) : null}
                           </div>
@@ -778,9 +819,12 @@ export default function ContasReceberPage() {
                         {formatBRLFromCents(item.valor_centavos)}
                       </td>
                       <td className="px-3 py-2 text-center">
-                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                          {statusLabel}
-                        </span>
+                        <div className="space-y-1">
+                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                            {situacaoLabel}
+                          </span>
+                          <div className="text-[11px] text-slate-500">Interno: {item.status || "-"}</div>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-slate-700">{item.origem_label || "--"}</td>
                       <td className="px-3 py-2 text-center">

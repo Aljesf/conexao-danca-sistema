@@ -3,6 +3,7 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type ContasReceberQuery = {
+  situacao?: string;
   status?: string;
   bucket?: string;
   competencia?: string;
@@ -22,6 +23,8 @@ const BUCKETS_VALIDOS = new Set([
   "QUITADA_OU_ZERO",
 ]);
 
+const SITUACOES_VALIDAS = new Set(["QUITADA", "EM_ABERTO", "VENCIDA"]);
+
 function isDateLike(value?: string): boolean {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -38,6 +41,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
   const q: ContasReceberQuery = {
+    situacao: searchParams.get("situacao") ?? undefined,
     status: searchParams.get("status") ?? undefined,
     bucket: searchParams.get("bucket") ?? undefined,
     competencia: searchParams.get("competencia") ?? undefined,
@@ -50,6 +54,10 @@ export async function GET(req: NextRequest) {
 
   if (q.bucket && !BUCKETS_VALIDOS.has(q.bucket)) {
     return NextResponse.json({ ok: false, error: "bucket_invalido" }, { status: 400 });
+  }
+
+  if (q.situacao && !SITUACOES_VALIDAS.has(q.situacao)) {
+    return NextResponse.json({ ok: false, error: "situacao_invalida" }, { status: 400 });
   }
 
   if (q.competencia && !isAnoMes(q.competencia)) {
@@ -76,6 +84,7 @@ export async function GET(req: NextRequest) {
     .order("cobranca_id", { ascending: false })
     .range(from, to);
 
+  if (q.situacao) query = query.eq("situacao_saas", q.situacao);
   if (q.status) query = query.eq("status_cobranca", q.status);
   if (q.bucket) query = query.eq("bucket_vencimento", q.bucket);
   if (q.competencia) query = query.eq("competencia_ano_mes", q.competencia);
