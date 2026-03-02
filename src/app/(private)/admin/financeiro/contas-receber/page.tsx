@@ -11,12 +11,40 @@ type Cobranca = {
   valor_centavos: number;
   vencimento: string | null;
   status: string;
+  competencia_ano_mes?: string | null;
+  bucket_vencimento?: string | null;
+  dias_atraso?: number;
   pessoa_id?: number | null;
   pessoa_nome?: string | null;
   centro_custo_nome?: string | null;
   centro_custo_codigo?: string | null;
   total_recebido_centavos: number;
   saldo_centavos: number;
+};
+
+type ContaReceberSaasRow = {
+  cobranca_id: number;
+  pessoa_id: number | null;
+  pessoa_nome: string | null;
+  data_vencimento: string | null;
+  status_cobranca: string | null;
+  origem_tipo: string | null;
+  origem_id: number | null;
+  valor_total_centavos: number;
+  valor_recebido_centavos: number;
+  saldo_aberto_centavos: number;
+  competencia_ano_mes: string | null;
+  dias_atraso: number;
+  bucket_vencimento: string | null;
+};
+
+type DevedorAtrasadoRow = {
+  pessoa_id: number;
+  titulos_vencidos_qtd: number;
+  total_vencido_centavos: number;
+  vencimento_mais_antigo: string | null;
+  maior_dias_atraso: number;
+  pessoa: { id: number; nome: string | null };
 };
 
 type CobrancaAvulsa = {
@@ -46,9 +74,18 @@ type ReceberItem = {
   avulsa?: CobrancaAvulsa;
 };
 
-type ListResponse = {
+type ContasReceberListResponse = {
   ok: boolean;
-  cobrancas?: Cobranca[];
+  itens?: ContaReceberSaasRow[];
+  kpis?: { total_aberto_centavos?: number };
+  total?: number;
+  error?: string;
+};
+
+type DevedoresResponse = {
+  ok: boolean;
+  itens?: DevedorAtrasadoRow[];
+  total_vencido_centavos?: number;
   error?: string;
 };
 
@@ -86,9 +123,21 @@ type MaquinaOp = { id: number; nome?: string | null };
 type BandeiraOp = { id: number; nome?: string | null; codigo?: string | null };
 
 const STATUS_OPCOES = ["TODOS", "PENDENTE", "RECEBIDO", "PAGO"] as const;
+type QuickPreset = "VENCIDAS" | "A_VENCER_7" | "A_VENCER_30" | "MES_ATUAL" | "PROXIMO_MES" | "LIMPAR";
 
 function hojeISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function anoMesAtual() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function anoMesProximo() {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export default function ContasReceberPage() {
@@ -96,8 +145,15 @@ export default function ContasReceberPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFiltro, setStatusFiltro] = useState<(typeof STATUS_OPCOES)[number]>("TODOS");
+  const [bucketFiltro, setBucketFiltro] = useState<string>("");
+  const [competenciaFiltro, setCompetenciaFiltro] = useState<string>("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
+  const [totalAbertoKpi, setTotalAbertoKpi] = useState<number>(0);
+  const [devedores, setDevedores] = useState<DevedorAtrasadoRow[]>([]);
+  const [devedoresLoading, setDevedoresLoading] = useState(false);
+  const [devedoresError, setDevedoresError] = useState<string | null>(null);
+  const [totalVencidoKpi, setTotalVencidoKpi] = useState<number>(0);
   const [modalCobranca, setModalCobranca] = useState<Cobranca | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [formas, setFormas] = useState<FormaPagamento[]>([]);
@@ -131,21 +187,73 @@ export default function ContasReceberPage() {
     try {
       const params = new URLSearchParams();
       if (statusFiltro && statusFiltro !== "TODOS") params.set("status", statusFiltro);
-      if (dataInicio) params.set("data_inicio", dataInicio);
-      if (dataFim) params.set("data_fim", dataFim);
-      const res = await fetch(`/api/financeiro/contas-receber?${params.toString()}`);
-      const json = (await res.json()) as ListResponse;
-      if (!res.ok || !json?.ok || !json.cobrancas) {
+      if (bucketFiltro) params.set("bucket", bucketFiltro);
+      if (competenciaFiltro) params.set("competencia", competenciaFiltro);
+      if (dataInicio) params.set("vencimento_inicio", dataInicio);
+      if (dataFim) params.set("vencimento_fim", dataFim);
+      params.set("somente_abertas", "1");
+      params.set("page", "1");
+      params.set("page_size", "100");
+
+      const res = await fetch(`/api/financeiro/contas-a-receber?${params.toString()}`);
+      const json = (await res.json()) as ContasReceberListResponse;
+      if (!res.ok || !json?.ok || !Array.isArray(json.itens)) {
         throw new Error(json?.error || "Erro ao carregar contas a receber.");
       }
-      setCobrancas(json.cobrancas);
+
+      const mapped: Cobranca[] = json.itens.map((row) => {
+        const origemLabel = row.origem_tipo
+          ? `${row.origem_tipo}${row.origem_id ? ` #${row.origem_id}` : ""}`
+          : `Cobranca #${row.cobranca_id}`;
+
+        return {
+          id: row.cobranca_id,
+          descricao: origemLabel,
+          valor_centavos: Number(row.valor_total_centavos || 0),
+          vencimento: row.data_vencimento,
+          status: row.status_cobranca || "PENDENTE",
+          pessoa_id: row.pessoa_id,
+          pessoa_nome: row.pessoa_nome,
+          total_recebido_centavos: Number(row.valor_recebido_centavos || 0),
+          saldo_centavos: Number(row.saldo_aberto_centavos || 0),
+          competencia_ano_mes: row.competencia_ano_mes,
+          bucket_vencimento: row.bucket_vencimento,
+          dias_atraso: Number(row.dias_atraso || 0),
+        };
+      });
+
+      setCobrancas(mapped);
+      setTotalAbertoKpi(Number(json?.kpis?.total_aberto_centavos ?? 0));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro inesperado ao carregar contas.";
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [statusFiltro, dataInicio, dataFim]);
+  }, [statusFiltro, bucketFiltro, competenciaFiltro, dataInicio, dataFim]);
+
+  const loadDevedores = useCallback(async () => {
+    setDevedoresLoading(true);
+    setDevedoresError(null);
+    try {
+      const res = await fetch("/api/financeiro/contas-a-receber/devedores-atrasados?limit=10", {
+        cache: "no-store",
+      });
+      const json = (await res.json()) as DevedoresResponse;
+      if (!res.ok || !json?.ok || !Array.isArray(json.itens)) {
+        throw new Error(json?.error || "Erro ao carregar devedores atrasados.");
+      }
+      setDevedores(json.itens);
+      setTotalVencidoKpi(Number(json.total_vencido_centavos ?? 0));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Erro ao carregar devedores atrasados.";
+      setDevedoresError(message);
+      setDevedores([]);
+      setTotalVencidoKpi(0);
+    } finally {
+      setDevedoresLoading(false);
+    }
+  }, []);
 
   const loadAvulsas = useCallback(async () => {
     setAvulsasLoading(true);
@@ -208,7 +316,55 @@ export default function ContasReceberPage() {
     loadCobrancas();
     loadRefs();
     loadAvulsas();
-  }, [loadCobrancas, loadRefs, loadAvulsas]);
+    loadDevedores();
+  }, [loadCobrancas, loadRefs, loadAvulsas, loadDevedores]);
+
+  function aplicarPreset(p: QuickPreset) {
+    if (p === "LIMPAR") {
+      setBucketFiltro("");
+      setCompetenciaFiltro("");
+      setDataInicio("");
+      setDataFim("");
+      return;
+    }
+
+    if (p === "VENCIDAS") {
+      setBucketFiltro("VENCIDA");
+      setCompetenciaFiltro("");
+      setDataInicio("");
+      setDataFim("");
+      return;
+    }
+
+    if (p === "A_VENCER_7") {
+      setBucketFiltro("A_VENCER_7");
+      setCompetenciaFiltro("");
+      setDataInicio("");
+      setDataFim("");
+      return;
+    }
+
+    if (p === "A_VENCER_30") {
+      setBucketFiltro("A_VENCER_30");
+      setCompetenciaFiltro("");
+      setDataInicio("");
+      setDataFim("");
+      return;
+    }
+
+    if (p === "MES_ATUAL") {
+      setCompetenciaFiltro(anoMesAtual());
+      setBucketFiltro("");
+      setDataInicio("");
+      setDataFim("");
+      return;
+    }
+
+    setCompetenciaFiltro(anoMesProximo());
+    setBucketFiltro("");
+    setDataInicio("");
+    setDataFim("");
+  }
 
   function abrirModal(c: Cobranca) {
     setModalCobranca(c);
@@ -379,13 +535,16 @@ export default function ContasReceberPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-slate-800">Contas a receber</h1>
-            <p className="text-sm text-slate-600">Dados reais de cobrancas e recebimentos.</p>
+            <p className="text-sm text-slate-600">
+              Central SaaS de cobrança com foco em vencimento, competência e recuperação de inadimplência.
+            </p>
           </div>
           <button
             className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             onClick={() => {
               loadCobrancas();
               loadAvulsas();
+              loadDevedores();
             }}
             disabled={loading}
           >
@@ -395,12 +554,34 @@ export default function ContasReceberPage() {
         <FinanceHelpCard
           subtitle="Operacao real"
           items={[
-            "Lista de cobrancas (cartao e avulsas) filtradas por status e periodo.",
-            "Total em aberto soma saldos das cobrancas e avulsas pendentes.",
-            "Registrar recebimento atualiza saldo e status.",
+            "Filtros rapidos por vencimento: vencidas, 7 dias e 30 dias.",
+            "Filtro por competencia (YYYY-MM) para operacao mensal.",
+            "Card de principais devedores atrasados (top 10) para cobrança ativa.",
           ]}
         />
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("VENCIDAS")}>
+            Vencidas
+          </button>
+          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("A_VENCER_7")}>
+            Vence em 7 dias
+          </button>
+          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("A_VENCER_30")}>
+            Vence em 30 dias
+          </button>
+          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("MES_ATUAL")}>
+            Mes atual
+          </button>
+          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("PROXIMO_MES")}>
+            Proximo mes
+          </button>
+          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("LIMPAR")}>
+            Limpar
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-4">
           <label className="text-sm text-slate-700">
             Status
             <select
@@ -412,6 +593,15 @@ export default function ContasReceberPage() {
                 <option key={s}>{s}</option>
               ))}
             </select>
+          </label>
+          <label className="text-sm text-slate-700">
+            Competencia (YYYY-MM)
+            <input
+              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+              placeholder="2026-03"
+              value={competenciaFiltro}
+              onChange={(e) => setCompetenciaFiltro(e.target.value)}
+            />
           </label>
           <label className="text-sm text-slate-700">
             Vencimento inicio
@@ -438,6 +628,7 @@ export default function ContasReceberPage() {
             onClick={() => {
               loadCobrancas();
               loadAvulsas();
+              loadDevedores();
             }}
             disabled={loading}
           >
@@ -445,7 +636,15 @@ export default function ContasReceberPage() {
           </button>
           <div className="text-xs text-slate-500 flex items-center gap-2">
             <span>Total em aberto:</span>
+            <span className="font-semibold text-slate-800">{formatBRLFromCents(totalAbertoKpi)}</span>
+          </div>
+          <div className="text-xs text-slate-500 flex items-center gap-2">
+            <span>Total em aberto (operacao):</span>
             <span className="font-semibold text-slate-800">{formatBRLFromCents(totalAberto)}</span>
+          </div>
+          <div className="text-xs text-slate-500 flex items-center gap-2">
+            <span>Total vencido:</span>
+            <span className="font-semibold text-slate-800">{formatBRLFromCents(totalVencidoKpi)}</span>
           </div>
         </div>
         {error ? (
@@ -458,6 +657,66 @@ export default function ContasReceberPage() {
             {refsErro} (usando fallback se necessario)
           </div>
         ) : null}
+        {refsLoading ? <div className="mt-2 text-xs text-slate-500">Carregando bases auxiliares...</div> : null}
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Principais devedores atrasados</h2>
+            <p className="text-sm text-slate-600">Top 10 por saldo vencido para priorizar régua de cobrança.</p>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-slate-500">Total vencido (top)</div>
+            <div className="text-sm font-semibold text-slate-800">{formatBRLFromCents(totalVencidoKpi)}</div>
+          </div>
+        </div>
+
+        {devedoresError ? (
+          <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {devedoresError}
+          </div>
+        ) : null}
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-sm text-slate-800">
+            <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+              <tr>
+                <th className="px-3 py-2 text-left">Pessoa</th>
+                <th className="px-3 py-2 text-right">Titulos vencidos</th>
+                <th className="px-3 py-2 text-right">Total vencido</th>
+                <th className="px-3 py-2 text-right">Maior atraso</th>
+              </tr>
+            </thead>
+            <tbody>
+              {devedoresLoading ? (
+                <tr>
+                  <td className="px-3 py-3 text-slate-600" colSpan={4}>
+                    Carregando devedores...
+                  </td>
+                </tr>
+              ) : devedores.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-3 text-slate-600" colSpan={4}>
+                    Nenhum devedor atrasado encontrado.
+                  </td>
+                </tr>
+              ) : (
+                devedores.map((d) => (
+                  <tr key={d.pessoa_id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-slate-800">{d.pessoa?.nome ?? `Pessoa #${d.pessoa_id}`}</div>
+                      <div className="text-xs text-slate-500">Vencimento mais antigo: {d.vencimento_mais_antigo ?? "--"}</div>
+                    </td>
+                    <td className="px-3 py-2 text-right">{d.titulos_vencidos_qtd}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{formatBRLFromCents(d.total_vencido_centavos)}</td>
+                    <td className="px-3 py-2 text-right">{d.maior_dias_atraso} dias</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
@@ -478,6 +737,7 @@ export default function ContasReceberPage() {
                   <th className="px-3 py-2 text-left">Tipo</th>
                   <th className="px-3 py-2 text-left">Pessoa</th>
                   <th className="px-3 py-2 text-left">Vencimento</th>
+                  <th className="px-3 py-2 text-left">Competencia/Bucket</th>
                   <th className="px-3 py-2 text-right">Valor</th>
                   <th className="px-3 py-2 text-center">Status</th>
                   <th className="px-3 py-2 text-left">Origem</th>
@@ -500,6 +760,19 @@ export default function ContasReceberPage() {
                       <td className="px-3 py-2 text-slate-700">{item.pessoa_label}</td>
                       <td className="px-3 py-2 text-slate-700">
                         {item.vencimento ? formatDateISO(item.vencimento) : "-"}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-600">
+                        {cobranca ? (
+                          <div>
+                            <div>Comp: {cobranca.competencia_ano_mes || "--"}</div>
+                            <div>Bucket: {cobranca.bucket_vencimento || "--"}</div>
+                            {Number(cobranca.dias_atraso || 0) > 0 ? (
+                              <div className="text-rose-600">{cobranca.dias_atraso} dia(s) em atraso</div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          "--"
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right">
                         {formatBRLFromCents(item.valor_centavos)}
