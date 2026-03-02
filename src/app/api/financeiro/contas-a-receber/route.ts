@@ -101,7 +101,32 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const totalAbertoCentavos = (data ?? []).reduce((acc: number, row: any) => {
+  const pessoaIds = Array.from(
+    new Set(
+      (data ?? [])
+        .map((row: any) => Number(row?.pessoa_id))
+        .filter((id: number) => Number.isFinite(id) && id > 0)
+    )
+  );
+
+  let pessoasMap: Record<string, { id: number; nome: string | null }> = {};
+
+  if (pessoaIds.length > 0) {
+    const { data: pessoas } = await supabase.from("pessoas").select("id,nome").in("id", pessoaIds);
+    if (Array.isArray(pessoas)) {
+      pessoasMap = pessoas.reduce((acc: Record<string, { id: number; nome: string | null }>, pessoa: any) => {
+        acc[String(pessoa.id)] = { id: Number(pessoa.id), nome: pessoa.nome ?? null };
+        return acc;
+      }, {});
+    }
+  }
+
+  const itens = (data ?? []).map((row: any) => ({
+    ...row,
+    pessoa_nome: pessoasMap[String(row?.pessoa_id)]?.nome ?? null,
+  }));
+
+  const totalAbertoCentavos = itens.reduce((acc: number, row: any) => {
     return acc + Number(row?.saldo_aberto_centavos ?? 0);
   }, 0);
 
@@ -113,6 +138,6 @@ export async function GET(req: NextRequest) {
     kpis: {
       total_aberto_centavos: totalAbertoCentavos,
     },
-    itens: data ?? [],
+    itens,
   });
 }

@@ -1,0 +1,840 @@
+{
+  "colunas_cobrancas": {
+    "name": "colunas_cobrancas",
+    "ok": true,
+    "rows": [
+      {
+        "column_name": "id",
+        "data_type": "bigint"
+      },
+      {
+        "column_name": "pessoa_id",
+        "data_type": "bigint"
+      },
+      {
+        "column_name": "descricao",
+        "data_type": "text"
+      },
+      {
+        "column_name": "valor_centavos",
+        "data_type": "integer"
+      },
+      {
+        "column_name": "moeda",
+        "data_type": "text"
+      },
+      {
+        "column_name": "vencimento",
+        "data_type": "date"
+      },
+      {
+        "column_name": "data_pagamento",
+        "data_type": "date"
+      },
+      {
+        "column_name": "status",
+        "data_type": "text"
+      },
+      {
+        "column_name": "metodo_pagamento",
+        "data_type": "text"
+      },
+      {
+        "column_name": "neofin_charge_id",
+        "data_type": "text"
+      },
+      {
+        "column_name": "neofin_payload",
+        "data_type": "jsonb"
+      },
+      {
+        "column_name": "link_pagamento",
+        "data_type": "text"
+      },
+      {
+        "column_name": "linha_digitavel",
+        "data_type": "text"
+      },
+      {
+        "column_name": "observacoes",
+        "data_type": "text"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone"
+      },
+      {
+        "column_name": "centro_custo_id",
+        "data_type": "integer"
+      },
+      {
+        "column_name": "origem_tipo",
+        "data_type": "text"
+      },
+      {
+        "column_name": "origem_id",
+        "data_type": "bigint"
+      },
+      {
+        "column_name": "parcela_numero",
+        "data_type": "smallint"
+      },
+      {
+        "column_name": "total_parcelas",
+        "data_type": "smallint"
+      },
+      {
+        "column_name": "origem_subtipo",
+        "data_type": "text"
+      },
+      {
+        "column_name": "competencia_ano_mes",
+        "data_type": "text"
+      },
+      {
+        "column_name": "data_prevista_pagamento",
+        "data_type": "date"
+      },
+      {
+        "column_name": "data_inicio_encargos",
+        "data_type": "date"
+      },
+      {
+        "column_name": "multa_percentual_aplicavel",
+        "data_type": "numeric"
+      },
+      {
+        "column_name": "juros_mora_percentual_mensal_aplicavel",
+        "data_type": "numeric"
+      },
+      {
+        "column_name": "cancelada_em",
+        "data_type": "timestamp with time zone"
+      },
+      {
+        "column_name": "cancelada_motivo",
+        "data_type": "text"
+      },
+      {
+        "column_name": "cancelada_por_user_id",
+        "data_type": "uuid"
+      }
+    ],
+    "rowCount": 30
+  },
+  "colunas_recebimentos": {
+    "name": "colunas_recebimentos",
+    "ok": true,
+    "rows": [
+      {
+        "column_name": "id",
+        "data_type": "bigint"
+      },
+      {
+        "column_name": "cobranca_id",
+        "data_type": "bigint"
+      },
+      {
+        "column_name": "centro_custo_id",
+        "data_type": "integer"
+      },
+      {
+        "column_name": "valor_centavos",
+        "data_type": "integer"
+      },
+      {
+        "column_name": "data_pagamento",
+        "data_type": "timestamp with time zone"
+      },
+      {
+        "column_name": "metodo_pagamento",
+        "data_type": "text"
+      },
+      {
+        "column_name": "origem_sistema",
+        "data_type": "text"
+      },
+      {
+        "column_name": "observacoes",
+        "data_type": "text"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone"
+      },
+      {
+        "column_name": "forma_pagamento_codigo",
+        "data_type": "text"
+      },
+      {
+        "column_name": "cartao_maquina_id",
+        "data_type": "bigint"
+      },
+      {
+        "column_name": "cartao_bandeira_id",
+        "data_type": "bigint"
+      },
+      {
+        "column_name": "cartao_numero_parcelas",
+        "data_type": "integer"
+      }
+    ],
+    "rowCount": 13
+  },
+  "cobrancas_pessoa_91_raw": {
+    "name": "cobrancas_pessoa_91_raw",
+    "ok": true,
+    "rows": [
+      {
+        "id": "286",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-01-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:30.098Z",
+        "updated_at": "2026-02-19T18:01:30.098Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-01",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "287",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-02-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:30.517Z",
+        "updated_at": "2026-02-19T18:01:30.517Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-02",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "288",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-03-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:30.923Z",
+        "updated_at": "2026-02-19T18:01:30.923Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-03",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "289",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-04-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:31.251Z",
+        "updated_at": "2026-02-19T18:01:31.251Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-04",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "290",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-05-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:31.596Z",
+        "updated_at": "2026-02-19T18:01:31.596Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-05",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "291",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-06-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:31.926Z",
+        "updated_at": "2026-02-19T18:01:31.926Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-06",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "292",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-07-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:32.291Z",
+        "updated_at": "2026-02-19T18:01:32.291Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-07",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "293",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-08-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:32.679Z",
+        "updated_at": "2026-02-19T18:01:32.679Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-08",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "294",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-09-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:33.040Z",
+        "updated_at": "2026-02-19T18:01:33.040Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-09",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "295",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-10-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:33.374Z",
+        "updated_at": "2026-02-19T18:01:33.374Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-10",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "296",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-11-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:33.711Z",
+        "updated_at": "2026-02-19T18:01:33.711Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-11",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "297",
+        "pessoa_id": "91",
+        "descricao": "Mensalidade (reprocessamento matricula)",
+        "valor_centavos": 40800,
+        "moeda": "BRL",
+        "vencimento": "2026-12-12T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": null,
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": null,
+        "created_at": "2026-02-19T18:01:34.064Z",
+        "updated_at": "2026-02-19T18:01:34.064Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": "CARTAO_CONEXAO",
+        "competencia_ano_mes": "2026-12",
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      },
+      {
+        "id": "298",
+        "pessoa_id": "91",
+        "descricao": "Entrada (reprocessamento matricula)",
+        "valor_centavos": 31600,
+        "moeda": "BRL",
+        "vencimento": "2026-02-19T03:00:00.000Z",
+        "data_pagamento": null,
+        "status": "PENDENTE",
+        "metodo_pagamento": "PIX",
+        "neofin_charge_id": null,
+        "neofin_payload": null,
+        "link_pagamento": null,
+        "linha_digitavel": null,
+        "observacoes": "Correcao de matricula (reprocessamento total).",
+        "created_at": "2026-02-19T18:01:39.172Z",
+        "updated_at": "2026-02-19T18:01:39.172Z",
+        "centro_custo_id": null,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7",
+        "parcela_numero": null,
+        "total_parcelas": null,
+        "origem_subtipo": null,
+        "competencia_ano_mes": null,
+        "data_prevista_pagamento": null,
+        "data_inicio_encargos": null,
+        "multa_percentual_aplicavel": null,
+        "juros_mora_percentual_mensal_aplicavel": null,
+        "cancelada_em": null,
+        "cancelada_motivo": null,
+        "cancelada_por_user_id": null
+      }
+    ],
+    "rowCount": 13
+  },
+  "recebimentos_para_cobrancas_pessoa_91": {
+    "name": "recebimentos_para_cobrancas_pessoa_91",
+    "ok": true,
+    "rows": [],
+    "rowCount": 0
+  },
+  "flat_pessoa_91": {
+    "name": "flat_pessoa_91",
+    "ok": true,
+    "rows": [
+      {
+        "cobranca_id": "286",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-01-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "VENCIDA",
+        "bucket_vencimento": "VENCIDA",
+        "dias_atraso": 49,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "287",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-02-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "VENCIDA",
+        "bucket_vencimento": "VENCIDA",
+        "dias_atraso": 18,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "298",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-02-19T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 31600,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "31600",
+        "situacao_saas": "VENCIDA",
+        "bucket_vencimento": "VENCIDA",
+        "dias_atraso": 11,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "288",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-03-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "A_VENCER_30",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "289",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-04-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "290",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-05-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "291",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-06-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "292",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-07-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "293",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-08-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "294",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-09-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "295",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-10-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "296",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-11-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      },
+      {
+        "cobranca_id": "297",
+        "pessoa_id": "91",
+        "data_vencimento": "2026-12-12T03:00:00.000Z",
+        "status_cobranca": "PENDENTE",
+        "valor_total_centavos": 40800,
+        "valor_recebido_centavos": "0",
+        "saldo_aberto_centavos": "40800",
+        "situacao_saas": "EM_ABERTO",
+        "bucket_vencimento": "FUTURA",
+        "dias_atraso": 0,
+        "origem_tipo": "MATRICULA",
+        "origem_id": "7"
+      }
+    ],
+    "rowCount": 13
+  },
+  "devedores_view_pessoa_91": {
+    "name": "devedores_view_pessoa_91",
+    "ok": true,
+    "rows": [
+      {
+        "pessoa_id": "91",
+        "titulos_vencidos_qtd": 3,
+        "total_vencido_centavos": 113200,
+        "vencimento_mais_antigo": "2026-01-12T03:00:00.000Z",
+        "maior_dias_atraso": 49
+      }
+    ],
+    "rowCount": 1
+  },
+  "def_flat": {
+    "name": "def_flat",
+    "ok": true,
+    "rows": [
+      {
+        "definition": " WITH receb AS (\n         SELECT r.cobranca_id,\n            COALESCE(sum(r.valor_centavos), (0)::bigint) AS valor_recebido_centavos\n           FROM recebimentos r\n          GROUP BY r.cobranca_id\n        ), base AS (\n         SELECT c.id AS cobranca_id,\n            c.pessoa_id,\n            c.vencimento,\n            c.status AS status_cobranca,\n            c.origem_tipo,\n            c.origem_id,\n            c.created_at,\n            COALESCE(c.valor_centavos, 0) AS valor_total_centavos,\n            COALESCE(rec.valor_recebido_centavos, (0)::bigint) AS valor_recebido_centavos,\n            GREATEST((COALESCE(c.valor_centavos, 0) - COALESCE(rec.valor_recebido_centavos, (0)::bigint)), (0)::bigint) AS saldo_aberto_centavos\n           FROM (cobrancas c\n             LEFT JOIN receb rec ON ((rec.cobranca_id = c.id)))\n        )\n SELECT cobranca_id,\n    pessoa_id,\n    vencimento AS data_vencimento,\n    status_cobranca,\n    origem_tipo,\n    origem_id,\n    created_at,\n    valor_total_centavos,\n    valor_recebido_centavos,\n    saldo_aberto_centavos,\n    to_char((COALESCE(vencimento, CURRENT_DATE))::timestamp with time zone, 'YYYY-MM'::text) AS competencia_ano_mes,\n        CASE\n            WHEN ((vencimento IS NOT NULL) AND (vencimento < CURRENT_DATE) AND (saldo_aberto_centavos > 0)) THEN (CURRENT_DATE - vencimento)\n            ELSE 0\n        END AS dias_atraso,\n        CASE\n            WHEN (saldo_aberto_centavos = 0) THEN 'QUITADA'::text\n            WHEN ((vencimento IS NOT NULL) AND (vencimento < CURRENT_DATE)) THEN 'VENCIDA'::text\n            ELSE 'EM_ABERTO'::text\n        END AS situacao_saas,\n        CASE\n            WHEN (vencimento IS NULL) THEN 'SEM_VENCIMENTO'::text\n            WHEN ((vencimento < CURRENT_DATE) AND (saldo_aberto_centavos > 0)) THEN 'VENCIDA'::text\n            WHEN ((vencimento >= CURRENT_DATE) AND (vencimento <= (CURRENT_DATE + 7)) AND (saldo_aberto_centavos > 0)) THEN 'A_VENCER_7'::text\n            WHEN ((vencimento > (CURRENT_DATE + 7)) AND (vencimento <= (CURRENT_DATE + 30)) AND (saldo_aberto_centavos > 0)) THEN 'A_VENCER_30'::text\n            WHEN ((vencimento > (CURRENT_DATE + 30)) AND (saldo_aberto_centavos > 0)) THEN 'FUTURA'::text\n            ELSE 'QUITADA_OU_ZERO'::text\n        END AS bucket_vencimento\n   FROM base b;"
+      }
+    ],
+    "rowCount": 1
+  },
+  "def_devedores": {
+    "name": "def_devedores",
+    "ok": true,
+    "rows": [
+      {
+        "definition": " SELECT pessoa_id,\n    (count(*))::integer AS titulos_vencidos_qtd,\n    (sum(saldo_aberto_centavos))::integer AS total_vencido_centavos,\n    min(data_vencimento) AS vencimento_mais_antigo,\n    max(dias_atraso) AS maior_dias_atraso\n   FROM vw_financeiro_contas_receber_flat f\n  WHERE ((situacao_saas = 'VENCIDA'::text) AND (saldo_aberto_centavos > 0))\n  GROUP BY pessoa_id;"
+      }
+    ],
+    "rowCount": 1
+  }
+}

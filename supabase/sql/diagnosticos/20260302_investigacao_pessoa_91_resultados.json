@@ -1,0 +1,332 @@
+{
+  "generated_at": "2026-03-02T20:38:33.671Z",
+  "pessoa_id_testada": 91,
+  "queries": {
+    "view_vw_financeiro_contas_receber_flat": {
+      "ok": true,
+      "rowCount": 1,
+      "rows": [
+        {
+          "definition": " WITH receb AS (\n         SELECT r.cobranca_id,\n            COALESCE(sum(r.valor_centavos), (0)::bigint) AS valor_recebido_centavos\n           FROM recebimentos r\n          GROUP BY r.cobranca_id\n        ), base AS (\n         SELECT c.id AS cobranca_id,\n            c.pessoa_id,\n            c.vencimento,\n            c.status AS status_cobranca,\n            c.origem_tipo,\n            c.origem_id,\n            c.created_at,\n            COALESCE(c.valor_centavos, 0) AS valor_total_centavos,\n            COALESCE(rec.valor_recebido_centavos, (0)::bigint) AS valor_recebido_centavos,\n            GREATEST((COALESCE(c.valor_centavos, 0) - COALESCE(rec.valor_recebido_centavos, (0)::bigint)), (0)::bigint) AS saldo_aberto_centavos\n           FROM (cobrancas c\n             LEFT JOIN receb rec ON ((rec.cobranca_id = c.id)))\n        )\n SELECT cobranca_id,\n    pessoa_id,\n    vencimento AS data_vencimento,\n    status_cobranca,\n    origem_tipo,\n    origem_id,\n    created_at,\n    valor_total_centavos,\n    valor_recebido_centavos,\n    saldo_aberto_centavos,\n    to_char((COALESCE(vencimento, CURRENT_DATE))::timestamp with time zone, 'YYYY-MM'::text) AS competencia_ano_mes,\n        CASE\n            WHEN ((vencimento IS NOT NULL) AND (vencimento < CURRENT_DATE) AND (saldo_aberto_centavos > 0)) THEN (CURRENT_DATE - vencimento)\n            ELSE 0\n        END AS dias_atraso,\n        CASE\n            WHEN (saldo_aberto_centavos = 0) THEN 'QUITADA'::text\n            WHEN ((vencimento IS NOT NULL) AND (vencimento < CURRENT_DATE)) THEN 'VENCIDA'::text\n            ELSE 'EM_ABERTO'::text\n        END AS situacao_saas,\n        CASE\n            WHEN (vencimento IS NULL) THEN 'SEM_VENCIMENTO'::text\n            WHEN ((vencimento < CURRENT_DATE) AND (saldo_aberto_centavos > 0)) THEN 'VENCIDA'::text\n            WHEN ((vencimento >= CURRENT_DATE) AND (vencimento <= (CURRENT_DATE + 7)) AND (saldo_aberto_centavos > 0)) THEN 'A_VENCER_7'::text\n            WHEN ((vencimento > (CURRENT_DATE + 7)) AND (vencimento <= (CURRENT_DATE + 30)) AND (saldo_aberto_centavos > 0)) THEN 'A_VENCER_30'::text\n            WHEN ((vencimento > (CURRENT_DATE + 30)) AND (saldo_aberto_centavos > 0)) THEN 'FUTURA'::text\n            ELSE 'QUITADA_OU_ZERO'::text\n        END AS bucket_vencimento\n   FROM base b;"
+        }
+      ]
+    },
+    "view_vw_financeiro_devedores_atrasados": {
+      "ok": true,
+      "rowCount": 1,
+      "rows": [
+        {
+          "definition": " SELECT pessoa_id,\n    (count(*))::integer AS titulos_vencidos_qtd,\n    (sum(saldo_aberto_centavos))::integer AS total_vencido_centavos,\n    min(data_vencimento) AS vencimento_mais_antigo,\n    max(dias_atraso) AS maior_dias_atraso\n   FROM vw_financeiro_contas_receber_flat f\n  WHERE ((situacao_saas = 'VENCIDA'::text) AND (saldo_aberto_centavos > 0))\n  GROUP BY pessoa_id;"
+        }
+      ]
+    },
+    "cobrancas_pessoa_91": {
+      "ok": false,
+      "error": "column c.valor_total_centavos does not exist"
+    },
+    "cobrancas_pessoa_91_origem_fatura": {
+      "ok": true,
+      "rowCount": 0,
+      "rows": []
+    },
+    "colunas_credito_conexao_faturas": {
+      "ok": true,
+      "rowCount": 13,
+      "rows": [
+        {
+          "column_name": "id",
+          "data_type": "bigint"
+        },
+        {
+          "column_name": "conta_conexao_id",
+          "data_type": "bigint"
+        },
+        {
+          "column_name": "periodo_referencia",
+          "data_type": "text"
+        },
+        {
+          "column_name": "data_fechamento",
+          "data_type": "date"
+        },
+        {
+          "column_name": "data_vencimento",
+          "data_type": "date"
+        },
+        {
+          "column_name": "valor_total_centavos",
+          "data_type": "integer"
+        },
+        {
+          "column_name": "status",
+          "data_type": "text"
+        },
+        {
+          "column_name": "cobranca_id",
+          "data_type": "bigint"
+        },
+        {
+          "column_name": "neofin_invoice_id",
+          "data_type": "text"
+        },
+        {
+          "column_name": "folha_pagamento_id",
+          "data_type": "bigint"
+        },
+        {
+          "column_name": "created_at",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "updated_at",
+          "data_type": "timestamp with time zone"
+        },
+        {
+          "column_name": "valor_taxas_centavos",
+          "data_type": "integer"
+        }
+      ]
+    },
+    "credito_conexao_faturas_pessoa_91_query_literal": {
+      "ok": false,
+      "error": "column \"pessoa_id\" does not exist"
+    },
+    "credito_conexao_faturas_por_titular_join": {
+      "ok": true,
+      "rowCount": 0,
+      "rows": []
+    },
+    "view_flat_pessoa_91": {
+      "ok": true,
+      "rowCount": 13,
+      "rows": [
+        {
+          "cobranca_id": "286",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-01-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:30.098Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-01",
+          "dias_atraso": 49,
+          "situacao_saas": "VENCIDA",
+          "bucket_vencimento": "VENCIDA"
+        },
+        {
+          "cobranca_id": "287",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-02-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:30.517Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-02",
+          "dias_atraso": 18,
+          "situacao_saas": "VENCIDA",
+          "bucket_vencimento": "VENCIDA"
+        },
+        {
+          "cobranca_id": "298",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-02-19T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:39.172Z",
+          "valor_total_centavos": 31600,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "31600",
+          "competencia_ano_mes": "2026-02",
+          "dias_atraso": 11,
+          "situacao_saas": "VENCIDA",
+          "bucket_vencimento": "VENCIDA"
+        },
+        {
+          "cobranca_id": "288",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-03-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:30.923Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-03",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "A_VENCER_30"
+        },
+        {
+          "cobranca_id": "289",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-04-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:31.251Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-04",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        },
+        {
+          "cobranca_id": "290",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-05-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:31.596Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-05",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        },
+        {
+          "cobranca_id": "291",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-06-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:31.926Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-06",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        },
+        {
+          "cobranca_id": "292",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-07-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:32.291Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-07",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        },
+        {
+          "cobranca_id": "293",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-08-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:32.679Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-08",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        },
+        {
+          "cobranca_id": "294",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-09-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:33.040Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-09",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        },
+        {
+          "cobranca_id": "295",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-10-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:33.374Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-10",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        },
+        {
+          "cobranca_id": "296",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-11-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:33.711Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-11",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        },
+        {
+          "cobranca_id": "297",
+          "pessoa_id": "91",
+          "data_vencimento": "2026-12-12T03:00:00.000Z",
+          "status_cobranca": "PENDENTE",
+          "origem_tipo": "MATRICULA",
+          "origem_id": "7",
+          "created_at": "2026-02-19T18:01:34.064Z",
+          "valor_total_centavos": 40800,
+          "valor_recebido_centavos": "0",
+          "saldo_aberto_centavos": "40800",
+          "competencia_ano_mes": "2026-12",
+          "dias_atraso": 0,
+          "situacao_saas": "EM_ABERTO",
+          "bucket_vencimento": "FUTURA"
+        }
+      ]
+    },
+    "resumo_status_vs_situacao_pessoa_91": {
+      "ok": true,
+      "rowCount": 2,
+      "rows": [
+        {
+          "status_cobranca": "PENDENTE",
+          "situacao_saas": "EM_ABERTO",
+          "qtd": 10,
+          "saldo_total": "408000"
+        },
+        {
+          "status_cobranca": "PENDENTE",
+          "situacao_saas": "VENCIDA",
+          "qtd": 3,
+          "saldo_total": "113200"
+        }
+      ]
+    }
+  }
+}
