@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RecibosContaConexao } from "@/components/documentos/RecibosContaConexao";
+import { ReciboModal, type ReciboModalParams } from "@/components/documentos/ReciboModal";
 
 type ResumoFinanceiro = {
   pessoa_id: number;
@@ -83,6 +84,8 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
   const [payComprovante, setPayComprovante] = useState<string>("");
   const [payError, setPayError] = useState<string | null>(null);
   const [payLoading, setPayLoading] = useState(false);
+  const [reciboOpen, setReciboOpen] = useState(false);
+  const [reciboParams, setReciboParams] = useState<ReciboModalParams | null>(null);
 
   const loadResumo = useCallback(async () => {
     setLoading(true);
@@ -275,6 +278,18 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                                 <Button
                                   variant="secondary"
                                   onClick={() => {
+                                    setReciboParams({
+                                      tipo: "COBRANCA_AVULSA",
+                                      cobranca_avulsa_id: c.id,
+                                    });
+                                    setReciboOpen(true);
+                                  }}
+                                >
+                                  Recibo
+                                </Button>
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => {
                                     setPayCobrancaId(c.id);
                                     setPayValor(c.valor_centavos);
                                     setPayMetodo("PIX");
@@ -366,6 +381,13 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
       ) : null}
 
       <RecibosContaConexao pessoaTitularId={pessoaTitularIdRecibos} />
+
+      <ReciboModal
+        open={reciboOpen}
+        onClose={() => setReciboOpen(false)}
+        params={reciboParams}
+        title="Recibo da cobranca avulsa"
+      />
 
       {data && payOpen && payCobrancaId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">

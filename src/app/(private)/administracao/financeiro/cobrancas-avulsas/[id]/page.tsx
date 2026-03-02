@@ -70,6 +70,8 @@ export default function Page() {
   const [observacao, setObservacao] = React.useState("");
   const [valorReais, setValorReais] = React.useState("");
   const [motivoValor, setMotivoValor] = React.useState("");
+  const [modoEditarValor, setModoEditarValor] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
 
   async function load() {
     try {
@@ -87,6 +89,7 @@ export default function Page() {
       setObservacao(c.observacao ?? "");
       setValorReais(centavosToReaisInput(Number(c.valor_centavos ?? 0)));
       setMotivoValor("");
+      setModoEditarValor(false);
     } catch (e) {
       const message = e instanceof Error ? e.message : "falha_ao_carregar_cobranca";
       setErro(message);
@@ -108,30 +111,61 @@ export default function Page() {
   async function salvar() {
     if (!cobranca) return;
     try {
+      setSaving(true);
       setErro(null);
+      const res = await fetch(`/api/financeiro/cobrancas-avulsas/${cobranca.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vencimento, meio, observacao }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `erro_http_${res.status}`);
+      }
+      await load();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "falha_ao_salvar";
+      setErro(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmarAlteracaoValor() {
+    if (!cobranca) return;
+    try {
+      setSaving(true);
+      setErro(null);
+
+      const statusUpper = String(cobranca.status ?? "").toUpperCase();
+      if (statusUpper === "PAGO" || statusUpper === "CANCELADO") {
+        setErro("status_bloqueia_edicao");
+        return;
+      }
+
       const valorCentavos = parseReaisInputToCentavos(valorReais);
       if (valorCentavos === null || valorCentavos < 0) {
         setErro("valor_invalido");
         return;
       }
+
       const valorAtual = Number(cobranca.valor_centavos ?? 0);
-      const valorAlterado = valorCentavos !== valorAtual;
-      const motivo = motivoValor.trim();
-      if (valorAlterado && !motivo) {
-        setErro("motivo_obrigatorio_valor");
+      if (valorCentavos === valorAtual) {
+        setModoEditarValor(false);
+        setMotivoValor("");
         return;
       }
 
-      const payload: Record<string, unknown> = { vencimento, meio, observacao };
-      if (valorAlterado) {
-        payload.valor_centavos = valorCentavos;
-        payload.motivo_valor = motivo;
+      const motivo = motivoValor.trim();
+      if (!motivo) {
+        setErro("motivo_obrigatorio_valor");
+        return;
       }
 
       const res = await fetch(`/api/financeiro/cobrancas-avulsas/${cobranca.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ valor_centavos: valorCentavos, motivo_valor: motivo }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.ok) {
@@ -144,7 +178,17 @@ export default function Page() {
     } catch (e) {
       const message = e instanceof Error ? e.message : "falha_ao_salvar";
       setErro(message);
+    } finally {
+      setSaving(false);
     }
+  }
+
+  function cancelarAlteracaoValor() {
+    if (!cobranca) return;
+    setModoEditarValor(false);
+    setValorReais(centavosToReaisInput(Number(cobranca.valor_centavos ?? 0)));
+    setMotivoValor("");
+    setErro(null);
   }
 
   async function cancelar() {
@@ -263,28 +307,60 @@ export default function Page() {
                     </div>
                   </div>
 
-                  <label className="block text-sm text-slate-700">
-                    Editar valor (R$)
-                    <input
-                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
-                      value={valorReais}
-                      onChange={(e) => setValorReais(e.target.value)}
-                      placeholder="84,15"
-                      disabled={bloqueadoValor}
-                    />
-                  </label>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 disabled:opacity-50"
+                      onClick={() => setModoEditarValor(true)}
+                      disabled={bloqueadoValor || saving}
+                    >
+                      Editar valor
+                    </button>
+                  </div>
 
-                  <label className="block text-sm text-slate-700">
-                    Motivo da alteracao do valor (obrigatorio)
-                    <textarea
-                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
-                      rows={2}
-                      value={motivoValor}
-                      onChange={(e) => setMotivoValor(e.target.value)}
-                      placeholder="Descreva o motivo da alteracao..."
-                      disabled={bloqueadoValor}
-                    />
-                  </label>
+                  {modoEditarValor ? (
+                    <div className="space-y-2 rounded-md border border-rose-100 bg-rose-50/40 p-3">
+                      <label className="block text-sm text-slate-700">
+                        Novo valor (R$)
+                        <input
+                          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                          value={valorReais}
+                          onChange={(e) => setValorReais(e.target.value)}
+                          placeholder="84,15"
+                        />
+                      </label>
+
+                      <label className="block text-sm text-slate-700">
+                        Motivo da alteracao do valor (obrigatorio)
+                        <textarea
+                          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                          rows={2}
+                          value={motivoValor}
+                          onChange={(e) => setMotivoValor(e.target.value)}
+                          placeholder="Descreva o motivo da alteracao..."
+                        />
+                      </label>
+
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          className="rounded-md border px-3 py-2 text-xs font-medium"
+                          onClick={cancelarAlteracaoValor}
+                          disabled={saving}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-md bg-rose-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                          onClick={() => void confirmarAlteracaoValor()}
+                          disabled={saving}
+                        >
+                          {saving ? "Confirmando..." : "Confirmar alteracao"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
 
                   {bloqueadoValor ? (
                     <div className="text-xs text-slate-500">
@@ -337,12 +413,14 @@ export default function Page() {
               <button
                 className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-white"
                 onClick={() => void salvar()}
+                disabled={saving}
               >
-                Salvar
+                {saving ? "Salvando..." : "Salvar"}
               </button>
               <button
                 className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700"
                 onClick={() => void cancelar()}
+                disabled={saving}
               >
                 Cancelar cobranca
               </button>

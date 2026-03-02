@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ReciboModal, type ReciboModalParams } from "@/components/documentos/ReciboModal";
 
 type FaturaItem = {
   fatura_id: number;
@@ -56,7 +57,8 @@ export function RecibosContaConexao(props: { pessoaTitularId: number }) {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [faturas, setFaturas] = useState<FaturaItem[]>([]);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [reciboOpen, setReciboOpen] = useState(false);
+  const [reciboParams, setReciboParams] = useState<ReciboModalParams | null>(null);
 
   async function carregarFaturas() {
     setErro(null);
@@ -83,27 +85,18 @@ export function RecibosContaConexao(props: { pessoaTitularId: number }) {
     }
   }
 
-  async function gerarReciboPorFatura(faturaId: number) {
+  function abrirModalRecibo(competencia: string) {
     setErro(null);
-    setPreview(null);
-    setLoading(true);
-    try {
-      const r = await fetch("/api/documentos/recibos/conta", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fatura_id: faturaId }),
-      });
-      const data = (await r.json()) as { error?: string; texto_renderizado?: string };
-      if (!r.ok) {
-        setErro(data?.error ?? "falha_ao_emitir_recibo");
-        return;
-      }
-      setPreview(String(data?.texto_renderizado ?? ""));
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "erro_desconhecido");
-    } finally {
-      setLoading(false);
+    if (!competencia || !/^\d{4}-\d{2}$/.test(competencia)) {
+      setErro("competencia_invalida_para_preview");
+      return;
     }
+    setReciboParams({
+      tipo: "CONTA_INTERNA",
+      competencia,
+      responsavel_pessoa_id: pessoaTitularId,
+    });
+    setReciboOpen(true);
   }
 
   useEffect(() => {
@@ -155,9 +148,9 @@ export function RecibosContaConexao(props: { pessoaTitularId: number }) {
                   <button
                     className="rounded-md bg-black px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
                     disabled={loading}
-                    onClick={() => gerarReciboPorFatura(f.fatura_id)}
+                    onClick={() => abrirModalRecibo(f.competencia_ano_mes)}
                   >
-                    Gerar recibo
+                    Recibo
                   </button>
                 </td>
               </tr>
@@ -173,12 +166,12 @@ export function RecibosContaConexao(props: { pessoaTitularId: number }) {
         </table>
       </div>
 
-      {preview ? (
-        <div className="mt-6 rounded-md border bg-slate-50 p-4">
-          <div className="mb-2 text-sm font-semibold">Pre-visualizacao</div>
-          <pre className="whitespace-pre-wrap text-sm">{preview}</pre>
-        </div>
-      ) : null}
+      <ReciboModal
+        open={reciboOpen}
+        onClose={() => setReciboOpen(false)}
+        params={reciboParams}
+        title="Recibo da conta interna"
+      />
     </div>
   );
 }
