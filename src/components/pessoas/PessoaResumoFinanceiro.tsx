@@ -22,6 +22,18 @@ type ResumoFinanceiro = {
     vencida: boolean;
     created_at: string | null;
   }>;
+  cobrancas_matricula?: Array<{
+    cobranca_id: number;
+    vencimento: string | null;
+    valor_centavos: number;
+    saldo_aberto_centavos: number;
+    dias_atraso: number;
+    status_cobranca: string;
+    origem_tipo: string;
+    origem_id: number | null;
+    situacao_saas: string;
+    bucket_vencimento: string;
+  }>;
   faturas_credito_conexao: Array<{
     id: number;
     conta_conexao_id: number;
@@ -215,6 +227,80 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                 )}
               </CardDescription>
             </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Cobrancas de matricula (em aberto)</CardTitle>
+              <CardDescription>
+                Titulos com origem MATRICULA em aberto para o responsavel financeiro.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="py-2 text-left">Cobranca</th>
+                      <th className="py-2 text-left">Vencimento</th>
+                      <th className="py-2 text-right">Saldo aberto</th>
+                      <th className="py-2 text-left">Situacao</th>
+                      <th className="py-2 text-left">Origem</th>
+                      <th className="py-2 text-right">Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.cobrancas_matricula ?? []).length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-3 text-muted-foreground">
+                          Nenhuma cobranca de matricula em aberto encontrada.
+                        </td>
+                      </tr>
+                    ) : (
+                      (data.cobrancas_matricula ?? []).map((c) => (
+                        <tr key={c.cobranca_id} className="border-t">
+                          <td className="py-2">#{c.cobranca_id}</td>
+                          <td className="py-2">
+                            <div>{c.vencimento ?? "-"}</div>
+                            {Number(c.dias_atraso || 0) > 0 ? (
+                              <div className="text-xs text-rose-600">{c.dias_atraso} dia(s) em atraso</div>
+                            ) : null}
+                          </td>
+                          <td className="py-2 text-right">
+                            {formatBRLFromCentavos(Number(c.saldo_aberto_centavos || 0))}
+                          </td>
+                          <td className="py-2">
+                            <div>{c.situacao_saas || "-"}</div>
+                            <div className="text-xs text-muted-foreground">
+                              Status interno: {c.status_cobranca || "-"}
+                            </div>
+                          </td>
+                          <td className="py-2 text-xs text-slate-600">
+                            {c.origem_tipo || "-"} {c.origem_id ? `#${c.origem_id}` : ""}
+                          </td>
+                          <td className="py-2 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Link
+                                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                                href={`/financeiro/cobrancas/${c.cobranca_id}`}
+                              >
+                                Abrir
+                              </Link>
+                              <Link
+                                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                                href={`/admin/financeiro/contas-receber`}
+                              >
+                                Receber
+                              </Link>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
           </Card>
 
           <Card>

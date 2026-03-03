@@ -23,6 +23,18 @@ type ResumoFinanceiroResponse = {
     vencida: boolean;
     created_at: string | null;
   }>;
+  cobrancas_matricula: Array<{
+    cobranca_id: number;
+    vencimento: string | null;
+    valor_centavos: number;
+    saldo_aberto_centavos: number;
+    dias_atraso: number;
+    status_cobranca: string;
+    origem_tipo: string;
+    origem_id: number | null;
+    situacao_saas: string;
+    bucket_vencimento: string;
+  }>;
   faturas_credito_conexao: Array<{
     id: number;
     conta_conexao_id: number;
@@ -123,6 +135,37 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     };
   });
 
+  const { data: cobrancasMatriculaRaw, error: errM } = await supabase
+    .from("vw_financeiro_contas_receber_flat")
+    .select(
+      "cobranca_id,vencimento,valor_centavos,saldo_aberto_centavos,dias_atraso,status_cobranca,origem_tipo,origem_id,situacao_saas,bucket_vencimento"
+    )
+    .eq("pessoa_id", responsavelId)
+    .eq("origem_tipo", "MATRICULA")
+    .gt("saldo_aberto_centavos", 0)
+    .not("status_cobranca", "ilike", "CANCELADA")
+    .order("vencimento", { ascending: true, nullsFirst: false });
+
+  if (errM) {
+    return NextResponse.json(
+      { error: "erro_listar_cobrancas_matricula", details: errM.message },
+      { status: 500 }
+    );
+  }
+
+  const cobrancasMatricula = (cobrancasMatriculaRaw ?? []).map((c) => ({
+    cobranca_id: Number((c as any).cobranca_id),
+    vencimento: (c as any).vencimento ? String((c as any).vencimento) : null,
+    valor_centavos: Number((c as any).valor_centavos ?? 0),
+    saldo_aberto_centavos: Number((c as any).saldo_aberto_centavos ?? 0),
+    dias_atraso: Number((c as any).dias_atraso ?? 0),
+    status_cobranca: String((c as any).status_cobranca ?? ""),
+    origem_tipo: String((c as any).origem_tipo ?? ""),
+    origem_id: Number((c as any).origem_id ?? 0) || null,
+    situacao_saas: String((c as any).situacao_saas ?? ""),
+    bucket_vencimento: String((c as any).bucket_vencimento ?? ""),
+  }));
+
   const { data: conta } = await supabase
     .from("credito_conexao_contas")
     .select("id,pessoa_titular_id")
@@ -163,6 +206,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     cobrancas: cobrancas.sort((a, b) =>
       (a.data_vencimento ?? "").localeCompare(b.data_vencimento ?? "")
     ),
+    cobrancas_matricula: cobrancasMatricula,
     faturas_credito_conexao: faturas,
     agregados: {
       cobrancas_pendentes_qtd: cobrancas.length,
