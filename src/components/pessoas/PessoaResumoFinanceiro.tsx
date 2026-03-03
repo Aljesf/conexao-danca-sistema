@@ -68,6 +68,17 @@ type CobrancaAvulsa = {
   pago_em: string | null;
 };
 
+type DependenteFinanceiro = {
+  dependente_pessoa_id: number;
+  dependente_nome: string | null;
+  dependente_cpf: string | null;
+  dependente_telefone: string | null;
+  ativo: boolean;
+  origem_tipo: string | null;
+  origem_id: number | null;
+  atualizado_em: string | null;
+};
+
 function formatBRLFromCentavos(v: number): string {
   const reais = (v ?? 0) / 100;
   return reais.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -88,6 +99,10 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [avulsas, setAvulsas] = useState<CobrancaAvulsa[]>([]);
   const [avulsasError, setAvulsasError] = useState<string | null>(null);
+  const [dependentes, setDependentes] = useState<DependenteFinanceiro[]>([]);
+  const [dependentesError, setDependentesError] = useState<string | null>(null);
+  const [dependentesLoading, setDependentesLoading] = useState(false);
+  const [dependentesBaseId, setDependentesBaseId] = useState<number>(pessoaId);
 
   const [payOpen, setPayOpen] = useState(false);
   const [payCobrancaId, setPayCobrancaId] = useState<number | null>(null);
@@ -98,6 +113,33 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
   const [payLoading, setPayLoading] = useState(false);
   const [reciboOpen, setReciboOpen] = useState(false);
   const [reciboParams, setReciboParams] = useState<ReciboModalParams | null>(null);
+
+  const loadDependentes = useCallback(async (basePessoaId: number) => {
+    if (!Number.isFinite(basePessoaId) || basePessoaId <= 0) {
+      setDependentes([]);
+      setDependentesError("responsavel_financeiro_invalido");
+      return;
+    }
+
+    setDependentesLoading(true);
+    setDependentesError(null);
+    setDependentesBaseId(basePessoaId);
+    try {
+      const res = await fetch(`/api/admin/pessoas/${basePessoaId}/dependentes-financeiros`, {
+        cache: "no-store",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error ?? `erro_dependentes_${res.status}`);
+      }
+      setDependentes(Array.isArray(json?.dependentes) ? (json.dependentes as DependenteFinanceiro[]) : []);
+    } catch (e) {
+      setDependentes([]);
+      setDependentesError(e instanceof Error ? e.message : "falha_ao_carregar_dependentes");
+    } finally {
+      setDependentesLoading(false);
+    }
+  }, []);
 
   const loadResumo = useCallback(async () => {
     setLoading(true);
@@ -113,9 +155,11 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
       }
       const j = (await res.json()) as ResumoFinanceiro;
       setData(j);
+      const responsavelId = Number(j.responsavel_financeiro_id || pessoaId);
+      const alvoDependentes = Number.isFinite(responsavelId) && responsavelId > 0 ? responsavelId : pessoaId;
+      await loadDependentes(alvoDependentes);
 
       try {
-        const responsavelId = Number(j.responsavel_financeiro_id || pessoaId);
         const alvoId = Number.isFinite(responsavelId) ? responsavelId : pessoaId;
         const resAv = await fetch(`/api/financeiro/pessoas/${alvoId}/cobrancas-avulsas`, {
           cache: "no-store",
@@ -136,10 +180,11 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
       setError(message);
       setData(null);
       setAvulsas([]);
+      await loadDependentes(pessoaId);
     } finally {
       setLoading(false);
     }
-  }, [pessoaId]);
+  }, [loadDependentes, pessoaId]);
 
   useEffect(() => {
     void loadResumo();
@@ -193,6 +238,74 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Dependentes financeiros</CardTitle>
+          <CardDescription>
+            Vinculos reutilizados da base de Vinculos: responsavel #{dependentesBaseId}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {dependentesLoading ? (
+            <div className="text-sm text-muted-foreground">Carregando dependentes...</div>
+          ) : dependentesError ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-sm text-amber-700">
+              Falha ao carregar dependentes: {dependentesError}
+            </div>
+          ) : dependentes.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Nenhum dependente financeiro vinculado.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="py-2 text-left">Dependente</th>
+                    <th className="py-2 text-left">Origem</th>
+                    <th className="py-2 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dependentes.map((d) => (
+                    <tr key={d.dependente_pessoa_id} className="border-t">
+                      <td className="py-2">
+                        <div className="font-medium text-slate-900">
+                          {d.dependente_nome
+                            ? `${d.dependente_nome} (#${d.dependente_pessoa_id})`
+                            : `Pessoa #${d.dependente_pessoa_id}`}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {d.dependente_cpf ? `CPF: ${d.dependente_cpf}` : ""}
+                          {d.dependente_telefone ? `${d.dependente_cpf ? " • " : ""}Tel: ${d.dependente_telefone}` : ""}
+                        </div>
+                      </td>
+                      <td className="py-2 text-xs text-slate-600">
+                        {d.origem_tipo ?? "--"} {d.origem_id ? `#${d.origem_id}` : ""}
+                      </td>
+                      <td className="py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Link
+                            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs hover:bg-slate-50"
+                            href={`/pessoas/${d.dependente_pessoa_id}`}
+                          >
+                            Abrir dependente
+                          </Link>
+                          <Link
+                            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs hover:bg-slate-50"
+                            href={`/admin/financeiro/contas-receber?pessoa_id=${d.dependente_pessoa_id}`}
+                          >
+                            Ver cobrancas
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {loading ? (
         <div className="text-sm text-muted-foreground">Carregando resumo financeiro...</div>
       ) : null}

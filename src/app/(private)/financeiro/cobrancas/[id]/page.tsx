@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { MatriculaAuditoriaAcoes } from "./_components/MatriculaAuditoriaAcoes";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -25,7 +26,9 @@ type PessoaBasica = {
 type MatriculaDetalhe = {
   id: number;
   pessoa_id: number | null;
+  responsavel_financeiro_id: number | null;
   vinculo_id: number | null;
+  ano_referencia: number | null;
   status: string | null;
   data_matricula: string | null;
 };
@@ -34,12 +37,15 @@ type TurmaResumo = {
   turma_id: number | null;
   nome: string | null;
   curso: string | null;
+  curso_id?: number | null;
 };
 
 type MatriculaResumoUi = {
   id: number;
   aluna: PessoaBasica | null;
+  responsavel_financeiro: PessoaBasica | null;
   turmas: TurmaResumo[];
+  ano_referencia: number | null;
   status: string | null;
   data_matricula: string | null;
   fallbackMessage: string | null;
@@ -48,6 +54,18 @@ type MatriculaResumoUi = {
 function isMatriculaOrigem(origemTipo: string | null): boolean {
   const normalized = String(origemTipo ?? "").trim().toUpperCase();
   return normalized === "MATRICULA" || normalized.startsWith("MATRICULA_");
+}
+
+function isMissingColumnError(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code;
+  return code === "42703";
+}
+
+function brlFromCentavos(value: number | null | undefined): string {
+  return (Number(value ?? 0) / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 export default async function CobrancaDetalhePage({ params }: PageProps) {
@@ -77,7 +95,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
   if (!cobranca) return notFound();
 
   const pessoaId = Number(cobranca.pessoa_id ?? 0);
-  const { data: pessoa } =
+  const { data: pessoaDevedora } =
     pessoaId > 0
       ? await supabase.from("pessoas").select("id,nome").eq("id", pessoaId).maybeSingle<PessoaBasica>()
       : { data: null };
@@ -87,7 +105,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
   if (isMatriculaOrigem(cobranca.origem_tipo) && origemId > 0) {
     const { data: matricula, error: matriculaErr } = await supabase
       .from("matriculas")
-      .select("id,pessoa_id,vinculo_id,status,data_matricula")
+      .select("id,pessoa_id,responsavel_financeiro_id,vinculo_id,ano_referencia,status,data_matricula")
       .eq("id", origemId)
       .maybeSingle<MatriculaDetalhe>();
 
@@ -95,7 +113,9 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
       matriculaResumo = {
         id: origemId,
         aluna: null,
+        responsavel_financeiro: null,
         turmas: [],
+        ano_referencia: null,
         status: null,
         data_matricula: null,
         fallbackMessage: "Matricula: dados indisponiveis (schema nao mapeado para leitura atual).",
@@ -104,7 +124,9 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
       matriculaResumo = {
         id: origemId,
         aluna: null,
+        responsavel_financeiro: null,
         turmas: [],
+        ano_referencia: null,
         status: null,
         data_matricula: null,
         fallbackMessage: "Matricula nao encontrada para esta origem.",
@@ -116,48 +138,109 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
           ? await supabase.from("pessoas").select("id,nome").eq("id", alunaId).maybeSingle<PessoaBasica>()
           : { data: null };
 
-      let turmas: TurmaResumo[] = [];
-      const { data: turmaAlunoRows, error: turmaAlunoErr } = await supabase
-        .from("turma_aluno")
-        .select("turma:turmas(turma_id,nome,curso)")
-        .eq("matricula_id", matricula.id);
+      const responsavelId = Number(matricula.responsavel_financeiro_id ?? 0);
+      const { data: responsavelFinanceiro } =
+        responsavelId > 0
+          ? await supabase.from("pessoas").select("id,nome").eq("id", responsavelId).maybeSingle<PessoaBasica>()
+          : { data: null };
 
-      if (!turmaAlunoErr && Array.isArray(turmaAlunoRows)) {
-        turmas = turmaAlunoRows
-          .map((row) => {
-            const turma = (row as { turma?: { turma_id?: number; nome?: string | null; curso?: string | null } | null })
-              .turma;
-            if (!turma?.turma_id) return null;
-            return {
-              turma_id: Number(turma.turma_id),
-              nome: turma.nome ?? null,
-              curso: turma.curso ?? null,
-            } satisfies TurmaResumo;
-          })
-          .filter((row): row is TurmaResumo => !!row);
+      let turmas: TurmaResumo[] = [];
+
+      const turmaIds = new Set<number>();
+      const { data: execRows, error: execErr } = await supabase
+        .from("matricula_execucao_valores")
+        .select("turma_id,ativo")
+        .eq("matricula_id", matricula.id)
+        .eq("ativo", true);
+
+      if (!execErr && Array.isArray(execRows)) {
+        for (const row of execRows) {
+          const turmaId = Number((row as { turma_id?: unknown }).turma_id ?? 0);
+          if (Number.isFinite(turmaId) && turmaId > 0) turmaIds.add(turmaId);
+        }
       }
 
-      if (turmas.length === 0 && Number(matricula.vinculo_id ?? 0) > 0) {
-        const { data: turmaFallback } = await supabase
+      if (turmaIds.size === 0 && Number(matricula.vinculo_id ?? 0) > 0) {
+        turmaIds.add(Number(matricula.vinculo_id));
+      }
+
+      const turmaIdList = Array.from(turmaIds);
+      if (turmaIdList.length > 0) {
+        let turmasRows:
+          | Array<{ turma_id?: number; nome?: string | null; curso?: string | null; curso_id?: number | null }>
+          | null = null;
+
+        const withCursoId = await supabase
           .from("turmas")
-          .select("turma_id,nome,curso")
-          .eq("turma_id", Number(matricula.vinculo_id))
-          .maybeSingle<TurmaResumo>();
-        if (turmaFallback?.turma_id) {
-          turmas = [
-            {
-              turma_id: Number(turmaFallback.turma_id),
-              nome: turmaFallback.nome ?? null,
-              curso: turmaFallback.curso ?? null,
-            },
-          ];
+          .select("turma_id,nome,curso,curso_id")
+          .in("turma_id", turmaIdList);
+
+        if (!withCursoId.error) {
+          turmasRows = withCursoId.data as Array<{
+            turma_id?: number;
+            nome?: string | null;
+            curso?: string | null;
+            curso_id?: number | null;
+          }>;
+        } else if (isMissingColumnError(withCursoId.error)) {
+          const withoutCursoId = await supabase
+            .from("turmas")
+            .select("turma_id,nome,curso")
+            .in("turma_id", turmaIdList);
+          if (!withoutCursoId.error) {
+            turmasRows = withoutCursoId.data as Array<{
+              turma_id?: number;
+              nome?: string | null;
+              curso?: string | null;
+            }>;
+          }
+        }
+
+        if (Array.isArray(turmasRows) && turmasRows.length > 0) {
+          const cursoIds = Array.from(
+            new Set(
+              turmasRows
+                .map((t) => Number(t.curso_id ?? 0))
+                .filter((cursoId) => Number.isFinite(cursoId) && cursoId > 0)
+            )
+          );
+          let cursosMap: Record<string, string> = {};
+          if (cursoIds.length > 0) {
+            const { data: cursosRows } = await supabase.from("cursos").select("id,nome").in("id", cursoIds);
+            if (Array.isArray(cursosRows)) {
+              cursosMap = cursosRows.reduce(
+                (acc, c) => {
+                  acc[String((c as { id: number }).id)] = String((c as { nome?: string | null }).nome ?? "");
+                  return acc;
+                },
+                {} as Record<string, string>
+              );
+            }
+          }
+
+          turmas = turmasRows
+            .map((t) => {
+              const turmaId = Number(t.turma_id ?? 0);
+              if (!Number.isFinite(turmaId) || turmaId <= 0) return null;
+              const cursoNome =
+                Number(t.curso_id ?? 0) > 0 ? cursosMap[String(Number(t.curso_id))] ?? null : (t.curso ?? null);
+              return {
+                turma_id: turmaId,
+                nome: t.nome ?? null,
+                curso: cursoNome,
+                curso_id: Number(t.curso_id ?? 0) || null,
+              } satisfies TurmaResumo;
+            })
+            .filter((t): t is TurmaResumo => !!t);
         }
       }
 
       matriculaResumo = {
         id: matricula.id,
         aluna: aluna ?? null,
+        responsavel_financeiro: responsavelFinanceiro ?? null,
         turmas,
+        ano_referencia: Number(matricula.ano_referencia ?? 0) || null,
         status: matricula.status ?? null,
         data_matricula: matricula.data_matricula ?? null,
         fallbackMessage: turmas.length === 0 ? "Matricula sem turmas/cursos vinculados no momento." : null,
@@ -165,14 +248,18 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
     }
   }
 
-  const pessoaLabel = pessoa?.nome ? `${pessoa.nome} (#${pessoa.id})` : `Pessoa #${cobranca.pessoa_id ?? "-"}`;
+  const pessoaLabel = pessoaDevedora?.nome
+    ? `${pessoaDevedora.nome} (#${pessoaDevedora.id})`
+    : `Pessoa #${cobranca.pessoa_id ?? "-"}`;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-6">
       <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold text-slate-800">Cobranca #{cobranca.id}</h1>
-          <div className="text-sm text-slate-600">Detalhe operacional da cobranca e da origem financeira.</div>
+          <div className="text-sm text-slate-600">
+            Auditoria da origem da cobranca (devedor, origem e acoes de diagnostico/reprocessamento).
+          </div>
         </div>
         <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/contas-receber">
           Voltar
@@ -183,7 +270,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-3">
             <div>
-              <div className="text-sm text-slate-500">Pessoa</div>
+              <div className="text-sm text-slate-500">Pessoa devedora</div>
               <div className="text-base font-semibold text-slate-900">{pessoaLabel}</div>
               {pessoaId > 0 ? (
                 <div className="mt-1 flex flex-wrap gap-3 text-xs">
@@ -211,10 +298,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
               </div>
               <div>
                 <span className="font-medium">Valor:</span>{" "}
-                {(Number(cobranca.valor_centavos ?? 0) / 100).toLocaleString("pt-BR", {
-                  style: "currency",
-                  currency: "BRL",
-                })}
+                {brlFromCentavos(cobranca.valor_centavos)}
               </div>
               <div>
                 <span className="font-medium">Origem:</span> {cobranca.origem_tipo ?? "-"}{" "}
@@ -240,6 +324,15 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
                   {matriculaResumo.aluna?.nome
                     ? `${matriculaResumo.aluna.nome} (#${matriculaResumo.aluna.id})`
                     : "Nao identificada"}
+                </div>
+                <div>
+                  <span className="font-medium">Responsavel financeiro:</span>{" "}
+                  {matriculaResumo.responsavel_financeiro?.nome
+                    ? `${matriculaResumo.responsavel_financeiro.nome} (#${matriculaResumo.responsavel_financeiro.id})`
+                    : "Nao identificado"}
+                </div>
+                <div>
+                  <span className="font-medium">Ano ref.:</span> {matriculaResumo.ano_referencia ?? "-"}
                 </div>
                 <div>
                   <span className="font-medium">Turmas/Cursos:</span>
@@ -278,6 +371,8 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
           </div>
         </div>
       </div>
+
+      {matriculaResumo?.id ? <MatriculaAuditoriaAcoes matriculaId={matriculaResumo.id} /> : null}
     </div>
   );
 }
