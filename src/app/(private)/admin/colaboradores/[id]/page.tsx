@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type TabKey = "geral" | "cartao" | "folha" | "remuneracao" | "jornada";
@@ -9,6 +9,7 @@ type PagamentoTipo = "PAGAMENTO" | "ADIANTAMENTO" | "SAQUE";
 
 type ResumoData = {
   colaborador: { id: number; pessoa_nome: string | null };
+  periodo_atual?: string | null;
   conta_conexao: { id: number; tipo_conta: string } | null;
   fatura_aberta_atual: { id: number; valor_total_centavos: number; status: string } | null;
   lancamentos_mes: { competencia: string; quantidade: number; total_centavos: number };
@@ -98,6 +99,92 @@ export default function PerfilColaboradorPage() {
   const [aplicarFolha, setAplicarFolha] = useState(true);
   const [folhaCompetencia, setFolhaCompetencia] = useState(currentCompetencia());
   const [gerarMovimento, setGerarMovimento] = useState(false);
+  const router = useRouter();
+  const [msgAcao, setMsgAcao] = useState<string | null>(null);
+  const [creatingContaInterna, setCreatingContaInterna] = useState(false);
+  const [startingFolha, setStartingFolha] = useState(false);
+
+  function competenciaAtualYYYYMM(): string {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${d.getFullYear()}-${mm}`;
+  }
+
+  async function recarregarResumo() {
+    await loadResumo();
+  }
+
+  async function criarContaInternaColaborador() {
+    if (!Number.isFinite(colaboradorId) || colaboradorId <= 0) return;
+    setCreatingContaInterna(true);
+    setMsgAcao(null);
+    try {
+      const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/criar-conta-colaborador`, { method: "POST" });
+      const j = (await r.json().catch(() => null)) as { conta?: unknown; error?: string } | null;
+      if (!r.ok) throw new Error(j?.error ?? "falha_criar_conta_interna");
+      await recarregarResumo();
+      setMsgAcao("Conta interna (COLABORADOR) criada/validada com sucesso.");
+    } catch (e) {
+      setMsgAcao(e instanceof Error ? e.message : "erro_desconhecido");
+    } finally {
+      setCreatingContaInterna(false);
+    }
+  }
+
+  async function iniciarGeracaoFolhaMesAtual() {
+    if (!Number.isFinite(colaboradorId) || colaboradorId <= 0) return;
+
+    const competencia = resumo?.periodo_atual || competenciaAtualYYYYMM();
+
+    setStartingFolha(true);
+    setMsgAcao(null);
+
+    try {
+      const r1 = await fetch("/api/financeiro/folha/abrir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          competencia,
+          dia_pagamento: 5,
+          pagamento_no_mes_seguinte: true,
+        }),
+      });
+      const j1 = (await r1.json().catch(() => null)) as { folha?: { id: number }; error?: string } | null;
+      if (!r1.ok) throw new Error(j1?.error ?? "falha_abrir_folha");
+
+      const r2 = await fetch("/api/financeiro/folha/gerar-espelho", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          competencia_base: competencia,
+          meses: 1,
+          importar_cartao: true,
+        }),
+      });
+      const j2 = (await r2.json().catch(() => null)) as
+        | { folhas?: Array<{ id: number; competencia?: string }>; error?: string; imported_cartao_total?: number }
+        | null;
+
+      if (!r2.ok) throw new Error(j2?.error ?? "falha_gerar_espelho");
+
+      const folhasResp = Array.isArray(j2?.folhas) ? j2.folhas : [];
+      const folhaDoMes = folhasResp.find((f) => String(f.competencia ?? "") === competencia);
+
+      const folhaId = folhaDoMes?.id ?? j1?.folha?.id;
+      if (!folhaId || !Number.isFinite(folhaId)) {
+        setMsgAcao("Folha criada, mas nao consegui resolver o ID para abrir o detalhe. Abra manualmente na tela de Folha.");
+        return;
+      }
+
+      setMsgAcao(`Folha da competencia ${competencia} iniciada. Itens de cartao importados: ${Number(j2?.imported_cartao_total ?? 0)}.`);
+
+      router.push(`/admin/financeiro/folha/colaboradores/${folhaId}`);
+    } catch (e) {
+      setMsgAcao(e instanceof Error ? e.message : "erro_desconhecido");
+    } finally {
+      setStartingFolha(false);
+    }
+  }
 
   async function loadResumo() {
     const res = await fetch(`/api/admin/colaboradores/${colaboradorId}/resumo-financeiro`);
@@ -242,7 +329,15 @@ export default function PerfilColaboradorPage() {
             onClick={() => setTab(key)}
             type="button"
           >
-            {key === "geral" ? "Visao geral" : key === "cartao" ? "Cartao / Despesas" : key === "folha" ? "Folha" : key === "remuneracao" ? "Remuneracao" : "Jornada"}
+            {key === "geral"
+              ? "Visao geral"
+              : key === "cartao"
+                ? "Conta interna / Despesas"
+                : key === "folha"
+                  ? "Folha"
+                  : key === "remuneracao"
+                    ? "Remuneracao"
+                    : "Jornada"}
           </button>
         ))}
       </div>
@@ -250,24 +345,66 @@ export default function PerfilColaboradorPage() {
       {feedback ? <p className="text-sm text-emerald-700">{feedback}</p> : null}
 
       {tab === "geral" ? (
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="border rounded p-3 text-sm">
-            <div className="text-xs text-muted-foreground">Conta Cartao Conexao</div>
-            <div>{resumo?.conta_conexao ? `#${resumo.conta_conexao.id} (${resumo.conta_conexao.tipo_conta})` : "Nao encontrada"}</div>
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="border rounded p-3 text-sm">
+              <div className="text-xs text-muted-foreground">Conta interna</div>
+              <div>{resumo?.conta_conexao ? `#${resumo.conta_conexao.id} (${resumo.conta_conexao.tipo_conta})` : "Não criada"}</div>
+            </div>
+            <div className="border rounded p-3 text-sm">
+              <div className="text-xs text-muted-foreground">Fatura aberta</div>
+              <div>{resumo?.fatura_aberta_atual ? fmtCentavos(resumo.fatura_aberta_atual.valor_total_centavos) : "Sem fatura aberta"}</div>
+            </div>
+            <div className="border rounded p-3 text-sm">
+              <div className="text-xs text-muted-foreground">Lancamentos do mes</div>
+              <div>{resumo ? `${resumo.lancamentos_mes.quantidade} itens - ${fmtCentavos(resumo.lancamentos_mes.total_centavos)}` : "-"}</div>
+            </div>
           </div>
+
           <div className="border rounded p-3 text-sm">
-            <div className="text-xs text-muted-foreground">Fatura aberta</div>
-            <div>{resumo?.fatura_aberta_atual ? fmtCentavos(resumo.fatura_aberta_atual.valor_total_centavos) : "Sem fatura aberta"}</div>
-          </div>
-          <div className="border rounded p-3 text-sm">
-            <div className="text-xs text-muted-foreground">Lancamentos do mes</div>
-            <div>{resumo ? `${resumo.lancamentos_mes.quantidade} itens - ${fmtCentavos(resumo.lancamentos_mes.total_centavos)}` : "-"}</div>
+            <div className="font-medium">Ações rápidas</div>
+
+            {msgAcao ? <div className="mt-2 text-xs text-slate-600">{msgAcao}</div> : null}
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {!resumo?.conta_conexao ? (
+                <button
+                  type="button"
+                  className="rounded border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                  disabled={creatingContaInterna}
+                  onClick={() => void criarContaInternaColaborador()}
+                >
+                  {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                className="rounded border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                disabled={startingFolha}
+                onClick={() => void iniciarGeracaoFolhaMesAtual()}
+              >
+                {startingFolha ? "Iniciando..." : "Iniciar geração da folha (mês atual)"}
+              </button>
+
+              <Link className="rounded border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/folha/colaboradores">
+                Abrir módulo de folha
+              </Link>
+            </div>
+
+            <div className="mt-2 text-xs text-slate-500">
+              Observação: a folha aparece quando o “espelho” é gerado para a competência (salário base + descontos).
+            </div>
           </div>
         </div>
       ) : null}
 
       {tab === "cartao" ? (
         <div className="space-y-2">
+          {!resumo?.conta_conexao ? (
+            <p className="text-sm text-muted-foreground">Este colaborador ainda não possui conta interna vinculada.</p>
+          ) : null}
+          <div className="text-sm font-medium">Últimas despesas</div>
           {(resumo?.ultimas_despesas ?? []).length === 0 ? <p className="text-sm text-muted-foreground">Sem despesas recentes.</p> : null}
           {(resumo?.ultimas_despesas ?? []).map((d) => (
             <div key={d.id} className="border rounded p-3 text-sm flex justify-between">
@@ -276,7 +413,7 @@ export default function PerfilColaboradorPage() {
             </div>
           ))}
           <Link className="underline text-sm" href="/admin/financeiro/credito-conexao/faturas">
-            Ver todas as faturas
+            Ver faturas da conta interna
           </Link>
         </div>
       ) : null}

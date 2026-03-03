@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type ConfigFinanceira = {
@@ -21,6 +22,7 @@ type ConfigFinanceira = {
 type Resumo = {
   colaborador: { id: number; pessoa_id: number; tipo_vinculo_id: number | null; ativo: boolean };
   pessoa: { id: number; nome: string; cpf: string | null; telefone: string | null; email: string | null };
+  periodo_atual?: string | null;
   config_financeira: ConfigFinanceira | null;
   cartao_conexao: {
     id: number;
@@ -87,14 +89,18 @@ function toForm(cfg: ConfigFinanceira | null): ConfigForm {
   };
 }
 
-export default function ColaboradorDetalhesPage({ params }: { params: { id: string } }) {
-  const colaboradorId = useMemo(() => Number(params.id), [params.id]);
+export default function ColaboradorDetalhesPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const colaboradorId = useMemo(() => Number(params?.id), [params?.id]);
   const [loading, setLoading] = useState(true);
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
-  const [creatingContaCartao, setCreatingContaCartao] = useState(false);
+  const [creatingContaInterna, setCreatingContaInterna] = useState(false);
+  const [startingFolha, setStartingFolha] = useState(false);
+  const [msgAcao, setMsgAcao] = useState<string | null>(null);
   const [configMsg, setConfigMsg] = useState<string | null>(null);
   const [formConfig, setFormConfig] = useState<ConfigForm>(defaultConfigForm());
 
@@ -176,10 +182,16 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
     setFormConfig(toForm(next.config_financeira));
   }
 
-  async function criarContaCartaoColaborador() {
+  function competenciaAtualYYYYMM(): string {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `${d.getFullYear()}-${mm}`;
+  }
+
+  async function criarContaInternaColaborador() {
     if (!Number.isFinite(colaboradorId) || colaboradorId <= 0) return;
-    setCreatingContaCartao(true);
-    setConfigMsg(null);
+    setCreatingContaInterna(true);
+    setMsgAcao(null);
     try {
       const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/criar-conta-colaborador`, {
         method: "POST",
@@ -187,11 +199,64 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
       const j = (await r.json().catch(() => null)) as { error?: string } | null;
       if (!r.ok) throw new Error(j?.error ?? "falha_criar_conta_colaborador");
       await recarregarResumo();
-      setConfigMsg("Conta do Cartao Conexao (COLABORADOR) criada/validada.");
+      setMsgAcao("Conta interna (COLABORADOR) criada/validada com sucesso.");
     } catch (e) {
-      setConfigMsg(e instanceof Error ? e.message : "erro_desconhecido");
+      setMsgAcao(e instanceof Error ? e.message : "erro_desconhecido");
     } finally {
-      setCreatingContaCartao(false);
+      setCreatingContaInterna(false);
+    }
+  }
+
+  async function iniciarGeracaoFolhaMesAtual() {
+    if (!Number.isFinite(colaboradorId) || colaboradorId <= 0) return;
+
+    const competencia = resumo?.periodo_atual || competenciaAtualYYYYMM();
+    setStartingFolha(true);
+    setMsgAcao(null);
+
+    try {
+      const r1 = await fetch("/api/financeiro/folha/abrir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          competencia,
+          dia_pagamento: 5,
+          pagamento_no_mes_seguinte: true,
+        }),
+      });
+      const j1 = (await r1.json().catch(() => null)) as { folha?: { id: number }; error?: string } | null;
+      if (!r1.ok) throw new Error(j1?.error ?? "falha_abrir_folha");
+
+      const r2 = await fetch("/api/financeiro/folha/gerar-espelho", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          competencia_base: competencia,
+          meses: 1,
+          importar_cartao: true,
+        }),
+      });
+      const j2 = (await r2.json().catch(() => null)) as
+        | { folhas?: Array<{ id: number; competencia?: string }>; error?: string; imported_cartao_total?: number }
+        | null;
+      if (!r2.ok) throw new Error(j2?.error ?? "falha_gerar_espelho");
+
+      const folhasResp = Array.isArray(j2?.folhas) ? j2.folhas : [];
+      const folhaDoMes = folhasResp.find((f) => String(f.competencia ?? "") === competencia);
+      const folhaId = folhaDoMes?.id ?? j1?.folha?.id;
+      if (!folhaId || !Number.isFinite(folhaId)) {
+        setMsgAcao("Folha criada, mas nao consegui resolver o ID para abrir o detalhe. Abra manualmente na tela de Folha.");
+        return;
+      }
+
+      setMsgAcao(
+        `Folha da competencia ${competencia} iniciada. Itens de conta interna importados: ${Number(j2?.imported_cartao_total ?? 0)}.`,
+      );
+      router.push(`/admin/financeiro/folha/colaboradores/${folhaId}`);
+    } catch (e) {
+      setMsgAcao(e instanceof Error ? e.message : "erro_desconhecido");
+    } finally {
+      setStartingFolha(false);
     }
   }
 
@@ -297,15 +362,45 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
                   </div>
 
                   <div className="rounded-xl border p-4">
-                    <div className="text-xs text-slate-500">Politica do Cartao Conexao</div>
+                    <div className="text-xs text-slate-500">Politica da conta interna</div>
                     <div className="text-sm text-slate-700">
                       {resumo.config_financeira?.politica_desconto_cartao ?? "-"} -{" "}
                       {resumo.config_financeira?.politica_corte_cartao ?? "-"}
                     </div>
+                    <div className="mt-3 text-xs text-slate-500">
+                      Conta interna:{" "}
+                      <span className="font-medium">
+                        {resumo.cartao_conexao
+                          ? `#${resumo.cartao_conexao.id} (${resumo.cartao_conexao.tipo_conta})`
+                          : "Nao criada"}
+                      </span>
+                    </div>
                     <div className="mt-3 text-xs text-slate-500">Acoes rapidas</div>
-                    <div className="flex gap-2">
+                    {msgAcao ? <div className="mt-2 text-xs text-slate-600">{msgAcao}</div> : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {!resumo.cartao_conexao ? (
+                        <button
+                          type="button"
+                          className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                          disabled={creatingContaInterna}
+                          onClick={() => void criarContaInternaColaborador()}
+                        >
+                          {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                        disabled={startingFolha}
+                        onClick={() => void iniciarGeracaoFolhaMesAtual()}
+                      >
+                        {startingFolha ? "Iniciando..." : "Iniciar geracao da folha (mes atual)"}
+                      </button>
                       <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/folha/colaboradores">
-                        Ir para Folha
+                        Abrir modulo de folha
+                      </Link>
+                      <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/credito-conexao/faturas">
+                        Ver faturas da conta interna
                       </Link>
                       {resumo.cartao_conexao?.id && resumo.faturas_recentes?.[0]?.id ? (
                         <Link
@@ -314,9 +409,7 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
                         >
                           Ver ultima fatura
                         </Link>
-                      ) : (
-                        <span className="text-sm text-slate-500">Sem Cartao Conexao COLABORADOR</span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -468,21 +561,19 @@ export default function ColaboradorDetalhesPage({ params }: { params: { id: stri
             </div>
 
             <div className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold">Cartao Conexao - Faturas recentes</h2>
+              <h2 className="text-lg font-semibold">Conta interna / Despesas - Faturas recentes</h2>
               {!resumo.cartao_conexao ? (
                 <div className="mt-3 space-y-3">
                   <div className="text-sm text-slate-600">
-                    Nenhuma conta do tipo COLABORADOR encontrada para esta pessoa.
+                    Este colaborador ainda nao possui conta interna vinculada.
                   </div>
                   <button
                     type="button"
                     className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
-                    disabled={creatingContaCartao}
-                    onClick={() => void criarContaCartaoColaborador()}
+                    disabled={creatingContaInterna}
+                    onClick={() => void criarContaInternaColaborador()}
                   >
-                    {creatingContaCartao
-                      ? "Criando conta..."
-                      : "Criar conta do Cartao (COLABORADOR)"}
+                    {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
                   </button>
                 </div>
               ) : resumo.faturas_recentes.length === 0 ? (

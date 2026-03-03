@@ -71,7 +71,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       dia_fechamento: diaFechamento,
       dia_vencimento: 12,
       ativo: true,
-      descricao_exibicao: "Cartao Conexao COLABORADOR",
+      descricao_exibicao: "Conta Interna COLABORADOR",
     })
     .select("id,tipo_conta,pessoa_titular_id,dia_fechamento,dia_vencimento,ativo,descricao_exibicao")
     .single();
