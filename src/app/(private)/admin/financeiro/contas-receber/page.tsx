@@ -1144,10 +1144,17 @@ export default function ContasReceberPage() {
                             <Link
                               className="rounded-md border px-2 py-1 text-xs hover:bg-slate-50"
                               href={`/financeiro/cobrancas/${t.cobranca_id}`}
-                              target="_blank"
                             >
                               Abrir
                             </Link>
+                            <a
+                              className="rounded-md border px-2 py-1 text-xs hover:bg-slate-50"
+                              href={`/financeiro/cobrancas/${t.cobranca_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              Nova aba
+                            </a>
                             <button
                               type="button"
                               className="rounded-md border border-purple-200 bg-purple-50 px-2 py-1 text-xs text-purple-700 hover:bg-purple-100"
