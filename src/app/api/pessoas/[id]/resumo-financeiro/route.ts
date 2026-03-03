@@ -87,28 +87,38 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     .eq("id", responsavelId)
     .maybeSingle();
 
-  const { data: cobrancasRaw } = await supabase
-    .from("cobrancas")
+  const { data: cobrancasRaw, error: cobrancasErr } = await supabase
+    .from("vw_financeiro_contas_receber_flat")
     .select(
-      "id,pessoa_id,status,created_at,origem_tipo,origem_subtipo,data_vencimento,vencimento,valor_total_centavos,valor_centavos"
+      "cobranca_id,pessoa_id,vencimento,status_cobranca,origem_tipo,origem_id,created_at,valor_centavos,saldo_aberto_centavos,situacao_saas,bucket_vencimento"
     )
     .eq("pessoa_id", responsavelId)
-    .in("status", ["ABERTA", "PENDENTE", "EM_ABERTO", "OPEN"]);
+    .gt("saldo_aberto_centavos", 0)
+    .not("status_cobranca", "ilike", "CANCELADA")
+    .order("vencimento", { ascending: true, nullsFirst: false });
+
+  if (cobrancasErr) {
+    return NextResponse.json(
+      { error: "erro_listar_cobrancas_saas", details: cobrancasErr.message },
+      { status: 500 }
+    );
+  }
 
   const hojeISO = new Date().toISOString().slice(0, 10);
   const cobrancas = (cobrancasRaw ?? []).map((c) => {
-    const dataVenc = (c as any).data_vencimento ?? (c as any).vencimento ?? null;
-    const valor = (c as any).valor_total_centavos ?? (c as any).valor_centavos ?? 0;
+    const dataVenc = (c as any).vencimento ?? null;
+    const saldoAberto = Number((c as any).saldo_aberto_centavos ?? 0);
+    const situacaoSaas = String((c as any).situacao_saas ?? "");
 
     return {
-      id: Number((c as any).id),
+      id: Number((c as any).cobranca_id),
       devedor_pessoa_id: Number((c as any).pessoa_id),
       data_vencimento: dataVenc ? String(dataVenc) : null,
-      valor_centavos: Number(valor),
-      status: String((c as any).status ?? ""),
+      valor_centavos: saldoAberto,
+      status: String((c as any).status_cobranca ?? ""),
       origem_tipo: String((c as any).origem_tipo ?? ""),
-      origem_subtipo: String((c as any).origem_subtipo ?? ""),
-      vencida: isVencida(dataVenc ? String(dataVenc) : null, hojeISO),
+      origem_subtipo: String((c as any).origem_id ?? ""),
+      vencida: situacaoSaas === "VENCIDA" || isVencida(dataVenc ? String(dataVenc) : null, hojeISO),
       created_at: (c as any).created_at ? String((c as any).created_at) : null,
     };
   });
@@ -155,16 +165,18 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     ),
     faturas_credito_conexao: faturas,
     agregados: {
-      cobrancas_pendentes_qtd: Number(resumo.cobrancas_pendentes_qtd ?? 0),
-      cobrancas_pendentes_total_centavos: Number(
-        resumo.cobrancas_pendentes_total_centavos ?? 0
+      cobrancas_pendentes_qtd: cobrancas.length,
+      cobrancas_pendentes_total_centavos: cobrancas.reduce(
+        (acc, c) => acc + Number(c.valor_centavos ?? 0),
+        0
       ),
-      cobrancas_vencidas_qtd: Number(resumo.cobrancas_vencidas_qtd ?? 0),
-      faturas_pendentes_qtd: Number(resumo.faturas_pendentes_qtd ?? 0),
-      faturas_pendentes_total_centavos: Number(
-        resumo.faturas_pendentes_total_centavos ?? 0
+      cobrancas_vencidas_qtd: cobrancas.filter((c) => c.vencida).length,
+      faturas_pendentes_qtd: faturas.length,
+      faturas_pendentes_total_centavos: faturas.reduce(
+        (acc, f) => acc + Number(f.valor_total_centavos ?? 0),
+        0
       ),
-      faturas_vencidas_qtd: Number(resumo.faturas_vencidas_qtd ?? 0),
+      faturas_vencidas_qtd: faturas.filter((f) => f.vencida).length,
     },
   };
 

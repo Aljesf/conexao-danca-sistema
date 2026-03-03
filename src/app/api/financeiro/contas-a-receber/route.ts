@@ -3,6 +3,7 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type ContasReceberQuery = {
+  visao?: string;
   situacao?: string;
   status?: string;
   bucket?: string;
@@ -24,6 +25,7 @@ const BUCKETS_VALIDOS = new Set([
 ]);
 
 const SITUACOES_VALIDAS = new Set(["QUITADA", "EM_ABERTO", "VENCIDA"]);
+const VISOES_VALIDAS = new Set(["VENCIDAS", "AVENCER", "RECEBIDAS", "INCONSISTENCIAS"]);
 
 function isDateLike(value?: string): boolean {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -41,6 +43,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
   const q: ContasReceberQuery = {
+    visao: searchParams.get("visao") ?? "VENCIDAS",
     situacao: searchParams.get("situacao") ?? undefined,
     status: searchParams.get("status") ?? undefined,
     bucket: searchParams.get("bucket") ?? undefined,
@@ -51,6 +54,9 @@ export async function GET(req: NextRequest) {
     page: searchParams.get("page") ?? "1",
     page_size: searchParams.get("page_size") ?? "30",
   };
+
+  const visao = String(q.visao ?? "VENCIDAS").toUpperCase();
+  const visaoSaas = VISOES_VALIDAS.has(visao) ? visao : "VENCIDAS";
 
   if (q.bucket && !BUCKETS_VALIDOS.has(q.bucket)) {
     return NextResponse.json({ ok: false, error: "bucket_invalido" }, { status: 400 });
@@ -80,7 +86,7 @@ export async function GET(req: NextRequest) {
   let query = supabase
     .from("vw_financeiro_contas_receber_flat")
     .select("*", { count: "exact" })
-    .order("data_vencimento", { ascending: true, nullsFirst: false })
+    .order("vencimento", { ascending: true, nullsFirst: false })
     .order("cobranca_id", { ascending: false })
     .range(from, to);
 
@@ -88,9 +94,62 @@ export async function GET(req: NextRequest) {
   if (q.status) query = query.eq("status_cobranca", q.status);
   if (q.bucket) query = query.eq("bucket_vencimento", q.bucket);
   if (q.competencia) query = query.eq("competencia_ano_mes", q.competencia);
-  if (q.vencimento_inicio) query = query.gte("data_vencimento", q.vencimento_inicio);
-  if (q.vencimento_fim) query = query.lte("data_vencimento", q.vencimento_fim);
-  if (q.somente_abertas === "1") query = query.gt("saldo_aberto_centavos", 0);
+  if (q.vencimento_inicio) query = query.gte("vencimento", q.vencimento_inicio);
+  if (q.vencimento_fim) query = query.lte("vencimento", q.vencimento_fim);
+
+  switch (visaoSaas) {
+    case "VENCIDAS": {
+      query = query.eq("situacao_saas", "VENCIDA").gt("saldo_aberto_centavos", 0);
+      break;
+    }
+    case "AVENCER": {
+      query = query.eq("situacao_saas", "EM_ABERTO").gt("saldo_aberto_centavos", 0);
+      break;
+    }
+    case "RECEBIDAS": {
+      query = query.eq("situacao_saas", "QUITADA");
+      break;
+    }
+    case "INCONSISTENCIAS": {
+      const { data: inconsistentes, error: inconsistentesErr } = await supabase
+        .from("vw_financeiro_cobrancas_inconsistentes")
+        .select("cobranca_id")
+        .limit(5000);
+
+      if (!inconsistentesErr) {
+        const ids = (inconsistentes ?? [])
+          .map((row: any) => Number(row?.cobranca_id))
+          .filter((id: number) => Number.isFinite(id) && id > 0);
+
+        if (ids.length === 0) {
+          return NextResponse.json({
+            ok: true,
+            visao: visaoSaas,
+            page,
+            page_size: pageSize,
+            total: 0,
+            kpis: {
+              total_aberto_centavos: 0,
+            },
+            itens: [],
+          });
+        }
+
+        query = query.in("cobranca_id", ids);
+      } else {
+        query = query.gt("saldo_aberto_centavos", 0).ilike("status_cobranca", "CANCELADA");
+      }
+      break;
+    }
+    default: {
+      query = query.gt("saldo_aberto_centavos", 0);
+      break;
+    }
+  }
+
+  if (q.somente_abertas === "1" && visaoSaas !== "RECEBIDAS") {
+    query = query.gt("saldo_aberto_centavos", 0);
+  }
 
   const { data, error, count } = await query;
 
@@ -121,10 +180,18 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const itens = (data ?? []).map((row: any) => ({
-    ...row,
-    pessoa_nome: pessoasMap[String(row?.pessoa_id)]?.nome ?? null,
-  }));
+  const itens = (data ?? []).map((row: any) => {
+    const vencimento = row?.vencimento ?? row?.data_vencimento ?? null;
+    const valorCentavos = Number(row?.valor_centavos ?? row?.valor_total_centavos ?? 0);
+    return {
+      ...row,
+      vencimento,
+      data_vencimento: vencimento, // compatibilidade temporária com UI legada
+      valor_centavos: valorCentavos,
+      valor_total_centavos: valorCentavos, // compatibilidade temporária com UI legada
+      pessoa_nome: pessoasMap[String(row?.pessoa_id)]?.nome ?? null,
+    };
+  });
 
   const totalAbertoCentavos = itens.reduce((acc: number, row: any) => {
     return acc + Number(row?.saldo_aberto_centavos ?? 0);
@@ -132,6 +199,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
+    visao: visaoSaas,
     page,
     page_size: pageSize,
     total: count ?? 0,
