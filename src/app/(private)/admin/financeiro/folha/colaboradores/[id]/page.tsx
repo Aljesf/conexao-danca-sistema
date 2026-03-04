@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type FolhaNav = {
@@ -48,8 +49,9 @@ function parseReaisToCentavos(value: string): number | null {
   return Math.round(num * 100);
 }
 
-export default function FolhaDetalhePage({ params }: { params: { id: string } }) {
-  const folhaId = Number(params.id);
+export default function FolhaDetalhePage() {
+  const params = useParams<{ id: string }>();
+  const folhaId = Number(params?.id);
 
   const [folha, setFolha] = useState<Folha | null>(null);
   const [prevFolha, setPrevFolha] = useState<FolhaNav | null>(null);
@@ -284,6 +286,10 @@ export default function FolhaDetalhePage({ params }: { params: { id: string } })
     void loadDetalhes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folhaId]);
+
+  if (!Number.isFinite(folhaId) || folhaId <= 0) {
+    return <div className="p-6 text-sm text-red-600">ID de folha inválido.</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">

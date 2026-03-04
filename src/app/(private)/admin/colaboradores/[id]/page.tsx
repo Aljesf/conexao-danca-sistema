@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type TabKey = "geral" | "cartao" | "folha" | "remuneracao" | "jornada";
 type PagamentoTipo = "PAGAMENTO" | "ADIANTAMENTO" | "SAQUE";
@@ -74,7 +74,7 @@ function currentCompetencia(): string {
 
 export default function PerfilColaboradorPage() {
   const params = useParams<{ id: string }>();
-  const colaboradorId = Number(params.id);
+  const colaboradorId = useMemo(() => Number(params?.id), [params?.id]);
   const [tab, setTab] = useState<TabKey>("geral");
   const [resumo, setResumo] = useState<ResumoData | null>(null);
   const [contas, setContas] = useState<ContaFinanceira[]>([]);
@@ -299,7 +299,7 @@ export default function PerfilColaboradorPage() {
   }, [tab, colaboradorId]);
 
   if (!Number.isFinite(colaboradorId) || colaboradorId <= 0) {
-    return <div className="p-6 text-sm text-red-600">ID de colaborador invalido.</div>;
+    return <div className="p-6 text-sm text-red-600">ID de colaborador inválido.</div>;
   }
 
   return (

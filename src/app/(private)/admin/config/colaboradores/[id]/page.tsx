@@ -21,7 +21,7 @@ type ConfigFinanceira = {
 
 type Resumo = {
   colaborador: { id: number; pessoa_id: number; tipo_vinculo_id: number | null; ativo: boolean };
-  pessoa: { id: number; nome: string; cpf: string | null; telefone: string | null; email: string | null };
+  pessoa: { id: number; nome: string; cpf: string | null; telefone: string | null; email: string | null; foto_url?: string | null };
   periodo_atual?: string | null;
   config_financeira: ConfigFinanceira | null;
   cartao_conexao: {
@@ -103,6 +103,7 @@ export default function ColaboradorDetalhesPage() {
   const [msgAcao, setMsgAcao] = useState<string | null>(null);
   const [configMsg, setConfigMsg] = useState<string | null>(null);
   const [formConfig, setFormConfig] = useState<ConfigForm>(defaultConfigForm());
+  const [uploadingFoto, setUploadingFoto] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -180,6 +181,27 @@ export default function ColaboradorDetalhesPage() {
     const next = j as Resumo;
     setResumo(next);
     setFormConfig(toForm(next.config_financeira));
+  }
+
+  async function uploadFotoPessoa(file: File) {
+    if (!resumo?.pessoa?.id) return;
+    setUploadingFoto(true);
+    setConfigMsg(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+
+      const r = await fetch(`/api/pessoas/${resumo.pessoa.id}/foto`, { method: "POST", body: form });
+      const j = (await r.json().catch(() => null)) as { url?: string; error?: string } | null;
+      if (!r.ok) throw new Error(j?.error ?? "falha_upload_foto");
+
+      await recarregarResumo();
+      setConfigMsg("Foto atualizada.");
+    } catch (e) {
+      setConfigMsg(e instanceof Error ? e.message : "erro_desconhecido");
+    } finally {
+      setUploadingFoto(false);
+    }
   }
 
   function competenciaAtualYYYYMM(): string {
@@ -261,14 +283,14 @@ export default function ColaboradorDetalhesPage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white p-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6">
+        <div className="rounded-2xl border bg-white p-5 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-semibold">Perfil do colaborador</h1>
               <p className="text-sm text-slate-600">
-                Informacoes gerais, cartao conexao e perfil de pagamento.
+                Informações gerais, conta interna e perfil de pagamento.
               </p>
             </div>
             <div className="flex gap-2">
@@ -280,25 +302,61 @@ export default function ColaboradorDetalhesPage() {
         </div>
 
         {loading ? (
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">Carregando...</div>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">Carregando...</div>
         ) : erro ? (
-          <div className="rounded-2xl border bg-white p-6 shadow-sm text-red-600">{erro}</div>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm text-red-600">{erro}</div>
         ) : !resumo ? (
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">Sem dados.</div>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">Sem dados.</div>
         ) : (
           <>
-            <div className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold">Identificacao</h2>
-              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="rounded-xl border p-4">
-                  <div className="text-xs text-slate-500">Nome</div>
-                  <div className="font-medium">{resumo.pessoa.nome}</div>
-                  <div className="mt-2 text-xs text-slate-500">Contato</div>
-                  <div className="text-sm text-slate-700">
-                    {resumo.pessoa.telefone ?? "-"} - {resumo.pessoa.email ?? "-"}
+            <div className="rounded-2xl border bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold">Identificação</h2>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-14 w-14 overflow-hidden rounded-full border bg-slate-50 flex items-center justify-center text-sm font-semibold text-slate-700">
+                      {resumo.pessoa.foto_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={resumo.pessoa.foto_url} alt={resumo.pessoa.nome ?? "Foto"} className="h-full w-full object-cover" />
+                      ) : (
+                        (resumo.pessoa.nome ?? "CD")
+                          .split(" ")
+                          .slice(0, 2)
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs text-slate-500">Nome</div>
+                      <div className="font-medium truncate">{resumo.pessoa.nome}</div>
+
+                      <div className="mt-2 text-xs text-slate-500">Contato</div>
+                      <div className="text-sm text-slate-700">
+                        {resumo.pessoa.telefone ?? "-"} - {resumo.pessoa.email ?? "-"}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <label className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer text-center">
+                        {uploadingFoto ? "Enviando..." : "Alterar foto"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={uploadingFoto}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) void uploadFotoPessoa(f);
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                 </div>
-                <div className="rounded-xl border p-4">
+                <div className="rounded-xl bg-slate-50 p-4">
                   <div className="text-xs text-slate-500">Status</div>
                   <div className="font-medium">{resumo.colaborador.ativo ? "Ativo" : "Inativo"}</div>
                   <div className="mt-2 text-xs text-slate-500">Pessoa ID</div>
@@ -307,10 +365,10 @@ export default function ColaboradorDetalhesPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-lg font-semibold">Perfil de pagamento</h2>
+                  <h2 className="text-base font-semibold">Perfil de pagamento</h2>
                   <p className="text-sm text-slate-600">
                     Define regras da folha e tipo de remuneracao do colaborador.
                   </p>
@@ -329,8 +387,8 @@ export default function ColaboradorDetalhesPage() {
               </div>
 
               {!editMode ? (
-                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="rounded-xl border p-4">
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-xl border bg-slate-50 p-4">
                     <div className="text-xs text-slate-500">Gera folha automaticamente</div>
                     <div className="font-medium">{resumo.config_financeira?.gera_folha ? "Sim" : "Nao"}</div>
 
@@ -361,7 +419,7 @@ export default function ColaboradorDetalhesPage() {
                     )}
                   </div>
 
-                  <div className="rounded-xl border p-4">
+                  <div className="rounded-xl border bg-slate-50 p-4">
                     <div className="text-xs text-slate-500">Politica da conta interna</div>
                     <div className="text-sm text-slate-700">
                       {resumo.config_financeira?.politica_desconto_cartao ?? "-"} -{" "}
@@ -414,7 +472,7 @@ export default function ColaboradorDetalhesPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-4 rounded-xl border p-4">
+                <div className="mt-4 rounded-xl border bg-slate-50 p-4">
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <label className="flex items-center gap-2 text-sm">
                       <input
@@ -560,8 +618,8 @@ export default function ColaboradorDetalhesPage() {
               )}
             </div>
 
-            <div className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-semibold">Conta interna / Despesas - Faturas recentes</h2>
+            <div className="rounded-2xl border bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold">Conta interna / Despesas — Faturas recentes</h2>
               {!resumo.cartao_conexao ? (
                 <div className="mt-3 space-y-3">
                   <div className="text-sm text-slate-600">
