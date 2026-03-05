@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { NextRequest } from "next/server";
-import type { ApiAuthContext } from "@/lib/supabase/api-auth";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
 
-export type Supa = ApiAuthContext["supabase"];
+export type Supa = SupabaseClient;
 export type AuthUser = { id: string };
 
 export async function getUserOrThrow(
@@ -12,6 +12,27 @@ export async function getUserOrThrow(
   | { ok: true; supabase: Supa; user: AuthUser }
   | { ok: false; status: number; code: "NAO_AUTENTICADO" }
 > {
+  const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
+  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : null;
+
+  if (bearer) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { headers: { Authorization: `Bearer ${bearer}` } },
+      },
+    );
+
+    const { data, error } = await supabase.auth.getUser(bearer);
+    if (error || !data.user) {
+      return { ok: false, status: 401, code: "NAO_AUTENTICADO" };
+    }
+
+    return { ok: true, supabase, user: { id: data.user.id } };
+  }
+
   const auth = await requireUser(request);
   if (auth instanceof Response) {
     return { ok: false, status: 401, code: "NAO_AUTENTICADO" };
