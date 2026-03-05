@@ -1,23 +1,24 @@
 import React from "react";
-import { NavigationContainer } from "@react-navigation/native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import LoginScreen from "./screens/LoginScreen";
-import TodayScreen from "./screens/TodayScreen";
-
-export type RootStackParamList = {
-  Login: undefined;
-  Today: undefined;
-};
-
-const Stack = createNativeStackNavigator<RootStackParamList>();
+import { SafeAreaView, View, Text } from "react-native";
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login">
-        <Stack.Screen name="Login" component={LoginScreen} options={{ title: "Professor" }} />
-        <Stack.Screen name="Today" component={TodayScreen} options={{ title: "Aulas de hoje" }} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#ffffff" }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <Text style={{ fontSize: 24, fontWeight: "700", marginBottom: 12 }}>
+          Professor App
+        </Text>
+        <Text style={{ fontSize: 16, textAlign: "center" }}>
+          Renderização básica funcionando.
+        </Text>
+      </View>
+    </SafeAreaView>
   );
 }
