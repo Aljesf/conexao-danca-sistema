@@ -2,7 +2,13 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-export type ContextKey = "escola" | "loja" | "lanchonete" | "administracao" | "bolsas";
+export type ContextKey =
+  | "escola"
+  | "loja"
+  | "lanchonete"
+  | "administracao"
+  | "bolsas"
+  | "financeiro";
 
 export type Palette = {
   primary: string;
@@ -133,6 +139,24 @@ const defaultBolsas: ContextConfig = {
   },
 };
 
+const defaultFinanceiro: ContextConfig = {
+  key: "financeiro",
+  displayName: "Financeiro",
+  legalName: "",
+  document: "",
+  contacts: {},
+  logoUrl: "",
+  palette: {
+    primary: "#059669",
+    secondary: "#10b981",
+    background: "#f3faf7",
+    text: "#0f172a",
+    accent: "#64748b",
+    gradientFrom: "#dcfce7",
+    gradientTo: "#ecfdf5",
+  },
+};
+
 const BrandingContext = createContext<BrandingContextType>({
   activeContext: "escola",
   configs: {
@@ -141,6 +165,7 @@ const BrandingContext = createContext<BrandingContextType>({
     lanchonete: defaultLanchonete,
     administracao: defaultAdmin,
     bolsas: defaultBolsas,
+    financeiro: defaultFinanceiro,
   },
   setActiveContext: () => {},
   updateContext: () => {},
@@ -168,6 +193,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     lanchonete: defaultLanchonete,
     administracao: defaultAdmin,
     bolsas: defaultBolsas,
+    financeiro: defaultFinanceiro,
   });
 
   useEffect(() => {
@@ -181,6 +207,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
           lanchonete: { ...defaultLanchonete, ...(parsed.lanchonete ?? {}) },
           administracao: { ...defaultAdmin, ...(parsed.administracao ?? {}) },
           bolsas: { ...defaultBolsas, ...(parsed.bolsas ?? {}) },
+          financeiro: { ...defaultFinanceiro, ...(parsed.financeiro ?? {}) },
         });
         if (parsed.activeContext) setActiveContext(parsed.activeContext);
       } else {

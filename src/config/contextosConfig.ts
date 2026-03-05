@@ -5,7 +5,8 @@ export type AppContextKey =
   | "LOJA"
   | "CAFE"
   | "ADMIN"
-  | "BOLSAS";
+  | "BOLSAS"
+  | "FINANCEIRO";
 
 export type AppContextItem = {
   key: AppContextKey;
@@ -42,6 +43,14 @@ export const CONTEXTOS_CONFIG: AppContextItem[] = [
     href: "/cafe",
   },
   {
+    key: "FINANCEIRO",
+    brandingKey: "financeiro",
+    label: "Financeiro",
+    emoji: "💰",
+    description: "Contabil, fluxo de caixa, cartoes e Credito Conexao",
+    href: "/financeiro",
+  },
+  {
     key: "ADMIN",
     brandingKey: "administracao",
     label: "Administracao do Sistema",
@@ -69,4 +78,3 @@ export function detectContextByPathname(pathname: string): AppContextItem | null
   }
   return null;
 }
-

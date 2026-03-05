@@ -11,24 +11,6 @@ export const adminSidebar: SidebarSection[] = [
     ],
   },
   {
-    id: "admin-financeiro",
-    title: "💰 Financeiro (Admin)",
-    items: [
-      { label: "📊 Dashboard financeiro", href: "/admin/financeiro" },
-      { label: "⚙️ Configuracoes do financeiro", href: "/admin/financeiro/configuracoes" },
-      { label: "🧾 Folha - Colaboradores", href: "/admin/financeiro/folha/colaboradores" },
-      { label: "🧾 Planos de preco (aluno)", href: "/admin/financeiro/planos-preco-alunos" },
-      { label: "📥 Contas a receber", href: "/admin/financeiro/contas-receber" },
-      { label: "📤 Contas a pagar", href: "/admin/financeiro/contas-pagar" },
-      { label: "🎯 Centros de custo (financeiro)", href: "/admin/financeiro/centros-custo" },
-      { label: "📚 Plano de contas", href: "/admin/financeiro/plano-contas" },
-      { label: "🏷️ Categorias financeiras", href: "/admin/financeiro/categorias" },
-      { label: "🏦 Contas financeiras", href: "/admin/financeiro/contas-financeiras" },
-      { label: "🔄 Movimento", href: "/admin/financeiro/movimento" },
-      { label: "✍️ Lancamentos manuais", href: "/admin/financeiro/lancamentos-manuais" },
-    ],
-  },
-  {
     id: "admin-movimento-legado",
     title: "🤝 Movimento (Legado)",
     items: [
@@ -42,22 +24,9 @@ export const adminSidebar: SidebarSection[] = [
     ],
   },
   {
-    id: "admin-cartoes",
-    title: "💳 Cartoes (Admin)",
-    items: [
-      { label: "⚙️ Configuracao de cartoes", href: "/admin/financeiro/cartao/configuracoes" },
-      { label: "💰 Recebiveis de cartao", href: "/admin/financeiro/cartao/recebiveis" },
-    ],
-  },
-  {
-    id: "admin-credito-conexao",
-    title: "💠 Credito Conexao (Admin)",
-    items: [
-      { label: "🏦 Contas", href: "/admin/financeiro/credito-conexao/contas" },
-      { label: "🧾 Faturas", href: "/admin/financeiro/credito-conexao/faturas" },
-      { label: "💸 Cobrancas (ALUNO)", href: "/admin/financeiro/credito-conexao/cobrancas" },
-      { label: "⚙️ Configuracoes", href: "/admin/financeiro/credito-conexao/configuracoes" },
-    ],
+    id: "admin-financeiro-atalho",
+    title: "💰 Financeiro",
+    items: [{ label: "➡️ Ir para Financeiro", href: "/financeiro" }],
   },
   {
     id: "admin-documentos",

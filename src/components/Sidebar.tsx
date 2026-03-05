@@ -25,6 +25,7 @@ const sidebarContextMap: Record<AnyContext, SidebarContext> = {
   lanchonete: "cafe",
   administracao: "admin",
   bolsas: "bolsas",
+  financeiro: "financeiro",
   cafe: "cafe",
   admin: "admin",
 };
@@ -35,16 +36,18 @@ const brandingContextMap: Record<AnyContext, ContextKey> = {
   lanchonete: "lanchonete",
   administracao: "administracao",
   bolsas: "bolsas",
+  financeiro: "financeiro",
   cafe: "lanchonete",
   admin: "administracao",
 };
 
-const sidebarToContextKey: Record<SidebarContext, "ESCOLA" | "LOJA" | "CAFE" | "ADMIN" | "BOLSAS"> = {
+const sidebarToContextKey: Record<SidebarContext, "ESCOLA" | "LOJA" | "CAFE" | "ADMIN" | "BOLSAS" | "FINANCEIRO"> = {
   escola: "ESCOLA",
   loja: "LOJA",
   cafe: "CAFE",
   admin: "ADMIN",
   bolsas: "BOLSAS",
+  financeiro: "FINANCEIRO",
 };
 
 const contextLabels: Record<SidebarContext, string> = {
@@ -53,6 +56,7 @@ const contextLabels: Record<SidebarContext, string> = {
   cafe: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.cafe)?.label ?? "Ballet Cafe",
   admin: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.admin)?.label ?? "Administracao do Sistema",
   bolsas: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.bolsas)?.label ?? "Bolsas & Projetos Sociais",
+  financeiro: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.financeiro)?.label ?? "Financeiro",
 };
 
 function Section({ id, title, items, defaultOpen = true }: SidebarSection) {

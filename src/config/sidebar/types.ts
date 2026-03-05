@@ -20,4 +20,5 @@ export type SidebarConfig = {
   cafe: SidebarSection[];
   admin: SidebarSection[];
   bolsas: SidebarSection[];
+  financeiro: SidebarSection[];
 };

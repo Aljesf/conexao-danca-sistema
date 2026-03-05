@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { SystemContextCard } from "@/components/system/SystemContextCard";
+import { SystemHelpCard } from "@/components/system/SystemHelpCard";
+import { SystemPage } from "@/components/system/SystemPage";
+import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 
 type ConfigFinanceira = {
   id: number;
@@ -283,393 +287,397 @@ export default function ColaboradorDetalhesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6">
-        <div className="rounded-2xl border bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold">Perfil do colaborador</h1>
-              <p className="text-sm text-slate-600">
-                Informações gerais, conta interna e perfil de pagamento.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/config/colaboradores">
-                Voltar
-              </Link>
-            </div>
-          </div>
+    <SystemPage>
+      <SystemContextCard
+        title="Perfil do colaborador"
+        subtitle="Informacoes gerais, conta interna e perfil de pagamento."
+      >
+        <div className="flex gap-2">
+          <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/config/colaboradores">
+            Voltar
+          </Link>
         </div>
+      </SystemContextCard>
 
-        {loading ? (
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">Carregando...</div>
-        ) : erro ? (
-          <div className="rounded-2xl border bg-white p-5 shadow-sm text-red-600">{erro}</div>
-        ) : !resumo ? (
-          <div className="rounded-2xl border bg-white p-5 shadow-sm">Sem dados.</div>
-        ) : (
-          <>
-            <div className="rounded-2xl border bg-white p-5 shadow-sm">
-              <h2 className="text-base font-semibold">Identificação</h2>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 overflow-hidden rounded-full border bg-slate-50 flex items-center justify-center text-sm font-semibold text-slate-700">
-                      {resumo.pessoa.foto_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={resumo.pessoa.foto_url} alt={resumo.pessoa.nome ?? "Foto"} className="h-full w-full object-cover" />
-                      ) : (
-                        (resumo.pessoa.nome ?? "CD")
-                          .split(" ")
-                          .slice(0, 2)
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()
-                      )}
-                    </div>
+      <SystemHelpCard
+        items={[
+          "Use Alterar foto para identificar professores e equipe rapidamente.",
+          "Conta interna mostra a conta do Credito Conexao (COLABORADOR) e suas faturas.",
+          "Se o colaborador nao apareceu na folha, use Iniciar geracao da folha (mes atual).",
+        ]}
+      />
 
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs text-slate-500">Nome</div>
-                      <div className="font-medium truncate">{resumo.pessoa.nome}</div>
-
-                      <div className="mt-2 text-xs text-slate-500">Contato</div>
-                      <div className="text-sm text-slate-700">
-                        {resumo.pessoa.telefone ?? "-"} - {resumo.pessoa.email ?? "-"}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <label className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer text-center">
-                        {uploadingFoto ? "Enviando..." : "Alterar foto"}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          disabled={uploadingFoto}
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) void uploadFotoPessoa(f);
-                            e.currentTarget.value = "";
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <div className="text-xs text-slate-500">Status</div>
-                  <div className="font-medium">{resumo.colaborador.ativo ? "Ativo" : "Inativo"}</div>
-                  <div className="mt-2 text-xs text-slate-500">Pessoa ID</div>
-                  <div className="text-sm text-slate-700">{resumo.pessoa.id}</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-base font-semibold">Perfil de pagamento</h2>
-                  <p className="text-sm text-slate-600">
-                    Define regras da folha e tipo de remuneracao do colaborador.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
-                  onClick={() => {
-                    if (editMode) setFormConfig(toForm(resumo.config_financeira));
-                    setEditMode((v) => !v);
-                    setConfigMsg(null);
-                  }}
-                >
-                  {editMode ? "Cancelar edicao" : "Editar configuracao"}
-                </button>
-              </div>
-
-              {!editMode ? (
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div className="rounded-xl border bg-slate-50 p-4">
-                    <div className="text-xs text-slate-500">Gera folha automaticamente</div>
-                    <div className="font-medium">{resumo.config_financeira?.gera_folha ? "Sim" : "Nao"}</div>
-
-                    <div className="mt-3 text-xs text-slate-500">Fechamento / Pagamento</div>
-                    <div className="text-sm text-slate-700">
-                      Fecha dia {resumo.config_financeira?.dia_fechamento ?? "-"} - Paga dia{" "}
-                      {resumo.config_financeira?.dia_pagamento ?? "-"}{" "}
-                      {resumo.config_financeira?.pagamento_no_mes_seguinte ? "(mes seguinte)" : "(mesmo mes)"}
-                    </div>
-
-                    <div className="mt-3 text-xs text-slate-500">Tipo de remuneracao</div>
-                    <div className="text-sm text-slate-700">{resumo.config_financeira?.tipo_remuneracao ?? "MENSAL"}</div>
-
-                    {resumo.config_financeira?.tipo_remuneracao === "HORISTA" ? (
-                      <>
-                        <div className="mt-3 text-xs text-slate-500">Valor hora</div>
-                        <div className="text-sm text-slate-700">
-                          {brlFromCentavos(Number(resumo.config_financeira?.valor_hora_centavos ?? 0))}
-                        </div>
-                      </>
+      {loading ? (
+        <SystemSectionCard title="Carregando">
+          <div className="text-sm text-slate-700">Carregando...</div>
+        </SystemSectionCard>
+      ) : erro ? (
+        <SystemSectionCard title="Erro">
+          <div className="text-sm text-red-600">{erro}</div>
+        </SystemSectionCard>
+      ) : !resumo ? (
+        <SystemSectionCard title="Sem dados">
+          <div className="text-sm text-slate-700">Sem dados.</div>
+        </SystemSectionCard>
+      ) : (
+        <>
+          <SystemSectionCard title="Identificacao" description="Dados basicos e foto do colaborador.">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center gap-4">
+                  <div className="h-14 w-14 overflow-hidden rounded-full border bg-slate-50 flex items-center justify-center text-sm font-semibold text-slate-700">
+                    {resumo.pessoa.foto_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={resumo.pessoa.foto_url} alt={resumo.pessoa.nome ?? "Foto"} className="h-full w-full object-cover" />
                     ) : (
-                      <>
-                        <div className="mt-3 text-xs text-slate-500">Salario base</div>
-                        <div className="text-sm text-slate-700">
-                          {brlFromCentavos(Number(resumo.config_financeira?.salario_base_centavos ?? 0))}
-                        </div>
-                      </>
+                      (resumo.pessoa.nome ?? "CD")
+                        .split(" ")
+                        .slice(0, 2)
+                        .map((n) => n[0])
+                        .join("")
+                        .toUpperCase()
                     )}
                   </div>
 
-                  <div className="rounded-xl border bg-slate-50 p-4">
-                    <div className="text-xs text-slate-500">Politica da conta interna</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs text-slate-500">Nome</div>
+                    <div className="font-medium truncate">{resumo.pessoa.nome}</div>
+
+                    <div className="mt-2 text-xs text-slate-500">Contato</div>
                     <div className="text-sm text-slate-700">
-                      {resumo.config_financeira?.politica_desconto_cartao ?? "-"} -{" "}
-                      {resumo.config_financeira?.politica_corte_cartao ?? "-"}
+                      {resumo.pessoa.telefone ?? "-"} - {resumo.pessoa.email ?? "-"}
                     </div>
-                    <div className="mt-3 text-xs text-slate-500">
-                      Conta interna:{" "}
-                      <span className="font-medium">
-                        {resumo.cartao_conexao
-                          ? `#${resumo.cartao_conexao.id} (${resumo.cartao_conexao.tipo_conta})`
-                          : "Nao criada"}
-                      </span>
-                    </div>
-                    <div className="mt-3 text-xs text-slate-500">Acoes rapidas</div>
-                    {msgAcao ? <div className="mt-2 text-xs text-slate-600">{msgAcao}</div> : null}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {!resumo.cartao_conexao ? (
-                        <button
-                          type="button"
-                          className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
-                          disabled={creatingContaInterna}
-                          onClick={() => void criarContaInternaColaborador()}
-                        >
-                          {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
-                        </button>
-                      ) : null}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer text-center">
+                      {uploadingFoto ? "Enviando..." : "Alterar foto"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingFoto}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadFotoPessoa(f);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Status</div>
+                <div className="font-medium">{resumo.colaborador.ativo ? "Ativo" : "Inativo"}</div>
+                <div className="mt-2 text-xs text-slate-500">Pessoa ID</div>
+                <div className="text-sm text-slate-700">{resumo.pessoa.id}</div>
+              </div>
+            </div>
+          </SystemSectionCard>
+
+          <SystemSectionCard title="Perfil de pagamento" description="Define regras da folha e tipo de remuneracao do colaborador.">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                onClick={() => {
+                  if (editMode) setFormConfig(toForm(resumo.config_financeira));
+                  setEditMode((v) => !v);
+                  setConfigMsg(null);
+                }}
+              >
+                {editMode ? "Cancelar edicao" : "Editar configuracao"}
+              </button>
+            </div>
+
+            {!editMode ? (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-xs text-slate-500">Gera folha automaticamente</div>
+                  <div className="font-medium">{resumo.config_financeira?.gera_folha ? "Sim" : "Nao"}</div>
+
+                  <div className="mt-3 text-xs text-slate-500">Fechamento / Pagamento</div>
+                  <div className="text-sm text-slate-700">
+                    Fecha dia {resumo.config_financeira?.dia_fechamento ?? "-"} - Paga dia{" "}
+                    {resumo.config_financeira?.dia_pagamento ?? "-"}{" "}
+                    {resumo.config_financeira?.pagamento_no_mes_seguinte ? "(mes seguinte)" : "(mesmo mes)"}
+                  </div>
+
+                  <div className="mt-3 text-xs text-slate-500">Tipo de remuneracao</div>
+                  <div className="text-sm text-slate-700">{resumo.config_financeira?.tipo_remuneracao ?? "MENSAL"}</div>
+
+                  {resumo.config_financeira?.tipo_remuneracao === "HORISTA" ? (
+                    <>
+                      <div className="mt-3 text-xs text-slate-500">Valor hora</div>
+                      <div className="text-sm text-slate-700">
+                        {brlFromCentavos(Number(resumo.config_financeira?.valor_hora_centavos ?? 0))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mt-3 text-xs text-slate-500">Salario base</div>
+                      <div className="text-sm text-slate-700">
+                        {brlFromCentavos(Number(resumo.config_financeira?.salario_base_centavos ?? 0))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-xs text-slate-500">Politica da conta interna</div>
+                  <div className="text-sm text-slate-700">
+                    {resumo.config_financeira?.politica_desconto_cartao ?? "-"} -{" "}
+                    {resumo.config_financeira?.politica_corte_cartao ?? "-"}
+                  </div>
+                  <div className="mt-3 text-xs text-slate-500">
+                    Conta interna:{" "}
+                    <span className="font-medium">
+                      {resumo.cartao_conexao
+                        ? `#${resumo.cartao_conexao.id} (${resumo.cartao_conexao.tipo_conta})`
+                        : "Nao criada"}
+                    </span>
+                  </div>
+                  <div className="mt-3 text-xs text-slate-500">Acoes rapidas</div>
+                  {msgAcao ? <div className="mt-2 text-xs text-slate-600">{msgAcao}</div> : null}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {!resumo.cartao_conexao ? (
                       <button
                         type="button"
                         className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
-                        disabled={startingFolha}
-                        onClick={() => void iniciarGeracaoFolhaMesAtual()}
+                        disabled={creatingContaInterna}
+                        onClick={() => void criarContaInternaColaborador()}
                       >
-                        {startingFolha ? "Iniciando..." : "Iniciar geracao da folha (mes atual)"}
+                        {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
                       </button>
-                      <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/folha/colaboradores">
-                        Abrir modulo de folha
-                      </Link>
-                      <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/credito-conexao/faturas">
-                        Ver faturas da conta interna
-                      </Link>
-                      {resumo.cartao_conexao?.id && resumo.faturas_recentes?.[0]?.id ? (
-                        <Link
-                          className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
-                          href={`/admin/financeiro/credito-conexao/faturas/${resumo.faturas_recentes[0].id}`}
-                        >
-                          Ver ultima fatura
-                        </Link>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-xl border bg-slate-50 p-4">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={formConfig.gera_folha}
-                        onChange={(e) => setFormConfig((prev) => ({ ...prev, gera_folha: e.target.checked }))}
-                      />
-                      Gera folha automaticamente
-                    </label>
-
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={formConfig.pagamento_no_mes_seguinte}
-                        onChange={(e) =>
-                          setFormConfig((prev) => ({ ...prev, pagamento_no_mes_seguinte: e.target.checked }))
-                        }
-                      />
-                      Pagamento no mes seguinte
-                    </label>
-
-                    <label className="text-sm">
-                      Dia de fechamento
-                      <input
-                        className="mt-1 w-full rounded-md border px-3 py-2"
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={formConfig.dia_fechamento}
-                        onChange={(e) =>
-                          setFormConfig((prev) => ({ ...prev, dia_fechamento: Number(e.target.value || 31) }))
-                        }
-                      />
-                    </label>
-
-                    <label className="text-sm">
-                      Dia de pagamento
-                      <input
-                        className="mt-1 w-full rounded-md border px-3 py-2"
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={formConfig.dia_pagamento}
-                        onChange={(e) =>
-                          setFormConfig((prev) => ({ ...prev, dia_pagamento: Number(e.target.value || 5) }))
-                        }
-                      />
-                    </label>
-
-                    <label className="text-sm">
-                      Tipo de remuneracao
-                      <select
-                        className="mt-1 w-full rounded-md border px-3 py-2"
-                        value={formConfig.tipo_remuneracao}
-                        onChange={(e) =>
-                          setFormConfig((prev) => ({
-                            ...prev,
-                            tipo_remuneracao: e.target.value as "MENSAL" | "HORISTA",
-                          }))
-                        }
-                      >
-                        <option value="MENSAL">MENSAL</option>
-                        <option value="HORISTA">HORISTA</option>
-                      </select>
-                    </label>
-
-                    {formConfig.tipo_remuneracao === "HORISTA" ? (
-                      <label className="text-sm">
-                        Valor hora (centavos)
-                        <input
-                          className="mt-1 w-full rounded-md border px-3 py-2"
-                          type="number"
-                          min={0}
-                          value={formConfig.valor_hora_centavos}
-                          onChange={(e) =>
-                            setFormConfig((prev) => ({ ...prev, valor_hora_centavos: Number(e.target.value || 0) }))
-                          }
-                        />
-                      </label>
-                    ) : (
-                      <label className="text-sm">
-                        Salario base (centavos)
-                        <input
-                          className="mt-1 w-full rounded-md border px-3 py-2"
-                          type="number"
-                          min={0}
-                          value={formConfig.salario_base_centavos}
-                          onChange={(e) =>
-                            setFormConfig((prev) => ({ ...prev, salario_base_centavos: Number(e.target.value || 0) }))
-                          }
-                        />
-                      </label>
-                    )}
-
-                    <label className="text-sm">
-                      Politica desconto cartao
-                      <select
-                        className="mt-1 w-full rounded-md border px-3 py-2"
-                        value={formConfig.politica_desconto_cartao}
-                        onChange={(e) =>
-                          setFormConfig((prev) => ({
-                            ...prev,
-                            politica_desconto_cartao: e.target.value as ConfigForm["politica_desconto_cartao"],
-                          }))
-                        }
-                      >
-                        <option value="DESCONTA_NA_FOLHA">DESCONTA_NA_FOLHA</option>
-                        <option value="NAO_DESCONTA">NAO_DESCONTA</option>
-                        <option value="MANUAL">MANUAL</option>
-                      </select>
-                    </label>
-
-                    <label className="text-sm md:col-span-2">
-                      Politica corte cartao
-                      <select
-                        className="mt-1 w-full rounded-md border px-3 py-2"
-                        value={formConfig.politica_corte_cartao}
-                        onChange={(e) =>
-                          setFormConfig((prev) => ({
-                            ...prev,
-                            politica_corte_cartao: e.target.value as ConfigForm["politica_corte_cartao"],
-                          }))
-                        }
-                      >
-                        <option value="POR_DIA_FECHAMENTO">POR_DIA_FECHAMENTO</option>
-                        <option value="SEM_CORTE">SEM_CORTE</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-2">
+                    ) : null}
                     <button
                       type="button"
-                      className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-60"
-                      onClick={() => void salvarConfig()}
-                      disabled={savingConfig}
+                      className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                      disabled={startingFolha}
+                      onClick={() => void iniciarGeracaoFolhaMesAtual()}
                     >
-                      {savingConfig ? "Salvando..." : "Salvar"}
+                      {startingFolha ? "Iniciando..." : "Iniciar geracao da folha (mes atual)"}
                     </button>
-                    {configMsg ? <span className="text-sm text-slate-700">{configMsg}</span> : null}
+                    <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/folha/colaboradores">
+                      Abrir modulo de folha
+                    </Link>
+                    <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/credito-conexao/faturas">
+                      Ver faturas da conta interna
+                    </Link>
+                    {resumo.cartao_conexao?.id && resumo.faturas_recentes?.[0]?.id ? (
+                      <Link
+                        className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                        href={`/admin/financeiro/credito-conexao/faturas/${resumo.faturas_recentes[0].id}`}
+                      >
+                        Ver ultima fatura
+                      </Link>
+                    ) : null}
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formConfig.gera_folha}
+                      onChange={(e) => setFormConfig((prev) => ({ ...prev, gera_folha: e.target.checked }))}
+                    />
+                    Gera folha automaticamente
+                  </label>
 
-            <div className="rounded-2xl border bg-white p-5 shadow-sm">
-              <h2 className="text-base font-semibold">Conta interna / Despesas — Faturas recentes</h2>
-              {!resumo.cartao_conexao ? (
-                <div className="mt-3 space-y-3">
-                  <div className="text-sm text-slate-600">
-                    Este colaborador ainda nao possui conta interna vinculada.
-                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={formConfig.pagamento_no_mes_seguinte}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({ ...prev, pagamento_no_mes_seguinte: e.target.checked }))
+                      }
+                    />
+                    Pagamento no mes seguinte
+                  </label>
+
+                  <label className="text-sm">
+                    Dia de fechamento
+                    <input
+                      className="mt-1 w-full rounded-md border px-3 py-2"
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={formConfig.dia_fechamento}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({ ...prev, dia_fechamento: Number(e.target.value || 31) }))
+                      }
+                    />
+                  </label>
+
+                  <label className="text-sm">
+                    Dia de pagamento
+                    <input
+                      className="mt-1 w-full rounded-md border px-3 py-2"
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={formConfig.dia_pagamento}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({ ...prev, dia_pagamento: Number(e.target.value || 5) }))
+                      }
+                    />
+                  </label>
+
+                  <label className="text-sm">
+                    Tipo de remuneracao
+                    <select
+                      className="mt-1 w-full rounded-md border px-3 py-2"
+                      value={formConfig.tipo_remuneracao}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          tipo_remuneracao: e.target.value as "MENSAL" | "HORISTA",
+                        }))
+                      }
+                    >
+                      <option value="MENSAL">MENSAL</option>
+                      <option value="HORISTA">HORISTA</option>
+                    </select>
+                  </label>
+
+                  {formConfig.tipo_remuneracao === "HORISTA" ? (
+                    <label className="text-sm">
+                      Valor hora (centavos)
+                      <input
+                        className="mt-1 w-full rounded-md border px-3 py-2"
+                        type="number"
+                        min={0}
+                        value={formConfig.valor_hora_centavos}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({ ...prev, valor_hora_centavos: Number(e.target.value || 0) }))
+                        }
+                      />
+                    </label>
+                  ) : (
+                    <label className="text-sm">
+                      Salario base (centavos)
+                      <input
+                        className="mt-1 w-full rounded-md border px-3 py-2"
+                        type="number"
+                        min={0}
+                        value={formConfig.salario_base_centavos}
+                        onChange={(e) =>
+                          setFormConfig((prev) => ({ ...prev, salario_base_centavos: Number(e.target.value || 0) }))
+                        }
+                      />
+                    </label>
+                  )}
+
+                  <label className="text-sm">
+                    Politica desconto cartao
+                    <select
+                      className="mt-1 w-full rounded-md border px-3 py-2"
+                      value={formConfig.politica_desconto_cartao}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          politica_desconto_cartao: e.target.value as ConfigForm["politica_desconto_cartao"],
+                        }))
+                      }
+                    >
+                      <option value="DESCONTA_NA_FOLHA">DESCONTA_NA_FOLHA</option>
+                      <option value="NAO_DESCONTA">NAO_DESCONTA</option>
+                      <option value="MANUAL">MANUAL</option>
+                    </select>
+                  </label>
+
+                  <label className="text-sm md:col-span-2">
+                    Politica corte cartao
+                    <select
+                      className="mt-1 w-full rounded-md border px-3 py-2"
+                      value={formConfig.politica_corte_cartao}
+                      onChange={(e) =>
+                        setFormConfig((prev) => ({
+                          ...prev,
+                          politica_corte_cartao: e.target.value as ConfigForm["politica_corte_cartao"],
+                        }))
+                      }
+                    >
+                      <option value="POR_DIA_FECHAMENTO">POR_DIA_FECHAMENTO</option>
+                      <option value="SEM_CORTE">SEM_CORTE</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mt-4 flex items-center gap-2">
                   <button
                     type="button"
-                    className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
-                    disabled={creatingContaInterna}
-                    onClick={() => void criarContaInternaColaborador()}
+                    className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-60"
+                    onClick={() => void salvarConfig()}
+                    disabled={savingConfig}
                   >
-                    {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
+                    {savingConfig ? "Salvando..." : "Salvar"}
                   </button>
+                  {configMsg ? <span className="text-sm text-slate-700">{configMsg}</span> : null}
                 </div>
-              ) : resumo.faturas_recentes.length === 0 ? (
-                <div className="mt-3 text-sm text-slate-600">Nenhuma fatura recente.</div>
-              ) : (
-                <div className="mt-4 overflow-x-auto rounded-xl border">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Periodo</th>
-                        <th className="px-3 py-2 text-left">Status</th>
-                        <th className="px-3 py-2 text-right">Valor</th>
-                        <th className="px-3 py-2 text-left">Vinculada na folha</th>
-                        <th className="px-3 py-2 text-right">Acoes</th>
+              </div>
+            )}
+          </SystemSectionCard>
+
+          <SystemSectionCard
+            title="Conta interna / Despesas — Faturas recentes"
+            description="Faturas do colaborador no Credito Conexao."
+          >
+            {!resumo.cartao_conexao ? (
+              <div className="mt-3 space-y-3">
+                <div className="text-sm text-slate-600">
+                  Este colaborador ainda nao possui conta interna vinculada.
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                  disabled={creatingContaInterna}
+                  onClick={() => void criarContaInternaColaborador()}
+                >
+                  {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
+                </button>
+              </div>
+            ) : resumo.faturas_recentes.length === 0 ? (
+              <div className="mt-3 text-sm text-slate-600">Nenhuma fatura recente.</div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Periodo</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                      <th className="px-3 py-2 text-right">Valor</th>
+                      <th className="px-3 py-2 text-left">Vinculada na folha</th>
+                      <th className="px-3 py-2 text-right">Acoes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumo.faturas_recentes.map((f) => (
+                      <tr key={f.id} className="border-t">
+                        <td className="px-3 py-2">{f.periodo_referencia}</td>
+                        <td className="px-3 py-2">{f.status}</td>
+                        <td className="px-3 py-2 text-right">{brlFromCentavos(f.valor_total_centavos)}</td>
+                        <td className="px-3 py-2">{f.folha_pagamento_id ? `Folha #${f.folha_pagamento_id}` : "-"}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Link className="text-purple-700 hover:underline" href={`/admin/financeiro/credito-conexao/faturas/${f.id}`}>
+                            Abrir
+                          </Link>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {resumo.faturas_recentes.map((f) => (
-                        <tr key={f.id} className="border-t">
-                          <td className="px-3 py-2">{f.periodo_referencia}</td>
-                          <td className="px-3 py-2">{f.status}</td>
-                          <td className="px-3 py-2 text-right">{brlFromCentavos(f.valor_total_centavos)}</td>
-                          <td className="px-3 py-2">{f.folha_pagamento_id ? `Folha #${f.folha_pagamento_id}` : "-"}</td>
-                          <td className="px-3 py-2 text-right">
-                            <Link className="text-purple-700 hover:underline" href={`/admin/financeiro/credito-conexao/faturas/${f.id}`}>
-                              Abrir
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </SystemSectionCard>
+        </>
+      )}
+    </SystemPage>
   );
 }
+

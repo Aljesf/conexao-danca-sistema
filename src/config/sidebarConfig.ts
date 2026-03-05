@@ -4,6 +4,7 @@ import { lojaSidebar } from "./sidebar/loja";
 import { cafeSidebar } from "./sidebar/cafe";
 import { adminSidebar } from "./sidebar/admin";
 import { bolsasSidebar } from "./sidebar/bolsas";
+import { financeiroSidebar } from "./sidebar/financeiro";
 
 export const sidebarConfig: SidebarConfig = {
   escola: escolaSidebar,
@@ -11,6 +12,7 @@ export const sidebarConfig: SidebarConfig = {
   cafe: cafeSidebar,
   admin: adminSidebar,
   bolsas: bolsasSidebar,
+  financeiro: financeiroSidebar,
 };
 
 export type { SidebarConfig, SidebarItem, SidebarSection };
