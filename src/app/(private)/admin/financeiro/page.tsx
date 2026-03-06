@@ -5,6 +5,10 @@ import Link from "next/link";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateTimeISO } from "@/lib/formatters/date";
+import {
+  formatarCompetenciaLabel,
+  type DashboardFinanceiroMensalResponse,
+} from "@/lib/financeiro/creditoConexao/cobrancas";
 import { HELP_DASHBOARD_INTELIGENTE } from "@/lib/financeiro/helpDashboardInteligente";
 
 type TendenciaValor = {
@@ -101,6 +105,11 @@ type DashboardResponse = {
   };
 };
 
+type DashboardMensalResponse = DashboardFinanceiroMensalResponse & {
+  ok: boolean;
+  error?: string;
+};
+
 type LineDatum = {
   x: number;
   y: number;
@@ -182,9 +191,11 @@ function normalizeSeries(data: SerieFluxoItem[], height: number, width: number) 
 export default function FinanceiroDashboardPage() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [analise, setAnalise] = useState<Analise | null>(null);
+  const [mensal, setMensal] = useState<DashboardFinanceiroMensalResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [reanalisando, setReanalisando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mensalError, setMensalError] = useState<string | null>(null);
   const [gptInfo, setGptInfo] = useState<{
     status?: "OK" | "SEM_CHAVE" | "ERRO";
     motivo?: string | null;
@@ -196,10 +207,26 @@ export default function FinanceiroDashboardPage() {
   async function loadDashboard() {
     setLoading(true);
     setError(null);
+    setMensalError(null);
     try {
-      const res = await fetch("/api/financeiro/dashboard-inteligente", { cache: "no-store" });
-      const json = (await res.json()) as DashboardResponse;
-      if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao carregar dashboard.");
+      const [inteligenteResult, mensalResult] = await Promise.allSettled([
+        fetch("/api/financeiro/dashboard-inteligente", { cache: "no-store" }).then(async (res) => {
+          const json = (await res.json()) as DashboardResponse;
+          if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao carregar dashboard.");
+          return json;
+        }),
+        fetch("/api/financeiro/dashboard/mensal", { cache: "no-store" }).then(async (res) => {
+          const json = (await res.json()) as DashboardMensalResponse;
+          if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao carregar leitura mensal.");
+          return json;
+        }),
+      ]);
+
+      if (inteligenteResult.status === "rejected") {
+        throw inteligenteResult.reason;
+      }
+
+      const json = inteligenteResult.value;
       setSnapshot(json.snapshot);
       setAnalise(json.analise);
       setGptInfo({
@@ -208,6 +235,17 @@ export default function FinanceiroDashboardPage() {
         hasKey: json.has_openai_key,
         model: json.model_usado,
       });
+
+      if (mensalResult.status === "fulfilled") {
+        setMensal(mensalResult.value);
+      } else {
+        setMensal(null);
+        setMensalError(
+          mensalResult.reason instanceof Error
+            ? mensalResult.reason.message
+            : "Erro ao carregar leitura mensal do financeiro.",
+        );
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro inesperado ao carregar dashboard.";
       setError(message);
@@ -217,7 +255,7 @@ export default function FinanceiroDashboardPage() {
   }
 
   useEffect(() => {
-    loadDashboard();
+    void loadDashboard();
   }, []);
 
   async function reanalisar() {
@@ -237,6 +275,20 @@ export default function FinanceiroDashboardPage() {
         hasKey: json.has_openai_key,
         model: json.model_usado,
       });
+      try {
+        const mensalRes = await fetch("/api/financeiro/dashboard/mensal", { cache: "no-store" });
+        const mensalJson = (await mensalRes.json()) as DashboardMensalResponse;
+        if (!mensalRes.ok || !mensalJson?.ok) {
+          throw new Error(mensalJson?.error || "Erro ao recarregar leitura mensal.");
+        }
+        setMensal(mensalJson);
+        setMensalError(null);
+      } catch (mensalErr: unknown) {
+        setMensal(null);
+        setMensalError(
+          mensalErr instanceof Error ? mensalErr.message : "Erro ao recarregar leitura mensal.",
+        );
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Erro ao reanalisar dashboard.";
       setError(message);
@@ -264,6 +316,7 @@ export default function FinanceiroDashboardPage() {
   const serieChart = useMemo(() => snapshot?.serie_fluxo_caixa ?? [], [snapshot]);
   const blocoCentros = useMemo(() => snapshot?.resumo_por_centro ?? [], [snapshot]);
   const tendencia = snapshot?.tendencia;
+  const competenciaMensalLabel = mensal ? formatarCompetenciaLabel(mensal.competencia_atual) : "--";
 
   const cardsSaude = [
     {
@@ -322,11 +375,11 @@ export default function FinanceiroDashboardPage() {
           </div>
 
           <FinanceHelpCard
-            subtitle="Visao geral do financeiro com dados reais."
+            subtitle="Visao geral do financeiro com saude imediata, leitura mensal SaaS e alertas inteligentes."
             items={[
-              "Blocos com saude imediata, leitura inteligente (GPT) e tendencia por centro.",
-              "Fluxo de caixa historico (90d) e projecao (30d) para decisoes de curto prazo.",
-              "Alertas simples calculados e ate 3 alertas GPT quando habilitado.",
+              "Saude imediata e saude mensal mostram previsto, pago, pendente, vencido e carteira em NeoFin.",
+              "A leitura mensal ajuda a comparar competencias recentes e priorizar cobranca e conversao.",
+              "Fluxo de caixa, alertas simples e leitura inteligente mantem a visao executiva do financeiro.",
             ]}
           />
 
@@ -365,6 +418,135 @@ export default function FinanceiroDashboardPage() {
           </div>
         </div>
 
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">Saude mensal do financeiro</h2>
+              <p className="text-sm text-slate-600">
+                Leitura rapida da competencia {competenciaMensalLabel} com foco em cobranca e conversao.
+              </p>
+            </div>
+            <Link
+              href="/admin/financeiro/credito-conexao/cobrancas"
+              className="inline-flex items-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Abrir cobrancas do aluno
+            </Link>
+          </div>
+
+          {mensalError ? (
+            <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {mensalError}
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            {[
+              {
+                titulo: "Previsto para receber no mes",
+                valor: formatBRLFromCents(mensal?.cards.previsto_mes_centavos ?? null),
+              },
+              {
+                titulo: "Recebido no mes",
+                valor: formatBRLFromCents(mensal?.cards.pago_mes_centavos ?? null),
+              },
+              {
+                titulo: "Pendente do mes",
+                valor: formatBRLFromCents(mensal?.cards.pendente_mes_centavos ?? null),
+              },
+              {
+                titulo: "Em cobranca NeoFin",
+                valor: formatBRLFromCents(mensal?.cards.neofin_mes_centavos ?? null),
+              },
+              {
+                titulo: "Inadimplencia do mes",
+                valor: `${(mensal?.cards.inadimplencia_mes_percentual ?? 0).toFixed(1)}%`,
+              },
+            ].map((card) => (
+              <div key={card.titulo} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm text-slate-600">{card.titulo}</p>
+                <p className="mt-2 text-xl font-semibold text-slate-800">{loading ? "Carregando..." : card.valor}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-800">Competencias recentes</h3>
+                  <p className="text-sm text-slate-600">
+                    Compare previsto, pago, pendente, vencido e NeoFin para decidir a prioridade do mes.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Competencia</th>
+                      <th className="px-3 py-2 text-right">Previsto</th>
+                      <th className="px-3 py-2 text-right">Pago</th>
+                      <th className="px-3 py-2 text-right">Pendente</th>
+                      <th className="px-3 py-2 text-right">Vencido</th>
+                      <th className="px-3 py-2 text-right">NeoFin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(mensal?.meses ?? []).length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
+                          Sem competencias disponiveis no recorte atual.
+                        </td>
+                      </tr>
+                    ) : (
+                      (mensal?.meses ?? []).map((mes) => (
+                        <tr key={mes.competencia} className="border-t border-slate-100">
+                          <td className="px-3 py-2 font-medium text-slate-800">
+                            {formatarCompetenciaLabel(mes.competencia)}
+                          </td>
+                          <td className="px-3 py-2 text-right">{formatBRLFromCents(mes.previsto_centavos)}</td>
+                          <td className="px-3 py-2 text-right">{formatBRLFromCents(mes.pago_centavos)}</td>
+                          <td className="px-3 py-2 text-right">{formatBRLFromCents(mes.pendente_centavos)}</td>
+                          <td className="px-3 py-2 text-right">{formatBRLFromCents(mes.vencido_centavos)}</td>
+                          <td className="px-3 py-2 text-right">{formatBRLFromCents(mes.neofin_centavos)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-sm">
+              <h3 className="text-base font-semibold text-slate-800">Leitura rapida do mes</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                Priorize a carteira vencida, acompanhe NeoFin e mantenha o foco em cobranca ativa antes de abrir novo ciclo.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                {(mensal?.destaques ?? []).map((item, index) => (
+                  <div key={`${item.titulo}-${index}`} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${
+                        item.tipo === "ALERTA" ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"
+                      }`}
+                    >
+                      {item.tipo}
+                    </span>
+                    <p className="mt-2 text-sm font-semibold text-slate-800">{item.titulo}</p>
+                    <p className="mt-1 text-sm text-slate-600">{item.descricao}</p>
+                    <p className="mt-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Acao sugerida: {item.acao_sugerida}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Bloco 2 */}
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -387,7 +569,7 @@ export default function FinanceiroDashboardPage() {
             <div className="flex gap-2">
               <button
                 className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                onClick={loadDashboard}
+                onClick={() => void loadDashboard()}
                 disabled={loading || reanalisando}
               >
                 Atualizar

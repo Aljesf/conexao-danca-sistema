@@ -1,259 +1,417 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { FinancePageShell } from "@/components/financeiro/FinancePageShell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { CobrancasCompetenciaCard } from "@/components/financeiro/credito-conexao/CobrancasCompetenciaCard";
+import { CobrancasMensaisResumo } from "@/components/financeiro/credito-conexao/CobrancasMensaisResumo";
+import {
+  type CobrancaOperacionalItem,
+  type CobrancasMensaisResponse,
+} from "@/lib/financeiro/creditoConexao/cobrancas";
 
-type CobrancaCartaoItem = {
-  fatura_id: number;
-  periodo: string;
-  fatura_status: string;
-  data_fechamento: string | null;
-  data_vencimento: string | null;
-  pessoa_id: number | null;
-  pessoa_nome: string | null;
-  cobranca_id: number;
-  cobranca_status: string;
-  vencimento: string | null;
-  valor_centavos: number | null;
-  neofin_charge_id: string;
-  link_pagamento: string | null;
-  linha_digitavel: string | null;
-  created_at: string;
-};
-
-type ApiResponse = {
+type ApiResponse = CobrancasMensaisResponse & {
   ok: boolean;
-  page: number;
-  page_size: number;
-  total: number;
-  items: CobrancaCartaoItem[];
   error?: string;
   detail?: string | null;
 };
 
-function formatBRL(centavos: number | null): string {
-  const n = (centavos ?? 0) / 100;
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+type FeedbackState = {
+  tipo: "sucesso" | "erro";
+  mensagem: string;
+} | null;
+
+type PagamentoResponse = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  detail?: string | null;
+};
+
+function localTodayIso(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+type PagamentoModalProps = {
+  item: CobrancaOperacionalItem | null;
+  open: boolean;
+  dataPagamento: string;
+  metodoPagamento: "PIX" | "DINHEIRO";
+  loading: boolean;
+  onClose: () => void;
+  onChangeData: (value: string) => void;
+  onChangeMetodo: (value: "PIX" | "DINHEIRO") => void;
+  onConfirm: () => void;
+};
+
+function PagamentoModal({
+  item,
+  open,
+  dataPagamento,
+  metodoPagamento,
+  loading,
+  onClose,
+  onChangeData,
+  onChangeMetodo,
+  onConfirm,
+}: PagamentoModalProps) {
+  if (!open || !item) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Registrar recebimento</h2>
+            <p className="mt-1 text-sm text-slate-600">{item.pessoa_label}</p>
+            <p className="text-sm text-slate-500">{item.origem_referencia_label}</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Fechar
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-700">Data do pagamento</span>
+            <input
+              type="date"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+              value={dataPagamento}
+              onChange={(event) => onChangeData(event.target.value)}
+              disabled={loading}
+            />
+          </label>
+
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-700">Metodo</span>
+            <select
+              className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              value={metodoPagamento}
+              onChange={(event) => onChangeMetodo(event.target.value === "DINHEIRO" ? "DINHEIRO" : "PIX")}
+              disabled={loading}
+            >
+              <option value="PIX">PIX</option>
+              <option value="DINHEIRO">Dinheiro</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={onConfirm} disabled={loading}>
+            {loading ? "Registrando..." : "Confirmar recebimento"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminCreditoConexaoCobrancasPage() {
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("TODOS");
-  const [faturaStatus, setFaturaStatus] = useState("TODOS");
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(25);
+  const [busca, setBusca] = useState("");
+  const [competencia, setCompetencia] = useState("TODOS");
+  const [statusOperacional, setStatusOperacional] = useState("TODOS");
+  const [statusNeofin, setStatusNeofin] = useState("TODOS");
+  const [pagina, setPagina] = useState(1);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [items, setItems] = useState<CobrancaCartaoItem[]>([]);
-  const [total, setTotal] = useState(0);
+  const [feedback, setFeedback] = useState<FeedbackState>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [data, setData] = useState<CobrancasMensaisResponse | null>(null);
+  const [modalPagamento, setModalPagamento] = useState<CobrancaOperacionalItem | null>(null);
+  const [dataPagamento, setDataPagamento] = useState(localTodayIso());
+  const [metodoPagamento, setMetodoPagamento] = useState<"PIX" | "DINHEIRO">("PIX");
+  const [savingPagamento, setSavingPagamento] = useState(false);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+  const buscaDiferida = useDeferredValue(busca);
 
-  const carregar = useCallback(async () => {
-    setLoading(true);
-    setErro(null);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function carregar() {
+      setLoading(true);
+      setErro(null);
+
+      try {
+        const params = new URLSearchParams();
+        params.set("page", String(pagina));
+        params.set("limite", "6");
+        if (buscaDiferida.trim()) params.set("q", buscaDiferida.trim());
+        if (competencia !== "TODOS") params.set("competencia", competencia);
+        if (statusOperacional !== "TODOS") params.set("status_operacional", statusOperacional);
+        if (statusNeofin !== "TODOS") params.set("status_neofin", statusNeofin);
+
+        const response = await fetch(`/api/financeiro/credito-conexao/cobrancas?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const json = (await response.json().catch(() => null)) as ApiResponse | null;
+
+        if (!response.ok || !json?.ok) {
+          setData(null);
+          setErro(json?.detail ?? json?.error ?? "falha_carregar_cobrancas");
+          return;
+        }
+
+        setData(json);
+      } catch (error) {
+        if ((error as { name?: string } | null)?.name === "AbortError") return;
+        setData(null);
+        setErro(error instanceof Error ? error.message : "falha_inesperada");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void carregar();
+
+    return () => controller.abort();
+  }, [buscaDiferida, competencia, pagina, reloadToken, statusNeofin, statusOperacional]);
+
+  const totalPaginas = useMemo(() => {
+    const total = data?.paginacao.total ?? 0;
+    const limite = data?.paginacao.limite ?? 6;
+    return Math.max(1, Math.ceil(total / limite));
+  }, [data?.paginacao.limite, data?.paginacao.total]);
+
+  function abrirModalPagamento(item: CobrancaOperacionalItem) {
+    setModalPagamento(item);
+    setDataPagamento(localTodayIso());
+    setMetodoPagamento("PIX");
+  }
+
+  async function confirmarPagamento() {
+    if (!modalPagamento) return;
+
+    setSavingPagamento(true);
+    setFeedback(null);
+
     try {
-      const sp = new URLSearchParams();
-      sp.set("page", String(page));
-      sp.set("page_size", String(pageSize));
-      if (q.trim()) sp.set("q", q.trim());
-      if (status !== "TODOS") sp.set("status", status);
-      if (faturaStatus !== "TODOS") sp.set("fatura_status", faturaStatus);
-
-      const res = await fetch(`/api/financeiro/credito-conexao/cobrancas?${sp.toString()}`, {
-        cache: "no-store",
+      const response = await fetch("/api/financeiro/cobrancas/registrar-pagamento-presencial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cobranca_id: modalPagamento.cobranca_id,
+          data_pagamento: dataPagamento,
+          metodo_pagamento: metodoPagamento,
+        }),
       });
-      const json = (await res.json().catch(() => null)) as ApiResponse | null;
 
-      if (!res.ok || !json?.ok) {
-        setItems([]);
-        setTotal(0);
-        setErro(json?.detail ?? json?.error ?? "falha_carregar_cobrancas_cartao");
+      const json = (await response.json().catch(() => null)) as PagamentoResponse | null;
+
+      if (!response.ok || !json?.ok) {
+        setFeedback({
+          tipo: "erro",
+          mensagem: json?.detail ?? json?.message ?? json?.error ?? "Falha ao registrar recebimento.",
+        });
         return;
       }
 
-      setItems(json.items ?? []);
-      setTotal(Number(json.total ?? 0));
-    } catch (e) {
-      setItems([]);
-      setTotal(0);
-      setErro(e instanceof Error ? e.message : "falha_inesperada");
+      setFeedback({
+        tipo: "sucesso",
+        mensagem: json.message ?? `Recebimento registrado para a cobranca #${modalPagamento.cobranca_id}.`,
+      });
+      setModalPagamento(null);
+      setReloadToken((current) => current + 1);
+    } catch (error) {
+      setFeedback({
+        tipo: "erro",
+        mensagem: error instanceof Error ? error.message : "Falha inesperada ao registrar recebimento.",
+      });
     } finally {
-      setLoading(false);
+      setSavingPagamento(false);
     }
-  }, [page, pageSize, q, status, faturaStatus]);
+  }
 
-  useEffect(() => {
-    void carregar();
-  }, [carregar]);
+  function limparFiltros() {
+    setBusca("");
+    setCompetencia("TODOS");
+    setStatusOperacional("TODOS");
+    setStatusNeofin("TODOS");
+    setPagina(1);
+  }
 
   return (
     <FinancePageShell
-      title="Cartao Conexao - Cobrancas (ALUNO)"
-      subtitle="Lista somente cobrancas consolidadas de faturas ALUNO do Cartao Conexao (com NeoFin)."
+      title="Cartao Conexao - Cobrancas (Aluno)"
+      subtitle="Visao mensal e operacional da carteira do aluno, organizada por competencia, risco e proxima acao."
       actions={
-        <Button type="button" variant="secondary" onClick={() => void carregar()} disabled={loading}>
+        <Button type="button" variant="secondary" onClick={() => setReloadToken((current) => current + 1)} disabled={loading}>
           {loading ? "Atualizando..." : "Atualizar"}
         </Button>
       }
     >
       <Card className="border-slate-200 bg-white shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-800">Filtros</CardTitle>
+          <CardTitle className="text-base text-slate-800">Filtros operacionais</CardTitle>
         </CardHeader>
-        <CardContent>
-          {erro ? (
-            <div className="mb-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{erro}</div>
+        <CardContent className="space-y-4">
+          <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-slate-700">
+            Leia primeiro o mes, depois o risco e por fim a acao. A carteira agora prioriza vencidos, a vencer e pagos em
+            blocos separados.
+          </div>
+
+          {feedback ? (
+            <div
+              className={`rounded-xl border px-4 py-3 text-sm ${
+                feedback.tipo === "sucesso"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-rose-200 bg-rose-50 text-rose-700"
+              }`}
+            >
+              {feedback.mensagem}
+            </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          {erro ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{erro}</div>
+          ) : null}
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <Input
-              value={q}
-              onChange={(e) => {
-                setPage(1);
-                setQ(e.target.value);
+              value={busca}
+              onChange={(event) => {
+                setPagina(1);
+                setBusca(event.target.value);
               }}
-              placeholder="Buscar por nome, periodo, fatura, cobranca, charge..."
+              placeholder="Buscar por nome, ID ou referencia"
               disabled={loading}
             />
 
             <select
-              value={status}
-              onChange={(e) => {
-                setPage(1);
-                setStatus(e.target.value);
+              value={competencia}
+              onChange={(event) => {
+                setPagina(1);
+                setCompetencia(event.target.value);
               }}
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
               disabled={loading}
             >
-              <option value="TODOS">Status cobranca: todos</option>
-              <option value="PENDENTE">PENDENTE</option>
-              <option value="PAGO">PAGO</option>
-              <option value="CANCELADO">CANCELADO</option>
-              <option value="ERRO_INTEGRACAO">ERRO_INTEGRACAO</option>
+              <option value="TODOS">Competencia: todas</option>
+              {(data?.competencias_disponiveis ?? []).map((item) => (
+                <option key={item.competencia} value={item.competencia}>
+                  {item.competencia_label}
+                </option>
+              ))}
             </select>
 
             <select
-              value={faturaStatus}
-              onChange={(e) => {
-                setPage(1);
-                setFaturaStatus(e.target.value);
+              value={statusOperacional}
+              onChange={(event) => {
+                setPagina(1);
+                setStatusOperacional(event.target.value);
               }}
-              className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
               disabled={loading}
             >
-              <option value="TODOS">Status fatura: todos</option>
-              <option value="ABERTA">ABERTA</option>
-              <option value="FECHADA">FECHADA</option>
-              <option value="PAGA">PAGA</option>
-              <option value="EM_ATRASO">EM_ATRASO</option>
-              <option value="CANCELADA">CANCELADA</option>
+              <option value="TODOS">Status operacional: todos</option>
+              <option value="PAGO">Pago</option>
+              <option value="PENDENTE_A_VENCER">Pendente a vencer</option>
+              <option value="PENDENTE_VENCIDO">Pendente vencido</option>
             </select>
 
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="secondary" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={loading || page <= 1}>
-                Anterior
+            <select
+              value={statusNeofin}
+              onChange={(event) => {
+                setPagina(1);
+                setStatusNeofin(event.target.value);
+              }}
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              disabled={loading}
+            >
+              <option value="TODOS">Status NeoFin: todos</option>
+              <option value="COM_NEOFIN">Com NeoFin</option>
+              <option value="SEM_NEOFIN">Sem NeoFin</option>
+            </select>
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={limparFiltros} disabled={loading}>
+                Limpar filtros
               </Button>
-              <span className="text-sm text-slate-600">
-                Pagina {page} de {totalPages}
-              </span>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={loading || page >= totalPages}
-              >
-                Proxima
+              <Button type="button" variant="secondary" onClick={() => setReloadToken((current) => current + 1)} disabled={loading}>
+                Recarregar
               </Button>
             </div>
-
-            <div className="flex items-center justify-end text-sm text-slate-600">Total: {total}</div>
           </div>
         </CardContent>
       </Card>
+
+      {data ? <CobrancasMensaisResumo resumo={data.resumo_geral} /> : null}
 
       <Card className="border-slate-200 bg-white shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-800">Cobrancas consolidadas</CardTitle>
+          <CardTitle className="text-base text-slate-800">Carteira por competencia</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-md border border-slate-200">
-            <table className="w-full min-w-[1200px] text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-3 py-2 text-left">Fatura ID</th>
-                  <th className="px-3 py-2 text-left">Pessoa</th>
-                  <th className="px-3 py-2 text-left">Periodo</th>
-                  <th className="px-3 py-2 text-left">Status fatura</th>
-                  <th className="px-3 py-2 text-left">Vencimento</th>
-                  <th className="px-3 py-2 text-right">Valor</th>
-                  <th className="px-3 py-2 text-left">Status cobranca</th>
-                  <th className="px-3 py-2 text-left">NeoFin</th>
-                  <th className="px-3 py-2 text-right">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={9} className="px-3 py-6 text-center text-slate-500">
-                      Carregando...
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="px-3 py-6 text-center text-slate-500">
-                      Nenhuma cobranca consolidada encontrada.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((row) => (
-                    <tr key={`${row.fatura_id}-${row.cobranca_id}`} className="border-t">
-                      <td className="px-3 py-2 font-medium">
-                        <Link className="text-purple-700 hover:underline" href={`/admin/financeiro/credito-conexao/faturas/${row.fatura_id}`}>
-                          {row.fatura_id}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2">{row.pessoa_nome ?? "-"}</td>
-                      <td className="px-3 py-2">{row.periodo}</td>
-                      <td className="px-3 py-2">{row.fatura_status}</td>
-                      <td className="px-3 py-2">{row.vencimento ?? row.data_vencimento ?? "-"}</td>
-                      <td className="px-3 py-2 text-right">{formatBRL(row.valor_centavos)}</td>
-                      <td className="px-3 py-2">{row.cobranca_status}</td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium">{row.neofin_charge_id}</div>
-                        {row.link_pagamento ? (
-                          <a className="text-xs underline" href={row.link_pagamento} target="_blank" rel="noreferrer">
-                            Abrir link
-                          </a>
-                        ) : (
-                          <div className="text-xs text-slate-500">Sem link</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          <Link href={`/admin/financeiro/credito-conexao/faturas/${row.fatura_id}`}>
-                            <Button variant="secondary">Abrir fatura</Button>
-                          </Link>
-                          {row.cobranca_id ? (
-                            <Link href={`/admin/governanca/cobrancas/${row.cobranca_id}`}>
-                              <Button variant="secondary">Detalhar cobranca</Button>
-                            </Link>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+        <CardContent className="space-y-4">
+          {loading && !data ? (
+            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">Carregando cobrancas...</div>
+          ) : null}
+
+          {!loading && (data?.meses.length ?? 0) === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
+              Nenhuma cobranca encontrada para o filtro atual.
+            </div>
+          ) : null}
+
+          {(data?.meses ?? []).map((mes) => (
+            <CobrancasCompetenciaCard
+              key={mes.competencia}
+              competencia={mes}
+              onRegistrarRecebimento={abrirModalPagamento}
+            />
+          ))}
+
+          {data && data.paginacao.total > 1 ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-600">
+                Pagina {data.paginacao.pagina} de {totalPaginas} competencias
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setPagina((current) => Math.max(1, current - 1))}
+                  disabled={loading || pagina <= 1}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setPagina((current) => Math.min(totalPaginas, current + 1))}
+                  disabled={loading || pagina >= totalPaginas}
+                >
+                  Proxima
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
+
+      <PagamentoModal
+        item={modalPagamento}
+        open={Boolean(modalPagamento)}
+        dataPagamento={dataPagamento}
+        metodoPagamento={metodoPagamento}
+        loading={savingPagamento}
+        onClose={() => setModalPagamento(null)}
+        onChangeData={setDataPagamento}
+        onChangeMetodo={setMetodoPagamento}
+        onConfirm={() => void confirmarPagamento()}
+      />
     </FinancePageShell>
   );
 }
-
