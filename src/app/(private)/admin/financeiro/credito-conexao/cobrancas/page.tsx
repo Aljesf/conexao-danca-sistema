@@ -30,6 +30,14 @@ type PagamentoResponse = {
   detail?: string | null;
 };
 
+function mensagemErroCobrancas(): string {
+  return "Nao foi possivel carregar a leitura operacional agora. Atualize a pagina ou tente novamente em instantes.";
+}
+
+function mensagemErroPagamento(): string {
+  return "Nao foi possivel registrar o recebimento agora. Revise os dados e tente novamente.";
+}
+
 function localTodayIso(): string {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
@@ -161,15 +169,15 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
         if (!response.ok || !json?.ok) {
           setData(null);
-          setErro(json?.detail ?? json?.error ?? "falha_carregar_cobrancas");
+          setErro(mensagemErroCobrancas());
           return;
         }
 
         setData(json);
-      } catch (error) {
+      } catch (error: unknown) {
         if ((error as { name?: string } | null)?.name === "AbortError") return;
         setData(null);
-        setErro(error instanceof Error ? error.message : "falha_inesperada");
+        setErro(mensagemErroCobrancas());
       } finally {
         setLoading(false);
       }
@@ -214,7 +222,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
       if (!response.ok || !json?.ok) {
         setFeedback({
           tipo: "erro",
-          mensagem: json?.detail ?? json?.message ?? json?.error ?? "Falha ao registrar recebimento.",
+          mensagem: json?.message ?? mensagemErroPagamento(),
         });
         return;
       }
@@ -225,10 +233,10 @@ export default function AdminCreditoConexaoCobrancasPage() {
       });
       setModalPagamento(null);
       setReloadToken((current) => current + 1);
-    } catch (error) {
+    } catch {
       setFeedback({
         tipo: "erro",
-        mensagem: error instanceof Error ? error.message : "Falha inesperada ao registrar recebimento.",
+        mensagem: mensagemErroPagamento(),
       });
     } finally {
       setSavingPagamento(false);
@@ -245,7 +253,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
   return (
     <FinancePageShell
-      title="Cartao Conexao - Cobrancas (Aluno)"
+      title="Conta Interna Aluno - Cobrancas"
       subtitle="Visao mensal e operacional da carteira do aluno, organizada por competencia, risco e proxima acao."
       actions={
         <Button type="button" variant="secondary" onClick={() => setReloadToken((current) => current + 1)} disabled={loading}>

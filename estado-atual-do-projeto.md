@@ -169,7 +169,7 @@ UI:
 ## Atualizacoes recentes (Cobrancas Aluno por Competencia + Dashboard Mensal SaaS) - 2026-03-06
 
 Modulo atual:
-- Financeiro / Credito Conexao com leitura operacional mensal para cobrancas do aluno e reforco da visao mensal SaaS no dashboard financeiro.
+- Financeiro / Credito Conexao com leitura operacional mensal da Conta Interna Aluno e reforco da visao mensal SaaS no dashboard financeiro.
 - A carteira de cobrancas do aluno agora e lida por competencia e por status operacional:
   - pago
   - pendente a vencer
@@ -207,6 +207,10 @@ SQL concluido:
   - saldo aberto
   - atraso
   - vinculo NeoFin
+- Falha identificada na primeira execucao da migration:
+  - a tabela `public.recebimentos` nao possui a coluna `status`
+  - a regra canonica de confirmacao foi ajustada para `data_pagamento IS NOT NULL`
+- View operacional recriada e validada com sucesso apos o ajuste.
 
 APIs concluidas:
 - `GET /api/financeiro/credito-conexao/cobrancas`
@@ -219,6 +223,9 @@ APIs concluidas:
   - nova rota server-side para cards mensais e competencias recentes
   - entrega `previsto`, `pago`, `pendente`, `vencido`, `neofin` e `% inadimplencia`
   - resposta pronta para cards e tabela de leitura rapida
+- Validacao pos-fix:
+  - a consulta principal da rota de cobrancas voltou a resolver faturas ALUNO e cobrancas operacionais sem erro da view
+  - a consulta principal do dashboard mensal voltou a ler a view operacional com competencias recentes e nomes reais
 - Novo helper compartilhado `src/lib/financeiro/creditoConexao/cobrancas.ts`
   - `classificarStatusOperacionalCobranca`
   - `agruparCobrancasPorCompetencia`
@@ -228,6 +235,7 @@ APIs concluidas:
 Paginas / componentes concluidos:
 - `/admin/financeiro/credito-conexao/cobrancas`
   - tela reestruturada em visao mensal
+  - nomenclatura visivel alinhada para Conta Interna Aluno
   - filtros em card proprio
   - resumo geral em cards
   - lista por competencia com secoes internas por status operacional
@@ -242,6 +250,7 @@ Paginas / componentes concluidos:
   - cards mensais orientados a operacao SaaS
   - tabela de competencias recentes
   - microcopy de gestao com foco em cobranca e conversao
+  - mensagens de erro controladas para leitura mensal, sem expor erro tecnico cru ao usuario
 - `FinanceHelpCard`/help do dashboard atualizados para refletir:
   - visao mensal
   - previsto x pago x pendente
@@ -258,6 +267,6 @@ Pendencias:
   - item com NeoFin
 
 Proximas acoes:
-- Validar visualmente `/financeiro/credito-conexao/cobrancas` e `/financeiro` com sessao autenticada.
+- Validar visualmente `/admin/financeiro/credito-conexao/cobrancas` e `/admin/financeiro` com sessao autenticada.
 - Capturar prints finais para aprovacao funcional.
 - Se desejado, estender a mesma leitura mensal para outros paines de contas a receber que ainda consomem a view legada.

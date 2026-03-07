@@ -43,7 +43,7 @@ export function CobrancaStatusSection({ titulo, descricao, tipo, itens, onRegist
           <p className="text-sm text-slate-600">{descricao}</p>
         </div>
         <div className="text-sm text-slate-700">
-          <span className="font-semibold">{itens.length}</span> item(ns) •{" "}
+          <span className="font-semibold">{itens.length}</span> item(ns) |{" "}
           <span className="font-semibold">{formatBRLFromCents(total)}</span>
         </div>
       </div>

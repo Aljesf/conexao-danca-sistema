@@ -115,6 +115,14 @@ type LineDatum = {
   y: number;
 };
 
+function mensagemErroDashboard(): string {
+  return "Nao foi possivel carregar o dashboard financeiro agora. Atualize a pagina ou tente novamente em instantes.";
+}
+
+function mensagemErroMensal(): string {
+  return "A leitura mensal do financeiro esta temporariamente indisponivel. Tente atualizar em instantes.";
+}
+
 function tendenciaIcon(direcao?: "UP" | "DOWN" | "FLAT") {
   if (direcao === "UP") return "\u2191";
   if (direcao === "DOWN") return "\u2193";
@@ -212,12 +220,12 @@ export default function FinanceiroDashboardPage() {
       const [inteligenteResult, mensalResult] = await Promise.allSettled([
         fetch("/api/financeiro/dashboard-inteligente", { cache: "no-store" }).then(async (res) => {
           const json = (await res.json()) as DashboardResponse;
-          if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao carregar dashboard.");
+          if (!res.ok || !json?.ok) throw new Error(json?.error || "erro_dashboard");
           return json;
         }),
         fetch("/api/financeiro/dashboard/mensal", { cache: "no-store" }).then(async (res) => {
           const json = (await res.json()) as DashboardMensalResponse;
-          if (!res.ok || !json?.ok) throw new Error(json?.error || "Erro ao carregar leitura mensal.");
+          if (!res.ok || !json?.ok) throw new Error(json?.error || "erro_dashboard_mensal");
           return json;
         }),
       ]);
@@ -240,15 +248,10 @@ export default function FinanceiroDashboardPage() {
         setMensal(mensalResult.value);
       } else {
         setMensal(null);
-        setMensalError(
-          mensalResult.reason instanceof Error
-            ? mensalResult.reason.message
-            : "Erro ao carregar leitura mensal do financeiro.",
-        );
+        setMensalError(mensagemErroMensal());
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro inesperado ao carregar dashboard.";
-      setError(message);
+    } catch {
+      setError(mensagemErroDashboard());
     } finally {
       setLoading(false);
     }
@@ -279,19 +282,16 @@ export default function FinanceiroDashboardPage() {
         const mensalRes = await fetch("/api/financeiro/dashboard/mensal", { cache: "no-store" });
         const mensalJson = (await mensalRes.json()) as DashboardMensalResponse;
         if (!mensalRes.ok || !mensalJson?.ok) {
-          throw new Error(mensalJson?.error || "Erro ao recarregar leitura mensal.");
+          throw new Error(mensalJson?.error || "erro_recarregar_dashboard_mensal");
         }
         setMensal(mensalJson);
         setMensalError(null);
-      } catch (mensalErr: unknown) {
+      } catch {
         setMensal(null);
-        setMensalError(
-          mensalErr instanceof Error ? mensalErr.message : "Erro ao recarregar leitura mensal.",
-        );
+        setMensalError(mensagemErroMensal());
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao reanalisar dashboard.";
-      setError(message);
+    } catch {
+      setError(mensagemErroDashboard());
     } finally {
       setReanalisando(false);
     }
@@ -430,7 +430,7 @@ export default function FinanceiroDashboardPage() {
               href="/admin/financeiro/credito-conexao/cobrancas"
               className="inline-flex items-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Abrir cobrancas do aluno
+              Abrir Conta Interna Aluno
             </Link>
           </div>
 
@@ -632,14 +632,17 @@ export default function FinanceiroDashboardPage() {
                     >
                       {a.severidade}
                     </span>
-                    <p className="mt-2 text-sm font-semibold text-slate-800 flex items-center gap-1">
-                      <span>{a.sinal}</span>
+                    <p className="mt-2 flex items-center gap-1 text-sm font-semibold text-slate-800">
+                      <span>{a.sinal === "\u2191" || a.sinal === "\u2193" ? a.sinal : "\u2192"}</span>
                       <span>{a.titulo}</span>
                     </p>
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">Por que importa: {a.por_que_importa}</p>
+                <p className="mt-1 text-sm text-slate-700">Acao pratica: {a.acao_pratica}</p>
+                <div className="hidden">
                 <p className="mt-1 text-sm text-slate-700">Ação prática: {a.acao_pratica}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -743,7 +746,7 @@ export default function FinanceiroDashboardPage() {
           <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Help — Bloco 2</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">Help - Bloco 2</p>
                 <h3 className="text-lg font-semibold text-slate-800">Leitura Inteligente do Sistema</h3>
                 <p className="text-xs text-slate-500">Fonte: docs/financeiro/dashboard-inteligente-help.md</p>
               </div>

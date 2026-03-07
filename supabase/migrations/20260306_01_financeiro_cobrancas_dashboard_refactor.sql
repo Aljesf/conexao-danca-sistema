@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_credito_conexao_faturas_neofin_invoice_id
 -- 3) View operacional canonica.
 -- Regras:
 -- - competencia prefere cobrancas.competencia_ano_mes; fallback seguro para vencimento
--- - valor pago considera apenas recebimentos confirmados/recebidos/pagos
+-- - valor pago considera apenas recebimentos com data_pagamento preenchida
 -- - nao duplica itens de fatura: a view e nivel cobranca
 CREATE OR REPLACE VIEW public.vw_financeiro_cobrancas_operacionais AS
 WITH recebimentos_confirmados AS (
@@ -56,7 +56,7 @@ WITH recebimentos_confirmados AS (
     COALESCE(
       SUM(
         CASE
-          WHEN UPPER(COALESCE(r.status, '')) IN ('CONFIRMADO', 'RECEBIDO', 'PAGO')
+          WHEN r.data_pagamento IS NOT NULL
             THEN COALESCE(r.valor_centavos, 0)
           ELSE 0
         END
@@ -64,7 +64,7 @@ WITH recebimentos_confirmados AS (
       0
     )::int AS valor_pago_centavos,
     MAX(r.data_pagamento) FILTER (
-      WHERE UPPER(COALESCE(r.status, '')) IN ('CONFIRMADO', 'RECEBIDO', 'PAGO')
+      WHERE r.data_pagamento IS NOT NULL
     ) AS data_pagamento
   FROM public.recebimentos r
   WHERE r.cobranca_id IS NOT NULL
