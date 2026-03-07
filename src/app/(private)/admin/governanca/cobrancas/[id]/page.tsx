@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GerarReciboButton } from "@/components/documentos/recibos/GerarReciboButton";
 
 type Pessoa = {
   nome: string | null;
@@ -48,6 +49,7 @@ type CobrancaDetalhe = {
     quantidade: number;
     total_centavos: number;
     ultimo_pagamento: string | null;
+    ultimo_recebimento_id: number | null;
   };
   matriculas_relacionadas: MatriculaRelacionada[];
   matricula_relacionada_id: number | null;
@@ -302,6 +304,20 @@ export default function GovernancaCobrancaDetalhePage() {
                   <Field label="Ultimo pagamento" value={formatDate(item.recebimentos_resumo.ultimo_pagamento)} />
                 </div>
               </div>
+              {item.recebimentos_resumo.ultimo_recebimento_id ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Recibo financeiro</div>
+                  <div className="mt-2 text-sm text-emerald-800">
+                    O recibo oficial agora e emitido a partir do ultimo recebimento confirmado da cobranca.
+                  </div>
+                  <div className="mt-3">
+                    <GerarReciboButton
+                      recebimentoId={item.recebimentos_resumo.ultimo_recebimento_id}
+                      label="Gerar recibo"
+                    />
+                  </div>
+                </div>
+              ) : null}
               {item.observacoes ? <Field label="Observacoes" value={<div className="whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4">{item.observacoes}</div>} /> : null}
             </Section>
 

@@ -59,7 +59,11 @@ export default function AdminDocumentosNovoReciboPage() {
       if (isPositiveIntegerLike(cobrancaId)) payload.cobranca_id = Number(cobrancaId.trim());
       if (isPositiveIntegerLike(recebimentoId)) payload.recebimento_id = Number(recebimentoId.trim());
 
-      const res = await fetch("/api/documentos/recibos/mensalidade", {
+      const endpoint = isPositiveIntegerLike(recebimentoId)
+        ? "/api/documentos/recibos/recebimento"
+        : "/api/documentos/recibos/mensalidade";
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

@@ -11,6 +11,7 @@ export type ReciboPagamentoItem = {
   recebimento_id: number | null;
   competencia_ano_mes: string | null;
   descricao: string;
+  forma_pagamento: string | null;
   data_pagamento: string | null;
   valor_pago_centavos: number;
   valor_total_referencia_centavos: number | null;
@@ -28,6 +29,9 @@ export type ReciboPagamentoSnapshot = {
   data_emissao: string;
   data_pagamento: string;
   cidade_emissao: string | null;
+  matricula_id: number | null;
+  aluno_pessoa_id: number | null;
+  aluno_nome: string | null;
   pessoa_id: number;
   pessoa_nome: string;
   pessoa_documento: string | null;
@@ -36,6 +40,7 @@ export type ReciboPagamentoSnapshot = {
   recebimento_id: number;
   competencia_ano_mes: string | null;
   descricao: string;
+  forma_pagamento: string | null;
   valor_pago_centavos: number;
   valor_pago_formatado: string;
   valor_total_referencia_centavos: number | null;
@@ -60,6 +65,9 @@ export type ReciboMensalConsolidadoSnapshot = {
   recibo_numero: string;
   data_emissao: string;
   cidade_emissao: string | null;
+  matricula_id: number | null;
+  aluno_pessoa_id: number | null;
+  aluno_nome: string | null;
   pessoa_id: number;
   pessoa_nome: string;
   pessoa_documento: string | null;

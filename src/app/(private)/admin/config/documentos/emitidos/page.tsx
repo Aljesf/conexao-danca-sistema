@@ -16,6 +16,11 @@ type DocumentoEmitido = {
   created_at: string;
   updated_at?: string | null;
   pdf_url: string | null;
+  snapshot_financeiro_json?: {
+    tipo_recibo?: string | null;
+    recebimento_id?: number | null;
+    cobranca_id?: number | null;
+  } | null;
 };
 
 export default function AdminDocumentosEmitidosPage() {
@@ -84,6 +89,13 @@ export default function AdminDocumentosEmitidosPage() {
                   Matricula: {c.matricula_id} | Modelo:{" "}
                   {c.documento_modelo_id ?? c.contrato_modelo_id ?? "-"} | Status: {c.status_assinatura ?? "-"}
                 </div>
+                {c.snapshot_financeiro_json?.tipo_recibo === "PAGAMENTO_CONFIRMADO" ? (
+                  <div className="mt-1 text-xs text-emerald-700">
+                    Recibo financeiro por recebimento
+                    {c.snapshot_financeiro_json?.recebimento_id ? ` #${c.snapshot_financeiro_json.recebimento_id}` : ""}
+                    {c.snapshot_financeiro_json?.cobranca_id ? ` | cobranca #${c.snapshot_financeiro_json.cobranca_id}` : ""}
+                  </div>
+                ) : null}
                 <div className="mt-2 text-sm text-slate-600">Criado: {new Date(c.created_at).toLocaleString("pt-BR")}</div>
                 <div className="mt-1 text-sm text-slate-600">PDF: {c.pdf_url ? "Disponivel" : "-"}</div>
               </div>

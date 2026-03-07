@@ -371,3 +371,123 @@ Proximas acoes:
 - Integrar a emissao desses snapshots ao modulo Documentos sem deixar o motor documental recalcular regra financeira.
 
 ---
+
+## Atualizacoes recentes (Fluxo Oficial de Recibos por Recebimento) - 2026-03-07
+
+SQL:
+- Nova migration incremental `supabase/migrations/20260307_02_documentos_recibos_recebimentos.sql`.
+- Estrutura atual de `documentos_emitidos` foi reaproveitada, sem refatoracao ampla do schema.
+- Adicionado apenas o minimo necessario:
+  - coluna `recebimento_id` em `public.documentos_emitidos`;
+  - foreign key para `public.recebimentos(id)` com `ON DELETE SET NULL`;
+  - indice `idx_documentos_emitidos_recebimento_id`.
+- Compatibilidade preservada com o slot legado `contrato_modelo_id`, `snapshot_financeiro_json` e `variaveis_utilizadas_json`.
+
+APIs / servicos concluidos:
+- Novo builder server-side `src/lib/documentos/recibos/montar-recibo-por-recebimento.ts`:
+  - ancora o recibo em `public.recebimentos`;
+  - valida `data_pagamento` como confirmacao canonica;
+  - busca cobranca, pessoa, matricula, responsavel financeiro, centro de custo e contexto operacional;
+  - monta `ReciboPagamentoSnapshot` fechado e rastreavel.
+- Novo mapeador `src/lib/documentos/recibos/mapear-variaveis-recibo.ts`:
+  - converte o snapshot em variaveis prontas para o modelo documental;
+  - preserva chaves legadas de recibo ja usadas no projeto.
+- Novo servico `src/lib/documentos/recibos/emitir-recibo-por-recebimento.ts`:
+  - localiza o modelo ativo de recibo em `documentos_modelo`;
+  - renderiza corpo, cabecalho e rodape a partir do motor documental;
+  - persiste em `documentos_emitidos`;
+  - aplica idempotencia por `recebimento_id` quando a migration esta aplicada.
+- Nova rota oficial `POST /api/documentos/recibos/recebimento`:
+  - recebe `recebimento_id`;
+  - monta snapshot;
+  - emite recibo oficial;
+  - retorna preview, snapshot e documento emitido.
+- Nova rota de preview `GET|POST /api/documentos/recibos/recebimento/preview`:
+  - permite conferencia sem persistencia adicional;
+  - pode devolver JSON ou HTML renderizado.
+- Rota legada `POST /api/documentos/recibos/mensalidade` foi mantida por compatibilidade:
+  - agora delega para o fluxo oficial por `recebimento_id`;
+  - resolve o ultimo recebimento confirmado da cobranca quando necessario.
+- Ajustada `GET /api/documentos/emitidos` para expor `snapshot_financeiro_json` e identificar recibos novos na listagem.
+
+Paginas / componentes concluidos:
+- Novo componente `src/components/documentos/recibos/GerarReciboButton.tsx`:
+  - estado de carregamento;
+  - erro amigavel;
+  - atalho para preview;
+  - atalho para abrir o documento emitido.
+- `/admin/governanca/cobrancas/[id]`:
+  - passa a exibir acao `Gerar recibo` quando existe recebimento confirmado;
+  - usa o ultimo recebimento confirmado da cobranca como ancora do recibo.
+- `/admin/financeiro/contas-receber`:
+  - lista enriquecida com `ultimo_recebimento_id`;
+  - acao `Gerar recibo` disponivel apenas para itens com recebimento confirmado.
+- `/admin/config/documentos/novo-recibo`:
+  - passa a usar a rota oficial de recibo por recebimento quando `recebimento_id` estiver informado.
+- `/admin/config/documentos/emitidos`:
+  - identifica visualmente os novos recibos financeiros por recebimento.
+
+Validacao concluida:
+- `npx eslint` nos arquivos alterados do escopo: sucesso.
+- `npm run build`: sucesso.
+- Validacao real no banco concluida em 7 de marco de 2026:
+  - migration aplicada;
+  - recibo emitido com sucesso para `recebimento_id = 29`;
+  - `documento_emitido_id = 24`;
+  - `modelo_id = 43` (modelo ativo de recibo);
+  - `recebimento_id` persistido em `documentos_emitidos`;
+  - snapshot validado com competencia `2026-02` e valor pago `42000`.
+
+Pendencias:
+- O tipo secundario `recibo consolidado mensal da conta interna` segue como proxima etapa.
+- A rota de `gerar-pdf` ainda nao foi consolidada no novo fluxo oficial; o preview HTML ja esta pronto para essa integracao.
+- Captura de prints reais continua bloqueada por autenticacao nas rotas administrativas locais.
+
+Proximas acoes:
+- Conectar o mesmo fluxo aos detalhes de recebimento/fatura que listam pagamentos confirmados.
+- Fechar o renderer final de PDF consumindo o preview oficial do recibo.
+- Implementar o recibo consolidado mensal da conta interna sobre snapshot server-side proprio.
+
+---
+
+## Atualizacoes recentes (Arquitetura final de Documentos para recibos) - 2026-03-07
+
+Escopo desta fase:
+- analise tecnica apenas;
+- sem migrations novas;
+- sem rotas novas;
+- sem alteracao funcional em producao.
+
+Entregas:
+- novo documento tecnico `docs/analise-arquitetura-documentos-recibos.md`;
+- mapeamento completo do estado atual do fluxo oficial de recibo por recebimento;
+- proposta da arquitetura final do dominio Documentos para recibos, contratos, declaracoes e comprovantes;
+- definicao do pipeline oficial:
+  - resolver contexto
+  - gerar snapshot
+  - resolver variaveis
+  - montar HTML institucional
+  - preview autenticado
+  - confirmar emissao
+  - persistir emitido
+  - gerar PDF
+  - tratar reemissao com historico
+
+Diagnostico consolidado:
+- `documentos_modelo`, `documentos_emitidos`, `documentos_tipos`, `documentos_conjuntos`, `documentos_grupos`, `documentos_variaveis`, `documentos_layouts` e `documentos_layout_templates` ja sao a base reaproveitavel do motor documental.
+- O fluxo atual de recibo por recebimento ja esta funcional, mas ainda tem acoplamentos:
+  - selecao de modelo por heuristica de observacao/titulo;
+  - preview com HTML wrapper especifico;
+  - aliases de variaveis e UI ainda centrados no caso de recibo.
+- O dominio ainda nao possui camada formal de:
+  - `documentos_operacoes`;
+  - reemissao historica;
+  - governanca canonica de cabecalho e rodape versionados.
+
+Proxima etapa SQL recomendada:
+- criar `documentos_operacoes`;
+- criar pivor operacao <-> conjuntos;
+- adicionar em `documentos_emitidos` referencias canonicas de operacao, origem e reemissao;
+- decidir se `documentos_cabecalhos` e `documentos_rodapes` entram como tabelas novas ou como evolucao controlada de `documentos_layout_templates`.
+
+---

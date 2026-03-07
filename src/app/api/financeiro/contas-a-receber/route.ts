@@ -169,6 +169,7 @@ export async function GET(req: NextRequest) {
   );
 
   let pessoasMap: Record<string, { id: number; nome: string | null }> = {};
+  let recebimentosMap: Record<string, { ultimo_recebimento_id: number | null; recebimentos_qtd: number }> = {};
 
   if (pessoaIds.length > 0) {
     const { data: pessoas } = await supabase.from("pessoas").select("id,nome").in("id", pessoaIds);
@@ -180,9 +181,57 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const cobrancaIds = Array.from(
+    new Set(
+      (data ?? [])
+        .map((row: any) => Number(row?.cobranca_id))
+        .filter((id: number) => Number.isFinite(id) && id > 0)
+    )
+  );
+
+  if (cobrancaIds.length > 0) {
+    const { data: recebimentos } = await supabase
+      .from("recebimentos")
+      .select("id,cobranca_id,data_pagamento")
+      .in("cobranca_id", cobrancaIds)
+      .not("data_pagamento", "is", null)
+      .order("data_pagamento", { ascending: false })
+      .order("id", { ascending: false });
+
+    if (Array.isArray(recebimentos)) {
+      recebimentosMap = recebimentos.reduce(
+        (
+          acc: Record<string, { ultimo_recebimento_id: number | null; recebimentos_qtd: number }>,
+          recebimento: any
+        ) => {
+          const cobrancaId = Number(recebimento?.cobranca_id);
+          if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) return acc;
+          const key = String(cobrancaId);
+          if (!acc[key]) {
+            acc[key] = {
+              ultimo_recebimento_id: Number(recebimento?.id),
+              recebimentos_qtd: 1,
+            };
+            return acc;
+          }
+          acc[key] = {
+            ultimo_recebimento_id: acc[key]?.ultimo_recebimento_id ?? Number(recebimento?.id),
+            recebimentos_qtd: (acc[key]?.recebimentos_qtd ?? 0) + 1,
+          };
+          return acc;
+        },
+        {}
+      );
+    }
+  }
+
   const itens = (data ?? []).map((row: any) => {
     const vencimento = row?.vencimento ?? row?.data_vencimento ?? null;
     const valorCentavos = Number(row?.valor_centavos ?? row?.valor_total_centavos ?? 0);
+    const recebimentosResumo = recebimentosMap[String(row?.cobranca_id)] ?? {
+      ultimo_recebimento_id: null,
+      recebimentos_qtd: 0,
+    };
     return {
       ...row,
       vencimento,
@@ -190,6 +239,8 @@ export async function GET(req: NextRequest) {
       valor_centavos: valorCentavos,
       valor_total_centavos: valorCentavos, // compatibilidade temporária com UI legada
       pessoa_nome: pessoasMap[String(row?.pessoa_id)]?.nome ?? null,
+      ultimo_recebimento_id: recebimentosResumo.ultimo_recebimento_id,
+      recebimentos_qtd: recebimentosResumo.recebimentos_qtd,
     };
   });
 

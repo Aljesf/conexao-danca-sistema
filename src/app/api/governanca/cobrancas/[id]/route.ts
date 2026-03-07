@@ -40,6 +40,7 @@ type RecebimentoRow = {
   id: number;
   valor_centavos: number | null;
   data_pagamento: string | null;
+  metodo_pagamento?: string | null;
 };
 
 type MatriculaRelacionadaRow = {
@@ -238,6 +239,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
           quantidade: recebimentos.length,
           total_centavos: totalRecebido,
           ultimo_pagamento: ultimoPagamento,
+          ultimo_recebimento_id: recebimentos[0]?.id ?? null,
         },
         matriculas_relacionadas: matriculasRelacionadas,
         matricula_relacionada_id: matriculaRelacionadaId,

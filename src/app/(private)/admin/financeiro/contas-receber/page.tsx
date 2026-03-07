@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
+import { GerarReciboButton } from "@/components/documentos/recibos/GerarReciboButton";
 import { PessoaResumoFinanceiro } from "@/components/pessoas/PessoaResumoFinanceiro";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateISO } from "@/lib/formatters/date";
@@ -24,6 +25,8 @@ type Cobranca = {
   centro_custo_codigo?: string | null;
   total_recebido_centavos: number;
   saldo_centavos: number;
+  ultimo_recebimento_id?: number | null;
+  recebimentos_qtd?: number;
 };
 
 type ContaReceberSaasRow = {
@@ -41,6 +44,8 @@ type ContaReceberSaasRow = {
   dias_atraso: number;
   situacao_saas: "QUITADA" | "EM_ABERTO" | "VENCIDA";
   bucket_vencimento: string | null;
+  ultimo_recebimento_id?: number | null;
+  recebimentos_qtd?: number;
 };
 
 type DevedorAtrasadoRow = {
@@ -256,6 +261,8 @@ export default function ContasReceberPage() {
           competencia_ano_mes: row.competencia_ano_mes,
           bucket_vencimento: row.bucket_vencimento,
           dias_atraso: Number(row.dias_atraso || 0),
+          ultimo_recebimento_id: typeof row.ultimo_recebimento_id === "number" ? row.ultimo_recebimento_id : null,
+          recebimentos_qtd: Number(row.recebimentos_qtd || 0),
         };
       });
 
@@ -1025,6 +1032,15 @@ export default function ContasReceberPage() {
                             Registrar recebimento
                           </button>
                         )}
+                        {!isAvulsa && cobranca?.ultimo_recebimento_id ? (
+                          <div className="mt-2 flex justify-center">
+                            <GerarReciboButton
+                              recebimentoId={cobranca.ultimo_recebimento_id}
+                              label="Gerar recibo"
+                              className="flex flex-col items-center"
+                            />
+                          </div>
+                        ) : null}
                       </td>
                     </tr>
                   );
