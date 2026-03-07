@@ -13,6 +13,7 @@ type Props = {
 
 export function CompetenciaTabs({ items, active, onChange }: Props) {
   if (items.length === 0) return null;
+  const orderedItems = [...items].sort((a, b) => a.competencia.localeCompare(b.competencia));
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -26,7 +27,7 @@ export function CompetenciaTabs({ items, active, onChange }: Props) {
 
       <div className="mt-4 overflow-x-auto pb-1">
         <div role="tablist" className="inline-flex min-w-full gap-2">
-          {items.map((item) => {
+          {orderedItems.map((item) => {
             const isActive = item.competencia === active;
             return (
               <button

@@ -46,6 +46,10 @@ function localTodayIso(): string {
   return local.toISOString().slice(0, 10);
 }
 
+function competenciaAtualLocal(): string {
+  return localTodayIso().slice(0, 7);
+}
+
 type PagamentoModalProps = {
   item: CobrancaOperacionalItem | null;
   open: boolean;
@@ -199,7 +203,15 @@ export default function AdminCreditoConexaoCobrancasPage() {
       return;
     }
 
-    setCompetenciaAtiva(data?.competencia_ativa_padrao ?? disponiveis[0]?.competencia ?? null);
+    const ordenadas = [...disponiveis].sort((a, b) => a.competencia.localeCompare(b.competencia));
+    const competenciaAtual = competenciaAtualLocal();
+    const competenciaPadrao =
+      ordenadas.find((item) => item.competencia === competenciaAtual)?.competencia ??
+      data?.competencia_ativa_padrao ??
+      ordenadas[0]?.competencia ??
+      null;
+
+    setCompetenciaAtiva(competenciaPadrao);
   }, [competenciaAtiva, data]);
 
   const competenciaAtual = useMemo(() => {

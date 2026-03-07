@@ -154,6 +154,12 @@ function prioridadeStatusFatura(status: string | null): number {
   }
 }
 
+function competenciaAtualIso(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 7);
+}
+
 function buildFaturaSuggestions(
   item: CobrancaOperacionalItem,
   faturasPessoa: FaturaSugestaoRow[],
@@ -356,10 +362,17 @@ export async function GET(req: NextRequest) {
   const totalCompetencias = mesesAgrupados.length;
   const inicio = (pagina - 1) * limite;
   const mesesPaginados = mesesAgrupados.slice(inicio, inicio + limite);
-  const competenciasDisponiveis = mesesAgrupados.map((mes) => ({
-    competencia: mes.competencia,
-    competencia_label: mes.competencia_label,
-  }));
+  const competenciasDisponiveis = mesesAgrupados
+    .map((mes) => ({
+      competencia: mes.competencia,
+      competencia_label: mes.competencia_label,
+    }))
+    .sort((a, b) => a.competencia.localeCompare(b.competencia));
+  const competenciaAtual = competenciaAtualIso();
+  const competenciaAtivaPadrao =
+    competenciasDisponiveis.find((item) => item.competencia === competenciaAtual)?.competencia ??
+    competenciasDisponiveis[0]?.competencia ??
+    null;
 
   return NextResponse.json(
     {
@@ -372,7 +385,7 @@ export async function GET(req: NextRequest) {
         total: totalCompetencias,
       },
       competencias_disponiveis: competenciasDisponiveis,
-      competencia_ativa_padrao: competenciasDisponiveis[0]?.competencia ?? null,
+      competencia_ativa_padrao: competenciaAtivaPadrao,
     } satisfies CobrancasMensaisResponse & { ok: true },
     { status: 200 },
   );
