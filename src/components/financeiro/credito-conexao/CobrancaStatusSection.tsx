@@ -10,6 +10,7 @@ type Props = {
   tipo: "pago" | "pendente_a_vencer" | "pendente_vencido";
   itens: CobrancaOperacionalItem[];
   onRegistrarRecebimento?: (item: CobrancaOperacionalItem) => void;
+  onVincularFatura?: (item: CobrancaOperacionalItem) => void;
 };
 
 function calcularTotal(tipo: Props["tipo"], itens: CobrancaOperacionalItem[]): number {
@@ -32,7 +33,7 @@ function toneClassName(tipo: Props["tipo"]): string {
   }
 }
 
-export function CobrancaStatusSection({ titulo, descricao, tipo, itens, onRegistrarRecebimento }: Props) {
+export function CobrancaStatusSection({ titulo, descricao, tipo, itens, onRegistrarRecebimento, onVincularFatura }: Props) {
   const total = calcularTotal(tipo, itens);
 
   return (
@@ -56,9 +57,10 @@ export function CobrancaStatusSection({ titulo, descricao, tipo, itens, onRegist
         ) : (
           itens.map((item) => (
             <CobrancaRow
-              key={`${tipo}-${item.cobranca_id}`}
+              key={`${tipo}-${item.cobranca_key}`}
               item={item}
               onRegistrarRecebimento={onRegistrarRecebimento}
+              onVincularFatura={onVincularFatura}
             />
           ))
         )}

@@ -8,6 +8,7 @@ import { formatarDataLabel, type CobrancaOperacionalItem } from "@/lib/financeir
 type Props = {
   item: CobrancaOperacionalItem;
   onRegistrarRecebimento?: (item: CobrancaOperacionalItem) => void;
+  onVincularFatura?: (item: CobrancaOperacionalItem) => void;
 };
 
 function statusClassName(status: CobrancaOperacionalItem["status_operacional"]): string {
@@ -32,14 +33,27 @@ function statusLabel(status: CobrancaOperacionalItem["status_operacional"]): str
   }
 }
 
-function neofinClassName(status: CobrancaOperacionalItem["neofin_status"]): string {
-  switch (status) {
-    case "LIQUIDADA":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "EM_COBRANCA":
+function tipoClassName(tipo: CobrancaOperacionalItem["tipo_cobranca"]): string {
+  switch (tipo) {
+    case "AVULSA":
       return "border-sky-200 bg-sky-50 text-sky-700";
+    case "MENSALIDADE":
+      return "border-slate-200 bg-slate-50 text-slate-700";
     default:
-      return "border-slate-200 bg-slate-50 text-slate-600";
+      return "border-violet-200 bg-violet-50 text-violet-700";
+  }
+}
+
+function neofinClassName(situacao: CobrancaOperacionalItem["neofin_situacao_operacional"]): string {
+  switch (situacao) {
+    case "VINCULADA":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "FALHA_INTEGRACAO":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    case "NAO_VINCULADA":
+      return "border-slate-200 bg-slate-50 text-slate-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-500";
   }
 }
 
@@ -54,17 +68,39 @@ function ActionLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-export function CobrancaRow({ item, onRegistrarRecebimento }: Props) {
-  const acaoPrimaria =
-    item.status_operacional !== "PAGO" && onRegistrarRecebimento
+export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: Props) {
+  const podeVincular = Boolean(onVincularFatura)
+    && (item.permite_vinculo_manual
+      || item.neofin_situacao_operacional === "NAO_VINCULADA"
+      || item.neofin_situacao_operacional === "FALHA_INTEGRACAO");
+  const podeRegistrarRecebimento = item.status_operacional !== "PAGO"
+    && item.cobranca_fonte === "COBRANCA"
+    && Boolean(onRegistrarRecebimento);
+  const acaoPrimariaTipo = podeVincular
+    ? "VINCULAR"
+    : podeRegistrarRecebimento
+      ? "RECEBER"
+      : item.fatura_url
+        ? "FATURA"
+        : item.cobranca_url
+          ? "DETALHE"
+          : "NENHUMA";
+
+  const acaoPrimaria = acaoPrimariaTipo === "VINCULAR"
+    ? (
+        <Button type="button" onClick={() => onVincularFatura?.(item)} className="w-full sm:w-auto">
+          Vincular a fatura
+        </Button>
+      )
+    : acaoPrimariaTipo === "RECEBER"
       ? (
-          <Button type="button" onClick={() => onRegistrarRecebimento(item)} className="w-full sm:w-auto">
+          <Button type="button" onClick={() => onRegistrarRecebimento?.(item)} className="w-full sm:w-auto">
             Registrar recebimento
           </Button>
         )
-      : item.fatura_url
+      : acaoPrimariaTipo === "FATURA" && item.fatura_url
         ? <ActionLink href={item.fatura_url} label="Abrir fatura" />
-        : item.cobranca_url
+        : acaoPrimariaTipo === "DETALHE" && item.cobranca_url
           ? <ActionLink href={item.cobranca_url} label="Ver detalhe" />
           : null;
 
@@ -81,8 +117,11 @@ export function CobrancaRow({ item, onRegistrarRecebimento }: Props) {
               <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClassName(item.status_operacional)}`}>
                 {statusLabel(item.status_operacional)}
               </span>
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${neofinClassName(item.neofin_status)}`}>
-                {item.neofin_label}
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${tipoClassName(item.tipo_cobranca)}`}>
+                {item.tipo_cobranca_label}
+              </span>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${neofinClassName(item.neofin_situacao_operacional)}`}>
+                {item.neofin_situacao_label}
               </span>
             </div>
           </div>
@@ -97,8 +136,10 @@ export function CobrancaRow({ item, onRegistrarRecebimento }: Props) {
               <p className="mt-1 font-medium text-slate-800">{formatBRLFromCents(item.valor_centavos)}</p>
             </div>
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Status bruto</p>
-              <p className="mt-1 font-medium text-slate-800">{item.status_cobranca ?? "-"}</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Fatura</p>
+              <p className="mt-1 font-medium text-slate-800">
+                {item.fatura_id ? `#${item.fatura_id}${item.fatura_competencia ? ` - ${item.fatura_competencia}` : ""}` : "Sem vinculo"}
+              </p>
             </div>
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
               <p className="text-xs uppercase tracking-wide text-slate-500">Atraso</p>
@@ -111,8 +152,15 @@ export function CobrancaRow({ item, onRegistrarRecebimento }: Props) {
 
         <div className="flex w-full flex-col gap-2 lg:w-auto lg:min-w-[220px]">
           {acaoPrimaria}
-          {item.fatura_url && item.status_operacional !== "PAGO" ? <ActionLink href={item.fatura_url} label="Abrir fatura" /> : null}
-          {item.cobranca_url ? <ActionLink href={item.cobranca_url} label="Ver detalhe" /> : null}
+          {podeRegistrarRecebimento && podeVincular ? (
+            <Button type="button" variant="secondary" onClick={() => onRegistrarRecebimento?.(item)}>
+              Registrar recebimento
+            </Button>
+          ) : null}
+          {item.fatura_url && acaoPrimariaTipo !== "FATURA" ? (
+            <ActionLink href={item.fatura_url} label="Abrir fatura" />
+          ) : null}
+          {item.cobranca_url && acaoPrimariaTipo !== "DETALHE" ? <ActionLink href={item.cobranca_url} label="Ver detalhe" /> : null}
           {item.link_pagamento ? (
             <a
               href={item.link_pagamento}

@@ -23,7 +23,7 @@ export function CobrancasMensaisResumo({ resumo }: Props) {
         <div>
           <h2 className="text-base font-semibold text-slate-900">Resumo geral da carteira</h2>
           <p className="text-sm text-slate-600">
-            Leitura consolidada para priorizar cobranca, conversao e acompanhamento operacional.
+            Leitura consolidada de mensalidades, avulsas e cobrancas sem NeoFin para priorizar cobranca e conversao.
           </p>
         </div>
         <p className="text-sm text-slate-500">{resumo.total_registros} cobranca(s) no filtro atual</p>

@@ -166,20 +166,27 @@ UI:
 
 ---
 
-## Atualizacoes recentes (Cobrancas Aluno por Competencia + Dashboard Mensal SaaS) - 2026-03-06
+## Atualizacoes recentes (Carteira Operacional Aluno + Vinculo Manual + Dashboard Mensal SaaS) - 2026-03-07
 
 Modulo atual:
 - Financeiro / Credito Conexao com leitura operacional mensal da Conta Interna Aluno e reforco da visao mensal SaaS no dashboard financeiro.
-- A carteira de cobrancas do aluno agora e lida por competencia e por status operacional:
+- A carteira operacional do aluno agora inclui:
+  - mensalidades
+  - cobrancas avulsas
+  - cobrancas sem NeoFin
+  - cobrancas com falha/inconsistencia operacional de integracao
+- As cobrancas do aluno agora sao lidas por competencia e por status operacional:
   - pago
   - pendente a vencer
   - pendente vencido
 - Os nomes passaram a ser exibidos com label humano + id no padrao `Nome da Pessoa (#ID)`.
+- NeoFin passou a ser tratado como camada operacional de cobranca, nao como criterio de existencia da divida.
 - O layout foi alinhado ao padrao institucional com:
   - container central
   - card de contexto
   - card de filtros
   - cards funcionais
+  - abas horizontais por competencia
   - listas dentro de cards
 
 SQL concluido:
@@ -200,56 +207,82 @@ SQL concluido:
   - vencimento
   - neofin
 - Criados indices auxiliares em `credito_conexao_faturas` para `periodo_referencia`, `cobranca_id`, `data_vencimento` e `neofin_invoice_id`.
+- Criados indices auxiliares em `credito_conexao_contas` e `financeiro_cobrancas_avulsas` para leitura operacional por pessoa, status e vencimento.
+- Criada a tabela minima `public.credito_conexao_faturas_cobrancas_avulsas` para vinculo manual rastreavel de cobrancas avulsas.
 - Nova view `public.vw_financeiro_cobrancas_operacionais`:
-  - consolida nome da pessoa
-  - competencia canonica
-  - valor pago
-  - saldo aberto
-  - atraso
-  - vinculo NeoFin
+  - preserva compatibilidade com os 20 campos antigos ja consumidos pela API
+  - consolida nome da pessoa e `pessoa_label`
+  - consolida competencia canonica e `competencia_label`
+  - classifica `tipo_cobranca` em mensalidade, avulsa ou outra
+  - expõe valor pago, saldo, atraso e `status_operacional`
+  - expõe `fatura_id`, `fatura_competencia`, `neofin_status` e `neofin_situacao_operacional`
+  - marca `permite_vinculo_manual` para cobrancas elegiveis
 - Falha identificada na primeira execucao da migration:
   - a tabela `public.recebimentos` nao possui a coluna `status`
   - a regra canonica de confirmacao foi ajustada para `data_pagamento IS NOT NULL`
 - View operacional recriada e validada com sucesso apos o ajuste.
+- Validacao SQL mais recente:
+  - `384` itens ALUNO na view operacional
+  - `23` cobrancas avulsas ALUNO
+  - `332` itens ALUNO sem vinculo NeoFin e elegiveis para vinculo manual
+  - `28` itens ALUNO vinculados ao NeoFin
 
 APIs concluidas:
 - `GET /api/financeiro/credito-conexao/cobrancas`
-  - refatorada para payload mensal/operacional com `resumo_geral`, `meses` e `paginacao`
-  - join operacional com pessoas via view canonica
+  - refatorada para payload mensal/operacional com `resumo_geral`, `meses`, `competencias_disponiveis` e `competencia_ativa_padrao`
+  - leitura direta da view operacional canonica
+  - inclui mensalidades, avulsas, cobrancas sem NeoFin e falhas operacionais
   - `pessoa_label` humano com fallback apenas quando nao houver nome
   - agrupamento por competencia e status operacional
-  - suporte a filtros por busca, competencia, status operacional e NeoFin
+  - suporte a filtros por busca, status operacional e situacao NeoFin
+  - entrega `sugestao_fatura_ids` para apoio ao vinculo manual
+- `POST /api/financeiro/credito-conexao/cobrancas/vincular-fatura`
+  - novo endpoint administrativo para vincular cobranca a fatura
+  - valida mesma pessoa, bloqueia cobranca quitada e bloqueia conflito de vinculo direto
+  - exige confirmacao explicita para competencia diferente
+  - registra auditoria em `auditoria_logs`
+- `GET /api/financeiro/credito-conexao/faturas/sugestoes`
+  - novo endpoint para sugerir faturas da mesma pessoa
+  - prioriza mesma competencia e depois competencias vizinhas
+  - sinaliza quando a competencia e diferente ou a fatura ja esta ocupada
 - `GET /api/financeiro/dashboard/mensal`
   - nova rota server-side para cards mensais e competencias recentes
   - entrega `previsto`, `pago`, `pendente`, `vencido`, `neofin` e `% inadimplencia`
+  - agora reflete a carteira real da Conta Interna Aluno, incluindo avulsas e itens sem NeoFin
   - resposta pronta para cards e tabela de leitura rapida
 - Validacao pos-fix:
-  - a consulta principal da rota de cobrancas voltou a resolver faturas ALUNO e cobrancas operacionais sem erro da view
+  - a consulta principal da rota de cobrancas voltou a resolver a carteira operacional sem erro da view
   - a consulta principal do dashboard mensal voltou a ler a view operacional com competencias recentes e nomes reais
 - Novo helper compartilhado `src/lib/financeiro/creditoConexao/cobrancas.ts`
   - `classificarStatusOperacionalCobranca`
   - `agruparCobrancasPorCompetencia`
   - `montarPessoaLabel`
   - `calcularResumoMensalFinanceiro`
+  - `montarCobrancaOperacionalBase`
+  - labels e normalizacao de NeoFin/tipo de cobranca
 
 Paginas / componentes concluidos:
 - `/admin/financeiro/credito-conexao/cobrancas`
-  - tela reestruturada em visao mensal
+  - tela reestruturada em visao mensal com abas horizontais por competencia
   - nomenclatura visivel alinhada para Conta Interna Aluno
   - filtros em card proprio
   - resumo geral em cards
-  - lista por competencia com secoes internas por status operacional
-  - acao de registrar recebimento no contexto da lista
+  - card unico da competencia ativa com secoes internas por status operacional
+  - badges de tipo de cobranca e situacao NeoFin
+  - acao de vinculo manual de cobranca para fatura
+  - acao de registrar recebimento mantida para cobrancas canonicas
 - Novos componentes:
   - `src/components/financeiro/credito-conexao/CobrancasMensaisResumo.tsx`
   - `src/components/financeiro/credito-conexao/CobrancasCompetenciaCard.tsx`
   - `src/components/financeiro/credito-conexao/CobrancaStatusSection.tsx`
   - `src/components/financeiro/credito-conexao/CobrancaRow.tsx`
+  - `src/components/financeiro/credito-conexao/CompetenciaTabs.tsx`
+  - `src/components/financeiro/credito-conexao/VincularCobrancaFaturaDialog.tsx`
 - `/admin/financeiro`
   - novo bloco "Saude mensal do financeiro"
   - cards mensais orientados a operacao SaaS
   - tabela de competencias recentes
-  - microcopy de gestao com foco em cobranca e conversao
+  - microcopy de gestao com foco em cobranca, conversao e vinculo operacional
   - mensagens de erro controladas para leitura mensal, sem expor erro tecnico cru ao usuario
 - `FinanceHelpCard`/help do dashboard atualizados para refletir:
   - visao mensal
@@ -257,16 +290,24 @@ Paginas / componentes concluidos:
   - acompanhamento de cobranca NeoFin
   - leitura operacional para gestao SaaS
 
+Validacao do escopo:
+- `npx eslint` nos arquivos alterados: sucesso.
+- `npm run build`: sucesso.
+- Validacao SQL:
+  - view operacional criada e consultada com sucesso
+  - carteira ALUNO com `384` itens, sendo `23` avulsas e `28` vinculadas ao NeoFin
+
 Pendencias:
-- Captura de prints reais da UI segue dependente de sessao autenticada local; nao foi possivel anexar revisao visual automatizada com dados reais nesta execucao.
-- `npm run lint` continua bloqueado por erros preexistentes fora do escopo deste modulo (loja, perfis, pessoas e outros arquivos nao alterados nesta entrega).
-- Revisao manual final recomendada com pelo menos uma competencia contendo:
-  - pago
-  - pendente a vencer
-  - pendente vencido
-  - item com NeoFin
+- Captura de prints reais da UI segue dependente de sessao autenticada local; as rotas `/admin/financeiro` e `/admin/financeiro/credito-conexao/cobrancas` redirecionam para `/login` sem sessao.
+- Revisao manual final recomendada com sessao autenticada e pelo menos:
+  - uma aba com item pago
+  - uma aba com item pendente a vencer
+  - uma aba com item pendente vencido
+  - um item avulso
+  - um item sem NeoFin
+  - um item com acao "Vincular a fatura"
 
 Proximas acoes:
 - Validar visualmente `/admin/financeiro/credito-conexao/cobrancas` e `/admin/financeiro` com sessao autenticada.
-- Capturar prints finais para aprovacao funcional.
-- Se desejado, estender a mesma leitura mensal para outros paines de contas a receber que ainda consomem a view legada.
+- Capturar prints finais para aprovacao funcional da carteira em abas e do dialogo de vinculo manual.
+- Se desejado, estender a mesma leitura mensal para Conta Interna Colaborador e para outros paines de contas a receber que ainda consomem a view legada.

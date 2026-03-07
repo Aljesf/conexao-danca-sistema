@@ -3,43 +3,24 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import {
   calcularResumoMensalFinanceiro,
-  classificarStatusOperacionalCobranca,
   formatarCompetenciaLabel,
-  inferirNeofinStatusCobranca,
-  montarNeofinLabel,
-  montarPessoaLabel,
+  montarCobrancaOperacionalBase,
   type CobrancaOperacionalItem,
+  type CobrancaOperacionalViewBase,
   type DashboardFinanceiroMensalResponse,
 } from "@/lib/financeiro/creditoConexao/cobrancas";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
-type DashboardOperacionalRow = {
-  cobranca_id: number;
-  pessoa_id: number | null;
-  pessoa_nome: string | null;
-  competencia_ano_mes: string | null;
-  data_vencimento: string | null;
-  status_cobranca: string | null;
+type DashboardOperacionalRow = CobrancaOperacionalViewBase & {
   origem_tipo: string | null;
   origem_subtipo: string | null;
   descricao: string | null;
-  valor_centavos: number | null;
-  valor_pago_centavos: number | null;
-  saldo_aberto_centavos: number | null;
-  dias_atraso: number | null;
-  data_pagamento: string | null;
-  neofin_charge_id: string | null;
-  link_pagamento: string | null;
-  linha_digitavel: string | null;
+  created_at: string | null;
 };
 
 function toInt(value: string | null, fallback: number): number {
   const parsed = value ? Number(value) : Number.NaN;
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
-}
-
-function toNumber(value: number | null | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 0;
 }
 
 function isCompetencia(value: string | null): value is string {
@@ -91,8 +72,8 @@ function criarDestaques(
       {
         tipo: "INFO",
         titulo: `Sem carteira prevista em ${competenciaLabel}`,
-        descricao: "Nao ha cobrancas previstas para a competencia selecionada.",
-        acao_sugerida: "Revisar a programacao de lancamentos e a competencia ativa.",
+        descricao: "Nao ha cobrancas operacionais previstas para a competencia selecionada.",
+        acao_sugerida: "Revisar a geracao de mensalidades, avulsas e vinculos do periodo.",
       },
     ];
   }
@@ -101,8 +82,8 @@ function criarDestaques(
     destaques.push({
       tipo: "ALERTA",
       titulo: "Inadimplencia mensal acima do limite operacional",
-      descricao: `A competencia ${competenciaLabel} ja concentra ${cards.inadimplencia_mes_percentual.toFixed(1)}% do previsto em atraso.`,
-      acao_sugerida: "Priorizar cobranca ativa dos titulos vencidos antes de abrir novo ciclo.",
+      descricao: `A competencia ${competenciaLabel} concentra ${cards.inadimplencia_mes_percentual.toFixed(1)}% do previsto em atraso.`,
+      acao_sugerida: "Priorizar a carteira vencida e conferir cobrancas sem vinculo NeoFin.",
     });
   }
 
@@ -111,7 +92,7 @@ function criarDestaques(
       tipo: "INFO",
       titulo: "Carteira em cobranca NeoFin ativa no mes",
       descricao: `Ha ${formatBRLFromCents(cards.neofin_mes_centavos)} ainda em cobranca NeoFin nesta competencia.`,
-      acao_sugerida: "Acompanhar retorno operacional e conversao dos titulos integrados.",
+      acao_sugerida: "Acompanhar a conversao dos titulos vinculados e o retorno operacional do provedor.",
     });
   }
 
@@ -120,7 +101,7 @@ function criarDestaques(
       tipo: "ALERTA",
       titulo: "Cobertura de recebimento abaixo da meta",
       descricao: "O volume recebido ainda esta abaixo de 70% do previsto para o mes.",
-      acao_sugerida: "Concentrar follow-up em vencidos e titulos a vencer da semana.",
+      acao_sugerida: "Atuar em vencidos, a vencer e cobrancas avulsas sem vinculo ainda no mesmo ciclo.",
     });
   }
 
@@ -128,8 +109,8 @@ function criarDestaques(
     destaques.push({
       tipo: "INFO",
       titulo: "Leitura mensal sob controle",
-      descricao: "Previsto, pago e pendente estao em faixa operacional sem alerta critico nesta competencia.",
-      acao_sugerida: "Manter rotina de cobranca e revisar a carteira NeoFin diariamente.",
+      descricao: "Previsto, pago, pendente e NeoFin estao em faixa operacional sem alerta critico nesta competencia.",
+      acao_sugerida: "Manter a rotina de cobranca e revisar a carteira NeoFin diariamente.",
     });
   }
 
@@ -144,6 +125,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const competencia = (url.searchParams.get("competencia") ?? "").trim();
   const limite = Math.min(Math.max(toInt(url.searchParams.get("limite"), 6), 1), 12);
+  const tipoConta = (url.searchParams.get("tipo_conta") ?? "ALUNO").trim().toUpperCase();
   const competenciaBase = competenciaAtual();
   const competenciaSelecionada = isCompetencia(competencia) ? competencia : competenciaBase;
 
@@ -151,31 +133,56 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "competencia_invalida" }, { status: 400 });
   }
 
+  if (tipoConta !== "ALUNO" && tipoConta !== "COLABORADOR" && tipoConta !== "TODOS") {
+    return NextResponse.json({ ok: false, error: "tipo_conta_invalido" }, { status: 400 });
+  }
+
   let query = supabase
     .from("vw_financeiro_cobrancas_operacionais")
     .select(
       [
         "cobranca_id",
+        "cobranca_fonte",
         "pessoa_id",
         "pessoa_nome",
+        "pessoa_label",
         "competencia_ano_mes",
+        "competencia_label",
+        "tipo_cobranca",
         "data_vencimento",
-        "status_cobranca",
-        "origem_tipo",
-        "origem_subtipo",
-        "descricao",
         "valor_centavos",
         "valor_pago_centavos",
+        "saldo_centavos",
         "saldo_aberto_centavos",
-        "dias_atraso",
-        "data_pagamento",
+        "status_cobranca",
+        "status_bruto",
+        "status_operacional",
         "neofin_charge_id",
+        "neofin_invoice_id",
+        "neofin_situacao_operacional",
+        "origem_tipo",
+        "origem_subtipo",
+        "origem_referencia_label",
+        "dias_atraso",
+        "fatura_id",
+        "fatura_competencia",
+        "fatura_status",
+        "tipo_conta",
+        "tipo_conta_label",
+        "permite_vinculo_manual",
+        "data_pagamento",
         "link_pagamento",
         "linha_digitavel",
+        "descricao",
+        "created_at",
       ].join(","),
     )
     .order("competencia_ano_mes", { ascending: false, nullsFirst: false })
     .order("data_vencimento", { ascending: false, nullsFirst: false });
+
+  if (tipoConta !== "TODOS") {
+    query = query.eq("tipo_conta", tipoConta);
+  }
 
   if (isCompetencia(competencia)) {
     query = query.eq("competencia_ano_mes", competencia);
@@ -194,56 +201,14 @@ export async function GET(req: NextRequest) {
 
   const today = new Date();
   const itens = ((data ?? []) as unknown[]).map((raw) => {
-    const row = raw as DashboardOperacionalRow;
-    const competenciaItem = isCompetencia(row.competencia_ano_mes)
-      ? row.competencia_ano_mes
-      : row.data_vencimento?.slice(0, 7) ?? competenciaSelecionada;
-    const valorCentavos = toNumber(row.valor_centavos);
-    const valorPagoCentavos = toNumber(row.valor_pago_centavos);
-    const saldoAbertoCentavos = toNumber(row.saldo_aberto_centavos);
-    const statusOperacional = classificarStatusOperacionalCobranca(
-      {
-        status_cobranca: row.status_cobranca,
-        data_vencimento: row.data_vencimento,
-        valor_centavos: valorCentavos,
-        valor_pago_centavos: valorPagoCentavos,
-        saldo_aberto_centavos: saldoAbertoCentavos,
-      },
-      today,
-    );
-    const neofinStatus = inferirNeofinStatusCobranca(row.neofin_charge_id, statusOperacional);
-
-    return {
-      cobranca_id: row.cobranca_id,
-      pessoa_id: row.pessoa_id,
-      pessoa_nome: row.pessoa_nome ?? (row.pessoa_id ? `Pessoa #${row.pessoa_id}` : "Pessoa nao identificada"),
-      pessoa_label: montarPessoaLabel(row.pessoa_nome, row.pessoa_id),
-      competencia_ano_mes: competenciaItem,
-      competencia_label: formatarCompetenciaLabel(competenciaItem),
-      data_vencimento: row.data_vencimento,
-      valor_centavos: valorCentavos,
-      valor_pago_centavos: valorPagoCentavos,
-      saldo_aberto_centavos: saldoAbertoCentavos,
-      valor_formatado: formatBRLFromCents(valorCentavos),
-      status_cobranca: row.status_cobranca,
-      status_operacional: statusOperacional,
-      neofin_status: neofinStatus,
-      neofin_label: montarNeofinLabel(neofinStatus),
-      neofin_charge_id: row.neofin_charge_id,
-      origem_tipo: row.origem_tipo,
-      origem_subtipo: row.origem_subtipo,
-      origem_referencia_label: row.descricao ?? "Cobranca financeira",
-      dias_em_atraso: toNumber(row.dias_atraso),
-      fatura_id: null,
-      cobranca_url: null,
-      fatura_url: null,
-      data_pagamento: row.data_pagamento,
-      link_pagamento: row.link_pagamento,
-      linha_digitavel: row.linha_digitavel,
-    } satisfies CobrancaOperacionalItem;
+    const item = montarCobrancaOperacionalBase(raw as DashboardOperacionalRow, today);
+    item.cobranca_url = item.cobranca_fonte === "COBRANCA_AVULSA"
+      ? `/administracao/financeiro/cobrancas-avulsas/${item.cobranca_id}`
+      : `/admin/governanca/cobrancas/${item.cobranca_id}`;
+    return item;
   });
 
-  const resumos = calcularResumoMensalFinanceiro(itens);
+  const resumos = calcularResumoMensalFinanceiro(itens as CobrancaOperacionalItem[]);
   const resumoSelecionado =
     resumos.find((item) => item.competencia === competenciaSelecionada) ?? criarResumoVazio(competenciaSelecionada);
 

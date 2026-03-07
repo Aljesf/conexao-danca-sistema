@@ -10,6 +10,7 @@ import { CobrancaStatusSection } from "./CobrancaStatusSection";
 type Props = {
   competencia: CobrancasCompetenciaGrupo;
   onRegistrarRecebimento?: (item: CobrancaOperacionalItem) => void;
+  onVincularFatura?: (item: CobrancaOperacionalItem) => void;
 };
 
 function TotalCard({ titulo, valor }: { titulo: string; valor: number }) {
@@ -21,15 +22,15 @@ function TotalCard({ titulo, valor }: { titulo: string; valor: number }) {
   );
 }
 
-export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento }: Props) {
+export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, onVincularFatura }: Props) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Competencia</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Competencia ativa</p>
           <h2 className="mt-1 text-xl font-semibold text-slate-900">{competencia.competencia_label}</h2>
           <p className="text-sm text-slate-600">
-            Carteira organizada por risco operacional e proxima acao da equipe.
+            Mensalidades, avulsas, cobrancas sem NeoFin e inconsistencias operacionais reunidas no mesmo mes.
           </p>
         </div>
 
@@ -46,26 +47,29 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento }
       <div className="mt-5 space-y-4">
         <CobrancaStatusSection
           titulo="Pendente vencido"
-          descricao="Titulos com risco imediato. Atue primeiro aqui."
+          descricao="Risco imediato. Priorize cobranca ativa, ajuste de vinculo e saneamento da carteira."
           tipo="pendente_vencido"
           itens={competencia.grupos.pendente_vencido}
           onRegistrarRecebimento={onRegistrarRecebimento}
+          onVincularFatura={onVincularFatura}
         />
 
         <CobrancaStatusSection
           titulo="Pendente a vencer"
-          descricao="Carteira aberta ainda dentro do prazo ou em janela de cobranca."
+          descricao="Titulos ainda dentro da janela operacional do ciclo atual."
           tipo="pendente_a_vencer"
           itens={competencia.grupos.pendente_a_vencer}
           onRegistrarRecebimento={onRegistrarRecebimento}
+          onVincularFatura={onVincularFatura}
         />
 
         <CobrancaStatusSection
           titulo="Pago"
-          descricao="Cobrancas liquidadas para a competencia."
+          descricao="Recebimentos liquidados para a competencia ativa."
           tipo="pago"
           itens={competencia.grupos.pago}
           onRegistrarRecebimento={onRegistrarRecebimento}
+          onVincularFatura={onVincularFatura}
         />
       </div>
     </section>

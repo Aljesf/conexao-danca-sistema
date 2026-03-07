@@ -1,6 +1,16 @@
 export type StatusOperacionalCobranca = "PAGO" | "PENDENTE_A_VENCER" | "PENDENTE_VENCIDO";
 
-export type NeofinStatusCobranca = "SEM_NEOFIN" | "EM_COBRANCA" | "LIQUIDADA";
+export type NeofinStatusCobranca = "SEM_NEOFIN" | "EM_COBRANCA" | "LIQUIDADA" | "FALHA_INTEGRACAO";
+
+export type NeofinSituacaoOperacional =
+  | "VINCULADA"
+  | "NAO_VINCULADA"
+  | "FALHA_INTEGRACAO"
+  | "NAO_SE_APLICA";
+
+export type TipoCobrancaOperacional = "MENSALIDADE" | "AVULSA" | "OUTRA";
+
+export type CobrancaFonteOperacional = "COBRANCA" | "COBRANCA_AVULSA";
 
 export type CobrancaOperacionalClassificavel = {
   status_cobranca: string | null;
@@ -12,28 +22,79 @@ export type CobrancaOperacionalClassificavel = {
 
 export type CobrancaOperacionalItem = {
   cobranca_id: number;
+  cobranca_fonte: CobrancaFonteOperacional;
+  cobranca_key: string;
   pessoa_id: number | null;
   pessoa_nome: string;
   pessoa_label: string;
   competencia_ano_mes: string;
   competencia_label: string;
+  tipo_cobranca: TipoCobrancaOperacional;
+  tipo_cobranca_label: string;
   data_vencimento: string | null;
   valor_centavos: number;
   valor_pago_centavos: number;
+  saldo_centavos: number;
   saldo_aberto_centavos: number;
   valor_formatado: string;
   status_cobranca: string | null;
+  status_bruto: string | null;
   status_operacional: StatusOperacionalCobranca;
   neofin_status: NeofinStatusCobranca;
   neofin_label: string;
+  neofin_situacao_operacional: NeofinSituacaoOperacional;
+  neofin_situacao_label: string;
   neofin_charge_id: string | null;
+  neofin_invoice_id: string | null;
   origem_tipo: string | null;
   origem_subtipo: string | null;
   origem_referencia_label: string;
   dias_em_atraso: number;
   fatura_id: number | null;
+  fatura_competencia: string | null;
+  fatura_status: string | null;
+  tipo_conta: string | null;
+  tipo_conta_label: string | null;
+  permite_vinculo_manual: boolean;
+  sugestao_competencia_vinculo: string | null;
+  sugestao_fatura_ids: number[];
   cobranca_url: string | null;
   fatura_url: string | null;
+  data_pagamento: string | null;
+  link_pagamento: string | null;
+  linha_digitavel: string | null;
+};
+
+export type CobrancaOperacionalViewBase = {
+  cobranca_id: number;
+  cobranca_fonte: CobrancaFonteOperacional | string | null;
+  pessoa_id: number | null;
+  pessoa_nome: string | null;
+  pessoa_label: string | null;
+  competencia_ano_mes: string | null;
+  competencia_label: string | null;
+  tipo_cobranca: TipoCobrancaOperacional | string | null;
+  data_vencimento: string | null;
+  valor_centavos: number | null;
+  valor_pago_centavos: number | null;
+  saldo_centavos: number | null;
+  saldo_aberto_centavos: number | null;
+  status_cobranca: string | null;
+  status_bruto: string | null;
+  status_operacional: StatusOperacionalCobranca | string | null;
+  neofin_charge_id: string | null;
+  neofin_invoice_id: string | null;
+  neofin_situacao_operacional: NeofinSituacaoOperacional | string | null;
+  origem_tipo: string | null;
+  origem_subtipo: string | null;
+  origem_referencia_label: string | null;
+  dias_em_atraso: number | null;
+  fatura_id: number | null;
+  fatura_competencia: string | null;
+  fatura_status: string | null;
+  tipo_conta: string | null;
+  tipo_conta_label: string | null;
+  permite_vinculo_manual: boolean | null;
   data_pagamento: string | null;
   link_pagamento: string | null;
   linha_digitavel: string | null;
@@ -88,6 +149,7 @@ export type CobrancasMensaisResponse = {
     competencia: string;
     competencia_label: string;
   }>;
+  competencia_ativa_padrao: string | null;
 };
 
 export type DashboardFinanceiroMensalResponse = {
@@ -158,6 +220,29 @@ function resolverCompetencia(value: string | null | undefined, dataVencimento: s
   return localIsoDate(new Date()).slice(0, 7);
 }
 
+function normalizarTipoCobrancaInterno(value: string | null | undefined): TipoCobrancaOperacional {
+  const normalized = normalizarTexto(value)?.toUpperCase();
+  if (normalized === "MENSALIDADE" || normalized === "AVULSA") {
+    return normalized;
+  }
+  return "OUTRA";
+}
+
+function normalizarFonteInterna(value: string | null | undefined): CobrancaFonteOperacional {
+  return normalizarTexto(value)?.toUpperCase() === "COBRANCA_AVULSA" ? "COBRANCA_AVULSA" : "COBRANCA";
+}
+
+function normalizarStatusOperacionalInterno(
+  value: string | null | undefined,
+  fallback: StatusOperacionalCobranca,
+): StatusOperacionalCobranca {
+  const normalized = normalizarTexto(value)?.toUpperCase();
+  if (normalized === "PAGO" || normalized === "PENDENTE_A_VENCER" || normalized === "PENDENTE_VENCIDO") {
+    return normalized;
+  }
+  return fallback;
+}
+
 function compareIsoAsc(a: string | null | undefined, b: string | null | undefined): number {
   const av = dataValida(a) ? a : "9999-12-31";
   const bv = dataValida(b) ? b : "9999-12-31";
@@ -171,6 +256,8 @@ function compareIsoDesc(a: string | null | undefined, b: string | null | undefin
 function comparadorPendentes(a: CobrancaOperacionalItem, b: CobrancaOperacionalItem): number {
   const byDue = compareIsoAsc(a.data_vencimento, b.data_vencimento);
   if (byDue !== 0) return byDue;
+  const byType = a.tipo_cobranca_label.localeCompare(b.tipo_cobranca_label, "pt-BR");
+  if (byType !== 0) return byType;
   return a.pessoa_label.localeCompare(b.pessoa_label, "pt-BR");
 }
 
@@ -212,6 +299,118 @@ export function montarPessoaLabel(nome: string | null | undefined, pessoaId: num
   return "Pessoa nao identificada";
 }
 
+export function montarCobrancaKey(
+  cobrancaFonte: CobrancaFonteOperacional | string | null | undefined,
+  cobrancaId: number | null | undefined,
+): string {
+  const fonte = normalizarTexto(cobrancaFonte)?.toUpperCase() ?? "COBRANCA";
+  const id = typeof cobrancaId === "number" && Number.isFinite(cobrancaId) ? Math.trunc(cobrancaId) : 0;
+  return `${fonte}:${id}`;
+}
+
+export function montarTipoCobrancaLabel(tipo: TipoCobrancaOperacional | string | null | undefined): string {
+  switch (normalizarTexto(tipo)?.toUpperCase()) {
+    case "MENSALIDADE":
+      return "Mensalidade";
+    case "AVULSA":
+      return "Avulsa";
+    default:
+      return "Cobranca diversa";
+  }
+}
+
+export function montarTipoContaLabel(tipoConta: string | null | undefined): string | null {
+  switch (normalizarTexto(tipoConta)?.toUpperCase()) {
+    case "ALUNO":
+      return "Conta Interna Aluno";
+    case "COLABORADOR":
+      return "Conta Interna Colaborador";
+    default:
+      return null;
+  }
+}
+
+export function montarCobrancaOperacionalBase(
+  row: CobrancaOperacionalViewBase,
+  todayDate = new Date(),
+): CobrancaOperacionalItem {
+  const cobrancaFonte = normalizarFonteInterna(row.cobranca_fonte);
+  const pessoaId = typeof row.pessoa_id === "number" && Number.isFinite(row.pessoa_id) ? row.pessoa_id : null;
+  const pessoaNome = normalizarTexto(row.pessoa_nome) ?? (pessoaId ? `Pessoa #${pessoaId}` : "Pessoa nao identificada");
+  const pessoaLabel = normalizarTexto(row.pessoa_label) ?? montarPessoaLabel(pessoaNome, pessoaId);
+  const competenciaFinal = resolverCompetencia(row.competencia_ano_mes, row.data_vencimento);
+  const valorCentavos = numeroSeguro(row.valor_centavos);
+  const valorPagoCentavos = numeroSeguro(row.valor_pago_centavos);
+  const saldoAbertoCentavos = Math.max(numeroSeguro(row.saldo_aberto_centavos), 0);
+  const statusFallback = classificarStatusOperacionalCobranca(
+    {
+      status_cobranca: row.status_cobranca,
+      data_vencimento: row.data_vencimento,
+      valor_centavos: valorCentavos,
+      valor_pago_centavos: valorPagoCentavos,
+      saldo_aberto_centavos: saldoAbertoCentavos,
+    },
+    todayDate,
+  );
+  const statusOperacional = normalizarStatusOperacionalInterno(row.status_operacional, statusFallback);
+  const tipoCobranca = normalizarTipoCobrancaInterno(row.tipo_cobranca);
+  const neofinSituacao = normalizarNeofinSituacaoOperacional(row.neofin_situacao_operacional, statusOperacional);
+  const neofinStatus = inferirNeofinStatusCobranca(
+    normalizarTexto(row.neofin_charge_id) ?? normalizarTexto(row.neofin_invoice_id),
+    statusOperacional,
+    neofinSituacao,
+  );
+
+  return {
+    cobranca_id: row.cobranca_id,
+    cobranca_fonte: cobrancaFonte,
+    cobranca_key: montarCobrancaKey(cobrancaFonte, row.cobranca_id),
+    pessoa_id: pessoaId,
+    pessoa_nome: pessoaNome,
+    pessoa_label: pessoaLabel,
+    competencia_ano_mes: competenciaFinal,
+    competencia_label: normalizarTexto(row.competencia_label) ?? formatarCompetenciaLabel(competenciaFinal),
+    tipo_cobranca: tipoCobranca,
+    tipo_cobranca_label: montarTipoCobrancaLabel(tipoCobranca),
+    data_vencimento: row.data_vencimento,
+    valor_centavos: valorCentavos,
+    valor_pago_centavos: valorPagoCentavos,
+    saldo_centavos: numeroSeguro(row.saldo_centavos) || saldoAbertoCentavos,
+    saldo_aberto_centavos: saldoAbertoCentavos,
+    valor_formatado: formatBRLFromCents(valorCentavos),
+    status_cobranca: row.status_cobranca,
+    status_bruto: row.status_bruto ?? row.status_cobranca,
+    status_operacional: statusOperacional,
+    neofin_status: neofinStatus,
+    neofin_label: montarNeofinLabel(neofinStatus),
+    neofin_situacao_operacional: neofinSituacao,
+    neofin_situacao_label: montarNeofinSituacaoLabel(neofinSituacao, neofinStatus),
+    neofin_charge_id: normalizarTexto(row.neofin_charge_id),
+    neofin_invoice_id: normalizarTexto(row.neofin_invoice_id),
+    origem_tipo: row.origem_tipo,
+    origem_subtipo: row.origem_subtipo,
+    origem_referencia_label:
+      normalizarTexto(row.origem_referencia_label) ?? normalizarTexto(row.pessoa_label) ?? "Cobranca operacional",
+    dias_em_atraso: numeroSeguro(row.dias_em_atraso),
+    fatura_id: typeof row.fatura_id === "number" && Number.isFinite(row.fatura_id) ? row.fatura_id : null,
+    fatura_competencia: normalizarTexto(row.fatura_competencia),
+    fatura_status: normalizarTexto(row.fatura_status),
+    tipo_conta: normalizarTexto(row.tipo_conta),
+    tipo_conta_label: normalizarTexto(row.tipo_conta_label) ?? montarTipoContaLabel(row.tipo_conta),
+    permite_vinculo_manual: row.permite_vinculo_manual === true,
+    sugestao_competencia_vinculo: competenciaFinal,
+    sugestao_fatura_ids: [],
+    cobranca_url: null,
+    fatura_url:
+      typeof row.fatura_id === "number" && Number.isFinite(row.fatura_id)
+        ? `/admin/financeiro/credito-conexao/faturas/${row.fatura_id}`
+        : null,
+    data_pagamento: row.data_pagamento,
+    link_pagamento: normalizarTexto(row.link_pagamento),
+    linha_digitavel: normalizarTexto(row.linha_digitavel),
+  };
+}
+
 export function classificarStatusOperacionalCobranca(
   cobranca: CobrancaOperacionalClassificavel,
   todayDate = new Date(),
@@ -233,11 +432,37 @@ export function classificarStatusOperacionalCobranca(
   return "PENDENTE_A_VENCER";
 }
 
-export function inferirNeofinStatusCobranca(
-  neofinChargeId: string | null | undefined,
+export function normalizarNeofinSituacaoOperacional(
+  value: string | null | undefined,
   statusOperacional: StatusOperacionalCobranca,
+): NeofinSituacaoOperacional {
+  switch (normalizarTexto(value)?.toUpperCase()) {
+    case "VINCULADA":
+      return "VINCULADA";
+    case "FALHA_INTEGRACAO":
+      return "FALHA_INTEGRACAO";
+    case "NAO_VINCULADA":
+      return "NAO_VINCULADA";
+    case "NAO_SE_APLICA":
+      return "NAO_SE_APLICA";
+    default:
+      return statusOperacional === "PAGO" ? "NAO_SE_APLICA" : "NAO_VINCULADA";
+  }
+}
+
+export function inferirNeofinStatusCobranca(
+  neofinIdentifier: string | null | undefined,
+  statusOperacional: StatusOperacionalCobranca,
+  neofinSituacao?: NeofinSituacaoOperacional | string | null,
 ): NeofinStatusCobranca {
-  if (!normalizarTexto(neofinChargeId)) return "SEM_NEOFIN";
+  const situacao = normalizarTexto(neofinSituacao)?.toUpperCase();
+
+  if (situacao === "FALHA_INTEGRACAO") return "FALHA_INTEGRACAO";
+  if (situacao === "VINCULADA") {
+    return statusOperacional === "PAGO" ? "LIQUIDADA" : "EM_COBRANCA";
+  }
+
+  if (!normalizarTexto(neofinIdentifier)) return "SEM_NEOFIN";
   return statusOperacional === "PAGO" ? "LIQUIDADA" : "EM_COBRANCA";
 }
 
@@ -247,8 +472,26 @@ export function montarNeofinLabel(status: NeofinStatusCobranca): string {
       return "NeoFin liquidada";
     case "EM_COBRANCA":
       return "Em cobranca NeoFin";
+    case "FALHA_INTEGRACAO":
+      return "Falha de integracao";
     default:
       return "Sem NeoFin";
+  }
+}
+
+export function montarNeofinSituacaoLabel(
+  situacao: NeofinSituacaoOperacional,
+  status: NeofinStatusCobranca,
+): string {
+  switch (situacao) {
+    case "VINCULADA":
+      return status === "LIQUIDADA" ? "NeoFin liquidada" : "Em cobranca NeoFin";
+    case "FALHA_INTEGRACAO":
+      return "Falha de integracao";
+    case "NAO_VINCULADA":
+      return "Sem vinculo NeoFin";
+    default:
+      return "Nao se aplica";
   }
 }
 
@@ -286,7 +529,7 @@ export function calcularResumoMensalFinanceiro(items: CobrancaOperacionalItem[])
       atual.a_vencer_centavos += saldoAbertoCentavos;
     }
 
-    if (item.neofin_charge_id && saldoAbertoCentavos > 0) {
+    if (item.neofin_situacao_operacional === "VINCULADA" && saldoAbertoCentavos > 0) {
       atual.neofin_centavos += saldoAbertoCentavos;
     }
 
@@ -358,3 +601,4 @@ export function agruparCobrancasPorCompetencia(items: CobrancaOperacionalItem[])
 
   return ordenados;
 }
+import { formatBRLFromCents } from "@/lib/formatters/money";

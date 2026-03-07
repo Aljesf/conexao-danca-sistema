@@ -378,7 +378,7 @@ export default function FinanceiroDashboardPage() {
             subtitle="Visao geral do financeiro com saude imediata, leitura mensal SaaS e alertas inteligentes."
             items={[
               "Saude imediata e saude mensal mostram previsto, pago, pendente, vencido e carteira em NeoFin.",
-              "A leitura mensal ajuda a comparar competencias recentes e priorizar cobranca e conversao.",
+              "A leitura mensal considera mensalidades, avulsas e cobrancas sem NeoFin dentro da Conta Interna Aluno.",
               "Fluxo de caixa, alertas simples e leitura inteligente mantem a visao executiva do financeiro.",
             ]}
           />
@@ -423,7 +423,7 @@ export default function FinanceiroDashboardPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-800">Saude mensal do financeiro</h2>
               <p className="text-sm text-slate-600">
-                Leitura rapida da competencia {competenciaMensalLabel} com foco em cobranca e conversao.
+                Leitura rapida da competencia {competenciaMensalLabel} com foco em cobranca, conversao e vinculo operacional.
               </p>
             </div>
             <Link
@@ -476,7 +476,7 @@ export default function FinanceiroDashboardPage() {
                 <div>
                   <h3 className="text-base font-semibold text-slate-800">Competencias recentes</h3>
                   <p className="text-sm text-slate-600">
-                    Compare previsto, pago, pendente, vencido e NeoFin para decidir a prioridade do mes.
+                    Compare previsto, pago, pendente, vencido e NeoFin para decidir a prioridade do mes na Conta Interna Aluno.
                   </p>
                 </div>
               </div>
@@ -522,7 +522,7 @@ export default function FinanceiroDashboardPage() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-sm">
               <h3 className="text-base font-semibold text-slate-800">Leitura rapida do mes</h3>
               <p className="mt-1 text-sm text-slate-600">
-                Priorize a carteira vencida, acompanhe NeoFin e mantenha o foco em cobranca ativa antes de abrir novo ciclo.
+                Priorize a carteira vencida, acompanhe NeoFin e ajuste cobrancas sem vinculo antes de abrir novo ciclo.
               </p>
 
               <div className="mt-4 space-y-3">

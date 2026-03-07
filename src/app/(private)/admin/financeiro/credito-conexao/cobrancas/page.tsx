@@ -2,11 +2,13 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { FinancePageShell } from "@/components/financeiro/FinancePageShell";
+import { CobrancasCompetenciaCard } from "@/components/financeiro/credito-conexao/CobrancasCompetenciaCard";
+import { CobrancasMensaisResumo } from "@/components/financeiro/credito-conexao/CobrancasMensaisResumo";
+import { CompetenciaTabs } from "@/components/financeiro/credito-conexao/CompetenciaTabs";
+import { VincularCobrancaFaturaDialog } from "@/components/financeiro/credito-conexao/VincularCobrancaFaturaDialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { CobrancasCompetenciaCard } from "@/components/financeiro/credito-conexao/CobrancasCompetenciaCard";
-import { CobrancasMensaisResumo } from "@/components/financeiro/credito-conexao/CobrancasMensaisResumo";
 import {
   type CobrancaOperacionalItem,
   type CobrancasMensaisResponse,
@@ -31,7 +33,7 @@ type PagamentoResponse = {
 };
 
 function mensagemErroCobrancas(): string {
-  return "Nao foi possivel carregar a leitura operacional agora. Atualize a pagina ou tente novamente em instantes.";
+  return "Nao foi possivel carregar a carteira operacional agora. Atualize a pagina ou tente novamente em instantes.";
 }
 
 function mensagemErroPagamento(): string {
@@ -129,16 +131,16 @@ function PagamentoModal({
 
 export default function AdminCreditoConexaoCobrancasPage() {
   const [busca, setBusca] = useState("");
-  const [competencia, setCompetencia] = useState("TODOS");
   const [statusOperacional, setStatusOperacional] = useState("TODOS");
   const [statusNeofin, setStatusNeofin] = useState("TODOS");
-  const [pagina, setPagina] = useState(1);
+  const [competenciaAtiva, setCompetenciaAtiva] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [data, setData] = useState<CobrancasMensaisResponse | null>(null);
   const [modalPagamento, setModalPagamento] = useState<CobrancaOperacionalItem | null>(null);
+  const [modalVinculo, setModalVinculo] = useState<CobrancaOperacionalItem | null>(null);
   const [dataPagamento, setDataPagamento] = useState(localTodayIso());
   const [metodoPagamento, setMetodoPagamento] = useState<"PIX" | "DINHEIRO">("PIX");
   const [savingPagamento, setSavingPagamento] = useState(false);
@@ -154,10 +156,8 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
       try {
         const params = new URLSearchParams();
-        params.set("page", String(pagina));
-        params.set("limite", "6");
+        params.set("limite", "36");
         if (buscaDiferida.trim()) params.set("q", buscaDiferida.trim());
-        if (competencia !== "TODOS") params.set("competencia", competencia);
         if (statusOperacional !== "TODOS") params.set("status_operacional", statusOperacional);
         if (statusNeofin !== "TODOS") params.set("status_neofin", statusNeofin);
 
@@ -186,13 +186,26 @@ export default function AdminCreditoConexaoCobrancasPage() {
     void carregar();
 
     return () => controller.abort();
-  }, [buscaDiferida, competencia, pagina, reloadToken, statusNeofin, statusOperacional]);
+  }, [buscaDiferida, reloadToken, statusNeofin, statusOperacional]);
 
-  const totalPaginas = useMemo(() => {
-    const total = data?.paginacao.total ?? 0;
-    const limite = data?.paginacao.limite ?? 6;
-    return Math.max(1, Math.ceil(total / limite));
-  }, [data?.paginacao.limite, data?.paginacao.total]);
+  useEffect(() => {
+    const disponiveis = data?.competencias_disponiveis ?? [];
+    if (disponiveis.length === 0) {
+      setCompetenciaAtiva(null);
+      return;
+    }
+
+    if (competenciaAtiva && disponiveis.some((item) => item.competencia === competenciaAtiva)) {
+      return;
+    }
+
+    setCompetenciaAtiva(data?.competencia_ativa_padrao ?? disponiveis[0]?.competencia ?? null);
+  }, [competenciaAtiva, data]);
+
+  const competenciaAtual = useMemo(() => {
+    if (!competenciaAtiva) return data?.meses[0] ?? null;
+    return data?.meses.find((mes) => mes.competencia === competenciaAtiva) ?? data?.meses[0] ?? null;
+  }, [competenciaAtiva, data]);
 
   function abrirModalPagamento(item: CobrancaOperacionalItem) {
     setModalPagamento(item);
@@ -245,16 +258,14 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
   function limparFiltros() {
     setBusca("");
-    setCompetencia("TODOS");
     setStatusOperacional("TODOS");
     setStatusNeofin("TODOS");
-    setPagina(1);
   }
 
   return (
     <FinancePageShell
-      title="Conta Interna Aluno - Cobrancas"
-      subtitle="Visao mensal e operacional da carteira do aluno, organizada por competencia, risco e proxima acao."
+      title="Conta Interna Aluno - Carteira operacional"
+      subtitle="Visao mensal SaaS da carteira do aluno com mensalidades, avulsas, cobrancas sem NeoFin e ajuste manual de vinculo."
       actions={
         <Button type="button" variant="secondary" onClick={() => setReloadToken((current) => current + 1)} disabled={loading}>
           {loading ? "Atualizando..." : "Atualizar"}
@@ -267,8 +278,9 @@ export default function AdminCreditoConexaoCobrancasPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-slate-700">
-            Leia primeiro o mes, depois o risco e por fim a acao. A carteira agora prioriza vencidos, a vencer e pagos em
-            blocos separados.
+            A carteira inclui mensalidades, avulsas e cobrancas sem NeoFin. NeoFin e camada operacional de cobranca, nao
+            criterio de existencia da divida. O vinculo manual com fatura deve ser usado como recurso administrativo
+            excepcional.
           </div>
 
           {feedback ? (
@@ -287,40 +299,17 @@ export default function AdminCreditoConexaoCobrancasPage() {
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{erro}</div>
           ) : null}
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Input
               value={busca}
-              onChange={(event) => {
-                setPagina(1);
-                setBusca(event.target.value);
-              }}
+              onChange={(event) => setBusca(event.target.value)}
               placeholder="Buscar por nome, ID ou referencia"
               disabled={loading}
             />
 
             <select
-              value={competencia}
-              onChange={(event) => {
-                setPagina(1);
-                setCompetencia(event.target.value);
-              }}
-              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
-              disabled={loading}
-            >
-              <option value="TODOS">Competencia: todas</option>
-              {(data?.competencias_disponiveis ?? []).map((item) => (
-                <option key={item.competencia} value={item.competencia}>
-                  {item.competencia_label}
-                </option>
-              ))}
-            </select>
-
-            <select
               value={statusOperacional}
-              onChange={(event) => {
-                setPagina(1);
-                setStatusOperacional(event.target.value);
-              }}
+              onChange={(event) => setStatusOperacional(event.target.value)}
               className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
               disabled={loading}
             >
@@ -332,16 +321,14 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
             <select
               value={statusNeofin}
-              onChange={(event) => {
-                setPagina(1);
-                setStatusNeofin(event.target.value);
-              }}
+              onChange={(event) => setStatusNeofin(event.target.value)}
               className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
               disabled={loading}
             >
-              <option value="TODOS">Status NeoFin: todos</option>
-              <option value="COM_NEOFIN">Com NeoFin</option>
-              <option value="SEM_NEOFIN">Sem NeoFin</option>
+              <option value="TODOS">Situacao NeoFin: todas</option>
+              <option value="VINCULADA">Em cobranca NeoFin</option>
+              <option value="NAO_VINCULADA">Sem vinculo NeoFin</option>
+              <option value="FALHA_INTEGRACAO">Falha de integracao</option>
             </select>
 
             <div className="flex flex-wrap gap-2">
@@ -358,53 +345,35 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
       {data ? <CobrancasMensaisResumo resumo={data.resumo_geral} /> : null}
 
+      <CompetenciaTabs
+        items={data?.competencias_disponiveis ?? []}
+        active={competenciaAtiva}
+        onChange={setCompetenciaAtiva}
+      />
+
       <Card className="border-slate-200 bg-white shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-800">Carteira por competencia</CardTitle>
+          <CardTitle className="text-base text-slate-800">Competencia ativa</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {loading && !data ? (
-            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">Carregando cobrancas...</div>
+            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
+              Carregando carteira operacional...
+            </div>
           ) : null}
 
-          {!loading && (data?.meses.length ?? 0) === 0 ? (
+          {!loading && !competenciaAtual ? (
             <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
               Nenhuma cobranca encontrada para o filtro atual.
             </div>
           ) : null}
 
-          {(data?.meses ?? []).map((mes) => (
+          {competenciaAtual ? (
             <CobrancasCompetenciaCard
-              key={mes.competencia}
-              competencia={mes}
+              competencia={competenciaAtual}
               onRegistrarRecebimento={abrirModalPagamento}
+              onVincularFatura={setModalVinculo}
             />
-          ))}
-
-          {data && data.paginacao.total > 1 ? (
-            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-slate-600">
-                Pagina {data.paginacao.pagina} de {totalPaginas} competencias
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setPagina((current) => Math.max(1, current - 1))}
-                  disabled={loading || pagina <= 1}
-                >
-                  Anterior
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setPagina((current) => Math.min(totalPaginas, current + 1))}
-                  disabled={loading || pagina >= totalPaginas}
-                >
-                  Proxima
-                </Button>
-              </div>
-            </div>
           ) : null}
         </CardContent>
       </Card>
@@ -419,6 +388,16 @@ export default function AdminCreditoConexaoCobrancasPage() {
         onChangeData={setDataPagamento}
         onChangeMetodo={setMetodoPagamento}
         onConfirm={() => void confirmarPagamento()}
+      />
+
+      <VincularCobrancaFaturaDialog
+        item={modalVinculo}
+        open={Boolean(modalVinculo)}
+        onClose={() => setModalVinculo(null)}
+        onSuccess={(mensagem) => {
+          setFeedback({ tipo: "sucesso", mensagem });
+          setReloadToken((current) => current + 1);
+        }}
       />
     </FinancePageShell>
   );
