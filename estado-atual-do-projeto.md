@@ -491,3 +491,49 @@ Proxima etapa SQL recomendada:
 - decidir se `documentos_cabecalhos` e `documentos_rodapes` entram como tabelas novas ou como evolucao controlada de `documentos_layout_templates`.
 
 ---
+
+## Atualizacoes recentes (SQL do dominio Documentos - operacoes, cabecalhos, rodapes e historico) - 2026-03-07
+
+Escopo desta fase:
+- somente SQL;
+- sem alteracoes em API;
+- sem alteracoes em paginas/componentes.
+
+Migration criada e aplicada:
+- `supabase/migrations/20260307_03_documentos_operacoes_componentes_emitidos.sql`
+
+Estrutura adicionada:
+- nova tabela `public.documentos_operacoes`;
+- nova tabela `public.documentos_operacoes_conjuntos`;
+- nova tabela `public.documentos_cabecalhos`;
+- nova tabela `public.documentos_rodapes`.
+
+Campos novos em `public.documentos_modelo`:
+- `operacao_id`
+- `cabecalho_id`
+- `rodape_id`
+
+Campos novos em `public.documentos_emitidos`:
+- `operacao_id`
+- `origem_tipo`
+- `origem_id`
+- `documento_origem_id`
+- `motivo_reemissao`
+- `tipo_relacao_documental`
+
+Ajuste tecnico aplicado na migration:
+- FKs adaptadas ao schema real:
+  - `documentos_tipos(tipo_documento_id)`
+  - `documentos_layout_templates(layout_template_id)`
+- constraints de FK e check criadas com abordagem idempotente para suportar reexecucao parcial.
+
+Seeds iniciais incluidos:
+- `RECIBO_PAGAMENTO_CONFIRMADO`
+- `RECIBO_CONTA_INTERNA_MENSAL`
+
+Proximo passo exato da fase API:
+- fazer a rota oficial de recibo por recebimento resolver `operacao_id`, `origem_tipo` e `origem_id`;
+- trocar a selecao heuristica do modelo por busca canonica de modelo vinculado a `documentos_operacoes`;
+- iniciar a resolucao de cabecalho e rodape pelo novo vinculo sem quebrar compatibilidade com `documentos_layout_templates`.
+
+---
