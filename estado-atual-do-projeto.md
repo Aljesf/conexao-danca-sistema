@@ -311,3 +311,63 @@ Proximas acoes:
 - Validar visualmente `/admin/financeiro/credito-conexao/cobrancas` e `/admin/financeiro` com sessao autenticada.
 - Capturar prints finais para aprovacao funcional da carteira em abas e do dialogo de vinculo manual.
 - Se desejado, estender a mesma leitura mensal para Conta Interna Colaborador e para outros paines de contas a receber que ainda consomem a view legada.
+## Atualizacoes recentes (Diagnostico de Recibos Financeiros) - 2026-03-07
+
+SQL:
+- Criado o arquivo diagnostico `supabase/migrations/diagnostico-recibos-financeiro.sql`.
+- O diagnostico consolida consultas para:
+  - colunas de `public.cobrancas`;
+  - colunas de `public.recebimentos`;
+  - colunas de `public.credito_conexao_faturas` e `public.credito_conexao_contas`;
+  - estruturas de `documentos_modelo` e `documentos_emitidos`;
+  - relacoes por `cobranca_id`, `pessoa_id`, `competencia_ano_mes` e `data_pagamento`;
+  - amostras de quitacao total, recebimento parcial e leitura mensal da conta interna.
+- Decisao tecnica fechada:
+  - o recibo principal deve nascer de `public.recebimentos`, usando `data_pagamento` como ancora do pagamento confirmado;
+  - status da cobranca sozinho nao e suficiente como ancora canonica do recibo.
+
+APIs / contrato:
+- Mapeado o trilho existente de recibos:
+  - `src/app/api/documentos/recibos/mensalidade/route.ts`
+  - `src/app/api/documentos/recibos/conta/route.ts`
+  - `src/app/api/documentos/recibos/preview/route.ts`
+  - `src/app/api/documentos/recibos/gerar-pdf/route.ts`
+- Confirmado que ja existe emissao parcial de recibo no dominio Documentos:
+  - modelo em `documentos_modelo`;
+  - persistencia em `documentos_emitidos` usando o slot legado `contrato_modelo_id`;
+  - busca operacional em `vw_documentos_busca_recibo`.
+- Criado o contrato tipado `src/lib/documentos/recibos/contrato-recibo.ts` com:
+  - `TipoRecibo`
+  - `OrigemRecibo`
+  - `ReciboPagamentoItem`
+  - `ReciboPagamentoSnapshot`
+  - `ReciboMensalConsolidadoSnapshot`
+- Recibo principal definido como:
+  - recibo por pagamento confirmado.
+- Recibo consolidado mensal mapeado como:
+  - evolucao complementar para conta interna por competencia.
+
+Paginas / componentes:
+- UI financeira mapeada para os pontos oficiais de entrada do recibo:
+  - detalhe da cobranca quitada;
+  - historico/operacao de recebimentos;
+  - detalhe mensal da fatura/conta interna para o consolidado.
+- Documento tecnico criado em `docs/diagnostico-recibos-financeiro.md` registrando:
+  - telas atuais encontradas;
+  - diferenca entre recibo individual e consolidado;
+  - onde o botao deve entrar;
+  - riscos de UX e gaps tecnicos.
+
+Pendencias:
+- A refatoracao completa do motor documental de recibos ficou propositalmente fora deste chat.
+- `gerar-pdf` de recibos ainda devolve HTML; o renderer final de PDF segue pendente.
+- O recibo consolidado mensal depende de confirmacao mensal mais robusta; no schema atual, `conta_interna_pagamentos` nao existe e a leitura segue em fallback.
+- Captura de prints reais segue dependente de sessao autenticada no ambiente local.
+
+Proximas acoes:
+- No proximo chat, implementar builders server-side de snapshot:
+  - por `recebimento_id`;
+  - por `pessoa_id + competencia_ano_mes` para consolidado mensal.
+- Integrar a emissao desses snapshots ao modulo Documentos sem deixar o motor documental recalcular regra financeira.
+
+---
