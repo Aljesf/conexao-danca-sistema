@@ -580,3 +580,38 @@ Pendencias:
   - botoes de reprocessamento na cobranca;
   - fluxo de cancelamento local somente em cobrancas sem NeoFin e sem recebimentos.
 
+---
+
+## Atualizacao 2026-03-08 (Documentos - API canonica de recibos por recebimento)
+
+SQL:
+- Sem nova migration nesta etapa.
+- A fase API passou a consumir a estrutura canonica criada em `documentos_operacoes`, `documentos_cabecalhos`, `documentos_rodapes` e nos novos campos de `documentos_emitidos`.
+
+API:
+- Novo servico `src/lib/documentos/core/resolver-modelo-por-operacao.ts`:
+  - resolve operacao canonica;
+  - localiza modelo ativo por `operacao_id`;
+  - carrega cabecalho/rodape semanticos quando existirem;
+  - aplica fallback compativel com `documentos_layout_templates`, `documentos_layouts` e HTML legado do modelo.
+- Novo servico `src/lib/documentos/core/montar-layout-documental.ts`:
+  - separa corpo, cabecalho e rodape;
+  - resolve placeholders no layout completo;
+  - devolve HTML final de preview e metadados de renderizacao.
+- `src/lib/documentos/recibos/emitir-recibo-por-recebimento.ts` refatorado para:
+  - usar a operacao `RECIBO_PAGAMENTO_CONFIRMADO`;
+  - persistir `operacao_id`, `origem_tipo`, `origem_id` e `tipo_relacao_documental` quando disponiveis;
+  - manter idempotencia por `recebimento_id`;
+  - preservar snapshot server-side e variaveis do recibo.
+- `src/app/api/documentos/recibos/recebimento/preview/route.ts` e `src/app/api/documentos/recibos/recebimento/route.ts` agora compartilham o mesmo pipeline ate a borda de persistencia.
+
+Compatibilidade:
+- `GerarReciboButton` permaneceu com a mesma UX e passou a aceitar payload antigo e novo.
+- O fallback legado segue ativo para ambientes onde o layout ainda dependa de `documentos_layout_templates` e campos antigos do modelo.
+
+Proximo passo:
+- Fase Paginas / Componentes do modulo Documentos:
+  - acabamento visual do preview autenticado;
+  - abertura e reemissao de recibos;
+  - tratamento institucional de cabecalho, rodape e PDF final.
+

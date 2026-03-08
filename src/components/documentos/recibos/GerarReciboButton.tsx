@@ -7,9 +7,16 @@ import { Button } from "@/components/ui/button";
 type GerarReciboResponse = {
   ok?: boolean;
   error?: string;
+  documentoEmitidoId?: number;
   documento_emitido_id?: number;
+  previewUrl?: string;
   preview_url?: string;
+  documentoUrl?: string;
   documento_url?: string;
+  htmlPreview?: string;
+  operacaoCodigo?: string;
+  origemTipo?: string;
+  origemId?: string;
 };
 
 type Props = {
@@ -69,9 +76,9 @@ export function GerarReciboButton({
         return;
       }
 
-      setDocumentoId(json.documento_emitido_id ?? null);
-      setPreviewUrl(json.preview_url ?? null);
-      setDocumentoUrl(json.documento_url ?? null);
+      setDocumentoId(json.documentoEmitidoId ?? json.documento_emitido_id ?? null);
+      setPreviewUrl(json.previewUrl ?? json.preview_url ?? null);
+      setDocumentoUrl(json.documentoUrl ?? json.documento_url ?? null);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Nao foi possivel emitir o recibo agora.");
     } finally {

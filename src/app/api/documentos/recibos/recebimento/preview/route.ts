@@ -11,37 +11,6 @@ function toPositiveInt(value: unknown): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function renderHtmlDocument(params: {
-  titulo: string;
-  cabecalhoHtml: string | null;
-  rodapeHtml: string | null;
-  conteudoHtml: string;
-}): string {
-  const { titulo, cabecalhoHtml, rodapeHtml, conteudoHtml } = params;
-
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${titulo}</title>
-    <style>
-      body { margin: 0; font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; }
-      .page { max-width: 980px; margin: 0 auto; padding: 24px; }
-      .slot { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
-      .slot + .slot { margin-top: 16px; }
-    </style>
-  </head>
-  <body>
-    <main class="page">
-      ${cabecalhoHtml ? `<section class="slot">${cabecalhoHtml}</section>` : ""}
-      <section class="slot">${conteudoHtml}</section>
-      ${rodapeHtml ? `<section class="slot">${rodapeHtml}</section>` : ""}
-    </main>
-  </body>
-</html>`;
-}
-
 async function resolverRecebimentoId(req: NextRequest): Promise<number | null> {
   const { searchParams } = new URL(req.url);
   const queryId = toPositiveInt(searchParams.get("recebimento_id"));
@@ -73,28 +42,26 @@ async function handlePreview(req: NextRequest) {
 
     const renderRaw = new URL(req.url).searchParams.get("render") === "1";
     if (renderRaw) {
-      return new NextResponse(
-        renderHtmlDocument({
-          titulo: preview.modelo.titulo ?? `Recibo ${preview.snapshot.recibo_numero}`,
-          cabecalhoHtml: preview.cabecalhoHtml,
-          rodapeHtml: preview.rodapeHtml,
-          conteudoHtml: preview.conteudoResolvido,
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "text/html; charset=utf-8" },
-        },
-      );
+      return new NextResponse(preview.htmlPreview, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
     }
 
     return NextResponse.json({
       ok: true,
+      operacao: preview.operacao,
       snapshot: preview.snapshot,
       variaveis: preview.variaveis,
+      variaveis_agrupadas: preview.variaveisAgrupadas,
       modelo: preview.modelo,
+      htmlPreview: preview.htmlPreview,
+      html_preview: preview.htmlPreview,
       preview_html: preview.conteudoResolvido,
       cabecalho_html: preview.cabecalhoHtml,
       rodape_html: preview.rodapeHtml,
+      metadadosRenderizacao: preview.metadadosRenderizacao,
+      metadados_renderizacao: preview.metadadosRenderizacao,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "falha_preview_recibo";

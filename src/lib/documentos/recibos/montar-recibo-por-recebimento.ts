@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ReciboPagamentoItem, ReciboPagamentoSnapshot } from "@/lib/documentos/recibos/contrato-recibo";
-import { mapearVariaveisRecibo, type VariaveisReciboDocumento } from "@/lib/documentos/recibos/mapear-variaveis-recibo";
+import {
+  mapearVariaveisRecibo,
+  mapearVariaveisReciboAgrupadas,
+  type VariaveisReciboAgrupadas,
+  type VariaveisReciboDocumento,
+} from "@/lib/documentos/recibos/mapear-variaveis-recibo";
 
 type RecebimentoRow = {
   id: number;
@@ -68,6 +73,7 @@ type EscolaContext = {
 export type MontagemReciboPorRecebimento = {
   snapshot: ReciboPagamentoSnapshot;
   variaveis: VariaveisReciboDocumento;
+  variaveisAgrupadas: VariaveisReciboAgrupadas;
   gaps: string[];
 };
 
@@ -347,6 +353,9 @@ export async function montarReciboPorRecebimento(params: {
     gaps,
   };
 
+  const variaveisAgrupadas = mapearVariaveisReciboAgrupadas(snapshot, {
+    escola_nome: escola.nome,
+  });
   const variaveis = mapearVariaveisRecibo(snapshot, {
     escola_nome: escola.nome,
   });
@@ -354,6 +363,7 @@ export async function montarReciboPorRecebimento(params: {
   return {
     snapshot,
     variaveis,
+    variaveisAgrupadas,
     gaps,
   };
 }
