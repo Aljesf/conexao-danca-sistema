@@ -30,6 +30,40 @@ type DocEmitido = {
 
 type ApiResp<T> = { ok?: boolean; data?: T; message?: string; debug?: unknown; html?: string };
 
+type ViewMode = "stored" | "raw" | "resolved";
+
+function resolveConteudoPersistido(doc: DocEmitido | null): { html: string; source: string; usedFallback: boolean } {
+  if (!doc) {
+    return { html: "<p></p>", source: "nao informado", usedFallback: true };
+  }
+
+  if (typeof doc.conteudo_resolvido_html === "string" && doc.conteudo_resolvido_html.trim()) {
+    return {
+      html: doc.conteudo_resolvido_html,
+      source: "conteudo_resolvido_html",
+      usedFallback: false,
+    };
+  }
+
+  if (typeof doc.conteudo_renderizado_md === "string" && doc.conteudo_renderizado_md.trim()) {
+    return {
+      html: doc.conteudo_renderizado_md,
+      source: "conteudo_renderizado_md",
+      usedFallback: false,
+    };
+  }
+
+  if (typeof doc.conteudo_template_html === "string" && doc.conteudo_template_html.trim()) {
+    return {
+      html: doc.conteudo_template_html,
+      source: "conteudo_template_html",
+      usedFallback: true,
+    };
+  }
+
+  return { html: "<p></p>", source: "nao informado", usedFallback: true };
+}
+
 export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const docId = Number(id);
 
@@ -41,11 +75,13 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const [html, setHtml] = React.useState<string>("");
   const [rawHtml, setRawHtml] = React.useState<string>("");
   const [resolvedHtml, setResolvedHtml] = React.useState<string>("");
-  const [viewMode, setViewMode] = React.useState<"raw" | "resolved">("raw");
+  const [viewMode, setViewMode] = React.useState<ViewMode>("stored");
   const [previewLoadingMode, setPreviewLoadingMode] = React.useState<"raw" | "resolved" | null>(null);
   const [salvando, setSalvando] = React.useState(false);
   const [okMsg, setOkMsg] = React.useState<string | null>(null);
   const [debug, setDebug] = React.useState<unknown>(null);
+  const [fonteVisualizacao, setFonteVisualizacao] = React.useState<string>("nao informado");
+  const [visualizacaoEmFallback, setVisualizacaoEmFallback] = React.useState(false);
 
   type LoadOptions = {
     preserveDraftHtml?: boolean;
@@ -67,29 +103,25 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     setOkMsg(null);
     setLoading(true);
     try {
-      const res = await fetch(`/api/documentos/emitidos/${docId}?mode=raw`, { cache: "no-store" });
+      const res = await fetch(`/api/documentos/emitidos/${docId}`, { cache: "no-store" });
       const json = (await res.json()) as ApiResp<DocEmitido>;
       if (!res.ok || !json.ok || !json.data) {
         throw new Error(json.message || "Falha ao carregar documento emitido.");
       }
-      const baseHtmlRaw =
-        json.data.conteudo_resolvido_html ||
-        json.data.conteudo_template_html ||
-        json.data.conteudo_renderizado_md ||
-        "<p></p>";
-      const baseHtml = maybeDecodeHtml(baseHtmlRaw);
-      const rawHtmlRaw = typeof json.html === "string" ? json.html : baseHtml;
-      const rawHtmlDecoded = maybeDecodeHtml(rawHtmlRaw) ?? "";
+      const persisted = resolveConteudoPersistido(json.data);
+      const baseHtml = maybeDecodeHtml(persisted.html) ?? "<p></p>";
       setDoc(json.data);
+      setFonteVisualizacao(persisted.source);
+      setVisualizacaoEmFallback(persisted.usedFallback);
       if (!options?.preserveDraftHtml) {
         setHtml(baseHtml);
       }
       if (!options?.preserveRawHtml) {
-        setRawHtml(rawHtmlDecoded);
+        setRawHtml("");
       }
       if (!options?.preserveResolvedHtml) {
         setResolvedHtml("");
-        setViewMode("raw");
+        setViewMode(persisted.usedFallback ? "raw" : "stored");
       }
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado.");
@@ -119,6 +151,8 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
       const rawDecoded = maybeDecodeHtml(fallbackRaw) ?? "";
       setRawHtml(rawDecoded);
       setDoc(json.data);
+      setFonteVisualizacao("conteudo_template_html");
+      setVisualizacaoEmFallback(true);
       setViewMode("raw");
       return true;
     } catch (e) {
@@ -145,6 +179,8 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
       if (json.data) {
         setDoc(json.data);
       }
+      setFonteVisualizacao("reconstrucao em tempo real");
+      setVisualizacaoEmFallback(false);
       setViewMode("resolved");
       if (json.debug) {
         setDebug(json.debug);
@@ -232,16 +268,22 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   } as React.CSSProperties;
   const previewConteudoRaw =
     (rawHtml && rawHtml.trim().length > 0 ? rawHtml : "") ||
-    (html && html.trim().length > 0 ? html : "") ||
     doc?.conteudo_template_html ||
+    html ||
     doc?.conteudo_renderizado_md ||
     doc?.conteudo_resolvido_html ||
     "<p>(sem conteudo)</p>";
+  const previewConteudoStored =
+    (html && html.trim().length > 0 ? html : "") ||
+    doc?.conteudo_resolvido_html ||
+    doc?.conteudo_renderizado_md ||
+    previewConteudoRaw;
   const previewConteudoResolved =
-    resolvedHtml && resolvedHtml.trim().length > 0 ? resolvedHtml : previewConteudoRaw;
-  const previewConteudo = viewMode === "resolved" ? previewConteudoResolved : previewConteudoRaw;
+    resolvedHtml && resolvedHtml.trim().length > 0 ? resolvedHtml : previewConteudoStored;
+  const previewConteudo =
+    viewMode === "raw" ? previewConteudoRaw : viewMode === "resolved" ? previewConteudoResolved : previewConteudoStored;
   const resolvedHasPlaceholders =
-    viewMode === "resolved" && previewConteudoResolved.includes("{{");
+    viewMode !== "raw" && previewConteudo.includes("{{");
   const colecoesVazias = React.useMemo(() => {
     const raw = doc?.variaveis_utilizadas_json;
     if (!raw || typeof raw !== "object") return [];
@@ -418,6 +460,10 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                   <p className="mt-1 text-xs text-slate-500">
                     Para gerar PDF, use &quot;Imprimir / Salvar PDF&quot;.
                   </p>
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                    <strong>Fonte oficial da visualizacao:</strong> {fonteVisualizacao}
+                    {visualizacaoEmFallback ? " (fallback legado/controlado)" : " (persistido na emissao)"}
+                  </div>
 
                   <div className="documento-preview mt-3 rounded-lg border border-slate-200 bg-white p-4">
                     <div id="print-root" className="doc-print-root" style={printVars}>
