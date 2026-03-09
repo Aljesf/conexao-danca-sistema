@@ -14,6 +14,7 @@ import { type JoinEdge } from "@/lib/documentos/resolveByJoinPath";
 import { normalizeOperacaoTipo, OPERACAO_TIPOS } from "@/lib/documentos/operacaoTipos";
 import { decodeHtmlEntities } from "@/lib/documentos/renderHtml";
 import { buildContextFromMatricula } from "@/lib/documentos/buildContext";
+import { buildDocumentoEmitidoPdfUrl } from "@/lib/documentos/core/documento-emitido-utils";
 
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
 
@@ -441,6 +442,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const decoded = {
     ...data,
+    pdf_url: typeof data.pdf_url === "string" && data.pdf_url.trim() ? data.pdf_url : buildDocumentoEmitidoPdfUrl(docId),
     conteudo_resolvido_html: maybeDecodeHtml(data.conteudo_resolvido_html),
     conteudo_template_html: maybeDecodeHtml(data.conteudo_template_html),
     conteudo_renderizado_md: maybeDecodeHtml(data.conteudo_renderizado_md),

@@ -23,6 +23,12 @@ type DocEmitido = {
   cabecalho_html?: string | null;
   rodape_html?: string | null;
   editado_manual?: boolean;
+  operacao_id?: number | null;
+  origem_tipo?: string | null;
+  origem_id?: string | null;
+  documento_origem_id?: number | null;
+  motivo_reemissao?: string | null;
+  tipo_relacao_documental?: string | null;
   variaveis_utilizadas_json?: Record<string, unknown> | null;
   created_at?: string;
   updated_at?: string | null;
@@ -247,6 +253,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
 
   const modeloId = doc?.documento_modelo_id ?? doc?.contrato_modelo_id ?? "-";
   const status = doc?.status_assinatura ?? doc?.status ?? "-";
+  const pdfUrl = doc?.pdf_url?.trim() ? doc.pdf_url : doc ? `/api/documentos/emitidos/${doc.id}/pdf` : null;
   const headerHtml = maybeDecodeHtml(doc?.header_html ?? doc?.cabecalho_html ?? "");
   const footerHtml = maybeDecodeHtml(doc?.footer_html ?? doc?.rodape_html ?? "");
   const headerHeightValue = Number(doc?.header_height_px);
@@ -364,9 +371,22 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                     {doc.editado_manual ? "Sim" : "Nao"}
                   </p>
                   <p>
+                    <strong>Relacao documental:</strong> {doc.tipo_relacao_documental ?? "ORIGINAL"}
+                    {doc.documento_origem_id ? (
+                      <>
+                        {" "}â€¢ <strong>Origem:</strong> #{doc.documento_origem_id}
+                      </>
+                    ) : null}
+                  </p>
+                  {doc.motivo_reemissao ? (
+                    <p>
+                      <strong>Motivo da reemissao:</strong> {doc.motivo_reemissao}
+                    </p>
+                  ) : null}
+                  <p>
                     <strong>PDF:</strong>{" "}
-                    {doc.pdf_url ? (
-                      <a className="underline" href={doc.pdf_url} target="_blank" rel="noreferrer">
+                    {pdfUrl ? (
+                      <a className="underline" href={pdfUrl} target="_blank" rel="noreferrer">
                         Abrir PDF
                       </a>
                     ) : (

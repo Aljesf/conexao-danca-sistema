@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildDocumentoEmitidoPdfUrl } from "@/lib/documentos/core/documento-emitido-utils";
 import { montarLayoutDocumental } from "@/lib/documentos/core/montar-layout-documental";
 import {
   resolverModeloPorOperacao,
@@ -166,6 +167,15 @@ export async function emitirReciboPorRecebimento(params: {
       .maybeSingle();
 
     if (existente?.id) {
+      const pdfUrlExistente = buildDocumentoEmitidoPdfUrl(Number(existente.id));
+      await supabase
+        .from("documentos_emitidos")
+        .update({
+          pdf_url: pdfUrlExistente,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", Number(existente.id));
+
       return {
         documentoEmitidoId: Number(existente.id),
         preview,
@@ -259,8 +269,18 @@ export async function emitirReciboPorRecebimento(params: {
     throw new Error(`falha_persistir_recibo:${insert.error?.message ?? "desconhecida"}`);
   }
 
+  const documentoEmitidoId = Number(insert.data.id);
+  const pdfUrl = buildDocumentoEmitidoPdfUrl(documentoEmitidoId);
+  await supabase
+    .from("documentos_emitidos")
+    .update({
+      pdf_url: pdfUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", documentoEmitidoId);
+
   return {
-    documentoEmitidoId: Number(insert.data.id),
+    documentoEmitidoId,
     preview,
     idempotent: false,
   };

@@ -1,11 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { getSupabaseServiceRole } from "@/lib/supabaseServer";
+import { gerarPdfDocumentoEmitido } from "@/lib/documentos/core/gerar-pdf-documento-emitido";
 
 function appendIfPresent(params: URLSearchParams, key: string, value: unknown) {
   if (value === null || value === undefined) return;
   const s = String(value).trim();
   if (!s) return;
   params.set(key, s);
+}
+
+function toPositiveInt(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 /**
@@ -19,14 +26,40 @@ export async function POST(req: NextRequest) {
 
   const incomingUrl = new URL(req.url);
   const query = new URLSearchParams(incomingUrl.search);
+  const body = await req.json().catch(() => ({} as Record<string, unknown>));
 
   // Fallback: permite receber params no body JSON tambem.
   if (!query.get("tipo")) {
-    const body = await req.json().catch(() => ({} as Record<string, unknown>));
     appendIfPresent(query, "tipo", body.tipo);
     appendIfPresent(query, "competencia", body.competencia);
     appendIfPresent(query, "responsavel_pessoa_id", body.responsavel_pessoa_id);
     appendIfPresent(query, "cobranca_avulsa_id", body.cobranca_avulsa_id);
+  }
+
+  const documentoEmitidoId =
+    toPositiveInt(query.get("documento_emitido_id")) ?? toPositiveInt(body.documento_emitido_id);
+
+  if (documentoEmitidoId) {
+    try {
+      const result = await gerarPdfDocumentoEmitido({
+        supabase: getSupabaseServiceRole(),
+        documentoEmitidoId,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        pdf: result.pdfUrl,
+        pdf_url: result.pdfUrl,
+        pdfDisponivel: true,
+        pdf_disponivel: true,
+        documentoEmitidoId: result.documento.id,
+        documento_emitido_id: result.documento.id,
+        fonte_conteudo: result.fonteConteudo,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "falha_gerar_pdf";
+      return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    }
   }
 
   if (!query.get("tipo")) {
