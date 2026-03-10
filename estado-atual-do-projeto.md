@@ -555,3 +555,5 @@ Pendencias remanescentes, agora de refinamento e expansao:
 - melhorar, se necessario, a experiencia de listagem e historico documental;
 - expandir o motor documental para outros tipos de documento alem de recibo;
 - implementar futuramente o recibo consolidado mensal da conta interna.
+
+- 2026-03-10 — Documentos / Autoria: modulo documental de emitidos e recibos ficou consolidado estruturalmente. A nova frente aberta passa a ser a ergonomia de autoria documental: revisao SRS/UX das telas de modelos, variaveis, conjuntos, grupos e colecoes, com foco em reduzir carga cognitiva, separar governanca tecnica de autoria operacional e reorganizar a manutencao de modelos em fluxo guiado por etapas. Documento base desta frente: `docs/revisao-srs-ux-documentos-autoria.md`.
