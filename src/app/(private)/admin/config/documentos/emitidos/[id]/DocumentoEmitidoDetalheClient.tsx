@@ -1,6 +1,11 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import CadeiaDocumentalCard from "@/components/documentos/emitidos/CadeiaDocumentalCard";
+import ReemitirDocumentoButton, {
+  type ReemissaoSuccessPayload,
+} from "@/components/documentos/emitidos/ReemitirDocumentoButton";
 import { RichTextEditor } from "@/components/ui/RichTextEditor/RichTextEditor";
 import { decodeHtmlEntities } from "@/lib/documentos/renderHtml";
 
@@ -88,6 +93,7 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
   const [debug, setDebug] = React.useState<unknown>(null);
   const [fonteVisualizacao, setFonteVisualizacao] = React.useState<string>("nao informado");
   const [visualizacaoEmFallback, setVisualizacaoEmFallback] = React.useState(false);
+  const [reemissaoResult, setReemissaoResult] = React.useState<ReemissaoSuccessPayload | null>(null);
 
   type LoadOptions = {
     preserveDraftHtml?: boolean;
@@ -312,9 +318,9 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
       <div className="doc-print-shell mx-auto flex max-w-6xl flex-col gap-6">
         <div className="no-print rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold">Documento emitido</h1>
+          <h1 className="text-xl font-semibold">Documento emitido #{docId}</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Visualizacao, impressao em PDF e edicao manual (admin).
+            Visualizacao final do emitido, com acoes administrativas e resumo documental consolidado logo abaixo.
           </p>
         </div>
 
@@ -357,8 +363,79 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
             <p className="text-sm text-slate-500">Carregando...</p>
           ) : (
             <div className="space-y-3">
+              <CadeiaDocumentalCard
+                documentoEmitidoId={doc.id}
+                tipoRelacaoDocumental={doc.tipo_relacao_documental}
+                documentoOrigemId={doc.documento_origem_id}
+                motivoReemissao={doc.motivo_reemissao}
+                operacaoId={doc.operacao_id}
+                origemTipo={doc.origem_tipo}
+                origemId={doc.origem_id}
+                pdfUrl={pdfUrl}
+              />
+
+              {reemissaoResult ? (
+                <div className="no-print rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  <div className="font-semibold">Novo documento reemitido com sucesso</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-emerald-800">
+                    <span>Documento #{reemissaoResult.novoDocumentoEmitidoId}</span>
+                    <span>•</span>
+                    <span>{reemissaoResult.tipoRelacaoDocumental}</span>
+                    <span>•</span>
+                    <span>{reemissaoResult.pdfDisponivel ? "PDF disponivel" : "PDF ainda nao gerado"}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {reemissaoResult.documentoUrl ? (
+                      <Link
+                        className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                        href={reemissaoResult.documentoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Abrir novo emitido
+                      </Link>
+                    ) : null}
+                    {reemissaoResult.pdfUrl ? (
+                      <Link
+                        className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                        href={reemissaoResult.pdfUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Abrir PDF do novo emitido
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
               <div className="no-print flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-slate-700">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Identificacao
+                    </div>
+                    <div className="mt-1 font-medium">Documento #{doc.id}</div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Matricula e modelo
+                    </div>
+                    <div className="mt-1 font-medium">
+                      Matricula {doc.matricula_id ?? "-"} | Modelo {modeloId}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-900">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Estado atual
+                    </div>
+                    <div className="mt-1 font-medium">
+                      {status} | Editado manualmente: {doc.editado_manual ? "Sim" : "Nao"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="hidden text-sm text-slate-700">
                   <p>
                     <strong>ID:</strong> {doc.id}
                   </p>
@@ -395,7 +472,20 @@ export default function DocumentoEmitidoDetalheClient({ id }: { id: string }) {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <ReemitirDocumentoButton documentoEmitidoId={doc.id} onSuccess={setReemissaoResult} />
+
+                  {pdfUrl ? (
+                    <a
+                      className="inline-flex items-center justify-center rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                      href={pdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Abrir PDF
+                    </a>
+                  ) : null}
+
                   <button
                     type="button"
                     className="rounded-md border bg-white px-3 py-2 text-sm hover:bg-slate-50"

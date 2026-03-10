@@ -16,12 +16,25 @@ type DocumentoEmitido = {
   created_at: string;
   updated_at?: string | null;
   pdf_url: string | null;
+  tipo_relacao_documental?: string | null;
+  documento_origem_id?: number | null;
   snapshot_financeiro_json?: {
     tipo_recibo?: string | null;
     recebimento_id?: number | null;
     cobranca_id?: number | null;
   } | null;
 };
+
+function badgeClass(tipo: string) {
+  switch (tipo) {
+    case "SUBSTITUICAO":
+      return "border-rose-200 bg-rose-50 text-rose-800";
+    case "REEMISSAO":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    default:
+      return "border-sky-200 bg-sky-50 text-sky-800";
+  }
+}
 
 export default function AdminDocumentosEmitidosPage() {
   const [loading, setLoading] = useState(true);
@@ -77,7 +90,18 @@ export default function AdminDocumentosEmitidosPage() {
             {itens.map((c) => (
               <div key={c.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-semibold">Documento #{c.id}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-sm font-semibold">Documento #{c.id}</div>
+                    {(c.tipo_relacao_documental ?? "ORIGINAL") !== "ORIGINAL" || c.documento_origem_id ? (
+                      <span
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${badgeClass(
+                          c.tipo_relacao_documental ?? "DERIVADO",
+                        )}`}
+                      >
+                        {c.tipo_relacao_documental ?? "DERIVADO"}
+                      </span>
+                    ) : null}
+                  </div>
                   <Link
                     className="text-xs font-medium uppercase tracking-wide text-slate-600 hover:underline"
                     href={`/admin/config/documentos/emitidos/${c.id}`}
@@ -89,6 +113,9 @@ export default function AdminDocumentosEmitidosPage() {
                   Matricula: {c.matricula_id} | Modelo:{" "}
                   {c.documento_modelo_id ?? c.contrato_modelo_id ?? "-"} | Status: {c.status_assinatura ?? "-"}
                 </div>
+                {c.documento_origem_id ? (
+                  <div className="mt-1 text-xs text-amber-700">Documento de origem: #{c.documento_origem_id}</div>
+                ) : null}
                 {c.snapshot_financeiro_json?.tipo_recibo === "PAGAMENTO_CONFIRMADO" ? (
                   <div className="mt-1 text-xs text-emerald-700">
                     Recibo financeiro por recebimento

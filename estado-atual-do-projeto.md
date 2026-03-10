@@ -537,6 +537,21 @@ Proximo passo exato da fase API:
 - iniciar a resolucao de cabecalho e rodape pelo novo vinculo sem quebrar compatibilidade com `documentos_layout_templates`.
 
 ---
-- 2026-03-09 — Documentos / Recibos: validacao visual real destravada em ambiente local com sessao autenticada de teste. Causa do bloqueio anterior: ausencia de sessao valida na revisao headless, nao erro no middleware. Durante a revisao apareceu um segundo bloqueio funcional: o modelo ativo "Recibo de Pagamento de Mensalidade" estava sem `operacao_id`, impedindo a resolucao por `documentos_operacoes`; foi feito backfill minimo para `RECIBO_PAGAMENTO_CONFIRMADO`. O fluxo autenticado passou a abrir preview, emitir documento e expor estado de PDF. Ajustes finos aplicados: "Fonte do corpo" refinada para "Modelo documental ativo" e microcopy de PDF ajustada para linguagem operacional.
-- 2026-03-09 — Documentos / Recibos: fase de ajustes aplicada na visualizacao do documento emitido. A tela administrativa `/admin/config/documentos/emitidos/[id]` deixou de abrir priorizando o template bruto e passou a usar como fonte oficial `documentos_emitidos.conteudo_resolvido_html`; na ausencia desse campo, usa `conteudo_renderizado_md` como equivalente persistido e deixa `conteudo_template_html` apenas como fallback controlado e explicitado na interface. A fase de Prints e revisao ficou concluida, e a pendencia real remanescente passa a ser o refinamento do fluxo de PDF/reemissao, nao mais a exibicao de placeholders crus na abertura do emitido.
-- 2026-03-09 — Documentos / Recibos: iniciada a consolidacao final do backend de PDF e reemissao. O PDF do documento emitido passou a nascer do HTML persistido em `documentos_emitidos.conteudo_resolvido_html`, com fallback apenas para `conteudo_renderizado_md` e, em ultimo caso, `conteudo_template_html`. Foi criada a rota autenticada `/api/documentos/emitidos/[id]/pdf`, que entrega `application/pdf` a partir do emitido ja persistido e estabiliza `pdf_url` no proprio registro. Tambem foi implementada a reemissao historica em `/api/documentos/emitidos/[id]/reemitir`, preservando o original, criando novo emitido com `documento_origem_id`, `motivo_reemissao`, `tipo_relacao_documental`, `operacao_id`, `origem_tipo` e `origem_id`, e expondo a cadeia documental minima na tela administrativa do emitido. Pendencia remanescente: elevar a fidelidade visual do PDF alem da renderizacao textual inicial em `pdf-lib` e criar a UX administrativa explicita de reemissao.
+- 2026-03-09 — Documentos / Recibos: modulo consolidado estruturalmente para recibos financeiros. Nesta etapa ficaram concluidos:
+  - recibo por recebimento confirmado funcional;
+  - snapshot server-side persistido;
+  - resolucao canonica por `documentos_operacoes`;
+  - cabecalhos, rodapes e componentes documentais estruturados;
+  - visualizacao final do emitido usando `documentos_emitidos.conteudo_resolvido_html`;
+  - PDF canonico por documento emitido;
+  - reemissao com preservacao do original;
+  - cadeia documental com `ORIGINAL`, `REEMISSAO` e `SUBSTITUICAO`;
+  - UI administrativa de reemissao;
+  - revisao visual concluida para fluxo normal e cadeia multinivel;
+  - limpeza de ruido duplicado no detalhe do emitido.
+
+Pendencias remanescentes, agora de refinamento e expansao:
+- refinar a fidelidade visual do renderer de PDF;
+- melhorar, se necessario, a experiencia de listagem e historico documental;
+- expandir o motor documental para outros tipos de documento alem de recibo;
+- implementar futuramente o recibo consolidado mensal da conta interna.
