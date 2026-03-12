@@ -19,7 +19,11 @@ type TipoDoc = {
 
 type ApiResp<T> = { ok?: boolean; data?: T; message?: string };
 
-export default function AdminDocumentosTiposPage() {
+type DocumentosTiposContentProps = {
+  embedded?: boolean;
+};
+
+export function DocumentosTiposContent({ embedded = false }: DocumentosTiposContentProps) {
   const [tipos, setTipos] = useState<TipoDoc[]>([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -77,27 +81,30 @@ export default function AdminDocumentosTiposPage() {
     void carregar();
   }, []);
 
-  return (
-    <SystemPage>
+  const content = (
+    <>
       <SystemContextCard
         title="Documentos - Tipos de documento"
-        subtitle="Classificacao usada pelos modelos. Documentos emitidos herdam o tipo do modelo."
+        subtitle="Classificação usada pelos modelos. Documentos emitidos herdam o tipo do modelo."
       >
-        <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-          Voltar ao hub de Documentos
-        </Link>
+        {!embedded ? (
+          <Link className="text-sm underline text-slate-600" href="/admin/config/documentos/configuracao">
+            Voltar à configuração de documentos
+          </Link>
+        ) : null}
       </SystemContextCard>
 
       <SystemHelpCard
         items={[
-          "Use codigos em caixa alta para padronizar.",
-          "Tipos ativos aparecem no cadastro de Modelos.",
+          "Use códigos em caixa alta para padronizar a operação documental.",
+          "Tipos ativos aparecem no cadastro de modelos.",
+          "Exemplos: contrato de matrícula, declaração, recibo financeiro.",
         ]}
       />
 
       <SystemSectionCard
         title="Cadastrar tipo"
-        description="Crie um tipo de documento (ex.: CONTRATO_MATRICULA)."
+        description="Crie uma classificação documental para contratos, declarações, recibos e outros modelos."
         footer={
           <Button onClick={() => void criar()} disabled={loading || !codigo.trim() || !nome.trim()}>
             Criar tipo
@@ -110,7 +117,7 @@ export default function AdminDocumentosTiposPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="text-sm font-medium">Codigo</label>
+            <label className="text-sm font-medium">Código</label>
             <div className="mt-1">
               <Input
                 placeholder="Ex.: CONTRATO_MATRICULA"
@@ -121,10 +128,10 @@ export default function AdminDocumentosTiposPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Nome</label>
+            <label className="text-sm font-medium">Nome visível</label>
             <div className="mt-1">
               <Input
-                placeholder="Ex.: Contrato de matricula"
+                placeholder="Ex.: Declaração de matrícula"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
               />
@@ -132,7 +139,7 @@ export default function AdminDocumentosTiposPage() {
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-sm font-medium">Descricao</label>
+            <label className="text-sm font-medium">Descrição</label>
             <div className="mt-1">
               <Input
                 placeholder="Opcional (uso interno)."
@@ -146,7 +153,7 @@ export default function AdminDocumentosTiposPage() {
 
       <SystemSectionCard
         title="Tipos cadastrados"
-        description="Usados no cadastro de Modelos."
+        description="Usados no cadastro de modelos e na leitura operacional da base documental."
       >
         <div className="flex justify-end">
           <Button onClick={() => void carregar()} disabled={loading} variant="outline">
@@ -169,12 +176,18 @@ export default function AdminDocumentosTiposPage() {
                 <div className="text-sm font-semibold">{t.nome}</div>
                 <div className="text-xs text-slate-600">{t.codigo}</div>
                 {t.descricao ? <div className="mt-1 text-xs text-slate-500">{t.descricao}</div> : null}
-                <div className="mt-1 text-xs text-slate-500">Ativo: {t.ativo ? "Sim" : "Nao"}</div>
+                <div className="mt-1 text-xs text-slate-500">Ativo: {t.ativo ? "Sim" : "Não"}</div>
               </div>
             ))}
           </div>
         )}
       </SystemSectionCard>
-    </SystemPage>
+    </>
   );
+
+  return embedded ? content : <SystemPage>{content}</SystemPage>;
+}
+
+export default function AdminDocumentosTiposPage() {
+  return <DocumentosTiposContent />;
 }

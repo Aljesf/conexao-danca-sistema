@@ -561,3 +561,49 @@ Pendencias remanescentes, agora de refinamento e expansao:
 - 2026-03-11 — Documentos / Autoria / Modelos: etapa de preview/teste ampliada com simulacao leve por dados reais, sem emitir documento e sem gravar historico. Foi adicionada a rota `POST /api/documentos/modelos/[id]/simular`, apoiada no pipeline existente de contexto por matricula, variaveis, colecoes e layout documental. A etapa 6 da edicao de modelos agora permite escolher uma matricula real, disparar a simulacao e alternar entre `Preview estrutural` e `Preview com dados simulados`, com renderizacao final no mesmo painel e resumo das colecoes resolvidas. Nesta rodada nao houve SQL e nao houve mudanca no backend principal de emissao; o foco ficou em teste guiado da autoria. Pendencias seguintes da frente de modelos: revisar microcopy e casos limite do preview simulado e depois seguir para ergonomia das telas auxiliares de variaveis, colecoes e conjuntos.
 - 2026-03-11 — Documentos / Autoria / Modelos: ergonomia do editor ajustada para visual de pagina central, no padrao "folha" de documento. A etapa `Corpo do documento` deixou de usar uma coluna estreita com apoio lateral sempre aberto e passou a concentrar o editor em largura fixa de `900px`, com toolbar fixa acima da folha e preview na mesma proporcao. Variaveis, colecoes e assistente IA foram retirados da presenca constante na tela e reposicionados como apoios retrateis por drawer/painel lateral, reduzindo compressao visual e melhorando a leitura de texto longo. Nesta rodada nao houve mudanca de backend nem de API; o foco foi exclusivamente visual na experiencia de autoria.
 - 2026-03-11 — Documentos / Autoria: refatoracao visual ampliada para o novo padrao SaaS. O hub de Documentos passou a ter entradas explicitas para `cabecalhos` e `rodapes`; Modelos ganhou bloco principal de criacao mais largo e apoio contextual separado; Variaveis, Colecoes e Conjuntos receberam hierarquia mais operacional e menos tecnica por padrao; e a etapa `Estrutura reutilizavel` do fluxo de modelos passou a apontar explicitamente para o cadastro de componentes reutilizaveis. A tela de emitidos segue alinhada ao schema real usando `contrato_modelo_id`. Proximo passo: rodada formal de prints e revisao visual das telas refatoradas.
+- 2026-03-12 — Documentos / Configuracao: a area tecnica do modulo passou a ter uma pagina unica em `/admin/config/documentos/configuracao`, com abas para `Variaveis`, `Colecoes`, `Cabecalhos`, `Rodapes`, `Tipos de documento` e `Conjuntos`. As telas tecnicas foram reaproveitadas em modo embutido para reduzir navegacao solta, o menu lateral de `Documentos` foi simplificado para `Novo documento`, `Novo recibo`, `Modelos`, `Documentos emitidos` e `Configuracao`, e a microcopy visivel trocou termos como `Root/Roots` por `Origem dos dados` e `Path` por `Caminho de dados`. A correcao da tela de emitidos permanece valida com `contrato_modelo_id`. Proximo passo: rodada de prints e revisao da nova experiencia unificada de configuracao documental.
+- 2026-03-12 — Documentos / Configuracao: rodada final de ajustes visuais concluida na experiencia unificada. A configuracao passou a usar largura responsiva maior, com `max-w-[92rem]` e melhor aproveitamento horizontal em telas amplas; as abas ficaram mais claramente clicaveis por contraste, hover, icones e area ativa ampliada; `Tipos de documento`, `Colecoes` e `Conjuntos` tiveram microcopy revisada e textos com encoding corrigido; e a aba de `Conjuntos` foi reorganizada com cards mais legiveis, metadados mais claros e grupos semanticos com destaque para `Principal`, `Obrigatorio`, `Opcional` e `Adicional`. Proximo passo: rodada final de prints e revisao visual em cenarios reais de uso da configuracao documental.
+
+## Modulo Documentos - Consolidacao
+
+O modulo documental do sistema foi consolidado nesta etapa.
+
+Funcionalidades implementadas:
+- Autoria documental:
+  - Modelos com fluxo guiado;
+  - editor rico em HTML;
+  - variaveis dinamicas;
+  - colecoes automaticas;
+  - simulacao com dados reais;
+  - preview estrutural e preview com dados.
+- Componentes reutilizaveis:
+  - cabecalhos;
+  - rodapes.
+- Fluxo documental:
+  - conjuntos documentais;
+  - grupos de documentos;
+  - classificacao por tipo de documento.
+- Operacao documental:
+  - emissao de documentos;
+  - registro em `documentos_emitidos`;
+  - geracao de PDF;
+  - reemissao documental;
+  - cadeia documental com `ORIGINAL`, `REEMISSAO` e `SUBSTITUICAO`.
+- Administracao:
+  - hub de configuracao documental;
+  - variaveis;
+  - colecoes;
+  - conjuntos;
+  - tipos de documento;
+  - documentos emitidos.
+
+A arquitetura documental do sistema esta registrada em:
+- `docs/arquitetura-documentos.md`
+
+Pendencias futuras, nao criticas:
+- refinamento visual do renderer de PDF;
+- melhoria futura da experiencia de listagem de documentos emitidos;
+- expansao do motor documental para outros tipos de documento alem de recibos e contratos;
+- criacao do tutorial completo do sistema.
+
+O modulo pode ser considerado funcionalmente estavel nesta fase.

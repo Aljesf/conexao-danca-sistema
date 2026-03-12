@@ -681,3 +681,34 @@ Pendencias remanescentes:
 - revisar visualmente as telas refatoradas com foco em microcopy, hierarquia e casos vazios;
 - refinar depois as telas tecnicas de layout templates, layouts e tipos, mantendo a mesma semantica operacional.
 
+---
+
+## Atualizacao 2026-03-12 (Documentos - configuracao unificada)
+
+Estado:
+- A area tecnica do modulo Documentos ganhou uma pagina unica em `/admin/config/documentos/configuracao`.
+- A nova tela organiza a configuracao em abas para:
+  - variaveis;
+  - colecoes;
+  - cabecalhos;
+  - rodapes;
+  - tipos de documento;
+  - conjuntos.
+
+Ajustes aplicados:
+- as telas de variaveis, colecoes, tipos e conjuntos passaram a funcionar tambem em modo embutido, reutilizadas dentro da pagina unica;
+- o menu lateral de `Documentos` foi simplificado para:
+  - novo documento;
+  - novo recibo;
+  - modelos;
+  - documentos emitidos;
+  - configuracao;
+- a microcopy visivel foi alinhada para linguagem mais operacional:
+  - `Root/Roots` -> `Origem dos dados`;
+  - `Path` -> `Caminho de dados`;
+- cabecalhos e rodapes reutilizaveis seguem acessiveis tanto por telas dedicadas quanto pela configuracao unificada;
+- a tela de emitidos segue corrigida e alinhada ao schema real com `contrato_modelo_id`.
+
+Proximo passo:
+- rodada de prints e revisao da nova experiencia unificada de configuracao documental, validando navegacao, abas e hierarquia visual antes de qualquer refinamento adicional.
+

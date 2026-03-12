@@ -44,6 +44,34 @@ type GrupoModeloLink = {
 
 type ApiResp<T> = { ok: boolean; data?: T; message?: string };
 
+function getPapelBadgeClass(papel?: GrupoPapel | null) {
+  switch (papel) {
+    case "PRINCIPAL":
+      return "border-slate-900 bg-slate-900 text-white";
+    case "OBRIGATORIO":
+      return "border-blue-200 bg-blue-50 text-blue-800";
+    case "ADICIONAL":
+      return "border-violet-200 bg-violet-50 text-violet-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-700";
+  }
+}
+
+function getPapelLabel(papel?: GrupoPapel | null) {
+  switch (papel) {
+    case "PRINCIPAL":
+      return "Principal";
+    case "OBRIGATORIO":
+      return "Obrigatório";
+    case "ADICIONAL":
+      return "Adicional";
+    case "OPCIONAL":
+      return "Opcional";
+    default:
+      return "Sem papel definido";
+  }
+}
+
 async function apiGet<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
   const json = (await res.json()) as ApiResp<T>;
@@ -51,7 +79,11 @@ async function apiGet<T>(url: string): Promise<T> {
   return json.data as T;
 }
 
-export default function AdminDocumentosConjuntosPage() {
+type DocumentosConjuntosContentProps = {
+  embedded?: boolean;
+};
+
+export function DocumentosConjuntosContent({ embedded = false }: DocumentosConjuntosContentProps) {
   const [loading, setLoading] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
   const [conjuntos, setConjuntos] = React.useState<Conjunto[]>([]);
@@ -225,7 +257,7 @@ export default function AdminDocumentosConjuntosPage() {
         (g) => g.id !== grupoEditId && (g.papel ?? "").toUpperCase() === "PRINCIPAL",
       );
       if (gEPapel === "PRINCIPAL" && principalExiste) {
-        setErro("Ja existe um grupo PRINCIPAL neste conjunto.");
+        setErro("Já existe um grupo PRINCIPAL neste conjunto.");
         return;
       }
 
@@ -241,7 +273,7 @@ export default function AdminDocumentosConjuntosPage() {
       };
 
       if (!payload.codigo || !payload.nome) {
-        setErro("Codigo e nome do grupo sao obrigatorios.");
+        setErro("Código e nome do grupo são obrigatórios.");
         return;
       }
 
@@ -379,7 +411,7 @@ export default function AdminDocumentosConjuntosPage() {
         (g) => (g.papel ?? "").toUpperCase() === "PRINCIPAL",
       );
       if (gPapel === "PRINCIPAL" && principalExiste) {
-        setErro("Ja existe um grupo PRINCIPAL neste conjunto.");
+        setErro("Já existe um grupo PRINCIPAL neste conjunto.");
         return;
       }
 
@@ -422,16 +454,17 @@ export default function AdminDocumentosConjuntosPage() {
     }
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+  const content = (
+      <div className={embedded ? "flex flex-col gap-6" : "mx-auto flex max-w-6xl flex-col gap-6"}>
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-            Voltar ao hub de documentos
-          </Link>
+          {!embedded ? (
+            <Link className="text-sm underline text-slate-600" href="/admin/config/documentos/configuracao">
+              Voltar à configuração de documentos
+            </Link>
+          ) : null}
           <h1 className="text-xl font-semibold">Documentos - Conjuntos e Grupos</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Conjuntos sao agrupadores de documentos de um processo. Os grupos organizam o que e principal, obrigatorio ou opcional.
+            Conjuntos são agrupadores de documentos de um processo. Os grupos organizam o que é principal, obrigatório, opcional ou adicional.
           </p>
         </div>
 
@@ -451,11 +484,11 @@ export default function AdminDocumentosConjuntosPage() {
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">Criar conjunto</h2>
-          <p className="mt-1 text-sm text-slate-600">Crie o agrupador documental do processo, como Matricula Regular, Renovacao ou Financeiro.</p>
+          <p className="mt-1 text-sm text-slate-600">Crie o agrupador documental do processo, como Matrícula Regular, Renovação ou Financeiro.</p>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
-              <label className="text-sm font-medium">Codigo</label>
+              <label className="text-sm font-medium">Código</label>
               <input
                 className="mt-1 w-full rounded-md border p-2 text-sm"
                 placeholder="Ex.: MATRICULA_REGULAR"
@@ -463,7 +496,7 @@ export default function AdminDocumentosConjuntosPage() {
                 onChange={(e) => setCCodigo(e.target.value)}
               />
               <p className="mt-1 text-xs text-slate-500">
-                Caixa alta. Espacos viram underscore automaticamente (se voce ja trata isso no backend).
+                Use caixa alta. Espaços podem virar underscore automaticamente se você já tratar isso no backend.
               </p>
             </div>
 
@@ -471,17 +504,17 @@ export default function AdminDocumentosConjuntosPage() {
               <label className="text-sm font-medium">Nome</label>
               <input
                 className="mt-1 w-full rounded-md border p-2 text-sm"
-                placeholder="Ex.: Matricula Regular"
+                placeholder="Ex.: Matrícula Regular"
                 value={cNome}
                 onChange={(e) => setCNome(e.target.value)}
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-sm font-medium">Descricao</label>
+              <label className="text-sm font-medium">Descrição</label>
               <input
                 className="mt-1 w-full rounded-md border p-2 text-sm"
-                placeholder="Opcional (uso interno)."
+                placeholder="Opcional, para contexto interno."
                 value={cDescricao}
                 onChange={(e) => setCDescricao(e.target.value)}
               />
@@ -504,7 +537,7 @@ export default function AdminDocumentosConjuntosPage() {
             <div>
               <h2 className="text-lg font-semibold">Conjuntos cadastrados</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Cada card representa um processo documental. Dentro dele, os grupos ajudam a organizar o que e principal, obrigatorio, opcional ou adicional.
+                Cada card representa um processo documental. Dentro dele, os grupos ajudam a organizar o que é principal, obrigatório, opcional ou adicional.
               </p>
             </div>
 
@@ -522,19 +555,51 @@ export default function AdminDocumentosConjuntosPage() {
             <p className="mt-3 text-sm text-slate-500">Carregando...</p>
           ) : null}
 
-          <div className="mt-4 space-y-4">
+          <div className="mt-4 grid gap-4 2xl:grid-cols-2">
             {conjuntos.map((c) => (
-              <div key={c.id} id={`conjunto-${c.id}`} className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <p className="text-base font-semibold">{c.nome}</p>
-                    <p className="text-sm text-slate-600">Codigo: {c.codigo}</p>
-                    {c.descricao ? <p className="text-sm text-slate-500">{c.descricao}</p> : null}
+              <div key={c.id} id={`conjunto-${c.id}`} className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">
+                        Processo documental
+                      </span>
+                      <span
+                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                          c.ativo ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {c.ativo ? "Ativo" : "Inativo"}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-slate-900">{c.nome}</p>
+                      <p className="mt-1 text-xs font-mono uppercase tracking-[0.16em] text-slate-500">{c.codigo}</p>
+                      {c.descricao ? <p className="mt-2 max-w-2xl text-sm text-slate-600">{c.descricao}</p> : null}
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Grupos</div>
+                        <div className="mt-1 text-lg font-semibold text-slate-900">{c.grupos?.length ?? 0}</div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Obrigatórios</div>
+                        <div className="mt-1 text-lg font-semibold text-slate-900">
+                          {c.grupos?.filter((grupo) => grupo.obrigatorio).length ?? 0}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Principal</div>
+                        <div className="mt-1 text-lg font-semibold text-slate-900">
+                          {(c.grupos ?? []).find((grupo) => grupo.papel === "PRINCIPAL")?.nome ?? "-"}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
-                      className="rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                       type="button"
                       onClick={() => {
                         setGrupoFormOpenId((prev) => (prev === c.id ? null : c.id));
@@ -548,7 +613,7 @@ export default function AdminDocumentosConjuntosPage() {
                     </button>
 
                     <button
-                      className="rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                       type="button"
                       onClick={() => {
                         if (conjuntoEditId === c.id) {
@@ -562,7 +627,7 @@ export default function AdminDocumentosConjuntosPage() {
                     </button>
 
                     <a
-                      className="rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                       href={`/admin/config/documentos/conjuntos/${c.id}`}
                       title="Link legado (redireciona para esta pagina)"
                     >
@@ -572,9 +637,9 @@ export default function AdminDocumentosConjuntosPage() {
                 </div>
 
                 {conjuntoEditId === c.id ? (
-                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-sm font-semibold">Editar conjunto</p>
-                    <p className="mt-1 text-xs text-slate-600">Atualize os dados do conjunto.</p>
+                    <p className="mt-1 text-xs text-slate-600">Atualize nome, descrição e status deste processo documental.</p>
 
                     <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div>
@@ -598,7 +663,7 @@ export default function AdminDocumentosConjuntosPage() {
                       </div>
 
                       <div className="md:col-span-2">
-                        <label className="text-sm font-medium">Descricao</label>
+                        <label className="text-sm font-medium">Descrição</label>
                         <input
                           className="mt-1 w-full rounded-md border p-2 text-sm"
                           value={ceDescricao}
@@ -621,20 +686,20 @@ export default function AdminDocumentosConjuntosPage() {
                         disabled={salvandoConjunto || !ceNome.trim()}
                         type="button"
                       >
-                        {salvandoConjunto ? "Salvando..." : "Salvar alteracoes"}
+                        {salvandoConjunto ? "Salvando..." : "Salvar alterações"}
                       </button>
                     </div>
                   </div>
                 ) : null}
 
                 {grupoFormOpenId === c.id ? (
-                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <p className="text-sm font-semibold">Cadastrar grupo</p>
-                    <p className="mt-1 text-xs text-slate-600">Crie um grupo dentro deste conjunto.</p>
+                    <p className="mt-1 text-xs text-slate-600">Crie um grupo para organizar os documentos deste processo.</p>
 
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                       <div>
-                        <label className="text-sm font-medium">Codigo</label>
+                        <label className="text-sm font-medium">Código</label>
                         <input
                           className="mt-1 w-full rounded-md border p-2 text-sm"
                           placeholder="Ex.: DOCUMENTO_PRINCIPAL"
@@ -654,7 +719,7 @@ export default function AdminDocumentosConjuntosPage() {
                       </div>
 
                       <div className="md:col-span-2">
-                        <label className="text-sm font-medium">Descricao</label>
+                        <label className="text-sm font-medium">Descrição</label>
                         <input
                           className="mt-1 w-full rounded-md border p-2 text-sm"
                           placeholder="Opcional (uso interno)."
@@ -679,17 +744,17 @@ export default function AdminDocumentosConjuntosPage() {
                             }
                           }}
                         >
-                          <option value="PRINCIPAL">PRINCIPAL</option>
-                          <option value="OBRIGATORIO">OBRIGATORIO</option>
-                          <option value="OPCIONAL">OPCIONAL</option>
-                          <option value="ADICIONAL">ADICIONAL</option>
+                          <option value="PRINCIPAL">Principal</option>
+                          <option value="OBRIGATORIO">Obrigatório</option>
+                          <option value="OPCIONAL">Opcional</option>
+                          <option value="ADICIONAL">Adicional</option>
                         </select>
                       </div>
 
                       <div className="flex items-center gap-3">
                         <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
+                              <input
+                                type="checkbox"
                             checked={gObrigatorio}
                             onChange={(e) => {
                               const next = e.target.checked;
@@ -703,7 +768,7 @@ export default function AdminDocumentosConjuntosPage() {
                             }}
                             disabled={gPapel === "PRINCIPAL" || gPapel === "OBRIGATORIO"}
                           />
-                          Obrigatorio
+                          Obrigatório
                         </label>
                       </div>
 
@@ -750,41 +815,29 @@ export default function AdminDocumentosConjuntosPage() {
                 ) : null}
 
                 <div className="mt-4">
-                  <p className="text-sm font-semibold">Grupos</p>
+                  <p className="text-sm font-semibold">Grupos do processo</p>
                   {!c.grupos || c.grupos.length === 0 ? (
-                    <p className="mt-2 text-sm text-slate-500">Nenhum grupo cadastrado.</p>
+                    <p className="mt-2 text-sm text-slate-500">Nenhum grupo cadastrado ainda.</p>
                   ) : (
                     <div className="mt-2 grid gap-2">
                     {c.grupos.map((g) => (
-                      <div key={g.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                      <div key={g.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-sm font-semibold">{g.nome}</p>
-                            <p className="text-xs text-slate-600">{g.codigo}</p>
-                            <p className="text-xs text-slate-500">
-                              Ordem: {g.ordem} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"} | Ativo:{" "}
-                              {g.ativo === false ? "Nao" : "Sim"}
-                              {g.papel ? ` | Papel no processo: ${g.papel}` : ""}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-900">{g.nome}</p>
+                              <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getPapelBadgeClass(g.papel)}`}>
+                                {getPapelLabel(g.papel)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs font-mono uppercase tracking-[0.14em] text-slate-500">{g.codigo}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Ordem: {g.ordem} | Obrigatório: {g.obrigatorio ? "Sim" : "Não"} | Ativo:{" "}
+                              {g.ativo === false ? "Não" : "Sim"}
                             </p>
-                            {g.descricao ? <p className="mt-1 text-xs text-slate-500">{g.descricao}</p> : null}
+                            {g.descricao ? <p className="mt-2 text-xs text-slate-600">{g.descricao}</p> : null}
                           </div>
                           <div className="flex items-center gap-2">
-                            {g.papel ? (
-                              <span
-                                className={[
-                                  "rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                                  g.papel === "PRINCIPAL"
-                                    ? "bg-slate-900 text-white"
-                                    : g.papel === "OBRIGATORIO"
-                                      ? "bg-slate-700 text-white"
-                                      : g.papel === "ADICIONAL"
-                                        ? "bg-slate-200 text-slate-700"
-                                        : "bg-slate-100 text-slate-700",
-                                ].join(" ")}
-                              >
-                                {g.papel}
-                              </span>
-                            ) : null}
                             <button
                               className="rounded-md border bg-white px-2 py-1 text-[10px] uppercase tracking-wide hover:bg-slate-50"
                               type="button"
@@ -796,13 +849,13 @@ export default function AdminDocumentosConjuntosPage() {
                         </div>
 
                         {grupoEditId === g.id ? (
-                          <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                          <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
                               Editar grupo
                             </p>
                             <div className="mt-2 grid gap-3 md:grid-cols-2">
                               <div>
-                                <label className="text-xs font-medium">Codigo</label>
+                                <label className="text-xs font-medium">Código</label>
                                 <input
                                   className="mt-1 w-full rounded-md border p-2 text-xs"
                                   value={gECodigo}
@@ -820,7 +873,7 @@ export default function AdminDocumentosConjuntosPage() {
                               </div>
 
                               <div className="md:col-span-2">
-                                <label className="text-xs font-medium">Descricao</label>
+                                <label className="text-xs font-medium">Descrição</label>
                                 <input
                                   className="mt-1 w-full rounded-md border p-2 text-xs"
                                   value={gEDescricao}
@@ -835,10 +888,10 @@ export default function AdminDocumentosConjuntosPage() {
                                   value={gEPapel}
                                   onChange={(e) => setGEPapel(e.target.value as GrupoPapel)}
                                 >
-                                  <option value="PRINCIPAL">PRINCIPAL</option>
-                                  <option value="OBRIGATORIO">OBRIGATORIO</option>
-                                  <option value="OPCIONAL">OPCIONAL</option>
-                                  <option value="ADICIONAL">ADICIONAL</option>
+                                  <option value="PRINCIPAL">Principal</option>
+                                  <option value="OBRIGATORIO">Obrigatório</option>
+                                  <option value="OPCIONAL">Opcional</option>
+                                  <option value="ADICIONAL">Adicional</option>
                                 </select>
                               </div>
 
@@ -888,11 +941,11 @@ export default function AdminDocumentosConjuntosPage() {
                           </div>
                         ) : null}
 
-                          <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                          <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-sm font-semibold">Modelos do grupo</p>
                               <button
-                                className="rounded-md border bg-white px-2 py-1 text-xs hover:bg-slate-50"
+                                className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-white"
                                 type="button"
                                 onClick={() => {
                                   setShowModelosByGrupo((prev) => {
@@ -925,7 +978,7 @@ export default function AdminDocumentosConjuntosPage() {
                                     {(modelosByGrupo[g.id] || []).map((m) => (
                                       <div
                                         key={m.grupo_modelo_id}
-                                        className="rounded-md border border-slate-200 bg-white px-2 py-2 text-xs"
+                                        className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs"
                                       >
                                         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                                           <div>
@@ -933,7 +986,7 @@ export default function AdminDocumentosConjuntosPage() {
                                               {m.documentos_modelo?.titulo || `Modelo #${m.modelo_id}`}
                                             </p>
                                             <p className="text-[10px] text-slate-500">
-                                              Ordem: {m.ordem} | Ativo: {m.ativo ? "Sim" : "Nao"}
+                                              Ordem: {m.ordem} | Ativo: {m.ativo ? "Sim" : "Não"}
                                             </p>
                                           </div>
 
@@ -1054,7 +1107,12 @@ export default function AdminDocumentosConjuntosPage() {
           </div>
         </div>
       </div>
-    </div>
   );
+
+  return embedded ? content : <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">{content}</div>;
+}
+
+export default function AdminDocumentosConjuntosPage() {
+  return <DocumentosConjuntosContent />;
 }
 

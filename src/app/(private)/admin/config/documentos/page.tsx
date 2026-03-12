@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BookTemplate, Braces, FolderKanban, Layers3, LibraryBig, ReceiptText, Rows3 } from "lucide-react";
+import { BookTemplate, Braces, FolderKanban, Layers3, LibraryBig, ReceiptText, Rows3, Settings2 } from "lucide-react";
 import { SystemContextCard } from "@/components/system/SystemContextCard";
 import { SystemHelpCard } from "@/components/system/SystemHelpCard";
 import { SystemPage } from "@/components/system/SystemPage";
@@ -23,6 +23,19 @@ type HubSection = {
 };
 
 const HUB_SECTIONS: HubSection[] = [
+  {
+    eyebrow: "Configuracao",
+    title: "Manutencao tecnica centralizada do modulo documental",
+    description: "Reune a configuracao tecnica em abas para variaveis, colecoes, componentes, tipos e conjuntos.",
+    items: [
+      {
+        title: "Configuracao de documentos",
+        description: "Abra a area unificada para manter variaveis, colecoes, cabecalhos, rodapes, tipos e conjuntos.",
+        href: "/admin/config/documentos/configuracao",
+        icon: <Settings2 className="h-5 w-5" />,
+      },
+    ],
+  },
   {
     eyebrow: "Autoria documental",
     title: "Onde os documentos sao escritos e estruturados",

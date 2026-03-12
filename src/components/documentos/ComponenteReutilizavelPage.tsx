@@ -29,10 +29,11 @@ type Props = {
   shortDescription: string;
   hintItems: string[];
   defaultHeightPx: number;
+  embedded?: boolean;
 };
 
 export function ComponenteReutilizavelPage(props: Props) {
-  const { tipo, title, subtitle, shortDescription, hintItems, defaultHeightPx } = props;
+  const { tipo, title, subtitle, shortDescription, hintItems, defaultHeightPx, embedded = false } = props;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,6 +44,7 @@ export function ComponenteReutilizavelPage(props: Props) {
   const [nome, setNome] = useState("");
   const [tags, setTags] = useState("");
   const [heightPx, setHeightPx] = useState<number>(defaultHeightPx);
+  const [ativo, setAtivo] = useState(true);
   const [html, setHtml] = useState("<p></p>");
 
   const carregar = useCallback(async () => {
@@ -96,6 +98,7 @@ export function ComponenteReutilizavelPage(props: Props) {
           tags: tags.trim(),
           height_px: heightPx,
           html,
+          ativo,
         }),
       });
       const json = (await res.json()) as ApiResp<unknown>;
@@ -106,6 +109,7 @@ export function ComponenteReutilizavelPage(props: Props) {
       setTags("");
       setHtml("<p></p>");
       setHeightPx(defaultHeightPx);
+      setAtivo(true);
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao salvar.");
@@ -114,12 +118,14 @@ export function ComponenteReutilizavelPage(props: Props) {
     }
   }
 
-  return (
-    <SystemPage>
+  const content = (
+    <>
       <SystemContextCard title={title} subtitle={subtitle}>
-        <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-          Voltar ao hub de documentos
-        </Link>
+        {!embedded ? (
+          <Link className="text-sm underline text-slate-600" href="/admin/config/documentos/configuracao">
+            Voltar a configuracao de documentos
+          </Link>
+        ) : null}
       </SystemContextCard>
 
       <SystemHelpCard items={hintItems} />
@@ -182,29 +188,37 @@ export function ComponenteReutilizavelPage(props: Props) {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Altura (px)</label>
-                <Input
-                  className="mt-1"
-                  type="number"
-                  min={40}
-                  value={heightPx}
-                  onChange={(e) => setHeightPx(Number(e.target.value))}
-                />
+                <label className="text-sm font-medium">Ativo e altura (px)</label>
+                <div className="mt-1 flex items-center gap-3">
+                  <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                    <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
+                    Ativo
+                  </label>
+                  <Input
+                    type="number"
+                    min={40}
+                    value={heightPx}
+                    onChange={(e) => setHeightPx(Number(e.target.value))}
+                  />
+                </div>
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium">Tags</label>
+              <label className="text-sm font-medium">Descricao curta / tags de busca</label>
               <Input
                 className="mt-1"
                 value={tags}
                 onChange={(e) => setTags(e.target.value)}
                 placeholder="institucional, assinatura, escola"
               />
+              <p className="mt-1 text-xs text-slate-500">
+                Sem alterar backend, este campo alimenta as tags de busca do componente reutilizavel.
+              </p>
             </div>
 
             <div>
-              <label className="text-sm font-medium">Conteudo do componente</label>
+              <label className="text-sm font-medium">HTML template</label>
               <div className="mt-2">
                 <RichTextEditor
                   valueHtml={html}
@@ -256,6 +270,8 @@ export function ComponenteReutilizavelPage(props: Props) {
           </div>
         </SystemSectionCard>
       </div>
-    </SystemPage>
+    </>
   );
+
+  return embedded ? content : <SystemPage>{content}</SystemPage>;
 }

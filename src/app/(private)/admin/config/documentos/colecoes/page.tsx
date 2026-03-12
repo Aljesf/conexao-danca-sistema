@@ -34,8 +34,8 @@ type ColecaoItem = {
 type ApiResp<T> = { data?: T; error?: string };
 
 const ROOT_LABELS: Record<string, string> = {
-  MATRICULA: "Matricula",
-  CREDITO_CONEXAO_FATURA: "Fatura (Credito Conexao)",
+  MATRICULA: "Matrícula",
+  CREDITO_CONEXAO_FATURA: "Fatura (Crédito Conexão)",
 };
 
 function formatRootLabel(rootTipo: string): string {
@@ -70,7 +70,11 @@ function buildExampleTable(c: ColecaoItem): string {
   ].join("\n");
 }
 
-export default function Page() {
+type DocumentosColecoesContentProps = {
+  embedded?: boolean;
+};
+
+export function DocumentosColecoesContent({ embedded = false }: DocumentosColecoesContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -95,7 +99,7 @@ export default function Page() {
     try {
       const res = await fetch("/api/documentos/colecoes", { cache: "no-store" });
       const json = (await res.json()) as ApiResp<ColecaoItem[]>;
-      if (!res.ok) throw new Error(json.error ?? "Falha ao carregar colecoes.");
+      if (!res.ok) throw new Error(json.error ?? "Falha ao carregar coleções.");
       setColecoes(json.data ?? []);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar colecoes.");
@@ -110,7 +114,7 @@ export default function Page() {
     try {
       const res = await fetch(`/api/documentos/colecoes/${id}`, { cache: "no-store" });
       const json = (await res.json()) as ApiResp<ColecaoItem>;
-      if (!res.ok) throw new Error(json.error ?? "Falha ao carregar colecao.");
+      if (!res.ok) throw new Error(json.error ?? "Falha ao carregar coleção.");
       const data = json.data;
       if (!data) return;
       setEditingId(data.id);
@@ -122,7 +126,7 @@ export default function Page() {
       setAtivo(Boolean(data.ativo));
       setColunas((data.colunas ?? []).map((col) => ({ ...col })));
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao carregar colecao.");
+      setErro(e instanceof Error ? e.message : "Erro ao carregar coleção.");
     }
   }, []);
 
@@ -147,7 +151,7 @@ export default function Page() {
     setOkMsg(null);
     try {
       if (!codigo.trim() || !nome.trim() || !rootTipo.trim()) {
-        throw new Error("Codigo, nome e root sao obrigatorios.");
+        throw new Error("Código, nome e origem dos dados são obrigatórios.");
       }
 
       const payload = {
@@ -173,11 +177,11 @@ export default function Page() {
         body: JSON.stringify(payload),
       });
       const json = (await res.json()) as ApiResp<unknown>;
-      if (!res.ok) throw new Error(json.error ?? "Falha ao salvar colecao.");
-      setOkMsg("Colecao atualizada com sucesso.");
+      if (!res.ok) throw new Error(json.error ?? "Falha ao salvar coleção.");
+      setOkMsg("Coleção atualizada com sucesso.");
       await carregarColecoes();
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao salvar colecao.");
+      setErro(e instanceof Error ? e.message : "Erro ao salvar coleção.");
     } finally {
       setSaving(false);
     }
@@ -210,30 +214,32 @@ export default function Page() {
     [colecoes],
   );
 
-  return (
-    <SystemPage>
+  const content = (
+    <>
       <SystemContextCard
-        title="Documentos - Colecoes de Documento"
-        subtitle="Catalogo tecnico e edicao das colecoes usadas nos modelos."
+        title="Documentos - Coleções documentais"
+        subtitle="Catálogo técnico e edição das coleções usadas nos modelos."
       >
-        <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-          Voltar ao hub de documentos
-        </Link>
+        {!embedded ? (
+          <Link className="text-sm underline text-slate-600" href="/admin/config/documentos/configuracao">
+            Voltar à configuração de documentos
+          </Link>
+        ) : null}
       </SystemContextCard>
 
       <SystemHelpCard
         items={[
-          "Colecoes sao listas automaticas usadas para renderizar linhas repetidas no documento.",
-          "O codigo da colecao deve bater com o que o template usa: {{#CODIGO}} ... {{/CODIGO}}.",
-          "Edite com cuidado: alterar o codigo impacta modelos existentes.",
+          "Coleções são listas automáticas usadas para renderizar linhas repetidas no documento.",
+          "O código da coleção deve bater com o que o template usa: {{#CODIGO}} ... {{/CODIGO}}.",
+          "Edite com cuidado: alterar o código impacta modelos existentes.",
         ]}
       />
 
       <div className="grid gap-3 md:grid-cols-4">
         {[
-          { label: "Colecoes", value: resumoColecoes.total, tone: "border-slate-200 bg-white text-slate-900" },
+          { label: "Coleções", value: resumoColecoes.total, tone: "border-slate-200 bg-white text-slate-900" },
           { label: "Ativas", value: resumoColecoes.ativas, tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
-          { label: "Roots", value: resumoColecoes.roots, tone: "border-sky-200 bg-sky-50 text-sky-800" },
+          { label: "Origens de dados", value: resumoColecoes.roots, tone: "border-sky-200 bg-sky-50 text-sky-800" },
           { label: "Colunas", value: resumoColecoes.colunas, tone: "border-amber-200 bg-amber-50 text-amber-800" },
         ].map((item) => (
           <div key={item.label} className={`rounded-2xl border px-4 py-4 ${item.tone}`}>
@@ -244,8 +250,8 @@ export default function Page() {
       </div>
 
       <SystemSectionCard
-        title={editingId ? `Editar colecao #${editingId}` : "Selecione uma colecao para editar"}
-        description="Cadastre ou ajuste a lista automatica usada no documento. Metadados ficam claros; colunas entram como detalhe operacional da colecao."
+        title={editingId ? `Editar coleção #${editingId}` : "Selecione uma coleção para editar"}
+        description="Cadastre ou ajuste a lista automática usada no documento. Metadados ficam claros; as colunas entram como detalhe operacional da coleção."
         footer={
           editingId ? (
             <div className="flex w-full flex-wrap justify-between gap-2">
@@ -253,7 +259,7 @@ export default function Page() {
                 Cancelar
               </Button>
               <Button onClick={() => void salvar()} disabled={saving}>
-                {saving ? "Salvando..." : "Salvar colecao"}
+                {saving ? "Salvando..." : "Salvar coleção"}
               </Button>
             </div>
           ) : null
@@ -270,31 +276,31 @@ export default function Page() {
 
         {!editingId ? (
           <p className="text-sm text-slate-600">
-            Use o botao &quot;Editar&quot; em uma colecao cadastrada para abrir o formulario.
+            Use o botão &quot;Editar&quot; em uma coleção cadastrada para abrir o formulário.
           </p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className="text-sm font-medium">Codigo (template)</label>
+              <label className="text-sm font-medium">Código do template</label>
               <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="MATRICULA_PARCELAS" />
             </div>
 
             <div>
               <label className="text-sm font-medium">Nome</label>
-              <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Matricula - Parcelas" />
+              <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Matrícula - Parcelas" />
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-sm font-medium">Descricao</label>
+              <label className="text-sm font-medium">Descrição</label>
               <Input
                 value={descricao}
                 onChange={(e) => setDescricao(e.target.value)}
-                placeholder="Descricao funcional da colecao"
+                placeholder="Descrição funcional da coleção"
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium">Root</label>
+              <label className="text-sm font-medium">Origem dos dados</label>
               <Input
                 value={rootTipo}
                 onChange={(e) => setRootTipo(e.target.value)}
@@ -309,7 +315,7 @@ export default function Page() {
             </div>
 
             <div>
-              <label className="text-sm font-medium">Ordem</label>
+              <label className="text-sm font-medium">Ordem visual</label>
               <Input type="number" value={ordem} onChange={(e) => setOrdem(Number(e.target.value))} />
             </div>
 
@@ -320,7 +326,7 @@ export default function Page() {
 
             <div className="md:col-span-2 rounded-lg border border-slate-200 bg-white/70 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-semibold">Colunas da colecao</div>
+                <div className="text-sm font-semibold">Colunas da coleção</div>
                 <Button
                   variant="ghost"
                   onClick={() =>
@@ -341,7 +347,7 @@ export default function Page() {
                   colunas.map((col, index) => (
                     <div key={`${col.codigo}-${index}`} className="grid gap-2 md:grid-cols-6">
                       <div>
-                        <label className="text-xs text-slate-500">Codigo</label>
+                        <label className="text-xs text-slate-500">Código</label>
                         <Input
                           value={col.codigo}
                           onChange={(e) =>
@@ -430,14 +436,14 @@ export default function Page() {
       </SystemSectionCard>
 
       <SystemSectionCard
-        title="Colecoes cadastradas"
-        description="Catalogo operacional das listas automaticas disponiveis para autoria documental."
+        title="Coleções cadastradas"
+        description="Catálogo operacional das listas automáticas disponíveis para autoria documental."
       >
         {loading ? (
           <p className="text-sm text-slate-600">Carregando...</p>
         ) : colecoes.length === 0 ? (
           <p className="text-sm text-slate-600">
-            Nenhuma colecao encontrada. Verifique se a migration foi aplicada e se o endpoint esta respondendo.
+            Nenhuma coleção encontrada. Verifique se a base está disponível e se o endpoint está respondendo.
           </p>
         ) : (
           <div className="grid gap-3">
@@ -460,7 +466,7 @@ export default function Page() {
                       </div>
                       <div className="mt-1 text-xs text-slate-600">{c.descricao ?? "Sem descricao."}</div>
                       <div className="mt-1 text-xs text-slate-500">
-                        Root: {formatRootLabel(c.root_tipo)} | Colunas: {c.colunas.length}
+                        Origem dos dados: {formatRootLabel(c.root_tipo)} | Colunas: {c.colunas.length}
                       </div>
                     </div>
                     <div className="text-xs font-mono text-slate-500">{c.codigo}</div>
@@ -493,7 +499,7 @@ export default function Page() {
                   </div>
 
                   <details className="mt-3">
-                    <summary className="cursor-pointer text-xs text-slate-500">Exemplo de tabela (visual)</summary>
+                    <summary className="cursor-pointer text-xs text-slate-500">Exemplo visual da coleção</summary>
                     <pre className="mt-2 whitespace-pre-wrap rounded-md bg-slate-950 p-3 text-xs text-slate-100">
                       {buildExampleTable(c)}
                     </pre>
@@ -504,6 +510,12 @@ export default function Page() {
           </div>
         )}
       </SystemSectionCard>
-    </SystemPage>
+    </>
   );
+
+  return embedded ? content : <SystemPage>{content}</SystemPage>;
+}
+
+export default function Page() {
+  return <DocumentosColecoesContent />;
 }

@@ -72,9 +72,10 @@ export function TabsTrigger(props: TabsTriggerProps) {
       type="button"
       role="tab"
       aria-selected={active}
+      data-active={active ? "true" : "false"}
       onClick={() => setValue(value)}
       className={`rounded-md px-3 py-1 text-sm transition ${
-        active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
+        active ? "bg-slate-900 text-white shadow-sm" : "text-slate-700 hover:bg-slate-100"
       } ${className}`}
       {...rest}
     />

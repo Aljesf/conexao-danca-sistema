@@ -35,11 +35,8 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🆕 Novo documento", href: "/admin/config/documentos" },
       { label: "🧾 Novo recibo", href: "/admin/config/documentos/novo-recibo" },
       { label: "🧩 Modelos", href: "/admin/config/documentos/modelos" },
-      { label: "🔣 Variaveis", href: "/admin/config/documentos/variaveis" },
-      { label: "🗂️ Colecoes", href: "/admin/config/documentos/colecoes" },
-      { label: "🧱 Conjuntos", href: "/admin/config/documentos/conjuntos" },
       { label: "📤 Documentos emitidos", href: "/admin/config/documentos/emitidos" },
-      { label: "🏷️ Tipos de documento", href: "/admin/config/documentos/tipos" },
+      { label: "⚙️ Configuracao", href: "/admin/config/documentos/configuracao" },
     ],
   },
   {

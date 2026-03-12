@@ -152,7 +152,11 @@ const normalizePathLabels = (raw: unknown): PathLabels => {
   };
 };
 
-export default function AdminDocumentosVariaveisPage() {
+type DocumentosVariaveisContentProps = {
+  embedded?: boolean;
+};
+
+export function DocumentosVariaveisContent({ embedded = false }: DocumentosVariaveisContentProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -274,7 +278,7 @@ export default function AdminDocumentosVariaveisPage() {
     try {
       const res = await fetch("/api/documentos/schema/roots");
       const json = (await res.json()) as { ok?: boolean; data?: SchemaRoot[]; message?: string };
-      if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao carregar roots.");
+      if (!res.ok || !json.ok) throw new Error(json.message ?? "Falha ao carregar origens de dados.");
       const list = json.data ?? [];
       setRoots(list);
       if (list.length > 0) {
@@ -283,7 +287,7 @@ export default function AdminDocumentosVariaveisPage() {
         setRootPkColumn(current.pk || "id");
       }
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Erro ao carregar roots.");
+      setErro(e instanceof Error ? e.message : "Erro ao carregar origens de dados.");
     } finally {
       setRootsLoading(false);
     }
@@ -481,7 +485,7 @@ export default function AdminDocumentosVariaveisPage() {
     }
 
     if (precisaJoin && !rootTable.trim()) {
-      setErro("Selecione o root.");
+      setErro("Selecione a origem dos dados.");
       setSaving(false);
       return;
     }
@@ -618,15 +622,17 @@ export default function AdminDocumentosVariaveisPage() {
     [itens, mostrarPendentes],
   );
 
-  return (
-    <SystemPage>
+  const content = (
+    <>
       <SystemContextCard
         title="Documentos - Variaveis"
         subtitle="Cadastre variaveis reutilizaveis para gerar placeholders automaticamente."
       >
-        <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-          Voltar ao hub de documentos
-        </Link>
+        {!embedded ? (
+          <Link className="text-sm underline text-slate-600" href="/admin/config/documentos/configuracao">
+            Voltar a configuracao de documentos
+          </Link>
+        ) : null}
       </SystemContextCard>
 
       <SystemHelpCard
@@ -773,7 +779,7 @@ export default function AdminDocumentosVariaveisPage() {
                 <div className="mt-4 space-y-3">
                   <div className="grid gap-3 md:grid-cols-3">
                     <div>
-                      <label className="text-sm font-medium">Ponto de partida (root)</label>
+                      <label className="text-sm font-medium">Ponto de partida dos dados</label>
                       <select
                         className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
                         value={rootTable}
@@ -781,7 +787,7 @@ export default function AdminDocumentosVariaveisPage() {
                         disabled={rootsLoading}
                       >
                         {rootsLoading ? <option>Carregando...</option> : null}
-                        {!rootsLoading && roots.length === 0 ? <option value="">Sem roots</option> : null}
+                        {!rootsLoading && roots.length === 0 ? <option value="">Sem origens</option> : null}
                         {roots.map((r) => (
                           <option key={r.key} value={r.key}>
                             {r.label}
@@ -791,7 +797,7 @@ export default function AdminDocumentosVariaveisPage() {
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium">PK do root</label>
+                      <label className="text-sm font-medium">Chave primaria da origem</label>
                       <Input value={rootPkColumn} onChange={(e) => setRootPkColumn(e.target.value)} />
                     </div>
                   </div>
@@ -809,7 +815,7 @@ export default function AdminDocumentosVariaveisPage() {
 
                         return (
                           <div key={`hop-${index}`}>
-                            <label className="text-xs font-medium">Hop {index + 1}</label>
+                            <label className="text-xs font-medium">Passo {index + 1}</label>
                             <select
                               className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
                               value={selectedValue}
@@ -923,7 +929,7 @@ export default function AdminDocumentosVariaveisPage() {
                     ) : null}
                     {item.root_table ? (
                       <div className="mt-1 text-xs text-slate-500">
-                        Root: {item.root_table}.{item.root_pk_column ?? "id"}
+                        Origem dos dados: {item.root_table}.{item.root_pk_column ?? "id"}
                       </div>
                     ) : null}
                     {item.target_table && item.target_column ? (
@@ -932,7 +938,7 @@ export default function AdminDocumentosVariaveisPage() {
                       </div>
                     ) : null}
                     {!item.root_table && item.path_origem ? (
-                      <div className="mt-1 text-xs text-slate-500">Path: {item.path_origem}</div>
+                      <div className="mt-1 text-xs text-slate-500">Caminho de dados: {item.path_origem}</div>
                     ) : null}
                     {item.join_path && item.join_path.length > 0 ? (
                       <div className="mt-1 text-xs text-slate-500">
@@ -977,7 +983,7 @@ export default function AdminDocumentosVariaveisPage() {
                   <div>
                     <div className="text-sm font-semibold">{col.nome}</div>
                     <div className="mt-1 text-xs text-slate-600">
-                      {col.codigo} | Root: {col.root_tipo} | Ativo: {col.ativo ? "Sim" : "Nao"}
+                      {col.codigo} | Origem dos dados: {col.root_tipo} | Ativo: {col.ativo ? "Sim" : "Nao"}
                     </div>
                     {col.descricao ? (
                       <div className="mt-1 text-xs text-slate-500">{col.descricao}</div>
@@ -995,6 +1001,12 @@ export default function AdminDocumentosVariaveisPage() {
           </div>
         )}
       </SystemSectionCard>
-    </SystemPage>
+    </>
   );
+
+  return embedded ? content : <SystemPage>{content}</SystemPage>;
+}
+
+export default function AdminDocumentosVariaveisPage() {
+  return <DocumentosVariaveisContent />;
 }
