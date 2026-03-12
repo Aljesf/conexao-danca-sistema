@@ -21,6 +21,7 @@ import { ImagemPickerModal } from "@/components/documentos/ImagemPickerModal";
 
 import {
   Bold,
+  Braces,
   Italic,
   Underline as UnderlineIcon,
   Strikethrough,
@@ -43,6 +44,7 @@ export type RteVariable = { code: string; label: string };
 export type RichTextEditorHandle = {
   insertPlaceholder: (code: string) => void;
   insertText: (text: string) => void;
+  insertCollectionTable: (colecao: ColecaoCatalogo) => void;
 };
 
 export type RichTextEditorProps = {
@@ -54,6 +56,11 @@ export type RichTextEditorProps = {
   enableCollections?: boolean;
   enableImages?: boolean;
   className?: string;
+  pageWidthPx?: number;
+  toolbarSticky?: boolean;
+  showVariablesInline?: boolean;
+  showCollectionsInline?: boolean;
+  toolbarExtras?: React.ReactNode;
 };
 
 type ToolbarButtonProps = {
@@ -136,6 +143,11 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
       enableCollections = false,
       enableImages = true,
       className,
+      pageWidthPx = 1120,
+      toolbarSticky = false,
+      showVariablesInline = true,
+      showCollectionsInline = true,
+      toolbarExtras,
     },
     ref,
   ) {
@@ -200,6 +212,10 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
           if (!editor) return;
           editor.chain().focus().insertContent(text).run();
         },
+        insertCollectionTable(colecao: ColecaoCatalogo) {
+          if (!editor) return;
+          editor.chain().focus().insertContent(buildColecaoTable(colecao)).run();
+        },
       }),
       [editor],
     );
@@ -219,8 +235,15 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
     const canRedo = editor.can().chain().focus().redo().run();
 
     return (
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+      <div className="space-y-3">
+        <div
+          className={[
+            "z-20 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 shadow-sm",
+            toolbarSticky ? "sticky top-4" : "",
+          ].join(" ")}
+          style={{ maxWidth: `${pageWidthPx}px`, margin: "0 auto" }}
+        >
+          <div className="flex flex-wrap items-center gap-2">
           <ToolbarButton title="Negrito" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
             <Bold size={16} />
           </ToolbarButton>
@@ -330,7 +353,7 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
             </>
           ) : null}
 
-          {enableVariables ? (
+          {enableVariables && showVariablesInline ? (
             <>
               <span className="mx-1 h-6 w-px bg-slate-200" />
               <select
@@ -354,9 +377,25 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
               </select>
             </>
           ) : null}
+          {toolbarExtras ? (
+            <>
+              <span className="mx-1 h-6 w-px bg-slate-200" />
+              <div className="flex flex-wrap items-center gap-2">{toolbarExtras}</div>
+            </>
+          ) : null}
+          {!showVariablesInline && enableVariables ? (
+            <>
+              <span className="mx-1 h-6 w-px bg-slate-200" />
+              <span className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
+                <Braces size={14} />
+                Variaveis e colecoes por painel lateral
+              </span>
+            </>
+          ) : null}
+          </div>
         </div>
 
-        {enableCollections ? (
+        {enableCollections && showCollectionsInline ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
             <div className="max-w-3xl">
               <span className="font-medium text-slate-700">Variaveis de colecao:</span>{" "}
@@ -375,7 +414,12 @@ export const RichTextEditor = React.forwardRef<RichTextEditorHandle, RichTextEdi
           </div>
         ) : null}
 
-        <EditorContent editor={editor} />
+        <div
+          className="mx-auto rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-[0_18px_48px_rgba(15,23,42,0.06)] md:px-5"
+          style={{ maxWidth: `${pageWidthPx}px` }}
+        >
+          <EditorContent editor={editor} />
+        </div>
 
         {enableImages ? (
           <ImagemPickerModal

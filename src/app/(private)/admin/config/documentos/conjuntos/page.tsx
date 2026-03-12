@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Link from "next/link";
 import React from "react";
 
 type Conjunto = {
@@ -412,9 +413,12 @@ export default function AdminDocumentosConjuntosPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
+            Voltar ao hub de documentos
+          </Link>
           <h1 className="text-xl font-semibold">Documentos - Conjuntos e Grupos</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Gerencie Conjuntos (blocos) e seus Grupos internos. Tudo em uma unica tela.
+            Conjuntos sao agrupadores de documentos de um processo. Os grupos organizam o que e principal, obrigatorio ou opcional.
           </p>
         </div>
 

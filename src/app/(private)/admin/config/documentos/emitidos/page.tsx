@@ -11,7 +11,6 @@ type DocumentoEmitido = {
   id: number;
   matricula_id: number;
   contrato_modelo_id?: number | null;
-  documento_modelo_id?: number | null;
   status_assinatura?: string | null;
   created_at: string;
   updated_at?: string | null;
@@ -64,7 +63,7 @@ export default function AdminDocumentosEmitidosPage() {
     <SystemPage>
       <SystemContextCard title="Documentos emitidos" subtitle="Lista simples dos documentos emitidos (MVP).">
         <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-          Voltar ao hub de Documentos
+          Voltar ao hub de documentos
         </Link>
       </SystemContextCard>
 
@@ -110,8 +109,7 @@ export default function AdminDocumentosEmitidosPage() {
                   </Link>
                 </div>
                 <div className="mt-1 text-xs text-slate-600">
-                  Matricula: {c.matricula_id} | Modelo:{" "}
-                  {c.documento_modelo_id ?? c.contrato_modelo_id ?? "-"} | Status: {c.status_assinatura ?? "-"}
+                  Matricula: {c.matricula_id} | Modelo: {c.contrato_modelo_id ?? "-"} | Status: {c.status_assinatura ?? "-"}
                 </div>
                 {c.documento_origem_id ? (
                   <div className="mt-1 text-xs text-amber-700">Documento de origem: #{c.documento_origem_id}</div>

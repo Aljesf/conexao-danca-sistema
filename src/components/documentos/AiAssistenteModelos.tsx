@@ -5,9 +5,10 @@ import type { AiAnalyzeResp } from "@/lib/documentos/ai.types";
 
 type Props = {
   onApplyTemplateHtml: (html: string) => void;
+  className?: string;
 };
 
-export function AiAssistenteModelos({ onApplyTemplateHtml }: Props) {
+export function AiAssistenteModelos({ onApplyTemplateHtml, className }: Props) {
   const [texto, setTexto] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -72,7 +73,7 @@ export function AiAssistenteModelos({ onApplyTemplateHtml }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-6 shadow-sm">
+    <div className={["rounded-2xl border bg-white p-6 shadow-sm", className ?? ""].join(" ").trim()}>
       <h2 className="text-lg font-semibold">Assistente IA</h2>
       <p className="mt-1 text-sm text-slate-600">
         Cole um contrato antigo ou briefing. A IA sugere variaveis e monta o template.

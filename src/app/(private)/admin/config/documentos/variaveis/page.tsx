@@ -615,14 +615,14 @@ export default function AdminDocumentosVariaveisPage() {
         subtitle="Cadastre variaveis reutilizaveis para gerar placeholders automaticamente."
       >
         <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-          Voltar ao hub de Documentos
+          Voltar ao hub de documentos
         </Link>
       </SystemContextCard>
 
       <SystemHelpCard
         items={[
-          "Use codigo em CAIXA ALTA, ex: ALUNO_NOME.",
-          "Origem MANUAL dispensa wizard de joins.",
+          "Variaveis sao os campos individuais do documento, como nome, CPF, data ou valor.",
+          "Origem MANUAL dispensa wizard de joins e serve para preenchimento operacional.",
           "Variaveis inativas nao aparecem para selecao nos modelos.",
         ]}
       />

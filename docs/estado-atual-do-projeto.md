@@ -615,3 +615,46 @@ Proximo passo:
   - abertura e reemissao de recibos;
   - tratamento institucional de cabecalho, rodape e PDF final.
 
+---
+
+## Atualizacao 2026-03-11 (Documentos - arquitetura estrutural registrada)
+
+Estado:
+- O submodulo documental de emitidos/recibos esta consolidado na base arquitetural.
+- A arquitetura oficial do modulo Documentos foi registrada em `docs/arquitetura-documentos.md`.
+
+Base de referencia:
+- Esse documento passa a servir como base para:
+  - tutorial do sistema;
+  - onboarding de desenvolvedores;
+  - manutencao do modulo documental.
+
+Estrutura registrada:
+- autoria documental;
+- componentes reutilizaveis;
+- fluxo documental;
+- operacao real dos documentos.
+
+Observacao:
+- A pasta `docs/tutorial/` foi preparada para receber o material futuro de treinamento do sistema.
+
+---
+
+## Atualizacao 2026-03-11 (Documentos - hub semantico e navegacao)
+
+Estado:
+- O modulo Documentos ganhou um hub de navegacao mais claro em `/admin/config/documentos`.
+- A organizacao visual agora separa o modulo em:
+  - autoria documental;
+  - componentes reutilizaveis;
+  - fluxos documentais;
+  - operacao.
+
+Ajustes aplicados:
+- microcopy revisada nas telas de variaveis, colecoes e conjuntos;
+- links padronizados de retorno ao hub nas telas principais do submodulo;
+- listagem de emitidos corrigida para usar a coluna real `contrato_modelo_id`.
+
+Base documental:
+- `docs/arquitetura-documentos.md` agora registra tambem a funcao do hub como base para tutorial, onboarding e manutencao.
+

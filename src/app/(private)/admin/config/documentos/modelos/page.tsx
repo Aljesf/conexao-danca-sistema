@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { FileText, Layers3, Wand2 } from "lucide-react";
 import { SystemContextCard } from "@/components/system/SystemContextCard";
 import { SystemHelpCard } from "@/components/system/SystemHelpCard";
 import { SystemPage } from "@/components/system/SystemPage";
@@ -16,6 +17,21 @@ import type { DocumentoModeloDTO, DocumentoModeloFormato } from "@/lib/documento
 type TipoDocOpt = { id: number; label: string };
 type ConjuntoOpt = { id: number; label: string; grupos: Array<{ id: number; label: string }> };
 type LayoutTemplateOpt = { id: number; label: string; tipo: "HEADER" | "FOOTER"; height_px: number };
+
+function extrairTexto(html: string): string {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function resumirConteudo(modelo: DocumentoModeloDTO): string {
+  const bruto =
+    modelo.formato === "RICH_HTML"
+      ? modelo.conteudo_html ?? modelo.texto_modelo_md ?? ""
+      : modelo.texto_modelo_md ?? modelo.conteudo_html ?? "";
+  const texto = extrairTexto(bruto);
+  if (!texto) return "Sem conteudo principal preenchido.";
+  if (texto.length <= 180) return texto;
+  return `${texto.slice(0, 177)}...`;
+}
 
 async function fetchVariaveisAtivas(): Promise<RteVariable[]> {
   const res = await fetch("/api/documentos/variaveis?ativo=1", { cache: "no-store" });
@@ -65,8 +81,25 @@ export default function AdminDocumentosModelosPage() {
 
   const conteudoOk =
     novoFormato === "RICH_HTML"
-      ? novoHtml.replace(/<[^>]+>/g, "").trim().length > 0
+      ? extrairTexto(novoHtml).length > 0
       : novoTextoMarkdown.trim().length > 0;
+
+  const tipoDocMap = useMemo(() => {
+    const map = new Map<number, string>();
+    tiposDoc.forEach((item) => map.set(item.id, item.label));
+    return map;
+  }, [tiposDoc]);
+
+  const resumoModelos = useMemo(() => {
+    const ativos = itens.filter((item) => item.ativo).length;
+    const html = itens.filter((item) => item.formato === "RICH_HTML").length;
+    return {
+      total: itens.length,
+      ativos,
+      rascunhos: itens.length - ativos,
+      html,
+    };
+  }, [itens]);
 
   async function carregar() {
     setLoading(true);
@@ -192,23 +225,15 @@ export default function AdminDocumentosModelosPage() {
 
       const payload =
         novoFormato === "RICH_HTML"
-          ? {
-              ...payloadBase,
-              formato: "RICH_HTML",
-              conteudo_html: novoHtml,
-            }
-          : {
-              ...payloadBase,
-              formato: "MARKDOWN",
-              texto_modelo_md: novoTextoMarkdown,
-            };
+          ? { ...payloadBase, formato: "RICH_HTML", conteudo_html: novoHtml }
+          : { ...payloadBase, formato: "MARKDOWN", texto_modelo_md: novoTextoMarkdown };
 
       const payloadFinal = {
         ...payload,
-        conjunto_grupo_id: conjuntoGrupoId ? conjuntoGrupoId : null,
+        conjunto_grupo_id: conjuntoGrupoId || null,
         ordem: vinculoOrdem,
-        header_template_id: headerTemplateId ? headerTemplateId : null,
-        footer_template_id: footerTemplateId ? footerTemplateId : null,
+        header_template_id: headerTemplateId || null,
+        footer_template_id: footerTemplateId || null,
         header_height_px: headerHeightPx,
         footer_height_px: footerHeightPx,
         page_margin_mm: pageMarginMm,
@@ -221,6 +246,7 @@ export default function AdminDocumentosModelosPage() {
       });
       const json = (await res.json()) as { data?: DocumentoModeloDTO; error?: string };
       if (!res.ok) throw new Error(json.error ?? "Falha ao criar modelo.");
+
       setNovoTitulo("");
       setNovoTextoMarkdown("");
       setNovoHtml("<p></p>");
@@ -252,314 +278,426 @@ export default function AdminDocumentosModelosPage() {
     <SystemPage>
       <SystemContextCard
         title="Documentos - Modelos"
-        subtitle="Templates e placeholders para emissao futura (MVP sem PDF e sem assinatura digital)."
+        subtitle="Autoria guiada para criar, testar e evoluir modelos sem abrir toda a governanca tecnica de uma vez."
       >
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1">{resumoModelos.total} modelos</span>
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700">
+            {resumoModelos.ativos} ativos
+          </span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+            {resumoModelos.rascunhos} em revisao
+          </span>
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-700">
+            {resumoModelos.html} em editor rico
+          </span>
+        </div>
         <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-          Voltar ao hub de Documentos
+          Voltar ao hub de documentos
         </Link>
       </SystemContextCard>
 
       <SystemHelpCard
         items={[
-          "Crie um modelo inicial e use a tela de detalhe para ajustar texto e schema.",
-          "Use placeholders em CAIXA ALTA para variaveis de documento.",
-          "Variaveis de colecao representam listas automaticas vinculadas a operacao.",
-          "O sistema renderiza automaticamente todas as linhas existentes nas colecoes.",
-          "Modelos ativos ficam disponiveis para emissao.",
+          "Comece pelo nome, pelo tipo documental e pelo corpo do texto. A configuracao tecnica fica recolhida.",
+          "Use a listagem para retomar versoes existentes sem abrir um cadastro cru.",
+          "Assistente de IA, variaveis e colecoes entram como apoio de autoria, nao como etapa inicial obrigatoria.",
         ]}
       />
 
-      <AiAssistenteModelos
-        onApplyTemplateHtml={(html) => {
-          setNovoFormato("RICH_HTML");
-          setNovoHtml(html);
-          setNovoTextoMarkdown(html);
-        }}
-      />
-
-      <SystemSectionCard
-        title="Novo modelo"
-        description="Crie o template inicial e depois edite schema e texto no detalhe."
-        footer={
-          <Button
-            onClick={() => void criarModelo()}
-            disabled={saving || !novoTitulo.trim() || !conteudoOk || !tipoDocumentoId}
-          >
-            {saving ? "Salvando..." : "Criar modelo"}
-          </Button>
-        }
-      >
-        {erro ? (
-          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
-        ) : null}
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <label className="text-sm font-medium">Formato</label>
-            <select
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              value={novoFormato}
-              onChange={(e) => setNovoFormato(e.target.value as DocumentoModeloFormato)}
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <SystemSectionCard
+          title="Criar novo modelo"
+          description="Comece pelo basico: identidade, tipo do documento e primeiro rascunho. O refinamento entra na edicao por etapas."
+          footer={
+            <Button
+              onClick={() => void criarModelo()}
+              disabled={saving || !novoTitulo.trim() || !conteudoOk || !tipoDocumentoId}
             >
-              <option value="RICH_HTML">Editor rico (HTML)</option>
-              <option value="MARKDOWN">Markdown (legado)</option>
-            </select>
-          </div>
+              {saving ? "Salvando..." : "Criar modelo e continuar edicao"}
+            </Button>
+          }
+        >
+          {erro ? (
+            <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
+          ) : null}
 
-          <div>
-            <label className="text-sm font-medium">Tipo de documento</label>
-            <select
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              value={tipoDocumentoId}
-              onChange={(e) => setTipoDocumentoId(e.target.value ? Number(e.target.value) : "")}
-            >
-              <option value="">Selecione...</option>
-              {tiposDoc.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">Header template</label>
-            <select
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              value={headerTemplateId}
-              onChange={(e) => {
-                const next = e.target.value ? Number(e.target.value) : "";
-                setHeaderTemplateId(next);
-                if (next) {
-                  const found = headerTemplates.find((t) => t.id === next);
-                  if (found && Number.isFinite(found.height_px) && found.height_px > 0) {
-                    setHeaderHeightPx(found.height_px);
-                  }
-                }
-              }}
-            >
-              <option value="">Sem header</option>
-              {headerTemplates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label || `Header ${t.id}`}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">Footer template</label>
-            <select
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              value={footerTemplateId}
-              onChange={(e) => {
-                const next = e.target.value ? Number(e.target.value) : "";
-                setFooterTemplateId(next);
-                if (next) {
-                  const found = footerTemplates.find((t) => t.id === next);
-                  if (found && Number.isFinite(found.height_px) && found.height_px > 0) {
-                    setFooterHeightPx(found.height_px);
-                  }
-                }
-              }}
-            >
-              <option value="">Sem footer</option>
-              {footerTemplates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label || `Footer ${t.id}`}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">Altura header (px)</label>
-            <input
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              type="number"
-              min={40}
-              value={headerHeightPx}
-              onChange={(e) => setHeaderHeightPx(Number(e.target.value))}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">Altura footer (px)</label>
-            <input
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              type="number"
-              min={40}
-              value={footerHeightPx}
-              onChange={(e) => setFooterHeightPx(Number(e.target.value))}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">Margem da pagina (mm)</label>
-            <input
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-              type="number"
-              min={5}
-              value={pageMarginMm}
-              onChange={(e) => setPageMarginMm(Number(e.target.value))}
-            />
-          </div>
-
-          <div className="md:col-span-2 grid gap-3 md:grid-cols-2">
-            <div>
-              <label className="text-sm font-medium">Conjunto (opcional)</label>
-              <select
-                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                value={conjuntoId}
-                onChange={(e) => {
-                  const next = e.target.value ? Number(e.target.value) : "";
-                  setConjuntoId(next);
-                  setConjuntoGrupoId("");
-                }}
-              >
-                <option value="">Selecione...</option>
-                {conjuntos.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Grupo (opcional)</label>
-              <select
-                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                value={conjuntoGrupoId}
-                onChange={(e) => setConjuntoGrupoId(e.target.value ? Number(e.target.value) : "")}
-                disabled={!conjuntoId}
-              >
-                <option value="">{conjuntoId ? "Selecione..." : "Selecione um conjunto primeiro"}</option>
-                {(conjuntos.find((c) => c.id === conjuntoId)?.grupos || []).map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium">Ordem do vinculo (opcional)</label>
-              <input
-                className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                type="number"
-                min={1}
-                value={vinculoOrdem}
-                onChange={(e) => setVinculoOrdem(Number(e.target.value))}
-              />
-              <p className="mt-1 text-xs text-slate-500">
-                Se o modelo estiver vinculado a mais de um grupo, gerencie os demais vinculos em Conjuntos e Grupos.
-              </p>
-            </div>
-          </div>
-
-          <div className="md:col-span-3">
-            <label className="text-sm font-medium">Titulo</label>
-            <div className="mt-1">
-              <Input
-                value={novoTitulo}
-                onChange={(e) => setNovoTitulo(e.target.value)}
-                placeholder="Ex.: Documento Regular 2026 (v1.0)"
-              />
-            </div>
-          </div>
-
-          <div className="md:col-span-3">
-            <label className="text-sm font-medium">Texto do modelo</label>
-            <div className="mt-1">
-              {novoFormato === "RICH_HTML" ? (
-                <>
-                  {variaveisErro ? <p className="mb-2 text-sm text-red-600">{variaveisErro}</p> : null}
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <div className="space-y-1 text-xs text-slate-500">
-                        <p>Variaveis sao herdadas do cadastro do sistema. Apenas variaveis ativas aparecem aqui.</p>
-                        <p>
-                          Variaveis de colecao representam listas automaticas vinculadas a operacao. O sistema
-                          renderiza automaticamente todas as linhas existentes.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void recarregarVariaveis()}
-                      className="rounded-md border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                      disabled={variaveisLoading}
-                    >
-                      {variaveisLoading ? "Recarregando..." : "Recarregar variaveis"}
-                    </button>
+          <div className="grid gap-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              {[
+                { icon: <FileText className="h-4 w-4" />, title: "1. Identidade", text: "Nome e tipo do documento para situar o modelo na operacao." },
+                { icon: <Wand2 className="h-4 w-4" />, title: "2. Corpo inicial", text: "Escreva o primeiro rascunho agora e refine depois no fluxo guiado." },
+                { icon: <Layers3 className="h-4 w-4" />, title: "3. Ajuste fino", text: "Cabecalho, rodape, grupos e margens ficam recolhidos como configuracao avancada." },
+              ].map((item) => (
+                <div key={item.title} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm">
+                      {item.icon}
+                    </span>
+                    {item.title}
                   </div>
+                  <p className="mt-2 text-sm text-slate-600">{item.text}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium">Nome do modelo</label>
+                <div className="mt-1">
+                  <Input
+                    value={novoTitulo}
+                    onChange={(e) => setNovoTitulo(e.target.value)}
+                    placeholder="Ex.: Recibo de pagamento confirmado"
+                  />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  Use um nome que ajude a reconhecer versao, finalidade e operacao sem abrir o detalhe.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Documento vinculado</label>
+                <select
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  value={tipoDocumentoId}
+                  onChange={(e) => setTipoDocumentoId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">Selecione...</option>
+                  {tiposDoc.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">
+                  Nesta primeira rodada de autoria, o tipo documental organiza a experiencia. A operacao canonica segue preservada no backend.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Formato de autoria</label>
+                <select
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  value={novoFormato}
+                  onChange={(e) => setNovoFormato(e.target.value as DocumentoModeloFormato)}
+                >
+                  <option value="RICH_HTML">Editor rico (HTML)</option>
+                  <option value="MARKDOWN">Markdown (legado)</option>
+                </select>
+              </div>
+
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                <div className="font-medium text-slate-800">Bloco principal</div>
+                <p className="mt-1">
+                  Crie o rascunho principal agora. Cabecalho, rodape, conjuntos e detalhes de layout ficam no avancado ou na edicao por etapas.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-sm font-medium">Corpo do documento</label>
+                <button
+                  type="button"
+                  onClick={() => void recarregarVariaveis()}
+                  className="rounded-md border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  disabled={variaveisLoading}
+                >
+                  {variaveisLoading ? "Recarregando variaveis..." : "Atualizar variaveis"}
+                </button>
+              </div>
+
+              {variaveisErro ? <p className="mt-2 text-sm text-red-600">{variaveisErro}</p> : null}
+
+              <div className="mt-2 rounded-2xl border border-slate-200 bg-white p-4">
+                {novoFormato === "RICH_HTML" ? (
                   <RichTextEditor
                     valueHtml={novoHtml}
                     onChangeHtml={setNovoHtml}
                     enableVariables
                     enableCollections
                     variables={variaveis}
+                    minHeightPx={320}
                   />
-                </>
-              ) : (
-                <Textarea
-                  value={novoTextoMarkdown}
-                  onChange={(e) => setNovoTextoMarkdown(e.target.value)}
-                  rows={10}
-                  placeholder="Cole aqui o texto do modelo com placeholders, ex.: {{ALUNO_NOME}}"
-                />
-              )}
+                ) : (
+                  <Textarea
+                    value={novoTextoMarkdown}
+                    onChange={(e) => setNovoTextoMarkdown(e.target.value)}
+                    rows={12}
+                    placeholder="Escreva o modelo com placeholders, ex.: {{ALUNO_NOME}}"
+                  />
+                )}
+              </div>
             </div>
-          </div>
 
-        </div>
-      </SystemSectionCard>
+            <details className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800">
+                Configuracoes avancadas de estrutura
+              </summary>
+              <p className="mt-2 text-sm text-slate-600">
+                Abra somente se este modelo precisar de cabecalho, rodape, grupos ou margens fora do padrao inicial.
+              </p>
 
-      <SystemSectionCard
-        title="Modelos cadastrados"
-        description="Use Editar para ajustar texto e schema no padrao do sistema."
-      >
-        {erro ? (
-          <div className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{erro}</div>
-        ) : null}
-
-        {loading ? (
-          <p className="text-sm text-slate-600">Carregando...</p>
-        ) : itens.length === 0 ? (
-          <p className="text-sm text-slate-600">Nenhum modelo cadastrado.</p>
-        ) : (
-          <div className="grid gap-3">
-            {itens.map((m) => {
-              const formato = m.formato ?? "MARKDOWN";
-              const preview =
-                formato === "RICH_HTML"
-                  ? (m.conteudo_html ?? m.texto_modelo_md ?? "")
-                  : (m.texto_modelo_md ?? "");
-
-              return (
-                <div key={m.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
-                  <div className="flex flex-col gap-1">
-                    <div className="text-sm font-semibold">
-                      {m.titulo} <span className="opacity-70">({m.versao})</span>
-                    </div>
-                    <div className="text-xs text-slate-600">
-                      ID: {m.id} | Ativo: {m.ativo ? "Sim" : "Nao"} | Formato: {formato}
-                    </div>
-                    <div>
-                      <Link className="text-sm underline" href={`/admin/config/documentos/modelos/${m.id}`}>
-                        Editar
-                      </Link>
-                    </div>
-                  </div>
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-sm text-slate-600">Ver texto</summary>
-                    <pre className="mt-2 whitespace-pre-wrap text-sm">{preview}</pre>
-                  </details>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium">Cabecalho reutilizavel</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={headerTemplateId}
+                    onChange={(e) => {
+                      const next = e.target.value ? Number(e.target.value) : "";
+                      setHeaderTemplateId(next);
+                      if (next) {
+                        const found = headerTemplates.find((item) => item.id === next);
+                        if (found && Number.isFinite(found.height_px) && found.height_px > 0) {
+                          setHeaderHeightPx(found.height_px);
+                        }
+                      }
+                    }}
+                  >
+                    <option value="">Sem cabecalho especifico</option>
+                    {headerTemplates.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label || `Header ${item.id}`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              );
-            })}
+
+                <div>
+                  <label className="text-sm font-medium">Rodape reutilizavel</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={footerTemplateId}
+                    onChange={(e) => {
+                      const next = e.target.value ? Number(e.target.value) : "";
+                      setFooterTemplateId(next);
+                      if (next) {
+                        const found = footerTemplates.find((item) => item.id === next);
+                        if (found && Number.isFinite(found.height_px) && found.height_px > 0) {
+                          setFooterHeightPx(found.height_px);
+                        }
+                      }
+                    }}
+                  >
+                    <option value="">Sem rodape especifico</option>
+                    {footerTemplates.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label || `Footer ${item.id}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Conjunto documental</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={conjuntoId}
+                    onChange={(e) => {
+                      const next = e.target.value ? Number(e.target.value) : "";
+                      setConjuntoId(next);
+                      setConjuntoGrupoId("");
+                    }}
+                  >
+                    <option value="">Sem conjunto no inicio</option>
+                    {conjuntos.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Grupo do conjunto</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    value={conjuntoGrupoId}
+                    onChange={(e) => setConjuntoGrupoId(e.target.value ? Number(e.target.value) : "")}
+                    disabled={!conjuntoId}
+                  >
+                    <option value="">{conjuntoId ? "Selecione..." : "Selecione um conjunto primeiro"}</option>
+                    {(conjuntos.find((item) => item.id === conjuntoId)?.grupos || []).map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 md:col-span-2">
+                  <div>
+                    <label className="text-sm font-medium">Header (px)</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                      type="number"
+                      min={40}
+                      value={headerHeightPx}
+                      onChange={(e) => setHeaderHeightPx(Number(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Rodape (px)</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                      type="number"
+                      min={40}
+                      value={footerHeightPx}
+                      onChange={(e) => setFooterHeightPx(Number(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Margem (mm)</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                      type="number"
+                      min={5}
+                      value={pageMarginMm}
+                      onChange={(e) => setPageMarginMm(Number(e.target.value))}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Ordem do vinculo</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                    type="number"
+                    min={1}
+                    value={vinculoOrdem}
+                    onChange={(e) => setVinculoOrdem(Number(e.target.value))}
+                  />
+                </div>
+              </div>
+            </details>
           </div>
-        )}
-      </SystemSectionCard>
+        </SystemSectionCard>
+
+        <div className="space-y-6">
+          <SystemSectionCard
+            title="Comecar com apoio"
+            description="O assistente e opcional. Use quando voce ja tiver um texto-base ou briefing para transformar em rascunho."
+          >
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              A IA agora entra como apoio contextual. Ela nao substitui o fluxo principal de autoria.
+            </div>
+            <div className="mt-4">
+              <AiAssistenteModelos
+                onApplyTemplateHtml={(html) => {
+                  setNovoFormato("RICH_HTML");
+                  setNovoHtml(html);
+                  setNovoTextoMarkdown(html);
+                }}
+              />
+            </div>
+          </SystemSectionCard>
+
+          <SystemSectionCard
+            title="Consultar modelos existentes"
+            description="Retome um modelo pelo status, formato e tipo documental, sem precisar abrir um formulario tecnico."
+          >
+            {loading ? (
+              <p className="text-sm text-slate-600">Carregando...</p>
+            ) : itens.length === 0 ? (
+              <p className="text-sm text-slate-600">Nenhum modelo cadastrado.</p>
+            ) : (
+              <div className="grid gap-4">
+                {itens.map((item) => {
+                  const formato = item.formato ?? "MARKDOWN";
+                  const tipoLabel =
+                    item.tipo_documento_id && tipoDocMap.has(item.tipo_documento_id)
+                      ? tipoDocMap.get(item.tipo_documento_id)
+                      : "Tipo documental nao identificado";
+
+                  return (
+                    <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-base font-semibold text-slate-900">{item.titulo}</h3>
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700">
+                              {item.versao}
+                            </span>
+                            <span
+                              className={[
+                                "rounded-full px-2.5 py-1 text-xs font-medium",
+                                item.ativo
+                                  ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border border-slate-200 bg-slate-100 text-slate-600",
+                              ].join(" ")}
+                            >
+                              {item.ativo ? "Ativo" : "Em revisao"}
+                            </span>
+                            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs text-sky-700">
+                              {formato === "RICH_HTML" ? "Editor rico" : "Markdown"}
+                            </span>
+                          </div>
+
+                          <div className="text-sm text-slate-600">
+                            <span className="font-medium text-slate-800">Documento:</span> {tipoLabel}
+                          </div>
+                          <p className="text-sm text-slate-600">{resumirConteudo(item)}</p>
+                        </div>
+
+                        <div className="flex shrink-0 flex-col items-end gap-2">
+                          <Link
+                            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                            href={`/admin/config/documentos/modelos/${item.id}`}
+                          >
+                            Continuar edicao
+                          </Link>
+                          <span className="text-xs text-slate-500">Modelo #{item.id}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Estrutura</div>
+                          <div className="mt-2 text-slate-700">
+                            Header {item.header_template_id ? `#${item.header_template_id}` : "padrao"}
+                            <br />
+                            Rodape {item.footer_template_id ? `#${item.footer_template_id}` : "padrao"}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Formato</div>
+                          <div className="mt-2 text-slate-700">
+                            {formato === "RICH_HTML" ? "Edicao visual com variaveis e colecoes" : "Modo legado em markdown"}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Proximo passo</div>
+                          <div className="mt-2 text-slate-700">
+                            {item.ativo ? "Revisar corpo, preview e versionamento" : "Concluir o fluxo guiado e ativar"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <summary className="cursor-pointer list-none text-sm font-medium text-slate-700">
+                          Ver contexto rapido do modelo
+                        </summary>
+                        <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
+                          <div>
+                            <span className="font-medium text-slate-800">Conteudo resumo:</span> {resumirConteudo(item)}
+                          </div>
+                          <div>
+                            <span className="font-medium text-slate-800">Abertura recomendada:</span> editar em etapas, validar preview e depois ativar.
+                          </div>
+                        </div>
+                      </details>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </SystemSectionCard>
+        </div>
+      </div>
     </SystemPage>
   );
 }

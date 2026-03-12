@@ -207,13 +207,13 @@ export default function Page() {
         subtitle="Catalogo tecnico e edicao das colecoes usadas nos modelos."
       >
         <Link className="text-sm underline text-slate-600" href="/admin/config/documentos">
-          Voltar ao hub de Documentos
+          Voltar ao hub de documentos
         </Link>
       </SystemContextCard>
 
       <SystemHelpCard
         items={[
-          "Colecoes sao listas automaticas vinculadas a uma operacao (ex.: matricula ou fatura).",
+          "Colecoes sao listas automaticas usadas para renderizar linhas repetidas no documento.",
           "O codigo da colecao deve bater com o que o template usa: {{#CODIGO}} ... {{/CODIGO}}.",
           "Edite com cuidado: alterar o codigo impacta modelos existentes.",
         ]}

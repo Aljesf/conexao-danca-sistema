@@ -1,96 +1,141 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { BookTemplate, Braces, FolderKanban, Layers3, LibraryBig, ReceiptText, Rows3 } from "lucide-react";
 import { SystemContextCard } from "@/components/system/SystemContextCard";
 import { SystemHelpCard } from "@/components/system/SystemHelpCard";
 import { SystemPage } from "@/components/system/SystemPage";
 import { SystemSectionCard } from "@/components/system/SystemSectionCard";
 
+type HubItem = {
+  title: string;
+  description: string;
+  href: string;
+  icon: ReactNode;
+};
+
+type HubSection = {
+  eyebrow: string;
+  title: string;
+  description: string;
+  items: HubItem[];
+};
+
+const HUB_SECTIONS: HubSection[] = [
+  {
+    eyebrow: "Autoria documental",
+    title: "Onde os documentos sao escritos e estruturados",
+    description: "Camada de autoria para criar modelos, placeholders e listas automaticas usadas no texto.",
+    items: [
+      {
+        title: "Modelos",
+        description: "Crie, edite e teste os templates principais de contrato, recibo, declaracao e termos.",
+        href: "/admin/config/documentos/modelos",
+        icon: <BookTemplate className="h-5 w-5" />,
+      },
+      {
+        title: "Variaveis",
+        description: "Cadastre os campos individuais que substituem valores dinamicos no documento.",
+        href: "/admin/config/documentos/variaveis",
+        icon: <Braces className="h-5 w-5" />,
+      },
+      {
+        title: "Colecoes",
+        description: "Gerencie listas automaticas usadas para renderizar tabelas e blocos repetitivos.",
+        href: "/admin/config/documentos/colecoes",
+        icon: <Rows3 className="h-5 w-5" />,
+      },
+    ],
+  },
+  {
+    eyebrow: "Componentes reutilizaveis",
+    title: "Estruturas institucionais compartilhadas entre modelos",
+    description: "Componentes visuais que padronizam identidade institucional e reaproveitamento entre documentos.",
+    items: [
+      {
+        title: "Cabecalhos",
+        description: "Defina identidade institucional, logo e bloco superior reutilizavel.",
+        href: "/admin/config/documentos/layout-templates",
+        icon: <Layers3 className="h-5 w-5" />,
+      },
+      {
+        title: "Rodapes",
+        description: "Mantenha assinaturas, local/data e elementos finais em componentes reaproveitaveis.",
+        href: "/admin/config/documentos/layout-templates",
+        icon: <LibraryBig className="h-5 w-5" />,
+      },
+    ],
+  },
+  {
+    eyebrow: "Fluxos documentais",
+    title: "Como os documentos se agrupam dentro de um processo",
+    description: "Conjuntos e grupos organizam quais documentos aparecem em cada operacao do sistema.",
+    items: [
+      {
+        title: "Conjuntos documentais",
+        description: "Agrupe contratos, recibos e termos dentro de um mesmo processo documental.",
+        href: "/admin/config/documentos/conjuntos",
+        icon: <FolderKanban className="h-5 w-5" />,
+      },
+    ],
+  },
+  {
+    eyebrow: "Operacao",
+    title: "Onde os documentos passam a existir de forma oficial",
+    description: "Acompanhe documentos gerados, PDF, status e cadeia historica das emissoes.",
+    items: [
+      {
+        title: "Documentos emitidos",
+        description: "Consulte os documentos oficiais gerados pelo sistema e acompanhe sua cadeia documental.",
+        href: "/admin/config/documentos/emitidos",
+        icon: <ReceiptText className="h-5 w-5" />,
+      },
+    ],
+  },
+];
+
 export default function AdminConfigDocumentosHome() {
   return (
     <SystemPage>
       <SystemContextCard
-        title="Configuracao - Documentos"
-        subtitle="Central do modulo de documentos: modelos, emissao e acompanhamento."
+        title="Hub de documentos"
+        subtitle="Navegacao semantica do modulo documental: autoria, componentes, fluxos e operacao."
       />
 
       <SystemHelpCard
         items={[
-          "Crie e edite modelos com placeholders.",
-          "Emita documentos a partir de matriculas existentes.",
-          "Acompanhe documentos emitidos e seus status.",
+          "Use este hub como ponto central do modulo e como base futura para documentacao e tutorial.",
+          "Autoria cobre modelos, variaveis e colecoes.",
+          "Componentes, fluxos e operacao ficam separados para reduzir carga cognitiva.",
         ]}
       />
 
-      <div className="grid gap-4">
-        <Link href="/admin/config/documentos/modelos" className="block">
+      <div className="space-y-6">
+        {HUB_SECTIONS.map((section) => (
           <SystemSectionCard
-            title="Modelos de documento"
-            description="Crie e edite templates com placeholders (DB/CALC/MANUAL)."
+            key={section.eyebrow}
+            title={section.title}
+            description={section.description}
           >
-            <p className="text-sm text-slate-600">Gerencie versao, tipo, texto e schema do modelo.</p>
+            <div className="text-xs uppercase tracking-[0.22em] text-slate-500">{section.eyebrow}</div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {section.items.map((item) => (
+                <Link
+                  key={item.href + item.title}
+                  href={item.href}
+                  className="rounded-2xl border border-slate-200 bg-white px-5 py-5 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <div className="flex items-center gap-3 text-slate-900">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">{item.icon}</div>
+                    <div className="text-base font-semibold">{item.title}</div>
+                  </div>
+                  <p className="mt-3 text-sm text-slate-600">{item.description}</p>
+                </Link>
+              ))}
+            </div>
           </SystemSectionCard>
-        </Link>
-
-        <Link href="/admin/config/documentos/emitir" className="block">
-          <SystemSectionCard
-            title="Emitir documento"
-            description="Busque aluno ou responsavel, selecione matricula e emita o documento."
-          >
-            <p className="text-sm text-slate-600">Emissao guiada com snapshot e variaveis manuais.</p>
-          </SystemSectionCard>
-        </Link>
-
-        <Link href="/admin/config/documentos/emitidos" className="block">
-          <SystemSectionCard title="Documentos emitidos" description="Visualize documentos emitidos (MVP).">
-            <p className="text-sm text-slate-600">Lista de emitidos com status e referencia.</p>
-          </SystemSectionCard>
-        </Link>
-
-        <Link href="/admin/config/documentos/novo-recibo" className="block">
-          <SystemSectionCard
-            title="Novo recibo de mensalidade"
-            description="Emita recibo por cobranca ou recebimento com texto pronto."
-          >
-            <p className="text-sm text-slate-600">Fluxo rapido para comprovante de mensalidade no financeiro.</p>
-          </SystemSectionCard>
-        </Link>
-
-        <Link href="/admin/config/documentos/variaveis" className="block">
-          <SystemSectionCard
-            title="Variaveis de documento"
-            description="Cadastre variaveis reutilizaveis para gerar placeholders."
-          >
-            <p className="text-sm text-slate-600">Use codigos padronizados e path tecnico.</p>
-          </SystemSectionCard>
-        </Link>
-
-        <Link href="/admin/config/documentos/layouts" className="block">
-          <SystemSectionCard
-            title="Layouts reutilizaveis"
-            description="Cabecalho e rodape padronizados para modelos."
-          >
-            <p className="text-sm text-slate-600">Defina layout e reutilize em varios modelos.</p>
-          </SystemSectionCard>
-        </Link>
-
-        <Link href="/admin/config/documentos/layout-templates" className="block">
-          <SystemSectionCard
-            title="Layout templates (header/footer)"
-            description="Templates fisicos de cabecalho e rodape com altura."
-          >
-            <p className="text-sm text-slate-600">Defina HTML e altura fisica para impressao.</p>
-          </SystemSectionCard>
-        </Link>
-
-        <Link href="/admin/config/documentos/imagens" className="block">
-          <SystemSectionCard
-            title="Banco de imagens"
-            description="Gerencie imagens publicas para usar em cabecalhos e modelos."
-          >
-            <p className="text-sm text-slate-600">Upload de logos e imagens institucionais.</p>
-          </SystemSectionCard>
-        </Link>
+        ))}
       </div>
     </SystemPage>
   );

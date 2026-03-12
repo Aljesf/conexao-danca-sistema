@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from("documentos_emitidos")
     .select(
-      "id, matricula_id, contrato_modelo_id, documento_modelo_id, status_assinatura, created_at, updated_at, pdf_url, snapshot_financeiro_json, tipo_relacao_documental, documento_origem_id",
+      "id, matricula_id, contrato_modelo_id, status_assinatura, created_at, updated_at, pdf_url, snapshot_financeiro_json, tipo_relacao_documental, documento_origem_id",
     )
     .order("id", { ascending: false })
     .limit(50);

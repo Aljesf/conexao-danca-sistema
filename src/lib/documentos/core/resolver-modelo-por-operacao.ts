@@ -325,6 +325,75 @@ async function resolverRodape(
   return semantico ?? null;
 }
 
+export async function carregarModeloDocumentoPorId(params: {
+  supabase: SupabaseClient;
+  modeloId: number;
+}): Promise<DocumentoModeloResolvido> {
+  const { supabase, modeloId } = params;
+
+  const { data: modelo } = await supabase
+    .from("documentos_modelo")
+    .select(
+      [
+        "id",
+        "titulo",
+        "formato",
+        "conteudo_html",
+        "texto_modelo_md",
+        "cabecalho_html",
+        "rodape_html",
+        "layout_id",
+        "header_template_id",
+        "footer_template_id",
+        "header_height_px",
+        "footer_height_px",
+        "page_margin_mm",
+        "operacao_id",
+        "cabecalho_id",
+        "rodape_id",
+        "tipo_documento_id",
+      ].join(","),
+    )
+    .eq("id", modeloId)
+    .maybeSingle<DocumentoModeloResolvido>();
+
+  if (!modelo) {
+    throw new Error("modelo_documental_nao_encontrado");
+  }
+
+  return modelo;
+}
+
+export async function resolverPartesModelo(params: {
+  supabase: SupabaseClient;
+  modelo: DocumentoModeloResolvido;
+}): Promise<{
+  cabecalho: DocumentoParteResolvida | null;
+  rodape: DocumentoParteResolvida | null;
+  metadadosFallback: ModeloPorOperacaoResolvido["metadadosFallback"];
+}> {
+  const { supabase, modelo } = params;
+  const cabecalho = await resolverCabecalho(supabase, modelo);
+  const rodape = await resolverRodape(supabase, modelo);
+
+  return {
+    cabecalho,
+    rodape,
+    metadadosFallback: {
+      tipoDocumentoCodigoSolicitado: null,
+      usouCabecalhoSemantico:
+        cabecalho?.source === "SEMANTICO" || cabecalho?.source === "SEMANTICO_LAYOUT_TEMPLATE",
+      usouRodapeSemantico:
+        rodape?.source === "SEMANTICO" || rodape?.source === "SEMANTICO_LAYOUT_TEMPLATE",
+      usouHeaderTemplateLegado: cabecalho?.source === "LEGADO_TEMPLATE",
+      usouFooterTemplateLegado: rodape?.source === "LEGADO_TEMPLATE",
+      usouLayoutLegado: cabecalho?.source === "LEGADO_LAYOUT" || rodape?.source === "LEGADO_LAYOUT",
+      usouCabecalhoInlineModelo: cabecalho?.source === "MODELO_INLINE",
+      usouRodapeInlineModelo: rodape?.source === "MODELO_INLINE",
+    },
+  };
+}
+
 export async function resolverModeloPorOperacao(params: {
   supabase: SupabaseClient;
   operacaoCodigo: string;
@@ -394,8 +463,10 @@ export async function resolverModeloPorOperacao(params: {
     throw new Error("modelo_operacao_nao_encontrado");
   }
 
-  const cabecalho = await resolverCabecalho(supabase, modelo);
-  const rodape = await resolverRodape(supabase, modelo);
+  const { cabecalho, rodape, metadadosFallback } = await resolverPartesModelo({
+    supabase,
+    modelo,
+  });
 
   return {
     operacao: {
@@ -414,14 +485,8 @@ export async function resolverModeloPorOperacao(params: {
     cabecalho,
     rodape,
     metadadosFallback: {
+      ...metadadosFallback,
       tipoDocumentoCodigoSolicitado: tipoDocumentoCodigo,
-      usouCabecalhoSemantico: cabecalho?.source === "SEMANTICO" || cabecalho?.source === "SEMANTICO_LAYOUT_TEMPLATE",
-      usouRodapeSemantico: rodape?.source === "SEMANTICO" || rodape?.source === "SEMANTICO_LAYOUT_TEMPLATE",
-      usouHeaderTemplateLegado: cabecalho?.source === "LEGADO_TEMPLATE",
-      usouFooterTemplateLegado: rodape?.source === "LEGADO_TEMPLATE",
-      usouLayoutLegado: cabecalho?.source === "LEGADO_LAYOUT" || rodape?.source === "LEGADO_LAYOUT",
-      usouCabecalhoInlineModelo: cabecalho?.source === "MODELO_INLINE",
-      usouRodapeInlineModelo: rodape?.source === "MODELO_INLINE",
     },
   };
 }
