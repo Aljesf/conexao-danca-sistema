@@ -56,13 +56,13 @@ const HUB_SECTIONS: HubSection[] = [
       {
         title: "Cabecalhos",
         description: "Defina identidade institucional, logo e bloco superior reutilizavel.",
-        href: "/admin/config/documentos/layout-templates",
+        href: "/admin/config/documentos/cabecalhos",
         icon: <Layers3 className="h-5 w-5" />,
       },
       {
         title: "Rodapes",
         description: "Mantenha assinaturas, local/data e elementos finais em componentes reaproveitaveis.",
-        href: "/admin/config/documentos/layout-templates",
+        href: "/admin/config/documentos/rodapes",
         icon: <LibraryBig className="h-5 w-5" />,
       },
     ],

@@ -603,6 +603,16 @@ export default function AdminDocumentosVariaveisPage() {
     [itens],
   );
 
+  const resumoVariaveis = useMemo(
+    () => ({
+      total: itens.length,
+      ativas: itens.filter((item) => item.ativo).length,
+      manuais: itens.filter((item) => item.origem === "MANUAL").length,
+      pendentes: pendentesCount,
+    }),
+    [itens, pendentesCount],
+  );
+
   const itensFiltrados = useMemo(
     () => (mostrarPendentes ? itens.filter((item) => item.mapeamento_pendente) : itens),
     [itens, mostrarPendentes],
@@ -627,9 +637,23 @@ export default function AdminDocumentosVariaveisPage() {
         ]}
       />
 
+      <div className="grid gap-3 md:grid-cols-4">
+        {[
+          { label: "Total", value: resumoVariaveis.total, tone: "border-slate-200 bg-white text-slate-900" },
+          { label: "Ativas", value: resumoVariaveis.ativas, tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+          { label: "Manuais", value: resumoVariaveis.manuais, tone: "border-sky-200 bg-sky-50 text-sky-800" },
+          { label: "Pendentes", value: resumoVariaveis.pendentes, tone: "border-amber-200 bg-amber-50 text-amber-800" },
+        ].map((item) => (
+          <div key={item.label} className={`rounded-2xl border px-4 py-4 ${item.tone}`}>
+            <div className="text-xs uppercase tracking-[0.18em] opacity-80">{item.label}</div>
+            <div className="mt-2 text-2xl font-semibold">{item.value}</div>
+          </div>
+        ))}
+      </div>
+
       <SystemSectionCard
         title={editingId ? "Editar variavel" : "Cadastrar variavel"}
-        description="Defina origem, tipo e o caminho por joins do schema."
+        description="Cadastre primeiro o que a variavel representa. O mapeamento tecnico fica logo abaixo, mas nao precisa dominar a tela."
         footer={
           <div className="flex w-full flex-wrap justify-between gap-2">
             <Button variant="ghost" onClick={limparFormulario} disabled={saving}>
@@ -737,96 +761,107 @@ export default function AdminDocumentosVariaveisPage() {
           </div>
 
           {precisaJoin ? (
-            <div className="md:col-span-3 space-y-3">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div>
-                  <label className="text-sm font-medium">Ponto de partida (root)</label>
-                  <select
-                    className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                    value={rootTable}
-                    onChange={(e) => handleRootChange(e.target.value)}
-                    disabled={rootsLoading}
-                  >
-                    {rootsLoading ? <option>Carregando...</option> : null}
-                    {!rootsLoading && roots.length === 0 ? <option value="">Sem roots</option> : null}
-                    {roots.map((r) => (
-                      <option key={r.key} value={r.key}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
+            <div className="md:col-span-3">
+              <details className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4" open={Boolean(editingId)}>
+                <summary className="cursor-pointer list-none text-sm font-semibold text-slate-800">
+                  Mapeamento tecnico da variavel
+                </summary>
+                <p className="mt-2 text-sm text-slate-600">
+                  Use este bloco quando a variavel precisar navegar pelo schema. O foco da operacao continua em codigo, descricao, origem e tipo.
+                </p>
+
+                <div className="mt-4 space-y-3">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div>
+                      <label className="text-sm font-medium">Ponto de partida (root)</label>
+                      <select
+                        className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                        value={rootTable}
+                        onChange={(e) => handleRootChange(e.target.value)}
+                        disabled={rootsLoading}
+                      >
+                        {rootsLoading ? <option>Carregando...</option> : null}
+                        {!rootsLoading && roots.length === 0 ? <option value="">Sem roots</option> : null}
+                        {roots.map((r) => (
+                          <option key={r.key} value={r.key}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium">PK do root</label>
+                      <Input value={rootPkColumn} onChange={(e) => setRootPkColumn(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-white/70 p-3">
+                    <div className="text-sm font-semibold">Wizard (ate 3 saltos)</div>
+                    <div className="mt-2 grid gap-3 md:grid-cols-3">
+                      {Array.from({ length: MAX_HOPS }).map((_, index) => {
+                        const table = hopTables[index];
+                        const options = table ? adjCache[table] ?? [] : [];
+                        const selectedEdge = joinPath[index];
+                        const selectedValue = selectedEdge ? edgeKey(selectedEdge) : "";
+                        const disabled = index > 0 && !joinPath[index - 1];
+                        const defaultHopLabel = selectedEdge ? getDefaultHopLabel(selectedEdge) : "";
+
+                        return (
+                          <div key={`hop-${index}`}>
+                            <label className="text-xs font-medium">Hop {index + 1}</label>
+                            <select
+                              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                              value={selectedValue}
+                              onChange={(e) => handleHopChange(index, e.target.value)}
+                              disabled={!table || disabled}
+                            >
+                              <option value="">Parar aqui</option>
+                              {options.map((edge) => (
+                                <option key={edgeKey(edge)} value={edgeKey(edge)}>
+                                  {edge.direction}: {edge.from_table}.{edge.from_column} {"->"} {edge.to_table}.
+                                  {edge.to_column}
+                                </option>
+                              ))}
+                            </select>
+                            <label className="mt-2 block text-xs text-slate-500">Nome do hop (opcional)</label>
+                            <Input
+                              className="mt-1"
+                              value={hopLabels[index] ?? ""}
+                              onChange={(e) => handleHopLabelChange(index, e.target.value)}
+                              placeholder={defaultHopLabel || "Nome do hop"}
+                              disabled={!selectedEdge || disabled}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-2 space-y-1 text-xs text-slate-500">
+                      <div>Caminho humano: {humanPathLabel || "(nenhum)"}</div>
+                      <div>Caminho tecnico: {technicalPathLabel || "(nenhum)"}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Coluna de destino ({targetTable})</label>
+                    <select
+                      className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                      value={targetColumn}
+                      onChange={(e) => setTargetColumn(e.target.value)}
+                      disabled={columnsLoading || !targetTable}
+                    >
+                      <option value="">Selecione...</option>
+                      {columns.map((col) => (
+                        <option key={col.column_name} value={col.column_name}>
+                          {col.column_name} ({col.data_type})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">{origemHint}</p>
+                  </div>
                 </div>
-
-                <div>
-                  <label className="text-sm font-medium">PK do root</label>
-                  <Input value={rootPkColumn} onChange={(e) => setRootPkColumn(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-white/70 p-3">
-                <div className="text-sm font-semibold">Wizard (ate 3 saltos)</div>
-                <div className="mt-2 grid gap-3 md:grid-cols-3">
-                  {Array.from({ length: MAX_HOPS }).map((_, index) => {
-                    const table = hopTables[index];
-                    const options = table ? adjCache[table] ?? [] : [];
-                    const selectedEdge = joinPath[index];
-                    const selectedValue = selectedEdge ? edgeKey(selectedEdge) : "";
-                    const disabled = index > 0 && !joinPath[index - 1];
-                    const defaultHopLabel = selectedEdge ? getDefaultHopLabel(selectedEdge) : "";
-
-                    return (
-                      <div key={`hop-${index}`}>
-                        <label className="text-xs font-medium">Hop {index + 1}</label>
-                        <select
-                          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                          value={selectedValue}
-                          onChange={(e) => handleHopChange(index, e.target.value)}
-                          disabled={!table || disabled}
-                        >
-                          <option value="">Parar aqui</option>
-                          {options.map((edge) => (
-                            <option key={edgeKey(edge)} value={edgeKey(edge)}>
-                              {edge.direction}: {edge.from_table}.{edge.from_column} {"->"} {edge.to_table}.
-                              {edge.to_column}
-                            </option>
-                          ))}
-                        </select>
-                        <label className="mt-2 block text-xs text-slate-500">Nome do hop (opcional)</label>
-                        <Input
-                          className="mt-1"
-                          value={hopLabels[index] ?? ""}
-                          onChange={(e) => handleHopLabelChange(index, e.target.value)}
-                          placeholder={defaultHopLabel || "Nome do hop"}
-                          disabled={!selectedEdge || disabled}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-2 space-y-1 text-xs text-slate-500">
-                  <div>Caminho humano: {humanPathLabel || "(nenhum)"}</div>
-                  <div>Caminho tecnico: {technicalPathLabel || "(nenhum)"}</div>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Coluna de destino ({targetTable})</label>
-                <select
-                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                  value={targetColumn}
-                  onChange={(e) => setTargetColumn(e.target.value)}
-                  disabled={columnsLoading || !targetTable}
-                >
-                  <option value="">Selecione...</option>
-                  {columns.map((col) => (
-                    <option key={col.column_name} value={col.column_name}>
-                      {col.column_name} ({col.data_type})
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-slate-500">{origemHint}</p>
-              </div>
+              </details>
             </div>
           ) : (
             <div className="md:col-span-3">
@@ -841,7 +876,7 @@ export default function AdminDocumentosVariaveisPage() {
         </div>
       </SystemSectionCard>
 
-      <SystemSectionCard title="Variaveis cadastradas" description="Edite ou desative variaveis existentes.">
+      <SystemSectionCard title="Variaveis cadastradas" description="Consulta operacional com codigo, origem, tipo e status para localizar rapidamente o que ja existe.">
         {loading ? (
           <p className="text-sm text-slate-600">Carregando...</p>
         ) : itens.length === 0 ? (
@@ -858,15 +893,27 @@ export default function AdminDocumentosVariaveisPage() {
             </label>
 
             {itensFiltrados.map((item) => (
-              <div key={item.id} className="rounded-lg border border-slate-200 bg-white/60 p-4 shadow-sm">
+              <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <div className="text-sm font-semibold">
-                      {item.codigo} <span className="text-xs text-slate-600">({item.tipo})</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold">{item.codigo}</div>
+                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-800">
+                        {item.tipo}
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                          item.ativo
+                            ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border border-slate-200 bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {item.ativo ? "Ativa" : "Inativa"}
+                      </span>
                     </div>
+                    <div className="mt-1 text-sm text-slate-700">{item.descricao}</div>
                     <div className="mt-1 text-xs text-slate-600">
-                      {item.descricao} | Origem: {ORIGEM_LABELS[item.origem] ?? item.origem} | Ativo:{" "}
-                      {item.ativo ? "Sim" : "Nao"}
+                      Origem: {ORIGEM_LABELS[item.origem] ?? item.origem}
                     </div>
                     {item.mapeamento_pendente ? (
                       <div className="mt-1 text-xs text-amber-700">Pendente de mapeamento</div>

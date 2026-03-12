@@ -98,6 +98,19 @@ export default function AdminDocumentosConjuntosPage() {
   const [updatingLinkById, setUpdatingLinkById] = React.useState<Record<number, boolean>>({});
   const [removingLinkById, setRemovingLinkById] = React.useState<Record<number, boolean>>({});
 
+  const resumoConjuntos = React.useMemo(
+    () => ({
+      conjuntos: conjuntos.length,
+      grupos: conjuntos.reduce((sum, item) => sum + (item.grupos?.length ?? 0), 0),
+      principais: conjuntos.reduce(
+        (sum, item) => sum + (item.grupos?.filter((grupo) => (grupo.papel ?? "").toUpperCase() === "PRINCIPAL").length ?? 0),
+        0,
+      ),
+      ativos: conjuntos.filter((item) => item.ativo).length,
+    }),
+    [conjuntos],
+  );
+
   async function carregarTudo() {
     setErro(null);
     setLoading(true);
@@ -422,9 +435,23 @@ export default function AdminDocumentosConjuntosPage() {
           </p>
         </div>
 
+        <div className="grid gap-3 md:grid-cols-4">
+          {[
+            { label: "Conjuntos", value: resumoConjuntos.conjuntos, tone: "border-slate-200 bg-white text-slate-900" },
+            { label: "Grupos", value: resumoConjuntos.grupos, tone: "border-sky-200 bg-sky-50 text-sky-800" },
+            { label: "Principais", value: resumoConjuntos.principais, tone: "border-amber-200 bg-amber-50 text-amber-800" },
+            { label: "Ativos", value: resumoConjuntos.ativos, tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+          ].map((item) => (
+            <div key={item.label} className={`rounded-2xl border px-4 py-4 ${item.tone}`}>
+              <div className="text-xs uppercase tracking-[0.18em] opacity-80">{item.label}</div>
+              <div className="mt-2 text-2xl font-semibold">{item.value}</div>
+            </div>
+          ))}
+        </div>
+
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold">Criar conjunto</h2>
-          <p className="mt-1 text-sm text-slate-600">Crie um conjunto institucional (ex.: Matricula Regular).</p>
+          <p className="mt-1 text-sm text-slate-600">Crie o agrupador documental do processo, como Matricula Regular, Renovacao ou Financeiro.</p>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
@@ -477,7 +504,7 @@ export default function AdminDocumentosConjuntosPage() {
             <div>
               <h2 className="text-lg font-semibold">Conjuntos cadastrados</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Cada card e um Conjunto. Dentro dele, voce cria e organiza os Grupos.
+                Cada card representa um processo documental. Dentro dele, os grupos ajudam a organizar o que e principal, obrigatorio, opcional ou adicional.
               </p>
             </div>
 
@@ -737,7 +764,7 @@ export default function AdminDocumentosConjuntosPage() {
                             <p className="text-xs text-slate-500">
                               Ordem: {g.ordem} | Obrigatorio: {g.obrigatorio ? "Sim" : "Nao"} | Ativo:{" "}
                               {g.ativo === false ? "Nao" : "Sim"}
-                              {g.papel ? ` | Papel: ${g.papel}` : ""}
+                              {g.papel ? ` | Papel no processo: ${g.papel}` : ""}
                             </p>
                             {g.descricao ? <p className="mt-1 text-xs text-slate-500">{g.descricao}</p> : null}
                           </div>

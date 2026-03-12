@@ -774,6 +774,31 @@ export default function ModeloDocumentoEditarClient(props: { id: string }) {
 
         {activeStep === "estrutura" ? (
           <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">Componentes reutilizaveis</div>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Se o cabecalho ou o rodape ainda nao existirem, cadastre primeiro o componente institucional e depois volte para selecionar aqui.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link
+                    href="/admin/config/documentos/cabecalhos"
+                    className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Gerenciar cabecalhos
+                  </Link>
+                  <Link
+                    href="/admin/config/documentos/rodapes"
+                    className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Gerenciar rodapes
+                  </Link>
+                </div>
+              </div>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="text-sm font-medium">Cabecalho reutilizavel</label>

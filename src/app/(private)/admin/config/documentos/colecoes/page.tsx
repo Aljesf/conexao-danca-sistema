@@ -200,6 +200,16 @@ export default function Page() {
     [colecoes],
   );
 
+  const resumoColecoes = useMemo(
+    () => ({
+      total: colecoes.length,
+      ativas: colecoes.filter((item) => item.ativo).length,
+      roots: new Set(colecoes.map((item) => item.root_tipo).filter(Boolean)).size,
+      colunas: colecoes.reduce((sum, item) => sum + item.colunas.length, 0),
+    }),
+    [colecoes],
+  );
+
   return (
     <SystemPage>
       <SystemContextCard
@@ -219,9 +229,23 @@ export default function Page() {
         ]}
       />
 
+      <div className="grid gap-3 md:grid-cols-4">
+        {[
+          { label: "Colecoes", value: resumoColecoes.total, tone: "border-slate-200 bg-white text-slate-900" },
+          { label: "Ativas", value: resumoColecoes.ativas, tone: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+          { label: "Roots", value: resumoColecoes.roots, tone: "border-sky-200 bg-sky-50 text-sky-800" },
+          { label: "Colunas", value: resumoColecoes.colunas, tone: "border-amber-200 bg-amber-50 text-amber-800" },
+        ].map((item) => (
+          <div key={item.label} className={`rounded-2xl border px-4 py-4 ${item.tone}`}>
+            <div className="text-xs uppercase tracking-[0.18em] opacity-80">{item.label}</div>
+            <div className="mt-2 text-2xl font-semibold">{item.value}</div>
+          </div>
+        ))}
+      </div>
+
       <SystemSectionCard
         title={editingId ? `Editar colecao #${editingId}` : "Selecione uma colecao para editar"}
-        description="Atualize metadados e colunas. As alteracoes nao mudam modelos ja emitidos."
+        description="Cadastre ou ajuste a lista automatica usada no documento. Metadados ficam claros; colunas entram como detalhe operacional da colecao."
         footer={
           editingId ? (
             <div className="flex w-full flex-wrap justify-between gap-2">
@@ -407,7 +431,7 @@ export default function Page() {
 
       <SystemSectionCard
         title="Colecoes cadastradas"
-        description="Catalogo tecnico (clique para editar)."
+        description="Catalogo operacional das listas automaticas disponiveis para autoria documental."
       >
         {loading ? (
           <p className="text-sm text-slate-600">Carregando...</p>
@@ -418,13 +442,26 @@ export default function Page() {
         ) : (
           <div className="grid gap-3">
             {colecoes.map((c) => (
-              <details key={c.codigo} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <details key={c.codigo} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <summary className="cursor-pointer">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold">{c.nome}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-semibold">{c.nome}</div>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                            c.ativo
+                              ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border border-slate-200 bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {c.ativo ? "Ativa" : "Inativa"}
+                        </span>
+                      </div>
                       <div className="mt-1 text-xs text-slate-600">{c.descricao ?? "Sem descricao."}</div>
-                      <div className="mt-1 text-xs text-slate-500">Root: {formatRootLabel(c.root_tipo)}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        Root: {formatRootLabel(c.root_tipo)} | Colunas: {c.colunas.length}
+                      </div>
                     </div>
                     <div className="text-xs font-mono text-slate-500">{c.codigo}</div>
                   </div>

@@ -305,7 +305,7 @@ export default function AdminDocumentosModelosPage() {
         ]}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
         <SystemSectionCard
           title="Criar novo modelo"
           description="Comece pelo basico: identidade, tipo do documento e primeiro rascunho. O refinamento entra na edicao por etapas."
@@ -418,7 +418,8 @@ export default function AdminDocumentosModelosPage() {
                     enableVariables
                     enableCollections
                     variables={variaveis}
-                    minHeightPx={320}
+                    minHeightPx={360}
+                    pageWidthPx={1120}
                   />
                 ) : (
                   <Textarea
@@ -438,6 +439,23 @@ export default function AdminDocumentosModelosPage() {
               <p className="mt-2 text-sm text-slate-600">
                 Abra somente se este modelo precisar de cabecalho, rodape, grupos ou margens fora do padrao inicial.
               </p>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <Link
+                  href="/admin/config/documentos/cabecalhos"
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  <div className="font-semibold text-slate-900">Gerenciar cabecalhos</div>
+                  <p className="mt-1">Cadastre aqui o bloco superior institucional e depois selecione no modelo.</p>
+                </Link>
+                <Link
+                  href="/admin/config/documentos/rodapes"
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  <div className="font-semibold text-slate-900">Gerenciar rodapes</div>
+                  <p className="mt-1">Cadastre aqui assinatura, local e rodape institucional reutilizavel.</p>
+                </Link>
+              </div>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div>
@@ -577,11 +595,27 @@ export default function AdminDocumentosModelosPage() {
 
         <div className="space-y-6">
           <SystemSectionCard
-            title="Comecar com apoio"
-            description="O assistente e opcional. Use quando voce ja tiver um texto-base ou briefing para transformar em rascunho."
+            title="Apoio contextual"
+            description="Ajuda de autoria, componentes reutilizaveis e assistente ficam aqui sem disputar espaco com o bloco principal."
           >
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               A IA agora entra como apoio contextual. Ela nao substitui o fluxo principal de autoria.
+            </div>
+            <div className="mt-4 grid gap-3">
+              <Link
+                href="/admin/config/documentos/cabecalhos"
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <div className="font-semibold text-slate-900">Cabecalhos reutilizaveis</div>
+                <p className="mt-1">Crie o bloco superior institucional e reaproveite em varios modelos.</p>
+              </Link>
+              <Link
+                href="/admin/config/documentos/rodapes"
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <div className="font-semibold text-slate-900">Rodapes reutilizaveis</div>
+                <p className="mt-1">Centralize assinatura, local, data e elementos finais em componentes compartilhados.</p>
+              </Link>
             </div>
             <div className="mt-4">
               <AiAssistenteModelos

@@ -658,3 +658,26 @@ Ajustes aplicados:
 Base documental:
 - `docs/arquitetura-documentos.md` agora registra tambem a funcao do hub como base para tutorial, onboarding e manutencao.
 
+---
+
+## Atualizacao 2026-03-11 (Documentos - refatoracao SaaS da autoria documental)
+
+Estado:
+- O submodulo de autoria documental entrou em refatoracao visual unificada no padrao SaaS.
+- A frente atual passou a cobrir modelos, variaveis, colecoes, conjuntos e componentes reutilizaveis.
+
+Ajustes aplicados:
+- pagina de Modelos ampliada como hub real de autoria, com bloco principal de criacao mais largo e apoio contextual separado;
+- criadas entradas administrativas explicitas para:
+  - `/admin/config/documentos/cabecalhos`
+  - `/admin/config/documentos/rodapes`
+- tela de Variaveis reorganizada com resumo operacional no topo e tecnico mais claramente secundario;
+- tela de Colecoes reorganizada com leitura mais semantica de root, colunas e status;
+- tela de Conjuntos reforcada como agrupador documental de processo, com melhor leitura de grupos e papeis;
+- etapa `Estrutura reutilizavel` do fluxo de modelos passou a apontar explicitamente para o cadastro de cabecalhos e rodapes;
+- tela de emitidos permanece alinhada ao schema real usando `contrato_modelo_id`.
+
+Pendencias remanescentes:
+- revisar visualmente as telas refatoradas com foco em microcopy, hierarquia e casos vazios;
+- refinar depois as telas tecnicas de layout templates, layouts e tipos, mantendo a mesma semantica operacional.
+

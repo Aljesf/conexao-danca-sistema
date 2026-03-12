@@ -175,6 +175,11 @@ O modulo agora possui um hub de navegacao semantico para organizar a experiencia
 - Cabecalhos
 - Rodapes
 
+Entradas administrativas explicitas:
+
+- `/admin/config/documentos/cabecalhos`
+- `/admin/config/documentos/rodapes`
+
 ### Fluxos
 
 - Conjuntos documentais
