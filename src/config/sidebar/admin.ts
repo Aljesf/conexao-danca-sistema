@@ -62,17 +62,6 @@ export const adminSidebar: SidebarSection[] = [
     ],
   },
   {
-    id: "admin-cafe",
-    title: "Ballet Cafe (Admin)",
-    items: [
-      { label: "Configuracoes", href: "/admin/cafe" },
-      { label: "Insumos", href: "/admin/cafe/insumos" },
-      { label: "Produtos", href: "/admin/cafe/produtos" },
-      { label: "Tabelas de preco", href: "/admin/cafe/tabelas-preco" },
-      { label: "Compras de insumos", href: "/admin/cafe/compras" },
-    ],
-  },
-  {
     id: "admin-colaboradores",
     title: "👥 Colaboradores",
     items: [
@@ -90,7 +79,7 @@ export const adminSidebar: SidebarSection[] = [
       { label: "🏫 Configuracao da escola", href: "/admin/config/escola" },
       { label: "📏 Regras de valor", href: "/admin/config/escola/regras-valor" },
       { label: "🛍️ Configuracao da loja", href: "/admin/config/loja" },
-      { label: "☕ Configuracao do Ballet Cafe", href: "/admin/config/cafe" },
+      { label: "☕ Configuracao institucional do Ballet Cafe", href: "/admin/config/cafe" },
     ],
   },
   {

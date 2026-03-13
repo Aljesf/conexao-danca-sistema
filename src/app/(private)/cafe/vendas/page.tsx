@@ -1,7 +1,10 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import PessoaLookup, { PessoaLookupItem } from "@/components/PessoaLookup";
+import PageHeader from "@/components/layout/PageHeader";
+import SectionCard from "@/components/layout/SectionCard";
 import { useRouter } from "next/navigation";
 import { useCafeCategorias } from "@/lib/cafe/useCafeCategorias";
 
@@ -181,8 +184,8 @@ function isFormaPagamentoCartaoConexao(f: FormaPagamentoContexto): boolean {
 }
 
 // NOTA SOBRE O MODELO DE PAPEIS NO CAFE v0:
-// - "comprador" é a Pessoa que está realizando a compra/pagamento.
-// - "beneficiario" é a Pessoa que vai usar o produto (normalmente aluno), armazenada por item em cafe_venda_itens.beneficiario_pessoa_id.
+// - "comprador" Ã© a Pessoa que estÃ¡ realizando a compra/pagamento.
+// - "beneficiario" Ã© a Pessoa que vai usar o produto (normalmente aluno), armazenada por item em cafe_venda_itens.beneficiario_pessoa_id.
 
 export default function FrenteCaixaCafePage() {
   const router = useRouter();
@@ -202,7 +205,7 @@ export default function FrenteCaixaCafePage() {
   );
   const [formaPagamentoCtxId, setFormaPagamentoCtxId] = useState<string>("");
 
-  // cartão externo (maquininha)
+  // cartÃ£o externo (maquininha)
   const [cartaoMaquinas, setCartaoMaquinas] = useState<MaquinaCartaoOpcao[]>([]);
   const [cartaoBandeiras, setCartaoBandeiras] = useState<BandeiraCartao[]>([]);
   const [cartaoRegras, setCartaoRegras] = useState<RegraCartao[]>([]);
@@ -211,7 +214,7 @@ export default function FrenteCaixaCafePage() {
   const [cartaoNumeroParcelas, setCartaoNumeroParcelas] = useState<number>(1);
   const [carregandoCartao, setCarregandoCartao] = useState(false);
 
-  // Cartão Conexão - regras de parcelamento
+  // CartÃ£o ConexÃ£o - regras de parcelamento
   const [regrasConexao, setRegrasConexao] = useState<RegraParcelamento[]>([]);
   const [carregandoRegrasConexao, setCarregandoRegrasConexao] = useState(false);
   const [parcelasConexao, setParcelasConexao] = useState<number>(1);
@@ -221,7 +224,7 @@ export default function FrenteCaixaCafePage() {
   const [totalFinalCentavos, setTotalFinalCentavos] = useState(0);
   const [avisoTaxa, setAvisoTaxa] = useState<string | null>(null);
 
-  // cadastro rápido de pessoa (comprador/beneficiário)
+  // cadastro rÃ¡pido de pessoa (comprador/beneficiÃ¡rio)
   const [showCadastroRapido, setShowCadastroRapido] = useState(false);
   const [cadastroContexto, setCadastroContexto] = useState<"COMPRADOR" | "BENEFICIARIO">(
     "COMPRADOR",
@@ -405,7 +408,7 @@ export default function FrenteCaixaCafePage() {
     return () => controller.abort();
   }, [buscaComprador]);
 
-  // catalogo de produtos para navegação rápida no PDV
+  // catalogo de produtos para navegaÃ§Ã£o rÃ¡pida no PDV
   useEffect(() => {
     const tabelaParam =
       tabelaPrecoId && typeof tabelaPrecoId === "number"
@@ -638,14 +641,14 @@ export default function FrenteCaixaCafePage() {
   const mostraTaxaCartao = !bloqueiaCobranca && isCartaoConexao;
   const totalExibido = bloqueiaCobranca ? 0 : totalFinalCentavos || subtotalCentavos;
 
-  // Descobrir tipo de conta (ALUNO / COLABORADOR) para Cartão Conexão
+  // Descobrir tipo de conta (ALUNO / COLABORADOR) para CartÃ£o ConexÃ£o
   const tipoContaConexao: TipoContaConexao | null = useMemo(() => {
     if (!isCartaoConexao) {
       return null;
     }
     return formaPagamentoSelecionadaOpcao?.tipoContaConexao ?? null;
   }, [isCartaoConexao, formaPagamentoSelecionadaOpcao]);
-  // ======== CARTÃO — REGRAS/BANDEIRAS/MAQUININHAS (externo) =========
+  // ======== CARTÃƒO â€” REGRAS/BANDEIRAS/MAQUININHAS (externo) =========
   const regraCartaoSelecionada = useMemo(() => {
     const maquina = cartaoMaquinaId ? Number(cartaoMaquinaId) : null;
     const bandeira = cartaoBandeiraId ? Number(cartaoBandeiraId) : null;
@@ -706,7 +709,7 @@ export default function FrenteCaixaCafePage() {
         }
       } catch (e) {
         console.error(
-          "Erro ao carregar configurações de cartão na frente de caixa",
+          "Erro ao carregar configuraÃ§Ãµes de cartÃ£o na frente de caixa",
           e,
         );
       } finally {
@@ -717,7 +720,7 @@ export default function FrenteCaixaCafePage() {
     carregarCartao();
   }, []);
 
-  // ======== Cartão Conexão — carregar regras de parcelamento =========
+  // ======== CartÃ£o ConexÃ£o â€” carregar regras de parcelamento =========
   useEffect(() => {
     async function carregarRegrasConexao() {
       try {
@@ -727,7 +730,7 @@ export default function FrenteCaixaCafePage() {
         );
       if (!res.ok) {
         console.error(
-          "Erro ao carregar regras de parcelamento do Cartão Conexão:",
+          "Erro ao carregar regras de parcelamento do CartÃ£o ConexÃ£o:",
           await res.text(),
         );
         return;
@@ -736,7 +739,7 @@ export default function FrenteCaixaCafePage() {
       const regras: RegraParcelamento[] = json.regras ?? [];
       setRegrasConexao(regras);
     } catch (e) {
-      console.error("Erro inesperado ao carregar regras do Cartão Conexão", e);
+      console.error("Erro inesperado ao carregar regras do CartÃ£o ConexÃ£o", e);
     } finally {
       setCarregandoRegrasConexao(false);
       }
@@ -745,7 +748,7 @@ export default function FrenteCaixaCafePage() {
     carregarRegrasConexao();
   }, []);
 
-  // Parcelas disponíveis para Cartão Conexão, de acordo com valor e tipo de conta
+  // Parcelas disponÃ­veis para CartÃ£o ConexÃ£o, de acordo com valor e tipo de conta
   const parcelasDisponiveisConexao = useMemo(() => {
     if (!isCartaoConexao || !tipoContaConexao || subtotalCentavos <= 0) {
       return [1];
@@ -778,7 +781,7 @@ export default function FrenteCaixaCafePage() {
     return arr;
   }, [isCartaoConexao, tipoContaConexao, regrasConexao, subtotalCentavos]);
 
-  // Garantir que parcelasConexao esteja sempre em uma opção válida
+  // Garantir que parcelasConexao esteja sempre em uma opÃ§Ã£o vÃ¡lida
   useEffect(() => {
     if (!isCartaoConexao) {
       setParcelasConexao(1);
@@ -789,7 +792,7 @@ export default function FrenteCaixaCafePage() {
     }
   }, [isCartaoConexao, parcelasDisponiveisConexao, parcelasConexao]);
 
-  // Carrega contas de Crédito Conexão do comprador para selecionar na venda
+  // Carrega contas de CrÃ©dito ConexÃ£o do comprador para selecionar na venda
   useEffect(() => {
     if (!isCartaoConexao || !comprador?.id || !tipoContaConexao) {
       setContasConexao([]);
@@ -844,7 +847,7 @@ export default function FrenteCaixaCafePage() {
     };
   }, [isCartaoConexao, comprador?.id, tipoContaConexao, contaConexaoId]);
 
-  // Recalcular taxa e total final conforme tipo de operação e pagamento
+  // Recalcular taxa e total final conforme tipo de operaÃ§Ã£o e pagamento
   useEffect(() => {
     if (bloqueiaCobranca) {
       setTaxaCartaoConexaoCentavos(0);
@@ -873,7 +876,7 @@ export default function FrenteCaixaCafePage() {
       setTaxaCartaoConexaoCentavos(0);
       setTotalFinalCentavos(subtotalCentavos);
       setAvisoTaxa(
-        "Sem regra de taxa para este parcelamento (ver Configurações Crédito Conexão).",
+        "Sem regra de taxa para este parcelamento (ver ConfiguraÃ§Ãµes CrÃ©dito ConexÃ£o).",
       );
       return;
     }
@@ -943,7 +946,7 @@ export default function FrenteCaixaCafePage() {
     setShowCadastroRapido(false);
   }
 
-  // ======== FINALIZAÇÃO DA VENDA =========
+  // ======== FINALIZAÃ‡ÃƒO DA VENDA =========
 
   async function handleFinalizarVenda() {
     resetMensagem();
@@ -960,40 +963,40 @@ export default function FrenteCaixaCafePage() {
     }
 
     if (!bloqueiaCobranca && (!formaPagamentoSelecionada || !formaPagamentoInterna)) {
-      setMensagem("Selecione uma forma de pagamento válida.");
+      setMensagem("Selecione uma forma de pagamento vÃ¡lida.");
       setMensagemTipo("error");
       return;
     }
 
     if (!bloqueiaCobranca && isCrediarioInterno && !dataVencimento) {
-      setMensagem("Informe a data de vencimento para crediário interno.");
+      setMensagem("Informe a data de vencimento para crediÃ¡rio interno.");
       setMensagemTipo("error");
       return;
     }
 
     if (!bloqueiaCobranca && isCredito) {
       if (!cartaoMaquinaId || !cartaoBandeiraId) {
-        setMensagem("Selecione a maquininha e a bandeira para pagamento no crédito.");
+        setMensagem("Selecione a maquininha e a bandeira para pagamento no crÃ©dito.");
         setMensagemTipo("error");
         return;
       }
       if (!regraCartaoSelecionada) {
         setMensagem(
-          "Não há regra de cartão de crédito configurada para essa maquininha/bandeira.",
+          "NÃ£o hÃ¡ regra de cartÃ£o de crÃ©dito configurada para essa maquininha/bandeira.",
         );
         setMensagemTipo("error");
         return;
       }
     }
 
-    // Para Cartão Conexão, validar se há pelo menos uma opção de parcela
+    // Para CartÃ£o ConexÃ£o, validar se hÃ¡ pelo menos uma opÃ§Ã£o de parcela
     if (
       !bloqueiaCobranca &&
       isCartaoConexao &&
       (!parcelasDisponiveisConexao.length || parcelasConexao < 1)
     ) {
       setMensagem(
-        "Não há opção de parcelamento disponível para o valor desta compra no Cartão Conexão.",
+        "NÃ£o hÃ¡ opÃ§Ã£o de parcelamento disponÃ­vel para o valor desta compra no CartÃ£o ConexÃ£o.",
       );
       setMensagemTipo("error");
       return;
@@ -1012,7 +1015,7 @@ export default function FrenteCaixaCafePage() {
       isCartaoConexao &&
       (!contaConexaoId || Number(contaConexaoId) <= 0)
     ) {
-      setMensagem("Selecione uma conta de Crédito Conexão antes de finalizar.");
+      setMensagem("Selecione uma conta de CrÃ©dito ConexÃ£o antes de finalizar.");
       setMensagemTipo("error");
       return;
     }
@@ -1146,13 +1149,51 @@ export default function FrenteCaixaCafePage() {
   // ======== RENDER =========
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">Ballet Café - Vendas</h1>
-        <p className="text-sm text-gray-600">
-          Frente de caixa do Ballet Café. Comprador = quem paga; aluno/usuário
-          = quem vai usar o produto (definido por item).
-        </p>
-      </header>
+      <PageHeader
+        eyebrow="Operação"
+        title="Ballet Café — Caixa / Vendas"
+        description="Frente de caixa do Ballet Café. Comprador é quem paga; aluno ou usuário é quem vai consumir o item."
+        actions={
+          <Link
+            href="/cafe/admin"
+            className="inline-flex items-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Ir para gestão do Café
+          </Link>
+        }
+      />
+
+      <SectionCard
+        title="Operação do dia"
+        description="Centralize aqui a venda no caixa e use a gestão do contexto Café para manter produtos, insumos, preços e abastecimento."
+      >
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Venda
+            </p>
+            <p className="mt-1 text-sm text-slate-700">
+              Selecione comprador, itens e forma de pagamento para concluir a operação.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Catálogo
+            </p>
+            <p className="mt-1 text-sm text-slate-700">
+              Produtos e categorias são mantidos em <span className="font-medium">Gestão do Café</span>.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Abastecimento
+            </p>
+            <p className="mt-1 text-sm text-slate-700">
+              Compras e insumos ficam separados da operação para evitar mistura com administração global.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
 
       {mensagem && (
         <div
@@ -1173,7 +1214,7 @@ export default function FrenteCaixaCafePage() {
         <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
           <h2 className="text-sm font-semibold">Comprador</h2>
           <p className="text-xs text-gray-500">
-            Pessoa que está realizando a compra/pagamento.
+            Pessoa que estÃ¡ realizando a compra/pagamento.
           </p>
           {!comprador ? (
             <div className="space-y-2">
@@ -1352,11 +1393,11 @@ export default function FrenteCaixaCafePage() {
               <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                 <tr>
                   <th className="px-3 py-2 text-left">Produto</th>
-                  <th className="px-3 py-2 text-left">Aluno (usuário)</th>
+                  <th className="px-3 py-2 text-left">Aluno (usuÃ¡rio)</th>
                   <th className="px-3 py-2 text-right">Qtd</th>
-                  <th className="px-3 py-2 text-right">Preço unit.</th>
+                  <th className="px-3 py-2 text-right">PreÃ§o unit.</th>
                   <th className="px-3 py-2 text-right">Total</th>
-                  <th className="px-3 py-2 text-center">Ações</th>
+                  <th className="px-3 py-2 text-center">AÃ§Ãµes</th>
                 </tr>
               </thead>
               <tbody>
@@ -1464,7 +1505,7 @@ export default function FrenteCaixaCafePage() {
             <div className="mt-3 border rounded-lg p-3 bg-slate-50 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-700">
-                  Selecionar aluno/usuário para o item
+                  Selecionar aluno/usuÃ¡rio para o item
                 </p>
                 <button
                   type="button"
@@ -1501,14 +1542,14 @@ export default function FrenteCaixaCafePage() {
                   className="text-xs text-indigo-600 hover:underline"
                   onClick={() => abrirCadastroRapido("BENEFICIARIO", itemSelecionandoAluno)}
                 >
-                  Cadastrar novo usuário (beneficiário)
+                  Cadastrar novo usuÃ¡rio (beneficiÃ¡rio)
                 </button>
               </div>
             </div>
           )}
           <p className="text-[11px] text-gray-500">
-            Se você não escolher um aluno para o item, o sistema considera o comprador como
-            usuário do produto.
+            Se vocÃª nÃ£o escolher um aluno para o item, o sistema considera o comprador como
+            usuÃ¡rio do produto.
           </p>
         </section>
       </div>
@@ -1517,18 +1558,18 @@ export default function FrenteCaixaCafePage() {
       <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
         <div className="grid md:grid-cols-4 gap-3">
           <div>
-            <label className="block text-xs font-medium mb-1">Tipo de operação</label>
+            <label className="block text-xs font-medium mb-1">Tipo de operaÃ§Ã£o</label>
             <select
               value={tipoOperacao}
               onChange={(e) => setTipoOperacao(e.target.value as TipoOperacaoCafe)}
               className="w-full border rounded-md px-3 py-2 text-sm"
             >
               <option value="VENDA">Venda</option>
-              <option value="ENTREGA_ADMIN">Entrega administrativa (sem cobrança)</option>
+              <option value="ENTREGA_ADMIN">Entrega administrativa (sem cobranÃ§a)</option>
             </select>
             {bloqueiaCobranca && (
               <p className="text-[11px] text-amber-700 mt-1">
-                Operação sem cobrança financeira.
+                OperaÃ§Ã£o sem cobranÃ§a financeira.
               </p>
             )}
           </div>
@@ -1665,7 +1706,7 @@ export default function FrenteCaixaCafePage() {
         )}
 
 
-        {/* Cartão externo (maquininha) */}
+        {/* CartÃ£o externo (maquininha) */}
         {isCredito && (
           <div className="md:col-span-3 grid md:grid-cols-4 gap-3 mt-3">
             <div>
@@ -1720,7 +1761,7 @@ export default function FrenteCaixaCafePage() {
               </select>
               {carregandoCartao && (
                 <p className="mt-1 text-[11px] text-gray-500">
-                  Carregando configurações de cartão...
+                  Carregando configuraÃ§Ãµes de cartÃ£o...
                 </p>
               )}
               {!carregandoCartao &&
@@ -1729,7 +1770,7 @@ export default function FrenteCaixaCafePage() {
                 cartaoBandeiraId &&
                 !regraCartaoSelecionada && (
                   <p className="mt-1 text-[11px] text-red-600">
-                    Não há regra configurada para esta maquininha/bandeira (crédito).
+                    NÃ£o hÃ¡ regra configurada para esta maquininha/bandeira (crÃ©dito).
                   </p>
                 )}
             </div>
@@ -1738,7 +1779,7 @@ export default function FrenteCaixaCafePage() {
 
         <div className="grid md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium mb-1">Observações</label>
+            <label className="block text-xs font-medium mb-1">ObservaÃ§Ãµes</label>
             <textarea
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
@@ -1748,7 +1789,7 @@ export default function FrenteCaixaCafePage() {
           </div>
           <div>
             <label className="block text-xs font-medium mb-1">
-              Observação do vendedor (interna)
+              ObservaÃ§Ã£o do vendedor (interna)
             </label>
             <textarea
               value={observacaoVendedor}
@@ -1942,10 +1983,10 @@ function CadastroPessoaRapidaModal({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold">
-              Cadastro rápido — {contexto === "COMPRADOR" ? "Comprador" : "Beneficiário"}
+              Cadastro rÃ¡pido â€” {contexto === "COMPRADOR" ? "Comprador" : "BeneficiÃ¡rio"}
             </h3>
             <p className="text-xs text-gray-600">
-              Dados completos para boleto (endereço recomendável).
+              Dados completos para boleto (endereÃ§o recomendÃ¡vel).
             </p>
           </div>
           <button
@@ -1969,8 +2010,8 @@ function CadastroPessoaRapidaModal({
               className="w-full border rounded-md px-3 py-2"
               disabled={salvando}
             >
-              <option value="FISICA">Pessoa física</option>
-              <option value="JURIDICA">Pessoa jurídica</option>
+              <option value="FISICA">Pessoa fÃ­sica</option>
+              <option value="JURIDICA">Pessoa jurÃ­dica</option>
             </select>
           </div>
           <div>
@@ -2006,7 +2047,7 @@ function CadastroPessoaRapidaModal({
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">Razão social</label>
+                <label className="block text-xs font-medium mb-1">RazÃ£o social</label>
                 <input
                   value={razaoSocial}
                   onChange={(e) => setRazaoSocial(e.target.value)}
@@ -2056,7 +2097,7 @@ function CadastroPessoaRapidaModal({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1">Número</label>
+            <label className="block text-xs font-medium mb-1">NÃºmero</label>
             <input
               value={numero}
               onChange={(e) => setNumero(e.target.value)}
@@ -2111,7 +2152,7 @@ function CadastroPessoaRapidaModal({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1">Referência</label>
+            <label className="block text-xs font-medium mb-1">ReferÃªncia</label>
             <input
               value={referencia}
               onChange={(e) => setReferencia(e.target.value)}
