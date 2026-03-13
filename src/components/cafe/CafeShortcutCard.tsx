@@ -7,6 +7,7 @@ type CafeShortcutCardProps = {
   description: string;
   eyebrow?: string;
   footer?: ReactNode;
+  featured?: boolean;
 };
 
 export default function CafeShortcutCard({
@@ -15,11 +16,17 @@ export default function CafeShortcutCard({
   description,
   eyebrow,
   footer,
+  featured,
 }: CafeShortcutCardProps) {
   return (
     <Link
       href={href}
-      className="group flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md"
+      className={[
+        "group flex h-full flex-col justify-between rounded-2xl border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+        featured
+          ? "border-amber-300 bg-gradient-to-br from-amber-50 via-white to-white hover:border-amber-400"
+          : "border-slate-200 hover:border-amber-300",
+      ].join(" ")}
     >
       <div className="space-y-2">
         {eyebrow ? (
@@ -36,7 +43,7 @@ export default function CafeShortcutCard({
       </div>
       <div className="mt-4 flex items-center justify-between text-sm font-medium text-slate-500">
         <span>Acessar</span>
-        <span aria-hidden="true">-&gt;</span>
+        <span aria-hidden="true">→</span>
       </div>
       {footer ? (
         <div className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">

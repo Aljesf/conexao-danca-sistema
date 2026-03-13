@@ -1,5 +1,7 @@
+import CafePageShell from "@/components/cafe/CafePageShell";
+import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
 import CafeShortcutCard from "@/components/cafe/CafeShortcutCard";
-import PageHeader from "@/components/layout/PageHeader";
+import CafeStatCard from "@/components/cafe/CafeStatCard";
 import SectionCard from "@/components/layout/SectionCard";
 
 const operacaoLinks = [
@@ -7,69 +9,108 @@ const operacaoLinks = [
     href: "/cafe/vendas",
     title: "Caixa / Vendas",
     description:
-      "Opera\u00e7\u00e3o do PDV, lan\u00e7amento de itens, comprador, pagamento e fechamento da venda.",
+      "Operação do PDV, lançamento de itens, comprador, pagamento e fechamento da venda.",
   },
 ];
 
 const gestaoLinks = [
   {
     href: "/cafe/admin",
-    title: "Gest\u00e3o do Caf\u00e9",
-    description:
-      "Acesse o hub de gest\u00e3o para cat\u00e1logo, insumos, pre\u00e7os e compras do Ballet Caf\u00e9.",
+    title: "Gestão do Café",
+    description: "Hub de gestão para catálogo, insumos, preços e compras do Ballet Café.",
     eyebrow: "Hub",
   },
   {
     href: "/cafe/admin/produtos",
     title: "Produtos",
-    description: "Card\u00e1pio, receitas e organiza\u00e7\u00e3o dos itens comercializados.",
+    description: "Cardápio, receitas e organização dos itens comercializados.",
   },
   {
     href: "/cafe/admin/insumos",
     title: "Insumos",
-    description: "Cadastros, abastecimento manual e acompanhamento de estoque do caf\u00e9.",
+    description: "Cadastros, abastecimento manual e acompanhamento do estoque do café.",
   },
   {
     href: "/cafe/admin/tabelas-preco",
-    title: "Tabelas de pre\u00e7o",
-    description: "Defina tabelas por perfil e mantenha a pol\u00edtica comercial do contexto.",
+    title: "Tabelas de preço",
+    description: "Política comercial aplicada ao catálogo e ao caixa.",
   },
   {
     href: "/cafe/admin/compras",
     title: "Compras de insumos",
-    description: "Registre compras, abaste\u00e7a o estoque e acompanhe o hist\u00f3rico recente.",
+    description: "Abastecimento operacional, histórico de compras e atualização do estoque.",
   },
 ];
 
 export default function CafeHomePage() {
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
-      <PageHeader
-        eyebrow="Contexto SaaS"
-        title="Ballet Caf\u00e9"
-        description="Opera\u00e7\u00e3o e gest\u00e3o do Ballet Caf\u00e9."
-      />
-
+    <CafePageShell
+      eyebrow="Contexto SaaS"
+      title="Ballet Café"
+      description="Operação e gestão do Ballet Café organizadas no próprio contexto, com navegação rápida para caixa, catálogo, insumos e abastecimento."
+      summary={
+        <>
+          <CafeStatCard
+            label="Operação do dia"
+            value="Caixa pronto"
+            description="A frente de caixa concentra comprador, itens, pagamento e fechamento da venda."
+          />
+          <CafeStatCard
+            label="Gestão comercial"
+            value="Catálogo e preços"
+            description="Produtos, tabelas de preço e organização comercial ficam dentro do módulo Café."
+          />
+          <CafeStatCard
+            label="Abastecimento"
+            value="Insumos e compras"
+            description="Gestão de insumos e compras operacionais separada da administração institucional."
+          />
+        </>
+      }
+    >
       <SectionCard
-        title="Opera\u00e7\u00e3o"
-        description="A opera\u00e7\u00e3o do caf\u00e9 fica concentrada no fluxo de caixa e vendas do dia."
+        title="Operação"
+        description="A operação do café precisa de acesso rápido. O Caixa / Vendas continua como o ponto principal do contexto."
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <CafeSectionIntro
+          title="Fluxo principal do dia"
+          description="Use o caixa para registrar vendas, selecionar comprador, aplicar a forma de pagamento e concluir a operação."
+        />
+        <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
           {operacaoLinks.map((item) => (
             <CafeShortcutCard
               key={item.href}
               href={item.href}
               title={item.title}
               description={item.description}
+              featured
+              eyebrow="Operação"
+              footer="Acesso principal do módulo para registrar vendas no dia."
             />
           ))}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Navegação do contexto
+            </p>
+            <h3 className="mt-2 text-base font-semibold text-slate-900">
+              Gestão e abastecimento sem sair do Café
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              O contexto já separa a operação do dia da gestão comercial e do abastecimento, sem
+              misturar essas tarefas com a administração global do sistema.
+            </p>
+          </div>
         </div>
       </SectionCard>
 
       <SectionCard
-        title="Gest\u00e3o do Caf\u00e9"
-        description="Cadastros, tabelas comerciais e abastecimento ficam dentro do pr\u00f3prio contexto Caf\u00e9."
+        title="Gestão do Café"
+        description="Cadastros, tabelas comerciais e abastecimento ficam dentro do próprio contexto Café."
       >
+        <CafeSectionIntro
+          title="Acessos de gestão"
+          description="Entre no hub administrativo do módulo ou vá direto para o cadastro que precisa ajustar."
+        />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {gestaoLinks.map((item) => (
             <CafeShortcutCard
@@ -82,6 +123,6 @@ export default function CafeHomePage() {
           ))}
         </div>
       </SectionCard>
-    </div>
+    </CafePageShell>
   );
 }

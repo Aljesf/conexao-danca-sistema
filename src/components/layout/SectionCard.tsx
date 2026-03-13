@@ -4,11 +4,12 @@ type SectionCardProps = {
   title: string;
   description?: string;
   children: ReactNode;
+  className?: string;
 };
 
-export function SectionCard({ title, description, children }: SectionCardProps) {
+export function SectionCard({ title, description, children, className }: SectionCardProps) {
   return (
-    <div className="flex flex-col gap-4 rounded-xl border bg-white p-6 shadow-sm">
+    <div className={`flex flex-col gap-4 rounded-xl border bg-white p-6 shadow-sm ${className ?? ""}`.trim()}>
       <div>
         <h2 className="text-lg font-semibold">{title}</h2>
         {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}

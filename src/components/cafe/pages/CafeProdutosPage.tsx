@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import PageHeader from "@/components/layout/PageHeader";
+import CafePageShell from "@/components/cafe/CafePageShell";
+import CafeStatCard from "@/components/cafe/CafeStatCard";
 import SectionCard from "@/components/layout/SectionCard";
 import { useCafeCategorias } from "@/lib/cafe/useCafeCategorias";
 
@@ -482,15 +483,44 @@ export default function CafeProdutosPage() {
   const precoDefault = selectedProduto && tabelaDefault
     ? (precosTabela[tabelaDefault.id] ?? precoFallback ?? "")
     : null;
+  const categoriasEmUso = useMemo(() => {
+    const keys = new Set(
+      produtos
+        .map((produto) => String(produto.categoria_nome ?? produto.categoria ?? "").trim())
+        .filter(Boolean),
+    );
+    return keys.size;
+  }, [produtos]);
+  const produtosPreparados = useMemo(
+    () => produtos.filter((produto) => produto.preparado).length,
+    [produtos],
+  );
 
   return (
-    <div className="p-6 space-y-6">
-      <PageHeader
-        eyebrow="Gestão do Café"
-        title="Gestão do Ballet Café — Produtos"
-        description="Cadastre produtos, organize categorias, defina preços em reais e mantenha receitas e insumos."
-      />
-
+    <CafePageShell
+      eyebrow="GestÃ£o do CafÃ©"
+      title="GestÃ£o do Ballet CafÃ© - Produtos"
+      description="Cadastre produtos, organize categorias, defina preÃ§os por tabela e mantenha receitas e insumos em um layout mais consistente."
+      summary={
+        <>
+          <CafeStatCard
+            label="Total de produtos"
+            value={produtos.length}
+            description="Itens cadastrados para catÃ¡logo e operaÃ§Ã£o do caixa."
+          />
+          <CafeStatCard
+            label="Categorias em uso"
+            value={categoriasEmUso}
+            description="Leitura rÃ¡pida da estrutura comercial atualmente utilizada."
+          />
+          <CafeStatCard
+            label="Preparados x simples"
+            value={`${produtosPreparados} / ${Math.max(produtos.length - produtosPreparados, 0)}`}
+            description="Produtos preparados versus itens simples vinculados a insumo direto."
+          />
+        </>
+      }
+    >
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {message ? <div className="text-sm text-emerald-700">{message}</div> : null}
       {categoriasError ? <div className="text-sm text-amber-700">Categorias: {categoriasError}</div> : null}
@@ -508,13 +538,13 @@ export default function CafeProdutosPage() {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Preco fallback (R$)</label>
+                <label className="text-sm font-medium">Pre\u00e7o fallback (R$)</label>
                 <input
                   className="mt-1 w-full rounded-md border p-2"
                   value={novoPrecoBRL}
                   onChange={(e) => setNovoPrecoBRL(e.target.value)}
                 />
-                <p className="mt-1 text-xs text-slate-500">Usado quando uma tabela nao possui preco definido.</p>
+                <p className="mt-1 text-xs text-slate-500">Usado quando uma tabela n\u00e3o possui pre\u00e7o definido.</p>
               </div>
               <div>
                 <label className="text-sm font-medium">Categoria</label>
@@ -567,7 +597,7 @@ export default function CafeProdutosPage() {
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium">Unidade venda</label>
+                <label className="text-sm font-medium">Unidade de venda</label>
                 <input
                   className="mt-1 w-full rounded-md border p-2"
                   value={novoUnidadeVenda}
@@ -625,7 +655,7 @@ export default function CafeProdutosPage() {
                     <th className="px-2 py-2 text-left">Nome</th>
                     <th className="px-2 py-2 text-left">Categoria</th>
                     <th className="px-2 py-2 text-left">Subcategoria</th>
-                    <th className="px-2 py-2 text-right">Preco fallback</th>
+                    <th className="px-2 py-2 text-right">Pre\u00e7o fallback</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -712,16 +742,16 @@ export default function CafeProdutosPage() {
                   onClick={() => void salvarClassificacaoProduto()}
                   disabled={salvandoClassificacao}
                 >
-                  {salvandoClassificacao ? "Salvando..." : "Salvar categoria/subcategoria"}
+                  {salvandoClassificacao ? "Salvando..." : "Salvar classifica\u00e7\u00e3o"}
                 </button>
               </div>
             </SectionCard>
 
-            <SectionCard title="Precos por tabela">
+            <SectionCard title="Pre\u00e7os por tabela">
               {precosError ? <p className="text-sm text-red-600">{precosError}</p> : null}
               {precosMessage ? <p className="text-sm text-emerald-700">{precosMessage}</p> : null}
               {tabelasPreco.length === 0 ? (
-                <p className="text-sm text-slate-600">Nenhuma tabela de preco cadastrada.</p>
+                <p className="text-sm text-slate-600">Nenhuma tabela de pre\u00e7o cadastrada.</p>
               ) : (
                 <div className="space-y-3">
                   {tabelasPreco.filter((t) => t.ativo).map((tabela) => {
@@ -735,7 +765,7 @@ export default function CafeProdutosPage() {
                           </div>
                           <div className="text-xs text-slate-500">{tabela.codigo}</div>
                           {sugestao ? (
-                            <div className="text-xs text-slate-500">Sugestao: fallback {sugestao}</div>
+                            <div className="text-xs text-slate-500">Sugest\u00e3o: fallback {sugestao}</div>
                           ) : null}
                         </div>
                         <input
@@ -745,7 +775,7 @@ export default function CafeProdutosPage() {
                             setPrecosTabela((prev) => ({ ...prev, [tabela.id]: e.target.value }));
                             setPrecosOrigem((prev) => ({ ...prev, [tabela.id]: "saved" }));
                           }}
-                          placeholder="Preco (R$)"
+                          placeholder="Pre\u00e7o (R$)"
                           disabled={precosLoading || precosSaving}
                         />
                       </div>
@@ -760,13 +790,13 @@ export default function CafeProdutosPage() {
                   onClick={() => void salvarPrecos()}
                   disabled={precosLoading || precosSaving || tabelasPreco.length === 0}
                 >
-                  {precosSaving ? "Salvando..." : "Salvar precos"}
+                  {precosSaving ? "Salvando..." : "Salvar pre\u00e7os"}
                 </button>
               </div>
             </SectionCard>
 
             {selectedProduto.preparado ? (
-              <SectionCard title="Receita / Insumos">
+              <SectionCard title="Receita e insumos">
                 {receitaLoading ? <p className="text-sm text-slate-600">Carregando receita...</p> : null}
                 <div className="mt-2 space-y-3">
                   {receitaItens.map((item, idx) => (
@@ -784,7 +814,7 @@ export default function CafeProdutosPage() {
                           );
                         }}
                       >
-                        <option value={0}>Selecione insumo...</option>
+                        <option value={0}>Selecione o insumo...</option>
                         {insumoOptions.map((insumo) => (
                           <option key={insumo.id} value={insumo.id}>
                             {insumo.nome}
@@ -841,25 +871,25 @@ export default function CafeProdutosPage() {
             <SectionCard title="Resumo">
               <div className="space-y-2 text-sm text-slate-700">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Tabela default</span>
+                  <span className="text-slate-500">Tabela principal</span>
                   <span className="font-medium">{tabelaDefault?.nome ?? "-"}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Preco default</span>
+                  <span className="text-slate-500">Pre\u00e7o principal</span>
                   <span className="font-medium">{precoDefault ?? "-"}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Preco fallback</span>
+                  <span className="text-slate-500">Pre\u00e7o fallback</span>
                   <span className="font-medium">{precoFallback ?? "-"}</span>
                 </div>
                 <div className="text-xs text-slate-500">
-                  Se uma tabela nao tiver preco salvo, o sistema sugere o fallback do produto.
+                  Se uma tabela n\u00e3o tiver pre\u00e7o salvo, o sistema sugere o fallback do produto.
                 </div>
               </div>
             </SectionCard>
           </div>
         ) : null}
       </div>
-    </div>
+    </CafePageShell>
   );
 }

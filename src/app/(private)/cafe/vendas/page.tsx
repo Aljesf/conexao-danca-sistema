@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -1209,7 +1209,7 @@ export default function FrenteCaixaCafePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
         {/* Comprador */}
         <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
           <h2 className="text-sm font-semibold">Comprador</h2>
@@ -1284,7 +1284,7 @@ export default function FrenteCaixaCafePage() {
           )}
         </section>
         {/* Itens */}
-        <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3 lg:col-span-2">
+        <section className="bg-white border rounded-xl shadow-sm p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">Itens da venda</h2>
             <div className="flex items-center gap-2">

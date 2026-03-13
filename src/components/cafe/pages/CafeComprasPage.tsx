@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import PageHeader from "@/components/layout/PageHeader";
+import CafePageShell from "@/components/cafe/CafePageShell";
+import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
+import CafeStatCard from "@/components/cafe/CafeStatCard";
+import CafeToolbar from "@/components/cafe/CafeToolbar";
 import SectionCard from "@/components/layout/SectionCard";
 
 type Insumo = { id: number; nome: string; unidade_base: string };
@@ -52,9 +55,10 @@ export default function AdminCafeComprasPage() {
   ]);
 
   const totalCentavos = useMemo(
-    () => itens.reduce((acc, it) => acc + parseBRLToCentavos(it.valor_total_brl), 0),
-    [itens]
+    () => itens.reduce((acc, item) => acc + parseBRLToCentavos(item.valor_total_brl), 0),
+    [itens],
   );
+  const comprasRecentes = compras.length;
 
   async function loadBase() {
     setLoading(true);
@@ -94,20 +98,20 @@ export default function AdminCafeComprasPage() {
   }
 
   function removeItem(idx: number) {
-    setItens((prev) => prev.filter((_, i) => i !== idx));
+    setItens((prev) => prev.filter((_, index) => index !== idx));
   }
 
   function updateItem(idx: number, patch: Partial<Item>) {
-    setItens((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+    setItens((prev) => prev.map((item, index) => (index === idx ? { ...item, ...patch } : item)));
   }
 
   function calcUnitPreview(idx: number): string {
-    const it = itens[idx];
-    const qtd = Number((it.quantidade || "").replace(",", "."));
-    const tot = parseBRLToCentavos(it.valor_total_brl);
+    const item = itens[idx];
+    const qtd = Number((item.quantidade || "").replace(",", "."));
+    const tot = parseBRLToCentavos(item.valor_total_brl);
     if (!Number.isFinite(qtd) || qtd <= 0) return "-";
-    const cu = Math.round(tot / qtd);
-    return `${formatBRLFromCentavos(cu)} / unidade`;
+    const custoUnitario = Math.round(tot / qtd);
+    return `${formatBRLFromCentavos(custoUnitario)} / unidade`;
   }
 
   async function registrarCompra() {
@@ -115,29 +119,30 @@ export default function AdminCafeComprasPage() {
     setMessage(null);
 
     if (!ondeComprei.trim()) {
-      setError("Onde comprei obrigatorio.");
+      setError("Onde comprei é obrigatório.");
       return;
     }
 
     if (contaId === "") {
-      setError("Conta do cafe obrigatoria.");
+      setError("A conta do café é obrigatória.");
       return;
     }
 
-    const payloadItens = itens.map((it, idx) => {
-      const qtd = Number((it.quantidade || "").replace(",", "."));
-      const valorTotal = parseBRLToCentavos(it.valor_total_brl);
+    const payloadItens = itens.map((item, idx) => {
+      const qtd = Number((item.quantidade || "").replace(",", "."));
+      const valorTotal = parseBRLToCentavos(item.valor_total_brl);
 
-      if (!it.insumo_id) throw new Error(`Insumo obrigatorio (item ${idx + 1}).`);
-      if (!Number.isFinite(qtd) || qtd <= 0) throw new Error(`Quantidade invalida (item ${idx + 1}).`);
-      if (!Number.isFinite(valorTotal) || valorTotal < 0)
-        throw new Error(`Valor total invalido (item ${idx + 1}).`);
+      if (!item.insumo_id) throw new Error(`Insumo obrigatório (item ${idx + 1}).`);
+      if (!Number.isFinite(qtd) || qtd <= 0) throw new Error(`Quantidade inválida (item ${idx + 1}).`);
+      if (!Number.isFinite(valorTotal) || valorTotal < 0) {
+        throw new Error(`Valor total inválido (item ${idx + 1}).`);
+      }
 
       return {
-        insumo_id: it.insumo_id,
+        insumo_id: item.insumo_id,
         quantidade: qtd,
         valor_total_centavos: valorTotal,
-        validade: it.validade ? it.validade : null,
+        validade: item.validade ? item.validade : null,
       };
     });
 
@@ -175,7 +180,7 @@ export default function AdminCafeComprasPage() {
     setError(null);
     setMessage(null);
 
-    const ok = window.confirm("Deseja cancelar esta compra? Essa acao reverte o estoque.");
+    const ok = window.confirm("Deseja cancelar esta compra? Essa ação reverte o estoque.");
     if (!ok) return;
 
     const motivo = window.prompt("Motivo do cancelamento (opcional):", "") ?? "";
@@ -197,127 +202,189 @@ export default function AdminCafeComprasPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <PageHeader
-        eyebrow="Gestão do Café"
-        title="Gestão do Ballet Café — Compras de insumos"
-        description="Registre compras por valor total e quantidade. O sistema calcula o custo unitário e abastece o estoque."
-      />
-
+    <CafePageShell
+      eyebrow="Gestão do Café"
+      title="Gestão do Ballet Café - Compras de insumos"
+      description="Registre compras por valor total e quantidade, mantendo o abastecimento operacional com mais contexto visual."
+      summary={
+        <>
+          <CafeStatCard
+            label="Compras recentes"
+            value={comprasRecentes}
+            description="Base atual de compras registradas no módulo."
+          />
+          <CafeStatCard
+            label="Abastecimento manual"
+            value={itens.length}
+            description="Itens prontos para lançamento na compra em edição."
+          />
+          <CafeStatCard
+            label="Impacto em estoque"
+            value={formatBRLFromCentavos(totalCentavos)}
+            description="Valor total previsto da compra atual antes do lançamento."
+          />
+        </>
+      }
+    >
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {message ? <div className="text-sm text-emerald-700">{message}</div> : null}
 
-      <SectionCard title="Nova compra">
-        <div className="grid gap-3 md:grid-cols-4">
-          <div>
-            <label className="text-sm font-medium">Data</label>
-            <input
-              className="mt-1 w-full rounded-md border p-2"
-              value={dataCompra}
-              onChange={(e) => setDataCompra(e.target.value)}
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-sm font-medium">Onde comprei</label>
-            <input
-              className="mt-1 w-full rounded-md border p-2"
-              value={ondeComprei}
-              onChange={(e) => setOndeComprei(e.target.value)}
-              placeholder="ex.: Padaria X / Feira / Mercado"
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Conta (Cafe)</label>
-            <select
-              className="mt-1 w-full rounded-md border p-2"
-              value={contaId}
-              onChange={(e) => setContaId(e.target.value ? Number(e.target.value) : "")}
-            >
-              <option value="">Selecione...</option>
-              {contas.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.codigo} — {c.nome}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+      <SectionCard
+        title="Abastecimento do café"
+        description="Consolide a compra com conta financeira, categoria e itens que entram no estoque."
+      >
+        <CafeToolbar
+          title="Operação de compra"
+          description="O sistema calcula custo unitário por item e abastece o estoque a partir do lançamento."
+        >
+          {loading ? <span className="text-xs text-slate-500">Atualizando dados...</span> : null}
+        </CafeToolbar>
 
-        <div className="mt-4">
-          <label className="text-sm font-medium">Categoria de despesa (opcional)</label>
-          <select
-            className="mt-1 w-full rounded-md border p-2"
-            value={categoriaId}
-            onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : "")}
+        <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <SectionCard
+            title="Nova compra"
+            description="Preencha o contexto da compra e depois detalhe os itens do abastecimento."
           >
-            <option value="">(sem categoria)</option>
-            {categorias.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome} ({c.codigo})
-              </option>
-            ))}
-          </select>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="text-sm font-medium">Data</label>
+                <input
+                  className="mt-1 w-full rounded-md border p-2"
+                  value={dataCompra}
+                  onChange={(e) => setDataCompra(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Conta do café</label>
+                <select
+                  className="mt-1 w-full rounded-md border p-2"
+                  value={contaId}
+                  onChange={(e) => setContaId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">Selecione...</option>
+                  {contas.map((conta) => (
+                    <option key={conta.id} value={conta.id}>
+                      {conta.codigo} - {conta.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium">Onde comprei</label>
+                <input
+                  className="mt-1 w-full rounded-md border p-2"
+                  value={ondeComprei}
+                  onChange={(e) => setOndeComprei(e.target.value)}
+                  placeholder="Ex.: Padaria X, feira ou mercado"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium">Categoria de despesa</label>
+                <select
+                  className="mt-1 w-full rounded-md border p-2"
+                  value={categoriaId}
+                  onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : "")}
+                >
+                  <option value="">Sem categoria</option>
+                  {categorias.map((categoria) => (
+                    <option key={categoria.id} value={categoria.id}>
+                      {categoria.nome} ({categoria.codigo})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Resumo da compra"
+            description="Use este bloco para validar quantidade de itens, total e efeito operacional antes de salvar."
+          >
+            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Itens na compra
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">{itens.length}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Total previsto
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">
+                  {formatBRLFromCentavos(totalCentavos)}
+                </p>
+              </div>
+              <p className="text-sm text-slate-600">
+                O lançamento abastece o estoque e preserva o histórico recente de compras do café.
+              </p>
+            </div>
+          </SectionCard>
         </div>
 
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold text-slate-700">Itens</h3>
-          <div className="mt-2 space-y-3">
-            {itens.map((it, idx) => (
-              <div key={idx} className="rounded-lg border p-3">
+        <SectionCard
+          title="Itens da compra"
+          description="Cada item define o insumo comprado, a quantidade, o valor total e a validade, quando houver."
+          className="mt-6"
+        >
+          <CafeSectionIntro
+            title="Bloco de abastecimento"
+            description="Adicione quantos insumos forem necessários e revise o custo unitário calculado antes de salvar."
+          />
+          <div className="mt-5 space-y-3">
+            {itens.map((item, idx) => (
+              <div key={idx} className="rounded-2xl border border-slate-200 p-4">
                 <div className="grid gap-3 md:grid-cols-5">
                   <div className="md:col-span-2">
                     <label className="text-sm font-medium">Insumo</label>
                     <select
                       className="mt-1 w-full rounded-md border p-2"
-                      value={it.insumo_id ?? ""}
+                      value={item.insumo_id ?? ""}
                       onChange={(e) =>
                         updateItem(idx, { insumo_id: e.target.value ? Number(e.target.value) : null })
                       }
                     >
                       <option value="">Selecione...</option>
-                      {insumos.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.nome} ({i.unidade_base})
+                      {insumos.map((insumo) => (
+                        <option key={insumo.id} value={insumo.id}>
+                          {insumo.nome} ({insumo.unidade_base})
                         </option>
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="text-sm font-medium">Quantidade</label>
                     <input
                       className="mt-1 w-full rounded-md border p-2"
-                      value={it.quantidade}
+                      value={item.quantidade}
                       onChange={(e) => updateItem(idx, { quantidade: e.target.value })}
-                      placeholder="ex.: 10"
+                      placeholder="Ex.: 10"
                     />
                   </div>
-
                   <div>
-                    <label className="text-sm font-medium">Valor total (R$)</label>
+                    <label className="text-sm font-medium">Valor total</label>
                     <input
                       className="mt-1 w-full rounded-md border p-2"
-                      value={it.valor_total_brl}
+                      value={item.valor_total_brl}
                       onChange={(e) => updateItem(idx, { valor_total_brl: e.target.value })}
-                      placeholder="ex.: 13,00"
+                      placeholder="Ex.: 13,00"
                     />
-                    <div className="mt-1 text-xs text-slate-500">Unitario: {calcUnitPreview(idx)}</div>
+                    <div className="mt-1 text-xs text-slate-500">{calcUnitPreview(idx)}</div>
                   </div>
-
                   <div>
-                    <label className="text-sm font-medium">Validade (opcional)</label>
+                    <label className="text-sm font-medium">Validade</label>
                     <input
                       className="mt-1 w-full rounded-md border p-2"
-                      value={it.validade}
+                      value={item.validade}
                       onChange={(e) => updateItem(idx, { validade: e.target.value })}
                       placeholder="YYYY-MM-DD"
                     />
                   </div>
                 </div>
 
-                <div className="mt-3 flex justify-between">
+                <div className="mt-3 flex items-center justify-between gap-3">
                   <button
-                    className="text-sm text-slate-600 hover:underline"
+                    className="text-sm text-slate-600 hover:underline disabled:text-slate-300"
                     onClick={() => removeItem(idx)}
                     disabled={itens.length <= 1}
                   >
@@ -330,23 +397,26 @@ export default function AdminCafeComprasPage() {
               </div>
             ))}
           </div>
-        </div>
 
-        <div className="mt-6 flex items-center justify-between">
-          <div className="text-sm text-slate-700">
-            Total: <span className="font-semibold">{formatBRLFromCentavos(totalCentavos)}</span>
+          <div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-slate-700">
+              Total: <span className="font-semibold">{formatBRLFromCentavos(totalCentavos)}</span>
+            </div>
+            <button
+              className="rounded-md bg-violet-600 px-4 py-2 text-white hover:bg-violet-700"
+              onClick={() => void registrarCompra()}
+              disabled={loading}
+            >
+              Registrar compra
+            </button>
           </div>
-          <button
-            className="rounded-md bg-violet-600 px-4 py-2 text-white hover:bg-violet-700"
-            onClick={() => void registrarCompra()}
-            disabled={loading}
-          >
-            Registrar compra
-          </button>
-        </div>
+        </SectionCard>
       </SectionCard>
 
-      <SectionCard title="Compras recentes">
+      <SectionCard
+        title="Compras recentes"
+        description="Consulte o histórico operacional e cancele compras quando for necessário reverter o estoque."
+      >
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="text-xs uppercase text-slate-500">
@@ -355,21 +425,23 @@ export default function AdminCafeComprasPage() {
                 <th className="px-2 py-2 text-left">Onde</th>
                 <th className="px-2 py-2 text-right">Total</th>
                 <th className="px-2 py-2 text-left">Status</th>
-                <th className="px-2 py-2 text-right">Acoes</th>
+                <th className="px-2 py-2 text-right">Ações</th>
               </tr>
             </thead>
             <tbody>
-              {compras.map((c) => (
-                <tr key={c.id} className="border-t">
-                  <td className="px-2 py-2">{c.data_compra}</td>
-                  <td className="px-2 py-2">{c.onde_comprei}</td>
-                  <td className="px-2 py-2 text-right">{formatBRLFromCentavos(c.valor_total_centavos)}</td>
-                  <td className="px-2 py-2">{c.status ?? "ATIVA"}</td>
+              {compras.map((compra) => (
+                <tr key={compra.id} className="border-t">
+                  <td className="px-2 py-2">{compra.data_compra}</td>
+                  <td className="px-2 py-2">{compra.onde_comprei}</td>
+                  <td className="px-2 py-2 text-right">
+                    {formatBRLFromCentavos(compra.valor_total_centavos)}
+                  </td>
+                  <td className="px-2 py-2">{compra.status ?? "ATIVA"}</td>
                   <td className="px-2 py-2 text-right">
                     <button
                       className="text-sm text-red-600 hover:underline disabled:text-slate-400"
-                      onClick={() => void cancelarCompra(c.id)}
-                      disabled={c.status === "CANCELADA"}
+                      onClick={() => void cancelarCompra(compra.id)}
+                      disabled={compra.status === "CANCELADA"}
                     >
                       Cancelar
                     </button>
@@ -388,6 +460,6 @@ export default function AdminCafeComprasPage() {
           {loading ? <p className="mt-3 text-sm text-slate-600">Carregando...</p> : null}
         </div>
       </SectionCard>
-    </div>
+    </CafePageShell>
   );
 }
