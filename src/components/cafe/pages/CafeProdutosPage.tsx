@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CafePageShell from "@/components/cafe/CafePageShell";
@@ -86,6 +86,7 @@ export default function CafeProdutosPage() {
   const [novoUnidadeVenda, setNovoUnidadeVenda] = useState("un");
   const [novoPreparado, setNovoPreparado] = useState(true);
   const [novoInsumoDiretoId, setNovoInsumoDiretoId] = useState<string>("");
+  const [buscaListagem, setBuscaListagem] = useState("");
 
   const [editCategoriaId, setEditCategoriaId] = useState<number | "">("");
   const [editSubcategoriaId, setEditSubcategoriaId] = useState<number | "">("");
@@ -147,17 +148,17 @@ export default function CafeProdutosPage() {
       const json = (await res.json()) as { ok?: boolean; data?: TabelaPreco[]; error?: string };
 
       if (!res.ok || !json.ok) {
-        console.warn("Falha ao carregar tabelas de preco:", json?.error);
+        console.warn("Falha ao carregar tabelas de preço:", json?.error);
         setTabelasPreco([]);
-        setPrecosError("Falha ao carregar tabelas de preco.");
+        setPrecosError("Falha ao carregar tabelas de preço.");
         return;
       }
 
       setTabelasPreco(Array.isArray(json?.data) ? json.data : []);
     } catch (err) {
-      console.error("Erro inesperado ao carregar tabelas de preco", err);
+      console.error("Erro inesperado ao carregar tabelas de preço", err);
       setTabelasPreco([]);
-      setPrecosError("Erro inesperado ao carregar tabelas de preco.");
+      setPrecosError("Erro inesperado ao carregar tabelas de preço.");
     }
   }
 
@@ -167,7 +168,7 @@ export default function CafeProdutosPage() {
     try {
       const res = await fetch(`/api/cafe/produtos/${produtoId}/precos`);
       const json = (await res.json()) as { ok?: boolean; data?: PrecoProduto[]; error?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error ?? "Falha ao carregar precos.");
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Falha ao carregar pre\u00e7os.");
 
       const basePrice = selectedProduto?.preco_venda_centavos ?? 0;
       const map = new Map<number, number>();
@@ -187,7 +188,7 @@ export default function CafeProdutosPage() {
       setPrecosTabela(next);
       setPrecosOrigem(origem);
     } catch (err) {
-      setPrecosError(err instanceof Error ? err.message : "Erro ao carregar precos.");
+      setPrecosError(err instanceof Error ? err.message : "Erro ao carregar pre\u00e7os.");
       setPrecosTabela({});
       setPrecosOrigem({});
     } finally {
@@ -262,28 +263,28 @@ export default function CafeProdutosPage() {
     setError(null);
     setMessage(null);
     if (!novoNome.trim()) {
-      setError("Nome obrigatorio.");
+      setError("Nome obrigat\u00f3rio.");
       return;
     }
     if (!novaCategoriaId) {
-      setError("Categoria obrigatoria.");
+      setError("Categoria obrigat\u00f3ria.");
       return;
     }
     const precoCentavos = parseBRLToCentavos(novoPrecoBRL);
     if (!Number.isFinite(precoCentavos) || precoCentavos < 0) {
-      setError("Preco invalido.");
+      setError("Pre\u00e7o inv\u00e1lido.");
       return;
     }
 
     const insumoDiretoId = novoPreparado ? null : (novoInsumoDiretoId ? Number(novoInsumoDiretoId) : null);
     if (novoInsumoDiretoId && !Number.isFinite(insumoDiretoId)) {
-      setError("Insumo direto invalido.");
+      setError("Insumo direto inv\u00e1lido.");
       return;
     }
 
     const categoria = categorias.find((c) => c.id === Number(novaCategoriaId));
     if (!categoria) {
-      setError("Categoria invalida.");
+      setError("Categoria inv\u00e1lida.");
       return;
     }
 
@@ -335,7 +336,7 @@ export default function CafeProdutosPage() {
       });
 
     if (selectedProduto?.preparado && itens.length === 0) {
-      setError("Receita obrigatoria para produto preparado.");
+      setError("Receita obrigatória para produto preparado.");
       return;
     }
     const res = await fetch(`/api/cafe/produtos/${selectedProdutoId}/receita`, {
@@ -406,7 +407,7 @@ export default function CafeProdutosPage() {
         });
 
       if (precos.some((p) => !Number.isFinite(p.preco_centavos) || p.preco_centavos < 0)) {
-        setPrecosError("Preco invalido.");
+        setPrecosError("Pre\u00e7o inv\u00e1lido.");
         return;
       }
 
@@ -418,14 +419,14 @@ export default function CafeProdutosPage() {
 
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
-        setPrecosError(json.error ?? "Falha ao salvar precos.");
+        setPrecosError(json.error ?? "Falha ao salvar pre\u00e7os.");
         return;
       }
 
-      setPrecosMessage("Precos atualizados.");
+      setPrecosMessage("Preços atualizados.");
       await loadPrecos(selectedProdutoId);
     } catch (err) {
-      setPrecosError(err instanceof Error ? err.message : "Erro ao salvar precos.");
+      setPrecosError(err instanceof Error ? err.message : "Erro ao salvar pre\u00e7os.");
     } finally {
       setPrecosSaving(false);
     }
@@ -435,13 +436,13 @@ export default function CafeProdutosPage() {
     if (!selectedProduto) return;
 
     if (!editCategoriaId) {
-      setError("Categoria obrigatoria para atualizar o produto.");
+      setError("Categoria obrigat\u00f3ria para atualizar o produto.");
       return;
     }
 
     const categoria = categorias.find((c) => c.id === Number(editCategoriaId));
     if (!categoria) {
-      setError("Categoria invalida.");
+      setError("Categoria inv\u00e1lida.");
       return;
     }
 
@@ -466,10 +467,10 @@ export default function CafeProdutosPage() {
         return;
       }
 
-      setMessage("Classificacao do produto atualizada.");
+      setMessage("Classificação do produto atualizada.");
       await loadProdutos();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao atualizar classificacao.");
+      setError(err instanceof Error ? err.message : "Erro ao atualizar classifica\u00e7\u00e3o.");
     } finally {
       setSalvandoClassificacao(false);
     }
@@ -495,27 +496,68 @@ export default function CafeProdutosPage() {
     () => produtos.filter((produto) => produto.preparado).length,
     [produtos],
   );
+  const produtosSimples = Math.max(produtos.length - produtosPreparados, 0);
+  const produtosOrdenados = useMemo(() => {
+    return [...produtos].sort((a, b) => {
+      const categoriaComparada = String(a.categoria_nome ?? a.categoria ?? "").localeCompare(
+        String(b.categoria_nome ?? b.categoria ?? ""),
+        "pt-BR",
+      );
+      if (categoriaComparada !== 0) return categoriaComparada;
+
+      const subcategoriaComparada = String(a.subcategoria_nome ?? "").localeCompare(
+        String(b.subcategoria_nome ?? ""),
+        "pt-BR",
+      );
+      if (subcategoriaComparada !== 0) return subcategoriaComparada;
+
+      return String(a.nome ?? "").localeCompare(String(b.nome ?? ""), "pt-BR");
+    });
+  }, [produtos]);
+  const produtosVisiveis = useMemo(() => {
+    const termo = buscaListagem
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+
+    if (!termo) return produtosOrdenados;
+
+    return produtosOrdenados.filter((produto) => {
+      const alvo = [
+        produto.nome,
+        produto.categoria_nome ?? produto.categoria,
+        produto.subcategoria_nome ?? "",
+      ]
+        .join(" ")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+
+      return alvo.includes(termo);
+    });
+  }, [buscaListagem, produtosOrdenados]);
 
   return (
     <CafePageShell
-      eyebrow="GestÃ£o do CafÃ©"
-      title="GestÃ£o do Ballet CafÃ© - Produtos"
-      description="Cadastre produtos, organize categorias, defina preÃ§os por tabela e mantenha receitas e insumos em um layout mais consistente."
+      eyebrow="Gest\u00e3o do Caf\u00e9"
+      title="Gest\u00e3o do Ballet Caf\u00e9 - Produtos"
+      description="Cadastre produtos, organize categorias, defina pre\u00e7os por tabela e mantenha receitas e insumos com classifica\u00e7\u00e3o relacional correta."
       summary={
         <>
           <CafeStatCard
             label="Total de produtos"
             value={produtos.length}
-            description="Itens cadastrados para catÃ¡logo e operaÃ§Ã£o do caixa."
+            description="Itens cadastrados para cat\u00e1logo e opera\u00e7\u00e3o do caixa."
           />
           <CafeStatCard
             label="Categorias em uso"
             value={categoriasEmUso}
-            description="Leitura rÃ¡pida da estrutura comercial atualmente utilizada."
+            description="Leitura r\u00e1pida da estrutura comercial atualmente utilizada."
           />
           <CafeStatCard
             label="Preparados x simples"
-            value={`${produtosPreparados} / ${Math.max(produtos.length - produtosPreparados, 0)}`}
+            value={`${produtosPreparados} / ${produtosSimples}`}
             description="Produtos preparados versus itens simples vinculados a insumo direto."
           />
         </>
@@ -647,19 +689,34 @@ export default function CafeProdutosPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Produtos cadastrados">
+          <SectionCard
+            title="Produtos cadastrados"
+            description="Listagem ordenada por categoria, subcategoria e nome, usando a classificação relacional do Café."
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm text-slate-600">
+                {produtosVisiveis.length} produto(s) exibido(s) na organização atual.
+              </p>
+              <input
+                className="w-full rounded-md border p-2 text-sm md:max-w-xs"
+                value={buscaListagem}
+                onChange={(e) => setBuscaListagem(e.target.value)}
+                placeholder="Buscar por nome, categoria ou subcategoria"
+              />
+            </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-[860px] text-sm">
                 <thead className="text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-2 py-2 text-left">Nome</th>
                     <th className="px-2 py-2 text-left">Categoria</th>
                     <th className="px-2 py-2 text-left">Subcategoria</th>
                     <th className="px-2 py-2 text-right">Pre\u00e7o fallback</th>
+                    <th className="px-2 py-2 text-center">Preparado</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {produtos.map((p) => (
+                  {produtosVisiveis.map((p) => (
                     <tr
                       key={p.id}
                       className={
@@ -668,11 +725,30 @@ export default function CafeProdutosPage() {
                       onClick={() => setSelectedProdutoId(p.id)}
                     >
                       <td className="px-2 py-2">{p.nome}</td>
-                      <td className="px-2 py-2">{p.categoria_nome ?? p.categoria}</td>
+                      <td className="px-2 py-2">{p.categoria_nome ?? p.categoria ?? "-"}</td>
                       <td className="px-2 py-2">{p.subcategoria_nome ?? "-"}</td>
                       <td className="px-2 py-2 text-right">{formatBRLFromCentavos(p.preco_venda_centavos)}</td>
+                      <td className="px-2 py-2 text-center">
+                        <span
+                          className={
+                            "inline-flex rounded-full px-2 py-1 text-xs font-medium " +
+                            (p.preparado
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-700")
+                          }
+                        >
+                          {p.preparado ? "Sim" : "N\u00e3o"}
+                        </span>
+                      </td>
                     </tr>
                   ))}
+                  {produtosVisiveis.length === 0 ? (
+                    <tr>
+                      <td className="px-2 py-4 text-center text-sm text-slate-500" colSpan={5}>
+                        Nenhum produto encontrado para o filtro informado.
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
               {loading ? <p className="mt-3 text-sm text-slate-600">Carregando...</p> : null}
@@ -682,7 +758,7 @@ export default function CafeProdutosPage() {
 
         {selectedProduto ? (
           <div className="space-y-6">
-            <SectionCard title="Categoria do produto">
+            <SectionCard title="Classifica\u00e7\u00e3o do produto">
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium">Categoria</label>
@@ -893,3 +969,4 @@ export default function CafeProdutosPage() {
     </CafePageShell>
   );
 }
+
