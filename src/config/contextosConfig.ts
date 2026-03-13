@@ -6,7 +6,8 @@ export type AppContextKey =
   | "CAFE"
   | "ADMIN"
   | "BOLSAS"
-  | "FINANCEIRO";
+  | "FINANCEIRO"
+  | "SUPORTE";
 
 export type AppContextItem = {
   key: AppContextKey;
@@ -15,6 +16,7 @@ export type AppContextItem = {
   emoji: string;
   description: string;
   href: string;
+  icon?: string;
 };
 
 export const CONTEXTOS_CONFIG: AppContextItem[] = [
@@ -59,6 +61,15 @@ export const CONTEXTOS_CONFIG: AppContextItem[] = [
     href: "/admin",
   },
   {
+    key: "SUPORTE",
+    brandingKey: "suporte",
+    label: "Suporte ao Usuario",
+    emoji: "🛟",
+    description: "Chamados, erros, melhorias e acompanhamento",
+    href: "/suporte-usuario",
+    icon: "LifeBuoy",
+  },
+  {
     key: "BOLSAS",
     brandingKey: "bolsas",
     label: "Bolsas & Projetos Sociais",
@@ -68,9 +79,7 @@ export const CONTEXTOS_CONFIG: AppContextItem[] = [
   },
 ];
 
-export const CONTEXTOS_BY_HREF_PREFIX = [...CONTEXTOS_CONFIG].sort(
-  (a, b) => b.href.length - a.href.length,
-);
+export const CONTEXTOS_BY_HREF_PREFIX = [...CONTEXTOS_CONFIG].sort((a, b) => b.href.length - a.href.length);
 
 export function detectContextByPathname(pathname: string): AppContextItem | null {
   for (const ctx of CONTEXTOS_BY_HREF_PREFIX) {

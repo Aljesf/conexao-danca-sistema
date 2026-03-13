@@ -14,7 +14,7 @@ export default function ContextSelector() {
   const currentOption = CONTEXTOS_CONFIG.find((opt) => opt.brandingKey === activeContext);
   const activeByPath = detectContextByPathname(pathname);
   const active = activeByPath ?? currentOption ?? null;
-  const current = configs[activeContext];
+  const current = configs[activeByPath?.brandingKey ?? activeContext];
 
   function choose(opt: AppContextItem) {
     setActiveContext(opt.brandingKey);

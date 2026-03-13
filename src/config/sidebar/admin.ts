@@ -110,7 +110,7 @@ export const adminSidebar: SidebarSection[] = [
     items: [
       { label: "🛠️ Construtor de Relatorios", href: "/admin/relatorios/construtor" },
       { label: "🕵️ Auditoria do sistema", href: "/admin/relatorios/auditoria" },
-      { label: "📮 Suporte (NASC)", href: "/administracao/suporte", matchPrefix: "/administracao/suporte" },
+      { label: "🛟 Suporte ao usuario", href: "/suporte-usuario", matchPrefix: "/suporte-usuario" },
       { label: "🧾 Boletos (NeoFin)", href: "/admin/governanca/boletos-neofin" },
       { label: "💸 Cobrancas", href: "/admin/governanca/cobrancas" },
     ],

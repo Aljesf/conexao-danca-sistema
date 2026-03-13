@@ -21,4 +21,5 @@ export type SidebarConfig = {
   admin: SidebarSection[];
   bolsas: SidebarSection[];
   financeiro: SidebarSection[];
+  suporte: SidebarSection[];
 };

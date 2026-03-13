@@ -1,7 +1,7 @@
 "use client";
 
 type UserBadgeProps = {
-  user?: { id: string; email: string | null } | null;
+  user?: { id: string; email: string | null; name?: string | null } | null;
   logoutAction?: () => Promise<void>;
 };
 
@@ -12,7 +12,8 @@ export default function UserBadge({ user, logoutAction }: UserBadgeProps) {
 
   return (
     <div className="px-4 py-3 text-xs">
-      <div className="truncate max-w-[220px] font-medium">{user.email ?? "Autenticado"}</div>
+      <div className="truncate max-w-[220px] font-medium">{user.name ?? user.email ?? "Autenticado"}</div>
+      {user.name && user.email ? <div className="truncate max-w-[220px] text-slate-500">{user.email}</div> : null}
       {logoutAction ? (
         <form action={logoutAction}>
           <button

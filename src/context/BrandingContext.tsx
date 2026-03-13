@@ -8,7 +8,8 @@ export type ContextKey =
   | "lanchonete"
   | "administracao"
   | "bolsas"
-  | "financeiro";
+  | "financeiro"
+  | "suporte";
 
 export type Palette = {
   primary: string;
@@ -47,14 +48,10 @@ const STORAGE_KEY = "ctx-branding-v1";
 
 const defaultEscola: ContextConfig = {
   key: "escola",
-  displayName: "Conexão Dança",
-  legalName: "Conexão Dança",
+  displayName: "Conexao Danca",
+  legalName: "Conexao Danca",
   document: "",
-  contacts: {
-    phone: "",
-    email: "",
-    site: "",
-  },
+  contacts: { phone: "", email: "", site: "" },
   logoUrl: "/logo-conexao.png",
   palette: {
     primary: "#8B5CF6",
@@ -87,7 +84,7 @@ const defaultLoja: ContextConfig = {
 
 const defaultLanchonete: ContextConfig = {
   key: "lanchonete",
-  displayName: "Ballet Café",
+  displayName: "Ballet Cafe",
   legalName: "",
   document: "",
   contacts: {},
@@ -105,7 +102,7 @@ const defaultLanchonete: ContextConfig = {
 
 const defaultAdmin: ContextConfig = {
   key: "administracao",
-  displayName: "Administração do Sistema",
+  displayName: "Administracao do Sistema",
   legalName: "",
   document: "",
   contacts: {},
@@ -157,6 +154,24 @@ const defaultFinanceiro: ContextConfig = {
   },
 };
 
+const defaultSuporte: ContextConfig = {
+  key: "suporte",
+  displayName: "Suporte ao Usuario",
+  legalName: "",
+  document: "",
+  contacts: {},
+  logoUrl: "",
+  palette: {
+    primary: "#0f766e",
+    secondary: "#14b8a6",
+    background: "#f2fbfa",
+    text: "#0f172a",
+    accent: "#64748b",
+    gradientFrom: "#d8fbf5",
+    gradientTo: "#dcfce7",
+  },
+};
+
 const BrandingContext = createContext<BrandingContextType>({
   activeContext: "escola",
   configs: {
@@ -166,6 +181,7 @@ const BrandingContext = createContext<BrandingContextType>({
     administracao: defaultAdmin,
     bolsas: defaultBolsas,
     financeiro: defaultFinanceiro,
+    suporte: defaultSuporte,
   },
   setActiveContext: () => {},
   updateContext: () => {},
@@ -194,6 +210,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
     administracao: defaultAdmin,
     bolsas: defaultBolsas,
     financeiro: defaultFinanceiro,
+    suporte: defaultSuporte,
   });
 
   useEffect(() => {
@@ -208,10 +225,23 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
           administracao: { ...defaultAdmin, ...(parsed.administracao ?? {}) },
           bolsas: { ...defaultBolsas, ...(parsed.bolsas ?? {}) },
           financeiro: { ...defaultFinanceiro, ...(parsed.financeiro ?? {}) },
+          suporte: { ...defaultSuporte, ...(parsed.suporte ?? {}) },
         });
         if (parsed.activeContext) setActiveContext(parsed.activeContext);
       } else {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...configs, activeContext }));
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            escola: defaultEscola,
+            loja: defaultLoja,
+            lanchonete: defaultLanchonete,
+            administracao: defaultAdmin,
+            bolsas: defaultBolsas,
+            financeiro: defaultFinanceiro,
+            suporte: defaultSuporte,
+            activeContext: "escola",
+          }),
+        );
       }
     } catch (err) {
       console.warn("Falha ao carregar branding salvo:", err);
@@ -221,10 +251,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     applyPalette(configs[activeContext].palette);
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ ...configs, activeContext })
-      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...configs, activeContext }));
     } catch (err) {
       console.warn("Falha ao salvar branding:", err);
     }
@@ -250,14 +277,10 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(
     () => ({ activeContext, configs, setActiveContext, updateContext }),
-    [activeContext, configs]
+    [activeContext, configs],
   );
 
-  return (
-    <BrandingContext.Provider value={value}>
-      {children}
-    </BrandingContext.Provider>
-  );
+  return <BrandingContext.Provider value={value}>{children}</BrandingContext.Provider>;
 }
 
 export function useBranding() {

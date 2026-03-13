@@ -1,6 +1,7 @@
 import AppShell from "@/components/AppShell";
 import MovimentoButton from "@/components/MovimentoButton";
-import { NascMount } from "@/components/nasc/NascMount";
+import AppErrorCaptureProvider from "@/components/providers/AppErrorCaptureProvider";
+import SuporteFab from "@/components/suporte/SuporteFab";
 import { getSystemSettings } from "@/lib/systemSettings";
 import { requireUser } from "@/lib/auth/requireUser";
 import { logoutAction } from "@/app/logout/actions";
@@ -15,10 +16,12 @@ export default async function PrivateLayout({
   const systemSettings = await getSystemSettings();
 
   return (
-    <AppShell systemSettings={systemSettings} user={user} logoutAction={logoutAction}>
-      {children}
-      <NascMount />
+    <AppErrorCaptureProvider>
+      <AppShell systemSettings={systemSettings} user={user} logoutAction={logoutAction}>
+        {children}
+      </AppShell>
+      <SuporteFab user={user} />
       <MovimentoButton />
-    </AppShell>
+    </AppErrorCaptureProvider>
   );
 }

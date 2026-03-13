@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { sidebarConfig, type SidebarItem, type SidebarSection } from "@/config/sidebarConfig";
-import { CONTEXTOS_CONFIG } from "@/config/contextosConfig";
+import { CONTEXTOS_CONFIG, detectContextByPathname } from "@/config/contextosConfig";
 import { useBranding, type ContextKey } from "@/context/BrandingContext";
 import UserBadge from "./UserBadge";
 
@@ -12,10 +12,6 @@ type SidebarContext = keyof typeof sidebarConfig;
 type AnyContext = SidebarContext | ContextKey;
 
 type SidebarProps = {
-  /**
-   * Contexto atual do app.
-   * Se nao for informado, usar o contexto vindo do BrandingContext.
-   */
   context?: AnyContext;
 };
 
@@ -26,6 +22,7 @@ const sidebarContextMap: Record<AnyContext, SidebarContext> = {
   administracao: "admin",
   bolsas: "bolsas",
   financeiro: "financeiro",
+  suporte: "suporte",
   cafe: "cafe",
   admin: "admin",
 };
@@ -37,17 +34,22 @@ const brandingContextMap: Record<AnyContext, ContextKey> = {
   administracao: "administracao",
   bolsas: "bolsas",
   financeiro: "financeiro",
+  suporte: "suporte",
   cafe: "lanchonete",
   admin: "administracao",
 };
 
-const sidebarToContextKey: Record<SidebarContext, "ESCOLA" | "LOJA" | "CAFE" | "ADMIN" | "BOLSAS" | "FINANCEIRO"> = {
+const sidebarToContextKey: Record<
+  SidebarContext,
+  "ESCOLA" | "LOJA" | "CAFE" | "ADMIN" | "BOLSAS" | "FINANCEIRO" | "SUPORTE"
+> = {
   escola: "ESCOLA",
   loja: "LOJA",
   cafe: "CAFE",
   admin: "ADMIN",
   bolsas: "BOLSAS",
   financeiro: "FINANCEIRO",
+  suporte: "SUPORTE",
 };
 
 const contextLabels: Record<SidebarContext, string> = {
@@ -57,6 +59,7 @@ const contextLabels: Record<SidebarContext, string> = {
   admin: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.admin)?.label ?? "Administracao do Sistema",
   bolsas: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.bolsas)?.label ?? "Bolsas & Projetos Sociais",
   financeiro: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.financeiro)?.label ?? "Financeiro",
+  suporte: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.suporte)?.label ?? "Suporte ao Usuario",
 };
 
 function Section({ id, title, items, defaultOpen = true }: SidebarSection) {
@@ -86,20 +89,20 @@ function Section({ id, title, items, defaultOpen = true }: SidebarSection) {
         <span className="text-[9px]">{open ? "v" : ">"}</span>
       </button>
 
-      {open && (
+      {open ? (
         <ul className="space-y-1 pb-2 pl-2">
           {items.map((item, index) => (
             <SidebarLink key={`${id}-${item.href}-${index}`} item={item} />
           ))}
         </ul>
-      )}
+      ) : null}
     </div>
   );
 }
 
 function SidebarLink({ item }: { item: SidebarItem }) {
   const pathname = usePathname();
-  const isActive = pathname === item.href || (item.matchPrefix && pathname.startsWith(item.matchPrefix || ""));
+  const isActive = pathname === item.href || (item.matchPrefix ? pathname.startsWith(item.matchPrefix) : false);
   const icon = item.icon;
 
   const baseClasses = "flex items-center gap-2 rounded-full px-3 py-2 text-sm transition-colors";
@@ -109,7 +112,7 @@ function SidebarLink({ item }: { item: SidebarItem }) {
   return (
     <li>
       <Link href={item.href} className={[baseClasses, isActive ? activeClasses : inactiveClasses].join(" ")}>
-        {icon && <span className="text-lg leading-none">{icon}</span>}
+        {icon ? <span className="text-lg leading-none">{icon}</span> : null}
         <span className="truncate">{item.label}</span>
       </Link>
     </li>
@@ -118,8 +121,10 @@ function SidebarLink({ item }: { item: SidebarItem }) {
 
 export default function Sidebar({ context }: SidebarProps) {
   const { activeContext, configs } = useBranding();
+  const pathname = usePathname();
 
-  const rawContext: AnyContext = context ?? activeContext;
+  const routeContext = detectContextByPathname(pathname);
+  const rawContext: AnyContext = routeContext?.brandingKey ?? context ?? activeContext;
   const resolvedContext = sidebarContextMap[rawContext] ?? "escola";
   const sections = sidebarConfig[resolvedContext] ?? [];
 

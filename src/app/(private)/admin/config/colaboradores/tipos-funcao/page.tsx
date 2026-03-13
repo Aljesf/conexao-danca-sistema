@@ -1,3 +1,3 @@
-import PageReal from "@/app/(private)/admin/config/colaboradores/_components/TiposFuncaoPage";
+import PageReal from "../_components/TiposFuncaoPage";
 
 export default PageReal;

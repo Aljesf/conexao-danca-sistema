@@ -11,7 +11,7 @@ import UserBadge from "./UserBadge";
 type Props = {
   children: ReactNode;
   systemSettings?: SystemSettings | null;
-  user?: { id: string; email: string | null };
+  user?: { id: string; email: string | null; name?: string | null };
   logoutAction?: () => Promise<void>;
 };
 
@@ -128,9 +128,9 @@ export default function AppShell({ children, systemSettings, user, logoutAction 
     <div className="app-grid">
       <Sidebar />
       <main className="app-main">
-        <header className="app-header">
+        <header className="app-header" data-html2canvas-ignore="true">
           <div className="flex w-full items-center gap-4">
-            <div className="flex shrink-0 items-center">
+            <div className="flex shrink-0 items-center" data-html2canvas-ignore="true">
               <Link href="/" className="flex items-center">
                 <SystemLogoImage src={logoSrc} width={120} height={60} className="h-10 w-auto" />
               </Link>
@@ -258,11 +258,15 @@ export default function AppShell({ children, systemSettings, user, logoutAction 
             </form>
             <div className="flex shrink-0 items-center gap-3">
               <ContextSelector />
-              <UserBadge user={user} logoutAction={logoutAction} />
+              <div data-html2canvas-ignore="true">
+                <UserBadge user={user} logoutAction={logoutAction} />
+              </div>
             </div>
           </div>
         </header>
-        <div className="app-content">{children}</div>
+        <div className="app-content" data-app-capture-root="true" data-main-content="true">
+          {children}
+        </div>
       </main>
     </div>
   );

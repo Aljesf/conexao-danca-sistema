@@ -1,3 +1,3 @@
-import PageReal from "@/app/(private)/admin/config/colaboradores/_components/JornadasPage";
+import PageReal from "../_components/JornadasPage";
 
 export default PageReal;
