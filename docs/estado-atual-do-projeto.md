@@ -45,3 +45,12 @@ Conectarte v0.9 - Ballet Café com revisão visual final em andamento e base Saa
 - Evoluir o PDV do Café para um fluxo ainda mais rápido e operacional.
 - Fazer a limpeza final de microtextos e encoding remanescentes na frente de caixa.
 - Seguir com a próxima frente de maturidade operacional do módulo após validação manual.
+
+## 9. App Professor / Mobile
+- App Professor:
+  - Estrutura Expo/EAS ajustada dentro de `apps/professor-app`.
+  - Workspace pnpm corrigido para incluir `apps/*`.
+  - Dependencias Expo normalizadas no app.
+  - Diagnostico do EAS Prebuild focado em resolucao local do pacote `expo`.
+  - Proxima validacao: build Android preview via EAS apos `expo prebuild --no-install` passar localmente.
+  - Status atual: build Android preview via EAS concluido com sucesso.
