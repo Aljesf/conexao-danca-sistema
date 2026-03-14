@@ -27,8 +27,11 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-secure-store"
-    ]
+    "extra": {
+      "eas": {
+        "projectId": "2460206b-637f-4377-b6c9-1146feb4b8ce"
+      }
+    },
+    "owner": "aljesf"
   }
 }
