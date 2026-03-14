@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "007b830b-8eb4-43a8-93b3-18dce849223c"
+      }
+    },
+    "android": {
+      "package": "br.com.conexaodanca.professorapp"
+    }
+  }
+}
