@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import CafePanel from "@/components/cafe/CafePanel";
 
 type CafeToolbarProps = {
   title?: string;
@@ -12,12 +13,14 @@ export default function CafeToolbar({
   children,
 }: CafeToolbarProps) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="space-y-1">
-        {title ? <p className="text-sm font-semibold text-slate-900">{title}</p> : null}
-        {description ? <p className="text-sm text-slate-600">{description}</p> : null}
+    <CafePanel className="px-4 py-3.5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          {title ? <p className="text-sm font-semibold text-slate-950">{title}</p> : null}
+          {description ? <p className="text-sm leading-6 text-slate-600">{description}</p> : null}
+        </div>
+        {children ? <div className="flex flex-wrap items-center gap-2">{children}</div> : null}
       </div>
-      {children ? <div className="flex flex-wrap items-center gap-2">{children}</div> : null}
-    </div>
+    </CafePanel>
   );
 }

@@ -1,8 +1,9 @@
+import CafeCard from "@/components/cafe/CafeCard";
 import CafePageShell from "@/components/cafe/CafePageShell";
+import CafePanel from "@/components/cafe/CafePanel";
 import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
 import CafeShortcutCard from "@/components/cafe/CafeShortcutCard";
 import CafeStatCard from "@/components/cafe/CafeStatCard";
-import SectionCard from "@/components/layout/SectionCard";
 
 const gestaoLinks = [
   {
@@ -58,7 +59,7 @@ export default function CafeAdminHomePage() {
         </>
       }
     >
-      <SectionCard
+      <CafeCard
         title="Hub administrativo do módulo"
         description="Escolha a área de gestão que precisa ajustar. O módulo foi reorganizado para concentrar o trabalho operacional e comercial dentro do próprio contexto Café."
       >
@@ -76,25 +77,36 @@ export default function CafeAdminHomePage() {
             />
           ))}
         </div>
-      </SectionCard>
+      </CafeCard>
 
-      <SectionCard
+      <CafeCard
         title="Configuração institucional do café"
         description="Branding, vínculo institucional e definições globais do contexto permanecem na Administração do Sistema."
       >
-        <CafeSectionIntro
-          title="Administração institucional"
-          description="Use a configuração institucional apenas para identidade, vínculos e parâmetros globais do Ballet Café."
-          actions={
-            <a
-              href="/admin/config/cafe"
-              className="inline-flex items-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Abrir configuração institucional
-            </a>
-          }
-        />
-      </SectionCard>
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <CafeSectionIntro
+            title="Administração institucional"
+            description="Use a configuração institucional apenas para identidade, vínculos e parâmetros globais do Ballet Café."
+            actions={
+              <a
+                href="/admin/config/cafe"
+                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                Abrir configuração institucional
+              </a>
+            }
+          />
+          <CafePanel>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Escopo institucional
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Esse espaço não mistura produtos, insumos, tabelas de preço ou compras. Ele existe
+              apenas para a configuração global do contexto.
+            </p>
+          </CafePanel>
+        </div>
+      </CafeCard>
     </CafePageShell>
   );
 }

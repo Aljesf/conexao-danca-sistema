@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import CafeCard from "@/components/cafe/CafeCard";
 import CafePageShell from "@/components/cafe/CafePageShell";
 import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
 import CafeStatCard from "@/components/cafe/CafeStatCard";
 import CafeToolbar from "@/components/cafe/CafeToolbar";
-import SectionCard from "@/components/layout/SectionCard";
 
 type Insumo = {
   id: number;
@@ -25,6 +25,12 @@ type Movimento = {
   created_at: string;
   observacoes: string | null;
 };
+
+const fieldClassName =
+  "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm shadow-slate-200/60 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-4 focus:ring-amber-100/70";
+const primaryButtonClassName =
+  "inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60";
+const tableWrapClassName = "overflow-hidden rounded-[20px] border border-slate-200/80";
 
 function formatBRLFromCentavos(value: number): string {
   const val = (value || 0) / 100;
@@ -168,7 +174,7 @@ export default function CafeInsumosPage() {
     >
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
-      <SectionCard
+      <CafeCard
         title="Cadastro e visão operacional"
         description="Mantenha o cadastro dos insumos enxuto e use o painel lateral para acompanhar o abastecimento manual."
       >
@@ -179,25 +185,25 @@ export default function CafeInsumosPage() {
           {loading ? <span className="text-xs text-slate-500">Atualizando dados...</span> : null}
         </CafeToolbar>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[0.95fr_1.25fr]">
-          <SectionCard
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.25fr]">
+          <CafeCard
             title="Novo insumo"
             description="Cadastre somente o necessário para liberar o uso do insumo no módulo."
           >
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="text-sm font-medium">Nome</label>
+                <label className="text-sm font-medium text-slate-700">Nome</label>
                 <input
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={novoNome}
                   onChange={(e) => setNovoNome(e.target.value)}
                   placeholder="Ex.: Leite integral"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Unidade base</label>
+                <label className="text-sm font-medium text-slate-700">Unidade base</label>
                 <select
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={unidadeBase}
                   onChange={(e) => setUnidadeBase(e.target.value as "g" | "ml" | "un")}
                 >
@@ -207,7 +213,7 @@ export default function CafeInsumosPage() {
                 </select>
               </div>
               <div className="flex items-end">
-                <label className="flex items-center gap-2 text-sm">
+                <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-700">
                   <input
                     type="checkbox"
                     checked={controlaValidade}
@@ -217,60 +223,57 @@ export default function CafeInsumosPage() {
                 </label>
               </div>
             </div>
-            <div className="mt-4">
-              <button
-                className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
-                onClick={() => void criarInsumo()}
-              >
+            <div>
+              <button className={primaryButtonClassName} onClick={() => void criarInsumo()}>
                 Criar insumo
               </button>
             </div>
-          </SectionCard>
+          </CafeCard>
 
-          <SectionCard
+          <CafeCard
             title="Lista de insumos"
             description="Clique em um item para abrir o abastecimento manual e o histórico operacional."
           >
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-2 py-2 text-left">Nome</th>
-                    <th className="px-2 py-2 text-left">Unidade</th>
-                    <th className="px-2 py-2 text-right">Saldo</th>
-                    <th className="px-2 py-2 text-right">Custo estimado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {insumos.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={
-                        "cursor-pointer border-t hover:bg-slate-50 " +
-                        (selectedInsumoId === item.id ? "bg-slate-50" : "")
-                      }
-                      onClick={() => setSelectedInsumoId(item.id)}
-                    >
-                      <td className="px-2 py-2">{item.nome}</td>
-                      <td className="px-2 py-2">{item.unidade_base}</td>
-                      <td className="px-2 py-2 text-right">
-                        {Number(item.saldo_atual || 0).toLocaleString("pt-BR")}
-                      </td>
-                      <td className="px-2 py-2 text-right">
-                        {formatBRLFromCentavos(item.custo_unitario_estimado_centavos)}
-                      </td>
+            <div className={tableWrapClassName}>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Nome</th>
+                      <th className="px-4 py-3 text-left">Unidade</th>
+                      <th className="px-4 py-3 text-right">Saldo</th>
+                      <th className="px-4 py-3 text-right">Custo estimado</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {loading ? <p className="mt-3 text-sm text-slate-600">Carregando...</p> : null}
+                  </thead>
+                  <tbody>
+                    {insumos.map((item) => (
+                      <tr
+                        key={item.id}
+                        className={[
+                          "cursor-pointer border-t border-slate-100 transition hover:bg-slate-50/80",
+                          selectedInsumoId === item.id ? "bg-amber-50/60" : "bg-white",
+                        ].join(" ")}
+                        onClick={() => setSelectedInsumoId(item.id)}
+                      >
+                        <td className="px-4 py-3">{item.nome}</td>
+                        <td className="px-4 py-3">{item.unidade_base}</td>
+                        <td className="px-4 py-3 text-right">{Number(item.saldo_atual || 0).toLocaleString("pt-BR")}</td>
+                        <td className="px-4 py-3 text-right">
+                          {formatBRLFromCentavos(item.custo_unitario_estimado_centavos)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </SectionCard>
+            {loading ? <p className="text-sm text-slate-600">Carregando...</p> : null}
+          </CafeCard>
         </div>
-      </SectionCard>
+      </CafeCard>
 
       {selectedInsumo ? (
-        <SectionCard
+        <CafeCard
           title={`Abastecimento manual - ${selectedInsumo.nome}`}
           description="Registre entradas, saídas ou ajustes sem sair da gestão do café."
         >
@@ -278,16 +281,16 @@ export default function CafeInsumosPage() {
             title="Movimento operacional"
             description="O histórico abaixo ajuda a validar saldo, validade e observações recentes."
           />
-          <div className="mt-5 grid gap-6 xl:grid-cols-[0.95fr_1.25fr]">
-            <SectionCard
+          <div className="grid gap-6 xl:grid-cols-[0.95fr_1.25fr]">
+            <CafeCard
               title="Novo movimento"
               description="Informe o tipo do movimento, quantidade e observações operacionais."
             >
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium">Tipo</label>
+                  <label className="text-sm font-medium text-slate-700">Tipo</label>
                   <select
-                    className="mt-1 w-full rounded-md border p-2"
+                    className={fieldClassName}
                     value={movTipo}
                     onChange={(e) => setMovTipo(e.target.value as "ENTRADA" | "SAIDA" | "AJUSTE")}
                   >
@@ -297,83 +300,82 @@ export default function CafeInsumosPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Quantidade</label>
+                  <label className="text-sm font-medium text-slate-700">Quantidade</label>
                   <input
-                    className="mt-1 w-full rounded-md border p-2"
+                    className={fieldClassName}
                     value={movQtd}
                     onChange={(e) => setMovQtd(e.target.value)}
                     placeholder="Ex.: 1,5"
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Validade</label>
+                  <label className="text-sm font-medium text-slate-700">Validade</label>
                   <input
-                    className="mt-1 w-full rounded-md border p-2"
+                    className={fieldClassName}
                     value={movValidade}
                     onChange={(e) => setMovValidade(e.target.value)}
                     placeholder="YYYY-MM-DD"
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Observações</label>
+                  <label className="text-sm font-medium text-slate-700">Observações</label>
                   <input
-                    className="mt-1 w-full rounded-md border p-2"
+                    className={fieldClassName}
                     value={movObs}
                     onChange={(e) => setMovObs(e.target.value)}
                     placeholder="Motivo, lote ou contexto do ajuste"
                   />
                 </div>
               </div>
-              <div className="mt-4">
-                <button
-                  className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
-                  onClick={() => void registrarMovimento()}
-                >
+              <div>
+                <button className={primaryButtonClassName} onClick={() => void registrarMovimento()}>
                   Registrar movimento
                 </button>
               </div>
-            </SectionCard>
+            </CafeCard>
 
-            <SectionCard
+            <CafeCard
               title="Histórico recente"
               description="Últimos movimentos registrados para o insumo selecionado."
             >
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="text-xs uppercase text-slate-500">
-                    <tr>
-                      <th className="px-2 py-2 text-left">Data</th>
-                      <th className="px-2 py-2 text-left">Tipo</th>
-                      <th className="px-2 py-2 text-right">Quantidade</th>
-                      <th className="px-2 py-2 text-left">Validade</th>
-                      <th className="px-2 py-2 text-left">Observações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {movs.map((mov) => (
-                      <tr key={mov.id} className="border-t">
-                        <td className="px-2 py-2">{mov.created_at}</td>
-                        <td className="px-2 py-2">{mov.tipo}</td>
-                        <td className="px-2 py-2 text-right">
-                          {Number(mov.quantidade).toLocaleString("pt-BR")}
-                        </td>
-                        <td className="px-2 py-2">{mov.validade ?? "-"}</td>
-                        <td className="px-2 py-2">{mov.observacoes ?? "-"}</td>
+              <div className={tableWrapClassName}>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Data</th>
+                        <th className="px-4 py-3 text-left">Tipo</th>
+                        <th className="px-4 py-3 text-right">Quantidade</th>
+                        <th className="px-4 py-3 text-left">Validade</th>
+                        <th className="px-4 py-3 text-left">Observações</th>
                       </tr>
-                    ))}
-                    {movs.length === 0 ? (
-                      <tr className="border-t">
-                        <td className="px-2 py-3 text-slate-500" colSpan={5}>
-                          Nenhum movimento registrado para este insumo.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {movs.map((mov) => (
+                        <tr key={mov.id} className="border-t border-slate-100">
+                          <td className="px-4 py-3">{mov.created_at}</td>
+                          <td className="px-4 py-3">{mov.tipo}</td>
+                          <td className="px-4 py-3 text-right">
+                            {Number(mov.quantidade).toLocaleString("pt-BR")}
+                          </td>
+                          <td className="px-4 py-3">{mov.validade ?? "-"}</td>
+                          <td className="px-4 py-3">{mov.observacoes ?? "-"}</td>
+                        </tr>
+                      ))}
+                      {movs.length === 0 ? (
+                        <tr className="border-t border-slate-100">
+                          <td className="px-4 py-4 text-slate-500" colSpan={5}>
+                            Nenhum movimento registrado para este insumo.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </SectionCard>
+            </CafeCard>
           </div>
-        </SectionCard>
+        </CafeCard>
       ) : null}
     </CafePageShell>
   );

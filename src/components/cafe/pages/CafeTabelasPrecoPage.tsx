@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import CafeCard from "@/components/cafe/CafeCard";
 import CafePageShell from "@/components/cafe/CafePageShell";
 import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
 import CafeStatCard from "@/components/cafe/CafeStatCard";
 import CafeToolbar from "@/components/cafe/CafeToolbar";
-import SectionCard from "@/components/layout/SectionCard";
 
 type TabelaPreco = {
   id: number;
@@ -16,6 +16,11 @@ type TabelaPreco = {
   is_default: boolean;
   ordem: number;
 };
+
+const fieldClassName =
+  "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm shadow-slate-200/60 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-4 focus:ring-amber-100/70";
+const primaryButtonClassName =
+  "inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60";
 
 export default function CafeTabelasPrecoPage() {
   const [data, setData] = useState<TabelaPreco[]>([]);
@@ -88,7 +93,7 @@ export default function CafeTabelasPrecoPage() {
         </>
       }
     >
-      <SectionCard
+      <CafeCard
         title="Política comercial do módulo"
         description="Defina a tabela principal e mantenha tabelas auxiliares prontas para o PDV e para o catálogo do Ballet Café."
       >
@@ -97,34 +102,34 @@ export default function CafeTabelasPrecoPage() {
           description="Use códigos claros e mantenha uma tabela principal ativa para evitar divergência no caixa."
         />
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[0.95fr_1.25fr]">
-          <SectionCard
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.25fr]">
+          <CafeCard
             title="Nova tabela de preço"
             description="Cadastre estruturas comerciais por perfil sem alterar a operação do dia."
           >
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-sm font-medium">Código</label>
+                <label className="text-sm font-medium text-slate-700">Código</label>
                 <input
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={codigo}
                   onChange={(e) => setCodigo(e.target.value)}
                   placeholder="Ex.: ALUNO"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Nome</label>
+                <label className="text-sm font-medium text-slate-700">Nome</label>
                 <input
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   placeholder="Ex.: Tabela Aluno"
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-sm font-medium">Descrição</label>
+                <label className="text-sm font-medium text-slate-700">Descrição</label>
                 <input
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
                   placeholder="Uso comercial, perfil atendido ou contexto da tabela"
@@ -132,7 +137,7 @@ export default function CafeTabelasPrecoPage() {
               </div>
             </div>
 
-            <label className="mt-4 flex items-center gap-2 text-sm">
+            <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-700">
               <input
                 type="checkbox"
                 checked={isDefault}
@@ -141,17 +146,14 @@ export default function CafeTabelasPrecoPage() {
               Marcar como tabela principal
             </label>
 
-            <div className="mt-4">
-              <button
-                className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
-                onClick={() => void criar()}
-              >
+            <div>
+              <button className={primaryButtonClassName} onClick={() => void criar()}>
                 Criar tabela
               </button>
             </div>
-          </SectionCard>
+          </CafeCard>
 
-          <SectionCard
+          <CafeCard
             title="Tabelas cadastradas"
             description="Acompanhe a tabela principal e mantenha os cadastros ativos para uso no PDV e nos produtos."
           >
@@ -159,47 +161,49 @@ export default function CafeTabelasPrecoPage() {
               title="Leitura rápida"
               description="A tabela principal governa o comportamento comercial padrão. As demais apoiam cenários específicos."
             />
-            <div className="mt-5 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-2 py-2 text-left">Código</th>
-                    <th className="px-2 py-2 text-left">Nome</th>
-                    <th className="px-2 py-2 text-left">Principal</th>
-                    <th className="px-2 py-2 text-left">Ativa</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.map((item) => (
-                    <tr key={item.id} className="border-t">
-                      <td className="px-2 py-2">{item.codigo}</td>
-                      <td className="px-2 py-2">
-                        <div className="font-medium text-slate-900">{item.nome}</div>
-                        {item.descricao ? (
-                          <div className="text-xs text-slate-500">{item.descricao}</div>
-                        ) : null}
-                      </td>
-                      <td className="px-2 py-2">{item.is_default ? "Sim" : "Não"}</td>
-                      <td className="px-2 py-2">{item.ativo ? "Sim" : "Não"}</td>
+            <div className="overflow-hidden rounded-[20px] border border-slate-200/80">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Código</th>
+                      <th className="px-4 py-3 text-left">Nome</th>
+                      <th className="px-4 py-3 text-left">Principal</th>
+                      <th className="px-4 py-3 text-left">Ativa</th>
                     </tr>
-                  ))}
-                  {data.length === 0 ? (
-                    <tr className="border-t">
-                      <td className="px-2 py-3 text-slate-500" colSpan={4}>
-                        Nenhuma tabela cadastrada.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {data.map((item) => (
+                      <tr key={item.id} className="border-t border-slate-100">
+                        <td className="px-4 py-3">{item.codigo}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">{item.nome}</div>
+                          {item.descricao ? (
+                            <div className="text-xs text-slate-500">{item.descricao}</div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3">{item.is_default ? "Sim" : "Não"}</td>
+                        <td className="px-4 py-3">{item.ativo ? "Sim" : "Não"}</td>
+                      </tr>
+                    ))}
+                    {data.length === 0 ? (
+                      <tr className="border-t border-slate-100">
+                        <td className="px-4 py-4 text-slate-500" colSpan={4}>
+                          Nenhuma tabela cadastrada.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <p className="mt-4 text-xs text-slate-500">
+            <p className="text-xs leading-5 text-slate-500">
               A edição avançada de status e ordenação pode evoluir depois; nesta etapa o foco é
               manter a política comercial organizada e fácil de operar.
             </p>
-          </SectionCard>
+          </CafeCard>
         </div>
-      </SectionCard>
+      </CafeCard>
     </CafePageShell>
   );
 }

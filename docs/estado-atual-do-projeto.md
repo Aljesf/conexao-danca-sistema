@@ -1,50 +1,47 @@
 ## 1. Módulo atual
-Ballet Café - reorganização de produtos e classificação comercial
+Ballet Café - revisão final de layout e consistência visual
 
 ## 2. SQL concluído
-- Migration de dados criada para reorganizar os 31 produtos atuais do Ballet Café.
-- Padronização das categorias canônicas: `BEBIDAS`, `SALGADOS`, `DOCES` e `OUTROS`.
-- Padronização das subcategorias canônicas do catálogo.
-- Correção relacional de `categoria_id` e `subcategoria_id` em `cafe_produtos`.
-- Padronização de nomenclatura dos produtos sem alterar preços atuais.
-- Ajuste do campo `preparado` conforme o comportamento real de cada item.
-- Compatibilidade temporária preservada no campo textual legado `categoria`.
-- Nenhuma alteração de schema nesta etapa, apenas reorganização de dados.
+- Nenhuma alteração SQL nesta etapa.
+- Nenhuma migration criada nesta etapa.
+- Estrutura de dados do módulo Café preservada.
 
 ## 3. APIs concluídas
 - Nenhuma alteração de API nesta etapa.
-- A tela de produtos continuou usando as rotas já existentes do módulo Café.
-- A carga atual já atende categoria e subcategoria relacionais sem criação de endpoint novo.
+- As rotas existentes do módulo Café foram mantidas sem mudança de contrato.
 
 ## 4. Páginas/componentes concluídos
-- Tela `/cafe/admin/produtos` ajustada para ler e priorizar categoria e subcategoria relacionais.
-- Ordenação visual da listagem por categoria, subcategoria e nome.
-- Inclusão de busca simples por nome, categoria ou subcategoria na listagem.
-- Correção de microtextos, cabeçalhos e problemas de encoding na página de produtos.
-- Melhoria da leitura da tabela com colunas:
-  - Nome
-  - Categoria
-  - Subcategoria
-  - Preço fallback
-  - Preparado
-- Cards superiores atualizados para refletir:
-  - total de produtos
-  - categorias em uso
-  - preparados x simples
+- Revisão final de layout do módulo Ballet Café com foco em aparência SaaS mais madura.
+- Padronização visual de cards, formulários, painéis e tabelas do módulo Café.
+- Criação/refatoração de componentes visuais compartilhados:
+  - `CafeCard`
+  - `CafeMetricCard`
+  - `CafePanel`
+  - `CafePageShell`
+  - `CafeSectionIntro`
+  - `CafeToolbar`
+  - `CafeShortcutCard`
+- Home `/cafe` refinada com cards mais elegantes, melhor hierarquia visual e melhor separação entre operação e gestão.
+- Home `/cafe/admin` refinada como hub administrativo do módulo, com visual mais executivo e menos aparência de placeholder.
+- Página `/cafe/admin/produtos` refinada com cards mais suaves, tabela mais legível e formulários com melhor densidade visual.
+- Página `/cafe/admin/insumos` reestruturada visualmente com melhor leitura de cadastro, abastecimento e histórico.
+- Página `/cafe/admin/tabelas-preco` refinada com melhor apresentação da política comercial do módulo.
+- Página `/cafe/admin/compras` refinada com melhor agrupamento do formulário, resumo de compra e tabela de histórico.
+- Página `/cafe/vendas` ajustada visualmente nos blocos centrais da frente de caixa para reduzir aparência crua e melhorar leitura operacional.
 
 ## 5. Pendências
-- Reorganizar também o domínio de insumos do Ballet Café com a mesma disciplina relacional.
-- Evoluir o PDV do Café para um fluxo operacional mais rápido e mais enxuto.
-- Revisar a gestão de categorias/subcategorias para adicionar manutenção administrativa mais completa dentro do contexto do Café.
-- Validar visualmente em produção a navegação e a leitura da tabela de produtos após deploy.
+- Finalizar uma rodada adicional de acabamento visual fino na frente de caixa `/cafe/vendas`, principalmente em microtextos antigos e alguns blocos internos ainda legados.
+- Substituir os últimos textos corrompidos remanescentes do PDV que vieram de arquivos antigos.
+- Validar manualmente o fluxo do Café em produção após deploy para ajuste fino de densidade, responsividade e ritmo operacional.
 
 ## 6. Bloqueios
-- Nenhum bloqueio funcional do escopo Café.
-- O `lint` do repositório ainda possui falhas legadas fora do escopo deste módulo.
+- Nenhum bloqueio funcional do módulo Café.
+- O `lint` do repositório ainda falha por legado fora do escopo Café.
 
 ## 7. Versão do sistema
-Conectarte v0.9 - Ballet Café com catálogo de produtos reorganizado
+Conectarte v0.9 - Ballet Café com revisão visual final em andamento e base SaaS consolidada
 
 ## 8. Próximas ações
-- Reorganizar insumos do Café com o mesmo padrão de categorias e consistência operacional.
-- Depois disso, evoluir o PDV dedicado do Café com foco em velocidade de operação.
+- Evoluir o PDV do Café para um fluxo ainda mais rápido e operacional.
+- Fazer a limpeza final de microtextos e encoding remanescentes na frente de caixa.
+- Seguir com a próxima frente de maturidade operacional do módulo após validação manual.

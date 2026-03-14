@@ -1,8 +1,9 @@
+import CafeCard from "@/components/cafe/CafeCard";
 import CafePageShell from "@/components/cafe/CafePageShell";
+import CafePanel from "@/components/cafe/CafePanel";
 import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
 import CafeShortcutCard from "@/components/cafe/CafeShortcutCard";
 import CafeStatCard from "@/components/cafe/CafeStatCard";
-import SectionCard from "@/components/layout/SectionCard";
 
 const operacaoLinks = [
   {
@@ -47,7 +48,7 @@ export default function CafeHomePage() {
     <CafePageShell
       eyebrow="Contexto SaaS"
       title="Ballet Café"
-      description="Operação e gestão do Ballet Café organizadas no próprio contexto, com navegação rápida para caixa, catálogo, insumos e abastecimento."
+      description="Operação e gestão do Ballet Café em um contexto dedicado, com navegação rápida para caixa, catálogo, preços, insumos e abastecimento."
       summary={
         <>
           <CafeStatCard
@@ -58,7 +59,7 @@ export default function CafeHomePage() {
           <CafeStatCard
             label="Gestão comercial"
             value="Catálogo e preços"
-            description="Produtos, tabelas de preço e organização comercial ficam dentro do módulo Café."
+            description="Produtos, preços e receitas ficam organizados dentro do próprio módulo."
           />
           <CafeStatCard
             label="Abastecimento"
@@ -68,13 +69,13 @@ export default function CafeHomePage() {
         </>
       }
     >
-      <SectionCard
+      <CafeCard
         title="Operação"
-        description="A operação do café precisa de acesso rápido. O Caixa / Vendas continua como o ponto principal do contexto."
+        description="A operação do café precisa de acesso rápido. Caixa / Vendas continua como o principal ponto de entrada do contexto."
       >
         <CafeSectionIntro
           title="Fluxo principal do dia"
-          description="Use o caixa para registrar vendas, selecionar comprador, aplicar a forma de pagamento e concluir a operação."
+          description="Use o caixa para registrar vendas, selecionar comprador, definir a forma de pagamento e concluir a operação com rapidez."
         />
         <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
           {operacaoLinks.map((item) => (
@@ -88,22 +89,27 @@ export default function CafeHomePage() {
               footer="Acesso principal do módulo para registrar vendas no dia."
             />
           ))}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-              Navegação do contexto
+          <CafePanel className="flex h-full flex-col justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Navegação do contexto
+              </p>
+              <h3 className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
+                Gestão e abastecimento sem sair do Café
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                O contexto já separa a operação do dia da gestão comercial e do abastecimento, sem
+                misturar essas tarefas com a administração global do sistema.
+              </p>
+            </div>
+            <p className="mt-5 text-xs leading-5 text-slate-500">
+              O mesmo padrão visual e de navegação se repete em todas as páginas do módulo.
             </p>
-            <h3 className="mt-2 text-base font-semibold text-slate-900">
-              Gestão e abastecimento sem sair do Café
-            </h3>
-            <p className="mt-2 text-sm text-slate-600">
-              O contexto já separa a operação do dia da gestão comercial e do abastecimento, sem
-              misturar essas tarefas com a administração global do sistema.
-            </p>
-          </div>
+          </CafePanel>
         </div>
-      </SectionCard>
+      </CafeCard>
 
-      <SectionCard
+      <CafeCard
         title="Gestão do Café"
         description="Cadastros, tabelas comerciais e abastecimento ficam dentro do próprio contexto Café."
       >
@@ -122,7 +128,7 @@ export default function CafeHomePage() {
             />
           ))}
         </div>
-      </SectionCard>
+      </CafeCard>
     </CafePageShell>
   );
 }

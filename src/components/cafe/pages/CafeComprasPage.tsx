@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import CafeCard from "@/components/cafe/CafeCard";
 import CafePageShell from "@/components/cafe/CafePageShell";
+import CafePanel from "@/components/cafe/CafePanel";
 import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
 import CafeStatCard from "@/components/cafe/CafeStatCard";
 import CafeToolbar from "@/components/cafe/CafeToolbar";
-import SectionCard from "@/components/layout/SectionCard";
 
 type Insumo = { id: number; nome: string; unidade_base: string };
 type ContaFin = { id: number; codigo: string; nome: string; tipo: string };
@@ -24,6 +25,11 @@ type Item = {
   valor_total_brl: string;
   validade: string;
 };
+
+const fieldClassName =
+  "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm shadow-slate-200/60 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-4 focus:ring-amber-100/70";
+const primaryButtonClassName =
+  "inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60";
 
 function parseBRLToCentavos(input: string): number {
   const clean = input.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
@@ -229,7 +235,7 @@ export default function AdminCafeComprasPage() {
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {message ? <div className="text-sm text-emerald-700">{message}</div> : null}
 
-      <SectionCard
+      <CafeCard
         title="Abastecimento do café"
         description="Consolide a compra com conta financeira, categoria e itens que entram no estoque."
       >
@@ -240,24 +246,20 @@ export default function AdminCafeComprasPage() {
           {loading ? <span className="text-xs text-slate-500">Atualizando dados...</span> : null}
         </CafeToolbar>
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <SectionCard
+        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <CafeCard
             title="Nova compra"
             description="Preencha o contexto da compra e depois detalhe os itens do abastecimento."
           >
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="text-sm font-medium">Data</label>
-                <input
-                  className="mt-1 w-full rounded-md border p-2"
-                  value={dataCompra}
-                  onChange={(e) => setDataCompra(e.target.value)}
-                />
+                <label className="text-sm font-medium text-slate-700">Data</label>
+                <input className={fieldClassName} value={dataCompra} onChange={(e) => setDataCompra(e.target.value)} />
               </div>
               <div>
-                <label className="text-sm font-medium">Conta do café</label>
+                <label className="text-sm font-medium text-slate-700">Conta do café</label>
                 <select
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={contaId}
                   onChange={(e) => setContaId(e.target.value ? Number(e.target.value) : "")}
                 >
@@ -270,18 +272,18 @@ export default function AdminCafeComprasPage() {
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="text-sm font-medium">Onde comprei</label>
+                <label className="text-sm font-medium text-slate-700">Onde comprei</label>
                 <input
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={ondeComprei}
                   onChange={(e) => setOndeComprei(e.target.value)}
-                  placeholder="Ex.: Padaria X, feira ou mercado"
+                  placeholder="Ex.: padaria, feira ou mercado"
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-sm font-medium">Categoria de despesa</label>
+                <label className="text-sm font-medium text-slate-700">Categoria de despesa</label>
                 <select
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={categoriaId}
                   onChange={(e) => setCategoriaId(e.target.value ? Number(e.target.value) : "")}
                 >
@@ -294,51 +296,50 @@ export default function AdminCafeComprasPage() {
                 </select>
               </div>
             </div>
-          </SectionCard>
+          </CafeCard>
 
-          <SectionCard
+          <CafeCard
             title="Resumo da compra"
             description="Use este bloco para validar quantidade de itens, total e efeito operacional antes de salvar."
           >
-            <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <CafePanel className="space-y-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Itens na compra
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-slate-900">{itens.length}</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-950">{itens.length}</p>
               </div>
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                   Total previsto
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-slate-900">
+                <p className="mt-1 text-2xl font-semibold text-slate-950">
                   {formatBRLFromCentavos(totalCentavos)}
                 </p>
               </div>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm leading-6 text-slate-600">
                 O lançamento abastece o estoque e preserva o histórico recente de compras do café.
               </p>
-            </div>
-          </SectionCard>
+            </CafePanel>
+          </CafeCard>
         </div>
 
-        <SectionCard
+        <CafeCard
           title="Itens da compra"
           description="Cada item define o insumo comprado, a quantidade, o valor total e a validade, quando houver."
-          className="mt-6"
         >
           <CafeSectionIntro
             title="Bloco de abastecimento"
             description="Adicione quantos insumos forem necessários e revise o custo unitário calculado antes de salvar."
           />
-          <div className="mt-5 space-y-3">
+          <div className="space-y-3">
             {itens.map((item, idx) => (
-              <div key={idx} className="rounded-2xl border border-slate-200 p-4">
-                <div className="grid gap-3 md:grid-cols-5">
+              <CafePanel key={idx}>
+                <div className="grid gap-4 md:grid-cols-5">
                   <div className="md:col-span-2">
-                    <label className="text-sm font-medium">Insumo</label>
+                    <label className="text-sm font-medium text-slate-700">Insumo</label>
                     <select
-                      className="mt-1 w-full rounded-md border p-2"
+                      className={fieldClassName}
                       value={item.insumo_id ?? ""}
                       onChange={(e) =>
                         updateItem(idx, { insumo_id: e.target.value ? Number(e.target.value) : null })
@@ -353,18 +354,18 @@ export default function AdminCafeComprasPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Quantidade</label>
+                    <label className="text-sm font-medium text-slate-700">Quantidade</label>
                     <input
-                      className="mt-1 w-full rounded-md border p-2"
+                      className={fieldClassName}
                       value={item.quantidade}
                       onChange={(e) => updateItem(idx, { quantidade: e.target.value })}
                       placeholder="Ex.: 10"
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Valor total</label>
+                    <label className="text-sm font-medium text-slate-700">Valor total</label>
                     <input
-                      className="mt-1 w-full rounded-md border p-2"
+                      className={fieldClassName}
                       value={item.valor_total_brl}
                       onChange={(e) => updateItem(idx, { valor_total_brl: e.target.value })}
                       placeholder="Ex.: 13,00"
@@ -372,9 +373,9 @@ export default function AdminCafeComprasPage() {
                     <div className="mt-1 text-xs text-slate-500">{calcUnitPreview(idx)}</div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Validade</label>
+                    <label className="text-sm font-medium text-slate-700">Validade</label>
                     <input
-                      className="mt-1 w-full rounded-md border p-2"
+                      className={fieldClassName}
                       value={item.validade}
                       onChange={(e) => updateItem(idx, { validade: e.target.value })}
                       placeholder="YYYY-MM-DD"
@@ -382,84 +383,80 @@ export default function AdminCafeComprasPage() {
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between gap-3">
+                <div className="mt-4 flex items-center justify-between gap-3">
                   <button
-                    className="text-sm text-slate-600 hover:underline disabled:text-slate-300"
+                    className="text-sm text-slate-600 transition hover:underline disabled:text-slate-300"
                     onClick={() => removeItem(idx)}
                     disabled={itens.length <= 1}
                   >
                     Remover item
                   </button>
-                  <button className="text-sm text-violet-700 hover:underline" onClick={addItem}>
+                  <button className="text-sm font-medium text-[#8c6640] transition hover:underline" onClick={addItem}>
                     + Adicionar insumo
                   </button>
                 </div>
-              </div>
+              </CafePanel>
             ))}
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-slate-700">
               Total: <span className="font-semibold">{formatBRLFromCentavos(totalCentavos)}</span>
             </div>
-            <button
-              className="rounded-md bg-violet-600 px-4 py-2 text-white hover:bg-violet-700"
-              onClick={() => void registrarCompra()}
-              disabled={loading}
-            >
+            <button className={primaryButtonClassName} onClick={() => void registrarCompra()} disabled={loading}>
               Registrar compra
             </button>
           </div>
-        </SectionCard>
-      </SectionCard>
+        </CafeCard>
+      </CafeCard>
 
-      <SectionCard
+      <CafeCard
         title="Compras recentes"
         description="Consulte o histórico operacional e cancele compras quando for necessário reverter o estoque."
       >
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-2 py-2 text-left">Data</th>
-                <th className="px-2 py-2 text-left">Onde</th>
-                <th className="px-2 py-2 text-right">Total</th>
-                <th className="px-2 py-2 text-left">Status</th>
-                <th className="px-2 py-2 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {compras.map((compra) => (
-                <tr key={compra.id} className="border-t">
-                  <td className="px-2 py-2">{compra.data_compra}</td>
-                  <td className="px-2 py-2">{compra.onde_comprei}</td>
-                  <td className="px-2 py-2 text-right">
-                    {formatBRLFromCentavos(compra.valor_total_centavos)}
-                  </td>
-                  <td className="px-2 py-2">{compra.status ?? "ATIVA"}</td>
-                  <td className="px-2 py-2 text-right">
-                    <button
-                      className="text-sm text-red-600 hover:underline disabled:text-slate-400"
-                      onClick={() => void cancelarCompra(compra.id)}
-                      disabled={compra.status === "CANCELADA"}
-                    >
-                      Cancelar
-                    </button>
-                  </td>
+        <div className="overflow-hidden rounded-[20px] border border-slate-200/80">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 text-left">Data</th>
+                  <th className="px-4 py-3 text-left">Onde</th>
+                  <th className="px-4 py-3 text-right">Total</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
-              ))}
-              {compras.length === 0 && !loading ? (
-                <tr className="border-t">
-                  <td className="px-2 py-3 text-slate-500" colSpan={5}>
-                    Nenhuma compra registrada.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-          {loading ? <p className="mt-3 text-sm text-slate-600">Carregando...</p> : null}
+              </thead>
+              <tbody>
+                {compras.map((compra) => (
+                  <tr key={compra.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3">{compra.data_compra}</td>
+                    <td className="px-4 py-3">{compra.onde_comprei}</td>
+                    <td className="px-4 py-3 text-right">{formatBRLFromCentavos(compra.valor_total_centavos)}</td>
+                    <td className="px-4 py-3">{compra.status ?? "ATIVA"}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        className="text-sm text-red-600 transition hover:underline disabled:text-slate-400"
+                        onClick={() => void cancelarCompra(compra.id)}
+                        disabled={compra.status === "CANCELADA"}
+                      >
+                        Cancelar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {compras.length === 0 && !loading ? (
+                  <tr className="border-t border-slate-100">
+                    <td className="px-4 py-4 text-slate-500" colSpan={5}>
+                      Nenhuma compra registrada.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </SectionCard>
+        {loading ? <p className="text-sm text-slate-600">Carregando...</p> : null}
+      </CafeCard>
     </CafePageShell>
   );
 }

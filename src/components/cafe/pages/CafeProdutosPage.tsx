@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import CafeCard from "@/components/cafe/CafeCard";
 import CafePageShell from "@/components/cafe/CafePageShell";
+import CafePanel from "@/components/cafe/CafePanel";
 import CafeStatCard from "@/components/cafe/CafeStatCard";
-import SectionCard from "@/components/layout/SectionCard";
 import { useCafeCategorias } from "@/lib/cafe/useCafeCategorias";
 
 type Insumo = {
@@ -65,6 +66,15 @@ function parseBRLToCentavos(input: string): number {
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100);
 }
+
+const fieldClassName =
+  "mt-1 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm shadow-slate-200/60 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-4 focus:ring-amber-100/70";
+const compactFieldClassName =
+  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm shadow-slate-200/60 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-4 focus:ring-amber-100/70";
+const primaryButtonClassName =
+  "inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60";
+const secondaryButtonClassName =
+  "inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50";
 
 export default function CafeProdutosPage() {
   const {
@@ -168,7 +178,7 @@ export default function CafeProdutosPage() {
     try {
       const res = await fetch(`/api/cafe/produtos/${produtoId}/precos`);
       const json = (await res.json()) as { ok?: boolean; data?: PrecoProduto[]; error?: string };
-      if (!res.ok || !json.ok) throw new Error(json.error ?? "Falha ao carregar pre\u00e7os.");
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Falha ao carregar preços.");
 
       const basePrice = selectedProduto?.preco_venda_centavos ?? 0;
       const map = new Map<number, number>();
@@ -188,7 +198,7 @@ export default function CafeProdutosPage() {
       setPrecosTabela(next);
       setPrecosOrigem(origem);
     } catch (err) {
-      setPrecosError(err instanceof Error ? err.message : "Erro ao carregar pre\u00e7os.");
+      setPrecosError(err instanceof Error ? err.message : "Erro ao carregar preços.");
       setPrecosTabela({});
       setPrecosOrigem({});
     } finally {
@@ -263,28 +273,28 @@ export default function CafeProdutosPage() {
     setError(null);
     setMessage(null);
     if (!novoNome.trim()) {
-      setError("Nome obrigat\u00f3rio.");
+      setError("Nome obrigatório.");
       return;
     }
     if (!novaCategoriaId) {
-      setError("Categoria obrigat\u00f3ria.");
+      setError("Categoria obrigatória.");
       return;
     }
     const precoCentavos = parseBRLToCentavos(novoPrecoBRL);
     if (!Number.isFinite(precoCentavos) || precoCentavos < 0) {
-      setError("Pre\u00e7o inv\u00e1lido.");
+      setError("Preço inválido.");
       return;
     }
 
     const insumoDiretoId = novoPreparado ? null : (novoInsumoDiretoId ? Number(novoInsumoDiretoId) : null);
     if (novoInsumoDiretoId && !Number.isFinite(insumoDiretoId)) {
-      setError("Insumo direto inv\u00e1lido.");
+      setError("Insumo direto inválido.");
       return;
     }
 
     const categoria = categorias.find((c) => c.id === Number(novaCategoriaId));
     if (!categoria) {
-      setError("Categoria inv\u00e1lida.");
+      setError("Categoria inválida.");
       return;
     }
 
@@ -407,7 +417,7 @@ export default function CafeProdutosPage() {
         });
 
       if (precos.some((p) => !Number.isFinite(p.preco_centavos) || p.preco_centavos < 0)) {
-        setPrecosError("Pre\u00e7o inv\u00e1lido.");
+        setPrecosError("Preço inválido.");
         return;
       }
 
@@ -419,14 +429,14 @@ export default function CafeProdutosPage() {
 
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
-        setPrecosError(json.error ?? "Falha ao salvar pre\u00e7os.");
+        setPrecosError(json.error ?? "Falha ao salvar preços.");
         return;
       }
 
       setPrecosMessage("Preços atualizados.");
       await loadPrecos(selectedProdutoId);
     } catch (err) {
-      setPrecosError(err instanceof Error ? err.message : "Erro ao salvar pre\u00e7os.");
+      setPrecosError(err instanceof Error ? err.message : "Erro ao salvar preços.");
     } finally {
       setPrecosSaving(false);
     }
@@ -436,13 +446,13 @@ export default function CafeProdutosPage() {
     if (!selectedProduto) return;
 
     if (!editCategoriaId) {
-      setError("Categoria obrigat\u00f3ria para atualizar o produto.");
+      setError("Categoria obrigatória para atualizar o produto.");
       return;
     }
 
     const categoria = categorias.find((c) => c.id === Number(editCategoriaId));
     if (!categoria) {
-      setError("Categoria inv\u00e1lida.");
+      setError("Categoria inválida.");
       return;
     }
 
@@ -470,7 +480,7 @@ export default function CafeProdutosPage() {
       setMessage("Classificação do produto atualizada.");
       await loadProdutos();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao atualizar classifica\u00e7\u00e3o.");
+      setError(err instanceof Error ? err.message : "Erro ao atualizar classificação.");
     } finally {
       setSalvandoClassificacao(false);
     }
@@ -540,20 +550,21 @@ export default function CafeProdutosPage() {
 
   return (
     <CafePageShell
-      eyebrow="Gest\u00e3o do Caf\u00e9"
-      title="Gest\u00e3o do Ballet Caf\u00e9 - Produtos"
-      description="Cadastre produtos, organize categorias, defina pre\u00e7os por tabela e mantenha receitas e insumos com classifica\u00e7\u00e3o relacional correta."
+      eyebrow="Gestão do Café"
+      title="Gestão do Ballet Café - Produtos"
+      description="Cadastre produtos, organize categorias, defina preços por tabela e mantenha receitas e insumos com classificação relacional correta."
+      className="max-w-[1600px]"
       summary={
         <>
           <CafeStatCard
             label="Total de produtos"
             value={produtos.length}
-            description="Itens cadastrados para cat\u00e1logo e opera\u00e7\u00e3o do caixa."
+            description="Itens cadastrados para catálogo e operação do caixa."
           />
           <CafeStatCard
             label="Categorias em uso"
             value={categoriasEmUso}
-            description="Leitura r\u00e1pida da estrutura comercial atualmente utilizada."
+            description="Leitura rápida da estrutura comercial atualmente utilizada."
           />
           <CafeStatCard
             label="Preparados x simples"
@@ -567,31 +578,31 @@ export default function CafeProdutosPage() {
       {message ? <div className="text-sm text-emerald-700">{message}</div> : null}
       {categoriasError ? <div className="text-sm text-amber-700">Categorias: {categoriasError}</div> : null}
 
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.35fr)_minmax(420px,0.9fr)]">
         <div className="space-y-6">
-          <SectionCard title="Novo produto">
-            <div className="grid gap-3 md:grid-cols-3">
+          <CafeCard title="Novo produto">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <div>
                 <label className="text-sm font-medium">Nome</label>
                 <input
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={novoNome}
                   onChange={(e) => setNovoNome(e.target.value)}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Pre\u00e7o fallback (R$)</label>
+                <label className="text-sm font-medium">Preço fallback (R$)</label>
                 <input
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={novoPrecoBRL}
                   onChange={(e) => setNovoPrecoBRL(e.target.value)}
                 />
-                <p className="mt-1 text-xs text-slate-500">Usado quando uma tabela n\u00e3o possui pre\u00e7o definido.</p>
+                <p className="mt-1 text-xs text-slate-500">Usado quando uma tabela não possui preço definido.</p>
               </div>
               <div>
                 <label className="text-sm font-medium">Categoria</label>
                 <select
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={novaCategoriaId}
                   onChange={(e) => setNovaCategoriaId(e.target.value ? Number(e.target.value) : "")}
                   disabled={categoriasLoading}
@@ -607,7 +618,7 @@ export default function CafeProdutosPage() {
               <div className="md:col-span-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="rounded-md border px-3 py-2 text-xs hover:bg-slate-50"
+                  className={secondaryButtonClassName}
                   onClick={() =>
                     window.open("/admin/cafe/categorias", "_blank", "noopener,noreferrer")
                   }
@@ -616,7 +627,7 @@ export default function CafeProdutosPage() {
                 </button>
                 <button
                   type="button"
-                  className="rounded-md border px-3 py-2 text-xs hover:bg-slate-50"
+                  className={secondaryButtonClassName}
                   onClick={() => void criarCategoriaRapida()}
                 >
                   + Nova categoria
@@ -625,7 +636,7 @@ export default function CafeProdutosPage() {
               <div>
                 <label className="text-sm font-medium">Subcategoria (opcional)</label>
                 <select
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={novaSubcategoriaId}
                   onChange={(e) => setNovaSubcategoriaId(e.target.value ? Number(e.target.value) : "")}
                   disabled={!novaCategoriaId}
@@ -641,7 +652,7 @@ export default function CafeProdutosPage() {
               <div>
                 <label className="text-sm font-medium">Unidade de venda</label>
                 <input
-                  className="mt-1 w-full rounded-md border p-2"
+                  className={fieldClassName}
                   value={novoUnidadeVenda}
                   onChange={(e) => setNovoUnidadeVenda(e.target.value)}
                   placeholder="un"
@@ -651,7 +662,7 @@ export default function CafeProdutosPage() {
                 <div>
                   <label className="text-sm font-medium">Insumo direto (opcional)</label>
                   <select
-                    className="mt-1 w-full rounded-md border p-2"
+                    className={fieldClassName}
                     value={novoInsumoDiretoId}
                     onChange={(e) => setNovoInsumoDiretoId(e.target.value)}
                   >
@@ -681,15 +692,15 @@ export default function CafeProdutosPage() {
             </div>
             <div className="mt-4">
               <button
-                className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
+                className={primaryButtonClassName}
                 onClick={() => void criarProduto()}
               >
                 Criar produto
               </button>
             </div>
-          </SectionCard>
+          </CafeCard>
 
-          <SectionCard
+          <CafeCard
             title="Produtos cadastrados"
             description="Listagem ordenada por categoria, subcategoria e nome, usando a classificação relacional do Café."
           >
@@ -698,21 +709,22 @@ export default function CafeProdutosPage() {
                 {produtosVisiveis.length} produto(s) exibido(s) na organização atual.
               </p>
               <input
-                className="w-full rounded-md border p-2 text-sm md:max-w-xs"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm shadow-slate-200/60 outline-none transition placeholder:text-slate-400 focus:border-amber-300 focus:ring-4 focus:ring-amber-100/70 md:max-w-sm"
                 value={buscaListagem}
                 onChange={(e) => setBuscaListagem(e.target.value)}
                 placeholder="Buscar por nome, categoria ou subcategoria"
               />
             </div>
+            <div className="overflow-hidden rounded-[20px] border border-slate-200/80">
             <div className="overflow-x-auto">
-              <table className="min-w-[860px] text-sm">
-                <thead className="text-xs uppercase text-slate-500">
+              <table className="min-w-[980px] text-sm">
+                <thead className="bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
                   <tr>
-                    <th className="px-2 py-2 text-left">Nome</th>
-                    <th className="px-2 py-2 text-left">Categoria</th>
-                    <th className="px-2 py-2 text-left">Subcategoria</th>
-                    <th className="px-2 py-2 text-right">Pre\u00e7o fallback</th>
-                    <th className="px-2 py-2 text-center">Preparado</th>
+                    <th className="px-4 py-3 text-left">Nome</th>
+                    <th className="px-4 py-3 text-left">Categoria</th>
+                    <th className="px-4 py-3 text-left">Subcategoria</th>
+                    <th className="px-4 py-3 text-right">Preço fallback</th>
+                    <th className="px-4 py-3 text-center">Preparado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -720,15 +732,15 @@ export default function CafeProdutosPage() {
                     <tr
                       key={p.id}
                       className={
-                        "border-t hover:bg-slate-50 cursor-pointer " + (selectedProdutoId === p.id ? "bg-slate-50" : "")
+                        "cursor-pointer border-t border-slate-100 hover:bg-slate-50/80 " + (selectedProdutoId === p.id ? "bg-amber-50/60" : "bg-white")
                       }
                       onClick={() => setSelectedProdutoId(p.id)}
                     >
-                      <td className="px-2 py-2">{p.nome}</td>
-                      <td className="px-2 py-2">{p.categoria_nome ?? p.categoria ?? "-"}</td>
-                      <td className="px-2 py-2">{p.subcategoria_nome ?? "-"}</td>
-                      <td className="px-2 py-2 text-right">{formatBRLFromCentavos(p.preco_venda_centavos)}</td>
-                      <td className="px-2 py-2 text-center">
+                      <td className="px-4 py-3 font-medium text-slate-900">{p.nome}</td>
+                      <td className="px-4 py-3">{p.categoria_nome ?? p.categoria ?? "-"}</td>
+                      <td className="px-4 py-3">{p.subcategoria_nome ?? "-"}</td>
+                      <td className="px-4 py-3 text-right">{formatBRLFromCentavos(p.preco_venda_centavos)}</td>
+                      <td className="px-4 py-3 text-center">
                         <span
                           className={
                             "inline-flex rounded-full px-2 py-1 text-xs font-medium " +
@@ -737,14 +749,14 @@ export default function CafeProdutosPage() {
                               : "bg-slate-100 text-slate-700")
                           }
                         >
-                          {p.preparado ? "Sim" : "N\u00e3o"}
+                          {p.preparado ? "Sim" : "Não"}
                         </span>
                       </td>
                     </tr>
                   ))}
                   {produtosVisiveis.length === 0 ? (
                     <tr>
-                      <td className="px-2 py-4 text-center text-sm text-slate-500" colSpan={5}>
+                      <td className="px-4 py-4 text-center text-sm text-slate-500" colSpan={5}>
                         Nenhum produto encontrado para o filtro informado.
                       </td>
                     </tr>
@@ -753,17 +765,18 @@ export default function CafeProdutosPage() {
               </table>
               {loading ? <p className="mt-3 text-sm text-slate-600">Carregando...</p> : null}
             </div>
-          </SectionCard>
+            </div>
+          </CafeCard>
         </div>
 
         {selectedProduto ? (
           <div className="space-y-6">
-            <SectionCard title="Classifica\u00e7\u00e3o do produto">
+            <CafeCard title="Classificação do produto">
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium">Categoria</label>
                   <select
-                    className="mt-1 w-full rounded-md border p-2"
+                    className={fieldClassName}
                     value={editCategoriaId}
                     onChange={(e) => setEditCategoriaId(e.target.value ? Number(e.target.value) : "")}
                     disabled={salvandoClassificacao || categoriasLoading}
@@ -778,7 +791,7 @@ export default function CafeProdutosPage() {
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className="rounded-md border px-3 py-2 text-xs hover:bg-slate-50"
+                      className={secondaryButtonClassName}
                       onClick={() =>
                         window.open("/admin/cafe/categorias", "_blank", "noopener,noreferrer")
                       }
@@ -787,7 +800,7 @@ export default function CafeProdutosPage() {
                     </button>
                     <button
                       type="button"
-                      className="rounded-md border px-3 py-2 text-xs hover:bg-slate-50"
+                      className={secondaryButtonClassName}
                       onClick={() => void criarCategoriaRapida()}
                     >
                       + Nova categoria
@@ -797,7 +810,7 @@ export default function CafeProdutosPage() {
                 <div>
                   <label className="text-sm font-medium">Subcategoria (opcional)</label>
                   <select
-                    className="mt-1 w-full rounded-md border p-2"
+                    className={fieldClassName}
                     value={editSubcategoriaId}
                     onChange={(e) => setEditSubcategoriaId(e.target.value ? Number(e.target.value) : "")}
                     disabled={salvandoClassificacao || !editCategoriaId}
@@ -814,20 +827,20 @@ export default function CafeProdutosPage() {
 
               <div className="mt-4">
                 <button
-                  className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-60"
+                  className={primaryButtonClassName}
                   onClick={() => void salvarClassificacaoProduto()}
                   disabled={salvandoClassificacao}
                 >
-                  {salvandoClassificacao ? "Salvando..." : "Salvar classifica\u00e7\u00e3o"}
+                  {salvandoClassificacao ? "Salvando..." : "Salvar classificação"}
                 </button>
               </div>
-            </SectionCard>
+            </CafeCard>
 
-            <SectionCard title="Pre\u00e7os por tabela">
+            <CafeCard title="Preços por tabela">
               {precosError ? <p className="text-sm text-red-600">{precosError}</p> : null}
               {precosMessage ? <p className="text-sm text-emerald-700">{precosMessage}</p> : null}
               {tabelasPreco.length === 0 ? (
-                <p className="text-sm text-slate-600">Nenhuma tabela de pre\u00e7o cadastrada.</p>
+                <p className="text-sm text-slate-600">Nenhuma tabela de preço cadastrada.</p>
               ) : (
                 <div className="space-y-3">
                   {tabelasPreco.filter((t) => t.ativo).map((tabela) => {
@@ -841,17 +854,17 @@ export default function CafeProdutosPage() {
                           </div>
                           <div className="text-xs text-slate-500">{tabela.codigo}</div>
                           {sugestao ? (
-                            <div className="text-xs text-slate-500">Sugest\u00e3o: fallback {sugestao}</div>
+                            <div className="text-xs text-slate-500">Sugestão: fallback {sugestao}</div>
                           ) : null}
                         </div>
                         <input
-                          className="rounded-md border p-2 text-sm"
+                          className={compactFieldClassName}
                           value={precosTabela[tabela.id] ?? ""}
                           onChange={(e) => {
                             setPrecosTabela((prev) => ({ ...prev, [tabela.id]: e.target.value }));
                             setPrecosOrigem((prev) => ({ ...prev, [tabela.id]: "saved" }));
                           }}
-                          placeholder="Pre\u00e7o (R$)"
+                          placeholder="Preço (R$)"
                           disabled={precosLoading || precosSaving}
                         />
                       </div>
@@ -862,23 +875,23 @@ export default function CafeProdutosPage() {
 
               <div className="mt-4">
                 <button
-                  className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-60"
+                  className={primaryButtonClassName}
                   onClick={() => void salvarPrecos()}
                   disabled={precosLoading || precosSaving || tabelasPreco.length === 0}
                 >
-                  {precosSaving ? "Salvando..." : "Salvar pre\u00e7os"}
+                  {precosSaving ? "Salvando..." : "Salvar preços"}
                 </button>
               </div>
-            </SectionCard>
+            </CafeCard>
 
             {selectedProduto.preparado ? (
-              <SectionCard title="Receita e insumos">
+              <CafeCard title="Receita e insumos">
                 {receitaLoading ? <p className="text-sm text-slate-600">Carregando receita...</p> : null}
                 <div className="mt-2 space-y-3">
                   {receitaItens.map((item, idx) => (
                     <div key={`${item.insumo_id}-${idx}`} className="grid gap-2 md:grid-cols-[2fr_1fr_1fr_auto]">
                       <select
-                        className="rounded-md border p-2 text-sm"
+                        className={compactFieldClassName}
                         value={item.insumo_id}
                         onChange={(e) => {
                           const insumoId = Number(e.target.value);
@@ -898,7 +911,7 @@ export default function CafeProdutosPage() {
                         ))}
                       </select>
                       <input
-                        className="rounded-md border p-2 text-sm"
+                        className={compactFieldClassName}
                         value={String(item.quantidade)}
                         onChange={(e) =>
                           setReceitaItens((prev) =>
@@ -908,7 +921,7 @@ export default function CafeProdutosPage() {
                         placeholder="Qtd"
                       />
                       <input
-                        className="rounded-md border p-2 text-sm"
+                        className={compactFieldClassName}
                         value={item.unidade}
                         onChange={(e) =>
                           setReceitaItens((prev) =>
@@ -929,40 +942,40 @@ export default function CafeProdutosPage() {
 
                 <div className="mt-3 flex gap-2">
                   <button
-                    className="rounded-md border px-3 py-2 text-sm"
+                    className={secondaryButtonClassName}
                     onClick={() => setReceitaItens((prev) => [...prev, { insumo_id: 0, quantidade: 0, unidade: "" }])}
                   >
                     Adicionar item
                   </button>
                   <button
-                    className="rounded-md bg-slate-900 px-4 py-2 text-white hover:bg-slate-800"
+                    className={primaryButtonClassName}
                     onClick={() => void salvarReceita()}
                   >
                     Salvar receita
                   </button>
                 </div>
-              </SectionCard>
+              </CafeCard>
             ) : null}
 
-            <SectionCard title="Resumo">
-              <div className="space-y-2 text-sm text-slate-700">
+            <CafeCard title="Resumo">
+              <CafePanel className="space-y-2 text-sm text-slate-700">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500">Tabela principal</span>
                   <span className="font-medium">{tabelaDefault?.nome ?? "-"}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Pre\u00e7o principal</span>
+                  <span className="text-slate-500">Preço principal</span>
                   <span className="font-medium">{precoDefault ?? "-"}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-500">Pre\u00e7o fallback</span>
+                  <span className="text-slate-500">Preço fallback</span>
                   <span className="font-medium">{precoFallback ?? "-"}</span>
                 </div>
                 <div className="text-xs text-slate-500">
-                  Se uma tabela n\u00e3o tiver pre\u00e7o salvo, o sistema sugere o fallback do produto.
+                  Se uma tabela não tiver preço salvo, o sistema sugere o fallback do produto.
                 </div>
-              </div>
-            </SectionCard>
+              </CafePanel>
+            </CafeCard>
           </div>
         ) : null}
       </div>
