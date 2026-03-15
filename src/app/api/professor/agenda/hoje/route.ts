@@ -1,19 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getColaboradorIdForUser, getUserOrThrow } from "../../diario-de-classe/_lib/auth";
-
-type AgendaRow = {
-  turma_id: number;
-  turma_nome: string;
-  hora_inicio: string | null;
-  hora_fim: string | null;
-};
-
-type AulaHoje = {
-  turma_id: number;
-  turma_nome: string;
-  hora_inicio: string;
-  hora_fim: string;
-};
+import { getUserOrThrow, isAdminUser } from "../../diario-de-classe/_lib/auth";
+import { fetchProfessorAgendaHoje, loadProfessorAppUserContext } from "../../_lib/operacional";
 
 export async function GET(request: NextRequest) {
   const auth = await getUserOrThrow(request);
@@ -22,38 +9,42 @@ export async function GET(request: NextRequest) {
   }
 
   const { supabase, user } = auth;
+  const scope = String(new URL(request.url).searchParams.get("scope") ?? "own").toLowerCase();
 
-  let professorId: number | null = null;
+  let isAdmin = false;
   try {
-    professorId = await getColaboradorIdForUser(supabase, user.id);
+    isAdmin = await isAdminUser(supabase, user.id);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "ERRO_BUSCAR_COLABORADOR";
-    return NextResponse.json({ error: "Falha ao mapear professor.", details: msg }, { status: 500 });
+    const msg = err instanceof Error ? err.message : "ERRO_PERMISSAO_ADMIN";
+    return NextResponse.json({ error: "Falha ao validar acesso.", details: msg }, { status: 500 });
   }
 
-  if (!professorId) {
-    return NextResponse.json({ error: "Usuario nao vinculado a professor." }, { status: 403 });
-  }
+  const ctx = await loadProfessorAppUserContext({
+    supabase,
+    userId: user.id,
+    email: user.email,
+    isAdmin,
+  });
 
-  const { data: rows, error: agendaError } = await supabase
-    .from("vw_professor_agenda_hoje")
-    .select("turma_id, turma_nome, hora_inicio, hora_fim")
-    .eq("professor_id", professorId)
-    .order("hora_inicio", { ascending: true });
+  const scopeAll = scope === "all" && ctx.podeVerOutrasTurmas;
 
-  if (agendaError) {
+  try {
+    const aulas = await fetchProfessorAgendaHoje({
+      supabase,
+      colaboradorId: ctx.colaboradorId,
+      scopeAll,
+    });
+
     return NextResponse.json(
-      { error: "Falha ao carregar agenda.", details: agendaError.message },
-      { status: 500 },
+      {
+        aulas,
+        podeVerOutrasTurmas: ctx.podeVerOutrasTurmas,
+        scope: scopeAll ? "all" : "own",
+      },
+      { status: 200 },
     );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "ERRO_AGENDA_HOJE";
+    return NextResponse.json({ error: "Falha ao carregar agenda.", details: msg }, { status: 500 });
   }
-
-  const aulas: AulaHoje[] = ((rows as AgendaRow[] | null) ?? []).map((r) => ({
-    turma_id: Number(r.turma_id),
-    turma_nome: String(r.turma_nome),
-    hora_inicio: r.hora_inicio ? String(r.hora_inicio) : "",
-    hora_fim: r.hora_fim ? String(r.hora_fim) : "",
-  }));
-
-  return NextResponse.json({ aulas }, { status: 200 });
 }

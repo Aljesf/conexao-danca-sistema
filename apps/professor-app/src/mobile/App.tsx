@@ -3,10 +3,12 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "./screens/LoginScreen";
 import TodayScreen from "./screens/TodayScreen";
+import TurmasScreen from "./screens/TurmasScreen";
 
 export type RootStackParamList = {
   Login: undefined;
   Today: undefined;
+  Turmas: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -23,7 +25,12 @@ export default function App() {
         <Stack.Screen
           name="Today"
           component={TodayScreen}
-          options={{ title: "Minhas aulas (hoje)" }}
+          options={{ title: "Dashboard do professor" }}
+        />
+        <Stack.Screen
+          name="Turmas"
+          component={TurmasScreen}
+          options={{ title: "Outras turmas" }}
         />
       </Stack.Navigator>
     </NavigationContainer>

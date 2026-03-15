@@ -2,9 +2,20 @@ import { z } from "zod";
 import type { NextRequest } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
+import { getProfessorOperationalAccess } from "@/app/api/professor/_lib/operacional";
 
-export type Supa = SupabaseClient;
-export type AuthUser = { id: string };
+export type Supa = SupabaseClient<any, any, any, any, any>;
+export type AuthUser = { id: string; email: string | null };
+
+function extractBearerToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
+  if (!authHeader) return null;
+
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match?.[1]) return null;
+
+  return match[1].trim();
+}
 
 export async function getUserOrThrow(
   request: NextRequest,
@@ -12,8 +23,7 @@ export async function getUserOrThrow(
   | { ok: true; supabase: Supa; user: AuthUser }
   | { ok: false; status: number; code: "NAO_AUTENTICADO" }
 > {
-  const authHeader = request.headers.get("authorization") || request.headers.get("Authorization");
-  const bearer = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : null;
+  const bearer = extractBearerToken(request);
 
   if (bearer) {
     const supabase = createClient(
@@ -25,19 +35,37 @@ export async function getUserOrThrow(
       },
     );
 
-    const { data, error } = await supabase.auth.getUser(bearer);
-    if (error || !data.user) {
+    const authViaHeader = await supabase.auth.getUser();
+    if (!authViaHeader.error && authViaHeader.data.user) {
+      return {
+        ok: true,
+        supabase,
+        user: { id: authViaHeader.data.user.id, email: authViaHeader.data.user.email ?? null },
+      };
+    }
+
+    const authViaToken = await supabase.auth.getUser(bearer);
+    if (authViaToken.error || !authViaToken.data.user) {
       return { ok: false, status: 401, code: "NAO_AUTENTICADO" };
     }
 
-    return { ok: true, supabase, user: { id: data.user.id } };
+    return {
+      ok: true,
+      supabase,
+      user: { id: authViaToken.data.user.id, email: authViaToken.data.user.email ?? null },
+    };
   }
 
   const auth = await requireUser(request);
   if (auth instanceof Response) {
     return { ok: false, status: 401, code: "NAO_AUTENTICADO" };
   }
-  return { ok: true, supabase: auth.supabase, user: { id: auth.userId } };
+  const userResult = await auth.supabase.auth.getUser();
+  return {
+    ok: true,
+    supabase: auth.supabase,
+    user: { id: auth.userId, email: userResult.data.user?.email ?? null },
+  };
 }
 
 export async function isAdminUser(supabase: Supa, userId: string): Promise<boolean> {
@@ -96,6 +124,13 @@ export async function canAccessTurma(params: {
   try {
     const admin = await isAdminUser(supabase, userId);
     if (admin) return { ok: true };
+  } catch {
+    return { ok: false, status: 500, code: "ERRO_PERMISSAO_TURMA" };
+  }
+
+  try {
+    const access = await getProfessorOperationalAccess(userId);
+    if (access.podeVerOutrasTurmas) return { ok: true };
   } catch {
     return { ok: false, status: 500, code: "ERRO_PERMISSAO_TURMA" };
   }

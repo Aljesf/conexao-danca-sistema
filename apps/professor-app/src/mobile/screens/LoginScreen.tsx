@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, Alert } from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../App";
 import { ENV } from "../../config/env";
@@ -25,7 +25,7 @@ export default function LoginScreen({ navigation }: Props) {
 
   async function onLogin() {
     if (!supabaseOk) {
-      Alert.alert("Configuração incompleta", "Faltou SUPABASE_URL e SUPABASE_ANON_KEY no .env do app.");
+      Alert.alert("Configuracao incompleta", "Faltou SUPABASE_URL e SUPABASE_ANON_KEY no .env do app.");
       return;
     }
     if (!email || !senha) {
@@ -41,7 +41,10 @@ export default function LoginScreen({ navigation }: Props) {
       await persistSessionToStorage(data.session ?? null);
       navigation.replace("Today");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Falha no login";
+      const raw = e instanceof Error ? e.message : "Falha no login";
+      const msg = raw.toLowerCase().includes("invalid login credentials")
+        ? "Email ou senha invalidos."
+        : raw;
       Alert.alert("Erro", msg);
     } finally {
       setLoading(false);

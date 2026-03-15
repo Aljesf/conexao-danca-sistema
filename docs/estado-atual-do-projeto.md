@@ -48,9 +48,13 @@ Conectarte v0.9 - Ballet Café com revisão visual final em andamento e base Saa
 
 ## 9. App Professor / Mobile
 - App Professor:
-  - Estrutura Expo/EAS ajustada dentro de `apps/professor-app`.
-  - Workspace pnpm corrigido para incluir `apps/*`.
-  - Dependencias Expo normalizadas no app.
-  - Diagnostico do EAS Prebuild focado em resolucao local do pacote `expo`.
-  - Proxima validacao: build Android preview via EAS apos `expo prebuild --no-install` passar localmente.
-  - Status atual: build Android preview via EAS concluido com sucesso.
+  - Login mobile funcional.
+  - Dashboard do professor em evolucao:
+    - turmas do dia;
+    - aniversariantes do dia;
+    - aniversariantes da semana;
+    - base para consulta ampliada de outras turmas.
+  - Correcao do fluxo mobile com Bearer token nas rotas do modulo professor.
+  - Base SQL criada para frequencia com rastreabilidade do usuario autenticado.
+  - Proxima etapa operacional:
+    - registro de frequencia com rastreabilidade do usuario autenticado.
