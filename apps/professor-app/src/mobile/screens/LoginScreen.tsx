@@ -1,37 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { RootStackParamList } from "../App";
+import { useProfessorAuth } from "../auth-context";
 import { ENV } from "../../config/env";
 import {
-  persistSessionToStorage,
-  restoreSessionFromStorage,
-  supabase,
-} from "../../lib/supabase";
+  restaurarSessao,
+  salvarSessaoLocal,
+} from "../../lib/api";
+import { supabase } from "../../lib/supabase";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Login">;
-
-export default function LoginScreen({ navigation }: Props) {
+export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
+  const { authStatus, refreshAuthState } = useProfessorAuth();
 
   const supabaseOk = Boolean(ENV.SUPABASE_URL && ENV.SUPABASE_ANON_KEY);
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.access_token) {
-        navigation.replace("Today");
-        return;
-      }
-
-      const session = await restoreSessionFromStorage();
-      if (session?.access_token) {
-        navigation.replace("Today");
-      }
-    })();
-  }, [navigation]);
 
   async function onLogin() {
     if (!supabaseOk) {
@@ -48,13 +31,13 @@ export default function LoginScreen({ navigation }: Props) {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
       if (error) throw error;
 
-      await persistSessionToStorage(data.session ?? null);
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session?.access_token) {
+      await salvarSessaoLocal(data.session ?? null);
+      const authState = await restaurarSessao();
+      if (!authState.isAuthenticated || !authState.accessToken) {
         throw new Error("Sessao nao ficou disponivel no app.");
       }
 
-      navigation.replace("Today");
+      await refreshAuthState();
     } catch (e) {
       const raw = e instanceof Error ? e.message : "Falha no login";
       const msg = raw.toLowerCase().includes("invalid login credentials")
@@ -99,7 +82,7 @@ export default function LoginScreen({ navigation }: Props) {
 
       <Pressable
         onPress={onLogin}
-        disabled={loading}
+        disabled={loading || authStatus === "booting"}
         style={{ padding: 12, borderRadius: 10, borderWidth: 1, alignItems: "center", opacity: loading ? 0.6 : 1 }}
       >
         <Text style={{ fontWeight: "600" }}>{loading ? "Entrando..." : "Entrar"}</Text>

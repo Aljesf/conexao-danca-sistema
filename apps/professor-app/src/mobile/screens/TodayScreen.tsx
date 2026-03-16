@@ -1,9 +1,17 @@
-import React, { useEffect, useState } from "react";
-import { Alert } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../App";
-import { apiFetch } from "../../lib/api";
+import { useProfessorAuth } from "../auth-context";
+import {
+  AUTH_SESSION_EXPIRED,
+  AUTH_SESSION_MISSING,
+  AUTH_SESSION_NOT_READY,
+  apiFetch,
+  enriquecerUsuarioAutenticado,
+  extrairUsuarioAutenticado,
+  type UsuarioAutenticadoResumo,
+} from "../../lib/api";
 
 type AgendaItem = {
   turma_id: number;
@@ -75,19 +83,52 @@ function formatDiaSemana(dataISO?: string | null): string {
 }
 
 function summarizeError(message: string): string {
-  if (message === "sessao_inexistente_no_app") {
-    return "sessao ainda nao foi restaurada no app.";
+  if (message === AUTH_SESSION_NOT_READY) {
+    return "Aguardando restauração da sessão...";
   }
-  if (message === "sessao_invalida_ou_expirada") {
-    return "sessao invalida ou expirada.";
+  if (message === AUTH_SESSION_MISSING) {
+    return "Aguardando restauração da sessão...";
+  }
+  if (message === AUTH_SESSION_EXPIRED) {
+    return "Sessão inválida ou expirada.";
   }
   if (message.includes("retornou HTML")) {
-    return "rota nao retornou JSON valido.";
+    return "A rota não retornou JSON válido.";
   }
   if (message.includes("Nao autenticado")) {
-    return "sessao invalida ou expirada.";
+    return "Sessão inválida ou expirada.";
   }
   return message;
+}
+
+function formatPerfil(value: string | null): string | null {
+  if (!value) return null;
+
+  const normalized = value.trim().toUpperCase();
+
+  if (normalized === "ADMIN") return "Administrador";
+  if (normalized === "PROFESSOR") return "Professor";
+  if (normalized === "COORDENACAO") return "Coordenação";
+  if (normalized === "SECRETARIA") return "Secretaria";
+  if (normalized === "ACADEMICO") return "Acadêmico";
+
+  const lower = value.trim().toLowerCase();
+  if (!lower) return null;
+
+  return `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
+}
+
+function buildDisplayUser(
+  dashboardData: DashboardPayload | null,
+  fallbackUser: UsuarioAutenticadoResumo | null,
+): UsuarioAutenticadoResumo {
+  const payloadUser = extrairUsuarioAutenticado(dashboardData);
+
+  return {
+    nome: payloadUser?.nome ?? fallbackUser?.nome ?? "Usuario autenticado",
+    email: payloadUser?.email ?? fallbackUser?.email ?? null,
+    perfil: payloadUser?.perfil ?? fallbackUser?.perfil ?? null,
+  };
 }
 
 function SectionCard(props: {
@@ -129,53 +170,78 @@ function ActionButton(props: {
 }
 
 export default function TodayScreen({ navigation }: Props) {
+  const { authStatus, usuarioAutenticado, logout } = useProfessorAuth();
   const [dataReferencia, setDataReferencia] = useState(todayISO());
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  async function loadDashboard(date: string) {
-    try {
-      const payload = await apiFetch<DashboardPayload>(`/api/professor/dashboard?data=${date}`);
-      setData(payload);
-      setErro(null);
-    } catch (e) {
-      setData(null);
-      setErro(summarizeError((e as Error).message));
-    }
-  }
-
-  useEffect(() => {
-    void loadDashboard(dataReferencia);
-  }, [dataReferencia]);
-
-  useEffect(() => {
-    if (erro !== "sessao_inexistente_no_app" && erro !== "sessao_invalida_ou_expirada") {
+  const loadDashboard = useCallback(async (date: string) => {
+    if (authStatus !== "authenticated") {
+      setErro("Aguardando restauração da sessão...");
       return;
     }
 
-    const message = erro === "sessao_inexistente_no_app"
-      ? "Sua sessao nao esta disponivel no app. Faca login novamente."
-      : "Sua sessao expirou. Faca login novamente.";
+    setLoading(true);
+    try {
+      const payload = await apiFetch<DashboardPayload>(`/api/professor/dashboard?data=${date}`);
+      await enriquecerUsuarioAutenticado(payload);
+      setData(payload);
+      setErro(null);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Falha ao carregar dashboard";
+      if (message === AUTH_SESSION_NOT_READY) {
+        setErro(null);
+        return;
+      }
 
-    Alert.alert("Sessao do app", message, [
-      {
-        text: "OK",
-        onPress: () => navigation.replace("Login"),
-      },
-    ]);
-  }, [erro, navigation]);
+      setData(null);
+      setErro(summarizeError(message));
+
+      if (message === AUTH_SESSION_EXPIRED || message === AUTH_SESSION_MISSING) {
+        await logout();
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [authStatus, logout]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") {
+      setData(null);
+      if (authStatus === "booting") {
+        setErro("Aguardando restauração da sessão...");
+      } else {
+        setErro(null);
+      }
+      return;
+    }
+
+    void loadDashboard(dataReferencia);
+  }, [authStatus, dataReferencia, loadDashboard]);
 
   const displayedDate = data?.dataReferencia ?? dataReferencia;
   const isToday = displayedDate === todayISO();
+  const displayUser = buildDisplayUser(data, usuarioAutenticado);
+
+  if (authStatus !== "authenticated") {
+    return (
+      <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 18 }}>
+        <SectionCard title="Usuário logado" subtitle="Aguardando restauração da sessão do app.">
+          <Text style={{ color: "#58656e" }}>Aguardando restauração da sessão...</Text>
+        </SectionCard>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 18 }}>
       <View style={{ gap: 8 }}>
         <Text style={{ fontSize: 30, fontWeight: "700", color: "#23313a" }}>
-          {data?.usuario?.nome ? `Ola, ${data.usuario.nome}` : "Professor App"}
+          {data?.usuario?.nome ? `Olá, ${data.usuario.nome}` : "Professor App"}
         </Text>
         <Text style={{ color: "#58656e", fontSize: 16 }}>
-          {data?.usuario?.perfil ? `Perfil operacional: ${data.usuario.perfil}` : "Dashboard operacional do dia"}
+          {data?.usuario?.perfil ? `Perfil operacional: ${formatPerfil(data.usuario.perfil) ?? data.usuario.perfil}` : "Dashboard operacional do dia"}
         </Text>
         <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
           <ActionButton label="Ontem" onPress={() => setDataReferencia((value) => shiftISODate(value, -1))} />
@@ -187,18 +253,52 @@ export default function TodayScreen({ navigation }: Props) {
         </Text>
       </View>
 
+      <SectionCard title="Usuário logado" subtitle="Sessão ativa no aplicativo.">
+        <View style={{ gap: 6 }}>
+          <Text style={{ fontSize: 18, fontWeight: "700", color: "#23313a" }}>{displayUser.nome}</Text>
+          {displayUser.email ? <Text style={{ color: "#39464f" }}>{displayUser.email}</Text> : null}
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <Text style={{ color: "#39464f" }}>
+              Perfil: {formatPerfil(displayUser.perfil) ?? "Não informado"}
+            </Text>
+            <Pressable
+              onPress={() => void logout()}
+              style={{
+                borderWidth: 1,
+                borderColor: "#23313a",
+                borderRadius: 12,
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+              }}
+            >
+              <Text style={{ fontWeight: "700", color: "#23313a" }}>Sair</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SectionCard>
+
       {erro ? (
         <View style={{ borderWidth: 1, borderColor: "#d17757", borderRadius: 16, padding: 14, gap: 10, backgroundColor: "#fff4ef" }}>
           <View style={{ gap: 4 }}>
-            <Text style={{ fontWeight: "700", color: "#7a2f19" }}>Nao foi possivel carregar o dashboard do professor.</Text>
+            <Text style={{ fontWeight: "700", color: "#7a2f19" }}>Não foi possível carregar o dashboard do professor.</Text>
             <Text style={{ color: "#7a2f19" }}>Detalhe: {erro}</Text>
           </View>
           <Pressable
-            onPress={() => void loadDashboard(dataReferencia)}
+            onPress={() => {
+              if (authStatus === "authenticated") {
+                void loadDashboard(dataReferencia);
+              }
+            }}
             style={{ alignSelf: "flex-start", borderWidth: 1, borderColor: "#7a2f19", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 }}
           >
             <Text style={{ fontWeight: "700", color: "#7a2f19" }}>Tentar novamente</Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {loading ? (
+        <View style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 16, padding: 14, backgroundColor: "#fffaf1" }}>
+          <Text style={{ color: "#58656e" }}>Carregando dashboard...</Text>
         </View>
       ) : null}
 
@@ -256,7 +356,11 @@ export default function TodayScreen({ navigation }: Props) {
 
       {data?.podeVerOutrasTurmas ? (
         <Pressable
-          onPress={() => navigation.navigate("Turmas", { dataReferencia: displayedDate })}
+          onPress={() => {
+            if (authStatus === "authenticated") {
+              navigation.navigate("Turmas", { dataReferencia: displayedDate });
+            }
+          }}
           style={{
             borderWidth: 1,
             borderColor: "#23313a",

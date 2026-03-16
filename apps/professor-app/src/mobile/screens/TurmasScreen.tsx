@@ -1,8 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../App";
-import { apiFetch } from "../../lib/api";
+import { useProfessorAuth } from "../auth-context";
+import {
+  AUTH_SESSION_EXPIRED,
+  AUTH_SESSION_NOT_READY,
+  apiFetch,
+} from "../../lib/api";
 
 type TurmaItem = {
   turma_id: number;
@@ -41,23 +46,57 @@ function formatDate(dataISO?: string | null): string {
 }
 
 export default function TurmasScreen({ route }: Props) {
+  const { authStatus, logout } = useProfessorAuth();
   const requestedDate = route.params?.dataReferencia ?? "";
   const [data, setData] = useState<TurmasPayload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadTurmas = useCallback(async (date: string) => {
+    setLoading(true);
+    try {
+      const payload = await apiFetch<TurmasPayload>(
+        `/api/professor/turmas?scope=all${date ? `&data=${date}` : ""}`,
+      );
+      setData(payload);
+      setErro(null);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Falha ao carregar turmas";
+
+      if (message === AUTH_SESSION_NOT_READY) {
+        setErro(null);
+        return;
+      }
+
+      setErro(message);
+
+      if (message === AUTH_SESSION_EXPIRED) {
+        await logout();
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [logout]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const payload = await apiFetch<TurmasPayload>(
-          `/api/professor/turmas?scope=all${requestedDate ? `&data=${requestedDate}` : ""}`,
-        );
-        setData(payload);
-        setErro(null);
-      } catch (e) {
-        setErro((e as Error).message);
-      }
-    })();
-  }, [requestedDate]);
+    if (authStatus !== "authenticated") {
+      setData(null);
+      setErro(null);
+      return;
+    }
+
+    void loadTurmas(requestedDate);
+  }, [authStatus, requestedDate, loadTurmas]);
+
+  if (authStatus === "booting") {
+    return (
+      <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 14 }}>
+        <View style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 16, padding: 16, backgroundColor: "#fffaf1" }}>
+          <Text style={{ color: "#58656e" }}>Carregando sessão...</Text>
+        </View>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 14 }}>
@@ -74,6 +113,12 @@ export default function TurmasScreen({ route }: Props) {
         <View style={{ borderWidth: 1, borderColor: "#d17757", borderRadius: 16, padding: 14, backgroundColor: "#fff4ef" }}>
           <Text style={{ fontWeight: "700", marginBottom: 6, color: "#7a2f19" }}>Erro operacional</Text>
           <Text style={{ color: "#7a2f19" }}>{erro}</Text>
+        </View>
+      ) : null}
+
+      {loading ? (
+        <View style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 16, padding: 16, backgroundColor: "#fffaf1" }}>
+          <Text style={{ color: "#58656e" }}>Carregando turmas...</Text>
         </View>
       ) : null}
 
