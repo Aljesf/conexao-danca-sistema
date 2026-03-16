@@ -60,5 +60,8 @@ Conectarte v0.9 - Ballet Café com revisão visual final em andamento e base Saa
   - Home com acoes rapidas de ontem/hoje/amanha.
   - Tratamento de erro operacional ajustado para nao renderizar HTML bruto no app.
   - Logica de aniversariantes do dia/semana revisada para refletir corretamente o calendario operacional.
+  - Ciclo de sessao mobile reforcado com bootstrap de restauracao no startup.
+  - Persistencia e limpeza de sessao ajustadas no app.
+  - Resposta 401 do dashboard agora força retorno ao login em vez de manter a home em estado invalido.
   - Proxima etapa operacional:
     - registro de frequencia com rastreabilidade do usuario autenticado.

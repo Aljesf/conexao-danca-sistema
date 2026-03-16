@@ -3,7 +3,11 @@ import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../App";
 import { ENV } from "../../config/env";
-import { persistSessionToStorage, restoreSessionFromStorage, supabase } from "../../lib/supabase";
+import {
+  persistSessionToStorage,
+  restoreSessionFromStorage,
+  supabase,
+} from "../../lib/supabase";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Login">;
 
@@ -16,8 +20,14 @@ export default function LoginScreen({ navigation }: Props) {
 
   useEffect(() => {
     (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) {
+        navigation.replace("Today");
+        return;
+      }
+
       const session = await restoreSessionFromStorage();
-      if (session) {
+      if (session?.access_token) {
         navigation.replace("Today");
       }
     })();
@@ -39,6 +49,11 @@ export default function LoginScreen({ navigation }: Props) {
       if (error) throw error;
 
       await persistSessionToStorage(data.session ?? null);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session?.access_token) {
+        throw new Error("Sessao nao ficou disponivel no app.");
+      }
+
       navigation.replace("Today");
     } catch (e) {
       const raw = e instanceof Error ? e.message : "Falha no login";

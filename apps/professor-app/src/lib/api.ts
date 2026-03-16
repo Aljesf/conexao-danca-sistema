@@ -1,5 +1,5 @@
 import { ENV } from "../config/env";
-import { getAccessToken } from "./supabase";
+import { clearPersistedSession, getAccessToken } from "./supabase";
 
 function isHtmlResponse(contentType: string, body: string): boolean {
   const normalizedType = contentType.toLowerCase();
@@ -40,13 +40,15 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const url = `${ENV.API_BASE_URL}${path}`;
   const token = await getAccessToken();
 
+  if (!token) {
+    throw new Error("sessao_inexistente_no_app");
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
+  headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(url, {
     ...init,
@@ -58,6 +60,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   const contentType = res.headers.get("content-type") ?? "";
   const body = await res.text().catch(() => "");
+
+  if (res.status === 401) {
+    await clearPersistedSession();
+    throw new Error("sessao_invalida_ou_expirada");
+  }
 
   if (isHtmlResponse(contentType, body)) {
     throw new Error("A API do app retornou HTML em vez de JSON. Verifique se a rota esta publicada no backend.");

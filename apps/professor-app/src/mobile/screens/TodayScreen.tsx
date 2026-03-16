@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Alert } from "react-native";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../App";
@@ -74,6 +75,12 @@ function formatDiaSemana(dataISO?: string | null): string {
 }
 
 function summarizeError(message: string): string {
+  if (message === "sessao_inexistente_no_app") {
+    return "sessao ainda nao foi restaurada no app.";
+  }
+  if (message === "sessao_invalida_ou_expirada") {
+    return "sessao invalida ou expirada.";
+  }
   if (message.includes("retornou HTML")) {
     return "rota nao retornou JSON valido.";
   }
@@ -140,6 +147,23 @@ export default function TodayScreen({ navigation }: Props) {
   useEffect(() => {
     void loadDashboard(dataReferencia);
   }, [dataReferencia]);
+
+  useEffect(() => {
+    if (erro !== "sessao_inexistente_no_app" && erro !== "sessao_invalida_ou_expirada") {
+      return;
+    }
+
+    const message = erro === "sessao_inexistente_no_app"
+      ? "Sua sessao nao esta disponivel no app. Faca login novamente."
+      : "Sua sessao expirou. Faca login novamente.";
+
+    Alert.alert("Sessao do app", message, [
+      {
+        text: "OK",
+        onPress: () => navigation.replace("Login"),
+      },
+    ]);
+  }, [erro, navigation]);
 
   const displayedDate = data?.dataReferencia ?? dataReferencia;
   const isToday = displayedDate === todayISO();
