@@ -9,7 +9,7 @@ export const cafeSidebar: SidebarSection[] = [
   {
     id: "cafe-operacao",
     title: "Operação",
-    items: [{ label: "Caixa / Vendas", href: "/cafe/vendas" }],
+    items: [{ label: "Caixa / Vendas", href: "/cafe/caixa" }],
   },
   {
     id: "cafe-gestao",

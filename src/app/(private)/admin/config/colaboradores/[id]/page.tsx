@@ -24,7 +24,7 @@ type ConfigFinanceira = {
 };
 
 type Resumo = {
-  colaborador: { id: number; pessoa_id: number; tipo_vinculo_id: number | null; ativo: boolean };
+  colaborador: { id: number; pessoa_id: number; tipo_vinculo_id: number | null; ativo: boolean; pessoa_nome?: string | null };
   pessoa: { id: number; nome: string; cpf: string | null; telefone: string | null; email: string | null; foto_url?: string | null };
   periodo_atual?: string | null;
   config_financeira: ConfigFinanceira | null;
@@ -44,6 +44,68 @@ type Resumo = {
     data_fechamento: string;
     data_vencimento: string | null;
     folha_pagamento_id: number | null;
+    cobranca_id?: number | null;
+  }>;
+  conta_interna?: {
+    existe: boolean;
+    id: number | null;
+    tipo_conta: string;
+    situacao_atual: string;
+    dia_fechamento: number | null;
+    dia_vencimento: number | null;
+  };
+  saldo_em_aberto_total_centavos?: number;
+  total_faturado_mes_centavos?: number;
+  itens_em_aberto_por_origem?: {
+    cafe: { quantidade: number; total_centavos: number };
+    loja: { quantidade: number; total_centavos: number };
+    escola: { quantidade: number; total_centavos: number };
+    outros?: { quantidade: number; total_centavos: number };
+  };
+  competencias_em_aberto?: string[];
+  ultima_importacao_para_folha?: {
+    referencia_id: number | null;
+    competencia: string | null;
+    status: string | null;
+  } | null;
+  status_configuracao_pagamento?: {
+    possui_config_financeira: boolean;
+    gera_folha: boolean;
+    possui_conta_interna: boolean;
+    politica_desconto_cartao: string | null;
+    politica_corte_cartao: string | null;
+  };
+  ultimos_lancamentos?: Array<{
+    id: number;
+    descricao: string | null;
+    origem_sistema: string | null;
+    valor_centavos: number;
+    data_lancamento: string | null;
+    status: string | null;
+    cobranca_id: number | null;
+  }>;
+  faturas_abertas?: Array<{
+    id: number;
+    periodo_referencia: string;
+    valor_total_centavos: number;
+    status: string;
+    folha_pagamento_id: number | null;
+    cobranca_id?: number | null;
+  }>;
+  faturas_fechadas_recentes?: Array<{
+    id: number;
+    periodo_referencia: string;
+    valor_total_centavos: number;
+    status: string;
+    folha_pagamento_id: number | null;
+    cobranca_id?: number | null;
+  }>;
+  folhas_recentes?: Array<{
+    id: number;
+    competencia_ano_mes: string;
+    status: string;
+    data_fechamento: string | null;
+    data_pagamento: string | null;
   }>;
 };
 
@@ -115,7 +177,7 @@ export default function ColaboradorDetalhesPage() {
       try {
         setLoading(true);
         setErro(null);
-        const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/resumo-financeiro`, { cache: "no-store" });
+        const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/financeiro-resumo`, { cache: "no-store" });
         const j = (await r.json()) as Partial<Resumo> & { error?: string };
         if (!r.ok) throw new Error(j?.error ?? "falha_carregar");
         if (alive) {
@@ -179,7 +241,7 @@ export default function ColaboradorDetalhesPage() {
 
   async function recarregarResumo() {
     if (!Number.isFinite(colaboradorId) || colaboradorId <= 0) return;
-    const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/resumo-financeiro`, { cache: "no-store" });
+    const r = await fetch(`/api/admin/colaboradores/${colaboradorId}/financeiro-resumo`, { cache: "no-store" });
     const j = (await r.json()) as Partial<Resumo> & { error?: string };
     if (!r.ok) throw new Error(j?.error ?? "falha_carregar");
     const next = j as Resumo;
@@ -674,6 +736,149 @@ export default function ColaboradorDetalhesPage() {
                 </table>
               </div>
             )}
+          </SystemSectionCard>
+
+          <SystemSectionCard
+            title="Conta interna e debitos"
+            description="Painel gerencial do colaborador com saldo aberto, competencias, faturas e ultimos lancamentos."
+          >
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Conta interna</div>
+                <div className="mt-1 text-lg font-semibold">
+                  {resumo.conta_interna?.existe ? "Ativa" : "Nao criada"}
+                </div>
+                <div className="mt-2 text-sm text-slate-600">
+                  {resumo.conta_interna?.tipo_conta ?? "COLABORADOR"} - {resumo.conta_interna?.situacao_atual ?? "NAO_CRIADA"}
+                </div>
+                {!resumo.conta_interna?.existe ? (
+                  <button
+                    type="button"
+                    className="mt-3 rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                    disabled={creatingContaInterna}
+                    onClick={() => void criarContaInternaColaborador()}
+                  >
+                    {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Resumo financeiro</div>
+                <div className="mt-1 text-lg font-semibold">
+                  {brlFromCentavos(Number(resumo.saldo_em_aberto_total_centavos ?? 0))}
+                </div>
+                <div className="mt-2 text-sm text-slate-600">Em aberto total</div>
+                <div className="mt-3 text-sm text-slate-700">
+                  Faturado no mes: {brlFromCentavos(Number(resumo.total_faturado_mes_centavos ?? 0))}
+                </div>
+                <div className="text-sm text-slate-700">
+                  Competencias abertas: {resumo.competencias_em_aberto?.join(", ") || "-"}
+                </div>
+                <div className="text-sm text-slate-700">
+                  Ultima importacao folha: {resumo.ultima_importacao_para_folha?.competencia ?? "-"}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Configuracao de pagamento</div>
+                <div className="mt-1 text-lg font-semibold">
+                  {resumo.status_configuracao_pagamento?.possui_config_financeira ? "Configurada" : "Pendente"}
+                </div>
+                <div className="mt-2 text-sm text-slate-700">
+                  Gera folha: {resumo.status_configuracao_pagamento?.gera_folha ? "Sim" : "Nao"}
+                </div>
+                <div className="text-sm text-slate-700">
+                  Desconto cartao: {resumo.status_configuracao_pagamento?.politica_desconto_cartao ?? "-"}
+                </div>
+                <div className="text-sm text-slate-700">
+                  Corte cartao: {resumo.status_configuracao_pagamento?.politica_corte_cartao ?? "-"}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="mb-3 text-sm font-semibold">Debitos por origem</div>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Cafe</span>
+                    <strong>{brlFromCentavos(Number(resumo.itens_em_aberto_por_origem?.cafe.total_centavos ?? 0))}</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Loja</span>
+                    <strong>{brlFromCentavos(Number(resumo.itens_em_aberto_por_origem?.loja.total_centavos ?? 0))}</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Escola</span>
+                    <strong>{brlFromCentavos(Number(resumo.itens_em_aberto_por_origem?.escola.total_centavos ?? 0))}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="mb-3 text-sm font-semibold">Competencias e faturas</div>
+                <div className="space-y-3">
+                  {(resumo.faturas_abertas ?? []).length === 0 && (resumo.faturas_fechadas_recentes ?? []).length === 0 ? (
+                    <div className="text-sm text-slate-600">Nenhuma fatura disponivel.</div>
+                  ) : (
+                    [...(resumo.faturas_abertas ?? []), ...(resumo.faturas_fechadas_recentes ?? [])].slice(0, 8).map((fatura) => (
+                      <div key={fatura.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                        <div>
+                          <div className="font-medium">{fatura.periodo_referencia}</div>
+                          <div className="text-slate-600">{fatura.status}</div>
+                        </div>
+                        <div className="text-right">
+                          <div>{brlFromCentavos(Number(fatura.valor_total_centavos ?? 0))}</div>
+                          <div className="mt-1 flex flex-wrap justify-end gap-2">
+                            <Link className="underline" href={`/admin/financeiro/credito-conexao/faturas/${fatura.id}`}>
+                              Abrir detalhes
+                            </Link>
+                            {fatura.folha_pagamento_id ? (
+                              <Link className="underline" href={`/admin/financeiro/folha/colaboradores/${fatura.folha_pagamento_id}`}>
+                                Ver espelho
+                              </Link>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 p-4">
+              <div className="mb-3 text-sm font-semibold">Ultimos lancamentos</div>
+              {(resumo.ultimos_lancamentos ?? []).length === 0 ? (
+                <div className="text-sm text-slate-600">Nenhum lancamento recente.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Origem</th>
+                        <th className="px-3 py-2 text-left">Descricao</th>
+                        <th className="px-3 py-2 text-left">Data</th>
+                        <th className="px-3 py-2 text-right">Valor</th>
+                        <th className="px-3 py-2 text-left">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(resumo.ultimos_lancamentos ?? []).map((item) => (
+                        <tr key={item.id} className="border-t">
+                          <td className="px-3 py-2">{item.origem_sistema ?? "-"}</td>
+                          <td className="px-3 py-2">{item.descricao ?? "-"}</td>
+                          <td className="px-3 py-2">{item.data_lancamento ?? "-"}</td>
+                          <td className="px-3 py-2 text-right">{brlFromCentavos(Number(item.valor_centavos ?? 0))}</td>
+                          <td className="px-3 py-2">{item.status ?? "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </SystemSectionCard>
         </>
       )}

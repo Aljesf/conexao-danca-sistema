@@ -7,7 +7,7 @@ import CafeStatCard from "@/components/cafe/CafeStatCard";
 
 const operacaoLinks = [
   {
-    href: "/cafe/vendas",
+    href: "/cafe/caixa",
     title: "Caixa / Vendas",
     description:
       "Operação do PDV, lançamento de itens, comprador, pagamento e fechamento da venda.",
