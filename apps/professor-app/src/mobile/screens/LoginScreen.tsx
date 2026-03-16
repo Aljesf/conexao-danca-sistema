@@ -2,17 +2,13 @@ import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import { useProfessorAuth } from "../auth-context";
 import { ENV } from "../../config/env";
-import {
-  restaurarSessao,
-  salvarSessaoLocal,
-} from "../../lib/api";
 import { supabase } from "../../lib/supabase";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
-  const { authStatus, refreshAuthState } = useProfessorAuth();
+  const { authStatus, completeLogin } = useProfessorAuth();
 
   const supabaseOk = Boolean(ENV.SUPABASE_URL && ENV.SUPABASE_ANON_KEY);
 
@@ -31,13 +27,7 @@ export default function LoginScreen() {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
       if (error) throw error;
 
-      await salvarSessaoLocal(data.session ?? null);
-      const authState = await restaurarSessao();
-      if (!authState.isAuthenticated || !authState.accessToken) {
-        throw new Error("Sessao nao ficou disponivel no app.");
-      }
-
-      await refreshAuthState();
+      await completeLogin(data.session ?? null);
     } catch (e) {
       const raw = e instanceof Error ? e.message : "Falha no login";
       const msg = raw.toLowerCase().includes("invalid login credentials")

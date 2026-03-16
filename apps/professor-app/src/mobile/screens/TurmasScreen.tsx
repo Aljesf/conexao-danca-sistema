@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../App";
 import { useProfessorAuth } from "../auth-context";
 import {
+  AUTH_REQUEST_UNAUTHORIZED,
   AUTH_SESSION_EXPIRED,
   AUTH_SESSION_NOT_READY,
   apiFetch,
@@ -45,14 +46,35 @@ function formatDate(dataISO?: string | null): string {
   }).format(date);
 }
 
+function summarizeTurmasError(message: string): string | null {
+  if (message === AUTH_SESSION_NOT_READY) {
+    return null;
+  }
+
+  if (message === AUTH_SESSION_EXPIRED) {
+    return "Sessão inválida ou expirada.";
+  }
+
+  if (message === AUTH_REQUEST_UNAUTHORIZED) {
+    return "A sessão foi mantida, mas a API recusou a consulta ampliada.";
+  }
+
+  return message;
+}
+
 export default function TurmasScreen({ route }: Props) {
-  const { authStatus, logout } = useProfessorAuth();
+  const { authStatus } = useProfessorAuth();
   const requestedDate = route.params?.dataReferencia ?? "";
   const [data, setData] = useState<TurmasPayload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const loadTurmas = useCallback(async (date: string) => {
+    if (authStatus !== "authenticated") {
+      setErro(null);
+      return;
+    }
+
     setLoading(true);
     try {
       const payload = await apiFetch<TurmasPayload>(
@@ -60,23 +82,19 @@ export default function TurmasScreen({ route }: Props) {
       );
       setData(payload);
       setErro(null);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Falha ao carregar turmas";
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Falha ao carregar turmas";
 
       if (message === AUTH_SESSION_NOT_READY) {
         setErro(null);
         return;
       }
 
-      setErro(message);
-
-      if (message === AUTH_SESSION_EXPIRED) {
-        await logout();
-      }
+      setErro(summarizeTurmasError(message));
     } finally {
       setLoading(false);
     }
-  }, [logout]);
+  }, [authStatus]);
 
   useEffect(() => {
     if (authStatus !== "authenticated") {
@@ -90,8 +108,19 @@ export default function TurmasScreen({ route }: Props) {
 
   if (authStatus === "booting") {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 14 }}>
-        <View style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 16, padding: 16, backgroundColor: "#fffaf1" }}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#f3efe7" }}
+        contentContainerStyle={{ padding: 16, gap: 14 }}
+      >
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#d7d2c8",
+            borderRadius: 16,
+            padding: 16,
+            backgroundColor: "#fffaf1",
+          }}
+        >
           <Text style={{ color: "#58656e" }}>Carregando sessão...</Text>
         </View>
       </ScrollView>
@@ -99,38 +128,72 @@ export default function TurmasScreen({ route }: Props) {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 14 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: "#f3efe7" }}
+      contentContainerStyle={{ padding: 16, gap: 14 }}
+    >
       <View style={{ gap: 6 }}>
         <Text style={{ fontSize: 28, fontWeight: "700", color: "#23313a" }}>Outras turmas</Text>
         <Text style={{ color: "#58656e" }}>
           {data?.scope === "all"
             ? `Consulta ampliada para ${formatDate(data.dataReferencia)}.`
-            : "Sem permissao ampliada. Exibindo apenas as turmas proprias."}
+            : "Sem permissão ampliada. Exibindo apenas as turmas próprias."}
         </Text>
       </View>
 
       {erro ? (
-        <View style={{ borderWidth: 1, borderColor: "#d17757", borderRadius: 16, padding: 14, backgroundColor: "#fff4ef" }}>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#d17757",
+            borderRadius: 16,
+            padding: 14,
+            backgroundColor: "#fff4ef",
+          }}
+        >
           <Text style={{ fontWeight: "700", marginBottom: 6, color: "#7a2f19" }}>Erro operacional</Text>
           <Text style={{ color: "#7a2f19" }}>{erro}</Text>
         </View>
       ) : null}
 
       {loading ? (
-        <View style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 16, padding: 16, backgroundColor: "#fffaf1" }}>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#d7d2c8",
+            borderRadius: 16,
+            padding: 16,
+            backgroundColor: "#fffaf1",
+          }}
+        >
           <Text style={{ color: "#58656e" }}>Carregando turmas...</Text>
         </View>
       ) : null}
 
       {!data?.turmas?.length ? (
-        <View style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 16, padding: 16, backgroundColor: "#fffaf1" }}>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#d7d2c8",
+            borderRadius: 16,
+            padding: 16,
+            backgroundColor: "#fffaf1",
+          }}
+        >
           <Text style={{ color: "#58656e" }}>Nenhuma turma encontrada para o dia.</Text>
         </View>
       ) : (
         data.turmas.map((item) => (
           <View
             key={`${item.turma_id}-${item.hora_inicio}`}
-            style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 16, padding: 14, gap: 5, backgroundColor: "#fffaf1" }}
+            style={{
+              borderWidth: 1,
+              borderColor: "#d7d2c8",
+              borderRadius: 16,
+              padding: 14,
+              gap: 5,
+              backgroundColor: "#fffaf1",
+            }}
           >
             <Text style={{ fontSize: 18, fontWeight: "700", color: "#23313a" }}>{item.turma_nome}</Text>
             <Text style={{ color: "#39464f" }}>

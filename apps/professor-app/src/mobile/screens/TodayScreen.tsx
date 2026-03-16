@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../App";
 import { useProfessorAuth } from "../auth-context";
 import {
+  AUTH_REQUEST_UNAUTHORIZED,
   AUTH_SESSION_EXPIRED,
   AUTH_SESSION_MISSING,
   AUTH_SESSION_NOT_READY,
@@ -83,21 +84,26 @@ function formatDiaSemana(dataISO?: string | null): string {
 }
 
 function summarizeError(message: string): string {
-  if (message === AUTH_SESSION_NOT_READY) {
+  if (message === AUTH_SESSION_NOT_READY || message === AUTH_SESSION_MISSING) {
     return "Aguardando restauração da sessão...";
   }
-  if (message === AUTH_SESSION_MISSING) {
-    return "Aguardando restauração da sessão...";
-  }
+
   if (message === AUTH_SESSION_EXPIRED) {
     return "Sessão inválida ou expirada.";
   }
+
+  if (message === AUTH_REQUEST_UNAUTHORIZED) {
+    return "A sessão foi mantida, mas a API recusou a requisição. Tente novamente.";
+  }
+
   if (message.includes("retornou HTML")) {
     return "A rota não retornou JSON válido.";
   }
+
   if (message.includes("Nao autenticado")) {
     return "Sessão inválida ou expirada.";
   }
+
   return message;
 }
 
@@ -125,7 +131,7 @@ function buildDisplayUser(
   const payloadUser = extrairUsuarioAutenticado(dashboardData);
 
   return {
-    nome: payloadUser?.nome ?? fallbackUser?.nome ?? "Usuario autenticado",
+    nome: payloadUser?.nome ?? fallbackUser?.nome ?? "Usuário autenticado",
     email: payloadUser?.email ?? fallbackUser?.email ?? null,
     perfil: payloadUser?.perfil ?? fallbackUser?.perfil ?? null,
   };
@@ -137,7 +143,16 @@ function SectionCard(props: {
   children: React.ReactNode;
 }) {
   return (
-    <View style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 18, padding: 16, gap: 10, backgroundColor: "#fffaf1" }}>
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: "#d7d2c8",
+        borderRadius: 18,
+        padding: 16,
+        gap: 10,
+        backgroundColor: "#fffaf1",
+      }}
+    >
       <View style={{ gap: 4 }}>
         <Text style={{ fontSize: 22, fontWeight: "700", color: "#23313a" }}>{props.title}</Text>
         {props.subtitle ? <Text style={{ color: "#58656e" }}>{props.subtitle}</Text> : null}
@@ -188,32 +203,25 @@ export default function TodayScreen({ navigation }: Props) {
       await enriquecerUsuarioAutenticado(payload);
       setData(payload);
       setErro(null);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Falha ao carregar dashboard";
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Falha ao carregar dashboard";
+
       if (message === AUTH_SESSION_NOT_READY) {
-        setErro(null);
+        setErro("Aguardando restauração da sessão...");
         return;
       }
 
       setData(null);
       setErro(summarizeError(message));
-
-      if (message === AUTH_SESSION_EXPIRED || message === AUTH_SESSION_MISSING) {
-        await logout();
-      }
     } finally {
       setLoading(false);
     }
-  }, [authStatus, logout]);
+  }, [authStatus]);
 
   useEffect(() => {
     if (authStatus !== "authenticated") {
       setData(null);
-      if (authStatus === "booting") {
-        setErro("Aguardando restauração da sessão...");
-      } else {
-        setErro(null);
-      }
+      setErro(authStatus === "booting" ? "Aguardando restauração da sessão..." : null);
       return;
     }
 
@@ -226,7 +234,10 @@ export default function TodayScreen({ navigation }: Props) {
 
   if (authStatus !== "authenticated") {
     return (
-      <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 18 }}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#f3efe7" }}
+        contentContainerStyle={{ padding: 16, gap: 18 }}
+      >
         <SectionCard title="Usuário logado" subtitle="Aguardando restauração da sessão do app.">
           <Text style={{ color: "#58656e" }}>Aguardando restauração da sessão...</Text>
         </SectionCard>
@@ -235,18 +246,23 @@ export default function TodayScreen({ navigation }: Props) {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 18 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: "#f3efe7" }}
+      contentContainerStyle={{ padding: 16, gap: 18 }}
+    >
       <View style={{ gap: 8 }}>
         <Text style={{ fontSize: 30, fontWeight: "700", color: "#23313a" }}>
           {data?.usuario?.nome ? `Olá, ${data.usuario.nome}` : "Professor App"}
         </Text>
         <Text style={{ color: "#58656e", fontSize: 16 }}>
-          {data?.usuario?.perfil ? `Perfil operacional: ${formatPerfil(data.usuario.perfil) ?? data.usuario.perfil}` : "Dashboard operacional do dia"}
+          {data?.usuario?.perfil
+            ? `Perfil operacional: ${formatPerfil(data.usuario.perfil) ?? data.usuario.perfil}`
+            : "Dashboard operacional do dia"}
         </Text>
         <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
           <ActionButton label="Ontem" onPress={() => setDataReferencia((value) => shiftISODate(value, -1))} />
           <ActionButton label="Hoje" onPress={() => setDataReferencia(todayISO())} active={isToday} />
-          <ActionButton label="Amanha" onPress={() => setDataReferencia((value) => shiftISODate(value, 1))} />
+          <ActionButton label="Amanhã" onPress={() => setDataReferencia((value) => shiftISODate(value, 1))} />
         </View>
         <Text style={{ color: "#39464f", fontSize: 15 }}>
           Data exibida: {formatDiaSemana(displayedDate)}
@@ -257,12 +273,14 @@ export default function TodayScreen({ navigation }: Props) {
         <View style={{ gap: 6 }}>
           <Text style={{ fontSize: 18, fontWeight: "700", color: "#23313a" }}>{displayUser.nome}</Text>
           {displayUser.email ? <Text style={{ color: "#39464f" }}>{displayUser.email}</Text> : null}
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <View
+            style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}
+          >
             <Text style={{ color: "#39464f" }}>
               Perfil: {formatPerfil(displayUser.perfil) ?? "Não informado"}
             </Text>
             <Pressable
-              onPress={() => void logout()}
+              onPress={() => void logout("manual_today_screen")}
               style={{
                 borderWidth: 1,
                 borderColor: "#23313a",
@@ -278,9 +296,20 @@ export default function TodayScreen({ navigation }: Props) {
       </SectionCard>
 
       {erro ? (
-        <View style={{ borderWidth: 1, borderColor: "#d17757", borderRadius: 16, padding: 14, gap: 10, backgroundColor: "#fff4ef" }}>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#d17757",
+            borderRadius: 16,
+            padding: 14,
+            gap: 10,
+            backgroundColor: "#fff4ef",
+          }}
+        >
           <View style={{ gap: 4 }}>
-            <Text style={{ fontWeight: "700", color: "#7a2f19" }}>Não foi possível carregar o dashboard do professor.</Text>
+            <Text style={{ fontWeight: "700", color: "#7a2f19" }}>
+              Não foi possível carregar o dashboard do professor.
+            </Text>
             <Text style={{ color: "#7a2f19" }}>Detalhe: {erro}</Text>
           </View>
           <Pressable
@@ -289,7 +318,14 @@ export default function TodayScreen({ navigation }: Props) {
                 void loadDashboard(dataReferencia);
               }
             }}
-            style={{ alignSelf: "flex-start", borderWidth: 1, borderColor: "#7a2f19", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 }}
+            style={{
+              alignSelf: "flex-start",
+              borderWidth: 1,
+              borderColor: "#7a2f19",
+              borderRadius: 12,
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+            }}
           >
             <Text style={{ fontWeight: "700", color: "#7a2f19" }}>Tentar novamente</Text>
           </Pressable>
@@ -297,7 +333,15 @@ export default function TodayScreen({ navigation }: Props) {
       ) : null}
 
       {loading ? (
-        <View style={{ borderWidth: 1, borderColor: "#d7d2c8", borderRadius: 16, padding: 14, backgroundColor: "#fffaf1" }}>
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: "#d7d2c8",
+            borderRadius: 16,
+            padding: 14,
+            backgroundColor: "#fffaf1",
+          }}
+        >
           <Text style={{ color: "#58656e" }}>Carregando dashboard...</Text>
         </View>
       ) : null}
@@ -309,7 +353,14 @@ export default function TodayScreen({ navigation }: Props) {
           data.agendaHoje.map((item) => (
             <View
               key={`${item.turma_id}-${item.hora_inicio}`}
-              style={{ borderWidth: 1, borderColor: "#e0d8cb", borderRadius: 14, padding: 12, gap: 4, backgroundColor: "#fff" }}
+              style={{
+                borderWidth: 1,
+                borderColor: "#e0d8cb",
+                borderRadius: 14,
+                padding: 12,
+                gap: 4,
+                backgroundColor: "#fff",
+              }}
             >
               <Text style={{ fontWeight: "700", fontSize: 18, color: "#23313a" }}>{item.turma_nome}</Text>
               <Text style={{ color: "#39464f" }}>
@@ -327,7 +378,7 @@ export default function TodayScreen({ navigation }: Props) {
         )}
       </SectionCard>
 
-      <SectionCard title="Aniversariantes do dia" subtitle="Quem faz aniversario na data selecionada.">
+      <SectionCard title="Aniversariantes do dia" subtitle="Quem faz aniversário na data selecionada.">
         {!data?.aniversariantesDia?.length ? (
           <Text style={{ color: "#58656e" }}>Nenhum aniversariante nesta data.</Text>
         ) : (
@@ -340,7 +391,10 @@ export default function TodayScreen({ navigation }: Props) {
         )}
       </SectionCard>
 
-      <SectionCard title="Aniversariantes da semana" subtitle="Semana operacional correspondente a data selecionada.">
+      <SectionCard
+        title="Aniversariantes da semana"
+        subtitle="Semana operacional correspondente à data selecionada."
+      >
         {!data?.aniversariantesSemana?.length ? (
           <Text style={{ color: "#58656e" }}>Nenhum aniversariante nesta semana.</Text>
         ) : (
@@ -348,7 +402,9 @@ export default function TodayScreen({ navigation }: Props) {
             <Text key={`semana-${item.id}`} style={{ color: "#23313a" }}>
               {item.nome}
               {item.tipo ? ` - ${item.tipo}` : ""}
-              {item.data_aniversario_referencia ? ` - ${formatDiaSemana(item.data_aniversario_referencia)}` : ""}
+              {item.data_aniversario_referencia
+                ? ` - ${formatDiaSemana(item.data_aniversario_referencia)}`
+                : ""}
             </Text>
           ))
         )}

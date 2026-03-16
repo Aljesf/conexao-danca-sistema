@@ -5,7 +5,8 @@ import { supabase } from "./supabase";
 
 export const AUTH_SESSION_NOT_READY = "AUTH_SESSION_NOT_READY";
 export const AUTH_SESSION_MISSING = "AUTH_SESSION_MISSING";
-export const AUTH_SESSION_EXPIRED = "sessao_invalida_ou_expirada";
+export const AUTH_SESSION_EXPIRED = "AUTH_SESSION_EXPIRED";
+export const AUTH_REQUEST_UNAUTHORIZED = "AUTH_REQUEST_UNAUTHORIZED";
 
 type UsuarioAutenticadoInterno = {
   id: string | null;
@@ -47,6 +48,11 @@ type DashboardPayloadComUsuario = {
 
 type AuthStateListener = (state: AuthBootstrapState) => void;
 
+type GetSessaoAtualOptions = {
+  preserveAuthenticatedState?: boolean;
+  origem?: string;
+};
+
 const estadoAuthInicial: AuthBootstrapState = {
   isHydratingSession: false,
   isAuthenticated: false,
@@ -55,9 +61,33 @@ const estadoAuthInicial: AuthBootstrapState = {
   user: null,
 };
 
+const authControl = {
+  bootstrapInProgress: false,
+  logoutInProgress: false,
+};
+
 let authState: AuthBootstrapState = estadoAuthInicial;
 let hydrationPromise: Promise<AuthBootstrapState> | null = null;
 const authListeners = new Set<AuthStateListener>();
+
+function authLog(evento: string, detalhes?: Record<string, unknown>): void {
+  if (detalhes) {
+    console.log(`[AUTH] ${evento}`, detalhes);
+    return;
+  }
+
+  console.log(`[AUTH] ${evento}`);
+}
+
+function resumirEstado(state: AuthBootstrapState): Record<string, unknown> {
+  return {
+    isHydratingSession: state.isHydratingSession,
+    isAuthenticated: state.isAuthenticated,
+    hasAccessToken: Boolean(state.accessToken),
+    hasRefreshToken: Boolean(state.refreshToken),
+    hasUser: Boolean(state.user),
+  };
+}
 
 function cloneUser(user: UsuarioAutenticadoInterno | null): UsuarioAutenticadoInterno | null {
   if (!user) return null;
@@ -87,8 +117,15 @@ function notifyAuthListeners(): void {
   }
 }
 
-function setAuthState(nextState: AuthBootstrapState): AuthBootstrapState {
+function setAuthState(origem: string, nextState: AuthBootstrapState): AuthBootstrapState {
+  const previousState = cloneAuthState(authState);
   authState = cloneAuthState(nextState);
+
+  authLog(`setAuthState origem=${origem}`, {
+    previous: resumirEstado(previousState),
+    next: resumirEstado(authState),
+  });
+
   notifyAuthListeners();
   return cloneAuthState(authState);
 }
@@ -211,7 +248,10 @@ function validarSessaoLocal(payload: unknown): SessaoLocalPersistida | null {
 
 export async function salvarSessaoLocal(session: Session | null): Promise<void> {
   if (!session?.access_token || !session.refresh_token) {
-    await clearSession();
+    authLog("salvarSessaoLocal ignorado", {
+      hasAccessToken: Boolean(session?.access_token),
+      hasRefreshToken: Boolean(session?.refresh_token),
+    });
     return;
   }
 
@@ -223,21 +263,36 @@ export async function salvarSessaoLocal(session: Session | null): Promise<void> 
   };
 
   await saveSession(JSON.stringify(payload));
+  authLog("salvarSessaoLocal ok", {
+    hasAccessToken: true,
+    hasRefreshToken: true,
+    hasUser: Boolean(user),
+  });
 }
 
 export async function lerSessaoLocal(): Promise<SessaoLocalPersistida | null> {
   const raw = await loadSession();
+  authLog("lerSessaoLocal", { hasSession: Boolean(raw) });
+
   if (!raw) return null;
 
   try {
-    return validarSessaoLocal(JSON.parse(raw));
+    const parsed = validarSessaoLocal(JSON.parse(raw));
+    authLog("lerSessaoLocal validada", {
+      hasAccessToken: Boolean(parsed?.accessToken),
+      hasRefreshToken: Boolean(parsed?.refreshToken),
+      hasUser: Boolean(parsed?.user),
+    });
+    return parsed;
   } catch {
+    authLog("lerSessaoLocal invalida");
     return null;
   }
 }
 
-export async function limparSessaoLocal(): Promise<void> {
+export async function limparSessaoLocal(motivo = "nao_informado"): Promise<void> {
   await clearSession();
+  authLog(`limparSessaoLocal motivo=${motivo}`);
 }
 
 export function extrairUsuarioAutenticado(payload: unknown): UsuarioAutenticadoResumo | null {
@@ -263,6 +318,9 @@ async function persistirUsuarioAtualEmMemoria(): Promise<void> {
   };
 
   await saveSession(JSON.stringify(payload));
+  authLog("persistirUsuarioAtualEmMemoria ok", {
+    hasUser: Boolean(payload.user),
+  });
 }
 
 export async function enriquecerUsuarioAutenticado(payload: unknown): Promise<UsuarioAutenticadoResumo | null> {
@@ -278,7 +336,7 @@ export async function enriquecerUsuarioAutenticado(payload: unknown): Promise<Us
     perfil: usuario.perfil ?? authState.user?.perfil ?? null,
   };
 
-  setAuthState({
+  setAuthState("enriquecerUsuarioAutenticado", {
     ...authState,
     user: nextUser,
   });
@@ -287,29 +345,30 @@ export async function enriquecerUsuarioAutenticado(payload: unknown): Promise<Us
   return usuarioInternoParaResumo(nextUser);
 }
 
-async function aplicarSessaoSupabase(session: Session | null, keepHydratingFlag: boolean): Promise<void> {
-  if (!session) {
-    await limparSessaoLocal();
-    setAuthState(criarEstadoNaoAutenticado(keepHydratingFlag));
-    return;
+async function aplicarSessaoEmMemoria(origem: string, session: Session | null): Promise<AuthBootstrapState> {
+  if (!session?.access_token || !session.refresh_token) {
+    return setAuthState(origem, criarEstadoNaoAutenticado(false));
   }
 
   await salvarSessaoLocal(session);
-  setAuthState(
+  return setAuthState(
+    origem,
     criarEstadoDeSessao({
       session,
       user: authState.user,
-      isHydratingSession: keepHydratingFlag,
+      isHydratingSession: authControl.bootstrapInProgress,
     }),
   );
 }
 
 export async function restaurarSessao(): Promise<AuthBootstrapState> {
   if (hydrationPromise) {
+    authLog("restaurarSessao reutilizando promise");
     return hydrationPromise;
   }
 
-  setAuthState({
+  authControl.bootstrapInProgress = true;
+  setAuthState("restaurarSessao:start", {
     ...authState,
     isHydratingSession: true,
     isAuthenticated: false,
@@ -317,24 +376,32 @@ export async function restaurarSessao(): Promise<AuthBootstrapState> {
 
   hydrationPromise = (async () => {
     const sessaoLocal = await lerSessaoLocal();
+
     if (!sessaoLocal) {
-      await limparSessaoLocal();
-      return setAuthState(criarEstadoNaoAutenticado(false));
+      await limparSessaoLocal("restore_sem_storage");
+      return setAuthState("restaurarSessao:sem_storage", criarEstadoNaoAutenticado(false));
     }
+
+    authLog("restaurarSessao tentando setSession", {
+      hasAccessToken: Boolean(sessaoLocal.accessToken),
+      hasRefreshToken: Boolean(sessaoLocal.refreshToken),
+      hasUser: Boolean(sessaoLocal.user),
+    });
 
     const { data, error } = await supabase.auth.setSession({
       access_token: sessaoLocal.accessToken,
       refresh_token: sessaoLocal.refreshToken,
     });
 
-    if (error || !data.session) {
-      await limparSessaoLocal();
-      return setAuthState(criarEstadoNaoAutenticado(false));
+    if (error || !data.session?.access_token) {
+      await limparSessaoLocal("restore_setSession_falhou");
+      return setAuthState("restaurarSessao:falhou", criarEstadoNaoAutenticado(false));
     }
 
     await salvarSessaoLocal(data.session);
 
     return setAuthState(
+      "restaurarSessao:authenticated",
       criarEstadoDeSessao({
         session: data.session,
         user: mergeUsuarioInterno(sessaoLocal.user, authState.user),
@@ -347,27 +414,46 @@ export async function restaurarSessao(): Promise<AuthBootstrapState> {
     return await hydrationPromise;
   } finally {
     hydrationPromise = null;
+    authControl.bootstrapInProgress = false;
+    authLog("restaurarSessao encerrada", resumirEstado(authState));
   }
 }
 
-export async function getSessaoAtual(): Promise<AuthBootstrapState> {
+export async function getSessaoAtual(options?: GetSessaoAtualOptions): Promise<AuthBootstrapState> {
+  const preserveAuthenticatedState = options?.preserveAuthenticatedState ?? true;
+  const origem = options?.origem ?? "getSessaoAtual";
+
   if (hydrationPromise) {
+    authLog(`${origem} aguardando restaurarSessao em andamento`);
     return hydrationPromise;
   }
 
   const { data } = await supabase.auth.getSession();
-  if (!data.session) {
-    return setAuthState(criarEstadoNaoAutenticado(false));
+  if (data.session?.access_token) {
+    await salvarSessaoLocal(data.session);
+    return setAuthState(
+      `${origem}:session_supabase`,
+      criarEstadoDeSessao({
+        session: data.session,
+        user: authState.user,
+        isHydratingSession: false,
+      }),
+    );
   }
 
-  const nextState = criarEstadoDeSessao({
-    session: data.session,
-    user: authState.user,
-    isHydratingSession: false,
-  });
+  if (preserveAuthenticatedState && authState.isAuthenticated && authState.accessToken) {
+    authLog(`${origem} preservando sessao em memoria`, resumirEstado(authState));
+    return cloneAuthState(authState);
+  }
 
-  await salvarSessaoLocal(data.session);
-  return setAuthState(nextState);
+  const sessaoLocal = await lerSessaoLocal();
+  if (sessaoLocal?.accessToken && sessaoLocal.refreshToken) {
+    authLog(`${origem} sem sessao no supabase, tentando restaurar do storage`);
+    return restaurarSessao();
+  }
+
+  await limparSessaoLocal(`${origem}_sem_sessao`);
+  return setAuthState(`${origem}:unauthenticated`, criarEstadoNaoAutenticado(false));
 }
 
 export function getAuthBootstrapState(): AuthBootstrapState {
@@ -382,20 +468,37 @@ export function subscribeAuthState(listener: AuthStateListener): () => void {
   };
 }
 
-export async function logoutApp(): Promise<AuthBootstrapState> {
-  await limparSessaoLocal();
-  await supabase.auth.signOut().catch(() => undefined);
-  return setAuthState(criarEstadoNaoAutenticado(false));
+export async function logoutApp(motivo = "manual"): Promise<AuthBootstrapState> {
+  authControl.logoutInProgress = true;
+  authLog(`logoutApp inicio motivo=${motivo}`, resumirEstado(authState));
+
+  try {
+    await limparSessaoLocal(`logout_${motivo}`);
+    await supabase.auth.signOut().catch(() => undefined);
+    return setAuthState(`logoutApp:${motivo}`, criarEstadoNaoAutenticado(false));
+  } finally {
+    authControl.logoutInProgress = false;
+    authLog(`logoutApp fim motivo=${motivo}`, resumirEstado(authState));
+  }
 }
 
-async function buildAuthenticatedHeaders(headers?: HeadersInit): Promise<Record<string, string>> {
+async function buildAuthenticatedHeaders(path: string, headers?: HeadersInit): Promise<Record<string, string>> {
   if (authState.isHydratingSession) {
+    authLog(`bloquear requisição por AUTH_SESSION_NOT_READY em ${path}`, resumirEstado(authState));
     throw new Error(AUTH_SESSION_NOT_READY);
   }
 
-  const accessToken = authState.accessToken ?? (await getSessaoAtual()).accessToken;
+  const currentState = !authState.isAuthenticated || !authState.accessToken
+    ? await getSessaoAtual({ origem: `buildAuthenticatedHeaders:${path}` })
+    : cloneAuthState(authState);
 
-  if (!authState.isAuthenticated || !accessToken) {
+  if (currentState.isHydratingSession) {
+    authLog(`bloquear requisição por AUTH_SESSION_NOT_READY em ${path}`, resumirEstado(currentState));
+    throw new Error(AUTH_SESSION_NOT_READY);
+  }
+
+  if (!currentState.isAuthenticated || !currentState.accessToken) {
+    authLog(`buildAuthenticatedHeaders sem token em ${path}`, resumirEstado(currentState));
     throw new Error(AUTH_SESSION_MISSING);
   }
 
@@ -415,9 +518,14 @@ async function buildAuthenticatedHeaders(headers?: HeadersInit): Promise<Record<
     Object.assign(normalizedHeaders, headers);
   }
 
+  authLog(`buildAuthenticatedHeaders ok em ${path}`, {
+    hasAccessToken: true,
+    hasUser: Boolean(currentState.user),
+  });
+
   return {
     ...normalizedHeaders,
-    Authorization: `Bearer ${accessToken}`,
+    Authorization: `Bearer ${currentState.accessToken}`,
   };
 }
 
@@ -458,7 +566,7 @@ function extractApiMessage(payload: unknown): { error: string; details?: string 
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${ENV.API_BASE_URL}${path}`;
-  const headers = await buildAuthenticatedHeaders(init?.headers);
+  const headers = await buildAuthenticatedHeaders(path, init?.headers);
 
   const res = await fetch(url, {
     ...init,
@@ -469,8 +577,22 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const body = await res.text().catch(() => "");
 
   if (res.status === 401) {
-    await logoutApp();
-    throw new Error(AUTH_SESSION_EXPIRED);
+    const currentState = cloneAuthState(authState);
+    const sessaoLocal = await lerSessaoLocal();
+    const hasConfirmedToken = Boolean(currentState.accessToken || sessaoLocal?.accessToken);
+
+    authLog(`401 detectado em ${path}`, {
+      ...resumirEstado(currentState),
+      hasLocalAccessToken: Boolean(sessaoLocal?.accessToken),
+      hasLocalUser: Boolean(sessaoLocal?.user),
+    });
+
+    if (!hasConfirmedToken) {
+      await logoutApp(`401_confirmado_${path}`);
+      throw new Error(AUTH_SESSION_EXPIRED);
+    }
+
+    throw new Error(AUTH_REQUEST_UNAUTHORIZED);
   }
 
   if (isHtmlResponse(contentType, body)) {
@@ -494,6 +616,39 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return payload as T;
 }
 
-void supabase.auth.onAuthStateChange((_event, session) => {
-  void aplicarSessaoSupabase(session, authState.isHydratingSession);
+void supabase.auth.onAuthStateChange((event, session) => {
+  authLog(`listener onAuthStateChange evento=${event}`, {
+    hasSession: Boolean(session?.access_token),
+    bootstrapInProgress: authControl.bootstrapInProgress,
+    logoutInProgress: authControl.logoutInProgress,
+    ...resumirEstado(authState),
+  });
+
+  if (session?.access_token) {
+    void aplicarSessaoEmMemoria(`listener:${event}`, session);
+    return;
+  }
+
+  if (authControl.logoutInProgress) {
+    authLog(`listener ${event} aceito durante logout`);
+    return;
+  }
+
+  if (authControl.bootstrapInProgress) {
+    authLog(`listener ${event} ignorado durante bootstrap`);
+    return;
+  }
+
+  void lerSessaoLocal().then(async (sessaoLocal) => {
+    if (sessaoLocal?.accessToken) {
+      authLog(`listener ${event} ignorado por sessao local ainda presente`, {
+        hasLocalAccessToken: true,
+        hasLocalUser: Boolean(sessaoLocal.user),
+      });
+      return;
+    }
+
+    await limparSessaoLocal(`listener_${event}_sem_storage`);
+    setAuthState(`listener:${event}:unauthenticated`, criarEstadoNaoAutenticado(false));
+  });
 });
