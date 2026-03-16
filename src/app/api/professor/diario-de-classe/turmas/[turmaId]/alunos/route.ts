@@ -40,7 +40,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ turmaId
     );
   }
 
-  const rows = (data as TurmaAlunoRow[] | null) ?? [];
+  const rows = (data as unknown as TurmaAlunoRow[] | null) ?? [];
 
   const alunosNormalizados = rows.map((row) => ({
     aluno_pessoa_id: row.aluno_pessoa_id,

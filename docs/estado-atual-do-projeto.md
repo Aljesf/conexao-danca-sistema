@@ -56,5 +56,9 @@ Conectarte v0.9 - Ballet Café com revisão visual final em andamento e base Saa
     - base para consulta ampliada de outras turmas.
   - Correcao do fluxo mobile com Bearer token nas rotas do modulo professor.
   - Base SQL criada para frequencia com rastreabilidade do usuario autenticado.
+  - Dashboard agora aceita data de referencia para navegacao entre dias.
+  - Home com acoes rapidas de ontem/hoje/amanha.
+  - Tratamento de erro operacional ajustado para nao renderizar HTML bruto no app.
+  - Logica de aniversariantes do dia/semana revisada para refletir corretamente o calendario operacional.
   - Proxima etapa operacional:
     - registro de frequencia com rastreabilidade do usuario autenticado.

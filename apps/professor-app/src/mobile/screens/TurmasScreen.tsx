@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../App";
 import { apiFetch } from "../../lib/api";
 
 type TurmaItem = {
@@ -15,26 +17,47 @@ type TurmaItem = {
 };
 
 type TurmasPayload = {
+  ok: true;
   turmas: TurmaItem[];
+  dataReferencia: string;
   scope?: string;
   podeVerOutrasTurmas?: boolean;
 };
 
-export default function TurmasScreen() {
+type Props = NativeStackScreenProps<RootStackParamList, "Turmas">;
+
+function formatDate(dataISO?: string | null): string {
+  if (!dataISO) return "";
+
+  const date = new Date(`${dataISO}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+export default function TurmasScreen({ route }: Props) {
+  const requestedDate = route.params?.dataReferencia ?? "";
   const [data, setData] = useState<TurmasPayload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const payload = await apiFetch<TurmasPayload>("/api/professor/turmas?scope=all");
+        const payload = await apiFetch<TurmasPayload>(
+          `/api/professor/turmas?scope=all${requestedDate ? `&data=${requestedDate}` : ""}`,
+        );
         setData(payload);
         setErro(null);
       } catch (e) {
         setErro((e as Error).message);
       }
     })();
-  }, []);
+  }, [requestedDate]);
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 14 }}>
@@ -42,7 +65,7 @@ export default function TurmasScreen() {
         <Text style={{ fontSize: 28, fontWeight: "700", color: "#23313a" }}>Outras turmas</Text>
         <Text style={{ color: "#58656e" }}>
           {data?.scope === "all"
-            ? "Consulta ampliada habilitada para a operacao do dia."
+            ? `Consulta ampliada para ${formatDate(data.dataReferencia)}.`
             : "Sem permissao ampliada. Exibindo apenas as turmas proprias."}
         </Text>
       </View>

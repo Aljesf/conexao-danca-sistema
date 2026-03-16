@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const turmas = (data as TurmaLinkRow[] | null)
+  const turmas = (data as unknown as TurmaLinkRow[] | null)
     ?.map((row) => row.turma)
     .filter((row): row is TurmaRow => Boolean(row)) ?? [];
 

@@ -24,6 +24,8 @@ type PessoaItem = {
 };
 
 type DashboardPayload = {
+  ok: true;
+  dataReferencia: string;
   usuario?: {
     id?: string | null;
     nome?: string | null;
@@ -38,17 +40,47 @@ type DashboardPayload = {
 
 type Props = NativeStackScreenProps<RootStackParamList, "Today">;
 
+function todayISO(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function shiftISODate(value: string, delta: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day, 12, 0, 0);
+  date.setDate(date.getDate() + delta);
+
+  const nextYear = date.getFullYear();
+  const nextMonth = String(date.getMonth() + 1).padStart(2, "0");
+  const nextDay = String(date.getDate()).padStart(2, "0");
+  return `${nextYear}-${nextMonth}-${nextDay}`;
+}
+
 function formatDiaSemana(dataISO?: string | null): string {
   if (!dataISO) return "";
 
-  const date = new Date(`${dataISO}T00:00:00`);
+  const date = new Date(`${dataISO}T12:00:00`);
   if (Number.isNaN(date.getTime())) return "";
 
   return new Intl.DateTimeFormat("pt-BR", {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
+    year: "numeric",
   }).format(date);
+}
+
+function summarizeError(message: string): string {
+  if (message.includes("retornou HTML")) {
+    return "rota nao retornou JSON valido.";
+  }
+  if (message.includes("Nao autenticado")) {
+    return "sessao invalida ou expirada.";
+  }
+  return message;
 }
 
 function SectionCard(props: {
@@ -67,43 +99,88 @@ function SectionCard(props: {
   );
 }
 
+function ActionButton(props: {
+  label: string;
+  onPress: () => void;
+  active?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={props.onPress}
+      style={{
+        borderWidth: 1,
+        borderColor: props.active ? "#23313a" : "#c8c1b6",
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        backgroundColor: props.active ? "#23313a" : "#fffaf1",
+      }}
+    >
+      <Text style={{ fontWeight: "700", color: props.active ? "#fffaf1" : "#23313a" }}>{props.label}</Text>
+    </Pressable>
+  );
+}
+
 export default function TodayScreen({ navigation }: Props) {
+  const [dataReferencia, setDataReferencia] = useState(todayISO());
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
+  async function loadDashboard(date: string) {
+    try {
+      const payload = await apiFetch<DashboardPayload>(`/api/professor/dashboard?data=${date}`);
+      setData(payload);
+      setErro(null);
+    } catch (e) {
+      setData(null);
+      setErro(summarizeError((e as Error).message));
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        const payload = await apiFetch<DashboardPayload>("/api/professor/dashboard");
-        setData(payload);
-        setErro(null);
-      } catch (e) {
-        setErro((e as Error).message);
-      }
-    })();
-  }, []);
+    void loadDashboard(dataReferencia);
+  }, [dataReferencia]);
+
+  const displayedDate = data?.dataReferencia ?? dataReferencia;
+  const isToday = displayedDate === todayISO();
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: "#f3efe7" }} contentContainerStyle={{ padding: 16, gap: 18 }}>
-      <View style={{ gap: 6 }}>
+      <View style={{ gap: 8 }}>
         <Text style={{ fontSize: 30, fontWeight: "700", color: "#23313a" }}>
           {data?.usuario?.nome ? `Ola, ${data.usuario.nome}` : "Professor App"}
         </Text>
         <Text style={{ color: "#58656e", fontSize: 16 }}>
           {data?.usuario?.perfil ? `Perfil operacional: ${data.usuario.perfil}` : "Dashboard operacional do dia"}
         </Text>
+        <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+          <ActionButton label="Ontem" onPress={() => setDataReferencia((value) => shiftISODate(value, -1))} />
+          <ActionButton label="Hoje" onPress={() => setDataReferencia(todayISO())} active={isToday} />
+          <ActionButton label="Amanha" onPress={() => setDataReferencia((value) => shiftISODate(value, 1))} />
+        </View>
+        <Text style={{ color: "#39464f", fontSize: 15 }}>
+          Data exibida: {formatDiaSemana(displayedDate)}
+        </Text>
       </View>
 
       {erro ? (
-        <View style={{ borderWidth: 1, borderColor: "#d17757", borderRadius: 16, padding: 14, backgroundColor: "#fff4ef" }}>
-          <Text style={{ fontWeight: "700", marginBottom: 6, color: "#7a2f19" }}>Erro operacional</Text>
-          <Text style={{ color: "#7a2f19" }}>{erro}</Text>
+        <View style={{ borderWidth: 1, borderColor: "#d17757", borderRadius: 16, padding: 14, gap: 10, backgroundColor: "#fff4ef" }}>
+          <View style={{ gap: 4 }}>
+            <Text style={{ fontWeight: "700", color: "#7a2f19" }}>Nao foi possivel carregar o dashboard do professor.</Text>
+            <Text style={{ color: "#7a2f19" }}>Detalhe: {erro}</Text>
+          </View>
+          <Pressable
+            onPress={() => void loadDashboard(dataReferencia)}
+            style={{ alignSelf: "flex-start", borderWidth: 1, borderColor: "#7a2f19", borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12 }}
+          >
+            <Text style={{ fontWeight: "700", color: "#7a2f19" }}>Tentar novamente</Text>
+          </Pressable>
         </View>
       ) : null}
 
-      <SectionCard title="Turmas de hoje" subtitle="Agenda operacional do professor logado.">
+      <SectionCard title="Turmas do dia" subtitle="Agenda operacional do professor para a data selecionada.">
         {!data?.agendaHoje?.length ? (
-          <Text style={{ color: "#58656e" }}>Nenhuma turma encontrada para hoje.</Text>
+          <Text style={{ color: "#58656e" }}>Nenhuma turma encontrada para esta data.</Text>
         ) : (
           data.agendaHoje.map((item) => (
             <View
@@ -126,9 +203,9 @@ export default function TodayScreen({ navigation }: Props) {
         )}
       </SectionCard>
 
-      <SectionCard title="Aniversariantes do dia" subtitle="Quem faz aniversario hoje no operacional da escola.">
+      <SectionCard title="Aniversariantes do dia" subtitle="Quem faz aniversario na data selecionada.">
         {!data?.aniversariantesDia?.length ? (
-          <Text style={{ color: "#58656e" }}>Nenhum aniversariante hoje.</Text>
+          <Text style={{ color: "#58656e" }}>Nenhum aniversariante nesta data.</Text>
         ) : (
           data.aniversariantesDia.map((item) => (
             <Text key={`dia-${item.id}`} style={{ color: "#23313a" }}>
@@ -139,7 +216,7 @@ export default function TodayScreen({ navigation }: Props) {
         )}
       </SectionCard>
 
-      <SectionCard title="Aniversariantes da semana" subtitle="Proximos 7 dias, incluindo hoje.">
+      <SectionCard title="Aniversariantes da semana" subtitle="Semana operacional correspondente a data selecionada.">
         {!data?.aniversariantesSemana?.length ? (
           <Text style={{ color: "#58656e" }}>Nenhum aniversariante nesta semana.</Text>
         ) : (
@@ -155,7 +232,7 @@ export default function TodayScreen({ navigation }: Props) {
 
       {data?.podeVerOutrasTurmas ? (
         <Pressable
-          onPress={() => navigation.navigate("Turmas")}
+          onPress={() => navigation.navigate("Turmas", { dataReferencia: displayedDate })}
           style={{
             borderWidth: 1,
             borderColor: "#23313a",
@@ -165,7 +242,7 @@ export default function TodayScreen({ navigation }: Props) {
             backgroundColor: "#23313a",
           }}
         >
-          <Text style={{ fontWeight: "700", color: "#f8f2e8" }}>Ver outras turmas de hoje</Text>
+          <Text style={{ fontWeight: "700", color: "#f8f2e8" }}>Ver outras turmas do dia</Text>
         </Pressable>
       ) : null}
     </ScrollView>

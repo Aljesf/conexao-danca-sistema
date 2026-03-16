@@ -8,7 +8,7 @@ import TurmasScreen from "./screens/TurmasScreen";
 export type RootStackParamList = {
   Login: undefined;
   Today: undefined;
-  Turmas: undefined;
+  Turmas: { dataReferencia?: string } | undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

@@ -51,6 +51,8 @@ type BirthdayRow = {
 };
 
 const EXPANDED_SCOPE_ROLE_CODES = new Set(["ADMIN", "COORDENACAO", "SECRETARIA", "ACADEMICO"]);
+const PROFESSOR_TIME_ZONE = "America/Fortaleza";
+const DATE_PARAM_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 function normalizeRoleCode(value: string | null | undefined): string {
   return String(value ?? "").trim().toUpperCase();
@@ -78,6 +80,46 @@ async function listRoleRowsForUser(userId: string): Promise<RoleJoinRow[]> {
   } catch {
     return [];
   }
+}
+
+function isValidDateParts(year: number, month: number, day: number): boolean {
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day
+  );
+}
+
+export function normalizeProfessorDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  if (!DATE_PARAM_REGEX.test(raw)) return null;
+
+  const [yearStr, monthStr, dayStr] = raw.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+
+  if (!isValidDateParts(year, month, day)) return null;
+  return raw;
+}
+
+export function getProfessorTodayISO(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: PROFESSOR_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+export function resolveProfessorDate(value: string | null | undefined): string {
+  return normalizeProfessorDate(value) ?? getProfessorTodayISO();
 }
 
 export async function getProfessorOperationalAccess(userId: string): Promise<{
@@ -174,29 +216,31 @@ export async function fetchProfessorAgendaHoje(params: {
   supabase: Supa;
   colaboradorId: number | null;
   scopeAll: boolean;
+  dataReferencia: string;
 }) {
-  const { supabase, colaboradorId, scopeAll } = params;
+  const { supabase, colaboradorId, scopeAll, dataReferencia } = params;
 
   if (!scopeAll && !colaboradorId) {
     return [];
   }
 
-  let query = supabase
-    .from("vw_app_professor_agenda_hoje")
-    .select("turma_id, turma_nome, professor_id, professor_nome, hora_inicio, hora_fim, sala, curso, nivel, turno, ano_referencia")
-    .order("hora_inicio", { ascending: true })
-    .order("turma_nome", { ascending: true });
+  const { data, error } = await supabase.rpc("fn_app_professor_agenda", {
+    p_data: dataReferencia,
+  });
 
-  if (!scopeAll && colaboradorId) {
-    query = query.eq("professor_id", colaboradorId);
-  }
-
-  const { data, error } = await query;
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data as AgendaRow[] | null) ?? []).map((row) => ({
+  const rows = ((data as unknown as AgendaRow[] | null) ?? [])
+    .filter((row) => scopeAll || row.professor_id === colaboradorId)
+    .sort((a, b) => {
+      const horaA = a.hora_inicio ?? "";
+      const horaB = b.hora_inicio ?? "";
+      return horaA.localeCompare(horaB) || a.turma_nome.localeCompare(b.turma_nome);
+    });
+
+  return rows.map((row) => ({
     turma_id: Number(row.turma_id),
     turma_nome: String(row.turma_nome),
     professor_id: row.professor_id ? Number(row.professor_id) : null,
@@ -211,17 +255,19 @@ export async function fetchProfessorAgendaHoje(params: {
   }));
 }
 
-export async function fetchProfessorAniversariantesDia(supabase: Supa) {
-  const { data, error } = await supabase
-    .from("vw_app_professor_aniversariantes_dia")
-    .select("id, pessoa_id, nome, nascimento, tipo")
-    .order("nome", { ascending: true });
+export async function fetchProfessorAniversariantesDia(params: {
+  supabase: Supa;
+  dataReferencia: string;
+}) {
+  const { data, error } = await params.supabase.rpc("fn_app_professor_aniversariantes_dia", {
+    p_data: params.dataReferencia,
+  });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data as BirthdayRow[] | null) ?? []).map((row) => ({
+  return ((data as unknown as BirthdayRow[] | null) ?? []).map((row) => ({
     id: row.id,
     pessoa_id: Number(row.pessoa_id),
     nome: row.nome,
@@ -230,18 +276,19 @@ export async function fetchProfessorAniversariantesDia(supabase: Supa) {
   }));
 }
 
-export async function fetchProfessorAniversariantesSemana(supabase: Supa) {
-  const { data, error } = await supabase
-    .from("vw_app_professor_aniversariantes_semana")
-    .select("id, pessoa_id, nome, nascimento, tipo, data_aniversario_referencia")
-    .order("data_aniversario_referencia", { ascending: true })
-    .order("nome", { ascending: true });
+export async function fetchProfessorAniversariantesSemana(params: {
+  supabase: Supa;
+  dataReferencia: string;
+}) {
+  const { data, error } = await params.supabase.rpc("fn_app_professor_aniversariantes_semana", {
+    p_data: params.dataReferencia,
+  });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data as BirthdayRow[] | null) ?? []).map((row) => ({
+  return ((data as unknown as BirthdayRow[] | null) ?? []).map((row) => ({
     id: row.id,
     pessoa_id: Number(row.pessoa_id),
     nome: row.nome,
