@@ -1,5 +1,5 @@
 ## Modulo atual
-Financeiro com formas de pagamento centralizadas por contexto e centro de custo no cadastro legado canônico, Ballet Cafe e Loja consumindo essa configuracao no PDV/caixa, dashboard operacional e financeiro do Cafe, home por contexto por usuario e compatibilidade ativa com o schema real do sistema.
+Ballet Cafe concluido neste chat com PDV, integracao financeira, conta interna, tabela de preco, formas de pagamento centrais, recibo operacional e compatibilidade ativa com o schema real do sistema. A Loja segue consumindo a mesma configuracao central de pagamentos.
 
 ## SQL concluido
 - `20260317_001_contexto_home_usuario_e_dashboard_cafe.sql` com preferencia de home por contexto e views analiticas do Cafe.
@@ -105,3 +105,9 @@ Conectarte v0.9 com:
 - O fechamento do PDV do Cafe agora oferece CTA direto para abrir o recibo da venda concluida, sem deixar o operador preso em um estado ambíguo.
 - A consulta posterior tambem ficou acessivel pela fila do Caixa, permitindo revisar e reimprimir vendas recentes.
 - A validacao manual autenticada continua pendente neste ambiente por ausencia de sessao de navegador; a validacao de dados/backend segue obrigatoria na homologacao final.
+
+## 2026-03-17 - Fechamento final do modulo Ballet Cafe
+
+- Modulo encerrado neste chat com PDV, Caixa, integracao financeira, conta interna por perfil, tabela de preco no fluxo, formas de pagamento centralizadas e recibo operacional.
+- O fluxo canonico de conta interna ficou consolidado para aluno e colaborador na mesma base mensal de fatura, com diferenca apenas no destino da liquidacao posterior.
+- O deploy final desta etapa depende do push na branch principal e do disparo automatico configurado no Vercel, salvo necessidade operacional externa da equipe.
