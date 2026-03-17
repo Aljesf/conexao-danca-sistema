@@ -48,6 +48,21 @@ type PagamentosResponse = {
     pessoa_id: number | null;
     tipo: CafeCompradorTipo;
   };
+  conta_interna?: {
+    elegivel: boolean;
+    tipo: "ALUNO" | "COLABORADOR" | null;
+    conta_id: number | null;
+    titular_pessoa_id: number | null;
+    motivo: string | null;
+    suporte?: {
+      pode_solicitar: boolean;
+      payload: {
+        pessoa_id: number | null;
+        tipo_conta: "ALUNO" | "COLABORADOR" | null;
+        contexto_origem: "CAFE" | "LOJA" | "ESCOLA";
+      } | null;
+    };
+  };
   opcoes: PagamentoOpcao[];
 };
 
@@ -178,7 +193,7 @@ const BUYER_TYPE_OPTIONS: Array<{
   {
     value: "ALUNO",
     label: "Aluno",
-    description: "Permite Cartao Conexao do aluno quando houver elegibilidade.",
+    description: "Permite conta interna do aluno quando houver elegibilidade financeira.",
   },
   {
     value: "COLABORADOR",
@@ -250,10 +265,10 @@ function formatTipoQuitacao(value: Comanda["tipo_quitacao"]) {
     case "PARCIAL":
       return "Pagamento parcial";
     case "CARTAO_CONEXAO":
-      return "Cartao Conexao";
+      return "Conta interna do aluno";
     case "CONTA_INTERNA":
     case "CONTA_INTERNA_COLABORADOR":
-      return "Conta interna";
+      return "Conta interna do colaborador";
     default:
       return value;
   }
@@ -307,15 +322,15 @@ function formatFormaPagamento(value: string | null | undefined) {
     case "TRANSFERENCIA":
       return "Transferencia";
     case "CREDIARIO_COLAB":
-      return "Conta interna colaborador";
+      return "Conta interna do colaborador";
     case "CARTAO_CONEXAO_ALUNO":
-      return "Cartao Conexao aluno";
+      return "Conta interna do aluno";
     case "CARTAO_CONEXAO_COLABORADOR":
     case "CARTAO_CONEXAO_COLAB":
-      return "Cartao Conexao colaborador";
+      return "Conta interna do colaborador";
     case "CONTA_INTERNA_COLABORADOR":
     case "CONTA_INTERNA":
-      return "Conta interna";
+      return "Conta interna do colaborador";
     default:
       return value?.trim() || "Nao informado";
   }
@@ -457,15 +472,15 @@ function FinanceiroBadge({ label, tone = "muted" }: FinanceiroBadgeProps) {
 
 function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: ComandaFilaCardProps) {
   const temSaldoAberto = comanda.valor_em_aberto_centavos > 0;
-  const emContaInterna =
+  const emContaInternaColaborador =
     comanda.tipo_quitacao === "CONTA_INTERNA_COLABORADOR" ||
     comanda.tipo_quitacao === "CONTA_INTERNA" ||
-    comanda.origem_financeira === "CONTA_INTERNA";
-  const emCartaoConexao =
-    comanda.tipo_quitacao === "CARTAO_CONEXAO" ||
-    comanda.origem_financeira === "CARTAO_CONEXAO_ALUNO" ||
+    comanda.origem_financeira === "CONTA_INTERNA" ||
     comanda.origem_financeira === "CARTAO_CONEXAO_COLABORADOR";
-  const emFluxoFuturo = emContaInterna || emCartaoConexao || Boolean(comanda.cobranca_id);
+  const emContaInternaAluno =
+    comanda.tipo_quitacao === "CARTAO_CONEXAO" ||
+    comanda.origem_financeira === "CARTAO_CONEXAO_ALUNO";
+  const emFluxoFuturo = emContaInternaColaborador || emContaInternaAluno || Boolean(comanda.cobranca_id);
   const podeConverterSaldo = temSaldoAberto && !emFluxoFuturo;
   const tituloComprador =
     comanda.colaborador_nome ?? comanda.pagador_nome ?? "Comanda administrativa sem vinculo";
@@ -474,10 +489,10 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
     : comanda.pagador_nome
       ? "Comprador identificado como pessoa avulsa."
       : "Sem vinculo especifico informado.";
-  const resultadoFinanceiro = emContaInterna
-    ? `Debito em conta interna${comanda.data_competencia ? ` na competencia ${comanda.data_competencia}` : ""}.`
-    : emCartaoConexao
-      ? `Debito em Cartao Conexao${comanda.data_competencia ? ` na competencia ${comanda.data_competencia}` : ""}.`
+  const resultadoFinanceiro = emContaInternaColaborador
+    ? `Debito em conta interna do colaborador${comanda.data_competencia ? ` na competencia ${comanda.data_competencia}` : ""}.`
+    : emContaInternaAluno
+      ? `Debito em conta interna do aluno${comanda.data_competencia ? ` na competencia ${comanda.data_competencia}` : ""}.`
     : temSaldoAberto
       ? comanda.valor_pago_centavos > 0
         ? "Parcial no caixa com saldo ainda em aberto."
@@ -507,11 +522,11 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
             ) : null}
             {comanda.status_pagamento === "PARCIAL" ? <FinanceiroBadge label="Parcial" tone="warning" /> : null}
             {podeConverterSaldo ? <FinanceiroBadge label="Saldo em aberto" tone="warning" /> : null}
-            {emContaInterna && comanda.data_competencia ? (
-              <FinanceiroBadge label={`Conta interna ${comanda.data_competencia}`} tone="account" />
+            {emContaInternaColaborador && comanda.data_competencia ? (
+              <FinanceiroBadge label={`Conta interna do colaborador ${comanda.data_competencia}`} tone="account" />
             ) : null}
-            {emCartaoConexao && comanda.data_competencia ? (
-              <FinanceiroBadge label={`Cartao Conexao ${comanda.data_competencia}`} tone="account" />
+            {emContaInternaAluno && comanda.data_competencia ? (
+              <FinanceiroBadge label={`Conta interna do aluno ${comanda.data_competencia}`} tone="account" />
             ) : null}
             {comanda.status_pagamento === "FATURADO" ? <FinanceiroBadge label="Faturada" tone="muted" /> : null}
           </div>
@@ -590,6 +605,7 @@ export default function CafeCaixaPage() {
   const [centroCustoId, setCentroCustoId] = useState<number | null>(null);
   const [pagamentosDisponiveis, setPagamentosDisponiveis] = useState<PagamentoOpcao[]>([]);
   const [pagamentosLoading, setPagamentosLoading] = useState(false);
+  const [contaInternaInfo, setContaInternaInfo] = useState<PagamentosResponse["conta_interna"] | null>(null);
   const [metodoPagamento, setMetodoPagamento] = useState("DINHEIRO");
   const [valorPagoCentavos, setValorPagoCentavos] = useState("0");
   const [itens, setItens] = useState<ItemForm[]>([]);
@@ -688,7 +704,14 @@ export default function CafeCaixaPage() {
       : null;
   const compradorColaboradorId =
     tipoComprador === "COLABORADOR" ? Number(colaboradorPessoaId || "0") || null : null;
-  const permiteContaInterna = tipoComprador === "COLABORADOR" && Boolean(compradorColaboradorId);
+  const permiteContaInternaAluno =
+    tipoComprador === "ALUNO" &&
+    Boolean(compradorPessoaId) &&
+    Boolean(contaInternaInfo?.elegivel && contaInternaInfo.tipo === "ALUNO");
+  const permiteContaInternaColaborador =
+    tipoComprador === "COLABORADOR" &&
+    Boolean(compradorColaboradorId) &&
+    Boolean(contaInternaInfo?.elegivel && contaInternaInfo.tipo === "COLABORADOR");
   const pagamentoSelecionado = pagamentosDisponiveis.find((item) => item.codigo === metodoPagamento) ?? null;
   const pagamentosDisponiveisFiltrados = pagamentosDisponiveis.filter((item) => {
     if (!item.habilitado) return true;
@@ -698,13 +721,11 @@ export default function CafeCaixaPage() {
     }
     return item.tipo_fluxo === "IMEDIATO" || item.tipo_fluxo === "CARTAO_EXTERNO";
   });
-  const permiteCartaoConexaoAluno =
-    tipoComprador === "ALUNO" &&
-    Boolean(compradorPessoaId) &&
+  const permiteFluxoContaInternaAluno =
+    permiteContaInternaAluno &&
     pagamentosDisponiveis.some((item) => item.habilitado && item.tipo_fluxo === "CARTAO_CONEXAO_ALUNO");
-  const permiteCartaoConexaoColaborador =
-    tipoComprador === "COLABORADOR" &&
-    Boolean(compradorColaboradorId) &&
+  const permiteFluxoContaInternaColaborador =
+    permiteContaInternaColaborador &&
     pagamentosDisponiveis.some(
       (item) =>
         item.habilitado &&
@@ -712,15 +733,17 @@ export default function CafeCaixaPage() {
     );
 
   const resultadoFinanceiro = isContaInterna
-    ? permiteContaInterna
-      ? "Debito em conta interna"
-      : "Conta interna aguardando colaborador valido"
+    ? permiteContaInternaColaborador
+      ? "Debito em conta interna do colaborador"
+      : "Conta interna do colaborador aguardando titular elegivel"
     : isCartaoConexao
       ? tipoComprador === "ALUNO"
-        ? "Debito em Cartao Conexao do aluno"
-        : permiteCartaoConexaoColaborador
-          ? "Debito em Cartao Conexao do colaborador"
-          : "Cartao Conexao aguardando comprador elegivel"
+        ? permiteFluxoContaInternaAluno
+          ? "Debito em conta interna do aluno"
+          : "Conta interna do aluno aguardando titular elegivel"
+        : permiteFluxoContaInternaColaborador
+          ? "Debito em conta interna do colaborador"
+          : "Conta interna do colaborador aguardando titular elegivel"
     : saldoPrevistoCentavos > 0
       ? valorPagoAberturaCentavos > 0
         ? "Parcial no caixa + saldo em aberto"
@@ -729,14 +752,16 @@ export default function CafeCaixaPage() {
 
   const statusPrevisto = editingId
     ? "Ajuste operacional"
-    : isContaInterna && !permiteContaInterna
+    : isContaInterna && !permiteContaInternaColaborador
       ? "Aguardando colaborador"
-      : isCartaoConexao && !permiteCartaoConexaoAluno && !permiteCartaoConexaoColaborador
+      : isCartaoConexao && !permiteFluxoContaInternaAluno && !permiteFluxoContaInternaColaborador
         ? "Aguardando comprador elegivel"
       : isCartaoConexao
-        ? "Em cobranca no Cartao Conexao"
+        ? tipoComprador === "ALUNO"
+          ? "Em faturamento na conta interna do aluno"
+          : "Em fechamento na conta interna do colaborador"
       : isContaInterna
-      ? "Faturado na conta interna"
+      ? "Em fechamento na conta interna do colaborador"
       : saldoPrevistoCentavos === 0
         ? "Pago"
         : valorPagoAberturaCentavos > 0
@@ -911,6 +936,7 @@ export default function CafeCaixaPage() {
         const nextOptions = Array.isArray(payload?.opcoes) ? payload.opcoes : [];
         setPagamentosDisponiveis(nextOptions);
         setCentroCustoId(payload?.centro_custo_id ?? null);
+        setContaInternaInfo(payload?.conta_interna ?? null);
         setMetodoPagamento((current) => {
           const availableCurrent = nextOptions.find((item) => item.codigo === current && item.habilitado);
           return availableCurrent?.codigo ?? nextOptions.find((item) => item.habilitado)?.codigo ?? "";
@@ -918,6 +944,7 @@ export default function CafeCaixaPage() {
       } catch (error) {
         if (!controller.signal.aborted) {
           setPagamentosDisponiveis([]);
+          setContaInternaInfo(null);
           setMetodoPagamento("");
           setMensagem(error instanceof Error ? error.message : "falha_carregar_pagamentos_cafe");
         }
@@ -1078,6 +1105,34 @@ export default function CafeCaixaPage() {
     setBuscaColaborador(item.nome);
   }
 
+  async function solicitarContaInterna() {
+    if (!contaInternaInfo?.suporte?.pode_solicitar || !contaInternaInfo.suporte.payload) return;
+
+    setMensagem(null);
+    try {
+      const response = await fetch("/api/suporte/solicitacoes-conta-interna", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...contaInternaInfo.suporte.payload,
+          observacao: `Solicitacao aberta a partir do Caixa do Ballet Cafe para ${compradorNome}.`,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as { detalhe?: string; ticket?: { codigo?: string | null } } | null;
+      if (!response.ok) {
+        throw new Error(payload?.detalhe ?? "falha_solicitar_conta_interna");
+      }
+
+      setMensagem(
+        payload?.ticket?.codigo
+          ? `Solicitacao registrada com sucesso. Ticket ${payload.ticket.codigo}.`
+          : "Solicitacao registrada com sucesso.",
+      );
+    } catch (error) {
+      setMensagem(error instanceof Error ? error.message : "falha_solicitar_conta_interna");
+    }
+  }
+
   async function salvarComanda() {
     if (!editingId && itens.length === 0) {
       setMensagem("Adicione ao menos um item na comanda.");
@@ -1094,8 +1149,18 @@ export default function CafeCaixaPage() {
       return;
     }
 
-    if (isContaInterna && !permiteContaInterna) {
-      setMensagem("Conta interna exige comprador vinculado como colaborador.");
+    if (isContaInterna && !permiteContaInternaColaborador) {
+      setMensagem("Conta interna do colaborador exige titular elegivel.");
+      return;
+    }
+
+    if (isCartaoConexao && tipoComprador === "ALUNO" && !permiteFluxoContaInternaAluno) {
+      setMensagem("Conta interna do aluno exige aluno ou responsavel financeiro elegivel.");
+      return;
+    }
+
+    if (isCartaoConexao && tipoComprador === "COLABORADOR" && !permiteFluxoContaInternaColaborador) {
+      setMensagem("Conta interna do colaborador exige titular elegivel.");
       return;
     }
 
@@ -1361,7 +1426,7 @@ export default function CafeCaixaPage() {
           <ShortcutCard
             badge="Fluxo futuro"
             title="Lancar em cobranca futura"
-            description="Use conta interna para colaborador e Cartao Conexao para aluno. A comanda ja nasce vinculada a cobranca da competencia."
+            description="Use conta interna do colaborador ou conta interna do aluno. A comanda ja nasce vinculada a cobranca da competencia."
             active={atalhoAtivo === "conta" || isContaInterna || isCartaoConexao || contaInternaId !== null}
             onClick={ativarFluxoContaInterna}
           />
@@ -1522,11 +1587,11 @@ export default function CafeCaixaPage() {
 
                   <CafePanel className="px-4 py-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">
-                      {tipoComprador === "ALUNO" ? "Cartao Conexao" : "Fluxo normal"}
+                      {tipoComprador === "ALUNO" ? "Conta interna do aluno" : "Fluxo normal"}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
                       {tipoComprador === "ALUNO"
-                        ? "Aluno pode consumir por pagamento imediato ou seguir para Cartao Conexao quando houver elegibilidade financeira."
+                        ? "Aluno pode consumir por pagamento imediato ou seguir para conta interna do aluno quando houver elegibilidade financeira."
                         : "Pessoa avulsa segue o fluxo normal de venda. O saldo fica no caixa para baixa posterior e nao vai para conta interna."}
                     </p>
                   </CafePanel>
@@ -1582,7 +1647,7 @@ export default function CafeCaixaPage() {
                   <CafePanel className="px-4 py-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Fluxo futuro habilitado</p>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Quando o comprador e colaborador, a comanda pode seguir para conta interna por competencia ou para Cartao Conexao do colaborador, mantendo coerencia com fatura e folha.
+                      Quando o comprador e colaborador, a comanda pode seguir para conta interna do colaborador por competencia, mantendo coerencia com fatura e folha.
                     </p>
                   </CafePanel>
                 </div>
@@ -1756,7 +1821,7 @@ export default function CafeCaixaPage() {
         <CaixaSection
           anchor="caixa-liquidacao"
           title="C. Liquidacao"
-          description="Essa tela registra vendas reais feitas fora do PDV. Por isso, a liquidacao precisa reproduzir como a venda aconteceu: no caixa, parcialmente, via Cartao Conexao ou em conta interna quando o comprador for elegivel."
+          description="Essa tela registra vendas reais feitas fora do PDV. Por isso, a liquidacao precisa reproduzir como a venda aconteceu: no caixa, parcialmente ou em conta interna quando o comprador for elegivel."
           active={atalhoAtivo === "baixa"}
         >
           <div className="grid gap-4 md:grid-cols-3">
@@ -1769,11 +1834,11 @@ export default function CafeCaixaPage() {
               >
                 <option value="IMEDIATA">Pagamento imediato</option>
                 <option value="PARCIAL">Pagamento parcial</option>
-                <option value="CONTA_INTERNA_COLABORADOR" disabled={!permiteContaInterna}>
-                  Debito direto em conta interna
+                <option value="CONTA_INTERNA_COLABORADOR" disabled={!permiteContaInternaColaborador}>
+                  Debito direto em conta interna do colaborador
                 </option>
-                <option value="CARTAO_CONEXAO" disabled={!permiteCartaoConexaoAluno && !permiteCartaoConexaoColaborador}>
-                  Cartao Conexao / cobranca futura
+                <option value="CARTAO_CONEXAO" disabled={!permiteFluxoContaInternaAluno && !permiteFluxoContaInternaColaborador}>
+                  Conta interna do aluno / cobranca futura
                 </option>
               </select>
             </label>
@@ -1817,19 +1882,21 @@ export default function CafeCaixaPage() {
             <CafePanel className="px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Regra operacional</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Essa tela registra vendas reais feitas fora do PDV. Pagamento imediato gera recebimento no caixa. Pagamento parcial mantem saldo aberto. Cartao Conexao e conta interna criam cobranca futura na competencia escolhida.
+                Essa tela registra vendas reais feitas fora do PDV. Pagamento imediato gera recebimento no caixa. Pagamento parcial mantem saldo aberto. Conta interna do aluno e conta interna do colaborador criam cobranca futura na competencia escolhida.
               </p>
             </CafePanel>
             <CafePanel className="px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Leitura rapida</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 {isContaInterna
-                  ? "A comanda ja nascera como debito em conta interna. A competencia define em qual mes esse valor sera cobrado do colaborador."
+                  ? "A comanda ja nascera como debito em conta interna do colaborador. A competencia define em qual mes esse valor sera cobrado em folha ou fechamento futuro."
                   : isCartaoConexao
-                    ? "A comanda ja nascera vinculada a cobranca futura. A competencia define em qual mes o debito entrara na fatura do Cartao Conexao."
-                  : saldoPrevistoCentavos > 0
-                    ? "Ha saldo em aberto previsto. Ele pode receber baixa posterior no caixa e, se necessario, ser convertido depois para conta interna."
-                    : "O total atual indica quitacao integral na abertura, sem saldo pendente."}
+                    ? tipoComprador === "ALUNO"
+                      ? "A comanda ja nascera vinculada a conta interna do aluno. A competencia define em qual mes o debito entrara na fatura mensal do responsavel."
+                      : "A comanda ja nascera vinculada a conta interna do colaborador. A competencia define em qual mes o debito entrara no fechamento futuro."
+                    : saldoPrevistoCentavos > 0
+                      ? "Ha saldo em aberto previsto. Ele pode receber baixa posterior no caixa e, se necessario, ser convertido depois para conta interna."
+                      : "O total atual indica quitacao integral na abertura, sem saldo pendente."}
               </p>
             </CafePanel>
           </div>
@@ -1838,7 +1905,7 @@ export default function CafeCaixaPage() {
         <CaixaSection
           anchor="caixa-destino-financeiro"
           title="D. Resultado financeiro da comanda"
-          description="Defina como a comanda nasce no financeiro. Conta interna e Cartao Conexao geram debito direto na competencia escolhida; parcial deixa saldo em aberto para ajuste posterior."
+          description="Defina como a comanda nasce no financeiro. Conta interna do aluno e conta interna do colaborador geram debito direto na competencia escolhida; parcial deixa saldo em aberto para ajuste posterior."
           active={isContaInterna || isCartaoConexao || contaInternaId !== null || atalhoAtivo === "conta"}
           variant={isContaInterna || isCartaoConexao || contaInternaId !== null ? "muted" : "default"}
         >
@@ -1853,7 +1920,7 @@ export default function CafeCaixaPage() {
                 disabled={!isContaInterna && !isCartaoConexao}
               />
               <p className="text-xs leading-5 text-slate-500">
-                Define o mes em que o valor sera cobrado na conta interna ou na fatura do Cartao Conexao.
+                Define o mes em que o valor sera cobrado na conta interna do aluno ou do colaborador.
               </p>
             </div>
 
@@ -1868,7 +1935,7 @@ export default function CafeCaixaPage() {
             </div>
           </div>
 
-          {(isContaInterna && !permiteContaInterna) || (isCartaoConexao && !permiteCartaoConexaoAluno && !permiteCartaoConexaoColaborador) ? (
+          {(isContaInterna && !permiteContaInternaColaborador) || (isCartaoConexao && !permiteFluxoContaInternaAluno && !permiteFluxoContaInternaColaborador) ? (
             <EmptyState
               title="Fluxo futuro exige comprador elegivel"
               description="Selecione o colaborador ou aluno correto antes de confirmar este lancamento. A cobranca por competencia depende desse vinculo."
@@ -1878,10 +1945,22 @@ export default function CafeCaixaPage() {
             <CafePanel className="px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Uso recomendado</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Se a liquidacao for conta interna ou Cartao Conexao, a comanda ja gera debito na competencia escolhida. A folha e as faturas importam a cobranca consolidada, nao a comanda isolada.
+                Se a liquidacao for conta interna do aluno ou do colaborador, a comanda ja gera debito na competencia escolhida. A folha e as faturas importam a cobranca consolidada, nao a comanda isolada.
               </p>
             </CafePanel>
           )}
+
+          {contaInternaInfo && !contaInternaInfo.elegivel && contaInternaInfo.suporte?.pode_solicitar ? (
+            <CafePanel className="px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Conta interna indisponivel</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {contaInternaInfo.motivo ?? "Ainda nao existe conta interna ativa para este titular. Abra uma solicitacao e volte a concluir a comanda quando a conta estiver pronta."}
+              </p>
+              <button type="button" className={cx(BUTTON_GHOST, "mt-3")} onClick={() => void solicitarContaInterna()}>
+                Solicitar criacao ao suporte
+              </button>
+            </CafePanel>
+          ) : null}
         </CaixaSection>
 
         <CafeCard variant="muted" className="gap-4">
@@ -1945,10 +2024,18 @@ export default function CafeCaixaPage() {
             <MetricTile label="Resultado financeiro" value={resultadoFinanceiro} />
             <MetricTile label="Status operacional previsto" value={statusPrevisto} />
             {tipoComprador === "COLABORADOR" ? (
-              <MetricTile label="Conta interna" value={permiteContaInterna ? "Disponivel para cobranca, fatura e folha" : "Aguardando colaborador"} emphasis />
+              <MetricTile
+                label="Conta interna do colaborador"
+                value={permiteContaInternaColaborador ? "Disponivel para cobranca, fatura e folha" : "Aguardando conta elegivel"}
+                emphasis
+              />
             ) : null}
             {tipoComprador === "ALUNO" ? (
-              <MetricTile label="Cartao Conexao" value={permiteCartaoConexaoAluno ? "Disponivel para cobranca futura" : "Aguardando conta elegivel"} emphasis />
+              <MetricTile
+                label="Conta interna do aluno"
+                value={permiteFluxoContaInternaAluno ? "Disponivel para faturamento mensal" : "Aguardando conta elegivel"}
+                emphasis
+              />
             ) : null}
           </div>
         </CafeCard>

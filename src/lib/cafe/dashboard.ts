@@ -89,8 +89,9 @@ export type CafeDashboardData = {
   };
   financeiro: {
     total_imediato_recebido_centavos: number;
-    total_cartao_conexao_centavos: number;
-    total_conta_interna_centavos: number;
+    total_recebivel_cartao_centavos: number;
+    total_conta_interna_aluno_centavos: number;
+    total_conta_interna_colaborador_centavos: number;
     total_pendente_liquidacao_centavos: number;
     distribuicao_contas: CafeDashboardContaDistribuicao[];
   };
@@ -234,14 +235,14 @@ function formatFormaPagamentoLabel(value: string | null) {
     case "CREDIARIO_COLAB":
     case "CONTA_INTERNA":
     case "CONTA_INTERNA_COLABORADOR":
-      return "Conta interna";
+      return "Conta interna do colaborador";
     case "CARTAO_CONEXAO_ALUNO":
-      return "Cartao Conexao aluno";
+      return "Conta interna do aluno";
     case "CARTAO_CONEXAO_COLAB":
     case "CARTAO_CONEXAO_COLABORADOR":
-      return "Cartao Conexao colaborador";
+      return "Conta interna do colaborador";
     case "CARTAO_CONEXAO":
-      return "Cartao Conexao";
+      return "Conta interna";
     case "":
       return "Nao informado";
     default:
@@ -374,8 +375,9 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
   const meiosPagamentoMap = new Map<string, CafeDashboardMeioPagamento>();
   const distribuicaoContasMap = new Map<string, CafeDashboardContaDistribuicao>();
   let totalImediatoRecebido = 0;
-  let totalCartaoConexao = 0;
-  let totalContaInterna = 0;
+  let totalRecebivelCartao = 0;
+  let totalContaInternaAluno = 0;
+  let totalContaInternaColaborador = 0;
   let totalPendenteLiquidacao = 0;
 
   for (const perfil of PERFIS) {
@@ -523,19 +525,22 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
         ? "Conta financeira nao resolvida"
         : contaFinanceiraNomeMap.get(contaFinanceiraId) ?? `Conta #${contaFinanceiraId}`;
 
-    if (origemFinanceira === "IMEDIATO" || origemFinanceira === "CARTAO_EXTERNO" || !origemFinanceira) {
+    if (origemFinanceira === "IMEDIATO" || !origemFinanceira) {
       totalImediatoRecebido += pago;
     }
+    if (origemFinanceira === "CARTAO_EXTERNO") {
+      totalRecebivelCartao += total;
+    }
+    if (origemFinanceira === "CARTAO_CONEXAO_ALUNO") {
+      totalContaInternaAluno += total;
+    }
     if (
-      origemFinanceira === "CARTAO_CONEXAO_ALUNO" ||
-      origemFinanceira === "CARTAO_CONEXAO_COLABORADOR"
+      origemFinanceira === "CARTAO_CONEXAO_COLABORADOR" ||
+      origemFinanceira === "CONTA_INTERNA"
     ) {
-      totalCartaoConexao += total;
+      totalContaInternaColaborador += total;
     }
-    if (origemFinanceira === "CONTA_INTERNA") {
-      totalContaInterna += total;
-    }
-    if (!isFluxoFuturo(origemFinanceira)) {
+    if (!isFluxoFuturo(origemFinanceira) && origemFinanceira !== "CARTAO_EXTERNO") {
       totalPendenteLiquidacao += aberto;
     }
 
@@ -589,8 +594,9 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
     },
     financeiro: {
       total_imediato_recebido_centavos: totalImediatoRecebido,
-      total_cartao_conexao_centavos: totalCartaoConexao,
-      total_conta_interna_centavos: totalContaInterna,
+      total_recebivel_cartao_centavos: totalRecebivelCartao,
+      total_conta_interna_aluno_centavos: totalContaInternaAluno,
+      total_conta_interna_colaborador_centavos: totalContaInternaColaborador,
       total_pendente_liquidacao_centavos: totalPendenteLiquidacao,
       distribuicao_contas: Array.from(distribuicaoContasMap.values()).sort(
         (a, b) => b.total_centavos - a.total_centavos,

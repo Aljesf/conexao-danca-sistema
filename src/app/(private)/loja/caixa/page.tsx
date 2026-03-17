@@ -87,7 +87,7 @@ type FormaPagamentoContexto = {
   } | null;
 };
 
-type ApiResponse<T = any> = { ok?: boolean; error?: string; data?: T };
+type ApiResponse<T = unknown> = { ok?: boolean; error?: string; data?: T };
 
 type RegraParcelamento = {
   id: number;
@@ -106,6 +106,52 @@ type ContaConexao = {
   tipo_conta: "ALUNO" | "COLABORADOR";
   descricao_exibicao?: string | null;
   ativo: boolean;
+};
+
+type ProdutoVariante = {
+  id?: number | string | null;
+  sku?: string | null;
+  cor_id?: number | null;
+  numeracao_id?: number | null;
+  tamanho_id?: number | null;
+  cor_nome?: string | null;
+  numeracao_nome?: string | null;
+  tamanho_nome?: string | null;
+  cor?: string | null;
+  numeracao?: string | null;
+  tamanho?: string | null;
+  preco_venda_centavos?: number | null;
+};
+
+type LojaVendaResponse = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  details?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+type PessoaRapidaPayload = {
+  tipo_pessoa: "FISICA" | "JURIDICA";
+  nome: string;
+  cpf: string;
+  cnpj: string;
+  razao_social: string;
+  nome_fantasia: string;
+  telefone: string;
+  email: string;
+  endereco: {
+    logradouro: string;
+    numero: string;
+    complemento: string;
+    bairro: string;
+    cidade: string;
+    uf: string;
+    cep: string;
+    referencia: string;
+  };
 };
 
 type TipoOperacaoLoja = "VENDA" | "ENTREGA_ADMIN";
@@ -177,9 +223,9 @@ export default function FrenteCaixaLojaPage() {
   const [resultadoProduto, setResultadoProduto] = useState<ProdutoResumo[]>([]);
   const [buscandoProduto, setBuscandoProduto] = useState(false);
   const [isVarianteModalOpen, setIsVarianteModalOpen] = useState(false);
-  const [variantesDoProduto, setVariantesDoProduto] = useState<any[]>([]);
+  const [variantesDoProduto, setVariantesDoProduto] = useState<ProdutoVariante[]>([]);
   const [varianteSelecionadaId, setVarianteSelecionadaId] = useState<string>("");
-  const [produtoPendenciaVariante, setProdutoPendenciaVariante] = useState<any | null>(
+  const [produtoPendenciaVariante, setProdutoPendenciaVariante] = useState<ProdutoResumo | null>(
     null,
   );
 
@@ -191,7 +237,22 @@ export default function FrenteCaixaLojaPage() {
     });
   }
 
-  function labelVariante(v: any) {
+  function getContaInternaLabel(tipo: "ALUNO" | "COLABORADOR" | null) {
+    return tipo === "COLABORADOR" ? "Conta interna do colaborador" : "Conta interna do aluno";
+  }
+
+  function formatFormaPagamentoLabelLoja(forma: FormaPagamentoContexto) {
+    const codigo = forma.formas_pagamento?.codigo ?? forma.forma_pagamento_codigo ?? "";
+    if (codigo === "CARTAO_CONEXAO_COLAB" || codigo === "CARTAO_CONEXAO_COLABORADOR") {
+      return "Conta interna do colaborador";
+    }
+    if (codigo === "CARTAO_CONEXAO_ALUNO" || forma.carteira_tipo === "ALUNO") {
+      return "Conta interna do aluno";
+    }
+    return forma.descricao_exibicao;
+  }
+
+  function labelVariante(v: ProdutoVariante) {
     const parts = [
       v?.sku ? String(v.sku) : v?.id ? `#${v.id}` : "",
       v?.cor_nome || v?.cor || null,
@@ -204,6 +265,38 @@ export default function FrenteCaixaLojaPage() {
   function resetMensagem() {
     setMensagem(null);
     setMensagemTipo(null);
+  }
+
+  async function solicitarContaInternaLoja() {
+    if (!comprador?.id || !tipoContaConexao) return;
+
+    resetMensagem();
+    try {
+      const response = await fetch("/api/suporte/solicitacoes-conta-interna", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pessoa_id: comprador.id,
+          tipo_conta: tipoContaConexao,
+          contexto_origem: "LOJA",
+          observacao: `Solicitacao aberta a partir da Loja para ${comprador.nome_completo ?? comprador.nome ?? `pessoa #${comprador.id}`}.`,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as { detalhe?: string; ticket?: { codigo?: string | null } } | null;
+      if (!response.ok) {
+        throw new Error(payload?.detalhe ?? "falha_solicitar_conta_interna");
+      }
+
+      setMensagem(
+        payload?.ticket?.codigo
+          ? `Solicitacao registrada com sucesso. Ticket ${payload.ticket.codigo}.`
+          : "Solicitacao registrada com sucesso.",
+      );
+      setMensagemTipo("success");
+    } catch (error) {
+      setMensagem(error instanceof Error ? error.message : "falha_solicitar_conta_interna");
+      setMensagemTipo("error");
+    }
   }
   // ======== BUSCAS AUXILIARES (COMPRADOR, ALUNO, PRODUTO) =========
   // busca comprador
@@ -227,7 +320,7 @@ export default function FrenteCaixaLojaPage() {
         }
         const data = (await resp.json()) as { items?: PessoaResumo[] };
         setResultadoComprador(Array.isArray(data.items) ? data.items : []);
-      } catch (e) {
+      } catch {
         if (!controller.signal.aborted) {
           setResultadoComprador([]);
         }
@@ -260,10 +353,10 @@ export default function FrenteCaixaLojaPage() {
         }
         const data = (await resp.json()) as ApiResponse<{
           items: ProdutoResumo[];
-          pagination: any;
+          pagination: unknown;
         }>;
         if (data.ok && data.data?.items) setResultadoProduto(data.data.items);
-      } catch (e) {
+      } catch {
         if (!controller.signal.aborted) {
           setResultadoProduto([]);
         }
@@ -358,7 +451,7 @@ export default function FrenteCaixaLojaPage() {
   const mostraTaxaCartao = !bloqueiaCobranca && isCartaoConexao;
   const totalExibido = bloqueiaCobranca ? 0 : totalFinalCentavos || subtotalCentavos;
 
-  // Descobrir tipo de conta (ALUNO / COLABORADOR) para Cartão Conexão
+  // Descobrir tipo de conta interna (ALUNO / COLABORADOR)
   const tipoContaConexao: "ALUNO" | "COLABORADOR" | null = useMemo(() => {
     if (!isCartaoConexao || !formaPagamentoSelecionada?.formas_pagamento?.codigo) {
       return null;
@@ -439,7 +532,7 @@ export default function FrenteCaixaLojaPage() {
     carregarCartao();
   }, []);
 
-  // ======== Cartão Conexão — carregar regras de parcelamento =========
+  // ======== Conta interna — carregar regras de parcelamento =========
   useEffect(() => {
     async function carregarRegrasConexao() {
       try {
@@ -449,7 +542,7 @@ export default function FrenteCaixaLojaPage() {
         );
       if (!res.ok) {
         console.error(
-          "Erro ao carregar regras de parcelamento do Cartão Conexão:",
+          "Erro ao carregar regras de parcelamento da conta interna:",
           await res.text(),
         );
         return;
@@ -458,7 +551,7 @@ export default function FrenteCaixaLojaPage() {
       const regras: RegraParcelamento[] = json.regras ?? [];
       setRegrasConexao(regras);
     } catch (e) {
-      console.error("Erro inesperado ao carregar regras do Cartão Conexão", e);
+      console.error("Erro inesperado ao carregar regras da conta interna", e);
     } finally {
       setCarregandoRegrasConexao(false);
       }
@@ -467,7 +560,7 @@ export default function FrenteCaixaLojaPage() {
     carregarRegrasConexao();
   }, []);
 
-  // Parcelas disponíveis para Cartão Conexão, de acordo com valor e tipo de conta
+  // Parcelas disponíveis para conta interna, de acordo com valor e tipo de conta
   const parcelasDisponiveisConexao = useMemo(() => {
     if (!isCartaoConexao || !tipoContaConexao || subtotalCentavos <= 0) {
       return [1];
@@ -526,11 +619,11 @@ export default function FrenteCaixaLojaPage() {
           `/api/financeiro/credito-conexao/contas?tipo_conta=${tipoContaConexao}`,
           { credentials: "include" },
         );
-        const json = await resp.json();
+        const json = (await resp.json()) as { contas?: ContaConexao[] };
         if (cancelado) return;
 
-        const contas: ContaConexao[] = (json.contas ?? []).filter(
-          (c: any) => c?.pessoa_titular_id === comprador.id && (c?.ativo ?? true),
+        const contas = (json.contas ?? []).filter(
+          (c) => c.pessoa_titular_id === comprador.id && (c.ativo ?? true),
         );
         setContasConexao(contas);
 
@@ -666,7 +759,7 @@ export default function FrenteCaixaLojaPage() {
     }
   }
 
-  function adicionarProdutoAoCarrinhoComVariante(produto: ProdutoResumo, variante: any) {
+  function adicionarProdutoAoCarrinhoComVariante(produto: ProdutoResumo, variante: ProdutoVariante) {
     const idTemp = crypto.randomUUID();
     const preco =
       typeof variante?.preco_venda_centavos === "number" && variante.preco_venda_centavos > 0
@@ -778,7 +871,7 @@ export default function FrenteCaixaLojaPage() {
       (!parcelasDisponiveisConexao.length || parcelasConexao < 1)
     ) {
       setMensagem(
-        "Não há opção de parcelamento disponível para o valor desta compra no Cartão Conexão.",
+        "Nao ha opcao de parcelamento disponivel para o valor desta compra na conta interna.",
       );
       setMensagemTipo("error");
       return;
@@ -865,7 +958,7 @@ export default function FrenteCaixaLojaPage() {
       });
 
       const rawText = await res.text();
-      let json: any = {};
+      let json: LojaVendaResponse = {};
       try {
         json = rawText ? JSON.parse(rawText) : {};
       } catch {
@@ -1339,7 +1432,7 @@ export default function FrenteCaixaLojaPage() {
               <option value="">Selecione...</option>
               {formasPagamentoCtx.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.descricao_exibicao}
+                  {formatFormaPagamentoLabelLoja(f)}
                 </option>
               ))}
             </select>
@@ -1360,12 +1453,12 @@ export default function FrenteCaixaLojaPage() {
           )}
         </div>
 
-        {/* Cartao Conexao - selecao de parcelas conforme regras */}
+        {/* Conta interna - selecao de parcelas conforme regras */}
         {isCartaoConexao && (
           <div className="grid md:grid-cols-3 gap-3 mt-3">
             <div>
               <label className="block text-xs font-medium mb-1">
-                Parcelas (Cartao Conexao)
+                Parcelas da conta interna
               </label>
               <select
                 value={parcelasConexao}
@@ -1394,7 +1487,7 @@ export default function FrenteCaixaLojaPage() {
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">
-                Conta Credito Conexao
+                Conta interna
               </label>
               {contasConexao.length > 0 ? (
                 <select
@@ -1408,14 +1501,25 @@ export default function FrenteCaixaLojaPage() {
                   <option value="">Selecione...</option>
                   {contasConexao.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.descricao_exibicao || `Conta #${c.id}`} - {c.tipo_conta}
+                      {c.descricao_exibicao || `Conta #${c.id}`} - {getContaInternaLabel(c.tipo_conta)}
                     </option>
                   ))}
                 </select>
               ) : (
-                <p className="text-[12px] text-red-600">
-                  Nenhuma conta ativa de Credito Conexao para este comprador/tipo.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-[12px] text-red-600">
+                    Nenhuma conta interna ativa para este comprador ou titular elegivel.
+                  </p>
+                  {comprador?.id && tipoContaConexao ? (
+                    <button
+                      type="button"
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                      onClick={() => void solicitarContaInternaLoja()}
+                    >
+                      Solicitar criacao ao suporte
+                    </button>
+                  ) : null}
+                </div>
               )}
             </div>
           </div>
@@ -1533,7 +1637,7 @@ export default function FrenteCaixaLojaPage() {
             </p>
             {mostraTaxaCartao && (
               <p>
-                <span className="font-semibold">Taxa Cartao Conexao:</span>{" "}
+                <span className="font-semibold">Taxa da conta interna:</span>{" "}
                 {formatCurrency(taxaCartaoConexaoCentavos)}
               </p>
             )}
@@ -1630,7 +1734,7 @@ function CadastroPessoaRapidaModal({
     setErro(null);
     setSalvando(true);
     try {
-      const payload: any = {
+      const payload: PessoaRapidaPayload = {
         tipo_pessoa: tipoPessoa,
         nome: nome || razaoSocial || nomeFantasia,
         cpf,
@@ -1667,9 +1771,9 @@ function CadastroPessoaRapidaModal({
       } else {
         setErro("Cadastro retornou resposta inesperada.");
       }
-    } catch (e: any) {
+    } catch (error) {
       setErro("Erro inesperado ao cadastrar pessoa.");
-      console.error(e);
+      console.error(error);
     } finally {
       setSalvando(false);
     }

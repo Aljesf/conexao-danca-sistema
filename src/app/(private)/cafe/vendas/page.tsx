@@ -24,6 +24,7 @@ type CafeCompradorTipo =
 type PagamentoOpcao = {
   id: number | null;
   codigo: string;
+  nome?: string;
   label: string;
   tipo_fluxo:
     | "IMEDIATO"
@@ -32,8 +33,12 @@ type PagamentoOpcao = {
     | "CARTAO_CONEXAO_COLABORADOR"
     | "CONTA_INTERNA";
   exige_conta_conexao: boolean;
+  exige_troco?: boolean;
+  exige_maquininha?: boolean;
+  exige_bandeira?: boolean;
   habilitado: boolean;
   motivo_bloqueio: string | null;
+  cartao_maquina_id?: number | null;
 };
 
 type PagamentosResponse = {
@@ -41,6 +46,21 @@ type PagamentosResponse = {
   comprador: {
     pessoa_id: number | null;
     tipo: CafeCompradorTipo;
+  };
+  conta_interna?: {
+    elegivel: boolean;
+    tipo: "ALUNO" | "COLABORADOR" | null;
+    conta_id: number | null;
+    titular_pessoa_id: number | null;
+    motivo: string | null;
+    suporte?: {
+      pode_solicitar: boolean;
+      payload: {
+        pessoa_id: number | null;
+        tipo_conta: "ALUNO" | "COLABORADOR" | null;
+        contexto_origem: "CAFE" | "LOJA" | "ESCOLA";
+      } | null;
+    };
   };
   opcoes: PagamentoOpcao[];
 };
@@ -97,18 +117,23 @@ function buildFinancialEffect(option: PagamentoOpcao | null, buyerType: CafeComp
   if (!option) return "Selecione uma forma de pagamento valida para continuar.";
   switch (option.tipo_fluxo) {
     case "CARTAO_CONEXAO_ALUNO":
-      return "Esta venda sera enviada para o Cartao Conexao do aluno, sem recebimento imediato.";
+      return "Esta venda sera lancada na conta interna do aluno e seguira para faturamento mensal.";
     case "CARTAO_CONEXAO_COLABORADOR":
-      return "Esta venda ficara no fluxo futuro do colaborador, vinculada ao Cartao Conexao.";
+      return "Esta venda ficara na conta interna do colaborador para fechamento futuro em folha.";
     case "CONTA_INTERNA":
       return "Esta venda ficara em conta interna do colaborador para fechamento futuro.";
     case "CARTAO_EXTERNO":
-      return "Esta venda seguira o fluxo financeiro do cartao externo do Ballet Cafe.";
+      return "Esta venda seguira o fluxo financeiro do cartao externo e do recebivel configurado.";
     default:
       return buyerType === "NAO_IDENTIFICADO"
         ? "Esta venda entrara imediatamente no caixa do Ballet Cafe."
         : "Esta venda gerara efeito financeiro imediato no Ballet Cafe.";
   }
+}
+
+function parseCentavosInput(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
 }
 
 export default function CafeVendasPage() {
@@ -120,7 +145,9 @@ export default function CafeVendasPage() {
   const [centroCustoId, setCentroCustoId] = useState<number | null>(null);
   const [pagamentos, setPagamentos] = useState<PagamentoOpcao[]>([]);
   const [pagamentosLoading, setPagamentosLoading] = useState(false);
+  const [contaInternaInfo, setContaInternaInfo] = useState<PagamentosResponse["conta_interna"] | null>(null);
   const [pagamentoCodigo, setPagamentoCodigo] = useState("");
+  const [valorRecebidoCentavos, setValorRecebidoCentavos] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [saving, setSaving] = useState(false);
@@ -193,6 +220,7 @@ export default function CafeVendasPage() {
         setPagamentos(nextPayments);
         setCentroCustoId(payload?.centro_custo_id ?? null);
         setCompradorTipo(payload?.comprador.tipo ?? "NAO_IDENTIFICADO");
+        setContaInternaInfo(payload?.conta_interna ?? null);
         setPagamentoCodigo((current) => {
           const existing = nextPayments.find((item) => item.codigo === current && item.habilitado);
           return existing?.codigo ?? fallback?.codigo ?? "";
@@ -200,6 +228,7 @@ export default function CafeVendasPage() {
       } catch (error) {
         if (!controller.signal.aborted) {
           setPagamentos([]);
+          setContaInternaInfo(null);
           setPagamentoCodigo("");
           setMensagem(error instanceof Error ? error.message : "falha_carregar_formas_pagamento_cafe");
           setMensagemTipo("error");
@@ -241,6 +270,16 @@ export default function CafeVendasPage() {
     () => buildFinancialEffect(pagamentoSelecionado, compradorTipo),
     [compradorTipo, pagamentoSelecionado],
   );
+  const pagamentoEmDinheiro = Boolean(pagamentoSelecionado?.exige_troco || pagamentoSelecionado?.codigo === "DINHEIRO");
+  const valorRecebidoAtualCentavos = parseCentavosInput(valorRecebidoCentavos);
+  const trocoCentavos = pagamentoEmDinheiro ? Math.max(valorRecebidoAtualCentavos - totalCentavos, 0) : 0;
+  const valorRecebidoInsuficiente = pagamentoEmDinheiro && valorRecebidoCentavos !== "" && valorRecebidoAtualCentavos < totalCentavos;
+
+  useEffect(() => {
+    if (!pagamentoEmDinheiro) {
+      setValorRecebidoCentavos("");
+    }
+  }, [pagamentoEmDinheiro]);
 
   function adicionarProduto(produto: CafeCatalogoProduto) {
     setMensagem(null);
@@ -281,6 +320,38 @@ export default function CafeVendasPage() {
     setBuscaComprador("");
     setCompradores([]);
     setPagamentoCodigo("");
+    setValorRecebidoCentavos("");
+  }
+
+  async function solicitarContaInterna() {
+    if (!contaInternaInfo?.suporte?.pode_solicitar || !contaInternaInfo.suporte.payload) return;
+
+    setMensagem(null);
+    setMensagemTipo(null);
+    try {
+      const response = await fetch("/api/suporte/solicitacoes-conta-interna", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...contaInternaInfo.suporte.payload,
+          observacao: `Solicitacao aberta a partir do PDV do Ballet Cafe para ${compradorSelecionado?.nome ?? `pessoa #${contaInternaInfo.suporte.payload.pessoa_id}`}.`,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as { detalhe?: string; ticket?: { codigo?: string | null } } | null;
+      if (!response.ok) {
+        throw new Error(payload?.detalhe ?? "falha_solicitar_conta_interna");
+      }
+
+      setMensagem(
+        payload?.ticket?.codigo
+          ? `Solicitacao registrada com sucesso. Ticket ${payload.ticket.codigo}.`
+          : "Solicitacao registrada com sucesso.",
+      );
+      setMensagemTipo("success");
+    } catch (error) {
+      setMensagem(error instanceof Error ? error.message : "falha_solicitar_conta_interna");
+      setMensagemTipo("error");
+    }
   }
 
   async function finalizarVenda() {
@@ -292,6 +363,12 @@ export default function CafeVendasPage() {
 
     if (!pagamentoSelecionado?.habilitado) {
       setMensagem("Selecione uma forma de pagamento valida para concluir a venda.");
+      setMensagemTipo("error");
+      return;
+    }
+
+    if (pagamentoEmDinheiro && valorRecebidoAtualCentavos < totalCentavos) {
+      setMensagem("Informe um valor recebido suficiente para calcular o troco.");
       setMensagemTipo("error");
       return;
     }
@@ -328,6 +405,9 @@ export default function CafeVendasPage() {
           metodo_pagamento: pagamentoSelecionado.codigo,
           data_competencia: pagamentoSelecionado.exige_conta_conexao ? competenciaFromDate(todayIso()) : null,
           valor_pago_centavos: valorPagoCentavos,
+          valor_recebido_centavos: pagamentoEmDinheiro ? valorRecebidoAtualCentavos : null,
+          troco_centavos: pagamentoEmDinheiro ? trocoCentavos : null,
+          maquininha_id: pagamentoSelecionado.exige_maquininha ? pagamentoSelecionado.cartao_maquina_id ?? null : null,
           observacoes: observacoes || "Venda registrada pelo PDV do Ballet Cafe.",
           observacoes_internas: observacoes ? `PDV: ${observacoes}` : "PDV / Vendas",
           itens: itens.map((item) => ({
@@ -522,6 +602,58 @@ export default function CafeVendasPage() {
                       : pagamentoSelecionado?.motivo_bloqueio ?? efeitoFinanceiro}
                   </p>
                 </label>
+
+                {pagamentoEmDinheiro ? (
+                  <div className="grid gap-3 rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                    <label className="space-y-2 text-sm">
+                      <span className="font-medium text-slate-700">Valor recebido em dinheiro</span>
+                      <input
+                        type="number"
+                        min={totalCentavos}
+                        value={valorRecebidoCentavos}
+                        onChange={(event) => setValorRecebidoCentavos(event.target.value)}
+                        className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
+                        placeholder={String(totalCentavos)}
+                      />
+                    </label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Total em dinheiro</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-950">{brl(totalCentavos)}</div>
+                      </div>
+                      <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Troco previsto</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-950">{brl(trocoCentavos)}</div>
+                      </div>
+                    </div>
+                    {valorRecebidoInsuficiente ? (
+                      <p className="text-xs text-rose-600">O valor recebido precisa ser maior ou igual ao total da venda.</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {compradorTipo !== "NAO_IDENTIFICADO" && contaInternaInfo && !contaInternaInfo.elegivel ? (
+                  <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                    <div className="text-sm font-medium text-slate-900">
+                      {contaInternaInfo.tipo === "COLABORADOR"
+                        ? "Conta interna do colaborador indisponivel"
+                        : "Conta interna do aluno indisponivel"}
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {contaInternaInfo.motivo ??
+                        "Ainda nao existe conta interna ativa para este comprador ou titular responsavel."}
+                    </p>
+                    {contaInternaInfo.suporte?.pode_solicitar ? (
+                      <button
+                        type="button"
+                        className="mt-3 rounded-full border border-[#d7c3a4] bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-[#fff8ef]"
+                        onClick={() => void solicitarContaInterna()}
+                      >
+                        Solicitar criacao ao suporte
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <label className="space-y-2 text-sm">
                   <span className="font-medium text-slate-700">Observacoes do balcao</span>

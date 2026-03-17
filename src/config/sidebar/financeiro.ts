@@ -11,6 +11,7 @@ export const financeiroSidebar: SidebarSection[] = [
     title: "Estrutura",
     items: [
       { label: "Configuracoes do financeiro", href: "/financeiro/configuracoes" },
+      { label: "Formas de pagamento", href: "/financeiro/formas-pagamento" },
       { label: "Centros de custo", href: "/financeiro/centros-custo" },
       { label: "Plano de contas", href: "/financeiro/plano-contas" },
       { label: "Categorias financeiras", href: "/financeiro/categorias" },

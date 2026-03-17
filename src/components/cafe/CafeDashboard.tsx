@@ -47,8 +47,9 @@ const EMPTY_DATA: CafeDashboardData = {
   },
   financeiro: {
     total_imediato_recebido_centavos: 0,
-    total_cartao_conexao_centavos: 0,
-    total_conta_interna_centavos: 0,
+    total_recebivel_cartao_centavos: 0,
+    total_conta_interna_aluno_centavos: 0,
+    total_conta_interna_colaborador_centavos: 0,
     total_pendente_liquidacao_centavos: 0,
     distribuicao_contas: [],
   },
@@ -290,9 +291,9 @@ export default function CafeDashboard() {
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <CafeCard
           title="Financeiro do Cafe"
-          description="A leitura financeira combina recebimento imediato, Cartao Conexao, conta interna e saldos que ainda dependem de regularizacao."
+          description="A leitura financeira separa recebimento imediato, recebivel de cartao e lancamentos para liquidacao futura em conta interna."
         >
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <CafePanel>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Recebido no ato
@@ -306,24 +307,35 @@ export default function CafeDashboard() {
             </CafePanel>
             <CafePanel>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Cartao Conexao
+                Recebivel de cartao
               </p>
               <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                {formatBRLFromCentavos(data.financeiro.total_cartao_conexao_centavos)}
+                {formatBRLFromCentavos(data.financeiro.total_recebivel_cartao_centavos)}
               </div>
               <p className="mt-2 text-sm text-slate-600">
-                Vendas enviadas para cobranca futura de aluno ou colaborador.
+                Vendas em cartao externo que seguem conciliacao e recebimento conforme a maquininha.
               </p>
             </CafePanel>
             <CafePanel>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Conta interna
+                Conta interna do aluno
               </p>
               <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
-                {formatBRLFromCentavos(data.financeiro.total_conta_interna_centavos)}
+                {formatBRLFromCentavos(data.financeiro.total_conta_interna_aluno_centavos)}
               </div>
               <p className="mt-2 text-sm text-slate-600">
-                Consumo de colaborador reservado para fechamento futuro por competencia.
+                Consumo enviado para faturamento mensal do responsavel financeiro.
+              </p>
+            </CafePanel>
+            <CafePanel>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Conta interna do colaborador
+              </p>
+              <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                {formatBRLFromCentavos(data.financeiro.total_conta_interna_colaborador_centavos)}
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                Consumo reservado para fechamento futuro em folha ou conta interna do colaborador.
               </p>
             </CafePanel>
             <CafePanel>

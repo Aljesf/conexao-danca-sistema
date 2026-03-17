@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 import { recalcularComprasFatura, vincularLancamentoNaFatura } from "@/lib/financeiro/creditoConexaoFaturas";
+import {
+  resolverContaInternaDoAlunoOuResponsavel,
+  resolverContaInternaDoColaborador,
+} from "@/lib/financeiro/conta-interna";
 
 type SupabaseLike = Pick<SupabaseClient, "from" | "rpc">;
 
@@ -38,6 +42,8 @@ export type CafeContaConexaoResumo = {
   pessoa_titular_id: number;
   dia_fechamento: number | null;
   dia_vencimento: number | null;
+  responsavel_financeiro_pessoa_id?: number | null;
+  tipo_liquidacao?: "FATURA_MENSAL" | "FOLHA_PAGAMENTO" | null;
 };
 
 export type CafeCompradorClassificado = {
@@ -284,35 +290,49 @@ export async function resolverContaConexaoCafe(
   const { compradorPessoaId, compradorTipo } = params;
   if (!compradorPessoaId) return null;
 
-  const tipoConta =
-    compradorTipo === CAFE_COMPRADOR_TIPO.ALUNO
-      ? "ALUNO"
-      : compradorTipo === CAFE_COMPRADOR_TIPO.COLABORADOR
-        ? "COLABORADOR"
-        : null;
+  if (compradorTipo === CAFE_COMPRADOR_TIPO.ALUNO) {
+    const contaAluno = await resolverContaInternaDoAlunoOuResponsavel({
+      supabase,
+      alunoPessoaId: compradorPessoaId,
+    });
 
-  if (!tipoConta) return null;
+    if (!contaAluno.elegivel || !contaAluno.conta_id || !contaAluno.titular_pessoa_id) {
+      return null;
+    }
 
-  const { data, error } = await supabase
-    .from("credito_conexao_contas")
-    .select("id,pessoa_titular_id,tipo_conta,dia_fechamento,dia_vencimento,ativo")
-    .eq("pessoa_titular_id", compradorPessoaId)
-    .eq("tipo_conta", tipoConta)
-    .eq("ativo", true)
-    .order("id", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    return {
+      id: contaAluno.conta_id,
+      pessoa_titular_id: contaAluno.titular_pessoa_id,
+      tipo_conta: "ALUNO",
+      dia_fechamento: null,
+      dia_vencimento: contaAluno.dia_vencimento,
+      responsavel_financeiro_pessoa_id: contaAluno.responsavel_financeiro_pessoa_id,
+      tipo_liquidacao: contaAluno.tipo_liquidacao,
+    };
+  }
 
-  if (error) throw error;
-  if (!data?.id) return null;
+  if (compradorTipo === CAFE_COMPRADOR_TIPO.COLABORADOR) {
+    const contaColaborador = await resolverContaInternaDoColaborador({
+      supabase,
+      colaboradorPessoaId: compradorPessoaId,
+    });
 
-  return {
-    id: asInt(data.id) ?? 0,
-    pessoa_titular_id: asInt(data.pessoa_titular_id) ?? compradorPessoaId,
-    tipo_conta: (upper(data.tipo_conta) === "ALUNO" ? "ALUNO" : "COLABORADOR") as "ALUNO" | "COLABORADOR",
-    dia_fechamento: asInt(data.dia_fechamento),
-    dia_vencimento: asInt(data.dia_vencimento),
-  };
+    if (!contaColaborador.elegivel || !contaColaborador.conta_id || !contaColaborador.titular_pessoa_id) {
+      return null;
+    }
+
+    return {
+      id: contaColaborador.conta_id,
+      pessoa_titular_id: contaColaborador.titular_pessoa_id,
+      tipo_conta: "COLABORADOR",
+      dia_fechamento: null,
+      dia_vencimento: contaColaborador.dia_vencimento,
+      responsavel_financeiro_pessoa_id: contaColaborador.responsavel_financeiro_pessoa_id,
+      tipo_liquidacao: contaColaborador.tipo_liquidacao,
+    };
+  }
+
+  return null;
 }
 
 export async function classificarCompradorCafe(
@@ -441,32 +461,11 @@ async function ensureContaInternaColaborador(supabase: SupabaseLike, colaborador
     compradorTipo: CAFE_COMPRADOR_TIPO.COLABORADOR,
   });
 
-  if (existente) return existente;
-
-  const { data: created, error: createError } = await supabase
-    .from("credito_conexao_contas")
-    .insert({
-      pessoa_titular_id: colaboradorPessoaId,
-      tipo_conta: "COLABORADOR",
-      dia_fechamento: 10,
-      dia_vencimento: 12,
-      ativo: true,
-      descricao_exibicao: "Conta interna COLABORADOR",
-    })
-    .select("id,pessoa_titular_id,tipo_conta,dia_fechamento,dia_vencimento")
-    .single();
-
-  if (createError || !created) {
-    throw createError ?? new Error("falha_criar_conta_interna_colaborador");
+  if (!existente) {
+    throw new Error("conta_interna_colaborador_nao_encontrada");
   }
 
-  return {
-    id: asInt(created.id) ?? 0,
-    pessoa_titular_id: asInt(created.pessoa_titular_id) ?? colaboradorPessoaId,
-    tipo_conta: "COLABORADOR" as const,
-    dia_fechamento: asInt(created.dia_fechamento),
-    dia_vencimento: asInt(created.dia_vencimento),
-  };
+  return existente;
 }
 
 async function ensureFaturaAbertaCompetencia(
@@ -652,9 +651,9 @@ export async function listarOpcoesPagamentoCafe(params: {
       if (comprador.tipo !== CAFE_COMPRADOR_TIPO.ALUNO) {
         motivoBloqueio = "Disponivel apenas para aluno identificado.";
       } else if (!comprador.pessoa_id) {
-        motivoBloqueio = "Selecione o aluno para usar Cartao Conexao.";
+        motivoBloqueio = "Selecione o aluno para usar a conta interna.";
       } else if (!comprador.conta_conexao) {
-        motivoBloqueio = "Aluno sem conta Cartao Conexao elegivel.";
+        motivoBloqueio = "Aluno ou responsavel financeiro sem conta interna ativa.";
       }
     } else if (
       tipoFluxo === CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_COLABORADOR ||
@@ -845,7 +844,11 @@ export async function criarCobrancaCafe(params: CriarCobrancaCafeInput): Promise
         });
 
   if (!conta?.id) {
-    throw new Error("conta_conexao_nao_encontrada");
+    throw new Error(
+      compradorTipo === CAFE_COMPRADOR_TIPO.ALUNO
+        ? "conta_interna_aluno_nao_encontrada"
+        : "conta_interna_colaborador_nao_encontrada",
+    );
   }
 
   const vendas = await carregarVendasCafeCompetencia({
@@ -881,7 +884,7 @@ export async function criarCobrancaCafe(params: CriarCobrancaCafeInput): Promise
   const observacaoFinanceira =
     origemFinanceira === CAFE_FLUXO_FINANCEIRO.CONTA_INTERNA
       ? "Debito vinculado a conta interna do colaborador."
-      : "Debito vinculado ao Cartao Conexao.";
+      : "Debito vinculado a conta interna do aluno.";
 
   let cobrancaId = cobrancaIdExistente;
   if (cobrancaId) {
@@ -1084,9 +1087,9 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
       : forma.tipo_fluxo === CAFE_FLUXO_FINANCEIRO.CARTAO_EXTERNO
         ? "Venda do Ballet Cafe com liquidacao em cartao externo."
         : forma.tipo_fluxo === CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_ALUNO
-          ? "Venda do Ballet Cafe enviada ao Cartao Conexao do aluno."
+          ? "Venda do Ballet Cafe lancada na conta interna do aluno."
           : forma.tipo_fluxo === CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_COLABORADOR
-            ? "Venda do Ballet Cafe enviada ao Cartao Conexao do colaborador."
+            ? "Venda do Ballet Cafe lancada na conta interna do colaborador."
             : "Venda do Ballet Cafe lancada para fechamento futuro na conta interna do colaborador.";
 
   const compradorPessoaFinanceiro =

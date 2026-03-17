@@ -6,7 +6,7 @@ export default function CafeHomePage() {
     <CafePageShell
       eyebrow="Dashboard operacional"
       title="Dashboard do Ballet Cafe"
-      description="Consolide vendas, consumo, horarios, mix por perfil de cliente e alertas operacionais do Ballet Cafe em uma unica home inteligente."
+      description="Consolide vendas, consumo, horarios, meios de pagamento, conta interna e alertas operacionais do Ballet Cafe em uma unica home inteligente."
     >
       <CafeDashboard />
     </CafePageShell>

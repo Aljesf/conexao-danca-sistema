@@ -44,6 +44,8 @@ function statusFromError(message: string): number {
     case "cartao_conexao_aluno_exige_aluno_identificado":
     case "comprador_obrigatorio_para_fluxo_futuro":
     case "conta_conexao_nao_encontrada":
+    case "conta_interna_aluno_nao_encontrada":
+    case "conta_interna_colaborador_nao_encontrada":
       return 400;
     case "saldo_insuficiente":
       return 409;
