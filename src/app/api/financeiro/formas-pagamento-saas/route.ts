@@ -28,32 +28,7 @@ const FormaPagamentoSchema = z.object({
   ativo: z.boolean().default(true),
 });
 
-export async function GET(request: NextRequest) {
-  const denied = await guardApiByRole(request as unknown as Request);
-  if (denied) return denied as unknown as NextResponse;
-
-  const auth = await requireUser(request);
-  if (auth instanceof NextResponse) return auth;
-
-  try {
-    const supabase = getSupabaseAdmin();
-    const itens = await listarFormasPagamentoCentrais(supabase);
-    return NextResponse.json({ ok: true, erro_controlado: null, itens }, { status: 200 });
-  } catch (error) {
-    console.error("[FORMAS_PAGAMENTO_SAAS][GET][ERRO]", error);
-    return NextResponse.json(
-      {
-        ok: false,
-        erro_controlado: "falha_listar_formas_pagamento_saas",
-        detalhe: error instanceof Error ? error.message : "erro_desconhecido",
-        itens: [],
-      },
-      { status: 200 },
-    );
-  }
-}
-
-export async function POST(request: NextRequest) {
+async function handleUpsert(request: NextRequest) {
   const denied = await guardApiByRole(request as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
 
@@ -85,7 +60,7 @@ export async function POST(request: NextRequest) {
     const itens = await listarFormasPagamentoCentrais(supabase);
     return NextResponse.json({ ok: true, erro_controlado: null, itens }, { status: 200 });
   } catch (error) {
-    console.error("[FORMAS_PAGAMENTO_SAAS][POST][ERRO]", error);
+    console.error("[FORMAS_PAGAMENTO_SAAS][UPSERT][ERRO]", error);
     return NextResponse.json(
       {
         error: "falha_salvar_forma_pagamento_saas",
@@ -94,4 +69,41 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  const denied = await guardApiByRole(request as unknown as Request);
+  if (denied) return denied as unknown as NextResponse;
+
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const itens = await listarFormasPagamentoCentrais(supabase);
+    return NextResponse.json({ ok: true, erro_controlado: null, itens }, { status: 200 });
+  } catch (error) {
+    console.error("[FORMAS_PAGAMENTO_SAAS][GET][ERRO]", error);
+    return NextResponse.json(
+      {
+        ok: false,
+        erro_controlado: "falha_listar_formas_pagamento_saas",
+        detalhe: error instanceof Error ? error.message : "erro_desconhecido",
+        itens: [],
+      },
+      { status: 200 },
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  return handleUpsert(request);
+}
+
+export async function PUT(request: NextRequest) {
+  return handleUpsert(request);
+}
+
+export async function PATCH(request: NextRequest) {
+  return handleUpsert(request);
 }

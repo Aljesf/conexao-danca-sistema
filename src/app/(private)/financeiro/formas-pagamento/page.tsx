@@ -93,6 +93,10 @@ export default function FinanceiroFormasPagamentoPage() {
     () => new Map(centros.map((item) => [item.id, item.nome])),
     [centros],
   );
+  const formaEmEdicao = useMemo(
+    () => itens.find((item) => item.codigo === form.codigo.trim().toUpperCase()) ?? null,
+    [form.codigo, itens],
+  );
 
   async function carregar() {
     setLoading(true);
@@ -174,7 +178,7 @@ export default function FinanceiroFormasPagamentoPage() {
 
     try {
       const response = await fetch("/api/financeiro/formas-pagamento-saas", {
-        method: "POST",
+        method: formaEmEdicao ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -206,6 +210,10 @@ export default function FinanceiroFormasPagamentoPage() {
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
             Cadastro central reutilizado por Cafe, Loja e demais contextos. Defina o fluxo da forma,
             se exige troco, maquininha, bandeira ou conta interna, e habilite os centros de custo que podem usala.
+          </p>
+          <p className="max-w-3xl text-sm leading-6 text-slate-500">
+            O PDV do Ballet Cafe e os demais modulos operacionais consomem este cadastro. Se uma forma nao aparecer no Cafe,
+            revise os vinculos de contexto e centro de custo abaixo.
           </p>
         </div>
       </section>
@@ -248,7 +256,7 @@ export default function FinanceiroFormasPagamentoPage() {
               ))
             ) : itens.length === 0 ? (
               <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
-                Nenhuma forma cadastrada no modelo central.
+                Nenhuma forma cadastrada no modelo central. Rode o seed padrao ou crie a primeira forma nesta tela.
               </div>
             ) : (
               itens.map((item) => (
@@ -295,6 +303,9 @@ export default function FinanceiroFormasPagamentoPage() {
             <h2 className="text-lg font-semibold text-slate-950">Cadastro central</h2>
             <p className="mt-1 text-sm text-slate-600">
               Cafe, Loja e Escola reutilizam esta configuracao. Evite listas locais e mantenha a mesma forma central em todos os contextos habilitados.
+            </p>
+            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
+              {formaEmEdicao ? `Editando ${formaEmEdicao.nome}` : "Criando nova forma"}
             </p>
           </div>
 
@@ -427,7 +438,7 @@ export default function FinanceiroFormasPagamentoPage() {
                 disabled={saving}
                 className="rounded-full bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
               >
-                {saving ? "Salvando..." : "Salvar forma central"}
+                {saving ? "Salvando..." : formaEmEdicao ? "Salvar alteracoes" : "Salvar forma central"}
               </button>
               <button
                 type="button"

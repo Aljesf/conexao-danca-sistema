@@ -597,7 +597,15 @@ export default function CafeVendasPage() {
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
                 <label className="space-y-2 text-sm">
-                  <span className="font-medium text-slate-700">Pagamento</span>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="font-medium text-slate-700">Pagamento</span>
+                    <Link
+                      href="/financeiro/formas-pagamento"
+                      className="text-xs font-medium text-[#9a3412] transition hover:underline"
+                    >
+                      Configurar formas de pagamento
+                    </Link>
+                  </div>
                   <select
                     className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
                     value={pagamentoCodigo}
@@ -605,7 +613,7 @@ export default function CafeVendasPage() {
                     disabled={pagamentosLoading || pagamentos.length === 0}
                   >
                     {pagamentos.length === 0 ? (
-                      <option value="">Nenhuma opcao disponivel no momento</option>
+                      <option value="">Nenhuma forma habilitada no momento</option>
                     ) : null}
                     {pagamentos.map((item) => (
                       <option key={item.codigo} value={item.codigo} disabled={!item.habilitado}>
@@ -619,8 +627,11 @@ export default function CafeVendasPage() {
                       ? "Resolvendo meios validos para este comprador..."
                       : pagamentoSelecionado?.motivo_bloqueio ??
                         (pagamentos.length === 0
-                          ? "O sistema nao encontrou formas disponiveis para este contexto agora."
+                          ? "O sistema nao encontrou formas habilitadas agora. Revise Financeiro > Formas de pagamento."
                           : efeitoFinanceiro)}
+                  </p>
+                  <p className="text-xs leading-5 text-slate-500">
+                    As formas de pagamento desta tela sao configuradas em Financeiro &gt; Formas de pagamento.
                   </p>
                 </label>
 
