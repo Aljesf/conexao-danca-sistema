@@ -1,0 +1,10 @@
+bloco,metrica,valor_texto,valor_numerico,detalhe
+A,duplicidades_ativas_fatura_credito_conexao_por_origem_id,0,0,OK
+B,grupos_duplicados_ativos_por_pessoa_competencia_valor,7,7,heuristica_original por pessoa + competencia_ano_mes + valor_centavos
+B,cobrancas_envolvidas_na_heuristica_original,15,15,cobrancas ainda capturadas pelo agrupamento original
+C,indice_ux_cobrancas_fatura_credito_conexao_ativa_existe,SIM,1,consistencia estrutural da protecao canonica
+D,grupos_duplicados_por_competencia_real,27,27,agrupamento por pessoa + competencia real (cobranca.competencia ou fatura.periodo)
+D,cobrancas_envolvidas_por_competencia_real,54,54,passivo real ainda visivel quando a competencia da fatura e considerada
+D,ids_seguro_para_lote_final_nao_executado,14,14,legado MATRICULA/CARTAO_CONEXAO sem recebimento e com par canonico
+D,ids_em_revisao_manual_por_recebimento,13,13,legado MATRICULA/CARTAO_CONEXAO com recebimento exige migracao ou decisao humana
+D,tipos_remanescentes_por_competencia_real,"FATURA_CREDITO_CONEXAO, MATRICULA",2,origens ainda presentes nos grupos por competencia real

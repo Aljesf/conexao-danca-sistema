@@ -63,6 +63,15 @@ Suporte ao Usuário / Sistema de Tickets
 - a idempotencia da cobranca canonica foi centralizada em `src/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura.ts`
 - pendencia remanescente: saneamento manual dos casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` ainda existentes no diagnostico anterior, alem da revisao de fluxos legados fora do escopo desta etapa
 
+## Saneamento final de duplicidade de cobrancas
+- o saneamento final nao foi executado nesta etapa porque a auditoria mostrou ambiguidades remanescentes com recebimento ja registrado
+- a validacao final confirmou `0` duplicidades ativas de `FATURA_CREDITO_CONEXAO` por `origem_id` e indice canonico consistente
+- a auditoria por competencia real identificou `27` grupos duplicados ativos (`54` cobrancas) entre legado `MATRICULA/CARTAO_CONEXAO` e cobranca canonica
+- existe um lote seguro proposto com `14` cobrancas legado sem recebimento: `50, 51, 72, 73, 116, 117, 127, 149, 160, 172, 193, 217, 261, 338`
+- permanecem `13` cobrancas legado em revisao manual por ja possuirem recebimento, alem do caso historico `25` sem competencia explicita
+- total efetivamente saneado ate agora permanece em `6` cobrancas canceladas no lote 1
+- a correcao estrutural do Cartao Conexao esta concluida, mas a frente de passivo historico ainda nao pode ser considerada encerrada
+
 ## Bloqueios
 nenhum
 
