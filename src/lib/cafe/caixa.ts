@@ -397,6 +397,7 @@ async function enrichVendas(supabase: any, vendas: VendaRow[]) {
 
 async function parseItensVenda(supabase: any, payload: Record<string, unknown>): Promise<ParsedItem[]> {
   const rawItens = payload.itens ?? payload.items ?? payload.venda_itens;
+  console.log("[CAFE_CAIXA][ITENS] validando payload de itens");
   if (!Array.isArray(rawItens) || rawItens.length === 0) {
     throw new Error("itens_obrigatorios");
   }
@@ -423,6 +424,7 @@ async function parseItensVenda(supabase: any, payload: Record<string, unknown>):
   }
 
   if (parsed.length === 0) throw new Error("itens_invalidos");
+  console.log("[CAFE_CAIXA][ITENS] itens parseados:", parsed.length);
 
   const produtoIds = Array.from(new Set(parsed.map((item) => item.produto_id)));
   const { data: produtos, error: produtosError } = await supabase
@@ -812,6 +814,7 @@ export async function sincronizarContaInternaCafe(params: {
 }
 
 export async function listarComandasCafe(supabase: any, filters: URLSearchParams) {
+  console.log("[CAFE_CAIXA][LISTAR] filtros:", Object.fromEntries(filters.entries()));
   let query = supabase
     .from("cafe_vendas")
     .select("*, cafe_venda_itens(*)")
@@ -833,6 +836,7 @@ export async function listarComandasCafe(supabase: any, filters: URLSearchParams
 
   const { data, error } = await query;
   if (error) throw error;
+  console.log("[CAFE_CAIXA][LISTAR] comandas encontradas:", Array.isArray(data) ? data.length : 0);
 
   return enrichVendas(supabase, ((data ?? []) as VendaRow[]));
 }
@@ -856,6 +860,7 @@ export async function criarComandaCafe(params: {
   userId: string | null;
 }) {
   const { supabase, body, userId } = params;
+  console.log("[CAFE_CAIXA][CRIAR] iniciando criacao de comanda");
   if (!isRecord(body)) throw new Error("payload_invalido");
 
   const tipoComprador = coerceTipoComprador(body.tipo_comprador ?? body.tipoComprador ?? "SEM_VINCULO");
@@ -869,6 +874,9 @@ export async function criarComandaCafe(params: {
     coerceTipoQuitacao(body.tipo_quitacao ?? body.tipoQuitacao) === CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR
       ? CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR
       : coerceTipoQuitacao(body.tipo_quitacao ?? body.tipoQuitacao);
+  // Conta interna como liquidacao principal ja nasce vinculada a cobranca da
+  // competencia escolhida. A conversao posterior fica reservada para saldo
+  // aberto de comandas registradas originalmente em outro fluxo.
   const contaInternaSolicitada = tipoQuitacao === CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR;
   const rawDataOperacao = asString(body.data_operacao ?? body.dataOperacao);
   const dataOperacao = isIsoDate(rawDataOperacao) ? rawDataOperacao : todayIso();
@@ -929,7 +937,20 @@ export async function criarComandaCafe(params: {
   const consumidorPessoaId = asInt(body.consumidor_pessoa_id ?? body.consumidorPessoaId);
   const observacoesInternas = asString(body.observacoes_internas ?? body.observacoesInternas);
   const observacoes = asString(body.observacoes);
+  console.log("[CAFE_CAIXA][CRIAR] payload normalizado:", {
+    tipoComprador,
+    tipoQuitacao,
+    dataOperacao,
+    competencia,
+    compradorPessoaId,
+    colaboradorPessoaId,
+    itens: itens.length,
+    valorTotal,
+    valorPagoCentavos,
+    valorEmAberto,
+  });
 
+  console.log("[CAFE_CAIXA][CRIAR] inserindo comanda principal");
   const { data: venda, error: vendaError } = await supabase
     .from("cafe_vendas")
     .insert({
@@ -959,6 +980,7 @@ export async function criarComandaCafe(params: {
   let estoqueRollback: Array<{ insumoId: number; saldoAnterior: number }> = [];
 
   try {
+    console.log("[CAFE_CAIXA][CRIAR] inserindo itens da comanda");
     const { error: itensError } = await supabase.from("cafe_venda_itens").insert(
       itens.map((item) => ({
         venda_id: vendaId,
@@ -976,6 +998,7 @@ export async function criarComandaCafe(params: {
     estoqueRollback = await aplicarConsumoEstoque({ supabase, vendaId, itens, createdBy: userId });
 
     if (contaInternaSolicitada && colaboradorPessoaId) {
+      console.log("[CAFE_CAIXA][CRIAR] sincronizando conta interna");
       await sincronizarContaInternaCafe({
         supabase,
         vendaId,
@@ -985,6 +1008,7 @@ export async function criarComandaCafe(params: {
     }
 
     if (valorPagoCentavos > 0) {
+      console.log("[CAFE_CAIXA][CRIAR] registrando recebimento real");
       await registrarRecebimentoReal({
         supabase,
         vendaId,
@@ -995,7 +1019,9 @@ export async function criarComandaCafe(params: {
         usuarioId: userId,
       });
     }
+    console.log("[CAFE_CAIXA][CRIAR] comanda criada com sucesso:", vendaId);
   } catch (error) {
+    console.error("[CAFE_CAIXA][CRIAR][ERRO] rollback da comanda:", error);
     for (const item of estoqueRollback) {
       await supabase.from("cafe_insumos").update({ saldo_atual: item.saldoAnterior }).eq("id", item.insumoId);
     }

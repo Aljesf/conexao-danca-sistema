@@ -105,6 +105,11 @@ type MetricTileProps = {
   emphasis?: boolean;
 };
 
+type FinanceiroBadgeProps = {
+  label: string;
+  tone?: "success" | "warning" | "account" | "muted";
+};
+
 type ComandaFilaCardProps = {
   comanda: Comanda;
   onEditar: (id: number) => void;
@@ -378,8 +383,30 @@ function MetricTile({ label, value, emphasis = false }: MetricTileProps) {
   );
 }
 
+function FinanceiroBadge({ label, tone = "muted" }: FinanceiroBadgeProps) {
+  const toneClass =
+    tone === "success"
+      ? "border-[#cfe7d2] bg-[#f3fbf4] text-[#2f6a3a]"
+      : tone === "warning"
+        ? "border-[#ead8ae] bg-[#fff8e8] text-[#8f6a22]"
+        : tone === "account"
+          ? "border-[#e3d0b5] bg-[#fff6eb] text-[#8c6640]"
+          : "border-slate-200 bg-slate-50 text-slate-600";
+
+  return (
+    <span className={cx("inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold", toneClass)}>
+      {label}
+    </span>
+  );
+}
+
 function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: ComandaFilaCardProps) {
   const temSaldoAberto = comanda.valor_em_aberto_centavos > 0;
+  const emContaInterna =
+    comanda.tipo_quitacao === "CONTA_INTERNA_COLABORADOR" ||
+    comanda.status_pagamento === "FATURADO" ||
+    Boolean(comanda.cobranca_id);
+  const podeConverterSaldo = temSaldoAberto && !emContaInterna;
   const tituloComprador =
     comanda.colaborador_nome ?? comanda.pagador_nome ?? "Comanda administrativa sem vinculo";
   const subtituloComprador = comanda.colaborador_nome
@@ -387,6 +414,13 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
     : comanda.pagador_nome
       ? "Comprador identificado como pessoa avulsa."
       : "Sem vinculo especifico informado.";
+  const resultadoFinanceiro = emContaInterna
+    ? `Debito em conta interna${comanda.data_competencia ? ` na competencia ${comanda.data_competencia}` : ""}.`
+    : temSaldoAberto
+      ? comanda.valor_pago_centavos > 0
+        ? "Parcial no caixa com saldo ainda em aberto."
+        : "Saldo em aberto aguardando baixa ou conversao posterior."
+      : "Recebimento concluido no caixa.";
 
   return (
     <article className="rounded-[24px] border border-slate-200/80 bg-white px-5 py-5 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.28)]">
@@ -406,12 +440,21 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
                 {formatFormaPagamento(comanda.forma_pagamento)}
               </span>
             ) : null}
+            {!emContaInterna && comanda.status_pagamento === "PAGO" ? (
+              <FinanceiroBadge label="Pago no caixa" tone="success" />
+            ) : null}
+            {comanda.status_pagamento === "PARCIAL" ? <FinanceiroBadge label="Parcial" tone="warning" /> : null}
+            {podeConverterSaldo ? <FinanceiroBadge label="Saldo em aberto" tone="warning" /> : null}
+            {emContaInterna && comanda.data_competencia ? (
+              <FinanceiroBadge label={`Conta interna ${comanda.data_competencia}`} tone="account" />
+            ) : null}
+            {comanda.status_pagamento === "FATURADO" ? <FinanceiroBadge label="Faturada" tone="muted" /> : null}
           </div>
 
           <div className="space-y-1">
             <h3 className="text-base font-semibold tracking-tight text-slate-950">{tituloComprador}</h3>
             <p className="text-sm leading-6 text-slate-600">
-              Operacao em {comanda.data_operacao}. {subtituloComprador}{" "}
+              Operacao em {comanda.data_operacao}. {subtituloComprador} {resultadoFinanceiro}{" "}
               {comanda.cafe_venda_itens?.length ? `${comanda.cafe_venda_itens.length} item(ns) registrados.` : "Itens nao detalhados nesta consulta."}
             </p>
           </div>
@@ -438,9 +481,11 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
         <button type="button" className={BUTTON_SECONDARY} disabled={!temSaldoAberto} onClick={() => onDarBaixa(comanda)}>
           Dar baixa
         </button>
-        <button type="button" className={BUTTON_GHOST} disabled={!temSaldoAberto} onClick={() => onContaInterna(comanda)}>
-          Enviar para conta interna
-        </button>
+        {podeConverterSaldo ? (
+          <button type="button" className={BUTTON_GHOST} onClick={() => onContaInterna(comanda)}>
+            Converter saldo para conta interna
+          </button>
+        ) : null}
         {comanda.cobranca_id ? (
           <Link className={BUTTON_SECONDARY} href={`/admin/governanca/cobrancas/${comanda.cobranca_id}`}>
             Ver cobranca
@@ -571,27 +616,28 @@ export default function CafeCaixaPage() {
     tipoComprador === "COLABORADOR" ? Number(colaboradorPessoaId || "0") || null : null;
   const permiteContaInterna = tipoComprador === "COLABORADOR" && Boolean(compradorColaboradorId);
 
-  const destinoFinanceiro = isContaInterna
+  const resultadoFinanceiro = isContaInterna
     ? permiteContaInterna
-      ? "Conta interna do colaborador por competencia"
+      ? "Debito em conta interna"
       : "Conta interna aguardando colaborador valido"
     : saldoPrevistoCentavos > 0
-      ? permiteContaInterna
-        ? "Saldo em aberto para baixa real ou conta interna"
+      ? valorPagoAberturaCentavos > 0
+        ? "Parcial no caixa + saldo em aberto"
         : "Saldo em aberto aguardando baixa real"
-      : "Recebimento imediato no caixa";
+      : "Recebimento no caixa";
 
   const statusPrevisto = editingId
     ? "Ajuste operacional"
     : isContaInterna && !permiteContaInterna
       ? "Aguardando colaborador"
       : isContaInterna
-      ? "Faturado"
+      ? "Faturado na conta interna"
       : saldoPrevistoCentavos === 0
         ? "Pago"
         : valorPagoAberturaCentavos > 0
           ? "Parcial"
           : "Pendente";
+  const competenciaCobranca = isContaInterna ? competenciaSugerida : "Nao se aplica";
 
   const filtrosAtivos =
     Boolean(filtroColaboradorPessoaId) ||
@@ -678,6 +724,12 @@ export default function CafeCaixaPage() {
       setAtalhoAtivo("conta");
     }
   }, [isContaInterna]);
+
+  useEffect(() => {
+    if (isContaInterna && valorPagoCentavos !== "0") {
+      setValorPagoCentavos("0");
+    }
+  }, [isContaInterna, valorPagoCentavos]);
 
   useEffect(() => {
     if (tipoComprador === "COLABORADOR") {
@@ -1022,7 +1074,7 @@ export default function CafeCaixaPage() {
       if (!res.ok) throw new Error(json?.detalhe ?? json?.error ?? "falha_enviar_conta_interna");
       setContaInternaId(null);
       await carregarComandas();
-      setMensagem("Saldo enviado para a conta interna.");
+      setMensagem("Saldo convertido para a conta interna.");
       setAtalhoAtivo("recentes");
       scrollToSection("recentes");
     } catch (error) {
@@ -1066,7 +1118,7 @@ export default function CafeCaixaPage() {
     return (
       <CafeCard
         title="Fluxos desta tela"
-        description="Escolha o objetivo do momento. Os cards abaixo funcionam como atalhos de foco para operacao retroativa, baixas, conta interna e revisao da fila."
+        description="Escolha o objetivo do momento. Os cards abaixo separam o fluxo direto da comanda, a baixa real e a conversao corretiva de saldo para conta interna."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <ShortcutCard
@@ -1085,8 +1137,8 @@ export default function CafeCaixaPage() {
           />
           <ShortcutCard
             badge="Conta interna"
-            title="Enviar saldo para conta interna"
-            description="Use conta interna quando o saldo precisar ser cobrado por competencia."
+            title="Lancar direto em conta interna"
+            description="Quando a liquidacao principal for conta interna, a comanda ja nasce vinculada a cobranca da competencia."
             active={atalhoAtivo === "conta" || isContaInterna || contaInternaId !== null}
             onClick={ativarFluxoContaInterna}
           />
@@ -1489,7 +1541,7 @@ export default function CafeCaixaPage() {
                 <option value="IMEDIATA">Pagamento imediato</option>
                 <option value="PARCIAL">Pagamento parcial</option>
                 <option value="CONTA_INTERNA_COLABORADOR" disabled={!permiteContaInterna}>
-                  Enviar saldo para conta interna
+                  Debito direto em conta interna
                 </option>
               </select>
             </label>
@@ -1517,7 +1569,7 @@ export default function CafeCaixaPage() {
                 type="number"
                 min={0}
                 value={valorPagoCentavos}
-                disabled={editingId !== null}
+                disabled={editingId !== null || isContaInterna}
                 onChange={(event) => setValorPagoCentavos(event.target.value)}
               />
             </label>
@@ -1527,18 +1579,16 @@ export default function CafeCaixaPage() {
             <CafePanel className="px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Regra operacional</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Use pagamento parcial quando parte da venda ja entrou no caixa e o restante precisa continuar aberto para baixa posterior ou conta interna, se o comprador for colaborador.
+                Essa tela registra vendas reais feitas fora do PDV. Pagamento imediato gera recebimento no caixa. Pagamento parcial mantem saldo aberto. Conta interna cria o debito diretamente na competencia escolhida.
               </p>
             </CafePanel>
             <CafePanel className="px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Leitura rapida</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 {isContaInterna
-                  ? "O saldo restante seguira para conta interna por competencia, sem recebimento imediato no caixa."
+                  ? "A comanda ja nascera como debito em conta interna. A competencia define em qual mes esse valor sera cobrado do colaborador."
                   : saldoPrevistoCentavos > 0
-                    ? permiteContaInterna
-                      ? "Ha saldo em aberto previsto. Revise se ele fica para baixa real ou conta interna."
-                      : "Ha saldo em aberto previsto. Revise a baixa posterior no caixa para fechar a venda."
+                    ? "Ha saldo em aberto previsto. Ele pode receber baixa posterior no caixa e, se necessario, ser convertido depois para conta interna."
                     : "O total atual indica quitacao integral na abertura, sem saldo pendente."}
               </p>
             </CafePanel>
@@ -1547,14 +1597,14 @@ export default function CafeCaixaPage() {
 
         <CaixaSection
           anchor="caixa-destino-financeiro"
-          title="D. Destino financeiro"
-          description="Defina a competencia quando o saldo precisa sair do caixa e ir para conta interna. O destaque aumenta quando a quitacao passa a depender desse fluxo."
+          title="D. Resultado financeiro da comanda"
+          description="Defina como a comanda nasce no financeiro. Conta interna gera debito direto na competencia escolhida; parcial deixa saldo em aberto para ajuste posterior."
           active={isContaInterna || contaInternaId !== null || atalhoAtivo === "conta"}
           variant={isContaInterna || contaInternaId !== null ? "muted" : "default"}
         >
           <div className="grid gap-4 md:grid-cols-[1fr_180px_1fr]">
-            <label className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Competencia</span>
+            <div className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Competencia de cobranca</span>
               <input
                 className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
                 value={competencia}
@@ -1562,7 +1612,10 @@ export default function CafeCaixaPage() {
                 placeholder="YYYY-MM"
                 disabled={!isContaInterna}
               />
-            </label>
+              <p className="text-xs leading-5 text-slate-500">
+                Define o mes em que o valor sera cobrado na conta interna do colaborador.
+              </p>
+            </div>
 
             <div className="space-y-2 text-sm">
               <span className="font-medium text-slate-700">Status previsto</span>
@@ -1570,8 +1623,8 @@ export default function CafeCaixaPage() {
             </div>
 
             <div className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Destino financeiro</span>
-              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950">{destinoFinanceiro}</div>
+              <span className="font-medium text-slate-700">Resultado financeiro</span>
+              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950">{resultadoFinanceiro}</div>
             </div>
           </div>
 
@@ -1585,7 +1638,7 @@ export default function CafeCaixaPage() {
             <CafePanel className="px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Uso recomendado</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Conta interna nao gera recebimento imediato. O saldo segue para cobranca canonica da competencia e a folha importa a fatura, nao a comanda isolada.
+                Se a liquidacao for conta interna, a comanda ja gera debito na conta interna do colaborador. A competencia define o mes de cobranca e a folha importa a fatura da conta interna, nao a comanda isolada.
               </p>
             </CafePanel>
           )}
@@ -1625,7 +1678,7 @@ export default function CafeCaixaPage() {
       <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
         <CafeCard
           title="Resumo operacional"
-          description="Confirme comprador, forma de pagamento, saldo, competencia sugerida e destino financeiro antes de gravar."
+          description="Confirme comprador, forma de liquidacao, saldo, competencia de cobranca e resultado financeiro antes de gravar."
           variant={saldoPrevistoCentavos > 0 || isContaInterna ? "muted" : "stats"}
         >
           <div className="rounded-[24px] border border-[#ead8be] bg-[linear-gradient(180deg,#fffef9_0%,#fff5e6_100%)] px-5 py-5">
@@ -1634,7 +1687,7 @@ export default function CafeCaixaPage() {
             <p className="mt-3 text-sm leading-6 text-slate-600">
               {editingId
                 ? "Resumo baseado nos itens atuais da comanda em leitura de referencia."
-                : "O painel lateral destaca saldo, competencia sugerida e previsao operacional do lancamento."}
+                : "O painel lateral destaca saldo, competencia de cobranca e o resultado financeiro previsto para a comanda."}
             </p>
           </div>
 
@@ -1647,11 +1700,11 @@ export default function CafeCaixaPage() {
             />
             <MetricTile label="Valor pago" value={brl(valorPagoAberturaCentavos)} />
             <MetricTile label="Saldo em aberto" value={brl(saldoPrevistoCentavos)} emphasis={saldoPrevistoCentavos > 0} />
-            <MetricTile label="Competencia sugerida" value={competenciaSugerida} />
-            <MetricTile label="Destino financeiro" value={destinoFinanceiro} />
+            <MetricTile label="Competencia de cobranca" value={competenciaCobranca} emphasis={isContaInterna} />
+            <MetricTile label="Resultado financeiro" value={resultadoFinanceiro} />
             <MetricTile label="Status operacional previsto" value={statusPrevisto} />
             {tipoComprador === "COLABORADOR" ? (
-              <MetricTile label="Conta interna" value={permiteContaInterna ? "Disponivel para fatura/folha" : "Aguardando colaborador"} emphasis />
+              <MetricTile label="Conta interna" value={permiteContaInterna ? "Disponivel para cobranca, fatura e folha" : "Aguardando colaborador"} emphasis />
             ) : null}
           </div>
         </CafeCard>
@@ -1712,8 +1765,8 @@ export default function CafeCaixaPage() {
       <div id={SECTION_TARGETS.conta} className="scroll-mt-28">
         {contaInternaId ? (
           <CafeCard
-            title={`Enviar saldo da comanda #${contaInternaId}`}
-            description="Converta apenas o saldo em aberto em divida por competencia do colaborador."
+            title={`Converter saldo da comanda #${contaInternaId}`}
+            description="Use este bloco apenas quando uma comanda com saldo aberto precisar ser corrigida para conta interna depois do registro."
             variant="muted"
           >
             <div className="grid gap-3">
@@ -1734,29 +1787,32 @@ export default function CafeCaixaPage() {
                 </select>
               </label>
               <label className="space-y-2 text-sm">
-                <span className="font-medium text-slate-700">Competencia</span>
+                <span className="font-medium text-slate-700">Competencia de cobranca</span>
                 <input
                   className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
                   value={contaInternaCompetencia}
                   onChange={(event) => setContaInternaCompetencia(event.target.value)}
                   placeholder="YYYY-MM"
                 />
+                <p className="text-xs leading-5 text-slate-500">
+                  Define o mes em que o saldo convertido sera cobrado na conta interna do colaborador.
+                </p>
               </label>
               <div className="flex flex-wrap gap-2">
                 <button type="button" className={BUTTON_SECONDARY} onClick={() => setContaInternaId(null)}>
                   Cancelar
                 </button>
                 <button type="button" className={BUTTON_PRIMARY} disabled={saving} onClick={() => void enviarContaInterna()}>
-                  Confirmar envio
+                  Confirmar conversao
                 </button>
               </div>
             </div>
           </CafeCard>
         ) : (
-          <CafeCard title="Conta interna por competencia" description="O envio do saldo para conta interna parte de uma comanda aberta na fila operacional.">
+          <CafeCard title="Conversao posterior para conta interna" description="Este painel existe apenas para corrigir saldo aberto de comandas que nao nasceram direto em conta interna.">
             <EmptyState
-              title="Nenhum envio para conta interna em andamento"
-              description="Use a acao da fila para escolher a comanda, validar o colaborador e confirmar a competencia que vai alimentar cobranca e fatura."
+              title="Nenhuma conversao em andamento"
+              description="Use a acao da fila para escolher a comanda, validar o colaborador e vincular apenas o saldo em aberto a uma competencia de cobranca."
             />
           </CafeCard>
         )}
@@ -1769,7 +1825,7 @@ export default function CafeCaixaPage() {
       <CaixaSection
         anchor={SECTION_TARGETS.recentes}
         title="Fila de comandas recentes"
-        description="Revise a operacao, filtre a fila e abra acoes de edicao, baixa e conta interna com mais contexto."
+        description="Revise a operacao, filtre a fila e abra acoes de edicao, baixa e conversao de saldo com mais contexto."
         active={atalhoAtivo === "recentes" || baixaId !== null || contaInternaId !== null}
         actions={
           <button type="button" className={BUTTON_SECONDARY} onClick={() => void carregarComandas()}>
@@ -1777,7 +1833,7 @@ export default function CafeCaixaPage() {
           </button>
         }
       >
-        <CafeSectionIntro
+          <CafeSectionIntro
           title="Filtros operacionais"
           description="Ajuste datas, colaborador, status e competencia para montar uma fila de revisao mais objetiva."
           actions={
@@ -1877,7 +1933,7 @@ export default function CafeCaixaPage() {
           <EmptyState
             title="Nenhuma comanda encontrada"
             description="A fila operacional esta vazia para os filtros atuais. Ajuste a busca ou registre um novo lancamento para voltar a revisar comandas."
-            hint="Revisao, baixa parcial e conta interna"
+            hint="Revisao, baixa parcial e conversao de saldo"
           />
         ) : (
           <div className="space-y-3">
@@ -1914,7 +1970,7 @@ export default function CafeCaixaPage() {
     <CafePageShell
       eyebrow="Ballet Cafe"
       title="Caixa / Lancamentos"
-      description="Painel operacional para regularizar comandas anotadas em papel, revisar saldos, registrar baixas reais e encaminhar cobrancas por competencia sem transformar esta tela em PDV."
+      description="Painel administrativo para registrar comandas retroativas, corrigir saldos e definir o tratamento financeiro real de cada comanda, sem transformar esta tela em PDV."
       actions={
         <>
           <Link className={BUTTON_PRIMARY} href="/cafe/vendas">
