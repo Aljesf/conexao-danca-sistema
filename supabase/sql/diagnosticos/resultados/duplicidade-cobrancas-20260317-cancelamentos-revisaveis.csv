@@ -1,0 +1,7 @@
+cobranca_id,pessoa_nome,valor_centavos,origem_tipo,origem_id,motivo_acao
+285,Bruna do Socorro de Amorin de Lima,9900,MATRICULA,2,Cobranca de MATRICULA sem vinculo a fatura em grupo misto; candidata a revisao para cancelamento controlado.
+216,Camila Emanuelle Tavares do Vale,22000,MATRICULA,34,Cobranca de MATRICULA sem vinculo a fatura em grupo misto; candidata a revisao para cancelamento controlado.
+272,Gabrielle Ferreira Figueiredo ,12000,MATRICULA,30,Cobranca de MATRICULA sem vinculo a fatura em grupo misto; candidata a revisao para cancelamento controlado.
+258,Lucianny Van Assche,27000,MATRICULA,29,Cobranca de MATRICULA sem vinculo a fatura em grupo misto; candidata a revisao para cancelamento controlado.
+313,Raimundo Nonato Barbosa Pessoa,30800,MATRICULA,37,Cobranca de MATRICULA sem vinculo a fatura em grupo misto; candidata a revisao para cancelamento controlado.
+412,Vanessa Aguierre de Amorin,17600,MATRICULA,38,Cobranca de MATRICULA sem vinculo a fatura em grupo misto; candidata a revisao para cancelamento controlado.

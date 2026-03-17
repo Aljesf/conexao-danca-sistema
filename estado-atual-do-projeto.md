@@ -38,6 +38,12 @@ Suporte ao Usuário / Sistema de Tickets
 - padrÃ£o forte de mistura entre `MATRICULA` e `FATURA_CREDITO_CONEXAO`, exigindo saneamento controlado e correÃ§Ã£o da causa raiz
 - todos os grupos diagnosticados possuem `competencia_ano_mes` nula e pedem revisÃ£o do fluxo de geraÃ§Ã£o e consolidaÃ§Ã£o
 
+## Saneamento controlado de financeiro
+- etapa de saneamento controlado preparada em arquivos SQL locais
+- casos `MATRICULA_X_FATURA` ja possuem lista de cancelamento revisavel
+- casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` permanecem em revisao manual
+- ainda nao houve alteracao de dados no banco
+
 ## Bloqueios
 nenhum
 
