@@ -77,3 +77,9 @@ Conectarte v0.9 com:
 - Produzir prints finais de dashboard, PDV, Caixa, conta interna e configuracao de contexto.
 - Fechar a integracao completa da Loja com o resolvedor central de conta interna e suporte.
 - Aplicar o backfill e o seed do cadastro central de formas nos ambientes restantes e remover os fallbacks quando o schema novo estiver plenamente presente.
+## 2026-03-17 - Ajustes finais do PDV do Ballet Cafe
+
+- Corrigido o fechamento da venda do Cafe com `Conta interna do colaborador`, unificando a mesma conta interna canonica entre `GET /api/cafe/pagamentos/opcoes` e `POST /api/cafe/vendas` via rota compartilhada do Cafe.
+- O PDV passou a enviar `conta_conexao_id` e `conta_interna_id` resolvidos pela API, e o backend agora valida a conta informada contra a conta canonica antes de lancar a cobranca/fatura.
+- Corrigido o warning de chave duplicada `conta-nao-resolvida` na leitura financeira do dashboard do Cafe.
+- Mantida a persistencia de `tabela_preco_id` e da composicao detalhada dos itens no lancamento financeiro/fatura do colaborador.

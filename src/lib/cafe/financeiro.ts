@@ -209,10 +209,9 @@ function inferirFluxoFinanceiroCafe(codigo: string | null | undefined): CafeFlux
   if (normalized === "CARTAO_CONEXAO_ALUNO" || normalized === "CREDITO_ALUNO") {
     return CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_ALUNO;
   }
-  if (normalized === "CARTAO_CONEXAO_COLAB" || normalized === "CARTAO_CONEXAO_COLABORADOR") {
-    return CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_COLABORADOR;
-  }
   if (
+    normalized === "CARTAO_CONEXAO_COLAB" ||
+    normalized === "CARTAO_CONEXAO_COLABORADOR" ||
     normalized === "CREDIARIO_COLAB" ||
     normalized === "CONTA_INTERNA" ||
     normalized === "CONTA_INTERNA_COLABORADOR"
@@ -918,6 +917,7 @@ export async function criarCobrancaCafe(params: CriarCobrancaCafeInput): Promise
     colaboradorPessoaId,
     origemFinanceira,
     centroCustoId,
+    contaConexaoId: contaConexaoIdInformada,
     itens,
   } = params;
 
@@ -942,6 +942,19 @@ export async function criarCobrancaCafe(params: CriarCobrancaCafeInput): Promise
         ? "conta_interna_aluno_nao_encontrada"
         : "conta_interna_colaborador_nao_encontrada",
     );
+  }
+
+  console.log("[CAFE_FINANCEIRO][COBRANCA][CONTA_INTERNA]", {
+    venda_id: vendaId,
+    comprador_tipo: compradorTipo,
+    comprador_pessoa_id: compradorPessoaId,
+    colaborador_pessoa_id: colaboradorPessoaId,
+    conta_interna_informada: contaConexaoIdInformada,
+    conta_interna_resolvida: conta.id,
+  });
+
+  if (contaConexaoIdInformada && contaConexaoIdInformada !== conta.id) {
+    throw new Error("conta_interna_informada_invalida");
   }
 
   const vendas = await carregarVendasCafeCompetencia({
@@ -1099,6 +1112,7 @@ type AplicarFluxoInput = {
   compradorTipoInformado: string | null;
   formaPagamentoId: number | null;
   formaPagamentoCodigo: string | null;
+  contaConexaoIdInformada: number | null;
   competenciaAnoMes: string | null;
   observacoes: string | null;
   usuarioId: string | null;
@@ -1137,6 +1151,7 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
     compradorTipoInformado,
     formaPagamentoId,
     formaPagamentoCodigo,
+    contaConexaoIdInformada,
     competenciaAnoMes,
     observacoes,
     usuarioId,
@@ -1193,12 +1208,17 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
     comprador.tipo === CAFE_COMPRADOR_TIPO.COLABORADOR
       ? colaboradorPessoaId ?? comprador.pessoa_id
       : comprador.pessoa_id;
+  const formaPagamentoPersistida =
+    forma.tipo_fluxo === CAFE_FLUXO_FINANCEIRO.CONTA_INTERNA &&
+    comprador.tipo === CAFE_COMPRADOR_TIPO.COLABORADOR
+      ? "CONTA_INTERNA_COLABORADOR"
+      : forma.codigo;
 
   const { error: preUpdateError } = await supabase
     .from("cafe_vendas")
     .update({
       data_competencia: forma.exige_conta_conexao ? competencia : null,
-      forma_pagamento: forma.codigo,
+      forma_pagamento: formaPagamentoPersistida,
       colaborador_pessoa_id:
         comprador.tipo === CAFE_COMPRADOR_TIPO.COLABORADOR ? compradorPessoaFinanceiro : colaboradorPessoaId,
       updated_at: nowIso(),
@@ -1221,7 +1241,7 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
       colaboradorPessoaId,
       origemFinanceira: forma.tipo_fluxo,
       centroCustoId,
-      contaConexaoId: comprador.conta_conexao?.id ?? null,
+      contaConexaoId: contaConexaoIdInformada ?? comprador.conta_conexao?.id ?? null,
       itens,
     });
 
@@ -1241,7 +1261,7 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
       observacao_financeira: cobranca.observacaoFinanceira,
       status_pagamento: cobranca.statusPagamento,
       tipo_quitacao: cobranca.tipoQuitacao,
-      forma_pagamento_codigo: forma.codigo,
+      forma_pagamento_codigo: formaPagamentoPersistida,
     };
   }
 
@@ -1284,7 +1304,7 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
     .update({
       status_pagamento: statusPagamento,
       tipo_quitacao: saldoAberto > 0 ? "PARCIAL" : "IMEDIATA",
-      forma_pagamento: forma.codigo,
+      forma_pagamento: formaPagamentoPersistida,
       updated_at: nowIso(),
     })
     .eq("id", vendaId);
@@ -1310,6 +1330,6 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
         : observacaoFinanceiraBase,
     status_pagamento: statusPagamento,
     tipo_quitacao: saldoAberto > 0 ? "PARCIAL" : "IMEDIATA",
-    forma_pagamento_codigo: forma.codigo,
+    forma_pagamento_codigo: formaPagamentoPersistida,
   };
 }

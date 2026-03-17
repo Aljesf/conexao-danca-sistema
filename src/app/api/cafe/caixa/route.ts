@@ -46,6 +46,7 @@ function statusFromError(message: string): number {
     case "conta_conexao_nao_encontrada":
     case "conta_interna_aluno_nao_encontrada":
     case "conta_interna_colaborador_nao_encontrada":
+    case "conta_interna_informada_invalida":
     case "tabela_preco_id_invalida":
       return 400;
     case "saldo_insuficiente":
@@ -91,6 +92,29 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null);
     console.log("[CAFE_CAIXA][POST] body:", JSON.stringify(body, null, 2));
     if (isRecord(body)) {
+      const compradorPessoaId = firstNumber(body, [
+        "comprador_pessoa_id",
+        "compradorPessoaId",
+        "comprador_id",
+        "compradorId",
+        "pagador_pessoa_id",
+        "cliente_pessoa_id",
+      ]);
+      const colaboradorPessoaIdInformado = firstNumber(body, ["colaborador_pessoa_id", "colaboradorPessoaId"]);
+      const colaboradorPessoaId = colaboradorPessoaIdInformado ?? compradorPessoaId;
+      const formaPagamentoId = firstNumber(body, [
+        "forma_pagamento_saas_id",
+        "formaPagamentoSaasId",
+        "forma_pagamento_id",
+        "formaPagamentoId",
+      ]);
+      const tabelaPrecoId = firstNumber(body, ["tabela_preco_id", "tabelaPrecoId"]);
+      const contaInternaId = firstNumber(body, [
+        "conta_conexao_id",
+        "contaConexaoId",
+        "conta_interna_id",
+        "contaInternaId",
+      ]);
       const formaPagamento = firstString(body, [
         "forma_pagamento",
         "formaPagamento",
@@ -105,12 +129,27 @@ export async function POST(request: NextRequest) {
         formaPagamento === "CARTAO_CONEXAO_COLABORADOR" ||
         formaPagamento === "CARTAO_CONEXAO_COLAB" ||
         tipoQuitacao === "CONTA_INTERNA_COLABORADOR";
+      console.log("[CAFE_CAIXA][POST][NORMALIZADO]", {
+        comprador_pessoa_id: compradorPessoaId,
+        colaborador_pessoa_id: colaboradorPessoaId,
+        forma_pagamento_saas_id: formaPagamentoId,
+        tabela_preco_id: tabelaPrecoId,
+        conta_interna_id: contaInternaId,
+        forma_pagamento: formaPagamento,
+        tipo_quitacao: tipoQuitacao,
+        conta_interna_solicitada: contaInternaSolicitada,
+      });
 
       if (contaInternaSolicitada) {
-        const colaboradorPessoaId = firstNumber(body, ["colaborador_pessoa_id", "colaboradorPessoaId"]);
         const competencia = firstString(body, ["data_competencia", "dataCompetencia", "competencia"]);
 
         if (!colaboradorPessoaId) {
+          console.warn("[CAFE_CAIXA][POST][VALIDACAO]", {
+            motivo: "conta_interna_exige_colaborador",
+            comprador_pessoa_id: compradorPessoaId,
+            colaborador_pessoa_id: colaboradorPessoaIdInformado,
+            conta_interna_id: contaInternaId,
+          });
           return NextResponse.json(
             { error: "falha_criar_comanda_cafe", detalhe: "conta_interna_exige_colaborador" },
             { status: 400 },
@@ -118,6 +157,12 @@ export async function POST(request: NextRequest) {
         }
 
         if (!competencia) {
+          console.warn("[CAFE_CAIXA][POST][VALIDACAO]", {
+            motivo: "competencia_obrigatoria_para_conta_interna",
+            comprador_pessoa_id: compradorPessoaId,
+            colaborador_pessoa_id: colaboradorPessoaId,
+            conta_interna_id: contaInternaId,
+          });
           return NextResponse.json(
             { error: "falha_criar_comanda_cafe", detalhe: "competencia_obrigatoria_para_conta_interna" },
             { status: 400 },

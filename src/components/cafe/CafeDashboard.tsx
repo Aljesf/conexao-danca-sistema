@@ -362,8 +362,8 @@ export default function CafeDashboard() {
               </CafePanel>
             ) : (
               <div className="grid gap-3 lg:grid-cols-2">
-                {data.financeiro.distribuicao_contas.map((conta) => (
-                  <CafePanel key={`conta-${conta.conta_financeira_id ?? "nao-resolvida"}`}>
+                {data.financeiro.distribuicao_contas.map((conta, index) => (
+                  <CafePanel key={`conta-${conta.conta_financeira_id ?? "nao-resolvida"}-${index}`}>
                     <p className="text-sm font-semibold text-slate-950">{conta.conta_financeira_nome}</p>
                     <p className="mt-2 text-sm text-slate-600">
                       {formatBRLFromCentavos(conta.total_centavos)}

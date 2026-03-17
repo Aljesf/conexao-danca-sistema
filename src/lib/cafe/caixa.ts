@@ -1035,7 +1035,18 @@ export async function criarComandaCafe(params: {
   const rawFormaPagamento =
     body.forma_pagamento ?? body.formaPagamento ?? body.metodo_pagamento ?? body.metodoPagamento;
   const tabelaPrecoId = asInt(body.tabela_preco_id ?? body.tabelaPrecoId);
-  const formaPagamentoId = asInt(body.forma_pagamento_id ?? body.formaPagamentoId);
+  const formaPagamentoId = asInt(
+    body.forma_pagamento_saas_id ??
+      body.formaPagamentoSaasId ??
+      body.forma_pagamento_id ??
+      body.formaPagamentoId,
+  );
+  const contaConexaoIdInformada = asInt(
+    body.conta_conexao_id ??
+      body.contaConexaoId ??
+      body.conta_interna_id ??
+      body.contaInternaId,
+  );
   const metodoPagamento = coerceFormaPagamento(
     body.metodo_pagamento ?? body.metodoPagamento ?? body.forma_pagamento ?? body.formaPagamento,
   );
@@ -1138,6 +1149,7 @@ export async function criarComandaCafe(params: {
     compradorPessoaId,
     colaboradorPessoaId,
     tabelaPrecoId,
+    contaConexaoIdInformada,
     itens: itens.length,
     valorTotal,
     valorPagoCentavos,
@@ -1207,6 +1219,7 @@ export async function criarComandaCafe(params: {
       formaPagamentoId,
       formaPagamentoCodigo:
         metodoPagamento ?? asString(body.forma_pagamento_codigo ?? body.formaPagamentoCodigo) ?? null,
+      contaConexaoIdInformada,
       competenciaAnoMes: faturamentoFuturoSolicitado ? competencia : null,
       observacoes: observacoesInternas ?? observacoes,
       usuarioId: userId,

@@ -70,6 +70,12 @@ type PagamentosResponse = {
   opcoes: PagamentoOpcao[];
 };
 
+type AvisoOperacional = {
+  id: string;
+  tone: "info" | "warning";
+  text: string;
+};
+
 type TabelaPrecoOpcao = {
   id: number;
   nome: string;
@@ -170,6 +176,10 @@ function formatCafeErrorMessage(message: string) {
   switch (message) {
     case "conta_interna_exige_colaborador":
       return "Selecione um colaborador com conta interna elegivel para usar essa forma de pagamento.";
+    case "conta_interna_colaborador_nao_encontrada":
+      return "Nao foi encontrada uma conta interna ativa para este colaborador.";
+    case "conta_interna_informada_invalida":
+      return "A conta interna resolvida para este colaborador ficou inconsistente. Recarregue o comprador e tente novamente.";
     case "competencia_obrigatoria_para_conta_interna":
       return "Defina a competencia de cobranca antes de registrar em conta interna.";
     case "tabela_preco_id_invalida":
@@ -190,6 +200,7 @@ export default function CafeVendasPage() {
   const [pagamentosLoading, setPagamentosLoading] = useState(false);
   const [pagamentosAviso, setPagamentosAviso] = useState<string | null>(null);
   const [contaInternaInfo, setContaInternaInfo] = useState<PagamentosResponse["conta_interna"] | null>(null);
+  const [contaInternaIdSelecionada, setContaInternaIdSelecionada] = useState<number | null>(null);
   const [pagamentoCodigo, setPagamentoCodigo] = useState("");
   const [tabelasPreco, setTabelasPreco] = useState<TabelaPrecoOpcao[]>([]);
   const [tabelasPrecoLoading, setTabelasPrecoLoading] = useState(false);
@@ -277,6 +288,7 @@ export default function CafeVendasPage() {
         setCentroCustoId(payload?.centro_custo_id ?? null);
         setCompradorTipo(payload?.comprador.tipo ?? "NAO_IDENTIFICADO");
         setContaInternaInfo(payload?.conta_interna ?? null);
+        setContaInternaIdSelecionada(payload?.conta_interna?.elegivel ? payload.conta_interna.conta_id ?? null : null);
         if (erroControlado) {
           setPagamentosAviso(
             nextPayments.length > 0
@@ -295,6 +307,7 @@ export default function CafeVendasPage() {
           setPagamentos([]);
           setPagamentosAviso(null);
           setContaInternaInfo(null);
+          setContaInternaIdSelecionada(null);
           setPagamentoCodigo("");
           setMensagem(
             formatCafeErrorMessage(error instanceof Error ? error.message : "falha_carregar_formas_pagamento_cafe"),
@@ -394,6 +407,8 @@ export default function CafeVendasPage() {
     () => pagamentos.find((item) => item.codigo === pagamentoCodigo) ?? null,
     [pagamentoCodigo, pagamentos],
   );
+  const contaInternaColaboradorSelecionada =
+    pagamentoSelecionado?.tipo_fluxo === "CONTA_INTERNA_COLABORADOR" ? contaInternaIdSelecionada : null;
   const tabelaPrecoAtiva = useMemo(
     () => tabelasPreco.find((item) => item.id === tabelaPrecoId) ?? null,
     [tabelaPrecoId, tabelasPreco],
@@ -407,6 +422,24 @@ export default function CafeVendasPage() {
   const precificacaoResumo = tabelaPrecoAtiva
     ? `Precos aplicados pela tabela: ${tabelaPrecoAtiva.nome}.`
     : "Precos aplicados pela tabela padrao do Ballet Cafe.";
+  const avisosOperacionais = useMemo<AvisoOperacional[]>(() => {
+    const avisos: AvisoOperacional[] = [];
+    if (pagamentosAviso) {
+      avisos.push({ id: "pagamentos-fallback", tone: "warning", text: pagamentosAviso });
+    }
+    if (
+      compradorTipo === "COLABORADOR" &&
+      pagamentoSelecionado?.tipo_fluxo === "CONTA_INTERNA_COLABORADOR" &&
+      contaInternaColaboradorSelecionada
+    ) {
+      avisos.push({
+        id: `conta-interna-colaborador-${contaInternaColaboradorSelecionada}`,
+        tone: "info",
+        text: "Conta interna do colaborador resolvida e pronta para o fechamento da venda.",
+      });
+    }
+    return avisos;
+  }, [compradorTipo, contaInternaColaboradorSelecionada, pagamentoSelecionado?.tipo_fluxo, pagamentosAviso]);
   const pagamentoEmDinheiro = Boolean(pagamentoSelecionado?.exige_troco || pagamentoSelecionado?.codigo === "DINHEIRO");
   const valorRecebidoAtualCentavos = parseCentavosInput(valorRecebidoCentavos);
   const trocoCentavos = pagamentoEmDinheiro ? Math.max(valorRecebidoAtualCentavos - totalCentavos, 0) : 0;
@@ -417,6 +450,18 @@ export default function CafeVendasPage() {
       setValorRecebidoCentavos("");
     }
   }, [pagamentoEmDinheiro]);
+
+  useEffect(() => {
+    if (pagamentoSelecionado?.tipo_fluxo === "CONTA_INTERNA_COLABORADOR") {
+      setContaInternaIdSelecionada(contaInternaInfo?.conta_id ?? null);
+      return;
+    }
+    if (pagamentoSelecionado?.tipo_fluxo === "CONTA_INTERNA_ALUNO") {
+      setContaInternaIdSelecionada(contaInternaInfo?.conta_id ?? null);
+      return;
+    }
+    setContaInternaIdSelecionada(null);
+  }, [contaInternaInfo?.conta_id, pagamentoSelecionado?.tipo_fluxo]);
 
   useEffect(() => {
     if (!tabelaPrecoId || itensRef.current.length === 0) return;
@@ -554,6 +599,12 @@ export default function CafeVendasPage() {
       return;
     }
 
+    if (pagamentoSelecionado.tipo_fluxo === "CONTA_INTERNA_COLABORADOR" && !contaInternaColaboradorSelecionada) {
+      setMensagem("A conta interna do colaborador ainda nao foi resolvida. Recarregue o comprador e tente novamente.");
+      setMensagemTipo("error");
+      return;
+    }
+
     if (pagamentoEmDinheiro && valorRecebidoAtualCentavos < totalCentavos) {
       setMensagem("Informe um valor recebido suficiente para calcular o troco.");
       setMensagemTipo("error");
@@ -569,7 +620,7 @@ export default function CafeVendasPage() {
         pagamentoSelecionado.tipo_fluxo === "IMEDIATO" || pagamentoSelecionado.tipo_fluxo === "CARTAO_EXTERNO"
           ? totalCentavos
           : 0;
-      const response = await fetch("/api/cafe/caixa", {
+      const response = await fetch("/api/cafe/vendas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -580,6 +631,7 @@ export default function CafeVendasPage() {
           comprador_pessoa_id: compradorSelecionado?.id ?? null,
           pagador_pessoa_id: compradorSelecionado?.id ?? null,
           cliente_pessoa_id: compradorSelecionado?.id ?? null,
+          colaborador_pessoa_id: compradorTipo === "COLABORADOR" ? compradorSelecionado?.id ?? null : null,
           tipo_quitacao:
             pagamentoSelecionado.tipo_fluxo === "CONTA_INTERNA_COLABORADOR"
               ? "CONTA_INTERNA_COLABORADOR"
@@ -587,9 +639,12 @@ export default function CafeVendasPage() {
                 ? "CARTAO_CONEXAO"
                 : "IMEDIATA",
           forma_pagamento_id: pagamentoSelecionado.id,
+          forma_pagamento_saas_id: pagamentoSelecionado.id,
           forma_pagamento_codigo: pagamentoSelecionado.codigo,
           metodo_pagamento: pagamentoSelecionado.codigo,
           tabela_preco_id: tabelaPrecoId,
+          conta_conexao_id: contaInternaIdSelecionada,
+          conta_interna_id: contaInternaIdSelecionada,
           data_competencia: pagamentoSelecionado.exige_conta_conexao ? competenciaFromDate(todayIso()) : null,
           valor_pago_centavos: valorPagoCentavos,
           valor_recebido_centavos: pagamentoEmDinheiro ? valorRecebidoAtualCentavos : null,
@@ -855,14 +910,32 @@ export default function CafeVendasPage() {
                               ? "O sistema nao encontrou formas habilitadas agora. Revise Financeiro > Formas de pagamento."
                               : efeitoFinanceiro)}
                       </p>
-                      {pagamentosAviso ? (
-                        <p className="text-xs leading-5 text-amber-700">{pagamentosAviso}</p>
-                      ) : null}
                       <p className="text-xs leading-5 text-slate-500">
                         As formas de pagamento desta tela sao configuradas em Financeiro &gt; Formas de pagamento.
                       </p>
                     </label>
                   </div>
+
+                  {avisosOperacionais.map((aviso, index) => (
+                    <div
+                      key={`${aviso.id}-${index}`}
+                      className={[
+                        "rounded-2xl border p-4",
+                        aviso.tone === "warning"
+                          ? "border-amber-200 bg-amber-50"
+                          : "border-[#eadfcd] bg-[#fffaf4]",
+                      ].join(" ")}
+                    >
+                      <p
+                        className={[
+                          "text-sm leading-6",
+                          aviso.tone === "warning" ? "text-amber-800" : "text-slate-600",
+                        ].join(" ")}
+                      >
+                        {aviso.text}
+                      </p>
+                    </div>
+                  ))}
 
                   {pagamentoEmDinheiro ? (
                     <div className="grid gap-3 rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
