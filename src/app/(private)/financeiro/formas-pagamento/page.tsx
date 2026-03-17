@@ -15,6 +15,19 @@ type FormaPagamentoFluxo =
   | "CONTA_INTERNA_ALUNO"
   | "CONTA_INTERNA_COLABORADOR";
 
+type FormaPagamentoVinculo = {
+  centro_custo_id: number;
+  contextos: string[];
+  conta_financeira_id: number | null;
+  conta_financeira_codigo: string | null;
+  conta_financeira_nome: string | null;
+  cartao_maquina_id: number | null;
+  cartao_maquina_nome: string | null;
+  carteira_tipo: string | null;
+  ordem_exibicao: number;
+  ativo: boolean;
+};
+
 type FormaPagamentoCentral = {
   id: number;
   codigo: string;
@@ -27,6 +40,7 @@ type FormaPagamentoCentral = {
   ativo: boolean;
   contextos: string[];
   centros_custo_ids: number[];
+  vinculacoes: FormaPagamentoVinculo[];
 };
 
 type FormState = {
@@ -78,6 +92,17 @@ function flowLabel(value: FormaPagamentoFluxo) {
 
 function toggleInArray<T extends string | number>(items: T[], value: T) {
   return items.includes(value) ? items.filter((item) => item !== value) : [...items, value];
+}
+
+function resumoVinculo(item: FormaPagamentoVinculo, centroMap: Map<number, string>) {
+  const centro = centroMap.get(item.centro_custo_id) ?? `Centro #${item.centro_custo_id}`;
+  const partes = [
+    centro,
+    item.cartao_maquina_nome ? `Maquininha: ${item.cartao_maquina_nome}` : null,
+    item.conta_financeira_nome ? `Conta: ${item.conta_financeira_nome}` : null,
+    item.carteira_tipo ? `Perfil: ${item.carteira_tipo}` : null,
+  ].filter(Boolean);
+  return partes.join(" | ");
 }
 
 export default function FinanceiroFormasPagamentoPage() {
@@ -291,6 +316,22 @@ export default function FinanceiroFormasPagamentoPage() {
                         {centroMap.get(centroId) ?? `Centro #${centroId}`}
                       </span>
                     ))}
+                  </div>
+                  <div className="mt-3 space-y-2 text-xs text-slate-500">
+                    {item.vinculacoes.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-2">
+                        Sem vinculos detalhados de maquininha ou conta financeira.
+                      </div>
+                    ) : (
+                      item.vinculacoes.map((vinculo) => (
+                        <div
+                          key={`${item.codigo}-${vinculo.centro_custo_id}-${vinculo.ordem_exibicao}`}
+                          className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2"
+                        >
+                          {resumoVinculo(vinculo, centroMap)}
+                        </div>
+                      ))
+                    )}
                   </div>
                 </button>
               ))

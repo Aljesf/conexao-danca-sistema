@@ -38,7 +38,10 @@ type PagamentoOpcao = {
   exige_bandeira?: boolean;
   habilitado: boolean;
   motivo_bloqueio: string | null;
+  conta_financeira_codigo?: string | null;
+  conta_financeira_nome?: string | null;
   cartao_maquina_id?: number | null;
+  cartao_maquina_nome?: string | null;
 };
 
 type PagamentosResponse = {
@@ -637,6 +640,14 @@ export default function CafeVendasPage() {
 
                 {pagamentoEmDinheiro ? (
                   <div className="grid gap-3 rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                    <div className="space-y-1">
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Subfluxo de troco
+                      </div>
+                      <p className="text-sm text-slate-600">
+                        Informe quanto entrou no caixa para calcular o troco antes de concluir a venda.
+                      </p>
+                    </div>
                     <label className="space-y-2 text-sm">
                       <span className="font-medium text-slate-700">Valor recebido em dinheiro</span>
                       <input
@@ -661,6 +672,34 @@ export default function CafeVendasPage() {
                     {valorRecebidoInsuficiente ? (
                       <p className="text-xs text-rose-600">O valor recebido precisa ser maior ou igual ao total da venda.</p>
                     ) : null}
+                  </div>
+                ) : null}
+
+                {pagamentoSelecionado?.tipo_fluxo === "IMEDIATO" && pagamentoSelecionado.codigo === "PIX" ? (
+                  <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                    <div className="text-sm font-medium text-slate-900">Destino financeiro do Pix</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      O valor sera direcionado para a conta financeira configurada para este contexto.
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-slate-800">
+                      {pagamentoSelecionado.conta_financeira_nome
+                        ? `Destino financeiro: ${pagamentoSelecionado.conta_financeira_nome}`
+                        : "Nenhuma conta financeira padrao foi configurada para o Pix deste contexto."}
+                    </p>
+                  </div>
+                ) : null}
+
+                {pagamentoSelecionado?.tipo_fluxo === "CARTAO_EXTERNO" ? (
+                  <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                    <div className="text-sm font-medium text-slate-900">Maquininha padrao do cartao</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      A venda sera enviada para a maquininha configurada em Financeiro &gt; Formas de pagamento.
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-slate-800">
+                      {pagamentoSelecionado.cartao_maquina_nome
+                        ? `Maquininha padrao: ${pagamentoSelecionado.cartao_maquina_nome}`
+                        : "Nenhuma maquininha padrao foi configurada para esta forma."}
+                    </p>
                   </div>
                 ) : null}
 

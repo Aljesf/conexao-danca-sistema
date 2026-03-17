@@ -34,14 +34,31 @@ export type FormaPagamentoSaas = {
   ativo: boolean;
   descricao_exibicao: string;
   centro_custo_id: number;
+  ordem_exibicao: number;
   conta_financeira_id: number | null;
+  conta_financeira_codigo: string | null;
+  conta_financeira_nome: string | null;
   cartao_maquina_id: number | null;
+  cartao_maquina_nome: string | null;
   carteira_tipo: string | null;
 };
 
 export type FormaPagamentoSaasElegivel = FormaPagamentoSaas & {
   habilitado: boolean;
   motivo_bloqueio: string | null;
+};
+
+export type FormaPagamentoSaasCentralVinculo = {
+  centro_custo_id: number;
+  contextos: string[];
+  conta_financeira_id: number | null;
+  conta_financeira_codigo: string | null;
+  conta_financeira_nome: string | null;
+  cartao_maquina_id: number | null;
+  cartao_maquina_nome: string | null;
+  carteira_tipo: string | null;
+  ordem_exibicao: number;
+  ativo: boolean;
 };
 
 export type FormaPagamentoSaasCentral = {
@@ -56,6 +73,7 @@ export type FormaPagamentoSaasCentral = {
   ativo: boolean;
   contextos: string[];
   centros_custo_ids: number[];
+  vinculacoes: FormaPagamentoSaasCentralVinculo[];
 };
 
 export type ContaInternaElegibilidadeResponse = {
@@ -106,6 +124,18 @@ type FormaPagamentoContextoRow = Record<string, unknown> & {
   conta_financeira_id?: number | string | null;
   cartao_maquina_id?: number | string | null;
   carteira_tipo?: string | null;
+};
+
+type ContaFinanceiraRow = Record<string, unknown> & {
+  id?: number | string | null;
+  codigo?: string | null;
+  nome?: string | null;
+};
+
+type CartaoMaquinaRow = Record<string, unknown> & {
+  id?: number | string | null;
+  nome?: string | null;
+  conta_financeira_id?: number | string | null;
 };
 
 type UpsertFormaPagamentoSaasPayload = {
@@ -299,6 +329,44 @@ async function carregarMapaFormas(supabase: SupabaseLike, codigos: string[]) {
   return map;
 }
 
+async function carregarMapaContasFinanceiras(supabase: SupabaseLike, ids: number[]) {
+  const validIds = Array.from(new Set(ids.filter((item) => item > 0)));
+  if (validIds.length === 0) return new Map<number, ContaFinanceiraRow>();
+
+  const { data, error } = await supabase
+    .from("contas_financeiras")
+    .select("id,codigo,nome")
+    .in("id", validIds);
+
+  if (error) throw error;
+
+  const map = new Map<number, ContaFinanceiraRow>();
+  for (const item of (data ?? []) as ContaFinanceiraRow[]) {
+    const id = asInt(item.id);
+    if (id) map.set(id, item);
+  }
+  return map;
+}
+
+async function carregarMapaCartaoMaquinas(supabase: SupabaseLike, ids: number[]) {
+  const validIds = Array.from(new Set(ids.filter((item) => item > 0)));
+  if (validIds.length === 0) return new Map<number, CartaoMaquinaRow>();
+
+  const { data, error } = await supabase
+    .from("cartao_maquinas")
+    .select("id,nome,conta_financeira_id")
+    .in("id", validIds);
+
+  if (error) throw error;
+
+  const map = new Map<number, CartaoMaquinaRow>();
+  for (const item of (data ?? []) as CartaoMaquinaRow[]) {
+    const id = asInt(item.id);
+    if (id) map.set(id, item);
+  }
+  return map;
+}
+
 export async function listarFormasPagamentoPorContexto(params: {
   supabase: SupabaseLike;
   contexto: ContextoSaas;
@@ -332,12 +400,33 @@ export async function listarFormasPagamentoPorContexto(params: {
       .filter((item): item is string => Boolean(item))
       .map((item) => upper(item)),
   );
+  const maquinasMap = await carregarMapaCartaoMaquinas(
+    supabase,
+    contextoRows
+      .map((item) => asInt(item.cartao_maquina_id))
+      .filter((item): item is number => Boolean(item)),
+  );
+  const contasMap = await carregarMapaContasFinanceiras(
+    supabase,
+    contextoRows
+      .flatMap((item) => {
+        const maquina = asInt(item.cartao_maquina_id);
+        const maquinaContaId = maquina ? asInt(maquinasMap.get(maquina)?.conta_financeira_id) : null;
+        return [asInt(item.conta_financeira_id), maquinaContaId];
+      })
+      .filter((item): item is number => Boolean(item)),
+  );
 
   const itens = contextoRows
     .map((item) => {
       const codigo = upper(item.forma_pagamento_codigo);
       const forma = formasMap.get(codigo) ?? {};
       const tipoFluxo = inferTipoFluxoSaas(forma, item);
+      const ordemExibicao = asInt(item.ordem_exibicao) ?? 0;
+      const cartaoMaquinaId = asInt(item.cartao_maquina_id);
+      const cartaoMaquina = cartaoMaquinaId ? maquinasMap.get(cartaoMaquinaId) ?? null : null;
+      const contaFinanceiraId = asInt(item.conta_financeira_id) ?? asInt(cartaoMaquina?.conta_financeira_id);
+      const contaFinanceira = contaFinanceiraId ? contasMap.get(contaFinanceiraId) ?? null : null;
       return {
         id: asInt(forma.id) ?? 0,
         codigo: asString(forma.codigo) ?? asString(item.forma_pagamento_codigo) ?? "",
@@ -350,8 +439,12 @@ export async function listarFormasPagamentoPorContexto(params: {
         ativo: typeof item.ativo === "boolean" ? item.ativo : Boolean(forma.ativo ?? true),
         descricao_exibicao: buildDisplayName(item, forma, tipoFluxo),
         centro_custo_id: asInt(item.centro_custo_id) ?? centroCustoId,
-        conta_financeira_id: asInt(item.conta_financeira_id),
-        cartao_maquina_id: asInt(item.cartao_maquina_id),
+        ordem_exibicao: ordemExibicao,
+        conta_financeira_id: contaFinanceiraId,
+        conta_financeira_codigo: asString(contaFinanceira?.codigo),
+        conta_financeira_nome: asString(contaFinanceira?.nome),
+        cartao_maquina_id: cartaoMaquinaId,
+        cartao_maquina_nome: asString(cartaoMaquina?.nome),
         carteira_tipo: asString(item.carteira_tipo),
       } satisfies FormaPagamentoSaas;
     })
@@ -619,6 +712,8 @@ export async function listarFormasPagamentoCentrais(
     formasResult,
     { data: contextoData, error: contextoError },
     { data: centrosData, error: centrosError },
+    { data: contasData, error: contasError },
+    { data: maquinasData, error: maquinasError },
   ] = await Promise.all([
     supabase
       .from("formas_pagamento")
@@ -634,6 +729,12 @@ export async function listarFormasPagamentoCentrais(
       .from("centros_custo")
       .select("id,codigo,nome,contextos_aplicaveis,ativo")
       .eq("ativo", true),
+    supabase
+      .from("contas_financeiras")
+      .select("id,codigo,nome"),
+    supabase
+      .from("cartao_maquinas")
+      .select("id,nome"),
   ]);
 
   let formasData = formasResult.data;
@@ -651,6 +752,20 @@ export async function listarFormasPagamentoCentrais(
   if (formasError) throw formasError;
   if (contextoError) throw contextoError;
   if (centrosError) throw centrosError;
+  if (contasError) throw contasError;
+  if (maquinasError) throw maquinasError;
+
+  const contasMap = new Map<number, ContaFinanceiraRow>();
+  for (const item of (contasData ?? []) as ContaFinanceiraRow[]) {
+    const id = asInt(item.id);
+    if (id) contasMap.set(id, item);
+  }
+
+  const maquinasMap = new Map<number, CartaoMaquinaRow>();
+  for (const item of (maquinasData ?? []) as CartaoMaquinaRow[]) {
+    const id = asInt(item.id);
+    if (id) maquinasMap.set(id, item);
+  }
 
   const centrosMap = new Map<number, string[]>();
   for (const centro of (centrosData ?? []) as CentroCustoRow[]) {
@@ -660,22 +775,49 @@ export async function listarFormasPagamentoCentrais(
     centrosMap.set(id, contextos);
   }
 
-  const contextoByCodigo = new Map<string, { centros: Set<number>; contextos: Set<string> }>();
+  const contextoByCodigo = new Map<
+    string,
+    { centros: Set<number>; contextos: Set<string>; vinculacoes: FormaPagamentoSaasCentralVinculo[] }
+  >();
   for (const item of (contextoData ?? []) as FormaPagamentoContextoRow[]) {
     const codigo = upper(item.forma_pagamento_codigo);
     const centroId = asInt(item.centro_custo_id);
     if (!codigo || !centroId) continue;
-    const current = contextoByCodigo.get(codigo) ?? { centros: new Set<number>(), contextos: new Set<string>() };
+    const cartaoMaquinaId = asInt(item.cartao_maquina_id);
+    const cartaoMaquina = cartaoMaquinaId ? maquinasMap.get(cartaoMaquinaId) ?? null : null;
+    const contaFinanceiraId = asInt(item.conta_financeira_id);
+    const contaFinanceira = contaFinanceiraId ? contasMap.get(contaFinanceiraId) ?? null : null;
+    const current = contextoByCodigo.get(codigo) ?? {
+      centros: new Set<number>(),
+      contextos: new Set<string>(),
+      vinculacoes: [],
+    };
     current.centros.add(centroId);
     for (const contexto of centrosMap.get(centroId) ?? []) {
       current.contextos.add(contexto);
     }
+    current.vinculacoes.push({
+      centro_custo_id: centroId,
+      contextos: (centrosMap.get(centroId) ?? []).slice().sort(),
+      conta_financeira_id: contaFinanceiraId,
+      conta_financeira_codigo: asString(contaFinanceira?.codigo),
+      conta_financeira_nome: asString(contaFinanceira?.nome),
+      cartao_maquina_id: cartaoMaquinaId,
+      cartao_maquina_nome: asString(cartaoMaquina?.nome),
+      carteira_tipo: asString(item.carteira_tipo),
+      ordem_exibicao: asInt(item.ordem_exibicao) ?? 0,
+      ativo: typeof item.ativo === "boolean" ? item.ativo : true,
+    });
     contextoByCodigo.set(codigo, current);
   }
 
   return ((formasData ?? []) as FormaPagamentoRow[]).map((forma) => {
     const codigo = upper(forma.codigo);
-    const meta = contextoByCodigo.get(codigo) ?? { centros: new Set<number>(), contextos: new Set<string>() };
+    const meta = contextoByCodigo.get(codigo) ?? {
+      centros: new Set<number>(),
+      contextos: new Set<string>(),
+      vinculacoes: [],
+    };
     const tipoFluxo = inferTipoFluxoSaas(forma, {});
     return {
       id: asInt(forma.id) ?? 0,
@@ -689,6 +831,10 @@ export async function listarFormasPagamentoCentrais(
       ativo: typeof forma.ativo === "boolean" ? forma.ativo : true,
       contextos: Array.from(meta.contextos).sort(),
       centros_custo_ids: Array.from(meta.centros).sort((a, b) => a - b),
+      vinculacoes: meta.vinculacoes.sort((a, b) => {
+        if (a.centro_custo_id !== b.centro_custo_id) return a.centro_custo_id - b.centro_custo_id;
+        return a.ordem_exibicao - b.ordem_exibicao;
+      }),
     } satisfies FormaPagamentoSaasCentral;
   });
 }

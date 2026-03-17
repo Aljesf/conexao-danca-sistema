@@ -28,6 +28,7 @@ export type FormaPagamentoDisponivel = {
   nome: string;
   descricao_exibicao: string;
   tipo_fluxo: TipoFluxoPagamento;
+  ordem_exibicao: number;
   exige_troco: boolean;
   exige_maquininha: boolean;
   exige_bandeira: boolean;
@@ -36,7 +37,10 @@ export type FormaPagamentoDisponivel = {
   habilitado: boolean;
   motivo_bloqueio: string | null;
   conta_financeira_id: number | null;
+  conta_financeira_codigo: string | null;
+  conta_financeira_nome: string | null;
   cartao_maquina_id: number | null;
+  cartao_maquina_nome: string | null;
   carteira_tipo: string | null;
   origem: "SAAS" | "LEGADO";
 };
@@ -75,6 +79,7 @@ type FormaPagamentoContextoRow = Record<string, unknown>;
 type FormaPagamentoLegadoRow = Record<string, unknown>;
 type CartaoMaquinaRow = Record<string, unknown>;
 type CartaoRegraRow = Record<string, unknown>;
+type ContaFinanceiraRow = Record<string, unknown>;
 
 function asInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
@@ -233,28 +238,52 @@ async function carregarMaquininhasValidas(
   maquinaIdsPreferidas: number[],
 ) {
   const filtrosIds = Array.from(new Set(maquinaIdsPreferidas.filter((item) => item > 0)));
-  let maquinasQuery = supabase
-    .from("cartao_maquinas")
-    .select("id,centro_custo_id,ativo")
-    .eq("ativo", true)
-    .eq("centro_custo_id", centroCustoId);
+  let maquinas: CartaoMaquinaRow[] = [];
 
   if (filtrosIds.length > 0) {
-    maquinasQuery = maquinasQuery.in("id", filtrosIds);
+    const { data, error } = await supabase
+      .from("cartao_maquinas")
+      .select("id,nome,centro_custo_id,conta_financeira_id,ativo")
+      .eq("ativo", true)
+      .in("id", filtrosIds);
+    if (error) {
+      console.error("[FORMAS_PAGAMENTO][MAQUININHAS][ERRO_PREFERIDAS]", error);
+      return new Map<number, CartaoMaquinaRow>();
+    }
+    maquinas = (data ?? []) as CartaoMaquinaRow[];
   }
 
-  const { data: maquinasData, error: maquinasError } = await maquinasQuery;
-  if (maquinasError) {
-    console.error("[FORMAS_PAGAMENTO][MAQUININHAS][ERRO]", maquinasError);
-    return new Map<number, number>();
+  if (maquinas.length === 0) {
+    const { data, error } = await supabase
+      .from("cartao_maquinas")
+      .select("id,nome,centro_custo_id,conta_financeira_id,ativo")
+      .eq("ativo", true)
+      .eq("centro_custo_id", centroCustoId);
+    if (error) {
+      console.error("[FORMAS_PAGAMENTO][MAQUININHAS][ERRO_CENTRO]", error);
+      return new Map<number, CartaoMaquinaRow>();
+    }
+    maquinas = (data ?? []) as CartaoMaquinaRow[];
   }
 
-  const maquinas = (maquinasData ?? []) as CartaoMaquinaRow[];
+  if (maquinas.length === 0) {
+    const { data, error } = await supabase
+      .from("cartao_maquinas")
+      .select("id,nome,centro_custo_id,conta_financeira_id,ativo")
+      .eq("ativo", true)
+      .order("id", { ascending: true });
+    if (error) {
+      console.error("[FORMAS_PAGAMENTO][MAQUININHAS][ERRO_FALLBACK]", error);
+      return new Map<number, CartaoMaquinaRow>();
+    }
+    maquinas = (data ?? []) as CartaoMaquinaRow[];
+  }
+
   const machineIds = maquinas
     .map((item) => asInt(item.id))
     .filter((item): item is number => Boolean(item));
 
-  if (machineIds.length === 0) return new Map<number, number>();
+  if (machineIds.length === 0) return new Map<number, CartaoMaquinaRow>();
 
   const { data: regrasData, error: regrasError } = await supabase
     .from("cartao_regras_operacao")
@@ -264,19 +293,24 @@ async function carregarMaquininhasValidas(
 
   if (regrasError) {
     console.error("[FORMAS_PAGAMENTO][REGRAS_CARTAO][ERRO]", regrasError);
-    return new Map<number, number>();
+    return new Map<number, CartaoMaquinaRow>();
   }
 
-  const regras = new Map<number, number>();
+  const regras = new Set<number>();
   for (const regra of (regrasData ?? []) as CartaoRegraRow[]) {
     const maquinaId = asInt(regra.maquina_id);
-    const regraId = asInt(regra.id);
-    if (maquinaId && regraId && !regras.has(maquinaId)) {
-      regras.set(maquinaId, regraId);
+    if (maquinaId) regras.add(maquinaId);
+  }
+
+  const maquinasValidas = new Map<number, CartaoMaquinaRow>();
+  for (const maquina of maquinas) {
+    const id = asInt(maquina.id);
+    if (id && regras.has(id)) {
+      maquinasValidas.set(id, maquina);
     }
   }
 
-  return regras;
+  return maquinasValidas;
 }
 
 type ResolverFormasBaseParams = {
@@ -351,12 +385,39 @@ async function carregarContextoELegado(
     if (codigo) formasMap.set(codigo, item);
   }
 
-  const regrasPorMaquina = await carregarMaquininhasValidas(
+  const maquinasValidas = await carregarMaquininhasValidas(
     params.supabase,
     centroCustoId,
     contextoRows.map((item) => asInt(item.cartao_maquina_id)).filter((item): item is number => Boolean(item)),
   );
-  const primeiraMaquinaValida = Array.from(regrasPorMaquina.keys())[0] ?? null;
+  const primeiraMaquinaValida = Array.from(maquinasValidas.keys())[0] ?? null;
+  const contaFinanceiraIds = Array.from(
+    new Set(
+      contextoRows
+        .flatMap((item) => {
+          const cartaoMaquinaId = asInt(item.cartao_maquina_id);
+          const maquinaContaId = cartaoMaquinaId
+            ? asInt(maquinasValidas.get(cartaoMaquinaId)?.conta_financeira_id)
+            : null;
+          return [asInt(item.conta_financeira_id), maquinaContaId];
+        })
+        .filter((item): item is number => Boolean(item)),
+    ),
+  );
+  const contasMap = new Map<number, ContaFinanceiraRow>();
+  if (contaFinanceiraIds.length > 0) {
+    const { data: contasData, error: contasError } = await params.supabase
+      .from("contas_financeiras")
+      .select("id,codigo,nome")
+      .in("id", contaFinanceiraIds);
+    if (contasError) {
+      throw contasError;
+    }
+    for (const item of (contasData ?? []) as ContaFinanceiraRow[]) {
+      const id = asInt(item.id);
+      if (id) contasMap.set(id, item);
+    }
+  }
 
   const opcoes = contextoRows.map((item) => {
     const codigoOriginal = asString(item.forma_pagamento_codigo) ?? "";
@@ -366,7 +427,11 @@ async function carregarContextoELegado(
       item,
       asString((forma as Record<string, unknown>).tipo_fluxo_saas),
     );
+    const ordemExibicao = asInt(item.ordem_exibicao) ?? 0;
     const cartaoMaquinaId = asInt(item.cartao_maquina_id) ?? (tipoFluxo === "CARTAO" ? primeiraMaquinaValida : null);
+    const cartaoMaquina = cartaoMaquinaId ? maquinasValidas.get(cartaoMaquinaId) ?? null : null;
+    const contaFinanceiraId = asInt(item.conta_financeira_id) ?? asInt(cartaoMaquina?.conta_financeira_id);
+    const contaFinanceira = contaFinanceiraId ? contasMap.get(contaFinanceiraId) ?? null : null;
     const exigeMaquininha =
       typeof (forma as Record<string, unknown>).exige_maquininha === "boolean"
         ? Boolean((forma as Record<string, unknown>).exige_maquininha)
@@ -390,6 +455,7 @@ async function carregarContextoELegado(
       nome: asString(forma.nome) ?? codigoOriginal,
       descricao_exibicao: resolveDisplayName(forma, item, tipoFluxo),
       tipo_fluxo: tipoFluxo,
+      ordem_exibicao: ordemExibicao,
       exige_troco: exigeTroco,
       exige_maquininha: exigeMaquininha,
       exige_bandeira: exigeBandeira,
@@ -402,8 +468,11 @@ async function carregarContextoELegado(
             : true,
       habilitado: true,
       motivo_bloqueio: null,
-      conta_financeira_id: asInt(item.conta_financeira_id),
+      conta_financeira_id: contaFinanceiraId,
+      conta_financeira_codigo: asString(contaFinanceira?.codigo),
+      conta_financeira_nome: asString(contaFinanceira?.nome),
       cartao_maquina_id: cartaoMaquinaId,
+      cartao_maquina_nome: asString(cartaoMaquina?.nome),
       carteira_tipo: asString(item.carteira_tipo),
       origem: asString((forma as Record<string, unknown>).tipo_fluxo_saas) ? "SAAS" : "LEGADO",
     } satisfies FormaPagamentoDisponivel;
@@ -562,6 +631,10 @@ function aplicarElegibilidade(params: {
         habilitado: item.ativo && motivoBloqueio === null,
         motivo_bloqueio: motivoBloqueio,
       } satisfies FormaPagamentoDisponivel;
+    })
+    .sort((a, b) => {
+      if (a.ordem_exibicao !== b.ordem_exibicao) return a.ordem_exibicao - b.ordem_exibicao;
+      return a.descricao_exibicao.localeCompare(b.descricao_exibicao);
     });
 }
 

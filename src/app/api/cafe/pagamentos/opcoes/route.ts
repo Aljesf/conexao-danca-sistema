@@ -47,6 +47,38 @@ function mapTipoFluxoCafe(value: string, codigo: string) {
   }
 }
 
+function isOpcaoCafePermitida(
+  tipoComprador: "NAO_IDENTIFICADO" | "ALUNO" | "COLABORADOR" | "PESSOA_AVULSA",
+  tipoFluxo: string,
+) {
+  if (tipoFluxo === "DINHEIRO" || tipoFluxo === "PIX" || tipoFluxo === "CARTAO") {
+    return true;
+  }
+  if (tipoFluxo === "CONTA_INTERNA_ALUNO") {
+    return tipoComprador === "ALUNO";
+  }
+  if (tipoFluxo === "CONTA_INTERNA_COLABORADOR") {
+    return tipoComprador === "COLABORADOR";
+  }
+  return false;
+}
+
+function ordemOpcaoCafe(tipoFluxo: string) {
+  switch (tipoFluxo) {
+    case "DINHEIRO":
+      return 10;
+    case "PIX":
+      return 20;
+    case "CARTAO":
+      return 30;
+    case "CONTA_INTERNA_ALUNO":
+    case "CONTA_INTERNA_COLABORADOR":
+      return 40;
+    default:
+      return 99;
+  }
+}
+
 export async function GET(request: NextRequest) {
   const denied = await guardApiByRole(request as unknown as Request);
   if (denied) return denied as unknown as NextResponse;
@@ -84,6 +116,16 @@ export async function GET(request: NextRequest) {
       erro_controlado: data.erro_controlado,
     });
 
+    const opcoesFiltradas = data.opcoes
+      .filter((item) => isOpcaoCafePermitida(data.comprador.tipo, item.tipo_fluxo))
+      .sort((a, b) => {
+        const ordemA = ordemOpcaoCafe(a.tipo_fluxo);
+        const ordemB = ordemOpcaoCafe(b.tipo_fluxo);
+        if (ordemA !== ordemB) return ordemA - ordemB;
+        if (a.ordem_exibicao !== b.ordem_exibicao) return a.ordem_exibicao - b.ordem_exibicao;
+        return a.descricao_exibicao.localeCompare(b.descricao_exibicao);
+      });
+
     return NextResponse.json(
       {
         ok: data.ok,
@@ -92,7 +134,7 @@ export async function GET(request: NextRequest) {
         centro_custo_id: data.centro_custo_id,
         comprador: data.comprador,
         conta_interna: data.conta_interna,
-        opcoes: data.opcoes.map((item) => ({
+        opcoes: opcoesFiltradas.map((item) => ({
           id: item.id,
           codigo: item.codigo,
           nome: item.nome,
@@ -105,7 +147,10 @@ export async function GET(request: NextRequest) {
           habilitado: item.habilitado,
           motivo_bloqueio: item.motivo_bloqueio,
           conta_financeira_id: item.conta_financeira_id,
+          conta_financeira_codigo: item.conta_financeira_codigo,
+          conta_financeira_nome: item.conta_financeira_nome,
           cartao_maquina_id: item.cartao_maquina_id,
+          cartao_maquina_nome: item.cartao_maquina_nome,
           carteira_tipo: item.carteira_tipo,
         })),
       },

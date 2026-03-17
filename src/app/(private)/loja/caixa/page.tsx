@@ -81,6 +81,11 @@ type FormaPagamentoContexto = {
     tipo_base?: string;
     ativo?: boolean;
   } | null;
+  contas_financeiras?: {
+    id?: number;
+    codigo?: string | null;
+    nome?: string | null;
+  } | null;
   cartao_maquinas?: {
     id?: number;
     nome?: string | null;
@@ -243,10 +248,20 @@ export default function FrenteCaixaLojaPage() {
 
   function formatFormaPagamentoLabelLoja(forma: FormaPagamentoContexto) {
     const codigo = forma.formas_pagamento?.codigo ?? forma.forma_pagamento_codigo ?? "";
-    if (codigo === "CARTAO_CONEXAO_COLAB" || codigo === "CARTAO_CONEXAO_COLABORADOR") {
+    if (
+      codigo === "CARTAO_CONEXAO_COLAB" ||
+      codigo === "CARTAO_CONEXAO_COLABORADOR" ||
+      codigo === "CREDIARIO_COLAB" ||
+      codigo === "CONTA_INTERNA_COLABORADOR"
+    ) {
       return "Conta interna do colaborador";
     }
-    if (codigo === "CARTAO_CONEXAO_ALUNO" || forma.carteira_tipo === "ALUNO") {
+    if (
+      codigo === "CARTAO_CONEXAO_ALUNO" ||
+      codigo === "CREDITO_ALUNO" ||
+      codigo === "CONTA_INTERNA_ALUNO" ||
+      forma.carteira_tipo === "ALUNO"
+    ) {
       return "Conta interna do aluno";
     }
     return forma.descricao_exibicao;
@@ -1436,6 +1451,9 @@ export default function FrenteCaixaLojaPage() {
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-[11px] text-gray-500">
+              As formas desta tela sao configuradas centralmente em Financeiro &gt; Formas de pagamento.
+            </p>
           </div>
 
           {isCrediarioInterno && (
@@ -1528,6 +1546,21 @@ export default function FrenteCaixaLojaPage() {
           <div className="mt-1 text-[11px] text-amber-700">{avisoTaxa}</div>
         )}
 
+        {!bloqueiaCobranca &&
+        formaPagamentoSelecionada?.forma_pagamento_codigo === "PIX" ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <div className="font-medium text-slate-900">Destino financeiro do Pix</div>
+            <p className="mt-1 text-[12px] leading-5 text-slate-600">
+              O valor sera direcionado para a conta financeira configurada para o contexto da Loja.
+            </p>
+            <p className="mt-2 text-[12px] font-medium text-slate-800">
+              {formaPagamentoSelecionada.contas_financeiras?.nome
+                ? `Destino financeiro: ${formaPagamentoSelecionada.contas_financeiras.nome}`
+                : "Nenhuma conta financeira padrao foi vinculada ao Pix desta tela."}
+            </p>
+          </div>
+        ) : null}
+
 
         {/* Cartão externo (maquininha) */}
         {isCredito && (
@@ -1548,6 +1581,11 @@ export default function FrenteCaixaLojaPage() {
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-[11px] text-gray-500">
+                {formaPagamentoSelecionada?.cartao_maquinas?.nome
+                  ? `Maquininha padrao: ${formaPagamentoSelecionada.cartao_maquinas.nome}`
+                  : "A maquininha padrao desta forma vem da configuracao central."}
+              </p>
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">Bandeira *</label>
