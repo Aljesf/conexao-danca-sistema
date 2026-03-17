@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { listarTabelasPrecoDisponiveisCafe } from "@/lib/cafe/precificacao";
 
 type TabelaInsert = {
   codigo: string;
@@ -16,17 +17,47 @@ export async function GET(req: Request) {
   if (denied) return denied as unknown as NextResponse;
 
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase
-    .from("cafe_tabelas_preco")
-    .select("id,codigo,nome,is_default,ativo,ordem")
-    .order("ordem", { ascending: true })
-    .order("nome", { ascending: true });
+  const url = new URL(req.url);
+  const compradorPessoaIdRaw = url.searchParams.get("comprador_pessoa_id");
+  const compradorPessoaId =
+    compradorPessoaIdRaw && Number.isFinite(Number(compradorPessoaIdRaw))
+      ? Math.trunc(Number(compradorPessoaIdRaw))
+      : null;
+  const compradorTipo = url.searchParams.get("comprador_tipo");
 
-  if (error) {
+  try {
+    const { data, error } = await supabase
+      .from("cafe_tabelas_preco")
+      .select("id,codigo,nome,descricao,is_default,ativo,ordem")
+      .order("ordem", { ascending: true })
+      .order("nome", { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    const resolucao = await listarTabelasPrecoDisponiveisCafe({
+      supabase,
+      compradorPessoaId,
+      compradorTipo,
+    });
+
+    return NextResponse.json(
+      {
+        ok: true,
+        data,
+        tabela_preco_atual_id: resolucao.tabela_preco_atual_id,
+        itens: resolucao.itens,
+      },
+      { status: 200 },
+    );
+  } catch (error) {
     console.error("Erro ao carregar tabelas de preco:", error);
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : "falha_carregar_tabelas_preco" },
+      { status: 500 },
+    );
   }
-  return NextResponse.json({ ok: true, data }, { status: 200 });
 }
 
 export async function POST(req: Request) {

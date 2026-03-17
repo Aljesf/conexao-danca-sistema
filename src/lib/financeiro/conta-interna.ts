@@ -60,6 +60,31 @@ function upper(value: unknown): string {
     : "";
 }
 
+function contaInternaCompativelComTipo(
+  tipoContaEsperado: ContaInternaTipo,
+  conta: Record<string, unknown>,
+) {
+  const tipoConta = upper(conta.tipo_conta);
+  const descricaoExibicao = upper(conta.descricao_exibicao);
+
+  if (tipoContaEsperado === "ALUNO") {
+    return (
+      tipoConta === "ALUNO" ||
+      tipoConta === "RESPONSAVEL_FINANCEIRO" ||
+      descricaoExibicao.includes("ALUNO") ||
+      descricaoExibicao.includes("RESPONSAVEL")
+    );
+  }
+
+  return (
+    tipoConta === "COLABORADOR" ||
+    descricaoExibicao.includes("COLABORADOR") ||
+    descricaoExibicao.includes("CONTA INTERNA COLABORADOR") ||
+    descricaoExibicao.includes("CARTAO CONEXAO COLABORADOR") ||
+    descricaoExibicao.includes("CARTAO CONEXAO COLAB")
+  );
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -146,7 +171,6 @@ async function carregarContaInternaPorTitulares(params: {
     .from("credito_conexao_contas")
     .select("id,pessoa_titular_id,tipo_conta,dia_vencimento,descricao_exibicao,ativo")
     .in("pessoa_titular_id", pessoaTitularIds)
-    .eq("tipo_conta", tipoConta)
     .eq("ativo", true);
 
   if (error) {
@@ -155,6 +179,7 @@ async function carregarContaInternaPorTitulares(params: {
   }
 
   const contas = ((data ?? []) as Array<Record<string, unknown>>)
+    .filter((item) => contaInternaCompativelComTipo(tipoConta, item))
     .map((item) => ({
       id: asInt(item.id),
       pessoa_titular_id: asInt(item.pessoa_titular_id),

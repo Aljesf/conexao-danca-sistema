@@ -75,6 +75,14 @@ export type CafePagamentoOpcaoResponse = {
   opcoes: CafePagamentoOpcao[];
 };
 
+export type CafeComposicaoItem = {
+  produtoId: number;
+  descricao: string | null;
+  quantidade: number;
+  valorUnitarioCentavos: number;
+  valorTotalCentavos: number;
+};
+
 type FormaPagamentoRow = Record<string, unknown> & {
   id?: number;
   codigo?: string | null;
@@ -129,6 +137,10 @@ function isCompetencia(value: string | null | undefined): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
 }
 
+function formatBrl(value: number) {
+  return (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 function competenciaFromDate(dateIso: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(dateIso) ? dateIso.slice(0, 7) : todayIso().slice(0, 7);
 }
@@ -141,6 +153,45 @@ function buildVencimentoFromCompetencia(competencia: string, diaVencimento: numb
   const diaBase = diaVencimento && Number.isFinite(diaVencimento) ? Math.trunc(diaVencimento) : 12;
   const dia = Math.max(1, Math.min(ultimoDia, diaBase));
   return `${anoRaw}-${mesRaw}-${String(dia).padStart(2, "0")}`;
+}
+
+export function buildCafeLancamentoComposicao(params: {
+  compradorTipo: CafeCompradorTipo;
+  compradorPessoaId: number | null;
+  colaboradorPessoaId: number | null;
+  origemFinanceira: CafeFluxoFinanceiro;
+  competenciaAnoMes: string;
+  vendaIds: number[];
+  valorCentavos: number;
+  itens: CafeComposicaoItem[];
+}) {
+  return {
+    origem: "CAFE",
+    comprador_tipo: params.compradorTipo,
+    comprador_pessoa_id: params.compradorPessoaId,
+    colaborador_pessoa_id: params.colaboradorPessoaId,
+    origem_financeira: params.origemFinanceira,
+    competencia: params.competenciaAnoMes,
+    venda_ids: params.vendaIds,
+    total_aberto_centavos: params.valorCentavos,
+    total_centavos: params.valorCentavos,
+    total_brl: formatBrl(params.valorCentavos),
+    itens: params.itens.map((item, index) => {
+      const descricao = item.descricao?.trim() || `Produto #${item.produtoId}`;
+      return {
+        posicao: index + 1,
+        produto_id: item.produtoId,
+        descricao,
+        label: item.quantidade > 1 ? `${item.quantidade}x ${descricao}` : descricao,
+        quantidade: item.quantidade,
+        valor_unitario_centavos: item.valorUnitarioCentavos,
+        valor_unitario_brl: formatBrl(item.valorUnitarioCentavos),
+        valor_centavos: item.valorTotalCentavos,
+        valor_total_centavos: item.valorTotalCentavos,
+        valor_brl: formatBrl(item.valorTotalCentavos),
+      };
+    }),
+  };
 }
 
 function normalizeBuyerType(value: string | null | undefined): CafeCompradorTipo {
@@ -808,6 +859,8 @@ export async function criarLancamentoCartaoConexaoCafe(params: {
   compradorTipo: CafeCompradorTipo;
   compradorPessoaId: number;
   vendaIds: number[];
+  colaboradorPessoaId: number | null;
+  itens: CafeComposicaoItem[];
 }) {
   return upsertLancamentoPorCobranca({
     cobrancaId: params.cobrancaId,
@@ -817,15 +870,16 @@ export async function criarLancamentoCartaoConexaoCafe(params: {
     descricao: params.descricao,
     origemSistema: "CAFE",
     origemId: params.cobrancaId,
-    composicaoJson: {
-      origem: "CAFE",
-      comprador_tipo: params.compradorTipo,
-      comprador_pessoa_id: params.compradorPessoaId,
-      origem_financeira: params.origemFinanceira,
-      competencia: params.competenciaAnoMes,
-      venda_ids: params.vendaIds,
-      total_aberto_centavos: params.valorCentavos,
-    },
+    composicaoJson: buildCafeLancamentoComposicao({
+      compradorTipo: params.compradorTipo,
+      compradorPessoaId: params.compradorPessoaId,
+      colaboradorPessoaId: params.colaboradorPessoaId,
+      origemFinanceira: params.origemFinanceira,
+      competenciaAnoMes: params.competenciaAnoMes,
+      vendaIds: params.vendaIds,
+      valorCentavos: params.valorCentavos,
+      itens: params.itens,
+    }),
     supabase: params.supabase,
   });
 }
@@ -840,6 +894,7 @@ type CriarCobrancaCafeInput = {
   origemFinanceira: CafeFluxoFinanceiro;
   centroCustoId: number;
   contaConexaoId: number | null;
+  itens: CafeComposicaoItem[];
 };
 
 type CriarCobrancaCafeOutput = {
@@ -863,6 +918,7 @@ export async function criarCobrancaCafe(params: CriarCobrancaCafeInput): Promise
     colaboradorPessoaId,
     origemFinanceira,
     centroCustoId,
+    itens,
   } = params;
 
   const pessoaReferencia =
@@ -1001,6 +1057,8 @@ export async function criarCobrancaCafe(params: CriarCobrancaCafeInput): Promise
     compradorTipo,
     compradorPessoaId: pessoaReferencia,
     vendaIds,
+    colaboradorPessoaId,
+    itens,
   });
 
   let faturaId: number | null = null;
@@ -1045,6 +1103,7 @@ type AplicarFluxoInput = {
   observacoes: string | null;
   usuarioId: string | null;
   origemOperacao: "PDV" | "CAIXA_ADMIN";
+  itens: CafeComposicaoItem[];
 };
 
 export type AplicarFluxoOutput = {
@@ -1082,6 +1141,7 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
     observacoes,
     usuarioId,
     origemOperacao,
+    itens,
   } = input;
 
   const centroCustoId = await resolverCentroCustoCafe(supabase);
@@ -1162,6 +1222,7 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
       origemFinanceira: forma.tipo_fluxo,
       centroCustoId,
       contaConexaoId: comprador.conta_conexao?.id ?? null,
+      itens,
     });
 
     return {

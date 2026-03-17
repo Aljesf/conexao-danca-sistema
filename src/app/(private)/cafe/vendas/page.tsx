@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import CafeCard from "@/components/cafe/CafeCard";
 import CafeCatalogoProdutos, { type CafeCatalogoProduto } from "@/components/cafe/catalogo/CafeCatalogoProdutos";
 import CafePageShell from "@/components/cafe/CafePageShell";
@@ -70,6 +70,28 @@ type PagamentosResponse = {
   opcoes: PagamentoOpcao[];
 };
 
+type TabelaPrecoOpcao = {
+  id: number;
+  nome: string;
+  codigo: string | null;
+  descricao: string | null;
+  padrao: boolean;
+};
+
+type TabelasPrecoResponse = {
+  ok?: boolean;
+  tabela_preco_atual_id?: number | null;
+  itens?: TabelaPrecoOpcao[];
+  data?: Array<{
+    id: number;
+    codigo: string | null;
+    nome: string;
+    descricao?: string | null;
+    ativo?: boolean;
+    is_default?: boolean;
+  }>;
+};
+
 type CaixaResponse = {
   data?: {
     id?: number;
@@ -78,6 +100,11 @@ type CaixaResponse = {
     movimento_financeiro_id?: number | null;
     status_financeiro?: string | null;
     forma_pagamento?: string | null;
+    fatura?: {
+      id?: number | null;
+      periodo_referencia?: string | null;
+      status?: string | null;
+    } | null;
   };
   error?: string;
   detalhe?: string;
@@ -139,6 +166,19 @@ function parseCentavosInput(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : 0;
 }
 
+function formatCafeErrorMessage(message: string) {
+  switch (message) {
+    case "conta_interna_exige_colaborador":
+      return "Selecione um colaborador com conta interna elegivel para usar essa forma de pagamento.";
+    case "competencia_obrigatoria_para_conta_interna":
+      return "Defina a competencia de cobranca antes de registrar em conta interna.";
+    case "tabela_preco_id_invalida":
+      return "A tabela de preco escolhida nao esta mais disponivel. Recarregue a venda e tente novamente.";
+    default:
+      return message;
+  }
+}
+
 export default function CafeVendasPage() {
   const [buscaComprador, setBuscaComprador] = useState("");
   const [compradores, setCompradores] = useState<PessoaBusca[]>([]);
@@ -148,14 +188,23 @@ export default function CafeVendasPage() {
   const [centroCustoId, setCentroCustoId] = useState<number | null>(null);
   const [pagamentos, setPagamentos] = useState<PagamentoOpcao[]>([]);
   const [pagamentosLoading, setPagamentosLoading] = useState(false);
+  const [pagamentosAviso, setPagamentosAviso] = useState<string | null>(null);
   const [contaInternaInfo, setContaInternaInfo] = useState<PagamentosResponse["conta_interna"] | null>(null);
   const [pagamentoCodigo, setPagamentoCodigo] = useState("");
+  const [tabelasPreco, setTabelasPreco] = useState<TabelaPrecoOpcao[]>([]);
+  const [tabelasPrecoLoading, setTabelasPrecoLoading] = useState(false);
+  const [tabelaPrecoId, setTabelaPrecoId] = useState<number | null>(null);
   const [valorRecebidoCentavos, setValorRecebidoCentavos] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [saving, setSaving] = useState(false);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [mensagemTipo, setMensagemTipo] = useState<"success" | "error" | null>(null);
+  const itensRef = useRef<ItemCarrinho[]>([]);
+
+  useEffect(() => {
+    itensRef.current = itens;
+  }, [itens]);
 
   useEffect(() => {
     const term = buscaComprador.trim();
@@ -182,7 +231,7 @@ export default function CafeVendasPage() {
       } catch (error) {
         if (!controller.signal.aborted) {
           setCompradores([]);
-          setMensagem(error instanceof Error ? error.message : "falha_buscar_pessoas");
+          setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_buscar_pessoas"));
           setMensagemTipo("error");
         }
       } finally {
@@ -229,15 +278,13 @@ export default function CafeVendasPage() {
         setCompradorTipo(payload?.comprador.tipo ?? "NAO_IDENTIFICADO");
         setContaInternaInfo(payload?.conta_interna ?? null);
         if (erroControlado) {
-          setMensagem(
+          setPagamentosAviso(
             nextPayments.length > 0
               ? "Algumas configuracoes novas ainda nao estao completas. O PDV esta usando as formas herdadas do cadastro legado."
               : "Nao foi possivel resolver as formas de pagamento deste contexto agora.",
           );
-          setMensagemTipo(nextPayments.length > 0 ? "success" : "error");
         } else {
-          setMensagem(null);
-          setMensagemTipo(null);
+          setPagamentosAviso(null);
         }
         setPagamentoCodigo((current) => {
           const existing = nextPayments.find((item) => item.codigo === current && item.habilitado);
@@ -246,9 +293,12 @@ export default function CafeVendasPage() {
       } catch (error) {
         if (!controller.signal.aborted) {
           setPagamentos([]);
+          setPagamentosAviso(null);
           setContaInternaInfo(null);
           setPagamentoCodigo("");
-          setMensagem(error instanceof Error ? error.message : "falha_carregar_formas_pagamento_cafe");
+          setMensagem(
+            formatCafeErrorMessage(error instanceof Error ? error.message : "falha_carregar_formas_pagamento_cafe"),
+          );
           setMensagemTipo("error");
         }
       } finally {
@@ -261,6 +311,66 @@ export default function CafeVendasPage() {
     void carregarPagamentos();
     return () => controller.abort();
   }, [compradorSelecionado]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function carregarTabelasPreco() {
+      setTabelasPrecoLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (compradorSelecionado?.id) params.set("comprador_pessoa_id", String(compradorSelecionado.id));
+        if (compradorTipo) params.set("comprador_tipo", compradorTipo);
+
+        const response = await fetch(`/api/cafe/tabelas-preco?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as TabelasPrecoResponse | { error?: string } | null;
+        if (!response.ok) {
+          throw new Error(
+            payload && typeof payload === "object" && "error" in payload && payload.error
+              ? String(payload.error)
+              : "falha_carregar_tabelas_preco",
+          );
+        }
+
+        const itens = Array.isArray(payload?.itens)
+          ? payload.itens
+          : Array.isArray(payload?.data)
+            ? payload.data.map((item) => ({
+                id: item.id,
+                nome: item.nome,
+                codigo: item.codigo ?? null,
+                descricao: item.descricao ?? null,
+                padrao: Boolean(item.is_default),
+              }))
+            : [];
+
+        setTabelasPreco(itens);
+        setTabelaPrecoId((current) => {
+          if (current && itens.some((item) => item.id === current)) return current;
+          return payload?.tabela_preco_atual_id ?? itens.find((item) => item.padrao)?.id ?? itens[0]?.id ?? null;
+        });
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setTabelasPreco([]);
+          setTabelaPrecoId(null);
+          setMensagem(
+            formatCafeErrorMessage(error instanceof Error ? error.message : "falha_carregar_tabelas_preco"),
+          );
+          setMensagemTipo("error");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setTabelasPrecoLoading(false);
+        }
+      }
+    }
+
+    void carregarTabelasPreco();
+    return () => controller.abort();
+  }, [compradorSelecionado, compradorTipo]);
 
   const totalItens = useMemo(
     () => itens.reduce((acc, item) => acc + item.quantidade, 0),
@@ -284,10 +394,19 @@ export default function CafeVendasPage() {
     () => pagamentos.find((item) => item.codigo === pagamentoCodigo) ?? null,
     [pagamentoCodigo, pagamentos],
   );
+  const tabelaPrecoAtiva = useMemo(
+    () => tabelasPreco.find((item) => item.id === tabelaPrecoId) ?? null,
+    [tabelaPrecoId, tabelasPreco],
+  );
   const efeitoFinanceiro = useMemo(
     () => buildFinancialEffect(pagamentoSelecionado, compradorTipo),
     [compradorTipo, pagamentoSelecionado],
   );
+  const tabelaAtivaResumo = tabelaPrecoAtiva?.nome ?? "Tabela padrao do Ballet Cafe";
+  const liquidacaoResumo = pagamentoSelecionado?.label ?? "Selecione uma forma de pagamento";
+  const precificacaoResumo = tabelaPrecoAtiva
+    ? `Precos aplicados pela tabela: ${tabelaPrecoAtiva.nome}.`
+    : "Precos aplicados pela tabela padrao do Ballet Cafe.";
   const pagamentoEmDinheiro = Boolean(pagamentoSelecionado?.exige_troco || pagamentoSelecionado?.codigo === "DINHEIRO");
   const valorRecebidoAtualCentavos = parseCentavosInput(valorRecebidoCentavos);
   const trocoCentavos = pagamentoEmDinheiro ? Math.max(valorRecebidoAtualCentavos - totalCentavos, 0) : 0;
@@ -298,6 +417,56 @@ export default function CafeVendasPage() {
       setValorRecebidoCentavos("");
     }
   }, [pagamentoEmDinheiro]);
+
+  useEffect(() => {
+    if (!tabelaPrecoId || itensRef.current.length === 0) return;
+
+    const controller = new AbortController();
+
+    async function recalcularCarrinho() {
+      try {
+        const produtoIds = itensRef.current.map((item) => item.produto_id);
+        const params = new URLSearchParams({
+          ids: produtoIds.join(","),
+          page: "1",
+          pageSize: String(Math.max(produtoIds.length, 20)),
+          tabela_preco_id: String(tabelaPrecoId),
+        });
+        const response = await fetch(`/api/cafe/produtos?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as ProdutoResponse | null;
+        if (!response.ok) {
+          throw new Error(payload?.error ?? "falha_recalcular_precos_pdv");
+        }
+
+        const produtos = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+        const produtoMap = new Map(produtos.map((item) => [item.id, item]));
+
+        setItens((current) =>
+          current.map((item) => {
+            const produtoAtualizado = produtoMap.get(item.produto_id);
+            if (!produtoAtualizado) return item;
+            return {
+              ...item,
+              nome: produtoAtualizado.nome,
+              unidade_venda: produtoAtualizado.unidade_venda ?? item.unidade_venda,
+              valor_unitario_centavos: Number(produtoAtualizado.preco_venda_centavos ?? item.valor_unitario_centavos),
+            };
+          }),
+        );
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_recalcular_precos_pdv"));
+          setMensagemTipo("error");
+        }
+      }
+    }
+
+    void recalcularCarrinho();
+    return () => controller.abort();
+  }, [tabelaPrecoId]);
 
   function adicionarProduto(produto: CafeCatalogoProduto) {
     setMensagem(null);
@@ -367,7 +536,7 @@ export default function CafeVendasPage() {
       );
       setMensagemTipo("success");
     } catch (error) {
-      setMensagem(error instanceof Error ? error.message : "falha_solicitar_conta_interna");
+      setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_solicitar_conta_interna"));
       setMensagemTipo("error");
     }
   }
@@ -420,6 +589,7 @@ export default function CafeVendasPage() {
           forma_pagamento_id: pagamentoSelecionado.id,
           forma_pagamento_codigo: pagamentoSelecionado.codigo,
           metodo_pagamento: pagamentoSelecionado.codigo,
+          tabela_preco_id: tabelaPrecoId,
           data_competencia: pagamentoSelecionado.exige_conta_conexao ? competenciaFromDate(todayIso()) : null,
           valor_pago_centavos: valorPagoCentavos,
           valor_recebido_centavos: pagamentoEmDinheiro ? valorRecebidoAtualCentavos : null,
@@ -446,6 +616,7 @@ export default function CafeVendasPage() {
         payload?.data?.recebimento_id ? `recebimento #${payload.data.recebimento_id}` : null,
         payload?.data?.cobranca_id ? `cobranca #${payload.data.cobranca_id}` : null,
         payload?.data?.movimento_financeiro_id ? `movimento #${payload.data.movimento_financeiro_id}` : null,
+        payload?.data?.fatura?.id ? `fatura #${payload.data.fatura.id}` : null,
       ].filter(Boolean);
       limparVenda();
       setMensagem(
@@ -455,7 +626,7 @@ export default function CafeVendasPage() {
       );
       setMensagemTipo("success");
     } catch (error) {
-      setMensagem(error instanceof Error ? error.message : "falha_finalizar_venda_pdv");
+      setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_finalizar_venda_pdv"));
       setMensagemTipo("error");
     } finally {
       setSaving(false);
@@ -528,6 +699,7 @@ export default function CafeVendasPage() {
           <CafeCatalogoProdutos
             onAddProduct={adicionarProduto}
             quantitiesByProductId={quantidadesPorProdutoId}
+            tabelaPrecoId={tabelaPrecoId}
             helperText="Use o Caixa / Lancamentos para retroativos, baixa parcial e conta interna."
           />
         </CafeCard>
@@ -594,144 +766,212 @@ export default function CafeVendasPage() {
                 </div>
               </CafePanel>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-                <label className="space-y-2 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <span className="font-medium text-slate-700">Pagamento</span>
-                    <Link
-                      href="/financeiro/formas-pagamento"
-                      className="text-xs font-medium text-[#9a3412] transition hover:underline"
-                    >
-                      Configurar formas de pagamento
-                    </Link>
+              <CafePanel>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Perfil resolvido
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-950">
+                      {formatBuyerType(compradorTipo)}
+                    </div>
                   </div>
-                  <select
-                    className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
-                    value={pagamentoCodigo}
-                    onChange={(event) => setPagamentoCodigo(event.target.value)}
-                    disabled={pagamentosLoading || pagamentos.length === 0}
-                  >
-                    {pagamentos.length === 0 ? (
-                      <option value="">Nenhuma forma habilitada no momento</option>
-                    ) : null}
-                    {pagamentos.map((item) => (
-                      <option key={item.codigo} value={item.codigo} disabled={!item.habilitado}>
-                        {item.label}
-                        {item.habilitado ? "" : " - indisponivel"}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs leading-5 text-slate-500">
-                    {pagamentosLoading
-                      ? "Resolvendo meios validos para este comprador..."
-                      : pagamentoSelecionado?.motivo_bloqueio ??
-                        (pagamentos.length === 0
-                          ? "O sistema nao encontrou formas habilitadas agora. Revise Financeiro > Formas de pagamento."
-                          : efeitoFinanceiro)}
-                  </p>
-                  <p className="text-xs leading-5 text-slate-500">
-                    As formas de pagamento desta tela sao configuradas em Financeiro &gt; Formas de pagamento.
-                  </p>
-                </label>
+                  <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Tabela ativa
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-950">{tabelaAtivaResumo}</div>
+                  </div>
+                  <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Liquidacao
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-slate-950">{liquidacaoResumo}</div>
+                  </div>
+                </div>
+              </CafePanel>
 
-                {pagamentoEmDinheiro ? (
-                  <div className="grid gap-3 rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
-                    <div className="space-y-1">
-                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                        Subfluxo de troco
+              <CafePanel>
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+                    <label className="space-y-2 text-sm">
+                      <span className="font-medium text-slate-700">Tabela de preco</span>
+                      <select
+                        className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
+                        value={tabelaPrecoId ?? ""}
+                        onChange={(event) =>
+                          setTabelaPrecoId(event.target.value ? Number(event.target.value) : null)
+                        }
+                        disabled={tabelasPrecoLoading || tabelasPreco.length === 0}
+                      >
+                        {tabelasPreco.length === 0 ? <option value="">Nenhuma tabela disponivel</option> : null}
+                        {tabelasPreco.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.nome}
+                            {item.padrao ? " - padrao" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs leading-5 text-slate-500">
+                        {tabelasPrecoLoading
+                          ? "Resolvendo tabela de preco para este comprador..."
+                          : tabelaPrecoAtiva
+                            ? `Tabela ativa: ${tabelaPrecoAtiva.nome}. Catalogo e carrinho usam essa referencia de preco.`
+                            : "O PDV usara a tabela padrao do Ballet Cafe enquanto nao houver outra elegivel."}
+                      </p>
+                    </label>
+
+                    <label className="space-y-2 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <span className="font-medium text-slate-700">Pagamento</span>
+                        <Link
+                          href="/financeiro/formas-pagamento"
+                          className="text-xs font-medium text-[#9a3412] transition hover:underline"
+                        >
+                          Configurar formas de pagamento
+                        </Link>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        Informe quanto entrou no caixa para calcular o troco antes de concluir a venda.
+                      <select
+                        className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
+                        value={pagamentoCodigo}
+                        onChange={(event) => setPagamentoCodigo(event.target.value)}
+                        disabled={pagamentosLoading || pagamentos.length === 0}
+                      >
+                        {pagamentos.length === 0 ? (
+                          <option value="">Nenhuma forma habilitada no momento</option>
+                        ) : null}
+                        {pagamentos.map((item) => (
+                          <option key={item.codigo} value={item.codigo} disabled={!item.habilitado}>
+                            {item.label}
+                            {item.habilitado ? "" : " - indisponivel"}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs leading-5 text-slate-500">
+                        {pagamentosLoading
+                          ? "Resolvendo meios validos para este comprador..."
+                          : pagamentoSelecionado?.motivo_bloqueio ??
+                            (pagamentos.length === 0
+                              ? "O sistema nao encontrou formas habilitadas agora. Revise Financeiro > Formas de pagamento."
+                              : efeitoFinanceiro)}
+                      </p>
+                      {pagamentosAviso ? (
+                        <p className="text-xs leading-5 text-amber-700">{pagamentosAviso}</p>
+                      ) : null}
+                      <p className="text-xs leading-5 text-slate-500">
+                        As formas de pagamento desta tela sao configuradas em Financeiro &gt; Formas de pagamento.
+                      </p>
+                    </label>
+                  </div>
+
+                  {pagamentoEmDinheiro ? (
+                    <div className="grid gap-3 rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                      <div className="space-y-1">
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          Subfluxo de troco
+                        </div>
+                        <p className="text-sm text-slate-600">
+                          Informe quanto entrou no caixa para calcular o troco antes de concluir a venda.
+                        </p>
+                      </div>
+                      <label className="space-y-2 text-sm">
+                        <span className="font-medium text-slate-700">Valor recebido em dinheiro</span>
+                        <input
+                          type="number"
+                          min={totalCentavos}
+                          value={valorRecebidoCentavos}
+                          onChange={(event) => setValorRecebidoCentavos(event.target.value)}
+                          className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
+                          placeholder={String(totalCentavos)}
+                        />
+                      </label>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Total em dinheiro</div>
+                          <div className="mt-2 text-sm font-semibold text-slate-950">{brl(totalCentavos)}</div>
+                        </div>
+                        <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Troco previsto</div>
+                          <div className="mt-2 text-sm font-semibold text-slate-950">{brl(trocoCentavos)}</div>
+                        </div>
+                      </div>
+                      {valorRecebidoInsuficiente ? (
+                        <p className="text-xs text-rose-600">O valor recebido precisa ser maior ou igual ao total da venda.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {pagamentoSelecionado?.tipo_fluxo === "IMEDIATO" && pagamentoSelecionado.codigo === "PIX" ? (
+                    <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                      <div className="text-sm font-medium text-slate-900">Destino financeiro do Pix</div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        O valor sera direcionado para a conta financeira configurada para este contexto.
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-slate-800">
+                        {pagamentoSelecionado.conta_financeira_nome
+                          ? `Destino financeiro: ${pagamentoSelecionado.conta_financeira_nome}`
+                          : "Nenhuma conta financeira padrao foi configurada para o Pix deste contexto."}
                       </p>
                     </div>
-                    <label className="space-y-2 text-sm">
-                      <span className="font-medium text-slate-700">Valor recebido em dinheiro</span>
-                      <input
-                        type="number"
-                        min={totalCentavos}
-                        value={valorRecebidoCentavos}
-                        onChange={(event) => setValorRecebidoCentavos(event.target.value)}
-                        className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
-                        placeholder={String(totalCentavos)}
-                      />
-                    </label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Total em dinheiro</div>
-                        <div className="mt-2 text-sm font-semibold text-slate-950">{brl(totalCentavos)}</div>
-                      </div>
-                      <div className="rounded-2xl border border-[#eadfcd] bg-white px-4 py-3">
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Troco previsto</div>
-                        <div className="mt-2 text-sm font-semibold text-slate-950">{brl(trocoCentavos)}</div>
-                      </div>
+                  ) : null}
+
+                  {pagamentoSelecionado?.tipo_fluxo === "CARTAO_EXTERNO" ? (
+                    <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                      <div className="text-sm font-medium text-slate-900">Maquininha padrao do cartao</div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        A venda sera enviada para a maquininha configurada em Financeiro &gt; Formas de pagamento.
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-slate-800">
+                        {pagamentoSelecionado.cartao_maquina_nome
+                          ? `Maquininha padrao: ${pagamentoSelecionado.cartao_maquina_nome}`
+                          : "Nenhuma maquininha padrao foi configurada para esta forma."}
+                      </p>
                     </div>
-                    {valorRecebidoInsuficiente ? (
-                      <p className="text-xs text-rose-600">O valor recebido precisa ser maior ou igual ao total da venda.</p>
-                    ) : null}
-                  </div>
-                ) : null}
+                  ) : null}
 
-                {pagamentoSelecionado?.tipo_fluxo === "IMEDIATO" && pagamentoSelecionado.codigo === "PIX" ? (
-                  <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
-                    <div className="text-sm font-medium text-slate-900">Destino financeiro do Pix</div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      O valor sera direcionado para a conta financeira configurada para este contexto.
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-slate-800">
-                      {pagamentoSelecionado.conta_financeira_nome
-                        ? `Destino financeiro: ${pagamentoSelecionado.conta_financeira_nome}`
-                        : "Nenhuma conta financeira padrao foi configurada para o Pix deste contexto."}
-                    </p>
-                  </div>
-                ) : null}
-
-                {pagamentoSelecionado?.tipo_fluxo === "CARTAO_EXTERNO" ? (
-                  <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
-                    <div className="text-sm font-medium text-slate-900">Maquininha padrao do cartao</div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      A venda sera enviada para a maquininha configurada em Financeiro &gt; Formas de pagamento.
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-slate-800">
-                      {pagamentoSelecionado.cartao_maquina_nome
-                        ? `Maquininha padrao: ${pagamentoSelecionado.cartao_maquina_nome}`
-                        : "Nenhuma maquininha padrao foi configurada para esta forma."}
-                    </p>
-                  </div>
-                ) : null}
-
-                {compradorTipo !== "NAO_IDENTIFICADO" && contaInternaInfo && !contaInternaInfo.elegivel ? (
-                  <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
-                    <div className="text-sm font-medium text-slate-900">
-                      {contaInternaInfo.tipo === "COLABORADOR"
-                        ? "Conta interna do colaborador indisponivel"
-                        : "Conta interna do aluno indisponivel"}
+                  {pagamentoSelecionado?.tipo_fluxo === "CONTA_INTERNA_COLABORADOR" ? (
+                    <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                      <div className="text-sm font-medium text-slate-900">Liquidacao em conta interna do colaborador</div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        Esta venda vai para a conta interna real do colaborador e entra na fatura da competencia.
+                      </p>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {contaInternaInfo.motivo ??
-                        "Ainda nao existe conta interna ativa para este comprador ou titular responsavel."}
-                    </p>
-                    {contaInternaInfo.suporte?.pode_solicitar ? (
-                      <button
-                        type="button"
-                        className="mt-3 rounded-full border border-[#d7c3a4] bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-[#fff8ef]"
-                        onClick={() => void solicitarContaInterna()}
-                      >
-                        Solicitar criacao ao suporte
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
+                  ) : null}
 
-                <label className="space-y-2 text-sm">
-                  <span className="font-medium text-slate-700">Observacoes do balcao</span>
-                  <textarea
-                    className="min-h-28 w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
-                    value={observacoes}
-                    onChange={(event) => setObservacoes(event.target.value)}
-                    placeholder="Observacao opcional da venda"
-                  />
-                </label>
-              </div>
+                  {compradorTipo !== "NAO_IDENTIFICADO" && contaInternaInfo && !contaInternaInfo.elegivel ? (
+                    <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
+                      <div className="text-sm font-medium text-slate-900">
+                        {contaInternaInfo.tipo === "COLABORADOR"
+                          ? "Conta interna do colaborador indisponivel"
+                          : "Conta interna do aluno indisponivel"}
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        {contaInternaInfo.motivo ??
+                          "Ainda nao existe conta interna ativa para este comprador ou titular responsavel."}
+                      </p>
+                      {contaInternaInfo.suporte?.pode_solicitar ? (
+                        <button
+                          type="button"
+                          className="mt-3 rounded-full border border-[#d7c3a4] bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-[#fff8ef]"
+                          onClick={() => void solicitarContaInterna()}
+                        >
+                          Solicitar criacao ao suporte
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-slate-700">Observacoes do balcao</span>
+                    <textarea
+                      className="min-h-28 w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
+                      value={observacoes}
+                      onChange={(event) => setObservacoes(event.target.value)}
+                      placeholder="Observacao opcional da venda"
+                    />
+                  </label>
+                </div>
+              </CafePanel>
 
               <div className="rounded-[22px] border border-[#eadfcd] bg-[#fffaf4] p-4">
                 <div className="flex items-center justify-between">
@@ -741,6 +981,7 @@ export default function CafeVendasPage() {
                     <div className="mt-2 text-xs text-slate-500">
                       Centro de custo: {centroCustoId ? `#${centroCustoId} Ballet Cafe` : "resolvendo..."}
                     </div>
+                    <div className="mt-1 text-xs text-slate-500">{precificacaoResumo}</div>
                   </div>
                   <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
                     {totalItens} item{totalItens === 1 ? "" : "s"}

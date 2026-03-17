@@ -46,6 +46,7 @@ function statusFromError(message: string): number {
     case "conta_conexao_nao_encontrada":
     case "conta_interna_aluno_nao_encontrada":
     case "conta_interna_colaborador_nao_encontrada":
+    case "tabela_preco_id_invalida":
       return 400;
     case "saldo_insuficiente":
       return 409;

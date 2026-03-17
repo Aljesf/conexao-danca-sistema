@@ -2,10 +2,12 @@ import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancame
 import { recalcularComprasFatura, vincularLancamentoNaFatura } from "@/lib/financeiro/creditoConexaoFaturas";
 import {
   aplicarFluxoFinanceiroVendaCafe,
+  buildCafeLancamentoComposicao,
   CAFE_COMPRADOR_TIPO as CAFE_COMPRADOR_TIPO_FINANCEIRO,
   CAFE_FLUXO_FINANCEIRO,
   criarCobrancaCafe,
 } from "@/lib/cafe/financeiro";
+import { resolverPrecoProdutoNoContexto } from "@/lib/cafe/precificacao";
 
 export const CAFE_TIPO_QUITACAO = {
   IMEDIATA: "IMEDIATA",
@@ -78,6 +80,7 @@ type VendaRow = Record<string, unknown> & {
   cobranca_id: number | null;
   forma_pagamento: string | null;
   forma_pagamento_id?: number | null;
+  tabela_preco_id?: number | null;
   conta_conexao_id?: number | null;
   recebimento_id?: number | null;
   movimento_financeiro_id?: number | null;
@@ -558,37 +561,37 @@ async function parseItensVenda(supabase: any, payload: Record<string, unknown>):
 
   if (parsed.length === 0) throw new Error("itens_invalidos");
   console.log("[CAFE_CAIXA][ITENS] itens parseados:", parsed.length);
+  const tabelaPrecoId = asInt(payload.tabela_preco_id ?? payload.tabelaPrecoId);
+  const compradorPessoaId = asInt(
+    payload.comprador_id ??
+      payload.compradorId ??
+      payload.comprador_pessoa_id ??
+      payload.compradorPessoaId ??
+      payload.pagador_pessoa_id ??
+      payload.cliente_pessoa_id,
+  );
+  const compradorTipo = asString(
+    payload.tipo_comprador ?? payload.tipoComprador ?? payload.comprador_tipo ?? payload.compradorTipo,
+  );
 
-  const produtoIds = Array.from(new Set(parsed.map((item) => item.produto_id)));
-  const { data: produtos, error: produtosError } = await supabase
-    .from("cafe_produtos")
-    .select("id,nome,preco_venda_centavos,ativo,preparado,insumo_direto_id")
-    .in("id", produtoIds);
+  return Promise.all(
+    parsed.map(async (item) => {
+      const precoResolvido = await resolverPrecoProdutoNoContexto({
+        supabase,
+        produtoId: item.produto_id,
+        tabelaPrecoId,
+        compradorPessoaId,
+        compradorTipo,
+      });
 
-  if (produtosError) throw produtosError;
-  const produtoMap = new Map<number, Record<string, unknown>>();
-  for (const produto of produtos ?? []) {
-    const id = asInt((produto as Record<string, unknown>).id);
-    if (id) produtoMap.set(id, produto as Record<string, unknown>);
-  }
-
-  if (produtoMap.size !== produtoIds.length) throw new Error("produto_nao_encontrado");
-
-  return parsed.map((item) => {
-    const produto = produtoMap.get(item.produto_id)!;
-    if ((produto.ativo as boolean) === false) {
-      throw new Error("produto_inativo");
-    }
-    const valorUnitario = item.valor_unitario_centavos > 0
-      ? item.valor_unitario_centavos
-      : asInt(produto.preco_venda_centavos) ?? 0;
-    return {
-      ...item,
-      valor_unitario_centavos: valorUnitario,
-      valor_total_centavos: valorUnitario * item.quantidade,
-      descricao_snapshot: item.descricao_snapshot ?? asString(produto.nome),
-    };
-  });
+      return {
+        ...item,
+        valor_unitario_centavos: precoResolvido.valor_unitario_centavos,
+        valor_total_centavos: precoResolvido.valor_unitario_centavos * item.quantidade,
+        descricao_snapshot: item.descricao_snapshot ?? precoResolvido.produto_nome,
+      };
+    }),
+  );
 }
 
 async function aplicarConsumoEstoque(params: {
@@ -900,6 +903,23 @@ export async function sincronizarContaInternaCafe(params: {
     .map((item) => asInt(item.id))
     .filter((value): value is number => typeof value === "number" && value > 0);
 
+  const { data: itensLancamentoRaw, error: itensLancamentoError } = await supabase
+    .from("cafe_venda_itens")
+    .select("venda_id,produto_id,quantidade,valor_unitario_centavos,preco_unitario_centavos,valor_total_centavos,total_centavos,descricao_snapshot")
+    .in("venda_id", vendaIds);
+  if (itensLancamentoError) throw itensLancamentoError;
+
+  const itensLancamento = ((itensLancamentoRaw ?? []) as Array<Record<string, unknown>>).map((item) => ({
+    produtoId: asInt(item.produto_id) ?? 0,
+    descricao: asString(item.descricao_snapshot),
+    quantidade: Math.max(asInt(item.quantidade) ?? 0, 0),
+    valorUnitarioCentavos: Math.max(
+      asInt(item.valor_unitario_centavos) ?? asInt(item.preco_unitario_centavos) ?? 0,
+      0,
+    ),
+    valorTotalCentavos: Math.max(asInt(item.valor_total_centavos) ?? asInt(item.total_centavos) ?? 0, 0),
+  }));
+
   if (vendaIds.length > 0) {
     const { error: vincularError } = await supabase
       .from("cafe_vendas")
@@ -917,12 +937,17 @@ export async function sincronizarContaInternaCafe(params: {
     origemSistema: "CAFE",
     origemId: cobrancaId,
     composicaoJson: {
-      origem: "CAFE",
+      ...buildCafeLancamentoComposicao({
+        compradorTipo: CAFE_COMPRADOR_TIPO_FINANCEIRO.COLABORADOR,
+        compradorPessoaId: colaboradorPessoaId,
+        colaboradorPessoaId,
+        origemFinanceira: CAFE_FLUXO_FINANCEIRO.CONTA_INTERNA,
+        competenciaAnoMes: competencia,
+        vendaIds,
+        valorCentavos: totalAberto,
+        itens: itensLancamento.filter((item) => item.produtoId > 0 && item.quantidade > 0),
+      }),
       tipo_quitacao: CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR,
-      competencia,
-      colaborador_pessoa_id: colaboradorPessoaId,
-      venda_ids: vendaIds,
-      total_aberto_centavos: totalAberto,
     },
     supabase,
   });
@@ -1002,11 +1027,14 @@ export async function criarComandaCafe(params: {
   console.log("[CAFE_CAIXA][CRIAR] iniciando criacao de comanda");
   if (!isRecord(body)) throw new Error("payload_invalido");
 
-  const tipoComprador = coerceTipoComprador(body.tipo_comprador ?? body.tipoComprador ?? "SEM_VINCULO");
+  const tipoComprador = coerceTipoComprador(
+    body.tipo_comprador ?? body.tipoComprador ?? body.comprador_tipo ?? body.compradorTipo ?? "SEM_VINCULO",
+  );
   const tipoCompradorFinanceiro = mapTipoCompradorParaFinanceiro(tipoComprador);
   const origemOperacao = upper(body.origem_operacao ?? body.origemOperacao) === "PDV" ? "PDV" : "CAIXA_ADMIN";
   const rawFormaPagamento =
     body.forma_pagamento ?? body.formaPagamento ?? body.metodo_pagamento ?? body.metodoPagamento;
+  const tabelaPrecoId = asInt(body.tabela_preco_id ?? body.tabelaPrecoId);
   const formaPagamentoId = asInt(body.forma_pagamento_id ?? body.formaPagamentoId);
   const metodoPagamento = coerceFormaPagamento(
     body.metodo_pagamento ?? body.metodoPagamento ?? body.forma_pagamento ?? body.formaPagamento,
@@ -1060,6 +1088,17 @@ export async function criarComandaCafe(params: {
     throw new Error("itens_obrigatorios");
   }
 
+  if (tabelaPrecoId) {
+    const { data: tabelaPreco, error: tabelaPrecoError } = await supabase
+      .from("cafe_tabelas_preco")
+      .select("id,ativo")
+      .eq("id", tabelaPrecoId)
+      .eq("ativo", true)
+      .maybeSingle();
+    if (tabelaPrecoError) throw tabelaPrecoError;
+    if (!tabelaPreco?.id) throw new Error("tabela_preco_id_invalida");
+  }
+
   const itens = await parseItensVenda(supabase, body);
   const valorTotal = itens.reduce((acc, item) => acc + item.valor_total_centavos, 0);
   const competencia = faturamentoFuturoSolicitado
@@ -1098,6 +1137,7 @@ export async function criarComandaCafe(params: {
     competencia,
     compradorPessoaId,
     colaboradorPessoaId,
+    tabelaPrecoId,
     itens: itens.length,
     valorTotal,
     valorPagoCentavos,
@@ -1118,6 +1158,7 @@ export async function criarComandaCafe(params: {
       valor_total_centavos: valorTotal,
       valor_pago_centavos: valorPagoCentavos,
       valor_em_aberto_centavos: valorEmAberto,
+      tabela_preco_id: tabelaPrecoId,
       forma_pagamento:
         contaInternaSolicitada
           ? CAFE_FORMAS_PAGAMENTO.CONTA_INTERNA_COLABORADOR
@@ -1170,6 +1211,13 @@ export async function criarComandaCafe(params: {
       observacoes: observacoesInternas ?? observacoes,
       usuarioId: userId,
       origemOperacao,
+      itens: itens.map((item) => ({
+        produtoId: item.produto_id,
+        descricao: item.descricao_snapshot,
+        quantidade: item.quantidade,
+        valorUnitarioCentavos: item.valor_unitario_centavos,
+        valorTotalCentavos: item.valor_total_centavos,
+      })),
     });
     console.log("[CAFE_CAIXA][CRIAR] comanda criada com sucesso:", vendaId);
   } catch (error) {
@@ -1283,6 +1331,21 @@ export async function atualizarComandaCafe(params: {
           body.forma_pagamento ?? body.metodo_pagamento ?? body.metodoPagamento,
         )
       : venda.forma_pagamento;
+  const nextTabelaPrecoId =
+    body.tabela_preco_id !== undefined || body.tabelaPrecoId !== undefined
+      ? asInt(body.tabela_preco_id ?? body.tabelaPrecoId)
+      : asInt(venda.tabela_preco_id);
+
+  if (nextTabelaPrecoId) {
+    const { data: tabelaPreco, error: tabelaPrecoError } = await supabase
+      .from("cafe_tabelas_preco")
+      .select("id,ativo")
+      .eq("id", nextTabelaPrecoId)
+      .eq("ativo", true)
+      .maybeSingle();
+    if (tabelaPrecoError) throw tabelaPrecoError;
+    if (!tabelaPreco?.id) throw new Error("tabela_preco_id_invalida");
+  }
 
   if (venda.status_pagamento === CAFE_STATUS_PAGAMENTO.FATURADO) {
     if (
@@ -1303,6 +1366,7 @@ export async function atualizarComandaCafe(params: {
       colaborador_pessoa_id: nextColaboradorPessoaId,
       data_competencia: nextCompetencia,
       forma_pagamento: nextFormaPagamento,
+      tabela_preco_id: nextTabelaPrecoId,
       updated_at: nowIso(),
     })
     .eq("id", vendaId);

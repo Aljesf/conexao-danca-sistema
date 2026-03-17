@@ -55,12 +55,18 @@ export async function GET(req: Request) {
   const tabelaPrecoRaw = searchParams.get("tabela_preco_id");
   const categoriaRaw = searchParams.get("categoria_id");
   const subcategoriaRaw = searchParams.get("subcategoria_id");
+  const idsRaw = searchParams.get("ids");
   const tabelaPrecoId =
     tabelaPrecoRaw && Number.isFinite(Number(tabelaPrecoRaw)) ? Number(tabelaPrecoRaw) : null;
   const categoriaId =
     categoriaRaw && Number.isFinite(Number(categoriaRaw)) ? Math.trunc(Number(categoriaRaw)) : null;
   const subcategoriaId =
     subcategoriaRaw && Number.isFinite(Number(subcategoriaRaw)) ? Math.trunc(Number(subcategoriaRaw)) : null;
+  const ids = (idsRaw ?? "")
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item) && item > 0)
+    .map((item) => Math.trunc(item));
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.trunc(pageRaw) : 1;
   const pageSize =
     Number.isFinite(pageSizeRaw) && pageSizeRaw > 0
@@ -84,6 +90,9 @@ export async function GET(req: Request) {
   if (search) {
     query = query.or(`nome.ilike.%${search}%,categoria.ilike.%${search}%`);
   }
+  if (ids.length > 0) {
+    query = query.in("id", ids);
+  }
 
   if (categoriaId) {
     query = query.eq("categoria_id", categoriaId);
@@ -104,6 +113,9 @@ export async function GET(req: Request) {
 
     if (search) {
       fallbackQuery = fallbackQuery.or(`nome.ilike.%${search}%,categoria.ilike.%${search}%`);
+    }
+    if (ids.length > 0) {
+      fallbackQuery = fallbackQuery.in("id", ids);
     }
 
     const fallback = await fallbackQuery;

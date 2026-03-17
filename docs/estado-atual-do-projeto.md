@@ -21,12 +21,18 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 - A API central de formas suporta listagem e upsert explicito para criacao e edicao posterior sem quebrar vinculos de contexto e centro de custo.
 - A resolucao das formas do Cafe e da Loja agora respeita a parametrizacao inicial por contexto, centro de custo, maquininha padrao e conta financeira de destino, com fallback controlado para o legado quando o schema novo ainda nao estiver completo.
 - Corrigida a elegibilidade da conta interna do colaborador no PDV do Cafe: o resolvedor agora identifica colaborador ativo pelo `comprador_pessoa_id`, preserva a forma `Conta interna do colaborador` no filtro final e nao cai em `NAO_IDENTIFICADO` quando a pessoa selecionada ja e um colaborador valido.
+- O PDV e o Caixa do Cafe agora resolvem a conta interna do colaborador pela mesma fonte canonica usada nas faturas administrativas (`credito_conexao_contas` + faturas vinculadas), com compatibilidade para nomenclaturas legadas da conta real.
+- `/api/cafe/tabelas-preco` passou a resolver tabela padrao por perfil e a devolver a tabela ativa do fluxo sem quebrar a listagem administrativa existente.
+- O fechamento do PDV do Cafe agora envia a composicao detalhada dos itens para `credito_conexao_lancamentos.composicao_json`, permitindo leitura coerente da venda dentro da fatura do colaborador.
 
 ## Paginas/componentes concluidos
 - `/cafe` como dashboard operacional inteligente do Ballet Cafe.
 - `/cafe/vendas` com meios de pagamento resolvidos por contexto, troco em dinheiro e aviso de conta interna indisponivel.
 - `/cafe/vendas` agora exibe Dinheiro, Pix, Credito a vista e conta interna por perfil elegivel, com subfluxo de troco, maquininha padrao Mercado Pago e destino financeiro do Pix quando configurado.
+- `/cafe/vendas` agora permite escolher a tabela de preco no fluxo, recalcula catalogo/carrinho conforme a tabela ativa e persiste a tabela usada na venda.
+- `/cafe/vendas` recebeu polimento final de UX no card lateral: tabela ativa, liquidacao escolhida e origem dos precos ficaram explicitos no resumo do PDV.
 - `/cafe/caixa` com fluxo administrativo claro para retroativo, baixa parcial, conta interna do aluno, conta interna do colaborador e conversao corretiva de saldo.
+- `/cafe/caixa` agora tambem resolve tabela de preco no lancamento administrativo, mostra a tabela ativa no resumo e envia `tabela_preco_id` para persistencia da comanda.
 - `/financeiro/formas-pagamento` para governanca central das formas por contexto e centro de custo.
 - `/financeiro/formas-pagamento` agora deixa explicito quais formas estao habilitadas em Cafe e Loja, qual maquininha padrao esta associada ao cartao e qual conta financeira padrao esta associada ao Pix.
 - `/loja/caixa` foi alinhada para consumir a mesma parametrizacao central e refletir maquininha e conta financeira de destino nas formas configuradas.
@@ -37,6 +43,8 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 ## Pendencias
 - Validacao visual final por prints em ambiente autenticado.
 - Homologacao com vendas reais de aluno, responsavel financeiro e colaborador.
+- Validar no ambiente autenticado a troca de tabela de preco no PDV/caixa e a persistencia correta de `tabela_preco_id` em vendas reais.
+- Gerar os prints finais do PDV mostrando tabela ativa, conta interna do colaborador e resumo do carrinho em ambiente autenticado.
 - Refinar a Loja para usar o mesmo resolvedor de elegibilidade de conta interna por responsavel financeiro em todo o fluxo, sem depender de adaptacoes locais residuais.
 - Evoluir previsoes de reposicao com historico temporal e alertas inteligentes.
 - Aplicar as migrations financeiras pendentes nos ambientes que ainda estao apenas no schema legado para persistir todos os metadados novos tambem no banco e garantir o seed padrao das formas centrais.
@@ -52,6 +60,7 @@ Conectarte v0.9 com:
 - dashboard operacional do Ballet Cafe;
 - home por contexto configuravel por usuario;
 - PDV e Caixa apoiados pelo mesmo nucleo operacional;
+- precificacao do Cafe conectada ao cadastro real de `cafe_tabelas_preco` e `cafe_produto_precos`;
 - unificacao da nomenclatura de conta interna na UI;
 - cadastro central de formas de pagamento reutilizavel por contexto e centro de custo;
 - parametrizacao inicial da maquininha Mercado Pago para Cafe e Loja;
@@ -60,6 +69,7 @@ Conectarte v0.9 com:
 - conta interna exibida por perfil elegivel no Cafe;
 - compatibilidade entre camada nova de pagamentos e legado sem quebrar o Cafe;
 - tela central no Financeiro para governar as formas consumidas pelo Cafe e pela Loja.
+- fechamento do PDV do Cafe validado com conta interna do colaborador, tabela de preco diferenciada e reflexo em fatura.
 
 ## Proximas acoes
 - Validar `/cafe`, `/cafe/vendas`, `/cafe/caixa` e `/financeiro/formas-pagamento` com dados reais.

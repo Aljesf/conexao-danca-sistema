@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import CafeCard from "@/components/cafe/CafeCard";
 import CafeCatalogoProdutos, { type CafeCatalogoProduto } from "@/components/cafe/catalogo/CafeCatalogoProdutos";
 import CafePageShell from "@/components/cafe/CafePageShell";
@@ -34,9 +34,8 @@ type PagamentoOpcao = {
   tipo_fluxo:
     | "IMEDIATO"
     | "CARTAO_EXTERNO"
-    | "CARTAO_CONEXAO_ALUNO"
-    | "CARTAO_CONEXAO_COLABORADOR"
-    | "CONTA_INTERNA";
+    | "CONTA_INTERNA_ALUNO"
+    | "CONTA_INTERNA_COLABORADOR";
   exige_conta_conexao: boolean;
   habilitado: boolean;
   motivo_bloqueio: string | null;
@@ -73,6 +72,28 @@ type ComandaItem = {
   valor_total_centavos: number;
 };
 
+type TabelaPrecoOpcao = {
+  id: number;
+  nome: string;
+  codigo: string | null;
+  descricao: string | null;
+  padrao: boolean;
+};
+
+type TabelasPrecoResponse = {
+  ok?: boolean;
+  tabela_preco_atual_id?: number | null;
+  itens?: TabelaPrecoOpcao[];
+  data?: Array<{
+    id: number;
+    codigo: string | null;
+    nome: string;
+    descricao?: string | null;
+    ativo?: boolean;
+    is_default?: boolean;
+  }>;
+};
+
 type Comanda = {
   id: number;
   pagador_pessoa_id: number | null;
@@ -92,6 +113,7 @@ type Comanda = {
   valor_em_aberto_centavos: number;
   cobranca_id: number | null;
   forma_pagamento?: string | null;
+  tabela_preco_id?: number | null;
   origem_financeira?: string | null;
   observacoes_internas: string | null;
   cafe_venda_itens?: ComandaItem[];
@@ -235,6 +257,19 @@ function todayIso() {
 
 function competenciaFromDate(dateIso: string) {
   return dateIso.slice(0, 7);
+}
+
+function formatCafeErrorMessage(message: string) {
+  switch (message) {
+    case "conta_interna_exige_colaborador":
+      return "Selecione um colaborador com conta interna elegivel para continuar.";
+    case "competencia_obrigatoria_para_conta_interna":
+      return "Informe a competencia de cobranca antes de registrar a comanda em conta interna.";
+    case "tabela_preco_id_invalida":
+      return "A tabela de preco escolhida nao esta mais disponivel. Atualize o lancamento e tente novamente.";
+    default:
+      return message;
+  }
 }
 
 function mergeItensForm(items: ItemForm[]) {
@@ -606,10 +641,14 @@ export default function CafeCaixaPage() {
   const [pagamentosDisponiveis, setPagamentosDisponiveis] = useState<PagamentoOpcao[]>([]);
   const [pagamentosLoading, setPagamentosLoading] = useState(false);
   const [contaInternaInfo, setContaInternaInfo] = useState<PagamentosResponse["conta_interna"] | null>(null);
+  const [tabelasPreco, setTabelasPreco] = useState<TabelaPrecoOpcao[]>([]);
+  const [tabelasPrecoLoading, setTabelasPrecoLoading] = useState(false);
+  const [tabelaPrecoId, setTabelaPrecoId] = useState<number | null>(null);
   const [metodoPagamento, setMetodoPagamento] = useState("DINHEIRO");
   const [valorPagoCentavos, setValorPagoCentavos] = useState("0");
   const [itens, setItens] = useState<ItemForm[]>([]);
   const [atalhoAtivo, setAtalhoAtivo] = useState<ShortcutId | null>(null);
+  const itensRef = useRef<ItemForm[]>([]);
 
   const [filtroDataInicial, setFiltroDataInicial] = useState(todayIso());
   const [filtroDataFinal, setFiltroDataFinal] = useState(todayIso());
@@ -624,6 +663,10 @@ export default function CafeCaixaPage() {
   const [contaInternaId, setContaInternaId] = useState<number | null>(null);
   const [contaInternaCompetencia, setContaInternaCompetencia] = useState(competenciaFromDate(todayIso()));
   const [contaInternaColaboradorPessoaId, setContaInternaColaboradorPessoaId] = useState("");
+
+  useEffect(() => {
+    itensRef.current = itens;
+  }, [itens]);
 
   const totalItensCentavos = useMemo(
     () => itens.reduce((acc, item) => acc + item.valor_unitario_centavos * item.quantidade, 0),
@@ -713,23 +756,28 @@ export default function CafeCaixaPage() {
     Boolean(compradorColaboradorId) &&
     Boolean(contaInternaInfo?.elegivel && contaInternaInfo.tipo === "COLABORADOR");
   const pagamentoSelecionado = pagamentosDisponiveis.find((item) => item.codigo === metodoPagamento) ?? null;
+  const tabelaPrecoAtiva = useMemo(
+    () => tabelasPreco.find((item) => item.id === tabelaPrecoId) ?? null,
+    [tabelaPrecoId, tabelasPreco],
+  );
   const pagamentosDisponiveisFiltrados = pagamentosDisponiveis.filter((item) => {
     if (!item.habilitado) return true;
-    if (isContaInterna) return item.tipo_fluxo === "CONTA_INTERNA";
+    if (isContaInterna) return item.tipo_fluxo === "CONTA_INTERNA_COLABORADOR";
     if (isCartaoConexao) {
-      return item.tipo_fluxo === "CARTAO_CONEXAO_ALUNO" || item.tipo_fluxo === "CARTAO_CONEXAO_COLABORADOR";
+      return (
+        item.tipo_fluxo === "CONTA_INTERNA_ALUNO" ||
+        item.tipo_fluxo === "CONTA_INTERNA_COLABORADOR"
+      );
     }
     return item.tipo_fluxo === "IMEDIATO" || item.tipo_fluxo === "CARTAO_EXTERNO";
   });
   const permiteFluxoContaInternaAluno =
     permiteContaInternaAluno &&
-    pagamentosDisponiveis.some((item) => item.habilitado && item.tipo_fluxo === "CARTAO_CONEXAO_ALUNO");
+    pagamentosDisponiveis.some((item) => item.habilitado && item.tipo_fluxo === "CONTA_INTERNA_ALUNO");
   const permiteFluxoContaInternaColaborador =
     permiteContaInternaColaborador &&
     pagamentosDisponiveis.some(
-      (item) =>
-        item.habilitado &&
-        (item.tipo_fluxo === "CARTAO_CONEXAO_COLABORADOR" || item.tipo_fluxo === "CONTA_INTERNA"),
+      (item) => item.habilitado && item.tipo_fluxo === "CONTA_INTERNA_COLABORADOR",
     );
 
   const resultadoFinanceiro = isContaInterna
@@ -811,7 +859,7 @@ export default function CafeCaixaPage() {
       if (!res.ok) throw new Error(json?.error ?? "falha_carregar_comandas");
       setComandas(json?.data ?? []);
     } catch (error) {
-      setMensagem(error instanceof Error ? error.message : "falha_carregar_comandas");
+      setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_carregar_comandas"));
     } finally {
       setLoading(false);
     }
@@ -823,7 +871,7 @@ export default function CafeCaixaPage() {
         await carregarBases();
         await carregarComandas();
       } catch (error) {
-        setMensagem(error instanceof Error ? error.message : "falha_inicializar_caixa");
+        setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_inicializar_caixa"));
         setLoading(false);
       }
     }
@@ -946,7 +994,9 @@ export default function CafeCaixaPage() {
           setPagamentosDisponiveis([]);
           setContaInternaInfo(null);
           setMetodoPagamento("");
-          setMensagem(error instanceof Error ? error.message : "falha_carregar_pagamentos_cafe");
+          setMensagem(
+            formatCafeErrorMessage(error instanceof Error ? error.message : "falha_carregar_pagamentos_cafe"),
+          );
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -960,17 +1010,91 @@ export default function CafeCaixaPage() {
   }, [compradorColaboradorId, compradorPessoaId, tipoComprador]);
 
   useEffect(() => {
+    const controller = new AbortController();
+
+    async function carregarTabelasPreco() {
+      setTabelasPrecoLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (tipoComprador === "COLABORADOR" && compradorColaboradorId) {
+          params.set("comprador_pessoa_id", String(compradorColaboradorId));
+          params.set("comprador_tipo", "COLABORADOR");
+        } else if (tipoComprador === "ALUNO" && compradorPessoaId) {
+          params.set("comprador_pessoa_id", String(compradorPessoaId));
+          params.set("comprador_tipo", "ALUNO");
+        } else if (tipoComprador === "PESSOA_AVULSA" && compradorPessoaId) {
+          params.set("comprador_pessoa_id", String(compradorPessoaId));
+          params.set("comprador_tipo", "PESSOA_AVULSA");
+        } else {
+          params.set("comprador_tipo", tipoComprador === "CARGO_SETOR" ? "NAO_IDENTIFICADO" : tipoComprador);
+        }
+
+        const response = await fetch(`/api/cafe/tabelas-preco?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as TabelasPrecoResponse | { error?: string } | null;
+        if (!response.ok) {
+          throw new Error(
+            payload && typeof payload === "object" && "error" in payload && payload.error
+              ? String(payload.error)
+              : "falha_carregar_tabelas_preco_cafe",
+          );
+        }
+
+        const itensTabela = Array.isArray(payload?.itens)
+          ? payload.itens
+          : Array.isArray(payload?.data)
+            ? payload.data.map((item) => ({
+                id: item.id,
+                nome: item.nome,
+                codigo: item.codigo ?? null,
+                descricao: item.descricao ?? null,
+                padrao: Boolean(item.is_default),
+              }))
+            : [];
+
+        setTabelasPreco(itensTabela);
+        setTabelaPrecoId((current) => {
+          if (current && itensTabela.some((item) => item.id === current)) return current;
+          return (
+            payload?.tabela_preco_atual_id ??
+            itensTabela.find((item) => item.padrao)?.id ??
+            itensTabela[0]?.id ??
+            null
+          );
+        });
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setTabelasPreco([]);
+          setTabelaPrecoId(null);
+          setMensagem(
+            formatCafeErrorMessage(error instanceof Error ? error.message : "falha_carregar_tabelas_preco_cafe"),
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setTabelasPrecoLoading(false);
+        }
+      }
+    }
+
+    void carregarTabelasPreco();
+    return () => controller.abort();
+  }, [compradorColaboradorId, compradorPessoaId, tipoComprador]);
+
+  useEffect(() => {
     const option = pagamentosDisponiveis.find((item) => item.codigo === metodoPagamento);
     if (!option) return;
-    if (option.tipo_fluxo === "CONTA_INTERNA" && tipoQuitacao !== "CONTA_INTERNA_COLABORADOR") {
+    if (option.tipo_fluxo === "CONTA_INTERNA_COLABORADOR" && tipoQuitacao !== "CONTA_INTERNA_COLABORADOR") {
       setTipoQuitacao("CONTA_INTERNA_COLABORADOR");
       return;
     }
     if (
-      (option.tipo_fluxo === "CARTAO_CONEXAO_ALUNO" || option.tipo_fluxo === "CARTAO_CONEXAO_COLABORADOR") &&
+      (option.tipo_fluxo === "CONTA_INTERNA_ALUNO" || option.tipo_fluxo === "CONTA_INTERNA_COLABORADOR") &&
       tipoQuitacao !== "CARTAO_CONEXAO"
     ) {
-      setTipoQuitacao("CARTAO_CONEXAO");
+      setTipoQuitacao(option.tipo_fluxo === "CONTA_INTERNA_ALUNO" ? "CARTAO_CONEXAO" : "CONTA_INTERNA_COLABORADOR");
       return;
     }
     if (
@@ -989,6 +1113,57 @@ export default function CafeCaixaPage() {
       setMetodoPagamento(fallback.codigo);
     }
   }, [metodoPagamento, pagamentosDisponiveisFiltrados]);
+
+  useEffect(() => {
+    if (!tabelaPrecoId || itensRef.current.length === 0) return;
+
+    const controller = new AbortController();
+
+    async function recalcularItensDaComanda() {
+      try {
+        const produtoIds = itensRef.current.map((item) => item.produto_id);
+        const params = new URLSearchParams({
+          ids: produtoIds.join(","),
+          page: "1",
+          pageSize: String(Math.max(produtoIds.length, 20)),
+          tabela_preco_id: String(tabelaPrecoId),
+        });
+        const response = await fetch(`/api/cafe/produtos?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as {
+          data?: { items?: CafeCatalogoProduto[] };
+          error?: string;
+        } | null;
+        if (!response.ok) {
+          throw new Error(payload?.error ?? "falha_recalcular_precos_caixa");
+        }
+
+        const produtos = Array.isArray(payload?.data?.items) ? payload.data.items : [];
+        const produtoMap = new Map(produtos.map((item) => [item.id, item]));
+
+        setItens((current) =>
+          current.map((item) => {
+            const produtoAtualizado = produtoMap.get(item.produto_id);
+            if (!produtoAtualizado) return item;
+            return {
+              ...item,
+              nome: produtoAtualizado.nome,
+              valor_unitario_centavos: Number(produtoAtualizado.preco_venda_centavos ?? item.valor_unitario_centavos),
+            };
+          }),
+        );
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_recalcular_precos_caixa"));
+        }
+      }
+    }
+
+    void recalcularItensDaComanda();
+    return () => controller.abort();
+  }, [tabelaPrecoId]);
 
   useEffect(() => {
     if (baixaId) {
@@ -1029,7 +1204,7 @@ export default function CafeCaixaPage() {
       } catch (error) {
         if (!controller.signal.aborted) {
           setCompradores([]);
-          setMensagem(error instanceof Error ? error.message : "falha_buscar_compradores");
+          setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_buscar_compradores"));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -1056,6 +1231,7 @@ export default function CafeCaixaPage() {
     setTipoQuitacao("IMEDIATA");
     setCompetencia(competenciaFromDate(todayIso()));
     setObservacoesInternas("");
+    setTabelaPrecoId(null);
     setMetodoPagamento("DINHEIRO");
     setValorPagoCentavos("0");
     setItens([]);
@@ -1129,7 +1305,7 @@ export default function CafeCaixaPage() {
           : "Solicitacao registrada com sucesso.",
       );
     } catch (error) {
-      setMensagem(error instanceof Error ? error.message : "falha_solicitar_conta_interna");
+      setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_solicitar_conta_interna"));
     }
   }
 
@@ -1193,6 +1369,7 @@ export default function CafeCaixaPage() {
             observacoes: observacoesInternas,
             forma_pagamento_id: pagamentoSelecionado.id,
             forma_pagamento: formaPagamentoPayload,
+            tabela_preco_id: tabelaPrecoId,
           }
         : {
             data_operacao: dataOperacao,
@@ -1208,6 +1385,7 @@ export default function CafeCaixaPage() {
             forma_pagamento_codigo: formaPagamentoPayload,
             metodo_pagamento: formaPagamentoPayload,
             forma_pagamento: formaPagamentoPayload,
+            tabela_preco_id: tabelaPrecoId,
             valor_pago_centavos: valorPagoPayload,
             itens: itens.map((item) => ({
               produto_id: item.produto_id,
@@ -1230,7 +1408,7 @@ export default function CafeCaixaPage() {
       setAtalhoAtivo("recentes");
       scrollToSection("recentes");
     } catch (error) {
-      setMensagem(error instanceof Error ? error.message : "falha_salvar_comanda");
+      setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_salvar_comanda"));
     } finally {
       setSaving(false);
     }
@@ -1292,6 +1470,7 @@ export default function CafeCaixaPage() {
     );
     setCompetencia(comanda.data_competencia ?? competenciaFromDate(comanda.data_operacao));
     setObservacoesInternas(comanda.observacoes_internas ?? "");
+    setTabelaPrecoId(comanda.tabela_preco_id ?? null);
     setMetodoPagamento(
       comanda.forma_pagamento && comanda.forma_pagamento !== "CONTA_INTERNA_COLABORADOR"
         ? comanda.forma_pagamento
@@ -1337,7 +1516,7 @@ export default function CafeCaixaPage() {
       setAtalhoAtivo("recentes");
       scrollToSection("recentes");
     } catch (error) {
-      setMensagem(error instanceof Error ? error.message : "falha_registrar_baixa");
+      setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_registrar_baixa"));
     } finally {
       setSaving(false);
     }
@@ -1364,7 +1543,7 @@ export default function CafeCaixaPage() {
       setAtalhoAtivo("recentes");
       scrollToSection("recentes");
     } catch (error) {
-      setMensagem(error instanceof Error ? error.message : "falha_enviar_conta_interna");
+      setMensagem(formatCafeErrorMessage(error instanceof Error ? error.message : "falha_enviar_conta_interna"));
     } finally {
       setSaving(false);
     }
@@ -1679,6 +1858,31 @@ export default function CafeCaixaPage() {
                   </p>
                 </CafePanel>
               ) : null}
+
+              <label className="space-y-2 text-sm md:col-span-2">
+                <span className="font-medium text-slate-700">Tabela de preco</span>
+                <select
+                  className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                  value={tabelaPrecoId ?? ""}
+                  onChange={(event) => setTabelaPrecoId(event.target.value ? Number(event.target.value) : null)}
+                  disabled={tabelasPrecoLoading}
+                >
+                  {tabelasPreco.length === 0 ? <option value="">Nenhuma tabela disponivel</option> : null}
+                  {tabelasPreco.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nome}
+                      {item.padrao ? " - padrao" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs leading-5 text-slate-500">
+                  {tabelasPrecoLoading
+                    ? "Resolvendo tabela de preco para este comprador..."
+                    : tabelaPrecoAtiva
+                      ? `Tabela ativa: ${tabelaPrecoAtiva.nome}. O catalogo e a comanda usam essa referencia de preco.`
+                      : "Sem tabela diferenciada configurada para este perfil. O Caixa usara a referencia padrao do Cafe."}
+                </p>
+              </label>
             </div>
 
             <label className="space-y-2 text-sm md:col-span-2">
@@ -1717,6 +1921,7 @@ export default function CafeCaixaPage() {
               <CafeCatalogoProdutos
                 onAddProduct={adicionarItem}
                 quantitiesByProductId={quantidadesPorProdutoId}
+                tabelaPrecoId={tabelaPrecoId}
                 disabled={editingId !== null}
                 helperText="Categorias e cards aceleram o lancamento administrativo sem transformar o Caixa em PDV."
                 disabledText="Itens travados nesta etapa. Para alteracoes estruturais, refaca a comanda antes do faturamento."
@@ -1732,6 +1937,9 @@ export default function CafeCaixaPage() {
                     <h3 className="text-lg font-semibold tracking-tight text-slate-950">Carrinho administrativo</h3>
                     <p className="text-sm leading-6 text-slate-600">
                       Cada clique em adicionar entra com quantidade 1. Cliques repetidos no mesmo produto somam automaticamente na comanda.
+                    </p>
+                    <p className="text-xs font-medium text-[#8c6640]">
+                      {tabelaPrecoAtiva ? `Tabela ativa: ${tabelaPrecoAtiva.nome}` : "Tabela ativa: padrao do Cafe"}
                     </p>
                   </div>
                   <div className="grid gap-2 text-right">
@@ -2017,6 +2225,7 @@ export default function CafeCaixaPage() {
               label="Forma de pagamento"
               value={pagamentoSelecionado?.label ?? formatFormaPagamento(metodoPagamento)}
             />
+            <MetricTile label="Tabela de preco" value={tabelaPrecoAtiva?.nome ?? "Padrao do Cafe"} />
             <MetricTile label="Centro de custo" value={centroCustoId ? `#${centroCustoId} Ballet Cafe` : "Resolvendo"} />
             <MetricTile label="Valor pago" value={brl(valorPagoAberturaCentavos)} />
             <MetricTile label="Saldo em aberto" value={brl(saldoPrevistoCentavos)} emphasis={saldoPrevistoCentavos > 0} />

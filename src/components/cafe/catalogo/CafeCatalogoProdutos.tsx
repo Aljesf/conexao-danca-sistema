@@ -25,6 +25,7 @@ type ProdutoResponse = {
 type CafeCatalogoProdutosProps = {
   onAddProduct: (produto: CafeCatalogoProduto) => void;
   quantitiesByProductId?: Record<number, number>;
+  tabelaPrecoId?: number | null;
   disabled?: boolean;
   searchPlaceholder?: string;
   helperText?: string;
@@ -40,6 +41,7 @@ function brl(value: number) {
 export default function CafeCatalogoProdutos({
   onAddProduct,
   quantitiesByProductId = {},
+  tabelaPrecoId = null,
   disabled = false,
   searchPlaceholder = "Nome do produto",
   helperText = "Use a busca como apoio, mas priorize os cards do catalogo para montar a operacao.",
@@ -78,6 +80,7 @@ export default function CafeCatalogoProdutos({
         if (buscaProduto.trim()) params.set("search", buscaProduto.trim());
         if (categoriaId) params.set("categoria_id", String(categoriaId));
         if (subcategoriaId) params.set("subcategoria_id", String(subcategoriaId));
+        if (tabelaPrecoId) params.set("tabela_preco_id", String(tabelaPrecoId));
 
         const response = await fetch(`/api/cafe/produtos?${params.toString()}`, {
           signal: controller.signal,
@@ -104,7 +107,7 @@ export default function CafeCatalogoProdutos({
 
     void carregarProdutos();
     return () => controller.abort();
-  }, [buscaProduto, categoriaId, subcategoriaId]);
+  }, [buscaProduto, categoriaId, subcategoriaId, tabelaPrecoId]);
 
   return (
     <div className="space-y-4">
