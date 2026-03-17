@@ -103,7 +103,11 @@ export default function FinanceiroFormasPagamentoPage() {
         fetch("/api/financeiro/contas-financeiras/centros", { cache: "no-store" }),
       ]);
 
-      const formasJson = (await formasRes.json().catch(() => null)) as { itens?: FormaPagamentoCentral[]; detalhe?: string } | null;
+      const formasJson = (await formasRes.json().catch(() => null)) as {
+        itens?: FormaPagamentoCentral[];
+        detalhe?: string;
+        erro_controlado?: string | null;
+      } | null;
       const centrosJson = (await centrosRes.json().catch(() => null)) as { centros?: CentroCusto[]; error?: string } | null;
 
       if (!formasRes.ok) {
@@ -115,6 +119,10 @@ export default function FinanceiroFormasPagamentoPage() {
 
       setItens(Array.isArray(formasJson?.itens) ? formasJson.itens : []);
       setCentros(Array.isArray(centrosJson?.centros) ? centrosJson.centros : []);
+      if (formasJson?.erro_controlado) {
+        setMensagem("Algumas informacoes do cadastro central foram carregadas via fallback legado.");
+        setMensagemErro(false);
+      }
     } catch (error) {
       setMensagem(error instanceof Error ? error.message : "falha_carregar_formas_pagamento");
       setMensagemErro(true);

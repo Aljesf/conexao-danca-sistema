@@ -42,6 +42,9 @@ type PagamentoOpcao = {
 };
 
 type PagamentosResponse = {
+  ok?: boolean;
+  erro_controlado?: string | null;
+  detalhe?: string | null;
   centro_custo_id: number;
   comprador: {
     pessoa_id: number | null;
@@ -216,11 +219,26 @@ export default function CafeVendasPage() {
 
         const nextPayments = Array.isArray(payload?.opcoes) ? payload.opcoes : [];
         const fallback = nextPayments.find((item) => item.habilitado) ?? null;
+        const erroControlado =
+          payload && typeof payload === "object" && "erro_controlado" in payload
+            ? payload.erro_controlado
+            : null;
 
         setPagamentos(nextPayments);
         setCentroCustoId(payload?.centro_custo_id ?? null);
         setCompradorTipo(payload?.comprador.tipo ?? "NAO_IDENTIFICADO");
         setContaInternaInfo(payload?.conta_interna ?? null);
+        if (erroControlado) {
+          setMensagem(
+            nextPayments.length > 0
+              ? "Algumas configuracoes novas ainda nao estao completas. O PDV esta usando as formas herdadas do cadastro legado."
+              : "Nao foi possivel resolver as formas de pagamento deste contexto agora.",
+          );
+          setMensagemTipo(nextPayments.length > 0 ? "success" : "error");
+        } else {
+          setMensagem(null);
+          setMensagemTipo(null);
+        }
         setPagamentoCodigo((current) => {
           const existing = nextPayments.find((item) => item.codigo === current && item.habilitado);
           return existing?.codigo ?? fallback?.codigo ?? "";
@@ -587,7 +605,7 @@ export default function CafeVendasPage() {
                     disabled={pagamentosLoading || pagamentos.length === 0}
                   >
                     {pagamentos.length === 0 ? (
-                      <option value="">Sem opcoes configuradas</option>
+                      <option value="">Nenhuma opcao disponivel no momento</option>
                     ) : null}
                     {pagamentos.map((item) => (
                       <option key={item.codigo} value={item.codigo} disabled={!item.habilitado}>
@@ -599,7 +617,10 @@ export default function CafeVendasPage() {
                   <p className="text-xs leading-5 text-slate-500">
                     {pagamentosLoading
                       ? "Resolvendo meios validos para este comprador..."
-                      : pagamentoSelecionado?.motivo_bloqueio ?? efeitoFinanceiro}
+                      : pagamentoSelecionado?.motivo_bloqueio ??
+                        (pagamentos.length === 0
+                          ? "O sistema nao encontrou formas disponiveis para este contexto agora."
+                          : efeitoFinanceiro)}
                   </p>
                 </label>
 

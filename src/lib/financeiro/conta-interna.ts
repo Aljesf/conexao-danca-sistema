@@ -86,7 +86,10 @@ async function listarResponsaveisFinanceirosAtivos(
     .eq("dependente_pessoa_id", alunoPessoaId)
     .eq("ativo", true);
 
-  if (vinculosCanonicosError) throw vinculosCanonicosError;
+  if (vinculosCanonicosError) {
+    console.error("[CONTA_INTERNA][ALUNO][RESPONSAVEIS][ERRO]", vinculosCanonicosError);
+    throw vinculosCanonicosError;
+  }
 
   for (const item of (vinculosCanonicos ?? []) as Array<Record<string, unknown>>) {
     const responsavelId = asInt(item.responsavel_pessoa_id);
@@ -101,7 +104,10 @@ async function listarResponsaveisFinanceirosAtivos(
     .limit(1)
     .maybeSingle();
 
-  if (matriculaError) throw matriculaError;
+  if (matriculaError) {
+    console.error("[CONTA_INTERNA][ALUNO][MATRICULA][ERRO]", matriculaError);
+    throw matriculaError;
+  }
 
   const responsavelMatriculaId = asInt(
     (matriculaAtual as Record<string, unknown> | null)?.responsavel_financeiro_id,
@@ -115,9 +121,11 @@ async function carregarContaInternaPorTitulares(params: {
   supabase: SupabaseLike;
   pessoaTitularIds: number[];
   tipoConta: ContaInternaTipo;
+  alunoPessoaId?: number | null;
 }): Promise<ContaInternaResolvida> {
-  const { supabase, pessoaTitularIds, tipoConta } = params;
+  const { supabase, pessoaTitularIds, tipoConta, alunoPessoaId = null } = params;
   if (pessoaTitularIds.length === 0) {
+    console.warn("[CONTA_INTERNA][SEM_TITULAR]", { tipoConta });
     return {
       elegivel: false,
       tipo: tipoConta,
@@ -136,14 +144,15 @@ async function carregarContaInternaPorTitulares(params: {
 
   const { data, error } = await supabase
     .from("credito_conexao_contas")
-    .select(
-      "id,pessoa_titular_id,tipo_conta,dia_vencimento,descricao_exibicao,tipo_titular,responsavel_financeiro_pessoa_id,tipo_liquidacao,ativo",
-    )
+    .select("id,pessoa_titular_id,tipo_conta,dia_vencimento,descricao_exibicao,ativo")
     .in("pessoa_titular_id", pessoaTitularIds)
     .eq("tipo_conta", tipoConta)
     .eq("ativo", true);
 
-  if (error) throw error;
+  if (error) {
+    console.error("[CONTA_INTERNA][CARREGAR][ERRO]", { tipoConta, pessoaTitularIds, error });
+    throw error;
+  }
 
   const contas = ((data ?? []) as Array<Record<string, unknown>>)
     .map((item) => ({
@@ -151,16 +160,13 @@ async function carregarContaInternaPorTitulares(params: {
       pessoa_titular_id: asInt(item.pessoa_titular_id),
       dia_vencimento: asInt(item.dia_vencimento),
       descricao_exibicao: asString(item.descricao_exibicao),
-      responsavel_financeiro_pessoa_id: asInt(item.responsavel_financeiro_pessoa_id),
-      tipo_liquidacao:
-        upper(item.tipo_liquidacao) === "FOLHA_PAGAMENTO" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
+      tipo_liquidacao: tipoConta === "COLABORADOR" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
     }))
     .filter((item) => item.id && item.pessoa_titular_id) as Array<{
     id: number;
     pessoa_titular_id: number;
     dia_vencimento: number | null;
     descricao_exibicao: string | null;
-    responsavel_financeiro_pessoa_id: number | null;
     tipo_liquidacao: ContaInternaLiquidacao;
   }>;
 
@@ -170,6 +176,7 @@ async function carregarContaInternaPorTitulares(params: {
       .find(Boolean) ?? null;
 
   if (!conta) {
+    console.warn("[CONTA_INTERNA][NAO_ENCONTRADA]", { tipoConta, pessoaTitularIds });
     return {
       elegivel: false,
       tipo: tipoConta,
@@ -192,10 +199,9 @@ async function carregarContaInternaPorTitulares(params: {
     conta_id: conta.id,
     titular_pessoa_id: conta.pessoa_titular_id,
     responsavel_financeiro_pessoa_id:
-      conta.responsavel_financeiro_pessoa_id ??
-      (tipoConta === "ALUNO" && conta.pessoa_titular_id !== pessoaTitularIds[pessoaTitularIds.length - 1]
+      tipoConta === "ALUNO" && alunoPessoaId && conta.pessoa_titular_id !== alunoPessoaId
         ? conta.pessoa_titular_id
-        : null),
+        : null,
     dia_vencimento: conta.dia_vencimento,
     tipo_liquidacao: conta.tipo_liquidacao,
     motivo: null,
@@ -225,10 +231,16 @@ export async function resolverContaInternaDoAlunoOuResponsavel(params: {
 
   const responsaveis = await listarResponsaveisFinanceirosAtivos(supabase, alunoPessoaId);
   const candidatos = permitirContaDoAluno ? [...responsaveis, alunoPessoaId] : responsaveis;
+  console.log("[CONTA_INTERNA][ALUNO][RESOLVER]", {
+    alunoPessoaId,
+    responsaveis,
+    candidatos,
+  });
   return carregarContaInternaPorTitulares({
     supabase,
     pessoaTitularIds: Array.from(new Set(candidatos)),
     tipoConta: "ALUNO",
+    alunoPessoaId,
   });
 }
 
@@ -251,6 +263,7 @@ export async function resolverContaInternaDoColaborador(params: {
     };
   }
 
+  console.log("[CONTA_INTERNA][COLABORADOR][RESOLVER]", { colaboradorPessoaId });
   return carregarContaInternaPorTitulares({
     supabase,
     pessoaTitularIds: [colaboradorPessoaId],

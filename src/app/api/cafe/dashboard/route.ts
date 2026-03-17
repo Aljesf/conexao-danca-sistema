@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const url = new URL(request.url);
+    console.log("[CAFE_DASHBOARD][GET]", Object.fromEntries(url.searchParams.entries()));
     const parsed = QuerySchema.safeParse({
       periodo: url.searchParams.get("periodo") ?? undefined,
       data_inicio: url.searchParams.get("data_inicio") ?? undefined,
@@ -33,12 +34,46 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(data, { status: 200 });
   } catch (error) {
+    console.error("[CAFE_DASHBOARD][ERRO]", error);
     return NextResponse.json(
       {
-        error: "falha_carregar_dashboard_cafe",
+        ok: false,
+        erro_controlado: "falha_carregar_dashboard_cafe",
         detalhe: error instanceof Error ? error.message : "erro_desconhecido",
+        resumo: {
+          faturamento_total_centavos: 0,
+          total_vendas: 0,
+          ticket_medio_centavos: 0,
+          itens_vendidos: 0,
+          clientes_identificados_percentual: 0,
+        },
+        horarios: {
+          faixas: [],
+          faixa_pico: { hora: null, vendas: 0, faturamento_centavos: 0 },
+        },
+        consumo_por_perfil: [],
+        alunos: { top_produtos: [], horarios_preferidos: [] },
+        produtos: { mais_vendidos: [], maior_receita: [] },
+        estoque: {
+          alertas: [],
+          quantidade_alertas: 0,
+          quantidade_repor_agora: 0,
+          quantidade_zerado: 0,
+        },
+        financeiro: {
+          total_imediato_recebido_centavos: 0,
+          total_recebivel_cartao_centavos: 0,
+          total_conta_interna_aluno_centavos: 0,
+          total_conta_interna_colaborador_centavos: 0,
+          total_pendente_liquidacao_centavos: 0,
+          distribuicao_contas: [],
+        },
+        meios_pagamento: [],
+        explicacao: {
+          texto_curto: "Dashboard do Cafe indisponivel no momento. A API retornou um estado vazio funcional.",
+        },
       },
-      { status: 500 },
+      { status: 200 },
     );
   }
 }

@@ -174,6 +174,42 @@ function inferirFluxoFinanceiroCafe(codigo: string | null | undefined): CafeFlux
   return CAFE_FLUXO_FINANCEIRO.IMEDIATO;
 }
 
+function inferirFluxoFinanceiroVendaLegada(venda: Record<string, unknown>) {
+  const tipoQuitacao = upper(venda.tipo_quitacao);
+  const formaPagamento = upper(venda.forma_pagamento);
+
+  if (
+    formaPagamento === "CARTAO_CONEXAO_ALUNO" ||
+    formaPagamento === "CREDITO_ALUNO" ||
+    (tipoQuitacao === "CARTAO_CONEXAO" && !asInt(venda.colaborador_pessoa_id))
+  ) {
+    return CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_ALUNO;
+  }
+
+  if (
+    formaPagamento === "CARTAO_CONEXAO_COLAB" ||
+    formaPagamento === "CARTAO_CONEXAO_COLABORADOR" ||
+    formaPagamento === "CONTA_INTERNA" ||
+    formaPagamento === "CONTA_INTERNA_COLABORADOR" ||
+    formaPagamento === "CREDIARIO_COLAB" ||
+    tipoQuitacao === "CONTA_INTERNA_COLABORADOR" ||
+    (tipoQuitacao === "CARTAO_CONEXAO" && Boolean(asInt(venda.colaborador_pessoa_id)))
+  ) {
+    return CAFE_FLUXO_FINANCEIRO.CONTA_INTERNA;
+  }
+
+  if (
+    formaPagamento === "CREDITO_AVISTA" ||
+    formaPagamento === "CREDITO_PARCELADO" ||
+    formaPagamento === "DEBITO" ||
+    formaPagamento === "CARTAO"
+  ) {
+    return CAFE_FLUXO_FINANCEIRO.CARTAO_EXTERNO;
+  }
+
+  return CAFE_FLUXO_FINANCEIRO.IMEDIATO;
+}
+
 function exigeContaConexao(fluxo: CafeFluxoFinanceiro) {
   return (
     fluxo === CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_ALUNO ||
@@ -564,28 +600,29 @@ async function carregarVendasCafeCompetencia(params: {
   let query = supabase
     .from("cafe_vendas")
     .select(
-      "id,valor_em_aberto_centavos,valor_total_centavos,valor_pago_centavos,cobranca_id,status_pagamento,data_operacao",
+      "id,pagador_pessoa_id,colaborador_pessoa_id,data_competencia,tipo_quitacao,forma_pagamento,valor_em_aberto_centavos,valor_total_centavos,valor_pago_centavos,cobranca_id,status_pagamento,data_operacao",
     )
-    .eq("competencia_ano_mes", competenciaAnoMes)
-    .eq("origem_financeira", origemFinanceira)
+    .eq("data_competencia", competenciaAnoMes)
     .neq("status_pagamento", "CANCELADO")
     .order("id", { ascending: true });
 
   if (compradorTipo === CAFE_COMPRADOR_TIPO.COLABORADOR) {
     query = query.eq("colaborador_pessoa_id", colaboradorPessoaId);
   } else {
-    query = query.eq("comprador_pessoa_id", compradorPessoaId);
+    query = query.eq("pagador_pessoa_id", compradorPessoaId);
   }
 
   const { data, error } = await query;
   if (error) throw error;
-  return ((data ?? []) as Array<Record<string, unknown>>).map((item) => ({
-    id: asInt(item.id) ?? 0,
-    valor_em_aberto_centavos: Math.max(asInt(item.valor_em_aberto_centavos) ?? 0, 0),
-    valor_total_centavos: Math.max(asInt(item.valor_total_centavos) ?? 0, 0),
-    valor_pago_centavos: Math.max(asInt(item.valor_pago_centavos) ?? 0, 0),
-    cobranca_id: asInt(item.cobranca_id),
-  }));
+  return ((data ?? []) as Array<Record<string, unknown>>)
+    .filter((item) => inferirFluxoFinanceiroVendaLegada(item) === origemFinanceira)
+    .map((item) => ({
+      id: asInt(item.id) ?? 0,
+      valor_em_aberto_centavos: Math.max(asInt(item.valor_em_aberto_centavos) ?? 0, 0),
+      valor_total_centavos: Math.max(asInt(item.valor_total_centavos) ?? 0, 0),
+      valor_pago_centavos: Math.max(asInt(item.valor_pago_centavos) ?? 0, 0),
+      cobranca_id: asInt(item.cobranca_id),
+    }));
 }
 
 function flowToOrigemSubtipo(fluxo: CafeFluxoFinanceiro) {
@@ -612,13 +649,13 @@ async function atualizarVendasCafePorCompetencia(params: {
 }) {
   const { supabase, vendaIds, cobrancaId, contaConexaoId, statusFinanceiro, statusPagamento, tipoQuitacao } = params;
   if (vendaIds.length === 0) return;
+  void contaConexaoId;
+  void statusFinanceiro;
 
   const { error } = await supabase
     .from("cafe_vendas")
     .update({
       cobranca_id: cobrancaId,
-      conta_conexao_id: contaConexaoId,
-      status_financeiro: statusFinanceiro,
       status_pagamento: statusPagamento,
       tipo_quitacao: tipoQuitacao,
       updated_at: nowIso(),
@@ -1100,17 +1137,10 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
   const { error: preUpdateError } = await supabase
     .from("cafe_vendas")
     .update({
-      centro_custo_id: centroCustoId,
-      conta_financeira_id: contaFinanceiraId,
-      forma_pagamento_id: forma.id,
-      comprador_tipo: comprador.tipo,
-      comprador_pessoa_id: compradorPessoaFinanceiro,
-      conta_conexao_id: comprador.conta_conexao?.id ?? null,
-      origem_financeira: forma.tipo_fluxo,
       data_competencia: forma.exige_conta_conexao ? competencia : null,
-      competencia_ano_mes: forma.exige_conta_conexao ? competencia : null,
-      observacao_financeira: observacaoFinanceiraBase,
       forma_pagamento: forma.codigo,
+      colaborador_pessoa_id:
+        comprador.tipo === CAFE_COMPRADOR_TIPO.COLABORADOR ? compradorPessoaFinanceiro : colaboradorPessoaId,
       updated_at: nowIso(),
     })
     .eq("id", vendaId);
@@ -1191,9 +1221,6 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
   const { error: finalizeError } = await supabase
     .from("cafe_vendas")
     .update({
-      recebimento_id: recebimentoId,
-      movimento_financeiro_id: movimentoFinanceiroId,
-      status_financeiro: statusFinanceiro,
       status_pagamento: statusPagamento,
       tipo_quitacao: saldoAberto > 0 ? "PARCIAL" : "IMEDIATA",
       forma_pagamento: forma.codigo,

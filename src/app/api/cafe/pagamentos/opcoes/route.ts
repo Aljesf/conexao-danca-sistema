@@ -3,7 +3,7 @@ import { z } from "zod";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
-import { listarFormasPagamentoElegiveis } from "@/lib/financeiro/formas-pagamento-saas";
+import { resolverFormasPagamentoDisponiveis } from "@/lib/financeiro/resolver-formas-pagamento-disponiveis";
 
 const QuerySchema = z.object({
   comprador_pessoa_id: z.string().trim().optional(),
@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const url = new URL(request.url);
+    console.log("[CAFE_PAGAMENTOS][GET]", Object.fromEntries(url.searchParams.entries()));
     const parsed = QuerySchema.safeParse({
       comprador_pessoa_id: url.searchParams.get("comprador_pessoa_id") ?? undefined,
       comprador_tipo: url.searchParams.get("comprador_tipo") ?? undefined,
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
-    const data = await listarFormasPagamentoElegiveis({
+    const data = await resolverFormasPagamentoDisponiveis({
       supabase,
       compradorPessoaId: parseOptionalInt(parsed.data.comprador_pessoa_id),
       compradorTipo: parsed.data.comprador_tipo ?? null,
@@ -75,8 +76,19 @@ export async function GET(request: NextRequest) {
       contexto: "CAFE",
     });
 
+    console.log("[CAFE_PAGAMENTOS][OPCOES]", {
+      comprador_pessoa_id: data.comprador.pessoa_id,
+      comprador_tipo: data.comprador.tipo,
+      centro_custo_id: data.centro_custo_id,
+      opcoes: data.opcoes.length,
+      erro_controlado: data.erro_controlado,
+    });
+
     return NextResponse.json(
       {
+        ok: data.ok,
+        erro_controlado: data.erro_controlado,
+        detalhe: data.detalhe,
         centro_custo_id: data.centro_custo_id,
         comprador: data.comprador,
         conta_interna: data.conta_interna,
@@ -100,12 +112,39 @@ export async function GET(request: NextRequest) {
       { status: 200 },
     );
   } catch (error) {
+    console.error("[CAFE_PAGAMENTOS][OPCOES][ERRO]", error);
+    const url = new URL(request.url);
+    const compradorTipoRaw = upper(url.searchParams.get("comprador_tipo"));
+    const compradorTipoFallback =
+      compradorTipoRaw === "ALUNO" ||
+      compradorTipoRaw === "COLABORADOR" ||
+      compradorTipoRaw === "PESSOA_AVULSA"
+        ? compradorTipoRaw
+        : "NAO_IDENTIFICADO";
     return NextResponse.json(
       {
-        error: "falha_listar_opcoes_pagamento_cafe",
+        ok: false,
+        erro_controlado: "falha_listar_opcoes_pagamento_cafe",
         detalhe: error instanceof Error ? error.message : "erro_desconhecido",
+        centro_custo_id: null,
+        comprador: {
+          pessoa_id: parseOptionalInt(url.searchParams.get("comprador_pessoa_id") ?? undefined),
+          tipo: compradorTipoFallback,
+        },
+        conta_interna: {
+          elegivel: false,
+          tipo: null,
+          conta_id: null,
+          titular_pessoa_id: null,
+          motivo: "Nao foi possivel resolver a conta interna.",
+          suporte: {
+            pode_solicitar: false,
+            payload: null,
+          },
+        },
+        opcoes: [],
       },
-      { status: 500 },
+      { status: 200 },
     );
   }
 }

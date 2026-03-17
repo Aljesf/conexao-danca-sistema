@@ -137,9 +137,9 @@ type CafeFinanceiroRow = {
   valor_total_centavos: number | string | null;
   valor_pago_centavos: number | string | null;
   valor_em_aberto_centavos: number | string | null;
-  origem_financeira: string | null;
   forma_pagamento: string | null;
-  conta_financeira_id: number | string | null;
+  tipo_quitacao?: string | null;
+  colaborador_pessoa_id?: number | string | null;
   status_pagamento?: string | null;
 };
 
@@ -161,6 +161,10 @@ function toInt(value: unknown): number {
 function toNullableInt(value: unknown): number | null {
   const parsed = toInt(value);
   return parsed > 0 ? parsed : null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function toIsoDate(date: Date): string {
@@ -246,16 +250,8 @@ function formatFormaPagamentoLabel(value: string | null) {
     case "":
       return "Nao informado";
     default:
-      return codigo.replaceAll("_", " ");
+      return codigo.split("_").join(" ");
   }
-}
-
-function isFluxoFuturo(origemFinanceira: string) {
-  return (
-    origemFinanceira === "CARTAO_CONEXAO_ALUNO" ||
-    origemFinanceira === "CARTAO_CONEXAO_COLABORADOR" ||
-    origemFinanceira === "CONTA_INTERNA"
-  );
 }
 
 function buildExplicacao(params: {
@@ -286,72 +282,121 @@ function buildExplicacao(params: {
   return partes.join(" ");
 }
 
+function inferCategoriaFinanceira(row: CafeFinanceiroRow) {
+  const forma = upper(row.forma_pagamento);
+  const quitacao = upper(row.tipo_quitacao);
+  const ehColaborador = toNullableInt(row.colaborador_pessoa_id) !== null;
+
+  if (
+    forma === "CARTAO_CONEXAO_ALUNO" ||
+    forma === "CREDITO_ALUNO" ||
+    (quitacao === "CARTAO_CONEXAO" && !ehColaborador)
+  ) {
+    return "CONTA_INTERNA_ALUNO" as const;
+  }
+
+  if (
+    forma === "CONTA_INTERNA_COLABORADOR" ||
+    forma === "CONTA_INTERNA" ||
+    forma === "CREDIARIO_COLAB" ||
+    forma === "CARTAO_CONEXAO_COLABORADOR" ||
+    forma === "CARTAO_CONEXAO_COLAB" ||
+    quitacao === "CONTA_INTERNA_COLABORADOR" ||
+    (quitacao === "CARTAO_CONEXAO" && ehColaborador)
+  ) {
+    return "CONTA_INTERNA_COLABORADOR" as const;
+  }
+
+  if (
+    forma === "CREDITO_AVISTA" ||
+    forma === "CREDITO_PARCELADO" ||
+    forma === "DEBITO" ||
+    forma === "CARTAO"
+  ) {
+    return "CARTAO_EXTERNO" as const;
+  }
+
+  if (quitacao === "PARCIAL") {
+    return "PARCIAL" as const;
+  }
+
+  return "IMEDIATO" as const;
+}
+
 export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise<CafeDashboardData> {
   const supabase = getSupabaseServiceClient();
   const range = resolveCafeDashboardRange(filters);
 
-  const [
-    { data: analyticsData, error: analyticsError },
-    { data: alertasData, error: alertasError },
-    { data: financeiroData, error: financeiroError },
-  ] = await Promise.all([
-    supabase
-      .from("vw_cafe_vendas_analytics")
-      .select(
-        "venda_id,dia_referencia,hora_referencia,cliente_pessoa_id,beneficiario_pessoa_id,perfil_consumidor,produto_id,produto_nome,produto_categoria,quantidade,preco_unitario_centavos,total_centavos,forma_pagamento,status_pagamento",
-      )
-      .gte("dia_referencia", range.dataInicio)
-      .lte("dia_referencia", range.dataFim),
-    supabase
-      .from("vw_cafe_insumos_alertas")
-      .select("insumo_id,nome,estoque_atual,estoque_minimo,status_reposicao,custo_medio_centavos")
-      .order("status_reposicao", { ascending: true })
-      .order("nome", { ascending: true }),
-    supabase
-      .from("cafe_vendas")
-      .select(
-        "valor_total_centavos,valor_pago_centavos,valor_em_aberto_centavos,origem_financeira,forma_pagamento,conta_financeira_id,status_pagamento",
-      )
-      .gte("data_operacao", range.dataInicio)
-      .lte("data_operacao", range.dataFim)
-      .neq("status_pagamento", "CANCELADO"),
-  ]);
+  let analytics: CafeAnalyticsRow[] = [];
+  let alertas: CafeInsumoAlertaRow[] = [];
+  let financeiroRows: CafeFinanceiroRow[] = [];
 
-  if (analyticsError) throw new Error(analyticsError.message);
-  if (alertasError) throw new Error(alertasError.message);
-  if (financeiroError) throw new Error(financeiroError.message);
+  const analyticsResult = await supabase
+    .from("vw_cafe_vendas_analytics")
+    .select(
+      "venda_id,dia_referencia,hora_referencia,cliente_pessoa_id,beneficiario_pessoa_id,perfil_consumidor,produto_id,produto_nome,produto_categoria,quantidade,preco_unitario_centavos,total_centavos,forma_pagamento,status_pagamento",
+    )
+    .gte("dia_referencia", range.dataInicio)
+    .lte("dia_referencia", range.dataFim);
+  if (analyticsResult.error) {
+    console.error("[CAFE_DASHBOARD][ANALYTICS][ERRO]", analyticsResult.error);
+  } else {
+    analytics = (analyticsResult.data ?? []) as CafeAnalyticsRow[];
+  }
 
-  const analytics = (analyticsData ?? []) as CafeAnalyticsRow[];
-  const alertas = (alertasData ?? []) as CafeInsumoAlertaRow[];
-  const financeiroRows = (financeiroData ?? []) as CafeFinanceiroRow[];
+  const alertasResult = await supabase
+    .from("vw_cafe_insumos_alertas")
+    .select("insumo_id,nome,estoque_atual,estoque_minimo,status_reposicao,custo_medio_centavos")
+    .order("status_reposicao", { ascending: true })
+    .order("nome", { ascending: true });
 
-  const contaIds = Array.from(
-    new Set(
-      financeiroRows
-        .map((row) => toNullableInt(row.conta_financeira_id))
-        .filter((value): value is number => typeof value === "number" && value > 0),
-    ),
-  );
+  if (alertasResult.error) {
+    console.warn("[CAFE_DASHBOARD][ESTOQUE][VIEW_FALLBACK]", alertasResult.error);
+    const fallbackAlertas = await supabase
+      .from("cafe_insumos")
+      .select("id,nome,estoque_atual,estoque_minimo,custo_medio_centavos")
+      .eq("ativo", true)
+      .order("nome", { ascending: true });
 
-  const contaFinanceiraNomeMap = new Map<number, string>();
-  if (contaIds.length > 0) {
-    const { data: contasData, error: contasError } = await supabase
-      .from("contas_financeiras")
-      .select("id,nome,codigo")
-      .in("id", contaIds);
+    if (fallbackAlertas.error) {
+      console.error("[CAFE_DASHBOARD][ESTOQUE][ERRO]", fallbackAlertas.error);
+    } else {
+      alertas = ((fallbackAlertas.data ?? []) as Array<Record<string, unknown>>).map((row) => {
+        const estoqueAtual = Number(row.estoque_atual ?? 0);
+        const estoqueMinimo = row.estoque_minimo === null ? null : Number(row.estoque_minimo ?? 0);
+        let status = "OK";
+        if (estoqueMinimo === null) status = "SEM_PARAMETRO";
+        else if (estoqueAtual <= 0) status = "ZERADO";
+        else if (estoqueAtual <= estoqueMinimo) status = "REPOR_AGORA";
+        else if (estoqueAtual <= estoqueMinimo * 1.5) status = "ATENCAO";
 
-    if (contasError) throw new Error(contasError.message);
-
-    for (const conta of (contasData ?? []) as Array<Record<string, unknown>>) {
-      const id = toNullableInt(conta.id);
-      if (!id) continue;
-      contaFinanceiraNomeMap.set(
-        id,
-        (typeof conta.nome === "string" && conta.nome.trim()) ||
-          (typeof conta.codigo === "string" && conta.codigo.trim()) ||
-          `Conta #${id}`,
-      );
+        return {
+          insumo_id: asInt(row.id) ?? 0,
+          nome: asString(row.nome) ?? "Insumo sem nome",
+          estoque_atual: estoqueAtual,
+          estoque_minimo: estoqueMinimo,
+          status_reposicao: status,
+          custo_medio_centavos: toNullableInt(row.custo_medio_centavos),
+        } satisfies CafeInsumoAlertaRow;
+      });
     }
+  } else {
+    alertas = (alertasResult.data ?? []) as CafeInsumoAlertaRow[];
+  }
+
+  const financeiroResult = await supabase
+    .from("cafe_vendas")
+    .select(
+      "valor_total_centavos,valor_pago_centavos,valor_em_aberto_centavos,forma_pagamento,tipo_quitacao,colaborador_pessoa_id,status_pagamento",
+    )
+    .gte("data_operacao", range.dataInicio)
+    .lte("data_operacao", range.dataFim)
+    .neq("status_pagamento", "CANCELADO");
+
+  if (financeiroResult.error) {
+    console.error("[CAFE_DASHBOARD][FINANCEIRO][ERRO]", financeiroResult.error);
+  } else {
+    financeiroRows = (financeiroResult.data ?? []) as CafeFinanceiroRow[];
   }
 
   const vendaIds = new Set<number>();
@@ -516,31 +561,22 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
     const total = Math.max(toInt(row.valor_total_centavos), 0);
     const pago = Math.max(toInt(row.valor_pago_centavos), 0);
     const aberto = Math.max(toInt(row.valor_em_aberto_centavos), 0);
-    const origemFinanceira = upper(row.origem_financeira);
-    const formaPagamentoCodigo = upper(row.forma_pagamento) || origemFinanceira || "NAO_INFORMADO";
-    const contaFinanceiraId = toNullableInt(row.conta_financeira_id);
-    const contaKey = String(contaFinanceiraId ?? 0);
-    const contaNome =
-      contaFinanceiraId === null
-        ? "Conta financeira nao resolvida"
-        : contaFinanceiraNomeMap.get(contaFinanceiraId) ?? `Conta #${contaFinanceiraId}`;
+    const categoria = inferCategoriaFinanceira(row);
+    const formaPagamentoCodigo = upper(row.forma_pagamento) || categoria || "NAO_INFORMADO";
 
-    if (origemFinanceira === "IMEDIATO" || !origemFinanceira) {
+    if (categoria === "IMEDIATO") {
       totalImediatoRecebido += pago;
     }
-    if (origemFinanceira === "CARTAO_EXTERNO") {
+    if (categoria === "CARTAO_EXTERNO") {
       totalRecebivelCartao += total;
     }
-    if (origemFinanceira === "CARTAO_CONEXAO_ALUNO") {
+    if (categoria === "CONTA_INTERNA_ALUNO") {
       totalContaInternaAluno += total;
     }
-    if (
-      origemFinanceira === "CARTAO_CONEXAO_COLABORADOR" ||
-      origemFinanceira === "CONTA_INTERNA"
-    ) {
+    if (categoria === "CONTA_INTERNA_COLABORADOR") {
       totalContaInternaColaborador += total;
     }
-    if (!isFluxoFuturo(origemFinanceira) && origemFinanceira !== "CARTAO_EXTERNO") {
+    if (categoria !== "CONTA_INTERNA_ALUNO" && categoria !== "CONTA_INTERNA_COLABORADOR") {
       totalPendenteLiquidacao += aberto;
     }
 
@@ -554,13 +590,20 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
     meioAtual.faturamento_centavos += total;
     meiosPagamentoMap.set(formaPagamentoCodigo, meioAtual);
 
-    const distribuicaoAtual = distribuicaoContasMap.get(contaKey) ?? {
-      conta_financeira_id: contaFinanceiraId,
-      conta_financeira_nome: contaNome,
+    const distribuicaoAtual = distribuicaoContasMap.get(categoria) ?? {
+      conta_financeira_id: null,
+      conta_financeira_nome:
+        categoria === "CONTA_INTERNA_ALUNO"
+          ? "Conta interna do aluno"
+          : categoria === "CONTA_INTERNA_COLABORADOR"
+            ? "Conta interna do colaborador"
+            : categoria === "CARTAO_EXTERNO"
+              ? "Recebivel de cartao"
+              : "Recebimento imediato",
       total_centavos: 0,
     };
     distribuicaoAtual.total_centavos += total;
-    distribuicaoContasMap.set(contaKey, distribuicaoAtual);
+    distribuicaoContasMap.set(categoria, distribuicaoAtual);
   }
 
   const resumo: CafeDashboardResumo = {

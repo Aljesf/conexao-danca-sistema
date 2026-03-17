@@ -74,6 +74,8 @@ export type ContaInternaElegibilidadeResponse = {
   };
 };
 
+const CONTEXTOS: ContextoSaas[] = ["CAFE", "LOJA", "ESCOLA", "FINANCEIRO", "ADMINISTRACAO"];
+
 type CentroCustoRow = Record<string, unknown> & {
   id?: number | string | null;
   codigo?: string | null;
@@ -147,6 +149,18 @@ function asStringArray(value: unknown): string[] {
     .map((item) => asString(item))
     .filter((item): item is string => Boolean(item))
     .map((item) => upper(item));
+}
+
+function contextMatchesCentro(contexto: string, centro: CentroCustoRow) {
+  const normalized = upper(contexto);
+  const contextos = asStringArray(centro.contextos_aplicaveis);
+  if (contextos.includes(normalized)) return true;
+
+  const codigo = upper(centro.codigo);
+  const nome = upper(centro.nome);
+  if (codigo === normalized) return true;
+  if (normalized === "FINANCEIRO" && codigo === "FIN") return true;
+  return Boolean(nome && nome.includes(normalized));
 }
 
 function normalizarCompradorTipo(value: string | null | undefined): CompradorTipoSaas {
@@ -227,6 +241,12 @@ function buildDisplayName(
   if (fluxo === "CONTA_INTERNA_ALUNO") return "Conta interna do aluno";
   if (fluxo === "CONTA_INTERNA_COLABORADOR") return "Conta interna do colaborador";
   return asString(contexto.descricao_exibicao) ?? asString(forma.nome) ?? asString(forma.codigo) ?? "Forma de pagamento";
+}
+
+function buildCentralName(forma: FormaPagamentoRow, fluxo: FormaPagamentoFluxoSaas) {
+  if (fluxo === "CONTA_INTERNA_ALUNO") return "Conta interna do aluno";
+  if (fluxo === "CONTA_INTERNA_COLABORADOR") return "Conta interna do colaborador";
+  return asString(forma.nome) ?? asString(forma.codigo) ?? "Forma de pagamento";
 }
 
 async function resolverCentroCustoPorContexto(
@@ -596,7 +616,7 @@ export async function listarFormasPagamentoCentrais(
   supabase: SupabaseLike,
 ): Promise<FormaPagamentoSaasCentral[]> {
   const [
-    { data: formasData, error: formasError },
+    formasResult,
     { data: contextoData, error: contextoError },
     { data: centrosData, error: centrosError },
   ] = await Promise.all([
@@ -612,9 +632,21 @@ export async function listarFormasPagamentoCentrais(
       .eq("ativo", true),
     supabase
       .from("centros_custo")
-      .select("id,contextos_aplicaveis,ativo")
+      .select("id,codigo,nome,contextos_aplicaveis,ativo")
       .eq("ativo", true),
   ]);
+
+  let formasData = formasResult.data;
+  let formasError = formasResult.error;
+  if (formasError) {
+    console.warn("[FORMAS_PAGAMENTO][CENTRAIS][FALLBACK_LEGADO]", formasError);
+    const legacyResult = await supabase
+      .from("formas_pagamento")
+      .select("id,codigo,nome,tipo_base,ativo")
+      .order("nome", { ascending: true });
+    formasData = legacyResult.data;
+    formasError = legacyResult.error;
+  }
 
   if (formasError) throw formasError;
   if (contextoError) throw contextoError;
@@ -624,7 +656,8 @@ export async function listarFormasPagamentoCentrais(
   for (const centro of (centrosData ?? []) as CentroCustoRow[]) {
     const id = asInt(centro.id);
     if (!id) continue;
-    centrosMap.set(id, asStringArray(centro.contextos_aplicaveis));
+    const contextos = CONTEXTOS.filter((contexto) => contextMatchesCentro(contexto, centro));
+    centrosMap.set(id, contextos);
   }
 
   const contextoByCodigo = new Map<string, { centros: Set<number>; contextos: Set<string> }>();
@@ -647,7 +680,7 @@ export async function listarFormasPagamentoCentrais(
     return {
       id: asInt(forma.id) ?? 0,
       codigo: asString(forma.codigo) ?? "",
-      nome: asString(forma.nome) ?? "",
+      nome: buildCentralName(forma, tipoFluxo),
       tipo_fluxo: tipoFluxo,
       exige_troco: inferExigeTroco(forma, tipoFluxo),
       exige_maquininha: inferExigeMaquininha(forma, tipoFluxo),
@@ -701,13 +734,38 @@ export async function upsertFormaPagamentoSaas(params: {
   };
 
   if (formaAtual?.id) {
-    const { error } = await supabase.from("formas_pagamento").update(formaPayload).eq("id", formaAtual.id);
+    let { error } = await supabase.from("formas_pagamento").update(formaPayload).eq("id", formaAtual.id);
+    if (error && /tipo_fluxo_saas|exige_troco|exige_maquininha|exige_bandeira|exige_conta_interna/i.test(error.message)) {
+      console.warn("[FORMAS_PAGAMENTO][UPSERT][FALLBACK_LEGADO_UPDATE]", error);
+      error = (
+        await supabase.from("formas_pagamento").update({
+          codigo,
+          nome: payload.nome.trim(),
+          tipo_base: tipoBase,
+          ativo: payload.ativo,
+          updated_at: new Date().toISOString(),
+        }).eq("id", formaAtual.id)
+      ).error;
+    }
     if (error) throw error;
   } else {
-    const { error } = await supabase.from("formas_pagamento").insert({
+    let { error } = await supabase.from("formas_pagamento").insert({
       ...formaPayload,
       created_at: new Date().toISOString(),
     });
+    if (error && /tipo_fluxo_saas|exige_troco|exige_maquininha|exige_bandeira|exige_conta_interna/i.test(error.message)) {
+      console.warn("[FORMAS_PAGAMENTO][UPSERT][FALLBACK_LEGADO_INSERT]", error);
+      error = (
+        await supabase.from("formas_pagamento").insert({
+          codigo,
+          nome: payload.nome.trim(),
+          tipo_base: tipoBase,
+          ativo: payload.ativo,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+      ).error;
+    }
     if (error) throw error;
   }
 
@@ -720,10 +778,7 @@ export async function upsertFormaPagamentoSaas(params: {
 
   const contextos = payload.contextos.map((item) => upper(item));
   const centroIdsContexto = ((centrosData ?? []) as CentroCustoRow[])
-    .filter((item) => {
-      const contextosCentro = asStringArray(item.contextos_aplicaveis);
-      return contextos.some((contexto) => contextosCentro.includes(contexto));
-    })
+    .filter((item) => contextos.some((contexto) => contextMatchesCentro(contexto, item)))
     .map((item) => asInt(item.id))
     .filter((item): item is number => Boolean(item));
 

@@ -5,8 +5,8 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 // GET /api/financeiro/credito-conexao/contas
 // Lista todas as contas de Crédito Conexão (sem joins por enquanto).
 export async function GET(req: NextRequest) {
-  const denied = await guardApiByRole(req as any);
-  if (denied) return denied as any;
+  const denied = await guardApiByRole(req as unknown as Request);
+  if (denied) return denied as unknown as NextResponse;
   try {
     const auth = await requireUser(req);
     if (auth instanceof NextResponse) return auth;
@@ -19,9 +19,6 @@ export async function GET(req: NextRequest) {
       id,
       pessoa_titular_id,
       tipo_conta,
-      tipo_titular,
-      responsavel_financeiro_pessoa_id,
-      tipo_liquidacao,
       descricao_exibicao,
       dia_fechamento,
       dia_vencimento,
@@ -56,7 +53,13 @@ export async function GET(req: NextRequest) {
     const { data: contasJoin, error: joinError } = await joinQuery;
 
     if (!joinError) {
-      return NextResponse.json({ ok: true, contas: contasJoin ?? [] });
+      const contasNormalizadas = (contasJoin ?? []).map((item) => ({
+        ...item,
+        tipo_titular: null,
+        responsavel_financeiro_pessoa_id: null,
+        tipo_liquidacao: item.tipo_conta === "COLABORADOR" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
+      }));
+      return NextResponse.json({ ok: true, contas: contasNormalizadas });
     }
 
     let baseQuery = supabase
@@ -108,10 +111,13 @@ export async function GET(req: NextRequest) {
     const contasOut = (contasBase ?? []).map((c) => ({
       ...c,
       titular: pessoasMap.get(c.pessoa_titular_id) ?? null,
+      tipo_titular: null,
+      responsavel_financeiro_pessoa_id: null,
+      tipo_liquidacao: c.tipo_conta === "COLABORADOR" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
     }));
 
     return NextResponse.json({ ok: true, contas: contasOut });
-  } catch (err: any) {
+  } catch (err) {
     console.error("Erro inesperado em GET /credito-conexao/contas", err);
     return NextResponse.json(
       { ok: false, error: "erro_interno_credito_conexao_get" },
@@ -123,8 +129,8 @@ export async function GET(req: NextRequest) {
 // POST /api/financeiro/credito-conexao/contas
 // Cria ou atualiza uma conta de Crédito Conexão.
 export async function POST(req: NextRequest) {
-  const denied = await guardApiByRole(req as any);
-  if (denied) return denied as any;
+  const denied = await guardApiByRole(req as unknown as Request);
+  if (denied) return denied as unknown as NextResponse;
   try {
     const auth = await requireUser(req);
     if (auth instanceof NextResponse) return auth;
@@ -136,9 +142,6 @@ export async function POST(req: NextRequest) {
       id,
       pessoa_titular_id,
       tipo_conta,
-      tipo_titular,
-      responsavel_financeiro_pessoa_id,
-      tipo_liquidacao,
       descricao_exibicao,
       dia_fechamento,
       dia_vencimento,
@@ -164,12 +167,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const payload: any = {
+    const payload = {
       pessoa_titular_id: Number(pessoa_titular_id),
       tipo_conta,
-      tipo_titular: tipo_titular ?? null,
-      responsavel_financeiro_pessoa_id: responsavel_financeiro_pessoa_id ?? null,
-      tipo_liquidacao: tipo_liquidacao ?? null,
       descricao_exibicao: descricao_exibicao || null,
       dia_fechamento: dia_fechamento ?? 10,
       dia_vencimento: dia_vencimento ?? null,
@@ -227,7 +227,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, conta: result });
-  } catch (err: any) {
+  } catch (err) {
     console.error("Erro inesperado em POST /credito-conexao/contas", err);
     return NextResponse.json(
       { ok: false, error: "erro_interno_credito_conexao_post" },

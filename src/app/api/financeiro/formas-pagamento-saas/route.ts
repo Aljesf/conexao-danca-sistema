@@ -38,14 +38,17 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
     const itens = await listarFormasPagamentoCentrais(supabase);
-    return NextResponse.json({ itens }, { status: 200 });
+    return NextResponse.json({ ok: true, erro_controlado: null, itens }, { status: 200 });
   } catch (error) {
+    console.error("[FORMAS_PAGAMENTO_SAAS][GET][ERRO]", error);
     return NextResponse.json(
       {
-        error: "falha_listar_formas_pagamento_saas",
+        ok: false,
+        erro_controlado: "falha_listar_formas_pagamento_saas",
         detalhe: error instanceof Error ? error.message : "erro_desconhecido",
+        itens: [],
       },
-      { status: 500 },
+      { status: 200 },
     );
   }
 }
@@ -80,8 +83,9 @@ export async function POST(request: NextRequest) {
     });
 
     const itens = await listarFormasPagamentoCentrais(supabase);
-    return NextResponse.json({ ok: true, itens }, { status: 200 });
+    return NextResponse.json({ ok: true, erro_controlado: null, itens }, { status: 200 });
   } catch (error) {
+    console.error("[FORMAS_PAGAMENTO_SAAS][POST][ERRO]", error);
     return NextResponse.json(
       {
         error: "falha_salvar_forma_pagamento_saas",
