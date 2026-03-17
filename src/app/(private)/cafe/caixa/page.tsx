@@ -1,22 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { SystemContextCard } from "@/components/system/SystemContextCard";
-import { SystemHelpCard } from "@/components/system/SystemHelpCard";
-import { SystemPage } from "@/components/system/SystemPage";
-import { SystemSectionCard } from "@/components/system/SystemSectionCard";
-
-type ProdutoOption = {
-  id: number;
-  nome: string;
-  preco_venda_centavos: number;
-};
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import CafeCard from "@/components/cafe/CafeCard";
+import CafeCatalogoProdutos, { type CafeCatalogoProduto } from "@/components/cafe/catalogo/CafeCatalogoProdutos";
+import CafePageShell from "@/components/cafe/CafePageShell";
+import CafePanel from "@/components/cafe/CafePanel";
+import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
+import CafeStatCard from "@/components/cafe/CafeStatCard";
 
 type ColaboradorOption = {
   id: number;
   pessoa_id: number | null;
   nome: string;
+};
+
+type PessoaBuscaItem = {
+  id: number;
+  nome: string;
+  email?: string | null;
 };
 
 type ComandaItem = {
@@ -28,6 +30,8 @@ type ComandaItem = {
 
 type Comanda = {
   id: number;
+  pagador_pessoa_id: number | null;
+  pagador_nome?: string | null;
   data_operacao: string;
   data_competencia: string | null;
   colaborador_pessoa_id: number | null;
@@ -38,6 +42,7 @@ type Comanda = {
   valor_pago_centavos: number;
   valor_em_aberto_centavos: number;
   cobranca_id: number | null;
+  forma_pagamento?: string | null;
   observacoes_internas: string | null;
   cafe_venda_itens?: ComandaItem[];
   fatura?: { id?: number; periodo_referencia?: string | null; status?: string | null } | null;
@@ -50,7 +55,113 @@ type ItemForm = {
   valor_unitario_centavos: number;
 };
 
+type BuyerType = "SEM_VINCULO" | "PESSOA_AVULSA" | "COLABORADOR" | "CARGO_SETOR";
+
+type ShortcutId = "retroativo" | "baixa" | "conta" | "recentes";
+
+type SectionId = "formulario" | "baixa" | "conta" | "recentes";
+
+type ComandaFilters = {
+  dataInicial: string;
+  dataFinal: string;
+  colaboradorPessoaId: string;
+  status: string;
+  competencia: string;
+};
+
+type CaixaSectionProps = {
+  anchor: string;
+  title: string;
+  description: string;
+  children: ReactNode;
+  active?: boolean;
+  variant?: "default" | "muted" | "stats";
+  actions?: ReactNode;
+};
+
+type ShortcutCardProps = {
+  badge: string;
+  title: string;
+  description: string;
+  active?: boolean;
+  onClick: () => void;
+};
+
+type EmptyStateProps = {
+  title: string;
+  description: string;
+  hint?: string;
+  tone?: "default" | "warning";
+};
+
+type StatusBadgeProps = {
+  kind: "status" | "quitacao";
+  value: string;
+};
+
+type MetricTileProps = {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+};
+
+type ComandaFilaCardProps = {
+  comanda: Comanda;
+  onEditar: (id: number) => void;
+  onDarBaixa: (comanda: Comanda) => void;
+  onContaInterna: (comanda: Comanda) => void;
+};
+
 const STATUS_OPTIONS = ["", "PENDENTE", "PARCIAL", "PAGO", "FATURADO", "CANCELADO"] as const;
+const PAGAMENTO_OPTIONS = [
+  { value: "DINHEIRO", label: "Dinheiro" },
+  { value: "PIX", label: "Pix" },
+  { value: "CARTAO", label: "Cartao" },
+  { value: "TICKET", label: "Ticket" },
+  { value: "TRANSFERENCIA", label: "Transferencia" },
+] as const;
+const BUYER_TYPE_OPTIONS: Array<{
+  value: BuyerType;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "SEM_VINCULO",
+    label: "Sem vinculo",
+    description: "Lancamento administrativo sem associacao direta.",
+  },
+  {
+    value: "PESSOA_AVULSA",
+    label: "Pessoa avulsa",
+    description: "Venda normal com comprador identificado, sem conta interna.",
+  },
+  {
+    value: "COLABORADOR",
+    label: "Colaborador",
+    description: "Permite saldo em conta interna e integracao com fatura/folha.",
+  },
+  {
+    value: "CARGO_SETOR",
+    label: "Cargo / setor",
+    description: "Estrutura preparada para evolucao futura sem quebrar a tela.",
+  },
+] as const;
+const SECTION_TARGETS: Record<SectionId, string> = {
+  formulario: "caixa-formulario",
+  baixa: "caixa-baixa",
+  conta: "caixa-conta-interna",
+  recentes: "caixa-recentes",
+};
+const BUTTON_PRIMARY =
+  "rounded-full bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60";
+const BUTTON_SECONDARY =
+  "rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
+const BUTTON_GHOST =
+  "rounded-full border border-[#e4d3bc] bg-[#fff8ef] px-4 py-2.5 text-sm font-medium text-[#8c6640] transition hover:border-[#d5ba92] hover:bg-[#fff2df] disabled:cursor-not-allowed disabled:opacity-60";
+
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
 
 function brl(value: number) {
   return (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -66,8 +177,286 @@ function competenciaFromDate(dateIso: string) {
   return dateIso.slice(0, 7);
 }
 
+function mergeItensForm(items: ItemForm[]) {
+  const grouped = new Map<number, ItemForm>();
+
+  items.forEach((item) => {
+    const current = grouped.get(item.produto_id);
+    if (current) {
+      grouped.set(item.produto_id, {
+        ...current,
+        quantidade: current.quantidade + item.quantidade,
+        valor_unitario_centavos: item.valor_unitario_centavos || current.valor_unitario_centavos,
+        nome: item.nome || current.nome,
+      });
+      return;
+    }
+
+    grouped.set(item.produto_id, { ...item });
+  });
+
+  return Array.from(grouped.values());
+}
+
+function formatTipoQuitacao(value: Comanda["tipo_quitacao"]) {
+  switch (value) {
+    case "IMEDIATA":
+      return "Pagamento imediato";
+    case "PARCIAL":
+      return "Pagamento parcial";
+    case "CONTA_INTERNA_COLABORADOR":
+      return "Conta interna";
+    default:
+      return value;
+  }
+}
+
+function formatStatus(value: Comanda["status_pagamento"]) {
+  switch (value) {
+    case "PENDENTE":
+      return "Pendente";
+    case "PARCIAL":
+      return "Parcial";
+    case "PAGO":
+      return "Pago";
+    case "FATURADO":
+      return "Faturado";
+    case "CANCELADO":
+      return "Cancelado";
+    default:
+      return value;
+  }
+}
+
+function formatBuyerType(value: BuyerType) {
+  switch (value) {
+    case "PESSOA_AVULSA":
+      return "Pessoa avulsa";
+    case "COLABORADOR":
+      return "Colaborador";
+    case "CARGO_SETOR":
+      return "Cargo / setor";
+    default:
+      return "Sem vinculo";
+  }
+}
+
+function formatFormaPagamento(value: string | null | undefined) {
+  const normalized = value?.trim().toUpperCase();
+  switch (normalized) {
+    case "DINHEIRO":
+      return "Dinheiro";
+    case "PIX":
+      return "Pix";
+    case "CARTAO":
+      return "Cartao";
+    case "TICKET":
+      return "Ticket";
+    case "TRANSFERENCIA":
+      return "Transferencia";
+    case "CONTA_INTERNA_COLABORADOR":
+      return "Conta interna";
+    default:
+      return value?.trim() || "Nao informado";
+  }
+}
+
+function scrollToSection(section: SectionId) {
+  if (typeof document === "undefined") return;
+  document.getElementById(SECTION_TARGETS[section])?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
+function CaixaSection({
+  anchor,
+  title,
+  description,
+  children,
+  active = false,
+  variant = "default",
+  actions,
+}: CaixaSectionProps) {
+  return (
+    <div id={anchor} className="scroll-mt-28">
+      <CafeCard
+        title={title}
+        description={description}
+        actions={actions}
+        variant={active && variant === "default" ? "muted" : variant}
+        className={cx(active && "ring-1 ring-[#d9b58b]/60")}
+      >
+        {children}
+      </CafeCard>
+    </div>
+  );
+}
+
+function ShortcutCard({ badge, title, description, active = false, onClick }: ShortcutCardProps) {
+  return (
+    <button
+      type="button"
+      className={cx(
+        "group flex h-full flex-col gap-4 rounded-[22px] border px-5 py-5 text-left transition",
+        active
+          ? "border-[#d2b086] bg-[linear-gradient(180deg,#fffef9_0%,#fff3df_100%)] shadow-[0_20px_44px_-28px_rgba(180,126,58,0.35)]"
+          : "border-slate-200/80 bg-white shadow-[0_14px_36px_-28px_rgba(15,23,42,0.28)] hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_20px_44px_-28px_rgba(15,23,42,0.25)]",
+      )}
+      onClick={onClick}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span
+          className={cx(
+            "rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]",
+            active ? "bg-[#d7b186] text-[#53361b]" : "bg-slate-100 text-slate-600",
+          )}
+        >
+          {badge}
+        </span>
+        <span className="text-sm font-medium text-slate-500 group-hover:text-slate-700">Ir para</span>
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold tracking-tight text-slate-950">{title}</h2>
+        <p className="text-sm leading-6 text-slate-600">{description}</p>
+      </div>
+    </button>
+  );
+}
+
+function EmptyState({ title, description, hint, tone = "default" }: EmptyStateProps) {
+  return (
+    <div
+      className={cx(
+        "rounded-[22px] border border-dashed px-5 py-6",
+        tone === "warning" ? "border-[#e1c59f] bg-[#fff8ee]" : "border-slate-200 bg-slate-50/80",
+      )}
+    >
+      <div className="space-y-2">
+        <h3 className="text-base font-semibold tracking-tight text-slate-950">{title}</h3>
+        <p className="text-sm leading-6 text-slate-600">{description}</p>
+        {hint ? <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">{hint}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ kind, value }: StatusBadgeProps) {
+  const classes =
+    kind === "status"
+      ? {
+          PENDENTE: "border-[#f3d0d0] bg-[#fff4f4] text-[#9f3a38]",
+          PARCIAL: "border-[#ead8ae] bg-[#fff8e8] text-[#8f6a22]",
+          PAGO: "border-[#cfe7d2] bg-[#f3fbf4] text-[#2f6a3a]",
+          FATURADO: "border-[#cfdbee] bg-[#f3f7ff] text-[#355d94]",
+          CANCELADO: "border-slate-200 bg-slate-100 text-slate-600",
+        }[value] ?? "border-slate-200 bg-slate-100 text-slate-600"
+      : {
+          IMEDIATA: "border-[#d5e5d7] bg-[#f4fbf5] text-[#2e6b38]",
+          PARCIAL: "border-[#ead8ae] bg-[#fff8e8] text-[#8f6a22]",
+          CONTA_INTERNA_COLABORADOR: "border-[#e3d0b5] bg-[#fff6eb] text-[#8c6640]",
+        }[value] ?? "border-slate-200 bg-slate-100 text-slate-600";
+
+  const label =
+    kind === "status"
+      ? formatStatus(value as Comanda["status_pagamento"])
+      : formatTipoQuitacao(value as Comanda["tipo_quitacao"]);
+
+  return (
+    <span className={cx("inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold", classes)}>
+      {label}
+    </span>
+  );
+}
+
+function MetricTile({ label, value, emphasis = false }: MetricTileProps) {
+  return (
+    <div className={cx("rounded-[18px] border px-4 py-3", emphasis ? "border-[#e3c39a] bg-[#fff7ea]" : "border-slate-200 bg-white")}>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+      <div className="mt-2 text-sm font-semibold text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: ComandaFilaCardProps) {
+  const temSaldoAberto = comanda.valor_em_aberto_centavos > 0;
+  const tituloComprador =
+    comanda.colaborador_nome ?? comanda.pagador_nome ?? "Comanda administrativa sem vinculo";
+  const subtituloComprador = comanda.colaborador_nome
+    ? "Comprador vinculado como colaborador."
+    : comanda.pagador_nome
+      ? "Comprador identificado como pessoa avulsa."
+      : "Sem vinculo especifico informado.";
+
+  return (
+    <article className="rounded-[24px] border border-slate-200/80 bg-white px-5 py-5 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.28)]">
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white">#{comanda.id}</span>
+            <StatusBadge kind="status" value={comanda.status_pagamento} />
+            <StatusBadge kind="quitacao" value={comanda.tipo_quitacao} />
+            {comanda.data_competencia ? (
+              <span className="rounded-full border border-[#e6d6bf] bg-[#fff8ef] px-3 py-1 text-xs font-semibold text-[#8c6640]">
+                {comanda.data_competencia}
+              </span>
+            ) : null}
+            {comanda.forma_pagamento ? (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                {formatFormaPagamento(comanda.forma_pagamento)}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="space-y-1">
+            <h3 className="text-base font-semibold tracking-tight text-slate-950">{tituloComprador}</h3>
+            <p className="text-sm leading-6 text-slate-600">
+              Operacao em {comanda.data_operacao}. {subtituloComprador}{" "}
+              {comanda.cafe_venda_itens?.length ? `${comanda.cafe_venda_itens.length} item(ns) registrados.` : "Itens nao detalhados nesta consulta."}
+            </p>
+          </div>
+
+          {comanda.observacoes_internas ? (
+            <CafePanel className="px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Observacao interna</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{comanda.observacoes_internas}</p>
+            </CafePanel>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[340px]">
+          <MetricTile label="Total" value={brl(comanda.valor_total_centavos)} />
+          <MetricTile label="Pago" value={brl(comanda.valor_pago_centavos)} />
+          <MetricTile label="Saldo aberto" value={brl(comanda.valor_em_aberto_centavos)} emphasis={temSaldoAberto} />
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button type="button" className={BUTTON_SECONDARY} onClick={() => onEditar(comanda.id)}>
+          Editar
+        </button>
+        <button type="button" className={BUTTON_SECONDARY} disabled={!temSaldoAberto} onClick={() => onDarBaixa(comanda)}>
+          Dar baixa
+        </button>
+        <button type="button" className={BUTTON_GHOST} disabled={!temSaldoAberto} onClick={() => onContaInterna(comanda)}>
+          Enviar para conta interna
+        </button>
+        {comanda.cobranca_id ? (
+          <Link className={BUTTON_SECONDARY} href={`/admin/governanca/cobrancas/${comanda.cobranca_id}`}>
+            Ver cobranca
+          </Link>
+        ) : null}
+        {comanda.fatura?.id ? (
+          <Link className={BUTTON_SECONDARY} href={`/admin/financeiro/credito-conexao/faturas/${comanda.fatura.id}`}>
+            Ver fatura
+          </Link>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export default function CafeCaixaPage() {
-  const [produtos, setProdutos] = useState<ProdutoOption[]>([]);
   const [colaboradores, setColaboradores] = useState<ColaboradorOption[]>([]);
   const [comandas, setComandas] = useState<Comanda[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,15 +466,21 @@ export default function CafeCaixaPage() {
   const [modo, setModo] = useState<"DIA" | "RETROATIVO">("DIA");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [dataOperacao, setDataOperacao] = useState(todayIso());
+  const [tipoComprador, setTipoComprador] = useState<BuyerType>("SEM_VINCULO");
+  const [compradorSelecionado, setCompradorSelecionado] = useState<PessoaBuscaItem | null>(null);
+  const [buscaComprador, setBuscaComprador] = useState("");
+  const [compradores, setCompradores] = useState<PessoaBuscaItem[]>([]);
+  const [compradoresLoading, setCompradoresLoading] = useState(false);
   const [colaboradorPessoaId, setColaboradorPessoaId] = useState<string>("");
+  const [buscaColaborador, setBuscaColaborador] = useState("");
+  const [cargoSetorLabel, setCargoSetorLabel] = useState("");
   const [tipoQuitacao, setTipoQuitacao] = useState<"IMEDIATA" | "PARCIAL" | "CONTA_INTERNA_COLABORADOR">("IMEDIATA");
   const [competencia, setCompetencia] = useState(competenciaFromDate(todayIso()));
   const [observacoesInternas, setObservacoesInternas] = useState("");
   const [metodoPagamento, setMetodoPagamento] = useState("DINHEIRO");
   const [valorPagoCentavos, setValorPagoCentavos] = useState("0");
   const [itens, setItens] = useState<ItemForm[]>([]);
-  const [produtoId, setProdutoId] = useState<string>("");
-  const [quantidade, setQuantidade] = useState("1");
+  const [atalhoAtivo, setAtalhoAtivo] = useState<ShortcutId | null>(null);
 
   const [filtroDataInicial, setFiltroDataInicial] = useState(todayIso());
   const [filtroDataFinal, setFiltroDataFinal] = useState(todayIso());
@@ -105,33 +500,135 @@ export default function CafeCaixaPage() {
     () => itens.reduce((acc, item) => acc + item.valor_unitario_centavos * item.quantidade, 0),
     [itens],
   );
+  const quantidadesPorProdutoId = useMemo(
+    () =>
+      itens.reduce<Record<number, number>>((acc, item) => {
+        acc[item.produto_id] = (acc[item.produto_id] ?? 0) + item.quantidade;
+        return acc;
+      }, {}),
+    [itens],
+  );
+  const valorPagoAberturaCentavos = Number(valorPagoCentavos || "0");
+  const saldoPrevistoCentavos = Math.max(totalItensCentavos - valorPagoAberturaCentavos, 0);
+  const isContaInterna = tipoQuitacao === "CONTA_INTERNA_COLABORADOR";
+  const competenciaSugerida = competencia || competenciaFromDate(dataOperacao);
+  const competenciaAtual = competenciaFromDate(todayIso());
+
+  const colaboradorAtual = useMemo(
+    () => colaboradores.find((item) => String(item.pessoa_id ?? "") === colaboradorPessoaId) ?? null,
+    [colaboradores, colaboradorPessoaId],
+  );
+
+  const colaboradoresFiltrados = useMemo(() => {
+    const query = buscaColaborador.trim().toLowerCase();
+    const base = query
+      ? colaboradores.filter((item) => item.nome.toLowerCase().includes(query))
+      : colaboradores;
+    return base.filter((item) => item.pessoa_id).slice(0, 8);
+  }, [buscaColaborador, colaboradores]);
+
+  const baixaSelecionada = useMemo(
+    () => comandas.find((comanda) => comanda.id === baixaId) ?? null,
+    [comandas, baixaId],
+  );
+
+  const contaInternaSelecionada = useMemo(
+    () => comandas.find((comanda) => comanda.id === contaInternaId) ?? null,
+    [comandas, contaInternaId],
+  );
+
+  const pendenciasAbertas = useMemo(
+    () => comandas.filter((comanda) => comanda.valor_em_aberto_centavos > 0).length,
+    [comandas],
+  );
+
+  const saldoAbertoFila = useMemo(
+    () => comandas.reduce((acc, comanda) => acc + comanda.valor_em_aberto_centavos, 0),
+    [comandas],
+  );
+
+  const faturadasNaFila = useMemo(
+    () => comandas.filter((comanda) => comanda.status_pagamento === "FATURADO").length,
+    [comandas],
+  );
+
+  const retroativasNaFila = useMemo(
+    () => comandas.filter((comanda) => comanda.data_operacao !== todayIso()).length,
+    [comandas],
+  );
+
+  const compradorNome =
+    tipoComprador === "COLABORADOR"
+      ? colaboradorAtual?.nome ?? "Nenhum colaborador selecionado"
+      : tipoComprador === "PESSOA_AVULSA"
+        ? compradorSelecionado?.nome ?? "Nenhuma pessoa selecionada"
+        : tipoComprador === "CARGO_SETOR"
+          ? cargoSetorLabel || "Preparado para vinculo futuro"
+          : "Sem vinculo especifico";
+
+  const compradorPessoaId = tipoComprador === "PESSOA_AVULSA" ? compradorSelecionado?.id ?? null : null;
+  const compradorColaboradorId =
+    tipoComprador === "COLABORADOR" ? Number(colaboradorPessoaId || "0") || null : null;
+  const permiteContaInterna = tipoComprador === "COLABORADOR" && Boolean(compradorColaboradorId);
+
+  const destinoFinanceiro = isContaInterna
+    ? permiteContaInterna
+      ? "Conta interna do colaborador por competencia"
+      : "Conta interna aguardando colaborador valido"
+    : saldoPrevistoCentavos > 0
+      ? permiteContaInterna
+        ? "Saldo em aberto para baixa real ou conta interna"
+        : "Saldo em aberto aguardando baixa real"
+      : "Recebimento imediato no caixa";
+
+  const statusPrevisto = editingId
+    ? "Ajuste operacional"
+    : isContaInterna && !permiteContaInterna
+      ? "Aguardando colaborador"
+      : isContaInterna
+      ? "Faturado"
+      : saldoPrevistoCentavos === 0
+        ? "Pago"
+        : valorPagoAberturaCentavos > 0
+          ? "Parcial"
+          : "Pendente";
+
+  const filtrosAtivos =
+    Boolean(filtroColaboradorPessoaId) ||
+    Boolean(filtroStatus) ||
+    filtroCompetencia !== competenciaAtual ||
+    filtroDataInicial !== todayIso() ||
+    filtroDataFinal !== todayIso();
+
+  function filtrosComOverrides(overrides?: Partial<ComandaFilters>): ComandaFilters {
+    return {
+      dataInicial: overrides?.dataInicial ?? filtroDataInicial,
+      dataFinal: overrides?.dataFinal ?? filtroDataFinal,
+      colaboradorPessoaId: overrides?.colaboradorPessoaId ?? filtroColaboradorPessoaId,
+      status: overrides?.status ?? filtroStatus,
+      competencia: overrides?.competencia ?? filtroCompetencia,
+    };
+  }
 
   async function carregarBases() {
-    const [produtosRes, colaboradoresRes] = await Promise.all([
-      fetch("/api/cafe/produtos?pageSize=200", { cache: "no-store" }),
-      fetch("/api/admin/colaboradores/opcoes", { cache: "no-store" }),
-    ]);
-
-    const produtosJson = (await produtosRes.json().catch(() => null)) as
-      | { data?: { items?: ProdutoOption[] } }
-      | null;
+    const colaboradoresRes = await fetch("/api/admin/colaboradores/opcoes", { cache: "no-store" });
     const colaboradoresJson = (await colaboradoresRes.json().catch(() => null)) as
       | { data?: ColaboradorOption[] }
       | null;
 
-    setProdutos(produtosJson?.data?.items ?? []);
     setColaboradores(colaboradoresJson?.data ?? []);
   }
 
-  async function carregarComandas() {
+  async function carregarComandas(overrides?: Partial<ComandaFilters>) {
     setLoading(true);
     try {
+      const filtros = filtrosComOverrides(overrides);
       const params = new URLSearchParams();
-      if (filtroDataInicial) params.set("data_inicial", filtroDataInicial);
-      if (filtroDataFinal) params.set("data_final", filtroDataFinal);
-      if (filtroColaboradorPessoaId) params.set("colaborador_pessoa_id", filtroColaboradorPessoaId);
-      if (filtroStatus) params.set("status_pagamento", filtroStatus);
-      if (filtroCompetencia) params.set("competencia", filtroCompetencia);
+      if (filtros.dataInicial) params.set("data_inicial", filtros.dataInicial);
+      if (filtros.dataFinal) params.set("data_final", filtros.dataFinal);
+      if (filtros.colaboradorPessoaId) params.set("colaborador_pessoa_id", filtros.colaboradorPessoaId);
+      if (filtros.status) params.set("status_pagamento", filtros.status);
+      if (filtros.competencia) params.set("competencia", filtros.competencia);
 
       const res = await fetch(`/api/cafe/caixa?${params.toString()}`, { cache: "no-store" });
       const json = (await res.json().catch(() => null)) as { data?: Comanda[]; error?: string } | null;
@@ -145,7 +642,18 @@ export default function CafeCaixaPage() {
   }
 
   useEffect(() => {
-    void carregarBases().then(() => carregarComandas());
+    async function iniciar() {
+      try {
+        await carregarBases();
+        await carregarComandas();
+      } catch (error) {
+        setMensagem(error instanceof Error ? error.message : "falha_inicializar_caixa");
+        setLoading(false);
+      }
+    }
+
+    void iniciar();
+    // Initial load happens once; the fetchers read current default filters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -159,34 +667,170 @@ export default function CafeCaixaPage() {
     }
   }, [modo, tipoQuitacao]);
 
+  useEffect(() => {
+    if (modo === "RETROATIVO") {
+      setAtalhoAtivo("retroativo");
+    }
+  }, [modo]);
+
+  useEffect(() => {
+    if (isContaInterna) {
+      setAtalhoAtivo("conta");
+    }
+  }, [isContaInterna]);
+
+  useEffect(() => {
+    if (tipoComprador === "COLABORADOR") {
+      if (compradorSelecionado) {
+        setCompradorSelecionado(null);
+      }
+      return;
+    }
+
+    if (colaboradorPessoaId) {
+      setColaboradorPessoaId("");
+    }
+    if (buscaColaborador) {
+      setBuscaColaborador("");
+    }
+
+    if (tipoComprador !== "PESSOA_AVULSA" && compradorSelecionado) {
+      setCompradorSelecionado(null);
+      setBuscaComprador("");
+      setCompradores([]);
+    }
+
+    if (tipoComprador !== "CARGO_SETOR" && cargoSetorLabel) {
+      setCargoSetorLabel("");
+    }
+  }, [
+    buscaColaborador,
+    cargoSetorLabel,
+    colaboradorPessoaId,
+    compradorSelecionado,
+    tipoComprador,
+  ]);
+
+  useEffect(() => {
+    if (tipoComprador === "COLABORADOR") return;
+    if (tipoQuitacao === "CONTA_INTERNA_COLABORADOR") {
+      setTipoQuitacao(saldoPrevistoCentavos > 0 ? "PARCIAL" : "IMEDIATA");
+    }
+  }, [saldoPrevistoCentavos, tipoComprador, tipoQuitacao]);
+
+  useEffect(() => {
+    if (baixaId) {
+      setAtalhoAtivo("baixa");
+    }
+  }, [baixaId]);
+
+  useEffect(() => {
+    const term = buscaComprador.trim();
+    if (tipoComprador !== "PESSOA_AVULSA") return;
+    if (compradorSelecionado && buscaComprador === compradorSelecionado.nome) {
+      setCompradores([]);
+      return;
+    }
+    if (term.length < 2) {
+      setCompradores([]);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function carregarCompradores() {
+      setCompradoresLoading(true);
+      try {
+        const response = await fetch(`/api/pessoas/busca?query=${encodeURIComponent(term)}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as
+          | { items?: PessoaBuscaItem[]; error?: string }
+          | null;
+
+        if (!response.ok) {
+          throw new Error(payload?.error ?? "falha_buscar_compradores");
+        }
+
+        setCompradores(Array.isArray(payload?.items) ? payload.items : []);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setCompradores([]);
+          setMensagem(error instanceof Error ? error.message : "falha_buscar_compradores");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setCompradoresLoading(false);
+        }
+      }
+    }
+
+    void carregarCompradores();
+    return () => controller.abort();
+  }, [buscaComprador, compradorSelecionado, tipoComprador]);
+
   function limparFormulario() {
     setEditingId(null);
     setModo("DIA");
     setDataOperacao(todayIso());
+    setTipoComprador("SEM_VINCULO");
+    setCompradorSelecionado(null);
+    setBuscaComprador("");
+    setCompradores([]);
     setColaboradorPessoaId("");
+    setBuscaColaborador("");
+    setCargoSetorLabel("");
     setTipoQuitacao("IMEDIATA");
     setCompetencia(competenciaFromDate(todayIso()));
     setObservacoesInternas("");
     setMetodoPagamento("DINHEIRO");
     setValorPagoCentavos("0");
     setItens([]);
+    setBaixaId(null);
+    setBaixaValorCentavos("");
+    setContaInternaId(null);
+    setContaInternaColaboradorPessoaId("");
+    setContaInternaCompetencia(competenciaFromDate(todayIso()));
+    setAtalhoAtivo(null);
   }
 
-  function adicionarItem() {
-    const produto = produtos.find((item) => item.id === Number(produtoId));
-    const qty = Number(quantidade);
-    if (!produto || !Number.isFinite(qty) || qty <= 0) return;
-    setItens((current) => [
-      ...current,
-      {
-        produto_id: produto.id,
-        nome: produto.nome,
-        quantidade: qty,
-        valor_unitario_centavos: produto.preco_venda_centavos,
-      },
-    ]);
-    setProdutoId("");
-    setQuantidade("1");
+  function adicionarItem(produto: CafeCatalogoProduto) {
+    setMensagem(null);
+    setItens((current) =>
+      mergeItensForm([
+        ...current,
+        {
+          produto_id: produto.id,
+          nome: produto.nome,
+          quantidade: 1,
+          valor_unitario_centavos: produto.preco_venda_centavos,
+        },
+      ]),
+    );
+  }
+
+  function atualizarQuantidadeItem(produtoId: number, quantidade: number) {
+    setItens((current) =>
+      current
+        .map((item) => (item.produto_id === produtoId ? { ...item, quantidade } : item))
+        .filter((item) => item.quantidade > 0),
+    );
+  }
+
+  function removerItem(produtoId: number) {
+    setItens((current) => current.filter((item) => item.produto_id !== produtoId));
+  }
+
+  function selecionarComprador(item: PessoaBuscaItem) {
+    setCompradorSelecionado(item);
+    setBuscaComprador(item.nome);
+    setCompradores([]);
+  }
+
+  function selecionarColaborador(item: ColaboradorOption) {
+    setColaboradorPessoaId(String(item.pessoa_id ?? ""));
+    setBuscaColaborador(item.nome);
   }
 
   async function salvarComanda() {
@@ -195,25 +839,51 @@ export default function CafeCaixaPage() {
       return;
     }
 
+    if (tipoComprador === "PESSOA_AVULSA" && !compradorSelecionado) {
+      setMensagem("Selecione a pessoa avulsa para continuar.");
+      return;
+    }
+
+    if (tipoComprador === "COLABORADOR" && !compradorColaboradorId) {
+      setMensagem("Selecione o colaborador para continuar.");
+      return;
+    }
+
+    if (isContaInterna && !permiteContaInterna) {
+      setMensagem("Conta interna exige comprador vinculado como colaborador.");
+      return;
+    }
+
     setSaving(true);
     setMensagem(null);
     try {
+      const compradorPayloadId = tipoComprador === "COLABORADOR" ? compradorColaboradorId : compradorPessoaId;
+      const colaboradorPayloadId = tipoComprador === "COLABORADOR" ? compradorColaboradorId : null;
+      const formaPagamentoPayload = isContaInterna ? "CONTA_INTERNA_COLABORADOR" : metodoPagamento;
       const payload = editingId
         ? {
             data_operacao: dataOperacao,
-            colaborador_pessoa_id: colaboradorPessoaId ? Number(colaboradorPessoaId) : null,
-            data_competencia: tipoQuitacao === "CONTA_INTERNA_COLABORADOR" ? competencia : null,
+            tipo_comprador: tipoComprador,
+            comprador_id: compradorPayloadId,
+            pagador_pessoa_id: compradorPayloadId,
+            colaborador_pessoa_id: colaboradorPayloadId,
+            data_competencia: isContaInterna ? competencia : null,
             observacoes_internas: observacoesInternas,
             observacoes: observacoesInternas,
+            forma_pagamento: formaPagamentoPayload,
           }
         : {
             data_operacao: dataOperacao,
-            colaborador_pessoa_id: colaboradorPessoaId ? Number(colaboradorPessoaId) : null,
+            tipo_comprador: tipoComprador,
+            comprador_id: compradorPayloadId,
+            pagador_pessoa_id: compradorPayloadId,
+            colaborador_pessoa_id: colaboradorPayloadId,
             tipo_quitacao: tipoQuitacao,
-            data_competencia: tipoQuitacao === "CONTA_INTERNA_COLABORADOR" ? competencia : null,
+            data_competencia: isContaInterna ? competencia : null,
             observacoes_internas: observacoesInternas,
             observacoes: observacoesInternas,
             metodo_pagamento: metodoPagamento,
+            forma_pagamento: formaPagamentoPayload,
             valor_pago_centavos: Number(valorPagoCentavos || "0"),
             itens: itens.map((item) => ({
               produto_id: item.produto_id,
@@ -228,11 +898,13 @@ export default function CafeCaixaPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) throw new Error(json?.error ?? "falha_salvar_comanda");
+      const json = (await res.json().catch(() => null)) as { error?: string; detalhe?: string } | null;
+      if (!res.ok) throw new Error(json?.detalhe ?? json?.error ?? "falha_salvar_comanda");
       limparFormulario();
       await carregarComandas();
       setMensagem(editingId ? "Comanda atualizada." : "Comanda registrada.");
+      setAtalhoAtivo("recentes");
+      scrollToSection("recentes");
     } catch (error) {
       setMensagem(error instanceof Error ? error.message : "falha_salvar_comanda");
     } finally {
@@ -243,9 +915,9 @@ export default function CafeCaixaPage() {
   async function editarComanda(id: number) {
     setMensagem(null);
     const res = await fetch(`/api/cafe/caixa/${id}`, { cache: "no-store" });
-    const json = (await res.json().catch(() => null)) as { data?: Comanda; error?: string } | null;
+    const json = (await res.json().catch(() => null)) as { data?: Comanda; error?: string; detalhe?: string } | null;
     if (!res.ok || !json?.data) {
-      setMensagem(json?.error ?? "falha_buscar_comanda");
+      setMensagem(json?.detalhe ?? json?.error ?? "falha_buscar_comanda");
       return;
     }
 
@@ -253,19 +925,56 @@ export default function CafeCaixaPage() {
     setEditingId(comanda.id);
     setModo(comanda.data_operacao === todayIso() ? "DIA" : "RETROATIVO");
     setDataOperacao(comanda.data_operacao);
-    setColaboradorPessoaId(comanda.colaborador_pessoa_id ? String(comanda.colaborador_pessoa_id) : "");
+    if (comanda.colaborador_pessoa_id) {
+      setTipoComprador("COLABORADOR");
+      setColaboradorPessoaId(String(comanda.colaborador_pessoa_id));
+      setBuscaColaborador(comanda.colaborador_nome ?? "");
+      setCompradorSelecionado(null);
+      setBuscaComprador("");
+      setCargoSetorLabel("");
+    } else if (comanda.pagador_pessoa_id) {
+      setTipoComprador("PESSOA_AVULSA");
+      setCompradorSelecionado({
+        id: comanda.pagador_pessoa_id,
+        nome: comanda.pagador_nome ?? `Pessoa #${comanda.pagador_pessoa_id}`,
+        email: null,
+      });
+      setBuscaComprador(comanda.pagador_nome ?? `Pessoa #${comanda.pagador_pessoa_id}`);
+      setColaboradorPessoaId("");
+      setBuscaColaborador("");
+      setCargoSetorLabel("");
+    } else {
+      setTipoComprador("SEM_VINCULO");
+      setCompradorSelecionado(null);
+      setBuscaComprador("");
+      setColaboradorPessoaId("");
+      setBuscaColaborador("");
+      setCargoSetorLabel("");
+    }
     setTipoQuitacao(comanda.tipo_quitacao);
     setCompetencia(comanda.data_competencia ?? competenciaFromDate(comanda.data_operacao));
     setObservacoesInternas(comanda.observacoes_internas ?? "");
-    setItens(
-      (comanda.cafe_venda_itens ?? []).map((item) => ({
-        produto_id: item.produto_id,
-        nome: item.descricao_snapshot ?? `Produto #${item.produto_id}`,
-        quantidade: item.quantidade,
-        valor_unitario_centavos:
-          item.quantidade > 0 ? Math.round(item.valor_total_centavos / item.quantidade) : 0,
-      })),
+    setMetodoPagamento(
+      comanda.forma_pagamento && comanda.forma_pagamento !== "CONTA_INTERNA_COLABORADOR"
+        ? comanda.forma_pagamento
+        : "DINHEIRO",
     );
+    setValorPagoCentavos(String(comanda.valor_pago_centavos ?? 0));
+    setItens(
+      mergeItensForm(
+        (comanda.cafe_venda_itens ?? []).map((item) => ({
+          produto_id: item.produto_id,
+          nome: item.descricao_snapshot ?? `Produto #${item.produto_id}`,
+          quantidade: item.quantidade,
+          valor_unitario_centavos:
+            item.quantidade > 0 ? Math.round(item.valor_total_centavos / item.quantidade) : 0,
+        })),
+      ),
+    );
+    setBaixaId(null);
+    setContaInternaId(null);
+    setAtalhoAtivo("retroativo");
+    scrollToSection("formulario");
   }
 
   async function registrarBaixa() {
@@ -281,12 +990,14 @@ export default function CafeCaixaPage() {
           metodo_pagamento: baixaMetodo,
         }),
       });
-      const json = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) throw new Error(json?.error ?? "falha_registrar_baixa");
+      const json = (await res.json().catch(() => null)) as { error?: string; detalhe?: string } | null;
+      if (!res.ok) throw new Error(json?.detalhe ?? json?.error ?? "falha_registrar_baixa");
       setBaixaId(null);
       setBaixaValorCentavos("");
       await carregarComandas();
       setMensagem("Baixa registrada.");
+      setAtalhoAtivo("recentes");
+      scrollToSection("recentes");
     } catch (error) {
       setMensagem(error instanceof Error ? error.message : "falha_registrar_baixa");
     } finally {
@@ -307,11 +1018,13 @@ export default function CafeCaixaPage() {
           data_competencia: contaInternaCompetencia,
         }),
       });
-      const json = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) throw new Error(json?.error ?? "falha_enviar_conta_interna");
+      const json = (await res.json().catch(() => null)) as { error?: string; detalhe?: string } | null;
+      if (!res.ok) throw new Error(json?.detalhe ?? json?.error ?? "falha_enviar_conta_interna");
       setContaInternaId(null);
       await carregarComandas();
       setMensagem("Saldo enviado para a conta interna.");
+      setAtalhoAtivo("recentes");
+      scrollToSection("recentes");
     } catch (error) {
       setMensagem(error instanceof Error ? error.message : "falha_enviar_conta_interna");
     } finally {
@@ -319,265 +1032,800 @@ export default function CafeCaixaPage() {
     }
   }
 
-  return (
-    <SystemPage>
-      <SystemContextCard
-        title="Caixa do Ballet Cafe"
-        subtitle="Lance vendas do dia ou retroativas, trabalhe com baixa parcial e envie saldo para a conta interna do colaborador por competencia."
+  async function verPendencias() {
+    const status = "PENDENTE";
+    setFiltroStatus(status);
+    setAtalhoAtivo("recentes");
+    scrollToSection("recentes");
+    await carregarComandas({ status });
+  }
+
+  function ativarFluxoRetroativo() {
+    setModo("RETROATIVO");
+    setAtalhoAtivo("retroativo");
+    scrollToSection("formulario");
+  }
+
+  function ativarFluxoBaixa() {
+    setAtalhoAtivo("baixa");
+    scrollToSection(baixaId ? "baixa" : "recentes");
+  }
+
+  function ativarFluxoContaInterna() {
+    setAtalhoAtivo("conta");
+    if (tipoComprador !== "COLABORADOR") {
+      setTipoComprador("COLABORADOR");
+    }
+    if (!isContaInterna) {
+      setTipoQuitacao("CONTA_INTERNA_COLABORADOR");
+    }
+    scrollToSection(contaInternaId ? "conta" : "formulario");
+  }
+
+  function renderAtalhos() {
+    return (
+      <CafeCard
+        title="Fluxos desta tela"
+        description="Escolha o objetivo do momento. Os cards abaixo funcionam como atalhos de foco para operacao retroativa, baixas, conta interna e revisao da fila."
       >
-        <div className="flex flex-wrap gap-2">
-          <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/cafe">
-            Voltar ao modulo
-          </Link>
-          <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/credito-conexao/faturas">
-            Faturas da conta interna
-          </Link>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <ShortcutCard
+            badge="Retroativo"
+            title="Lancar comanda retroativa"
+            description="Registre aqui comandas anotadas em papel ou vendas lancadas depois do atendimento."
+            active={atalhoAtivo === "retroativo" || modo === "RETROATIVO"}
+            onClick={ativarFluxoRetroativo}
+          />
+          <ShortcutCard
+            badge="Baixa"
+            title="Registrar baixa parcial"
+            description="Selecione uma comanda aberta e confirme o pagamento real sem criar fluxo paralelo no cafe."
+            active={atalhoAtivo === "baixa" || baixaId !== null}
+            onClick={ativarFluxoBaixa}
+          />
+          <ShortcutCard
+            badge="Conta interna"
+            title="Enviar saldo para conta interna"
+            description="Use conta interna quando o saldo precisar ser cobrado por competencia."
+            active={atalhoAtivo === "conta" || isContaInterna || contaInternaId !== null}
+            onClick={ativarFluxoContaInterna}
+          />
+          <ShortcutCard
+            badge="Revisao"
+            title="Revisar comandas recentes"
+            description="Filtre colaborador, competencia e status para acompanhar a fila operacional."
+            active={atalhoAtivo === "recentes"}
+            onClick={() => {
+              setAtalhoAtivo("recentes");
+              scrollToSection("recentes");
+            }}
+          />
         </div>
-      </SystemContextCard>
+      </CafeCard>
+    );
+  }
 
-      <SystemHelpCard
-        items={[
-          "Venda do dia usa a data atual. Lancamento retroativo libera a data operacional e a competencia.",
-          "Conta interna do colaborador nao gera recebimento imediato: a comanda entra na cobranca canonica da competencia.",
-          "Baixas reais alimentam recebimento e movimento financeiro sem criar um financeiro paralelo para o cafe.",
-        ]}
-      />
+  function renderFormularioPrincipal() {
+    return (
+      <div className="space-y-6">
+        <CaixaSection
+          anchor={SECTION_TARGETS.formulario}
+          title="A. Dados da comanda"
+          description="Defina o contexto do lancamento, a data correta da operacao e quem esta comprando para manter o caixa alinhado com a operacao real do Ballet Cafe."
+          active={modo === "RETROATIVO" || atalhoAtivo === "retroativo"}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Modo de operacao</span>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  className={cx(
+                    "rounded-[18px] border px-4 py-3 text-left transition",
+                    modo === "DIA" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                  )}
+                  onClick={() => {
+                    setModo("DIA");
+                    setAtalhoAtivo(null);
+                  }}
+                >
+                  <div className="text-sm font-semibold">Venda do dia</div>
+                  <div className="mt-1 text-xs leading-5 text-inherit/80">Ajuste rapido para registro do proprio dia.</div>
+                </button>
+                <button
+                  type="button"
+                  className={cx(
+                    "rounded-[18px] border px-4 py-3 text-left transition",
+                    modo === "RETROATIVO"
+                      ? "border-[#d2b086] bg-[#fff6ea] text-[#6f4f2c]"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                  )}
+                  onClick={() => {
+                    setModo("RETROATIVO");
+                    setAtalhoAtivo("retroativo");
+                  }}
+                >
+                  <div className="text-sm font-semibold">Lancamento retroativo</div>
+                  <div className="mt-1 text-xs leading-5 text-inherit/80">Corrige comandas lancadas depois do atendimento.</div>
+                </button>
+              </div>
+            </label>
 
-      <SystemSectionCard
-        title="Lancamento de comanda"
-        description="Card principal da operacao do caixa, com data da operacao, colaborador opcional, tipo de quitacao e itens."
-        footer={
-          <>
-            <button type="button" className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" onClick={limparFormulario}>
-              Limpar
-            </button>
-            <button
-              type="button"
-              className="rounded-md bg-black px-4 py-2 text-sm text-white disabled:opacity-60"
-              disabled={saving}
-              onClick={() => void salvarComanda()}
-            >
-              {saving ? "Salvando..." : editingId ? "Salvar ajustes" : "Registrar comanda"}
-            </button>
-          </>
-        }
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label className="space-y-1 text-sm">
-            <span>Modo de operacao</span>
-            <div className="flex gap-2">
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Data da operacao</span>
+              <input
+                className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                type="date"
+                value={dataOperacao}
+                onChange={(event) => setDataOperacao(event.target.value)}
+              />
+            </label>
+
+            <div className="space-y-4 rounded-[22px] border border-[#ead8be] bg-[#fffaf2] p-5 md:col-span-2">
+              <div className="space-y-1">
+                <h3 className="text-base font-semibold tracking-tight text-slate-950">Comprador e vinculo</h3>
+                <p className="text-sm leading-6 text-slate-600">
+                  Escolha se a comanda pertence a uma pessoa avulsa, a um colaborador, a um futuro cargo/setor ou se nao possui associacao direta.
+                </p>
+              </div>
+
+              <div className="grid gap-2 xl:grid-cols-4">
+                {BUYER_TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={cx(
+                      "rounded-[18px] border px-4 py-3 text-left transition",
+                      tipoComprador === option.value
+                        ? "border-[#c99663] bg-white text-slate-900 shadow-[0_18px_34px_-28px_rgba(180,126,58,0.35)]"
+                        : "border-[#ead8be] bg-[#fff7eb] text-slate-700 hover:border-[#d9b58b]",
+                    )}
+                    onClick={() => setTipoComprador(option.value)}
+                  >
+                    <div className="text-sm font-semibold">{option.label}</div>
+                    <div className="mt-1 text-xs leading-5 text-inherit/80">{option.description}</div>
+                  </button>
+                ))}
+              </div>
+
+              {tipoComprador === "PESSOA_AVULSA" ? (
+                <div className="space-y-3">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-slate-700">Pessoa avulsa</span>
+                    <div className="relative">
+                      <input
+                        className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                        value={buscaComprador}
+                        onChange={(event) => {
+                          setBuscaComprador(event.target.value);
+                          setCompradorSelecionado(null);
+                        }}
+                        placeholder="Buscar comprador por nome ou email"
+                      />
+                      {compradorSelecionado ? (
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                          onClick={() => {
+                            setCompradorSelecionado(null);
+                            setBuscaComprador("");
+                            setCompradores([]);
+                          }}
+                        >
+                          Limpar
+                        </button>
+                      ) : null}
+                    </div>
+                  </label>
+
+                  {compradoresLoading ? (
+                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                      Buscando pessoas...
+                    </div>
+                  ) : compradores.length > 0 ? (
+                    <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-white">
+                      {compradores.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-left first:border-t-0 hover:bg-slate-50"
+                          onClick={() => selecionarComprador(item)}
+                        >
+                          <span className="font-medium text-slate-900">{item.nome}</span>
+                          <span className="text-xs text-slate-500">{item.email ?? "Pessoa"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : buscaComprador.trim().length >= 2 ? (
+                    <EmptyState
+                      title="Nenhuma pessoa encontrada"
+                      description="Continue digitando ou troque o tipo de comprador se esta comanda nao precisa de pessoa vinculada."
+                    />
+                  ) : null}
+
+                  <CafePanel className="px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Fluxo normal</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Pessoa avulsa segue o fluxo normal de venda. O saldo fica no caixa para baixa posterior e nao vai para conta interna.
+                    </p>
+                  </CafePanel>
+                </div>
+              ) : null}
+
+              {tipoComprador === "COLABORADOR" ? (
+                <div className="space-y-3">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-slate-700">Colaborador</span>
+                    <div className="relative">
+                      <input
+                        className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                        value={buscaColaborador}
+                        onChange={(event) => {
+                          setBuscaColaborador(event.target.value);
+                          setColaboradorPessoaId("");
+                        }}
+                        placeholder="Buscar colaborador por nome"
+                      />
+                      {colaboradorAtual ? (
+                        <button
+                          type="button"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                          onClick={() => {
+                            setColaboradorPessoaId("");
+                            setBuscaColaborador("");
+                          }}
+                        >
+                          Limpar
+                        </button>
+                      ) : null}
+                    </div>
+                  </label>
+
+                  {colaboradoresFiltrados.length > 0 &&
+                  (!colaboradorAtual || buscaColaborador !== colaboradorAtual.nome) ? (
+                    <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-white">
+                      {colaboradoresFiltrados.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className="flex w-full items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-left first:border-t-0 hover:bg-slate-50"
+                          onClick={() => selecionarColaborador(item)}
+                        >
+                          <span className="font-medium text-slate-900">{item.nome}</span>
+                          <span className="text-xs text-slate-500">Pessoa #{item.pessoa_id ?? item.id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <CafePanel className="px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Conta interna habilitada</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      Quando o comprador e colaborador, o saldo pode seguir para conta interna por competencia e manter coerencia com fatura e folha.
+                    </p>
+                  </CafePanel>
+                </div>
+              ) : null}
+
+              {tipoComprador === "CARGO_SETOR" ? (
+                <div className="space-y-3">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium text-slate-700">Cargo / setor</span>
+                    <input
+                      className="w-full rounded-[18px] border border-dashed border-[#d9b58b] bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-[#c99663]"
+                      value={cargoSetorLabel}
+                      onChange={(event) => setCargoSetorLabel(event.target.value)}
+                      placeholder="Ex.: Professores, Recepcao, Equipe tecnica"
+                    />
+                  </label>
+                  <EmptyState
+                    title="Integracao futura preparada"
+                    description="Ainda nao ha backend para cargo/setor no caixa. O lancamento segue sem vinculo tecnico, mas a interface ja deixa o contexto preparado para a proxima etapa."
+                  />
+                </div>
+              ) : null}
+
+              {tipoComprador === "SEM_VINCULO" ? (
+                <CafePanel className="px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Lancamento administrativo</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Use sem vinculo especifico quando a comanda precisa apenas entrar no caixa administrativo, sem pessoa nem colaborador associados.
+                  </p>
+                </CafePanel>
+              ) : null}
+            </div>
+
+            <label className="space-y-2 text-sm md:col-span-2">
+              <span className="font-medium text-slate-700">Observacoes internas</span>
+              <textarea
+                className="min-h-[120px] w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                value={observacoesInternas}
+                onChange={(event) => setObservacoesInternas(event.target.value)}
+                placeholder="Contexto operacional, retroatividade, observacoes do caixa e referencias da comanda em papel."
+              />
+            </label>
+          </div>
+        </CaixaSection>
+
+        <CaixaSection
+          anchor="caixa-itens"
+          title="B. Itens da comanda"
+          description={
+            editingId
+              ? "Itens exibidos para referencia. Nesta etapa a API de ajuste altera data, observacoes e vinculo antes do faturamento."
+              : "Monte os itens da comanda para consolidar o valor total do lancamento."
+          }
+          actions={
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              {editingId ? "Leitura de referencia" : `${itens.length} item(ns)`}
+            </span>
+          }
+        >
+          <CafeSectionIntro
+            title="Catalogo visual da comanda"
+            description="Use o mesmo paradigma do PDV para localizar categorias e clicar nos cards dos produtos. O Caixa continua administrativo, mas a montagem da comanda fica mais rapida e coerente com a operacao real."
+          />
+
+          <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+            <div className="space-y-4">
+              <CafeCatalogoProdutos
+                onAddProduct={adicionarItem}
+                quantitiesByProductId={quantidadesPorProdutoId}
+                disabled={editingId !== null}
+                helperText="Categorias e cards aceleram o lancamento administrativo sem transformar o Caixa em PDV."
+                disabledText="Itens travados nesta etapa. Para alteracoes estruturais, refaca a comanda antes do faturamento."
+                addLabel="Adicionar"
+              />
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-[24px] border border-[#ead8be] bg-[linear-gradient(180deg,#fffdf8_0%,#fff7ea_100%)] p-5 shadow-[0_20px_44px_-32px_rgba(180,126,58,0.28)]">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Comanda montada</p>
+                    <h3 className="text-lg font-semibold tracking-tight text-slate-950">Carrinho administrativo</h3>
+                    <p className="text-sm leading-6 text-slate-600">
+                      Cada clique em adicionar entra com quantidade 1. Cliques repetidos no mesmo produto somam automaticamente na comanda.
+                    </p>
+                  </div>
+                  <div className="grid gap-2 text-right">
+                    <span className="rounded-full border border-[#e6d3b8] bg-white px-3 py-1 text-xs font-semibold text-[#8c6640]">
+                      {itens.length} item(ns)
+                    </span>
+                    <div className="text-lg font-semibold text-[#9a3412]">{brl(totalItensCentavos)}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {itens.length === 0 ? (
+                    <EmptyState
+                      title="Nenhum item na comanda"
+                      description="Use o catalogo visual ao lado para adicionar produtos por categoria. O total da comanda e o resumo operacional serao recalculados automaticamente a cada clique."
+                      hint="Fluxo principal por cards, com busca apenas como apoio"
+                    />
+                  ) : (
+                    itens.map((item) => (
+                      <div
+                        key={item.produto_id}
+                        className="rounded-[20px] border border-[#eadfcd] bg-white px-4 py-4 shadow-[0_14px_32px_-28px_rgba(148,91,31,0.22)]"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-slate-950">{item.nome}</div>
+                            <div className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">Produto #{item.produto_id}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-slate-500">{brl(item.valor_unitario_centavos)} cada</div>
+                            <div className="mt-1 text-base font-semibold text-slate-950">
+                              {brl(item.valor_unitario_centavos * item.quantidade)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                          <div className="inline-flex items-center gap-2 rounded-full border border-[#eadfcd] bg-[#fffaf4] px-2 py-1">
+                            <button
+                              type="button"
+                              className="h-8 w-8 rounded-full border border-[#eadfcd] bg-white text-sm text-slate-700 transition hover:bg-[#fff8ef] disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={editingId !== null}
+                              onClick={() => atualizarQuantidadeItem(item.produto_id, item.quantidade - 1)}
+                            >
+                              -
+                            </button>
+                            <span className="min-w-8 text-center text-sm font-semibold text-slate-950">{item.quantidade}</span>
+                            <button
+                              type="button"
+                              className="h-8 w-8 rounded-full border border-[#eadfcd] bg-white text-sm text-slate-700 transition hover:bg-[#fff8ef] disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={editingId !== null}
+                              onClick={() => atualizarQuantidadeItem(item.produto_id, item.quantidade + 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-xs font-semibold">
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
+                              Subtotal {brl(item.valor_unitario_centavos * item.quantidade)}
+                            </span>
+                            <button
+                              type="button"
+                              className="rounded-full px-3 py-1.5 text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                              disabled={editingId !== null}
+                              onClick={() => removerItem(item.produto_id)}
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </CaixaSection>
+      </div>
+    );
+  }
+
+  function renderLiquidacaoEDestino() {
+    return (
+      <div className="space-y-6">
+        <CaixaSection
+          anchor="caixa-liquidacao"
+          title="C. Liquidacao"
+          description="Essa tela registra vendas reais feitas fora do PDV. Por isso, a liquidacao precisa reproduzir como a venda aconteceu: no caixa, parcialmente ou em conta interna quando houver colaborador."
+          active={atalhoAtivo === "baixa"}
+        >
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Tipo de quitacao</span>
+              <select
+                className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                value={tipoQuitacao}
+                onChange={(event) => setTipoQuitacao(event.target.value as typeof tipoQuitacao)}
+              >
+                <option value="IMEDIATA">Pagamento imediato</option>
+                <option value="PARCIAL">Pagamento parcial</option>
+                <option value="CONTA_INTERNA_COLABORADOR" disabled={!permiteContaInterna}>
+                  Enviar saldo para conta interna
+                </option>
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Forma de pagamento real</span>
+              <select
+                className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
+                value={metodoPagamento}
+                disabled={isContaInterna}
+                onChange={(event) => setMetodoPagamento(event.target.value)}
+              >
+                {PAGAMENTO_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Valor pago na abertura (centavos)</span>
+              <input
+                className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
+                type="number"
+                min={0}
+                value={valorPagoCentavos}
+                disabled={editingId !== null}
+                onChange={(event) => setValorPagoCentavos(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <CafePanel className="px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Regra operacional</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Use pagamento parcial quando parte da venda ja entrou no caixa e o restante precisa continuar aberto para baixa posterior ou conta interna, se o comprador for colaborador.
+              </p>
+            </CafePanel>
+            <CafePanel className="px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Leitura rapida</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {isContaInterna
+                  ? "O saldo restante seguira para conta interna por competencia, sem recebimento imediato no caixa."
+                  : saldoPrevistoCentavos > 0
+                    ? permiteContaInterna
+                      ? "Ha saldo em aberto previsto. Revise se ele fica para baixa real ou conta interna."
+                      : "Ha saldo em aberto previsto. Revise a baixa posterior no caixa para fechar a venda."
+                    : "O total atual indica quitacao integral na abertura, sem saldo pendente."}
+              </p>
+            </CafePanel>
+          </div>
+        </CaixaSection>
+
+        <CaixaSection
+          anchor="caixa-destino-financeiro"
+          title="D. Destino financeiro"
+          description="Defina a competencia quando o saldo precisa sair do caixa e ir para conta interna. O destaque aumenta quando a quitacao passa a depender desse fluxo."
+          active={isContaInterna || contaInternaId !== null || atalhoAtivo === "conta"}
+          variant={isContaInterna || contaInternaId !== null ? "muted" : "default"}
+        >
+          <div className="grid gap-4 md:grid-cols-[1fr_180px_1fr]">
+            <label className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Competencia</span>
+              <input
+                className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
+                value={competencia}
+                onChange={(event) => setCompetencia(event.target.value)}
+                placeholder="YYYY-MM"
+                disabled={!isContaInterna}
+              />
+            </label>
+
+            <div className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Status previsto</span>
+              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950">{statusPrevisto}</div>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <span className="font-medium text-slate-700">Destino financeiro</span>
+              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950">{destinoFinanceiro}</div>
+            </div>
+          </div>
+
+          {isContaInterna && !permiteContaInterna ? (
+            <EmptyState
+              title="Conta interna exige colaborador"
+              description="Selecione um colaborador antes de confirmar este lancamento. A cobranca por competencia depende desse vinculo."
+              tone="warning"
+            />
+          ) : (
+            <CafePanel className="px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Uso recomendado</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Conta interna nao gera recebimento imediato. O saldo segue para cobranca canonica da competencia e a folha importa a fatura, nao a comanda isolada.
+              </p>
+            </CafePanel>
+          )}
+        </CaixaSection>
+
+        <CafeCard variant="muted" className="gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-slate-950">Fechamento do lancamento</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Revise os blocos acima antes de registrar. Esta tela foi desenhada para seguranca de lancamento e regularizacao operacional, nao para venda rapida de balcao.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                className={`rounded-md border px-3 py-2 ${modo === "DIA" ? "bg-slate-900 text-white" : "bg-white"}`}
-                onClick={() => setModo("DIA")}
+                className={BUTTON_SECONDARY}
+                onClick={() => {
+                  limparFormulario();
+                  setMensagem(null);
+                }}
               >
-                Venda do dia
+                Limpar
               </button>
-              <button
-                type="button"
-                className={`rounded-md border px-3 py-2 ${modo === "RETROATIVO" ? "bg-slate-900 text-white" : "bg-white"}`}
-                onClick={() => setModo("RETROATIVO")}
-              >
-                Lancamento retroativo
+              <button type="button" className={BUTTON_PRIMARY} disabled={saving} onClick={() => void salvarComanda()}>
+                {saving ? "Salvando..." : editingId ? "Salvar ajustes" : "Registrar comanda"}
               </button>
             </div>
-          </label>
+          </div>
+        </CafeCard>
+      </div>
+    );
+  }
 
-          <label className="space-y-1 text-sm">
-            <span>Data da operacao</span>
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              type="date"
-              value={dataOperacao}
-              onChange={(event) => setDataOperacao(event.target.value)}
+  function renderLateralResumo() {
+    return (
+      <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+        <CafeCard
+          title="Resumo operacional"
+          description="Confirme comprador, forma de pagamento, saldo, competencia sugerida e destino financeiro antes de gravar."
+          variant={saldoPrevistoCentavos > 0 || isContaInterna ? "muted" : "stats"}
+        >
+          <div className="rounded-[24px] border border-[#ead8be] bg-[linear-gradient(180deg,#fffef9_0%,#fff5e6_100%)] px-5 py-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Total da comanda</div>
+            <div className="mt-3 text-[2.2rem] font-semibold leading-none tracking-tight text-slate-950">{brl(totalItensCentavos)}</div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              {editingId
+                ? "Resumo baseado nos itens atuais da comanda em leitura de referencia."
+                : "O painel lateral destaca saldo, competencia sugerida e previsao operacional do lancamento."}
+            </p>
+          </div>
+
+          <div className="grid gap-3">
+            <MetricTile label="Tipo de comprador" value={formatBuyerType(tipoComprador)} />
+            <MetricTile label="Comprador selecionado" value={compradorNome} />
+            <MetricTile
+              label="Forma de pagamento"
+              value={isContaInterna ? "Conta interna" : formatFormaPagamento(metodoPagamento)}
             />
-          </label>
+            <MetricTile label="Valor pago" value={brl(valorPagoAberturaCentavos)} />
+            <MetricTile label="Saldo em aberto" value={brl(saldoPrevistoCentavos)} emphasis={saldoPrevistoCentavos > 0} />
+            <MetricTile label="Competencia sugerida" value={competenciaSugerida} />
+            <MetricTile label="Destino financeiro" value={destinoFinanceiro} />
+            <MetricTile label="Status operacional previsto" value={statusPrevisto} />
+            {tipoComprador === "COLABORADOR" ? (
+              <MetricTile label="Conta interna" value={permiteContaInterna ? "Disponivel para fatura/folha" : "Aguardando colaborador"} emphasis />
+            ) : null}
+          </div>
+        </CafeCard>
 
-          <label className="space-y-1 text-sm">
-            <span>Colaborador</span>
-            <select
-              className="w-full rounded-md border px-3 py-2"
-              value={colaboradorPessoaId}
-              onChange={(event) => setColaboradorPessoaId(event.target.value)}
-            >
-              <option value="">Sem colaborador</option>
-              {colaboradores.map((item) => (
-                <option key={item.id} value={item.pessoa_id ?? ""}>
-                  {item.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="space-y-1 text-sm">
-            <span>Tipo de quitacao</span>
-            <select
-              className="w-full rounded-md border px-3 py-2"
-              value={tipoQuitacao}
-              onChange={(event) => setTipoQuitacao(event.target.value as typeof tipoQuitacao)}
-            >
-              <option value="IMEDIATA">Pagamento imediato</option>
-              <option value="PARCIAL">Pagamento parcial</option>
-              <option value="CONTA_INTERNA_COLABORADOR">Enviar para conta interna do colaborador</option>
-            </select>
-          </label>
-
-          <label className="space-y-1 text-sm">
-            <span>Competencia</span>
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              value={competencia}
-              onChange={(event) => setCompetencia(event.target.value)}
-              placeholder="YYYY-MM"
-              disabled={tipoQuitacao !== "CONTA_INTERNA_COLABORADOR"}
-            />
-          </label>
-
-          <label className="space-y-1 text-sm">
-            <span>Metodo de pagamento</span>
-            <select
-              className="w-full rounded-md border px-3 py-2"
-              value={metodoPagamento}
-              onChange={(event) => setMetodoPagamento(event.target.value)}
-              disabled={tipoQuitacao === "CONTA_INTERNA_COLABORADOR"}
-            >
-              <option value="DINHEIRO">DINHEIRO</option>
-              <option value="PIX">PIX</option>
-              <option value="TRANSFERENCIA">TRANSFERENCIA</option>
-            </select>
-          </label>
-
-          <label className="space-y-1 text-sm">
-            <span>Valor pago na abertura (centavos)</span>
-            <input
-              className="w-full rounded-md border px-3 py-2"
-              type="number"
-              min={0}
-              value={valorPagoCentavos}
-              onChange={(event) => setValorPagoCentavos(event.target.value)}
-              disabled={editingId !== null}
-            />
-          </label>
+        <div id={SECTION_TARGETS.baixa} className="scroll-mt-28">
+          {baixaId ? (
+            <CafeCard title={`Registrar baixa da comanda #${baixaId}`} description="Use este bloco para baixa parcial ou total com pagamento real." variant="muted">
+              <div className="grid gap-3">
+                <MetricTile label="Saldo atual" value={brl(baixaSelecionada?.valor_em_aberto_centavos ?? 0)} emphasis />
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-slate-700">Valor da baixa (centavos)</span>
+                  <input
+                    className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                    type="number"
+                    min={1}
+                    value={baixaValorCentavos}
+                    onChange={(event) => setBaixaValorCentavos(event.target.value)}
+                  />
+                </label>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-slate-700">Forma de pagamento</span>
+                  <select
+                    className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                    value={baixaMetodo}
+                    onChange={(event) => setBaixaMetodo(event.target.value)}
+                  >
+                    {PAGAMENTO_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={BUTTON_SECONDARY} onClick={() => setBaixaId(null)}>
+                    Cancelar
+                  </button>
+                  <button type="button" className={BUTTON_PRIMARY} disabled={saving} onClick={() => void registrarBaixa()}>
+                    Confirmar baixa
+                  </button>
+                </div>
+              </div>
+            </CafeCard>
+          ) : (
+            <CafeCard title="Baixas parciais e totais" description="Selecione uma comanda na fila abaixo para abrir o bloco de baixa com contexto de saldo.">
+              <EmptyState title="Nenhuma baixa em andamento" description="Quando uma comanda tiver pagamento real, use a acao 'Dar baixa' na fila operacional para preencher este painel." />
+            </CafeCard>
+          )}
         </div>
 
-        <label className="space-y-1 text-sm">
-          <span>Observacoes internas</span>
-          <textarea
-            className="min-h-24 w-full rounded-md border px-3 py-2"
-            value={observacoesInternas}
-            onChange={(event) => setObservacoesInternas(event.target.value)}
-            placeholder="Contexto operacional, retroatividade, observacoes do caixa."
-          />
-        </label>
+        {renderContaInternaLateral()}
+      </div>
+    );
+  }
 
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-xl border border-slate-200 p-4">
-            <div className="grid gap-3 md:grid-cols-[1.4fr_0.6fr_auto]">
-              <label className="space-y-1 text-sm">
-                <span>Produto</span>
-                <select className="w-full rounded-md border px-3 py-2" value={produtoId} onChange={(event) => setProdutoId(event.target.value)}>
+  function renderContaInternaLateral() {
+    return (
+      <div id={SECTION_TARGETS.conta} className="scroll-mt-28">
+        {contaInternaId ? (
+          <CafeCard
+            title={`Enviar saldo da comanda #${contaInternaId}`}
+            description="Converta apenas o saldo em aberto em divida por competencia do colaborador."
+            variant="muted"
+          >
+            <div className="grid gap-3">
+              <MetricTile label="Saldo atual" value={brl(contaInternaSelecionada?.valor_em_aberto_centavos ?? 0)} emphasis />
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">Colaborador</span>
+                <select
+                  className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                  value={contaInternaColaboradorPessoaId}
+                  onChange={(event) => setContaInternaColaboradorPessoaId(event.target.value)}
+                >
                   <option value="">Selecione</option>
-                  {produtos.map((produto) => (
-                    <option key={produto.id} value={produto.id}>
-                      {produto.nome} - {brl(produto.preco_venda_centavos)}
+                  {colaboradores.map((item) => (
+                    <option key={item.id} value={item.pessoa_id ?? ""}>
+                      {item.nome}
                     </option>
                   ))}
                 </select>
               </label>
-
-              <label className="space-y-1 text-sm">
-                <span>Quantidade</span>
-                <input className="w-full rounded-md border px-3 py-2" type="number" min={1} value={quantidade} onChange={(event) => setQuantidade(event.target.value)} />
+              <label className="space-y-2 text-sm">
+                <span className="font-medium text-slate-700">Competencia</span>
+                <input
+                  className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                  value={contaInternaCompetencia}
+                  onChange={(event) => setContaInternaCompetencia(event.target.value)}
+                  placeholder="YYYY-MM"
+                />
               </label>
-
-              <div className="flex items-end">
-                <button type="button" className="w-full rounded-md border px-3 py-2 text-sm hover:bg-slate-50" onClick={adicionarItem}>
-                  Adicionar item
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={BUTTON_SECONDARY} onClick={() => setContaInternaId(null)}>
+                  Cancelar
+                </button>
+                <button type="button" className={BUTTON_PRIMARY} disabled={saving} onClick={() => void enviarContaInterna()}>
+                  Confirmar envio
                 </button>
               </div>
             </div>
+          </CafeCard>
+        ) : (
+          <CafeCard title="Conta interna por competencia" description="O envio do saldo para conta interna parte de uma comanda aberta na fila operacional.">
+            <EmptyState
+              title="Nenhum envio para conta interna em andamento"
+              description="Use a acao da fila para escolher a comanda, validar o colaborador e confirmar a competencia que vai alimentar cobranca e fatura."
+            />
+          </CafeCard>
+        )}
+      </div>
+    );
+  }
 
-            <div className="mt-4 overflow-x-auto rounded-lg border">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Produto</th>
-                    <th className="px-3 py-2 text-right">Qtd</th>
-                    <th className="px-3 py-2 text-right">Unitario</th>
-                    <th className="px-3 py-2 text-right">Total</th>
-                    <th className="px-3 py-2 text-right">Acao</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {itens.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-4 text-slate-500" colSpan={5}>
-                        Nenhum item adicionado.
-                      </td>
-                    </tr>
-                  ) : (
-                    itens.map((item, index) => (
-                      <tr key={`${item.produto_id}-${index}`} className="border-t">
-                        <td className="px-3 py-2">{item.nome}</td>
-                        <td className="px-3 py-2 text-right">{item.quantidade}</td>
-                        <td className="px-3 py-2 text-right">{brl(item.valor_unitario_centavos)}</td>
-                        <td className="px-3 py-2 text-right">{brl(item.valor_unitario_centavos * item.quantidade)}</td>
-                        <td className="px-3 py-2 text-right">
-                          <button
-                            type="button"
-                            className="text-xs text-red-600 hover:underline"
-                            onClick={() => setItens((current) => current.filter((_, currentIndex) => currentIndex !== index))}
-                          >
-                            Remover
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+  function renderFilaRecentes() {
+    return (
+      <CaixaSection
+        anchor={SECTION_TARGETS.recentes}
+        title="Fila de comandas recentes"
+        description="Revise a operacao, filtre a fila e abra acoes de edicao, baixa e conta interna com mais contexto."
+        active={atalhoAtivo === "recentes" || baixaId !== null || contaInternaId !== null}
+        actions={
+          <button type="button" className={BUTTON_SECONDARY} onClick={() => void carregarComandas()}>
+            Atualizar lista
+          </button>
+        }
+      >
+        <CafeSectionIntro
+          title="Filtros operacionais"
+          description="Ajuste datas, colaborador, status e competencia para montar uma fila de revisao mais objetiva."
+          actions={
+            filtrosAtivos ? (
+              <button
+                type="button"
+                className={BUTTON_GHOST}
+                onClick={() => {
+                  const hoje = todayIso();
+                  setFiltroDataInicial(hoje);
+                  setFiltroDataFinal(hoje);
+                  setFiltroColaboradorPessoaId("");
+                  setFiltroStatus("");
+                  setFiltroCompetencia(competenciaAtual);
+                }}
+              >
+                Restaurar filtros
+              </button>
+            ) : null
+          }
+        />
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Resumo da operacao</div>
-            <div className="mt-3 text-2xl font-semibold">{brl(totalItensCentavos)}</div>
-            <div className="mt-2 text-sm text-slate-600">
-              {editingId
-                ? "Itens exibidos para referencia. A edicao operacional altera data, observacoes e vinculo antes do faturamento."
-                : "O total considera os itens atuais da comanda."}
-            </div>
-            <div className="mt-4 space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span>Valor pago informado</span>
-                <strong>{brl(Number(valorPagoCentavos || "0"))}</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Saldo previsto</span>
-                <strong>{brl(Math.max(totalItensCentavos - Number(valorPagoCentavos || "0"), 0))}</strong>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Competencia sugerida</span>
-                <strong>{competencia}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      </SystemSectionCard>
-
-      <SystemSectionCard title="Comandas recentes" description="Lista operacional com filtros e acoes rapidas de edicao, baixa e envio para conta interna.">
         <div className="grid gap-3 md:grid-cols-5">
-          <label className="space-y-1 text-sm">
-            <span>Data inicial</span>
-            <input className="w-full rounded-md border px-3 py-2" type="date" value={filtroDataInicial} onChange={(event) => setFiltroDataInicial(event.target.value)} />
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-slate-700">Data inicial</span>
+            <input
+              className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+              type="date"
+              value={filtroDataInicial}
+              onChange={(event) => setFiltroDataInicial(event.target.value)}
+            />
           </label>
-          <label className="space-y-1 text-sm">
-            <span>Data final</span>
-            <input className="w-full rounded-md border px-3 py-2" type="date" value={filtroDataFinal} onChange={(event) => setFiltroDataFinal(event.target.value)} />
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-slate-700">Data final</span>
+            <input
+              className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+              type="date"
+              value={filtroDataFinal}
+              onChange={(event) => setFiltroDataFinal(event.target.value)}
+            />
           </label>
-          <label className="space-y-1 text-sm">
-            <span>Colaborador</span>
-            <select className="w-full rounded-md border px-3 py-2" value={filtroColaboradorPessoaId} onChange={(event) => setFiltroColaboradorPessoaId(event.target.value)}>
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-slate-700">Colaborador</span>
+            <select
+              className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+              value={filtroColaboradorPessoaId}
+              onChange={(event) => setFiltroColaboradorPessoaId(event.target.value)}
+            >
               <option value="">Todos</option>
               {colaboradores.map((item) => (
                 <option key={item.id} value={item.pessoa_id ?? ""}>
@@ -586,178 +1834,140 @@ export default function CafeCaixaPage() {
               ))}
             </select>
           </label>
-          <label className="space-y-1 text-sm">
-            <span>Status</span>
-            <select className="w-full rounded-md border px-3 py-2" value={filtroStatus} onChange={(event) => setFiltroStatus(event.target.value)}>
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-slate-700">Status</span>
+            <select
+              className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+              value={filtroStatus}
+              onChange={(event) => setFiltroStatus(event.target.value)}
+            >
               {STATUS_OPTIONS.map((status) => (
                 <option key={status || "todos"} value={status}>
-                  {status || "Todos"}
+                  {status ? formatStatus(status) : "Todos"}
                 </option>
               ))}
             </select>
           </label>
-          <label className="space-y-1 text-sm">
-            <span>Competencia</span>
-            <input className="w-full rounded-md border px-3 py-2" value={filtroCompetencia} onChange={(event) => setFiltroCompetencia(event.target.value)} placeholder="YYYY-MM" />
+          <label className="space-y-2 text-sm">
+            <span className="font-medium text-slate-700">Competencia</span>
+            <input
+              className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+              value={filtroCompetencia}
+              onChange={(event) => setFiltroCompetencia(event.target.value)}
+              placeholder="YYYY-MM"
+            />
           </label>
         </div>
 
-        <div className="flex justify-end">
-          <button type="button" className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" onClick={() => void carregarComandas()}>
-            Atualizar lista
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="animate-pulse rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-6">
+                <div className="h-4 w-24 rounded bg-slate-200" />
+                <div className="mt-4 h-4 w-3/4 rounded bg-slate-200" />
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  <div className="h-16 rounded-[18px] bg-slate-200" />
+                  <div className="h-16 rounded-[18px] bg-slate-200" />
+                  <div className="h-16 rounded-[18px] bg-slate-200" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : comandas.length === 0 ? (
+          <EmptyState
+            title="Nenhuma comanda encontrada"
+            description="A fila operacional esta vazia para os filtros atuais. Ajuste a busca ou registre um novo lancamento para voltar a revisar comandas."
+            hint="Revisao, baixa parcial e conta interna"
+          />
+        ) : (
+          <div className="space-y-3">
+            {comandas.map((comanda) => (
+              <ComandaFilaCard
+                key={comanda.id}
+                comanda={comanda}
+                onEditar={(id) => void editarComanda(id)}
+                onDarBaixa={(item) => {
+                  setBaixaId(item.id);
+                  setContaInternaId(null);
+                  setBaixaValorCentavos(String(item.valor_em_aberto_centavos));
+                  setBaixaMetodo("DINHEIRO");
+                  setAtalhoAtivo("baixa");
+                  scrollToSection("baixa");
+                }}
+                onContaInterna={(item) => {
+                  setContaInternaId(item.id);
+                  setBaixaId(null);
+                  setContaInternaCompetencia(item.data_competencia ?? competenciaFromDate(item.data_operacao));
+                  setContaInternaColaboradorPessoaId(item.colaborador_pessoa_id ? String(item.colaborador_pessoa_id) : "");
+                  setAtalhoAtivo("conta");
+                  scrollToSection("conta");
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </CaixaSection>
+    );
+  }
+
+  return (
+    <CafePageShell
+      eyebrow="Ballet Cafe"
+      title="Caixa / Lancamentos"
+      description="Painel operacional para regularizar comandas anotadas em papel, revisar saldos, registrar baixas reais e encaminhar cobrancas por competencia sem transformar esta tela em PDV."
+      actions={
+        <>
+          <Link className={BUTTON_PRIMARY} href="/cafe/vendas">
+            Abrir PDV
+          </Link>
+          <Link className={BUTTON_SECONDARY} href="/admin/financeiro/credito-conexao/faturas">
+            Ver faturas da conta interna
+          </Link>
+          <button type="button" className={BUTTON_SECONDARY} onClick={() => void verPendencias()}>
+            Ver pendencias
           </button>
-        </div>
-
-        <div className="overflow-x-auto rounded-xl border">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-left">Comanda</th>
-                <th className="px-3 py-2 text-left">Data</th>
-                <th className="px-3 py-2 text-left">Colaborador</th>
-                <th className="px-3 py-2 text-left">Quitacao</th>
-                <th className="px-3 py-2 text-left">Status</th>
-                <th className="px-3 py-2 text-right">Total</th>
-                <th className="px-3 py-2 text-right">Aberto</th>
-                <th className="px-3 py-2 text-right">Acoes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td className="px-3 py-4 text-slate-500" colSpan={8}>
-                    Carregando...
-                  </td>
-                </tr>
-              ) : comandas.length === 0 ? (
-                <tr>
-                  <td className="px-3 py-4 text-slate-500" colSpan={8}>
-                    Nenhuma comanda encontrada com os filtros atuais.
-                  </td>
-                </tr>
-              ) : (
-                comandas.map((comanda) => (
-                  <tr key={comanda.id} className="border-t">
-                    <td className="px-3 py-2 font-medium">#{comanda.id}</td>
-                    <td className="px-3 py-2">{comanda.data_operacao}</td>
-                    <td className="px-3 py-2">{comanda.colaborador_nome ?? "-"}</td>
-                    <td className="px-3 py-2">{comanda.tipo_quitacao}</td>
-                    <td className="px-3 py-2">{comanda.status_pagamento}</td>
-                    <td className="px-3 py-2 text-right">{brl(comanda.valor_total_centavos)}</td>
-                    <td className="px-3 py-2 text-right">{brl(comanda.valor_em_aberto_centavos)}</td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button type="button" className="rounded border px-2 py-1 text-xs hover:bg-slate-50" onClick={() => void editarComanda(comanda.id)}>
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
-                          onClick={() => {
-                            setBaixaId(comanda.id);
-                            setBaixaValorCentavos(String(comanda.valor_em_aberto_centavos));
-                            setBaixaMetodo("DINHEIRO");
-                          }}
-                        >
-                          Dar baixa
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border px-2 py-1 text-xs hover:bg-slate-50"
-                          onClick={() => {
-                            setContaInternaId(comanda.id);
-                            setContaInternaCompetencia(comanda.data_competencia ?? competenciaFromDate(comanda.data_operacao));
-                            setContaInternaColaboradorPessoaId(comanda.colaborador_pessoa_id ? String(comanda.colaborador_pessoa_id) : "");
-                          }}
-                        >
-                          Conta interna
-                        </button>
-                        {comanda.cobranca_id ? (
-                          <Link className="rounded border px-2 py-1 text-xs hover:bg-slate-50" href={`/admin/governanca/cobrancas/${comanda.cobranca_id}`}>
-                            Cobranca
-                          </Link>
-                        ) : null}
-                        {comanda.fatura?.id ? (
-                          <Link className="rounded border px-2 py-1 text-xs hover:bg-slate-50" href={`/admin/financeiro/credito-conexao/faturas/${comanda.fatura.id}`}>
-                            Fatura
-                          </Link>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </SystemSectionCard>
-
-      {baixaId ? (
-        <SystemSectionCard title={`Baixa da comanda #${baixaId}`} description="Use este bloco para baixa parcial ou total com pagamento real.">
-          <div className="grid gap-3 md:grid-cols-3">
-            <label className="space-y-1 text-sm">
-              <span>Valor da baixa (centavos)</span>
-              <input className="w-full rounded-md border px-3 py-2" type="number" min={1} value={baixaValorCentavos} onChange={(event) => setBaixaValorCentavos(event.target.value)} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span>Metodo</span>
-              <select className="w-full rounded-md border px-3 py-2" value={baixaMetodo} onChange={(event) => setBaixaMetodo(event.target.value)}>
-                <option value="DINHEIRO">DINHEIRO</option>
-                <option value="PIX">PIX</option>
-                <option value="TRANSFERENCIA">TRANSFERENCIA</option>
-              </select>
-            </label>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" onClick={() => setBaixaId(null)}>
-              Cancelar
-            </button>
-            <button type="button" className="rounded-md bg-black px-4 py-2 text-sm text-white" onClick={() => void registrarBaixa()}>
-              Confirmar baixa
-            </button>
-          </div>
-        </SystemSectionCard>
-      ) : null}
-
-      {contaInternaId ? (
-        <SystemSectionCard title={`Enviar saldo da comanda #${contaInternaId} para conta interna`} description="Converte apenas o saldo em aberto em divida por competencia do colaborador.">
-          <div className="grid gap-3 md:grid-cols-3">
-            <label className="space-y-1 text-sm">
-              <span>Colaborador</span>
-              <select
-                className="w-full rounded-md border px-3 py-2"
-                value={contaInternaColaboradorPessoaId}
-                onChange={(event) => setContaInternaColaboradorPessoaId(event.target.value)}
-              >
-                <option value="">Selecione</option>
-                {colaboradores.map((item) => (
-                  <option key={item.id} value={item.pessoa_id ?? ""}>
-                    {item.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm">
-              <span>Competencia</span>
-              <input className="w-full rounded-md border px-3 py-2" value={contaInternaCompetencia} onChange={(event) => setContaInternaCompetencia(event.target.value)} placeholder="YYYY-MM" />
-            </label>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" onClick={() => setContaInternaId(null)}>
-              Cancelar
-            </button>
-            <button type="button" className="rounded-md bg-black px-4 py-2 text-sm text-white" onClick={() => void enviarContaInterna()}>
-              Confirmar envio
-            </button>
-          </div>
-        </SystemSectionCard>
-      ) : null}
-
+          <button
+            type="button"
+            className={BUTTON_GHOST}
+            onClick={() => {
+              limparFormulario();
+              setMensagem(null);
+              scrollToSection("formulario");
+            }}
+          >
+            Novo lancamento
+          </button>
+        </>
+      }
+      summary={
+        <>
+          <CafeStatCard label="Pendencias na fila" value={String(pendenciasAbertas)} description="Comandas carregadas com saldo aberto." />
+          <CafeStatCard label="Saldo em aberto" value={brl(saldoAbertoFila)} description="Total em revisao no filtro atual." />
+          <CafeStatCard label="Faturadas" value={String(faturadasNaFila)} description="Comandas ja vinculadas a cobranca ou fatura." />
+          <CafeStatCard label="Retroativas" value={String(retroativasNaFila)} description="Lancamentos fora da data atual." />
+        </>
+      }
+    >
       {mensagem ? (
-        <SystemSectionCard title="Retorno operacional">
-          <div className="text-sm text-slate-700">{mensagem}</div>
-        </SystemSectionCard>
+        <CafeCard variant="muted" title="Retorno operacional">
+          <p className="text-sm leading-6 text-slate-700">{mensagem}</p>
+        </CafeCard>
       ) : null}
-    </SystemPage>
+
+      {renderAtalhos()}
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
+        <div className="space-y-6">
+
+          {renderFormularioPrincipal()}
+          {renderLiquidacaoEDestino()}
+        </div>
+
+        {renderLateralResumo()}
+      </div>
+
+      {renderFilaRecentes()}
+
+    </CafePageShell>
   );
 }

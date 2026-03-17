@@ -1,24 +1,27 @@
-﻿import type { SidebarSection } from "./types";
+import type { SidebarSection } from "./types";
 
 export const cafeSidebar: SidebarSection[] = [
   {
     id: "cafe-inicio",
-    title: "Início",
-    items: [{ label: "Ballet Café", href: "/cafe" }],
+    title: "Inicio",
+    items: [{ label: "Ballet Cafe", href: "/cafe" }],
   },
   {
     id: "cafe-operacao",
-    title: "Operação",
-    items: [{ label: "Caixa / Vendas", href: "/cafe/caixa" }],
+    title: "Operacao",
+    items: [
+      { label: "Vendas", href: "/cafe/vendas" },
+      { label: "Caixa / Lancamentos", href: "/cafe/caixa" },
+    ],
   },
   {
     id: "cafe-gestao",
-    title: "Gestão do Café",
+    title: "Gestao do Cafe",
     items: [
-      { label: "Gestão do Café", href: "/cafe/admin" },
+      { label: "Gestao do Cafe", href: "/cafe/admin" },
       { label: "Produtos", href: "/cafe/admin/produtos" },
       { label: "Insumos", href: "/cafe/admin/insumos" },
-      { label: "Tabelas de preço", href: "/cafe/admin/tabelas-preco" },
+      { label: "Tabelas de preco", href: "/cafe/admin/tabelas-preco" },
       { label: "Compras de insumos", href: "/cafe/admin/compras" },
     ],
   },

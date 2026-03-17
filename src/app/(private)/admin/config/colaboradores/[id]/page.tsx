@@ -100,6 +100,17 @@ type Resumo = {
     folha_pagamento_id: number | null;
     cobranca_id?: number | null;
   }>;
+  competencias_folha?: Array<{
+    competencia: string;
+    valor_total_centavos: number;
+    status_fatura: string | null;
+    status_folha: string | null;
+    status_importacao: string;
+    referencia_fatura_id: number | null;
+    referencia_cobranca_id: number | null;
+    folha_pagamento_id: number | null;
+    espelho_disponivel: boolean;
+  }>;
   folhas_recentes?: Array<{
     id: number;
     competencia_ano_mes: string;
@@ -352,7 +363,7 @@ export default function ColaboradorDetalhesPage() {
     <SystemPage>
       <SystemContextCard
         title="Perfil do colaborador"
-        subtitle="Informacoes gerais, conta interna e perfil de pagamento."
+        subtitle="Informacoes gerais, folha mensal, conta interna e perfil de pagamento."
       >
         <div className="flex gap-2">
           <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/config/colaboradores">
@@ -364,8 +375,9 @@ export default function ColaboradorDetalhesPage() {
       <SystemHelpCard
         items={[
           "Use Alterar foto para identificar professores e equipe rapidamente.",
-          "Conta interna mostra a conta do Credito Conexao (COLABORADOR) e suas faturas.",
-          "Se o colaborador nao apareceu na folha, use Iniciar geracao da folha (mes atual).",
+          "Conta interna unifica a leitura do antigo Cartao Conexao para o colaborador e suas faturas por competencia.",
+          "As competencias e folhas voltaram a aparecer em destaque para facilitar leitura mensal e operacional.",
+          "Se o colaborador ainda nao apareceu na folha, use Iniciar geracao da folha (mes atual).",
         ]}
       />
 
@@ -687,7 +699,274 @@ export default function ColaboradorDetalhesPage() {
           </SystemSectionCard>
 
           <SystemSectionCard
-            title="Conta interna / Despesas — Faturas recentes"
+            title="Resumo financeiro"
+            description="Leitura executiva do saldo, faturamento, competencias em aberto e ultima importacao para folha."
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Saldo em aberto</div>
+                <div className="mt-2 text-2xl font-semibold">
+                  {brlFromCentavos(Number(resumo.saldo_em_aberto_total_centavos ?? 0))}
+                </div>
+                <div className="mt-2 text-sm text-slate-600">Total atualmente pendente na conta interna.</div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Faturado no mes</div>
+                <div className="mt-2 text-2xl font-semibold">
+                  {brlFromCentavos(Number(resumo.total_faturado_mes_centavos ?? 0))}
+                </div>
+                <div className="mt-2 text-sm text-slate-600">Somatorio da competencia atual no financeiro do colaborador.</div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Competencias em aberto</div>
+                <div className="mt-2 text-2xl font-semibold">{resumo.competencias_em_aberto?.length ?? 0}</div>
+                <div className="mt-2 text-sm text-slate-600">{resumo.competencias_em_aberto?.join(", ") || "Nenhuma competencia pendente."}</div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Ultima importacao</div>
+                <div className="mt-2 text-2xl font-semibold">{resumo.ultima_importacao_para_folha?.competencia ?? "-"}</div>
+                <div className="mt-2 text-sm text-slate-600">
+                  Status: {resumo.ultima_importacao_para_folha?.status ?? "Sem importacao recente"}
+                </div>
+              </div>
+            </div>
+          </SystemSectionCard>
+
+          <SystemSectionCard
+            title="Acoes rapidas"
+            description="Atalhos operacionais para conta interna, folha do mes e cockpit financeiro de colaboradores."
+          >
+            {msgAcao ? <div className="mb-3 text-sm text-slate-600">{msgAcao}</div> : null}
+            <div className="flex flex-wrap gap-2">
+              {!resumo.conta_interna?.existe ? (
+                <button
+                  type="button"
+                  className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                  disabled={creatingContaInterna}
+                  onClick={() => void criarContaInternaColaborador()}
+                >
+                  {creatingContaInterna ? "Criando conta interna..." : "Criar conta interna"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-60"
+                disabled={startingFolha}
+                onClick={() => void iniciarGeracaoFolhaMesAtual()}
+              >
+                {startingFolha ? "Iniciando..." : "Iniciar geracao da folha (mes atual)"}
+              </button>
+              <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/financeiro/colaboradores">
+                Abrir colaboradores financeiros
+              </Link>
+              <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/folha/colaboradores">
+                Abrir modulo da folha
+              </Link>
+              <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/admin/financeiro/credito-conexao/faturas">
+                Abrir faturas da conta interna
+              </Link>
+              {resumo.conta_interna?.id ? (
+                <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/financeiro/credito-conexao/contas">
+                  Abrir contas internas
+                </Link>
+              ) : null}
+            </div>
+          </SystemSectionCard>
+
+          <SystemSectionCard
+            title="Competencias e folhas"
+            description="Visao mensal com valor por competencia, status da conta interna e vinculo com a folha."
+          >
+            {(resumo.competencias_folha ?? []).length === 0 ? (
+              <div className="text-sm text-slate-600">Nenhuma competencia financeira encontrada para este colaborador.</div>
+            ) : (
+              <div className="grid gap-4 xl:grid-cols-2">
+                {(resumo.competencias_folha ?? []).map((competencia) => (
+                  <div key={competencia.competencia} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs text-slate-500">Competencia</div>
+                        <div className="mt-1 text-lg font-semibold">{competencia.competencia}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs text-slate-500">Valor</div>
+                        <div className="mt-1 text-lg font-semibold">
+                          {brlFromCentavos(Number(competencia.valor_total_centavos ?? 0))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                        <div className="text-xs text-slate-500">Conta interna</div>
+                        <div className="mt-1 font-medium">{competencia.status_fatura ?? "Sem fatura"}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                        <div className="text-xs text-slate-500">Folha</div>
+                        <div className="mt-1 font-medium">{competencia.status_folha ?? "Nao iniciada"}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                        <div className="text-xs text-slate-500">Importacao</div>
+                        <div className="mt-1 font-medium">{competencia.status_importacao}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {competencia.referencia_fatura_id ? (
+                        <Link
+                          className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                          href={`/admin/financeiro/credito-conexao/faturas/${competencia.referencia_fatura_id}`}
+                        >
+                          Abrir detalhes
+                        </Link>
+                      ) : null}
+                      {competencia.espelho_disponivel && competencia.folha_pagamento_id ? (
+                        <Link
+                          className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                          href={`/admin/financeiro/folha/colaboradores/${competencia.folha_pagamento_id}`}
+                        >
+                          Ver espelho
+                        </Link>
+                      ) : null}
+                      {competencia.folha_pagamento_id ? (
+                        <Link
+                          className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                          href={`/admin/financeiro/folha/colaboradores/${competencia.folha_pagamento_id}`}
+                        >
+                          Abrir folha
+                        </Link>
+                      ) : (
+                        <Link
+                          className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
+                          href={`/admin/financeiro/folha/colaboradores?competencia=${competencia.competencia}`}
+                        >
+                          Abrir modulo da folha
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SystemSectionCard>
+
+          <SystemSectionCard
+            title="Conta interna e debitos"
+            description="Conta interna (Cartao Conexao), politicas aplicadas, debitos por origem e faturas recentes."
+          >
+            <div className="grid gap-4 xl:grid-cols-[0.9fr_0.6fr_1.1fr]">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs text-slate-500">Conta interna</div>
+                <div className="mt-1 text-lg font-semibold">
+                  {resumo.conta_interna?.existe ? "Ativa" : "Nao criada"}
+                </div>
+                <div className="mt-2 text-sm text-slate-600">
+                  {resumo.conta_interna?.tipo_conta ?? "COLABORADOR"} - {resumo.conta_interna?.situacao_atual ?? "NAO_CRIADA"}
+                </div>
+                <div className="mt-4 text-xs text-slate-500">Politicas aplicadas</div>
+                <div className="mt-2 text-sm text-slate-700">
+                  Desconto: {resumo.status_configuracao_pagamento?.politica_desconto_cartao ?? "-"}
+                </div>
+                <div className="text-sm text-slate-700">
+                  Corte: {resumo.status_configuracao_pagamento?.politica_corte_cartao ?? "-"}
+                </div>
+                <div className="text-sm text-slate-700">
+                  Gera folha: {resumo.status_configuracao_pagamento?.gera_folha ? "Sim" : "Nao"}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 text-sm font-semibold">Debitos por origem</div>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Cafe</span>
+                    <strong>{brlFromCentavos(Number(resumo.itens_em_aberto_por_origem?.cafe.total_centavos ?? 0))}</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Loja</span>
+                    <strong>{brlFromCentavos(Number(resumo.itens_em_aberto_por_origem?.loja.total_centavos ?? 0))}</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Escola</span>
+                    <strong>{brlFromCentavos(Number(resumo.itens_em_aberto_por_origem?.escola.total_centavos ?? 0))}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-4">
+                <div className="mb-3 text-sm font-semibold">Faturas recentes</div>
+                {(resumo.faturas_recentes ?? []).length === 0 ? (
+                  <div className="text-sm text-slate-600">Nenhuma fatura recente.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {(resumo.faturas_recentes ?? []).slice(0, 6).map((fatura) => (
+                      <div key={fatura.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                        <div>
+                          <div className="font-medium">{fatura.periodo_referencia}</div>
+                          <div className="text-slate-600">{fatura.status}</div>
+                        </div>
+                        <div className="text-right">
+                          <div>{brlFromCentavos(Number(fatura.valor_total_centavos ?? 0))}</div>
+                          <div className="mt-1 flex flex-wrap justify-end gap-2">
+                            <Link className="underline" href={`/admin/financeiro/credito-conexao/faturas/${fatura.id}`}>
+                              Abrir detalhes
+                            </Link>
+                            {fatura.folha_pagamento_id ? (
+                              <Link className="underline" href={`/admin/financeiro/folha/colaboradores/${fatura.folha_pagamento_id}`}>
+                                Abrir folha
+                              </Link>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </SystemSectionCard>
+
+          <SystemSectionCard
+            title="Ultimos lancamentos"
+            description="Historico recente que alimenta a conta interna, a cobranca por competencia e a importacao da folha."
+          >
+            {(resumo.ultimos_lancamentos ?? []).length === 0 ? (
+              <div className="text-sm text-slate-600">Nenhum lancamento recente.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Origem</th>
+                      <th className="px-3 py-2 text-left">Descricao</th>
+                      <th className="px-3 py-2 text-left">Data</th>
+                      <th className="px-3 py-2 text-right">Valor</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(resumo.ultimos_lancamentos ?? []).map((item) => (
+                      <tr key={item.id} className="border-t">
+                        <td className="px-3 py-2">{item.origem_sistema ?? "-"}</td>
+                        <td className="px-3 py-2">{item.descricao ?? "-"}</td>
+                        <td className="px-3 py-2">{item.data_lancamento ?? "-"}</td>
+                        <td className="px-3 py-2 text-right">{brlFromCentavos(Number(item.valor_centavos ?? 0))}</td>
+                        <td className="px-3 py-2">{item.status ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </SystemSectionCard>
+
+          {false ? (
+          <>
+          <SystemSectionCard
+            title="Conta interna / Despesas - Faturas recentes"
             description="Faturas do colaborador no Credito Conexao."
           >
             {!resumo.cartao_conexao ? (
@@ -880,6 +1159,8 @@ export default function ColaboradorDetalhesPage() {
               )}
             </div>
           </SystemSectionCard>
+          </>
+          ) : null}
         </>
       )}
     </SystemPage>

@@ -170,10 +170,23 @@ export default function FolhaColaboradoresPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-6">
       <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold">Folha de pagamento - colaboradores</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Visao gerencial por competencia, com atalho para debitos em aberto, perfil do colaborador e importacao da conta interna.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-semibold">Folha de pagamento - colaboradores</h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Visao gerencial por competencia, com foco em processamento, importacao da conta interna e acesso rapido
+                ao perfil financeiro de cada colaborador.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/financeiro/colaboradores">
+                Abrir colaboradores financeiros
+              </Link>
+              <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/financeiro/credito-conexao/faturas">
+                Faturas da conta interna
+              </Link>
+            </div>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
@@ -223,6 +236,9 @@ export default function FolhaColaboradoresPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <Link className="rounded-md border px-3 py-2 text-sm" href="/financeiro/colaboradores">
+                Colaboradores financeiros
+              </Link>
               <button type="button" className="rounded-md border px-3 py-2 text-sm" disabled={running !== null} onClick={() => void abrirFolha()}>
                 {running === "abrir" ? "Abrindo..." : "Abrir folha"}
               </button>
@@ -290,6 +306,9 @@ export default function FolhaColaboradoresPage() {
                         <td className="px-3 py-2 text-right">{brl(Number(competenciaAtualPainel?.valor_total_centavos ?? 0))}</td>
                         <td className="px-3 py-2 text-right">
                           <div className="inline-flex gap-2">
+                            <Link className="rounded border px-3 py-1 text-xs hover:bg-slate-50" href={`/admin/config/colaboradores/${row.colaborador_id}`}>
+                              Perfil
+                            </Link>
                             <Link className="rounded border px-3 py-1 text-xs hover:bg-slate-50" href={`/admin/financeiro/folha/colaboradores/${row.id}`}>
                               Abrir folha
                             </Link>

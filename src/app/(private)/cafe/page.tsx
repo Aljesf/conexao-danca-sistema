@@ -7,115 +7,126 @@ import CafeStatCard from "@/components/cafe/CafeStatCard";
 
 const operacaoLinks = [
   {
-    href: "/cafe/caixa",
-    title: "Caixa / Vendas",
+    href: "/cafe/vendas",
+    title: "Vendas",
     description:
-      "Operação do PDV, lançamento de itens, comprador, pagamento e fechamento da venda.",
+      "PDV do Ballet Cafe com categorias, cards de produto, carrinho rapido e fechamento imediato.",
+    eyebrow: "Principal",
+    featured: true,
+  },
+  {
+    href: "/cafe/caixa",
+    title: "Caixa / Lancamentos",
+    description:
+      "Tela administrativa para registro retroativo, baixa parcial, revisao de comandas e envio para conta interna.",
+    eyebrow: "Regularizacao",
+    featured: false,
   },
 ];
 
 const gestaoLinks = [
   {
     href: "/cafe/admin",
-    title: "Gestão do Café",
-    description: "Hub de gestão para catálogo, insumos, preços e compras do Ballet Café.",
+    title: "Gestao do Cafe",
+    description: "Hub do modulo para catalogo, estoque, precos e abastecimento.",
     eyebrow: "Hub",
   },
   {
     href: "/cafe/admin/produtos",
     title: "Produtos",
-    description: "Cardápio, receitas e organização dos itens comercializados.",
+    description: "Cardapio, receitas e organizacao dos itens comercializados.",
   },
   {
     href: "/cafe/admin/insumos",
     title: "Insumos",
-    description: "Cadastros, abastecimento manual e acompanhamento do estoque do café.",
+    description: "Cadastro, saldo e abastecimento do estoque operacional do cafe.",
   },
   {
     href: "/cafe/admin/tabelas-preco",
-    title: "Tabelas de preço",
-    description: "Política comercial aplicada ao catálogo e ao caixa.",
+    title: "Tabelas de preco",
+    description: "Politica comercial aplicada ao PDV e aos lancamentos do caixa.",
   },
   {
     href: "/cafe/admin/compras",
     title: "Compras de insumos",
-    description: "Abastecimento operacional, histórico de compras e atualização do estoque.",
+    description: "Compras operacionais e historico de abastecimento.",
   },
 ];
 
 export default function CafeHomePage() {
   return (
     <CafePageShell
-      eyebrow="Contexto SaaS"
-      title="Ballet Café"
-      description="Operação e gestão do Ballet Café em um contexto dedicado, com navegação rápida para caixa, catálogo, preços, insumos e abastecimento."
+      eyebrow="Modulo operacional"
+      title="Ballet Cafe"
+      description="O modulo agora separa claramente a frente de vendas do caixa administrativo. Use o PDV para a operacao rapida e o caixa para regularizacoes."
       summary={
         <>
           <CafeStatCard
-            label="Operação do dia"
-            value="Caixa pronto"
-            description="A frente de caixa concentra comprador, itens, pagamento e fechamento da venda."
+            label="PDV"
+            value="Vendas rapidas"
+            description="A experiencia principal do dia fica em /cafe/vendas, com clique rapido por categoria e fechamento imediato."
           />
           <CafeStatCard
-            label="Gestão comercial"
-            value="Catálogo e preços"
-            description="Produtos, preços e receitas ficam organizados dentro do próprio módulo."
+            label="Caixa"
+            value="Lancamentos e revisao"
+            description="Comandas em papel, retroatividade, baixa parcial e envio para conta interna ficam em /cafe/caixa."
           />
           <CafeStatCard
-            label="Abastecimento"
-            value="Insumos e compras"
-            description="Gestão de insumos e compras operacionais separada da administração institucional."
+            label="Conta interna"
+            value="Financeiro unificado"
+            description="As vendas administrativas do cafe seguem a cobranca canonica por competencia sem criar financeiro paralelo."
           />
         </>
       }
     >
       <CafeCard
-        title="Operação"
-        description="A operação do café precisa de acesso rápido. Caixa / Vendas continua como o principal ponto de entrada do contexto."
+        title="Operacao do dia"
+        description="A entrada principal do Ballet Cafe volta a ser o PDV. O caixa administrativo segue separado para regularizacao operacional."
       >
         <CafeSectionIntro
-          title="Fluxo principal do dia"
-          description="Use o caixa para registrar vendas, selecionar comprador, definir a forma de pagamento e concluir a operação com rapidez."
+          title="Escolha a experiencia certa"
+          description="Vendas e caixa nao competem pela mesma tela: o PDV atende o balcao e o caixa atende o administrativo."
         />
-        <div className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
-          {operacaoLinks.map((item) => (
-            <CafeShortcutCard
-              key={item.href}
-              href={item.href}
-              title={item.title}
-              description={item.description}
-              featured
-              eyebrow="Operação"
-              footer="Acesso principal do módulo para registrar vendas no dia."
-            />
-          ))}
+        <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+          <div className="grid gap-4 md:grid-cols-2">
+            {operacaoLinks.map((item) => (
+              <CafeShortcutCard
+                key={item.href}
+                href={item.href}
+                title={item.title}
+                description={item.description}
+                eyebrow={item.eyebrow}
+                featured={item.featured}
+              />
+            ))}
+          </div>
           <CafePanel className="flex h-full flex-col justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Navegação do contexto
+                Regra de uso
               </p>
               <h3 className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
-                Gestão e abastecimento sem sair do Café
+                O caixa nao substitui o PDV
               </h3>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                O contexto já separa a operação do dia da gestão comercial e do abastecimento, sem
-                misturar essas tarefas com a administração global do sistema.
+                O PDV atende a venda do balcao. O caixa administrativo serve para comandas em papel,
+                lancamentos retroativos, baixas parciais e envio de saldo para conta interna.
               </p>
             </div>
             <p className="mt-5 text-xs leading-5 text-slate-500">
-              O mesmo padrão visual e de navegação se repete em todas as páginas do módulo.
+              A navegacao do modulo foi reorganizada para refletir essa separacao operacional.
             </p>
           </CafePanel>
         </div>
       </CafeCard>
 
       <CafeCard
-        title="Gestão do Café"
-        description="Cadastros, tabelas comerciais e abastecimento ficam dentro do próprio contexto Café."
+        title="Gestao do Cafe"
+        description="Cadastros, tabelas comerciais e abastecimento permanecem no contexto de gestao do modulo."
       >
         <CafeSectionIntro
-          title="Acessos de gestão"
-          description="Entre no hub administrativo do módulo ou vá direto para o cadastro que precisa ajustar."
+          title="Acessos de apoio"
+          description="Entre no hub administrativo do modulo ou va direto para o cadastro que precisa ajustar."
         />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {gestaoLinks.map((item) => (

@@ -157,6 +157,39 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
 
   const faturasAbertas = faturas.filter((item) => FATURA_STATUS_ABERTA.has(String(item.status ?? "").toUpperCase()));
   const faturasFechadasRecentes = faturas.filter((item) => FATURA_STATUS_FECHADA.has(String(item.status ?? "").toUpperCase())).slice(0, 6);
+  const faturaPorCompetencia = new Map<string, Record<string, unknown>>();
+  for (const fatura of faturas) {
+    const competencia = String(fatura.periodo_referencia ?? "").trim();
+    if (competencia && !faturaPorCompetencia.has(competencia)) {
+      faturaPorCompetencia.set(competencia, fatura);
+    }
+  }
+
+  const folhaPorCompetencia = new Map<string, Record<string, unknown>>();
+  for (const folha of folhas) {
+    const competencia = String(folha.competencia_ano_mes ?? "").trim();
+    if (competencia && !folhaPorCompetencia.has(competencia)) {
+      folhaPorCompetencia.set(competencia, folha);
+    }
+  }
+
+  const competenciasFolha = Array.from(new Set([...faturaPorCompetencia.keys(), ...folhaPorCompetencia.keys()]))
+    .sort((a, b) => b.localeCompare(a))
+    .map((competencia) => {
+      const fatura = faturaPorCompetencia.get(competencia) ?? null;
+      const folha = folhaPorCompetencia.get(competencia) ?? null;
+      return {
+        competencia,
+        valor_total_centavos: Math.max(Number(fatura?.valor_total_centavos ?? 0), 0),
+        status_fatura: String(fatura?.status ?? "") || null,
+        status_folha: String(folha?.status ?? "") || null,
+        status_importacao: folha?.id ? "IMPORTADA" : fatura?.id ? "PENDENTE" : "SEM_MOVIMENTO",
+        referencia_fatura_id: Number(fatura?.id ?? 0) || null,
+        referencia_cobranca_id: Number(fatura?.cobranca_id ?? 0) || null,
+        folha_pagamento_id: Number(folha?.id ?? fatura?.folha_pagamento_id ?? 0) || null,
+        espelho_disponivel: Boolean(folha?.id),
+      };
+    });
 
   return NextResponse.json(
     {
@@ -219,6 +252,7 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
         politica_desconto_cartao: configFinanceira?.politica_desconto_cartao ?? null,
         politica_corte_cartao: configFinanceira?.politica_corte_cartao ?? null,
       },
+      competencias_folha: competenciasFolha,
       ultimos_lancamentos: ultimosLancamentos,
       folhas_recentes: folhas,
     },

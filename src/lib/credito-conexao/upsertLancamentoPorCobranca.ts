@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type UpsertLancamentoPorCobrancaInput = {
   cobrancaId: number;
@@ -11,10 +12,11 @@ type UpsertLancamentoPorCobrancaInput = {
   origemSistema?: string;
   origemId?: number | null;
   composicaoJson?: Record<string, unknown> | null;
+  supabase?: Pick<SupabaseClient, "from"> | null;
 };
 
 export async function upsertLancamentoPorCobranca(input: UpsertLancamentoPorCobrancaInput) {
-  const supabase = await createClient();
+  const supabase = input.supabase ?? (await createClient());
   const referenciaItem = `cobranca:${input.cobrancaId}`;
 
   const { data: existente, error: errFind } = await supabase

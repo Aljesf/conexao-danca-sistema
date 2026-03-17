@@ -12,6 +12,9 @@ function statusFromError(message: string): number {
     case "produto_nao_encontrado":
     case "produto_inativo":
     case "colaborador_pessoa_id_obrigatorio":
+    case "conta_interna_exige_colaborador":
+    case "competencia_obrigatoria_para_conta_interna":
+    case "forma_pagamento_obrigatoria":
     case "saldo_em_aberto_obrigatorio_para_conta_interna":
     case "competencia_invalida":
       return 400;
@@ -49,6 +52,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
     const body = await request.json().catch(() => null);
+    console.log("[CAFE_CAIXA][POST] body:", JSON.stringify(body, null, 2));
     const data = await criarComandaCafe({
       supabase,
       body,
@@ -56,7 +60,14 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: true, data }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "falha_criar_comanda_cafe";
-    return NextResponse.json({ ok: false, error: message }, { status: statusFromError(message) });
+    const detalhe = error instanceof Error ? error.message : "erro_desconhecido";
+    console.error("[CAFE_CAIXA][ERRO]", error);
+    return NextResponse.json(
+      {
+        error: "falha_criar_comanda_cafe",
+        detalhe,
+      },
+      { status: statusFromError(detalhe) },
+    );
   }
 }
