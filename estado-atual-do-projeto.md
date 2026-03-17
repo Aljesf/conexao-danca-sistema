@@ -84,6 +84,20 @@ Suporte ao Usuário / Sistema de Tickets
 - o residual remanescente e historico/manual e nao exige reabertura da frente tecnica
 - passivo excepcional remanescente: `25, 26, 27, 38, 61, 138, 171, 182, 204, 205, 247, 274, 302, 402`
 
+## Saneamento final do passivo historico de cobrancas
+- saneamento final do passivo historico executado com criterio objetivo por grupo e com atualizacao apenas de `public.cobrancas.status`
+- criterio aplicado: recebimento legado prevalece; na ausencia dele, prevalece a fatura unica; em caso de multiplos recebimentos, prevalece a cobranca mais antiga
+- validacao final confirmou `0` duplicidades ativas canonicas por `origem_id` e `0` grupos duplicados ativos por competencia real
+- total geral cancelado em toda a frente: `34` cobrancas (`6` no lote 1, `14` no lote seguro legado e `14` no lote final historico)
+- nao restou caso residual de duplicidade historica auditada nesta frente
+
+## Fechamento da frente de duplicidade de cobrancas do Cartao Conexao
+- a frente de duplicidade de cobrancas do Cartao Conexao foi encerrada
+- total consolidado de `34` cobrancas canceladas
+- duplicidades ativas remanescentes zeradas
+- correcao estrutural concluida
+- nao ha pendencia tecnica aberta nesta frente
+
 ## Bloqueios
 nenhum
 

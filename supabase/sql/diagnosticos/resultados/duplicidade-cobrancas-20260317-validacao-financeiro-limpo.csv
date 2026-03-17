@@ -1,0 +1,32 @@
+bloco,grupo_chave,cobranca_id,pessoa_id,pessoa_nome,competencia_real,valor_centavos,origem_tipo,origem_id,status,created_at,possui_recebimento,recebimento_id,possui_fatura,fatura_id,quantidade,cobrancas_ids,origens,metrica,valor
+A,100|2026-03|17600,402,100,Vanessa Aguierre de Amorin,2026-03,17600,MATRICULA,38,PAGO,2026-03-09 20:08:59.03604+00,true,59,false,,,,,,
+A,100|2026-03|17600,413,100,Vanessa Aguierre de Amorin,2026-03,17600,FATURA_CREDITO_CONEXAO,319,CANCELADA,2026-03-09 20:10:23.525778+00,true,44,true,319,,,,,
+A,102|2026-02|30800,302,102,Raimundo Nonato Barbosa Pessoa,2026-02,30800,MATRICULA,37,RECEBIDO,2026-02-19 18:08:24.394476+00,true,31,false,,,,,,
+A,102|2026-02|30800,314,102,Raimundo Nonato Barbosa Pessoa,2026-02,30800,FATURA_CREDITO_CONEXAO,264,CANCELADA,2026-02-19 18:09:02.126186+00,true,34,true,264,,,,,
+A,156|2026-02|11000,171,156,Maria de Nazaré de Sousa Moura Monteiro ,2026-02,11000,MATRICULA,24,RECEBIDO,2026-01-15 20:16:58.662151+00,true,15,false,,,,,,
+A,156|2026-02|11000,234,156,Maria de Nazaré de Sousa Moura Monteiro ,2026-02,11000,FATURA_CREDITO_CONEXAO,170,CANCELADA,2026-02-16 22:12:44.986955+00,true,57,true,170,,,,,
+A,193|2026-02|12000,182,193,Cledson Belo da Costa,2026-02,12000,MATRICULA,25,RECEBIDO,2026-01-15 20:21:45.941959+00,true,14,false,,,,,,
+A,193|2026-02|12000,232,193,Cledson Belo da Costa,2026-02,12000,FATURA_CREDITO_CONEXAO,182,CANCELADA,2026-02-16 21:50:23.582629+00,false,,true,182,,,,,
+A,55|2026-02|9900,274,55,Bruna do Socorro de Amorin de Lima,2026-02,9900,MATRICULA,2,RECEBIDO,2026-02-19 17:58:10.932981+00,true,17,false,,,,,,
+A,55|2026-02|9900,300,55,Bruna do Socorro de Amorin de Lima,2026-02,9900,FATURA_CREDITO_CONEXAO,252,CANCELADA,2026-02-19 18:04:37.125261+00,false,,true,252,,,,,
+A,59|2026-02|42000,25,59,Carla Velasco Silvestre Luján,2026-02,42000,MATRICULA,4,PAGA,2026-01-12 20:37:42.920301+00,true,3,false,,,,,,
+A,59|2026-02|42000,26,59,Carla Velasco Silvestre Luján,2026-02,42000,MATRICULA,4,CANCELADA,2026-01-12 20:37:49.304582+00,true,29,false,,,,,,
+A,59|2026-02|42000,245,59,Carla Velasco Silvestre Luján,2026-02,42000,FATURA_CREDITO_CONEXAO,26,CANCELADA,2026-02-19 12:34:01.961306+00,true,33,true,26,,,,,
+A,59|2026-03|42000,27,59,Carla Velasco Silvestre Luján,2026-03,42000,MATRICULA,4,PAGO,2026-01-12 20:37:50.648121+00,true,63,false,,,,,,
+A,59|2026-03|42000,374,59,Carla Velasco Silvestre Luján,2026-03,42000,FATURA_CREDITO_CONEXAO,27,CANCELADA,2026-03-06 13:25:05.178211+00,true,61,true,27,,,,,
+A,63|2026-02|11000,138,63,Kamilla Melo Faro,2026-02,11000,MATRICULA,20,RECEBIDO,2026-01-15 13:59:35.06399+00,true,8,false,,,,,,
+A,63|2026-02|11000,238,63,Kamilla Melo Faro,2026-02,11000,FATURA_CREDITO_CONEXAO,134,CANCELADA,2026-02-19 11:56:11.397017+00,false,,true,134,,,,,
+A,75|2026-02|30334,61,75,Halanna Denise de Oliveira Demétrio,2026-02,30334,MATRICULA,13,RECEBIDO,2026-01-14 18:36:48.480736+00,true,16,false,,,,,,
+A,75|2026-02|30334,242,75,Halanna Denise de Oliveira Demétrio,2026-02,30334,FATURA_CREDITO_CONEXAO,62,CANCELADA,2026-02-19 12:29:16.947855+00,false,,true,62,,,,,
+A,83|2026-02|27000,247,83,Lucianny Van Assche,2026-02,27000,MATRICULA,29,RECEBIDO,2026-02-19 17:29:38.183297+00,true,30,false,,,,,,
+A,83|2026-02|27000,259,83,Lucianny Van Assche,2026-02,27000,FATURA_CREDITO_CONEXAO,228,CANCELADA,2026-02-19 17:33:28.726309+00,true,58,true,228,,,,,
+A,87|2026-02|12000,204,87,Tedy de Figueiredo da Costa Pinheiro,2026-02,12000,MATRICULA,27,RECEBIDO,2026-01-19 11:47:06.113461+00,true,6,false,,,,,,
+A,87|2026-02|12000,231,87,Tedy de Figueiredo da Costa Pinheiro,2026-02,12000,FATURA_CREDITO_CONEXAO,205,CANCELADA,2026-02-16 10:57:21.315437+00,false,,true,205,,,,,
+A,87|2026-03|12000,205,87,Tedy de Figueiredo da Costa Pinheiro,2026-03,12000,MATRICULA,27,PAGO,2026-01-19 11:47:07.510163+00,true,62,false,,,,,,
+A,87|2026-03|12000,370,87,Tedy de Figueiredo da Costa Pinheiro,2026-03,12000,FATURA_CREDITO_CONEXAO,206,CANCELADA,2026-03-06 12:45:43.121046+00,false,,true,206,,,,,
+A,95|2026-02|27500,38,95,Natália Cintia Assunção Brito ,2026-02,27500,MATRICULA,6,RECEBIDO,2026-01-14 12:18:01.868396+00,true,26,false,,,,,,
+A,95|2026-02|27500,244,95,Natália Cintia Assunção Brito ,2026-02,27500,FATURA_CREDITO_CONEXAO,38,CANCELADA,2026-02-19 12:33:05.952618+00,true,35,true,38,,,,,
+D,,,,,,,,,,,,,,,,,,cobrancas_canceladas_nesta_etapa,14
+D,,,,,,,,,,,,,,,,,,cobrancas_mantidas_no_historico,13
+D,,,,,,,,,,,,,,,,,,grupos_duplicados_ativos_restantes,0
+D,,,,,,,,,,,,,,,,,,cobrancas_ativas_no_passivo_historico,13
