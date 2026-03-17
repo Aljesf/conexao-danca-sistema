@@ -6,6 +6,10 @@ import { getCobrancaProvider } from "@/lib/financeiro/cobranca/providers";
 import type { CobrancaProviderCode } from "@/lib/financeiro/cobranca/providers/types";
 import { buildDescricaoCobranca } from "@/lib/financeiro/cobranca/descricao";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  DuplicidadeCobrancaCanonicaError,
+  getOrCreateCobrancaCanonicaFatura,
+} from "@/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -39,13 +43,6 @@ type ConfigCobrancaRow = {
   dias_permitidos_vencimento: number[] | null;
 };
 
-type CobrancaRow = {
-  id: number;
-  neofin_charge_id: string | null;
-};
-
-const ORIGEM_TIPO_CANONICA = "FATURA_CREDITO_CONEXAO";
-const ORIGEM_TIPOS_COMPATIVEIS = [ORIGEM_TIPO_CANONICA, "CREDITO_CONEXAO_FATURA"];
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function isStatusCheckError(errorMessage: string | null | undefined): boolean {
@@ -111,68 +108,6 @@ async function calcularTotalEItens(supabase: any, faturaId: number, fallbackValo
     totalCentavos: total,
     itensDescricao,
   };
-}
-
-async function resolveCobrancaExistente(supabase: any, fatura: FaturaRow): Promise<CobrancaRow | null> {
-  if (fatura.cobranca_id && Number.isFinite(Number(fatura.cobranca_id))) {
-    const { data } = await supabase
-      .from("cobrancas")
-      .select("id,neofin_charge_id")
-      .eq("id", Number(fatura.cobranca_id))
-      .maybeSingle<CobrancaRow>();
-    if (data) return data;
-  }
-
-  const { data } = await supabase
-    .from("cobrancas")
-    .select("id,neofin_charge_id")
-    .in("origem_tipo", ORIGEM_TIPOS_COMPATIVEIS)
-    .eq("origem_id", fatura.id)
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle<CobrancaRow>();
-
-  return data ?? null;
-}
-
-async function upsertCobrancaLocal(supabase: any, args: {
-  cobrancaExistente: CobrancaRow | null;
-  pessoaId: number;
-  descricao: string;
-  valorCentavos: number;
-  vencimentoIso: string;
-  faturaId: number;
-}) {
-  const payload = {
-    pessoa_id: args.pessoaId,
-    descricao: args.descricao,
-    valor_centavos: args.valorCentavos,
-    moeda: "BRL",
-    vencimento: args.vencimentoIso,
-    status: "PENDENTE",
-    metodo_pagamento: "BOLETO",
-    origem_tipo: ORIGEM_TIPO_CANONICA,
-    origem_id: args.faturaId,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (args.cobrancaExistente?.id) {
-    const { error } = await supabase
-      .from("cobrancas")
-      .update(payload)
-      .eq("id", args.cobrancaExistente.id);
-    if (error) throw new Error(`erro_atualizar_cobranca:${error.message}`);
-    return args.cobrancaExistente.id;
-  }
-
-  const { data, error } = await supabase
-    .from("cobrancas")
-    .insert(payload)
-    .select("id")
-    .single<{ id: number }>();
-
-  if (error || !data?.id) throw new Error(`erro_criar_cobranca:${error?.message ?? "sem_id"}`);
-  return data.id;
 }
 
 async function updateFaturaComStatusCompativel(
@@ -433,27 +368,38 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
   });
 
   const providerCode = (cfgGlobal?.provider_ativo ?? "NEOFIN") as CobrancaProviderCode;
-  let cobrancaExistente = await resolveCobrancaExistente(supabaseAdmin, fatura);
-
-  const cobrancaId = await upsertCobrancaLocal(supabaseAdmin, {
-    cobrancaExistente,
-    pessoaId: Number(conta.pessoa_titular_id),
-    descricao,
-    valorCentavos: totalEItens.totalCentavos,
-    vencimentoIso: vencimentoEfetivo,
-    faturaId: fatura.id,
-  });
-
-  if (!cobrancaExistente || cobrancaExistente.id !== cobrancaId) {
-    const { data: recarregada } = await supabaseAdmin
-      .from("cobrancas")
-      .select("id,neofin_charge_id")
-      .eq("id", cobrancaId)
-      .maybeSingle<CobrancaRow>();
-    cobrancaExistente = recarregada ?? null;
+  let cobrancaAtual;
+  try {
+    const resultadoCobranca = await getOrCreateCobrancaCanonicaFatura({
+      supabase: supabaseAdmin,
+      faturaId: fatura.id,
+      pessoaId: Number(conta.pessoa_titular_id),
+      descricao,
+      valorCentavos: totalEItens.totalCentavos,
+      vencimentoIso: vencimentoEfetivo,
+    });
+    cobrancaAtual = resultadoCobranca.cobranca;
+  } catch (err) {
+    if (err instanceof DuplicidadeCobrancaCanonicaError) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "duplicidade_cobranca_canonica",
+          detail: err.message,
+          cobranca_ids: err.cobrancaIds,
+          fatura_id: err.faturaId,
+        },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json(
+      { ok: false, error: "erro_upsert_cobranca", detail: err instanceof Error ? err.message : null },
+      { status: 500 },
+    );
   }
 
-  let neofinChargeId = cobrancaExistente?.neofin_charge_id ?? null;
+  const cobrancaId = cobrancaAtual.id;
+  let neofinChargeId = cobrancaAtual.neofin_charge_id ?? null;
   if (!neofinChargeId || force) {
     try {
       const provider = getCobrancaProvider(providerCode);

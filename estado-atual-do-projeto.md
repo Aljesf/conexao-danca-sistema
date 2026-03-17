@@ -56,6 +56,13 @@ Suporte ao Usuário / Sistema de Tickets
 - ha falha de idempotencia transversal: existem guardas locais por `matricula + competencia` e por `fatura + cobranca`, mas nao existe guarda unica por pessoa + competencia + contexto financeiro para impedir cobrancas paralelas
 - arquivos criticos mapeados: `src/app/api/matriculas/novo/route.ts`, `src/app/api/matriculas/liquidacao-primeira/route.ts`, `src/app/api/escola/matriculas/[id]/reprocessar-financeiro/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/fechar/route.ts`, `src/app/api/financeiro/credito-conexao/cobrancas/vincular-fatura/route.ts`, `src/lib/credito-conexao/upsertLancamentoPorCobranca.ts`, `src/lib/cobrancasNeofin.ts`, `src/lib/financeiro/creditoConexaoFaturas.ts`
 
+## Correcao da causa raiz de duplicidade de cobrancas
+- correcao da causa raiz iniciada e concluida nesta etapa, com ajuste de SQL e API
+- a cobranca canonica da fatura virou fonte unica e passou a ter protecao de unicidade por `origem_tipo + origem_id` quando ativa
+- a matricula nao gera mais cobranca paralela para mensalidade do Cartao Conexao nas rotas corrigidas; agora gera apenas lancamento elegivel ao faturamento
+- a idempotencia da cobranca canonica foi centralizada em `src/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura.ts`
+- pendencia remanescente: saneamento manual dos casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` ainda existentes no diagnostico anterior, alem da revisao de fluxos legados fora do escopo desta etapa
+
 ## Bloqueios
 nenhum
 

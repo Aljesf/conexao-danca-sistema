@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type UpsertLancamentoPorCobrancaInput = {
-  cobrancaId: number;
+  cobrancaId?: number | null;
   contaConexaoId: number;
   competencia: string; // YYYY-MM
   valorCentavos: number;
@@ -12,24 +12,37 @@ type UpsertLancamentoPorCobrancaInput = {
   origemSistema?: string;
   origemId?: number | null;
   composicaoJson?: Record<string, unknown> | null;
+  referenciaItem?: string | null;
   supabase?: Pick<SupabaseClient, "from"> | null;
 };
 
 export async function upsertLancamentoPorCobranca(input: UpsertLancamentoPorCobrancaInput) {
   const supabase = input.supabase ?? (await createClient());
-  const referenciaItem = `cobranca:${input.cobrancaId}`;
+  const cobrancaId =
+    typeof input.cobrancaId === "number" && Number.isFinite(input.cobrancaId) && input.cobrancaId > 0
+      ? Math.trunc(input.cobrancaId)
+      : null;
+  const referenciaItem =
+    typeof input.referenciaItem === "string" && input.referenciaItem.trim()
+      ? input.referenciaItem.trim()
+      : cobrancaId
+        ? `cobranca:${cobrancaId}`
+        : null;
 
-  const { data: existente, error: errFind } = await supabase
-    .from("credito_conexao_lancamentos")
-    .select("id")
-    .eq("cobranca_id", input.cobrancaId)
-    .maybeSingle();
+  if (!cobrancaId && !referenciaItem) {
+    throw new Error("cobranca_ou_referencia_item_obrigatorio");
+  }
+
+  const queryExistente = supabase.from("credito_conexao_lancamentos").select("id");
+  const { data: existente, error: errFind } = cobrancaId
+    ? await queryExistente.eq("cobranca_id", cobrancaId).maybeSingle()
+    : await queryExistente.eq("referencia_item", referenciaItem).maybeSingle();
 
   if (errFind) throw errFind;
 
   const payload = {
     conta_conexao_id: input.contaConexaoId,
-    cobranca_id: input.cobrancaId,
+    cobranca_id: cobrancaId,
     competencia: input.competencia,
     referencia_item: referenciaItem,
     valor_centavos: input.valorCentavos,

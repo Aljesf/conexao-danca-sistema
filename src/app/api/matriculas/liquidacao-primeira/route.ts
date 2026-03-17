@@ -605,79 +605,8 @@ async function ensureTurmaAlunoVinculos(params: {
   }
 }
 
-async function ensureCobrancaCartaoConexao(params: {
-  supabase: SupabaseAdminClient;
-  pessoaId: number;
-  matriculaId: number;
-  competencia: string;
-  valorCentavos: number;
-  vencimento: string;
-  descricao: string;
-}): Promise<number> {
-  const { supabase, pessoaId, matriculaId, competencia, valorCentavos, vencimento, descricao } = params;
-
-  const { data: existente, error: findErr } = await supabase
-    .from("cobrancas")
-    .select("id")
-    .eq("pessoa_id", pessoaId)
-    .eq("origem_tipo", "MATRICULA")
-    .eq("origem_id", matriculaId)
-    .eq("origem_subtipo", "CARTAO_CONEXAO")
-    .eq("competencia_ano_mes", competencia)
-    .order("id", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (findErr) {
-    throw new Error(`falha_buscar_cobranca_cartao: ${findErr.message}`);
-  }
-
-  const existenteId = existente ? Number((existente as { id?: number }).id) : NaN;
-  if (Number.isFinite(existenteId) && existenteId > 0) {
-    const { error: updErr } = await supabase
-      .from("cobrancas")
-      .update({
-        descricao,
-        valor_centavos: valorCentavos,
-        vencimento,
-        origem_subtipo: "CARTAO_CONEXAO",
-        competencia_ano_mes: competencia,
-      })
-      .eq("id", existenteId);
-
-    if (updErr) {
-      throw new Error(`falha_atualizar_cobranca_cartao: ${updErr.message}`);
-    }
-
-    return existenteId;
-  }
-
-  const { data: cobranca, error: insErr } = await supabase
-    .from("cobrancas")
-    .insert({
-      pessoa_id: pessoaId,
-      descricao,
-      valor_centavos: valorCentavos,
-      vencimento,
-      status: "PENDENTE",
-      origem_tipo: "MATRICULA",
-      origem_id: matriculaId,
-      origem_subtipo: "CARTAO_CONEXAO",
-      competencia_ano_mes: competencia,
-    })
-    .select("id")
-    .single();
-
-  if (insErr || !cobranca) {
-    throw new Error(`falha_criar_cobranca_cartao: ${insErr?.message ?? "erro_desconhecido"}`);
-  }
-
-  const id = Number((cobranca as { id?: number }).id);
-  if (!Number.isFinite(id) || id <= 0) {
-    throw new Error("cobranca_id_invalido");
-  }
-
-  return id;
+function buildReferenciaLancamentoCartaoConexao(matriculaId: number, competencia: string): string {
+  return `matricula:${matriculaId}|cartao_conexao|competencia:${competencia}`;
 }
 
 function asDateStr(n: unknown): string | null {
@@ -1034,14 +963,7 @@ function normalizeCompetenciaFim(competenciaInicio: string, competenciaFim: stri
   return competenciaFim;
 }
 
-function clampDiaVencimento(year: number, month: number, day: number): number {
-  const ultimoDia = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  const safeDay = Number.isFinite(day) ? Math.trunc(day) : 12;
-  if (safeDay <= 0) return Math.min(12, ultimoDia);
-  return Math.min(safeDay, ultimoDia);
-}
-
-async function gerarCobrancasCartaoManual(params: {
+async function gerarLancamentosCartaoManual(params: {
   supabase: SupabaseAdminClient;
   contaConexaoId: number;
   pessoaId: number;
@@ -1051,8 +973,10 @@ async function gerarCobrancasCartaoManual(params: {
   totalCentavos: number;
   competenciaInicio: string;
   competenciaFim: string;
-  diaVencimento: number;
-}): Promise<{ cobrancas: Array<{ id: number; competencia_ano_mes: string }>; lancamentos: number }> {
+}): Promise<{
+  lancamentosDetalhe: Array<{ id: number; competencia_ano_mes: string; referencia_item: string }>;
+  lancamentos: number;
+}> {
   const {
     supabase,
     contaConexaoId,
@@ -1063,32 +987,18 @@ async function gerarCobrancasCartaoManual(params: {
     totalCentavos,
     competenciaInicio,
     competenciaFim,
-    diaVencimento,
   } = params;
 
   const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
-  const cobrancas: Array<{ id: number; competencia_ano_mes: string }> = [];
+  const lancamentosDetalhe: Array<{ id: number; competencia_ano_mes: string; referencia_item: string }> = [];
   let lancamentos = 0;
 
   for (const competencia of competencias) {
     const parsed = parsePeriodo(competencia);
     if (!parsed) continue;
-    const vencimento = buildDateFromYMD(
-      parsed.year,
-      parsed.month,
-      clampDiaVencimento(parsed.year, parsed.month, diaVencimento),
-    );
 
     const descricao = `Mensalidade ${competencia} - matricula`;
-    const cobrancaId = await ensureCobrancaCartaoConexao({
-      supabase,
-      pessoaId,
-      matriculaId,
-      competencia,
-      valorCentavos: totalCentavos,
-      vencimento,
-      descricao,
-    });
+    const referenciaItem = buildReferenciaLancamentoCartaoConexao(matriculaId, competencia);
 
     const composicaoJson = {
       fonte: "MATRICULA_MANUAL",
@@ -1104,7 +1014,9 @@ async function gerarCobrancasCartaoManual(params: {
     };
 
     const lancamento = await upsertLancamentoPorCobranca({
-      cobrancaId,
+      referenciaItem,
+      cobrancaId: null,
+      supabase,
       contaConexaoId,
       competencia,
       valorCentavos: totalCentavos,
@@ -1141,10 +1053,14 @@ async function gerarCobrancasCartaoManual(params: {
       throw new Error(`falha_inserir_ledger: ${ledgerErr.message}`);
     }
 
-    cobrancas.push({ id: cobrancaId, competencia_ano_mes: competencia });
+    lancamentosDetalhe.push({
+      id: lancamento.id,
+      competencia_ano_mes: competencia,
+      referencia_item: referenciaItem,
+    });
   }
 
-  return { cobrancas, lancamentos };
+  return { lancamentosDetalhe, lancamentos };
 }
 
 export async function POST(request: NextRequest) {
@@ -1265,7 +1181,8 @@ export async function POST(request: NextRequest) {
     | NextResponse
   > => {
     debugCartao.executado = true;
-    let cobrancasGeradas: Array<{ id: number; competencia_ano_mes: string }> = [];
+    const cobrancasGeradas: Array<{ id: number; competencia_ano_mes: string }> = [];
+    let lancamentosGerados: Array<{ id: number; competencia_ano_mes: string; referencia_item: string }> = [];
     let totalMensalidade = 0;
 
     try {
@@ -1340,7 +1257,7 @@ export async function POST(request: NextRequest) {
           diaVencimento: conta.dia_vencimento ?? 12,
         });
 
-        const resultado = await gerarCobrancasCartaoManual({
+        const resultado = await gerarLancamentosCartaoManual({
           supabase,
           contaConexaoId: conta.id,
           pessoaId: matricula.responsavel_financeiro_id,
@@ -1350,10 +1267,9 @@ export async function POST(request: NextRequest) {
           totalCentavos: totalFamiliaManual,
           competenciaInicio,
           competenciaFim,
-          diaVencimento: conta.dia_vencimento ?? 12,
         });
 
-        cobrancasGeradas = resultado.cobrancas;
+        lancamentosGerados = resultado.lancamentosDetalhe;
         debugCartao.created_lancamentos += resultado.lancamentos;
         debugCartao.linked_faturas += resultado.lancamentos;
         totalMensalidade = totalFamiliaManual;
@@ -1425,21 +1341,12 @@ export async function POST(request: NextRequest) {
             const parsed = parsePeriodo(periodo);
             if (!parsed) continue;
             const dataEvento = buildDateFromYMD(parsed.year, parsed.month, 1);
-            const vencimento = buildDateFromYMD(parsed.year, parsed.month, conta.dia_vencimento ?? 12);
             const descricao = `Mensalidade ${periodo} - matricula`;
 
-            const cobrancaId = await ensureCobrancaCartaoConexao({
-              supabase,
-              pessoaId: matricula.responsavel_financeiro_id,
-              matriculaId: matricula.id,
-              competencia: periodo,
-              valorCentavos: totalMensalidade,
-              vencimento,
-              descricao,
-            });
-
             const lancamento = await upsertLancamentoPorCobranca({
-              cobrancaId,
+              referenciaItem: buildReferenciaLancamentoCartaoConexao(matricula.id, periodo),
+              cobrancaId: null,
+              supabase,
               contaConexaoId: Number(conta.id),
               competencia: periodo,
               valorCentavos: totalMensalidade,
@@ -1490,6 +1397,7 @@ export async function POST(request: NextRequest) {
 
     return {
       cobrancasCriadasManual: cobrancasGeradas,
+      lancamentosCriadosManual: lancamentosGerados,
       totalMensalidadeCentavos: totalMensalidade,
     };
   };
@@ -1967,7 +1875,7 @@ export async function POST(request: NextRequest) {
         diaVencimento: conta.dia_vencimento ?? 12,
       });
 
-      const resultado = await gerarCobrancasCartaoManual({
+      const resultado = await gerarLancamentosCartaoManual({
         supabase,
         contaConexaoId: conta.id,
         pessoaId: matricula.responsavel_financeiro_id,
@@ -1977,7 +1885,6 @@ export async function POST(request: NextRequest) {
         totalCentavos: totalFamiliaManual,
         competenciaInicio,
         competenciaFim,
-        diaVencimento: conta.dia_vencimento ?? 12,
       });
 
       const { error: errUpd } = await supabase
@@ -2032,8 +1939,6 @@ export async function POST(request: NextRequest) {
     if (!parsedPeriodo) {
       return NextResponse.json({ error: "competencia_invalida" }, { status: 400 });
     }
-    const vencimento = buildDateFromYMD(parsedPeriodo.year, parsedPeriodo.month, conta.dia_vencimento ?? 12);
-
     let composicao;
     try {
       composicao = await montarComposicaoMensalidade({
@@ -2054,20 +1959,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
     }
 
-    const cobrancaId = await ensureCobrancaCartaoConexao({
-      supabase,
-      pessoaId: matricula.responsavel_financeiro_id,
-      matriculaId: matricula.id,
-      competencia: periodo,
-      valorCentavos: totalMensalidade,
-      vencimento,
-      descricao: "Mensalidade cheia - matricula",
-    });
-
     let lancamentoId: number;
     try {
       const lancamento = await upsertLancamentoPorCobranca({
-        cobrancaId,
+        referenciaItem: buildReferenciaLancamentoCartaoConexao(matricula.id, periodo),
+        cobrancaId: null,
+        supabase,
         contaConexaoId: Number(conta.id),
         competencia: periodo,
         valorCentavos: totalMensalidade,

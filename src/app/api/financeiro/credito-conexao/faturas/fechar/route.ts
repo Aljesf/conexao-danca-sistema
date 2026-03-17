@@ -1,7 +1,13 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
-import { criarCobrancaLocalEEnviarNeofin } from "@/lib/cobrancasNeofin";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { getCobrancaProvider } from "@/lib/financeiro/cobranca/providers";
+import { buildDescricaoCobranca } from "@/lib/financeiro/cobranca/descricao";
+import type { CobrancaProviderCode } from "@/lib/financeiro/cobranca/providers/types";
+import {
+  DuplicidadeCobrancaCanonicaError,
+  getOrCreateCobrancaCanonicaFatura,
+} from "@/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura";
 
 /**
  * POST /api/financeiro/credito-conexao/faturas/fechar
@@ -95,7 +101,6 @@ export async function POST(req: NextRequest) {
       .select("id, valor_centavos, numero_parcelas")
       .eq("conta_conexao_id", contaConexaoId)
       .eq("competencia", periodo_ref)
-      .not("cobranca_id", "is", null)
       .eq("status", "PENDENTE_FATURA");
 
     if (lancamentosError) {
@@ -216,51 +221,82 @@ export async function POST(req: NextRequest) {
 
     if (conta.tipo_conta === "ALUNO") {
       try {
-        // Buscar dados minimos do titular para a cobranca (pessoa)
         const pessoaId = conta.pessoa_titular_id;
         if (!pessoaId) {
           console.warn(
             "Conta Credito Conexao ALUNO sem pessoa_titular_id; nao sera gerada cobranca.",
           );
         } else {
-          const integrationIdentifier = `credito-conexao-fatura-${faturaId}`;
-          const resultadoCobranca = await criarCobrancaLocalEEnviarNeofin({
-            supabase,
-            usuarioId: null,
-            pessoa_id: pessoaId,
-            descricao: `Fatura Cartao Conexao ${periodo_ref} (Conta #${conta.id})`,
-            valor_centavos: valorTotalFatura,
-            vencimento: (dataVencimento ?? dataFechamento).toISOString().slice(0, 10),
-            metodo_pagamento: null,
-            centro_custo_id: conta.centro_custo_principal_id ?? null,
-            origem_tipo: "CREDITO_CONEXAO_FATURA",
-            origem_id: faturaId,
-            integrationIdentifier,
-            exigirResponsavelFinanceiro: true,
+          const vencimentoIso = (dataVencimento ?? dataFechamento).toISOString().slice(0, 10);
+          const descricao = buildDescricaoCobranca({
+            contexto: "FATURA_CREDITO_CONEXAO",
+            faturaId,
+            periodo: periodo_ref,
+            itensDescricao: [],
           });
 
-          if (resultadoCobranca.ok) {
-            cobrancaId = resultadoCobranca.cobranca_id;
+          const resultadoCobranca = await getOrCreateCobrancaCanonicaFatura({
+            supabase,
+            faturaId,
+            pessoaId,
+            descricao,
+            valorCentavos: valorTotalFatura,
+            vencimentoIso,
+          });
 
-            const { error: updateFaturaError } = await supabase
-              .from("credito_conexao_faturas")
-              .update({ cobranca_id: cobrancaId })
-              .eq("id", faturaId);
+          cobrancaId = resultadoCobranca.cobranca.id;
 
-            if (updateFaturaError) {
-              console.error(
-                "Erro ao atualizar fatura com cobranca_id",
-                updateFaturaError,
-              );
+          if (!resultadoCobranca.cobranca.neofin_charge_id) {
+            const provider = getCobrancaProvider("NEOFIN" as CobrancaProviderCode);
+            const out = await provider.criarCobranca({
+              pessoaId,
+              descricao,
+              valorCentavos: valorTotalFatura,
+              vencimentoISO: vencimentoIso,
+              referenciaInterna: { tipo: "FATURA_CREDITO_CONEXAO", id: faturaId },
+            });
+
+            const { error: updProviderErr } = await supabase
+              .from("cobrancas")
+              .update({
+                neofin_charge_id: out.providerCobrancaId,
+                neofin_payload: out.payload ?? null,
+                link_pagamento: out.linkPagamento ?? null,
+                linha_digitavel: out.linhaDigitavel ?? null,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", cobrancaId);
+
+            if (updProviderErr) {
+              throw updProviderErr;
             }
-          } else {
+          }
+
+          const { error: updateFaturaError } = await supabase
+            .from("credito_conexao_faturas")
+            .update({ cobranca_id: cobrancaId })
+            .eq("id", faturaId);
+
+          if (updateFaturaError) {
             console.error(
-              "Falha ao criar/enviar cobranca Neofin no fechamento da fatura:",
-              resultadoCobranca,
+              "Erro ao atualizar fatura com cobranca_id",
+              updateFaturaError,
             );
           }
         }
       } catch (cobrancaErr) {
+        if (cobrancaErr instanceof DuplicidadeCobrancaCanonicaError) {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: "duplicidade_cobranca_canonica",
+              detail: cobrancaErr.message,
+              cobranca_ids: cobrancaErr.cobrancaIds,
+              fatura_id: cobrancaErr.faturaId,
+            },
+            { status: 409 },
+          );
+        }
         console.error(
           "Erro inesperado ao gerar cobranca da fatura Credito Conexao",
           cobrancaErr,

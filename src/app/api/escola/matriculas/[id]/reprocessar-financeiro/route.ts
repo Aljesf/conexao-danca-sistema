@@ -71,13 +71,8 @@ function toTimestamptzNoonUtc(dateYYYYMMDD: string): string {
   return `${dateYYYYMMDD}T12:00:00.000Z`;
 }
 
-function buildVencimento(competencia: string, diaVencimento: number | null): string {
-  const [anoStr, mesStr] = competencia.split("-");
-  const ano = Number(anoStr);
-  const mes = Number(mesStr);
-  const dia = diaVencimento && diaVencimento >= 1 && diaVencimento <= 31 ? diaVencimento : 12;
-  const data = new Date(Date.UTC(ano, mes - 1, dia));
-  return data.toISOString().slice(0, 10);
+function buildReferenciaLancamentoCartaoConexao(matriculaId: number, competencia: string): string {
+  return `matricula:${matriculaId}|cartao_conexao|competencia:${competencia}`;
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }> }) {
@@ -168,6 +163,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
     }
 
     const competenciaPadrao = new Date().toISOString().slice(0, 7);
+    const { data: lancMens, error: errLancMens } = await supabase
+      .from("credito_conexao_lancamentos")
+      .select("competencia, valor_centavos, referencia_item")
+      .eq("origem_id", matriculaId)
+      .in("origem_sistema", ["MATRICULA", "MATRICULA_MENSAL", "MATRICULA_REPROCESSAR"]);
+
+    if (errLancMens && !isSchemaMissing(errLancMens)) throw errLancMens;
+
     const { data: cobMens, error: errCobMens } = await supabase
       .from("cobrancas")
       .select("competencia_ano_mes, valor_centavos")
@@ -179,7 +182,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
 
     if (valorBaseMensal && valorBaseMensal > 0) {
       const competencias =
-        !errCobMens && Array.isArray(cobMens)
+        !errLancMens && Array.isArray(lancMens) && lancMens.length > 0
+          ? Array.from(
+              new Set(
+                lancMens
+                  .map((row) => (typeof row.competencia === "string" ? row.competencia : ""))
+                  .filter((comp) => isCompetencia(comp)),
+              ),
+            )
+          : !errCobMens && Array.isArray(cobMens)
           ? Array.from(
               new Set(
                 cobMens
@@ -195,7 +206,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
           valor_centavos: valorBaseMensal,
           descricao: "Mensalidade (herdada)",
         }));
-        mensalidadesFonte = "matricula_execucao_valores + cobrancas";
+        mensalidadesFonte =
+          !errLancMens && Array.isArray(lancMens) && lancMens.length > 0
+            ? "matricula_execucao_valores + credito_conexao_lancamentos"
+            : "matricula_execucao_valores + cobrancas";
       } else {
         mensalidades = [
           {
@@ -204,6 +218,25 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }>
             descricao: "Mensalidade (herdada)",
           },
         ];
+      }
+    } else if (!errLancMens && Array.isArray(lancMens) && lancMens.length > 0) {
+      const mapMensal = new Map<string, number>();
+      lancMens.forEach((row) => {
+        const comp = typeof row.competencia === "string" ? row.competencia : "";
+        const valor = Number(row.valor_centavos);
+        if (isCompetencia(comp) && Number.isFinite(valor) && valor > 0) {
+          mapMensal.set(comp, valor);
+        }
+      });
+      mensalidades = Array.from(mapMensal.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([competencia, valor_centavos]) => ({
+          competencia,
+          valor_centavos,
+          descricao: "Mensalidade (inferida por lancamentos)",
+        }));
+      if (mensalidades.length > 0) {
+        mensalidadesFonte = "credito_conexao_lancamentos";
       }
     } else if (!errCobMens && Array.isArray(cobMens) && cobMens.length > 0) {
       const mapMensal = new Map<string, number>();
@@ -367,6 +400,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
       );
     }
 
+    const referenciasPayload = competenciasPayload.map((competencia) =>
+      buildReferenciaLancamentoCartaoConexao(matriculaId, competencia),
+    );
+    const { data: lancExistentes, error: errLancExist } = await supabase
+      .from("credito_conexao_lancamentos")
+      .select("id, competencia, referencia_item, status")
+      .eq("origem_id", matriculaId)
+      .in("referencia_item", referenciasPayload);
+
+    if (errLancExist) throw errLancExist;
+
+    if (lancExistentes && lancExistentes.length > 0) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "reprocessamento_bloqueado_lancamento_existente",
+          detail:
+            "Ja existem lancamentos elegiveis ao Cartao Conexao para esta matricula/competencia. Para evitar duplicidade, o reprocessamento foi bloqueado.",
+          lancamentos_existentes: lancExistentes,
+        },
+        { status: 409 },
+      );
+    }
+
     const { data: conta, error: contaErr } = await supabase
       .from("credito_conexao_contas")
       .select("*")
@@ -377,7 +434,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
 
     if (contaErr) throw contaErr;
     let contaConexaoId: number;
-    let diaVencimento: number | null = null;
 
     if (!conta) {
       const { data: contaNova, error: errContaNova } = await supabase
@@ -393,25 +449,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
 
       if (errContaNova) throw errContaNova;
       contaConexaoId = Number(contaNova.id);
-      diaVencimento = Number.isFinite(Number(contaNova.dia_vencimento))
-        ? Number(contaNova.dia_vencimento)
-        : null;
     } else {
       contaConexaoId = Number(conta.id);
-      diaVencimento = Number.isFinite(Number(conta.dia_vencimento))
-        ? Number(conta.dia_vencimento)
-        : null;
     }
 
     const resultados: {
       cobrancas_criadas: number[];
       cobrancas_atualizadas: number[];
-      lancamentos_upsert: Array<{ cobranca_id: number; lancamento_id: number | null }>;
+      referencias_lancamento: string[];
+      lancamentos_upsert: Array<{ cobranca_id: number | null; lancamento_id: number | null }>;
       entrada?: { cobranca_id: number | null; recebimento_id: number | null };
       faturas_rebuild?: Array<{ competencia: string; fatura_id: number | null }>;
     } = {
       cobrancas_criadas: [],
       cobrancas_atualizadas: [],
+      referencias_lancamento: [],
       lancamentos_upsert: [],
     };
 
@@ -465,71 +517,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
 
     for (const m of payload.mensalidades) {
       const descricao = m.descricao ?? "Mensalidade (reprocessada)";
-      const vencimento = buildVencimento(m.competencia, diaVencimento);
-
-      const { data: cobExist, error: errFind } = await supabase
-        .from("cobrancas")
-        .select("id, valor_centavos, vencimento, descricao")
-        .eq("origem_tipo", "MATRICULA")
-        .eq("origem_id", matriculaId)
-        .eq("origem_subtipo", "CARTAO_CONEXAO")
-        .eq("competencia_ano_mes", m.competencia)
-        .order("id", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (errFind) throw errFind;
-
-      let cobrancaId: number;
-
-      if (!cobExist) {
-        const { data: cobNova, error: errCob } = await supabase
-          .from("cobrancas")
-          .insert({
-            pessoa_id: responsavelId,
-            descricao,
-            valor_centavos: m.valor_centavos,
-            vencimento,
-            status: "PENDENTE",
-            origem_tipo: "MATRICULA",
-            origem_subtipo: "CARTAO_CONEXAO",
-            origem_id: matriculaId,
-            competencia_ano_mes: m.competencia,
-          })
-          .select("id")
-          .single();
-
-        if (errCob) throw errCob;
-
-        cobrancaId = cobNova.id;
-        resultados.cobrancas_criadas.push(cobrancaId);
-      } else {
-        cobrancaId = cobExist.id;
-        const valorAtual = Number(cobExist.valor_centavos);
-        const vencAtual = String(cobExist.vencimento ?? "").slice(0, 10);
-        const descAtual = String(cobExist.descricao ?? "");
-        const needsUpdate =
-          valorAtual !== m.valor_centavos || vencAtual !== vencimento || descAtual !== descricao;
-
-        if (needsUpdate) {
-          const { error: errUpd } = await supabase
-            .from("cobrancas")
-            .update({
-              descricao,
-              valor_centavos: m.valor_centavos,
-              vencimento,
-              origem_subtipo: "CARTAO_CONEXAO",
-              competencia_ano_mes: m.competencia,
-            })
-            .eq("id", cobrancaId);
-
-          if (errUpd) throw errUpd;
-          resultados.cobrancas_atualizadas.push(cobrancaId);
-        }
-      }
+      const referenciaItem = buildReferenciaLancamentoCartaoConexao(matriculaId, m.competencia);
 
       const lanc = await upsertLancamentoPorCobranca({
-        cobrancaId,
+        cobrancaId: null,
+        referenciaItem,
+        supabase,
         contaConexaoId,
         competencia: m.competencia,
         valorCentavos: m.valor_centavos,
@@ -538,8 +531,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
         origemId: matriculaId,
       });
 
+      resultados.referencias_lancamento.push(referenciaItem);
       resultados.lancamentos_upsert.push({
-        cobranca_id: cobrancaId,
+        cobranca_id: null,
         lancamento_id: lanc?.id ?? null,
       });
     }
@@ -592,25 +586,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
           .select("id, valor_centavos, status, referencia_item, cobranca_id")
           .eq("conta_conexao_id", contaConexaoId)
           .eq("competencia", competencia)
-          .not("cobranca_id", "is", null)
           .in("status", ["PENDENTE_FATURA", "FATURADO"]);
 
         if (errLancs) throw errLancs;
 
-        let lista = lancs ?? [];
-        if (lista.length === 0) {
-          const { data: legacy, error: errLegacy } = await supabase
-            .from("credito_conexao_lancamentos")
-            .select("id, valor_centavos, status, referencia_item, cobranca_id")
-            .eq("conta_conexao_id", contaConexaoId)
-            .eq("competencia", competencia)
-            .is("cobranca_id", null)
-            .not("referencia_item", "is", null)
-            .in("status", ["PENDENTE_FATURA", "FATURADO"]);
-
-          if (errLegacy) throw errLegacy;
-          lista = legacy ?? [];
-        }
+        const lista = lancs ?? [];
 
         if (lista.length > 0) {
           const payloadPivot = lista.map((l) => ({ fatura_id: faturaId, lancamento_id: l.id }));
