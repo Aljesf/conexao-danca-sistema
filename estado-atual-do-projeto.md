@@ -72,6 +72,18 @@ Suporte ao Usuário / Sistema de Tickets
 - total efetivamente saneado ate agora permanece em `6` cobrancas canceladas no lote 1
 - a correcao estrutural do Cartao Conexao esta concluida, mas a frente de passivo historico ainda nao pode ser considerada encerrada
 
+## Execucao do lote seguro legado
+- a correcao estrutural do Cartao Conexao esta concluida e o lote seguro legado foi executado com sucesso
+- `14` cobrancas legado sem recebimento foram canceladas de forma controlada: `50, 51, 72, 73, 116, 117, 127, 149, 160, 172, 193, 217, 261, 338`
+- restam apenas `13` casos historicos com recebimento legado e o id `25` para decisao manual
+- a frente tecnica fica praticamente encerrada, restando apenas passivo historico excepcional para revisao financeira manual
+
+## Encerramento tecnico da duplicidade de cobrancas do Cartao Conexao
+- a frente tecnica de duplicidade de cobrancas do Cartao Conexao esta encerrada
+- a correcao estrutural foi concluida e nao bloqueia a evolucao normal do sistema
+- o residual remanescente e historico/manual e nao exige reabertura da frente tecnica
+- passivo excepcional remanescente: `25, 26, 27, 38, 61, 138, 171, 182, 204, 205, 247, 274, 302, 402`
+
 ## Bloqueios
 nenhum
 
