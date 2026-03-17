@@ -33,6 +33,11 @@ Suporte ao Usuário / Sistema de Tickets
 - notificações automáticas
 - painel de saúde do sistema
 
+## PendÃªncias tÃ©cnicas de financeiro
+- diagnÃ³stico concluÃ­do de duplicidade de cobranÃ§as no CrÃ©dito ConexÃ£o: 13 grupos duplicados e 27 cobranÃ§as envolvidas
+- padrÃ£o forte de mistura entre `MATRICULA` e `FATURA_CREDITO_CONEXAO`, exigindo saneamento controlado e correÃ§Ã£o da causa raiz
+- todos os grupos diagnosticados possuem `competencia_ano_mes` nula e pedem revisÃ£o do fluxo de geraÃ§Ã£o e consolidaÃ§Ã£o
+
 ## Bloqueios
 nenhum
 
