@@ -26,6 +26,7 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 - `/api/cafe/tabelas-preco` passou a resolver tabela padrao por perfil e a devolver a tabela ativa do fluxo sem quebrar a listagem administrativa existente.
 - O fechamento do PDV do Cafe agora envia a composicao detalhada dos itens para `credito_conexao_lancamentos.composicao_json`, permitindo leitura coerente da venda dentro da fatura do colaborador.
 - O metadata das contas internas e das opcoes de pagamento agora expoe `tipo_fatura = MENSAL`, `destino_liquidacao_fatura` e `permite_parcelamento` de forma consistente para aluno e colaborador.
+- `/api/cafe/vendas/[id]` agora entrega o detalhe completo da venda do Cafe em formato de recibo, com itens, competencia, referencias correlatas e total pronto para consulta e impressao.
 
 ## Paginas/componentes concluidos
 - `/cafe` como dashboard operacional inteligente do Ballet Cafe.
@@ -34,8 +35,10 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 - `/cafe/vendas` agora permite escolher a tabela de preco no fluxo, recalcula catalogo/carrinho conforme a tabela ativa e persiste a tabela usada na venda.
 - `/cafe/vendas` recebeu polimento final de UX no card lateral: tabela ativa, liquidacao escolhida e origem dos precos ficaram explicitos no resumo do PDV.
 - `/cafe/vendas` agora comunica corretamente que a conta interna do colaborador entra em fatura mensal e que a liquidacao dessa fatura integra a folha do mes seguinte.
+- `/cafe/vendas/[id]` passou a funcionar como recibo operacional da venda, com impressao, consulta posterior e rastreabilidade de cobranca, fatura e conta interna.
 - `/cafe/caixa` com fluxo administrativo claro para retroativo, baixa parcial, conta interna do aluno, conta interna do colaborador e conversao corretiva de saldo.
 - `/cafe/caixa` agora tambem resolve tabela de preco no lancamento administrativo, mostra a tabela ativa no resumo e envia `tabela_preco_id` para persistencia da comanda.
+- A fila de comandas do Caixa agora abre o recibo da venda registrada para consulta e reimpressao.
 - `/financeiro/formas-pagamento` para governanca central das formas por contexto e centro de custo.
 - `/financeiro/formas-pagamento` agora deixa explicito quais formas estao habilitadas em Cafe e Loja, qual maquininha padrao esta associada ao cartao e qual conta financeira padrao esta associada ao Pix.
 - `/loja/caixa` foi alinhada para consumir a mesma parametrizacao central e refletir maquininha e conta financeira de destino nas formas configuradas.
@@ -48,6 +51,7 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 - Homologacao com vendas reais de aluno, responsavel financeiro e colaborador.
 - Validar no ambiente autenticado a troca de tabela de preco no PDV/caixa e a persistencia correta de `tabela_preco_id` em vendas reais.
 - Gerar os prints finais do PDV mostrando tabela ativa, conta interna do colaborador e resumo do carrinho em ambiente autenticado.
+- Validar em navegador autenticado o recibo do Cafe, a impressao e a navegacao pos-fechamento da venda.
 - Revisar gradualmente a nomenclatura legado "Cartao Conexao" nas telas administrativas antigas para refletir o conceito unificado de conta interna mensal.
 - Refinar a Loja para usar o mesmo resolvedor de elegibilidade de conta interna por responsavel financeiro em todo o fluxo, sem depender de adaptacoes locais residuais.
 - Evoluir previsoes de reposicao com historico temporal e alertas inteligentes.
@@ -94,3 +98,10 @@ Conectarte v0.9 com:
 - Aluno e colaborador agora estao documentados e expostos pela mesma base canonica de conta interna com `tipo_fatura = MENSAL`.
 - A diferenca passa a ficar explicita no destino da liquidacao da fatura: aluno em fluxo de cobranca/pagamento da escola e colaborador em integracao com folha do mes seguinte.
 - O check-up confirmou que a configuracao de parcelamento continua centralizada em `credito_conexao_regras_parcelas`, compartilhada por `ALUNO` e `COLABORADOR`.
+
+## 2026-03-17 - Recibo e consulta posterior da venda do Cafe
+
+- Implementado o recibo operacional em `/cafe/vendas/[id]`, com visualizacao limpa, impressao e referencias correlatas da venda.
+- O fechamento do PDV do Cafe agora oferece CTA direto para abrir o recibo da venda concluida, sem deixar o operador preso em um estado ambíguo.
+- A consulta posterior tambem ficou acessivel pela fila do Caixa, permitindo revisar e reimprimir vendas recentes.
+- A validacao manual autenticada continua pendente neste ambiente por ausencia de sessao de navegador; a validacao de dados/backend segue obrigatoria na homologacao final.

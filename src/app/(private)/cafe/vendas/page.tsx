@@ -8,6 +8,7 @@ import CafePageShell from "@/components/cafe/CafePageShell";
 import CafePanel from "@/components/cafe/CafePanel";
 import CafeSectionIntro from "@/components/cafe/CafeSectionIntro";
 import CafeStatCard from "@/components/cafe/CafeStatCard";
+import { formatCafeVendaNumeroLegivel } from "@/lib/cafe/venda-recibo";
 
 type PessoaBusca = {
   id: number;
@@ -124,6 +125,11 @@ type ItemCarrinho = {
   unidade_venda: string | null;
 };
 
+type VendaConfirmada = {
+  id: number;
+  numero_legivel: string;
+};
+
 function brl(value: number) {
   return (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -211,6 +217,7 @@ export default function CafeVendasPage() {
   const [saving, setSaving] = useState(false);
   const [mensagem, setMensagem] = useState<string | null>(null);
   const [mensagemTipo, setMensagemTipo] = useState<"success" | "error" | null>(null);
+  const [ultimaVendaConfirmada, setUltimaVendaConfirmada] = useState<VendaConfirmada | null>(null);
   const itensRef = useRef<ItemCarrinho[]>([]);
 
   useEffect(() => {
@@ -516,6 +523,7 @@ export default function CafeVendasPage() {
   function adicionarProduto(produto: CafeCatalogoProduto) {
     setMensagem(null);
     setMensagemTipo(null);
+    setUltimaVendaConfirmada(null);
     setItens((current) => {
       const index = current.findIndex((item) => item.produto_id === produto.id);
       if (index >= 0) {
@@ -553,6 +561,12 @@ export default function CafeVendasPage() {
     setCompradores([]);
     setPagamentoCodigo("");
     setValorRecebidoCentavos("");
+  }
+
+  function limparRetornoOperacional() {
+    setMensagem(null);
+    setMensagemTipo(null);
+    setUltimaVendaConfirmada(null);
   }
 
   async function solicitarContaInterna() {
@@ -674,9 +688,17 @@ export default function CafeVendasPage() {
         payload?.data?.fatura?.id ? `fatura #${payload.data.fatura.id}` : null,
       ].filter(Boolean);
       limparVenda();
+      setUltimaVendaConfirmada(
+        vendaId
+          ? {
+              id: vendaId,
+              numero_legivel: formatCafeVendaNumeroLegivel(vendaId),
+            }
+          : null,
+      );
       setMensagem(
         vendaId
-          ? `Venda registrada no PDV com sucesso. Comanda #${vendaId}${complemento.length ? `, ${complemento.join(", ")}` : ""}.`
+          ? `Venda registrada no PDV com sucesso. ${formatCafeVendaNumeroLegivel(vendaId)}${complemento.length ? `, ${complemento.join(", ")}` : ""}.`
           : "Venda registrada no PDV com sucesso.",
       );
       setMensagemTipo("success");
@@ -736,8 +758,31 @@ export default function CafeVendasPage() {
     >
       {mensagem ? (
         <CafeCard variant={mensagemTipo === "success" ? "stats" : "muted"}>
-          <div className={mensagemTipo === "success" ? "text-sm text-emerald-900" : "text-sm text-amber-900"}>
-            {mensagem}
+          <div className="space-y-3">
+            <div className={mensagemTipo === "success" ? "text-sm text-emerald-900" : "text-sm text-amber-900"}>
+              {mensagem}
+            </div>
+            {mensagemTipo === "success" && ultimaVendaConfirmada ? (
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/cafe/vendas/${ultimaVendaConfirmada.id}`}
+                  className="rounded-full bg-[#9a3412] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#7c2d12]"
+                >
+                  Ver recibo
+                </Link>
+                <button
+                  type="button"
+                  className="rounded-full border border-[#d7c3a4] bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-[#fff8ef]"
+                  onClick={() => {
+                    setMensagem(null);
+                    setMensagemTipo(null);
+                    setUltimaVendaConfirmada(null);
+                  }}
+                >
+                  Seguir vendendo
+                </button>
+              </div>
+            ) : null}
           </div>
         </CafeCard>
       ) : null}
@@ -776,7 +821,10 @@ export default function CafeVendasPage() {
                       <button
                         type="button"
                         className="mt-3 text-xs font-medium text-[#9a3412] hover:underline"
-                        onClick={() => setCompradorSelecionado(null)}
+                        onClick={() => {
+                          limparRetornoOperacional();
+                          setCompradorSelecionado(null);
+                        }}
                       >
                         Remover comprador
                       </button>
@@ -804,6 +852,7 @@ export default function CafeVendasPage() {
                               key={pessoa.id}
                               type="button"
                               onClick={() => {
+                                limparRetornoOperacional();
                                 setCompradorSelecionado(pessoa);
                                 setBuscaComprador("");
                                 setCompradores([]);
@@ -854,9 +903,10 @@ export default function CafeVendasPage() {
                       <select
                         className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
                         value={tabelaPrecoId ?? ""}
-                        onChange={(event) =>
-                          setTabelaPrecoId(event.target.value ? Number(event.target.value) : null)
-                        }
+                        onChange={(event) => {
+                          limparRetornoOperacional();
+                          setTabelaPrecoId(event.target.value ? Number(event.target.value) : null);
+                        }}
                         disabled={tabelasPrecoLoading || tabelasPreco.length === 0}
                       >
                         {tabelasPreco.length === 0 ? <option value="">Nenhuma tabela disponivel</option> : null}
@@ -889,7 +939,10 @@ export default function CafeVendasPage() {
                       <select
                         className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
                         value={pagamentoCodigo}
-                        onChange={(event) => setPagamentoCodigo(event.target.value)}
+                        onChange={(event) => {
+                          limparRetornoOperacional();
+                          setPagamentoCodigo(event.target.value);
+                        }}
                         disabled={pagamentosLoading || pagamentos.length === 0}
                       >
                         {pagamentos.length === 0 ? (

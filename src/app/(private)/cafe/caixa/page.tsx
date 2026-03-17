@@ -590,6 +590,9 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
+        <Link className={BUTTON_SECONDARY} href={`/cafe/vendas/${comanda.id}`}>
+          Ver recibo
+        </Link>
         <button type="button" className={BUTTON_SECONDARY} onClick={() => onEditar(comanda.id)}>
           Editar
         </button>
