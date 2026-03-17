@@ -50,6 +50,12 @@ Suporte ao Usuário / Sistema de Tickets
 - casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` continuam pendentes de revisao manual
 - proxima frente: investigacao da causa raiz no codigo
 
+## Investigacao da causa raiz de duplicidade de cobrancas
+- investigacao no codigo concluida nesta etapa, sem alteracao de regra de negocio e sem alteracao no banco
+- hipotese principal: o fluxo de matricula cria cobranca mensal `MATRICULA` com subtipo `CARTAO_CONEXAO`, enquanto o fluxo de fechamento/geracao de fatura cria a cobranca canonica `FATURA_CREDITO_CONEXAO` sem coordenacao entre os dois fluxos
+- ha falha de idempotencia transversal: existem guardas locais por `matricula + competencia` e por `fatura + cobranca`, mas nao existe guarda unica por pessoa + competencia + contexto financeiro para impedir cobrancas paralelas
+- arquivos criticos mapeados: `src/app/api/matriculas/novo/route.ts`, `src/app/api/matriculas/liquidacao-primeira/route.ts`, `src/app/api/escola/matriculas/[id]/reprocessar-financeiro/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/fechar/route.ts`, `src/app/api/financeiro/credito-conexao/cobrancas/vincular-fatura/route.ts`, `src/lib/credito-conexao/upsertLancamentoPorCobranca.ts`, `src/lib/cobrancasNeofin.ts`, `src/lib/financeiro/creditoConexaoFaturas.ts`
+
 ## Bloqueios
 nenhum
 
