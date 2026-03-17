@@ -157,7 +157,7 @@ function buildFinancialEffect(option: PagamentoOpcao | null, buyerType: CafeComp
     case "CONTA_INTERNA_ALUNO":
       return "Esta venda sera lancada na conta interna do aluno e seguira para faturamento mensal.";
     case "CONTA_INTERNA_COLABORADOR":
-      return "Esta venda ficara em conta interna do colaborador para fechamento futuro.";
+      return "Esta venda entrara na fatura mensal da conta interna do colaborador. A liquidacao dessa fatura integra a folha de pagamento do mes seguinte.";
     case "CARTAO_EXTERNO":
       return "Esta venda seguira o fluxo financeiro do cartao externo e do recebivel configurado.";
     default:
@@ -1006,7 +1006,10 @@ export default function CafeVendasPage() {
                     <div className="rounded-2xl border border-[#eadfcd] bg-[#fffaf4] p-4">
                       <div className="text-sm font-medium text-slate-900">Liquidacao em conta interna do colaborador</div>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
-                        Esta venda vai para a conta interna real do colaborador e entra na fatura da competencia.
+                        Esta venda entra na fatura mensal da conta interna do colaborador.
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        A liquidacao dessa fatura integra a folha de pagamento do mes seguinte.
                       </p>
                     </div>
                   ) : null}

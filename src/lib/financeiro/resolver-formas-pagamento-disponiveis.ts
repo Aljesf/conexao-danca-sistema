@@ -50,6 +50,13 @@ export type ContaInternaElegibilidade = {
   tipo: "ALUNO" | "COLABORADOR" | null;
   conta_id: number | null;
   titular_pessoa_id: number | null;
+  tipo_fatura: "MENSAL" | null;
+  destino_liquidacao_fatura:
+    | "NEOFIN"
+    | "PAGAMENTO_DIRETO_ESCOLA"
+    | "INTEGRACAO_FOLHA_MES_SEGUINTE"
+    | null;
+  permite_parcelamento: boolean;
   motivo: string | null;
   suporte: {
     pode_solicitar: boolean;
@@ -620,6 +627,9 @@ function buildContaInternaResponse(params: {
       tipo: "ALUNO",
       conta_id: contaAluno.conta_id,
       titular_pessoa_id: contaAluno.titular_pessoa_id,
+      tipo_fatura: contaAluno.tipo_fatura,
+      destino_liquidacao_fatura: contaAluno.destino_liquidacao_fatura,
+      permite_parcelamento: contaAluno.permite_parcelamento,
       motivo: contaAluno.motivo,
       suporte: {
         pode_solicitar: !contaAluno.elegivel && Boolean(compradorPessoaId),
@@ -634,6 +644,9 @@ function buildContaInternaResponse(params: {
       tipo: "COLABORADOR",
       conta_id: contaColaborador.conta_id,
       titular_pessoa_id: contaColaborador.titular_pessoa_id,
+      tipo_fatura: contaColaborador.tipo_fatura,
+      destino_liquidacao_fatura: contaColaborador.destino_liquidacao_fatura,
+      permite_parcelamento: contaColaborador.permite_parcelamento,
       motivo: contaColaborador.motivo,
       suporte: {
         pode_solicitar: !contaColaborador.elegivel && Boolean(compradorPessoaId),
@@ -649,6 +662,9 @@ function buildContaInternaResponse(params: {
     tipo: null,
     conta_id: null,
     titular_pessoa_id: null,
+    tipo_fatura: null,
+    destino_liquidacao_fatura: null,
+    permite_parcelamento: false,
     motivo: "Conta interna disponivel apenas para aluno ou colaborador identificado.",
     suporte: {
       pode_solicitar: false,
@@ -756,11 +772,15 @@ export async function resolverFormasPagamentoDisponiveis(params: {
       : Promise.resolve<ContaInternaResolvida>({
           elegivel: false,
           tipo: "ALUNO",
+          tipo_titular: "ALUNO",
           conta_id: null,
           titular_pessoa_id: null,
           responsavel_financeiro_pessoa_id: null,
           dia_vencimento: null,
+          tipo_fatura: "MENSAL",
           tipo_liquidacao: "FATURA_MENSAL",
+          destino_liquidacao_fatura: "NEOFIN",
+          permite_parcelamento: false,
           motivo: "Nao se aplica.",
           descricao: null,
         }),
@@ -772,11 +792,15 @@ export async function resolverFormasPagamentoDisponiveis(params: {
       : Promise.resolve<ContaInternaResolvida>({
           elegivel: false,
           tipo: "COLABORADOR",
+          tipo_titular: "COLABORADOR",
           conta_id: null,
           titular_pessoa_id: null,
           responsavel_financeiro_pessoa_id: null,
           dia_vencimento: null,
-          tipo_liquidacao: "FOLHA_PAGAMENTO",
+          tipo_fatura: "MENSAL",
+          tipo_liquidacao: "FATURA_MENSAL",
+          destino_liquidacao_fatura: "INTEGRACAO_FOLHA_MES_SEGUINTE",
+          permite_parcelamento: false,
           motivo: "Nao se aplica.",
           descricao: null,
         }),

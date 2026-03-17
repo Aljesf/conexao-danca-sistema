@@ -22,8 +22,10 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 - A resolucao das formas do Cafe e da Loja agora respeita a parametrizacao inicial por contexto, centro de custo, maquininha padrao e conta financeira de destino, com fallback controlado para o legado quando o schema novo ainda nao estiver completo.
 - Corrigida a elegibilidade da conta interna do colaborador no PDV do Cafe: o resolvedor agora identifica colaborador ativo pelo `comprador_pessoa_id`, preserva a forma `Conta interna do colaborador` no filtro final e nao cai em `NAO_IDENTIFICADO` quando a pessoa selecionada ja e um colaborador valido.
 - O PDV e o Caixa do Cafe agora resolvem a conta interna do colaborador pela mesma fonte canonica usada nas faturas administrativas (`credito_conexao_contas` + faturas vinculadas), com compatibilidade para nomenclaturas legadas da conta real.
+- Corrigida a regra conceitual da conta interna do colaborador: compras do Cafe entram na mesma estrutura canonica de fatura mensal usada pelo aluno, e a diferenca fica no destino da liquidacao dessa fatura (`INTEGRACAO_FOLHA_MES_SEGUINTE` para colaborador).
 - `/api/cafe/tabelas-preco` passou a resolver tabela padrao por perfil e a devolver a tabela ativa do fluxo sem quebrar a listagem administrativa existente.
 - O fechamento do PDV do Cafe agora envia a composicao detalhada dos itens para `credito_conexao_lancamentos.composicao_json`, permitindo leitura coerente da venda dentro da fatura do colaborador.
+- O metadata das contas internas e das opcoes de pagamento agora expoe `tipo_fatura = MENSAL`, `destino_liquidacao_fatura` e `permite_parcelamento` de forma consistente para aluno e colaborador.
 
 ## Paginas/componentes concluidos
 - `/cafe` como dashboard operacional inteligente do Ballet Cafe.
@@ -31,6 +33,7 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 - `/cafe/vendas` agora exibe Dinheiro, Pix, Credito a vista e conta interna por perfil elegivel, com subfluxo de troco, maquininha padrao Mercado Pago e destino financeiro do Pix quando configurado.
 - `/cafe/vendas` agora permite escolher a tabela de preco no fluxo, recalcula catalogo/carrinho conforme a tabela ativa e persiste a tabela usada na venda.
 - `/cafe/vendas` recebeu polimento final de UX no card lateral: tabela ativa, liquidacao escolhida e origem dos precos ficaram explicitos no resumo do PDV.
+- `/cafe/vendas` agora comunica corretamente que a conta interna do colaborador entra em fatura mensal e que a liquidacao dessa fatura integra a folha do mes seguinte.
 - `/cafe/caixa` com fluxo administrativo claro para retroativo, baixa parcial, conta interna do aluno, conta interna do colaborador e conversao corretiva de saldo.
 - `/cafe/caixa` agora tambem resolve tabela de preco no lancamento administrativo, mostra a tabela ativa no resumo e envia `tabela_preco_id` para persistencia da comanda.
 - `/financeiro/formas-pagamento` para governanca central das formas por contexto e centro de custo.
@@ -45,6 +48,7 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 - Homologacao com vendas reais de aluno, responsavel financeiro e colaborador.
 - Validar no ambiente autenticado a troca de tabela de preco no PDV/caixa e a persistencia correta de `tabela_preco_id` em vendas reais.
 - Gerar os prints finais do PDV mostrando tabela ativa, conta interna do colaborador e resumo do carrinho em ambiente autenticado.
+- Revisar gradualmente a nomenclatura legado "Cartao Conexao" nas telas administrativas antigas para refletir o conceito unificado de conta interna mensal.
 - Refinar a Loja para usar o mesmo resolvedor de elegibilidade de conta interna por responsavel financeiro em todo o fluxo, sem depender de adaptacoes locais residuais.
 - Evoluir previsoes de reposicao com historico temporal e alertas inteligentes.
 - Aplicar as migrations financeiras pendentes nos ambientes que ainda estao apenas no schema legado para persistir todos os metadados novos tambem no banco e garantir o seed padrao das formas centrais.
@@ -83,3 +87,10 @@ Conectarte v0.9 com:
 - O PDV passou a enviar `conta_conexao_id` e `conta_interna_id` resolvidos pela API, e o backend agora valida a conta informada contra a conta canonica antes de lancar a cobranca/fatura.
 - Corrigido o warning de chave duplicada `conta-nao-resolvida` na leitura financeira do dashboard do Cafe.
 - Mantida a persistencia de `tabela_preco_id` e da composicao detalhada dos itens no lancamento financeiro/fatura do colaborador.
+
+## 2026-03-17 - Regra corrigida da fatura mensal do colaborador
+
+- Corrigida a interpretacao conceitual da conta interna do colaborador: a venda do Cafe nao liquida direto em folha no ato da compra.
+- Aluno e colaborador agora estao documentados e expostos pela mesma base canonica de conta interna com `tipo_fatura = MENSAL`.
+- A diferenca passa a ficar explicita no destino da liquidacao da fatura: aluno em fluxo de cobranca/pagamento da escola e colaborador em integracao com folha do mes seguinte.
+- O check-up confirmou que a configuracao de parcelamento continua centralizada em `credito_conexao_regras_parcelas`, compartilhada por `ALUNO` e `COLABORADOR`.

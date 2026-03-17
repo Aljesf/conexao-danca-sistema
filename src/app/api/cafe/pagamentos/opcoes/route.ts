@@ -115,6 +115,8 @@ export async function GET(request: NextRequest) {
       conta_interna_elegivel: data.conta_interna.elegivel,
       conta_interna_tipo: data.conta_interna.tipo,
       conta_interna_id: data.conta_interna.conta_id,
+      conta_interna_tipo_fatura: data.conta_interna.tipo_fatura,
+      conta_interna_destino_liquidacao: data.conta_interna.destino_liquidacao_fatura,
       formas_antes_filtro: data.opcoes.map((item) => ({
         codigo: item.codigo,
         label: item.descricao_exibicao,
@@ -200,6 +202,9 @@ export async function GET(request: NextRequest) {
           tipo: null,
           conta_id: null,
           titular_pessoa_id: null,
+          tipo_fatura: null,
+          destino_liquidacao_fatura: null,
+          permite_parcelamento: false,
           motivo: "Nao foi possivel resolver a conta interna.",
           suporte: {
             pode_solicitar: false,

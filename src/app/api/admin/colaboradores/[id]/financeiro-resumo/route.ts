@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
   }
 
   const pessoaId = Number(colaborador.pessoa_id);
-  const [{ data: pessoa }, { data: configFinanceira }, { data: contaInterna }] = await Promise.all([
+  const [{ data: pessoa }, { data: configFinanceira }, { data: contaInterna }, { data: regrasParcelamento }] = await Promise.all([
     supabase.from("pessoas").select("id,nome,cpf,telefone,email").eq("id", pessoaId).maybeSingle(),
     supabase.from("colaborador_config_financeira").select("*").eq("colaborador_id", colaboradorId).maybeSingle(),
     supabase
@@ -61,7 +61,15 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
       .order("id", { ascending: true })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("credito_conexao_regras_parcelas")
+      .select("id")
+      .eq("tipo_conta", "COLABORADOR")
+      .eq("ativo", true)
+      .limit(1),
   ]);
+
+  const permiteParcelamento = Boolean((regrasParcelamento ?? []).length > 0);
 
   let faturas: Array<Record<string, unknown>> = [];
   let ultimosLancamentos: Array<Record<string, unknown>> = [];
@@ -227,6 +235,9 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
         situacao_atual: contaInterna?.ativo === false ? "INATIVA" : contaInterna?.id ? "ATIVA" : "NAO_CRIADA",
         dia_fechamento: contaInterna?.dia_fechamento ?? null,
         dia_vencimento: contaInterna?.dia_vencimento ?? null,
+        tipo_fatura: contaInterna?.id ? "MENSAL" : null,
+        destino_liquidacao_fatura: contaInterna?.id ? "INTEGRACAO_FOLHA_MES_SEGUINTE" : null,
+        permite_parcelamento: contaInterna?.id ? permiteParcelamento : false,
       },
       saldo_em_aberto_total_centavos: saldoEmAbertoTotalCentavos,
       total_faturado_mes_centavos: totalFaturadoMesCentavos,
@@ -249,6 +260,9 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
         possui_config_financeira: Boolean(configFinanceira),
         gera_folha: Boolean(configFinanceira?.gera_folha),
         possui_conta_interna: Boolean(contaInterna?.id),
+        faturamento_mensal_conta_interna: Boolean(contaInterna?.id),
+        destino_liquidacao_fatura: contaInterna?.id ? "INTEGRACAO_FOLHA_MES_SEGUINTE" : null,
+        permite_parcelamento: contaInterna?.id ? permiteParcelamento : false,
         politica_desconto_cartao: configFinanceira?.politica_desconto_cartao ?? null,
         politica_corte_cartao: configFinanceira?.politica_corte_cartao ?? null,
       },

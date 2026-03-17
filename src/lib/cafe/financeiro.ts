@@ -43,7 +43,14 @@ export type CafeContaConexaoResumo = {
   dia_fechamento: number | null;
   dia_vencimento: number | null;
   responsavel_financeiro_pessoa_id?: number | null;
-  tipo_liquidacao?: "FATURA_MENSAL" | "FOLHA_PAGAMENTO" | null;
+  tipo_liquidacao?: "FATURA_MENSAL" | null;
+  tipo_fatura?: "MENSAL" | null;
+  destino_liquidacao_fatura?:
+    | "NEOFIN"
+    | "PAGAMENTO_DIRETO_ESCOLA"
+    | "INTEGRACAO_FOLHA_MES_SEGUINTE"
+    | null;
+  permite_parcelamento?: boolean;
 };
 
 export type CafeCompradorClassificado = {
@@ -394,6 +401,9 @@ export async function resolverContaConexaoCafe(
       dia_vencimento: contaAluno.dia_vencimento,
       responsavel_financeiro_pessoa_id: contaAluno.responsavel_financeiro_pessoa_id,
       tipo_liquidacao: contaAluno.tipo_liquidacao,
+      tipo_fatura: contaAluno.tipo_fatura,
+      destino_liquidacao_fatura: contaAluno.destino_liquidacao_fatura,
+      permite_parcelamento: contaAluno.permite_parcelamento,
     };
   }
 
@@ -415,6 +425,9 @@ export async function resolverContaConexaoCafe(
       dia_vencimento: contaColaborador.dia_vencimento,
       responsavel_financeiro_pessoa_id: contaColaborador.responsavel_financeiro_pessoa_id,
       tipo_liquidacao: contaColaborador.tipo_liquidacao,
+      tipo_fatura: contaColaborador.tipo_fatura,
+      destino_liquidacao_fatura: contaColaborador.destino_liquidacao_fatura,
+      permite_parcelamento: contaColaborador.permite_parcelamento,
     };
   }
 
@@ -989,7 +1002,7 @@ export async function criarCobrancaCafe(params: CriarCobrancaCafeInput): Promise
       : CAFE_STATUS_FINANCEIRO.FATURADO_CARTAO_CONEXAO;
   const observacaoFinanceira =
     origemFinanceira === CAFE_FLUXO_FINANCEIRO.CONTA_INTERNA
-      ? "Debito vinculado a conta interna do colaborador."
+      ? "Debito vinculado a fatura mensal da conta interna do colaborador."
       : "Debito vinculado a conta interna do aluno.";
 
   let cobrancaId = cobrancaIdExistente;
@@ -1201,8 +1214,8 @@ export async function aplicarFluxoFinanceiroVendaCafe(input: AplicarFluxoInput):
         : forma.tipo_fluxo === CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_ALUNO
           ? "Venda do Ballet Cafe lancada na conta interna do aluno."
           : forma.tipo_fluxo === CAFE_FLUXO_FINANCEIRO.CARTAO_CONEXAO_COLABORADOR
-            ? "Venda do Ballet Cafe lancada na conta interna do colaborador."
-            : "Venda do Ballet Cafe lancada para fechamento futuro na conta interna do colaborador.";
+            ? "Venda do Ballet Cafe lancada na fatura mensal da conta interna do colaborador."
+            : "Venda do Ballet Cafe lancada na fatura mensal da conta interna do colaborador, com liquidacao posterior integrada a folha.";
 
   const compradorPessoaFinanceiro =
     comprador.tipo === CAFE_COMPRADOR_TIPO.COLABORADOR

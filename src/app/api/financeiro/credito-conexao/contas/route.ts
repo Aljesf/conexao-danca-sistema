@@ -14,6 +14,20 @@ export async function GET(req: NextRequest) {
     const { supabase } = auth;
     const { searchParams } = new URL(req.url);
     const tipoConta = searchParams.get("tipo_conta"); // ALUNO / COLABORADOR / null
+    const { data: regrasParcelamento, error: regrasParcelamentoError } = await supabase
+      .from("credito_conexao_regras_parcelas")
+      .select("tipo_conta")
+      .eq("ativo", true);
+
+    if (regrasParcelamentoError) {
+      console.error("Erro ao listar regras de parcelamento do Credito Conexao", regrasParcelamentoError);
+    }
+
+    const tiposComParcelamento = new Set(
+      (regrasParcelamento ?? [])
+        .map((item) => (typeof item.tipo_conta === "string" ? item.tipo_conta : null))
+        .filter((item): item is string => Boolean(item)),
+    );
 
     const baseSelect = `
       id,
@@ -55,9 +69,13 @@ export async function GET(req: NextRequest) {
     if (!joinError) {
       const contasNormalizadas = (contasJoin ?? []).map((item) => ({
         ...item,
-        tipo_titular: null,
+        tipo_titular: item.tipo_conta === "COLABORADOR" ? "COLABORADOR" : "ALUNO",
         responsavel_financeiro_pessoa_id: null,
-        tipo_liquidacao: item.tipo_conta === "COLABORADOR" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
+        tipo_fatura: "MENSAL",
+        tipo_liquidacao: "FATURA_MENSAL",
+        destino_liquidacao_fatura:
+          item.tipo_conta === "COLABORADOR" ? "INTEGRACAO_FOLHA_MES_SEGUINTE" : "NEOFIN",
+        permite_parcelamento: tiposComParcelamento.has(String(item.tipo_conta ?? "")),
       }));
       return NextResponse.json({ ok: true, contas: contasNormalizadas });
     }
@@ -111,9 +129,13 @@ export async function GET(req: NextRequest) {
     const contasOut = (contasBase ?? []).map((c) => ({
       ...c,
       titular: pessoasMap.get(c.pessoa_titular_id) ?? null,
-      tipo_titular: null,
+      tipo_titular: c.tipo_conta === "COLABORADOR" ? "COLABORADOR" : "ALUNO",
       responsavel_financeiro_pessoa_id: null,
-      tipo_liquidacao: c.tipo_conta === "COLABORADOR" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
+      tipo_fatura: "MENSAL",
+      tipo_liquidacao: "FATURA_MENSAL",
+      destino_liquidacao_fatura:
+        c.tipo_conta === "COLABORADOR" ? "INTEGRACAO_FOLHA_MES_SEGUINTE" : "NEOFIN",
+      permite_parcelamento: tiposComParcelamento.has(String(c.tipo_conta ?? "")),
     }));
 
     return NextResponse.json({ ok: true, contas: contasOut });

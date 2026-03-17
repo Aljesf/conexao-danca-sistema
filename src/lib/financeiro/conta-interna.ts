@@ -5,16 +5,26 @@ import { recalcularComprasFatura, vincularLancamentoNaFatura } from "@/lib/finan
 type SupabaseLike = Pick<SupabaseClient, "from">;
 
 export type ContaInternaTipo = "ALUNO" | "COLABORADOR";
-export type ContaInternaLiquidacao = "FATURA_MENSAL" | "FOLHA_PAGAMENTO";
+export type ContaInternaTipoTitular = "ALUNO" | "COLABORADOR" | "RESPONSAVEL_FINANCEIRO";
+export type ContaInternaTipoFatura = "MENSAL";
+export type ContaInternaDestinoLiquidacaoFatura =
+  | "NEOFIN"
+  | "PAGAMENTO_DIRETO_ESCOLA"
+  | "INTEGRACAO_FOLHA_MES_SEGUINTE";
+export type ContaInternaLiquidacao = "FATURA_MENSAL";
 
 export type ContaInternaResolvida = {
   elegivel: boolean;
   tipo: ContaInternaTipo | null;
+  tipo_titular: ContaInternaTipoTitular | null;
   conta_id: number | null;
   titular_pessoa_id: number | null;
   responsavel_financeiro_pessoa_id: number | null;
   dia_vencimento: number | null;
+  tipo_fatura: ContaInternaTipoFatura | null;
   tipo_liquidacao: ContaInternaLiquidacao | null;
+  destino_liquidacao_fatura: ContaInternaDestinoLiquidacaoFatura | null;
+  permite_parcelamento: boolean;
   motivo: string | null;
   descricao: string | null;
 };
@@ -85,6 +95,45 @@ function contaInternaCompativelComTipo(
   );
 }
 
+function resolveContaInternaTipoTitular(
+  tipoContaEsperado: ContaInternaTipo,
+  conta: Record<string, unknown> | null = null,
+): ContaInternaTipoTitular {
+  const tipoConta = upper(conta?.tipo_conta);
+  if (tipoContaEsperado === "ALUNO" && tipoConta === "RESPONSAVEL_FINANCEIRO") {
+    return "RESPONSAVEL_FINANCEIRO";
+  }
+  return tipoContaEsperado;
+}
+
+function resolveDestinoLiquidacaoFatura(
+  tipoContaEsperado: ContaInternaTipo,
+): ContaInternaDestinoLiquidacaoFatura {
+  return tipoContaEsperado === "COLABORADOR"
+    ? "INTEGRACAO_FOLHA_MES_SEGUINTE"
+    : "NEOFIN";
+}
+
+async function verificarPermiteParcelamento(
+  supabase: SupabaseLike,
+  tipoConta: ContaInternaTipo,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("credito_conexao_regras_parcelas")
+    .select("id")
+    .eq("tipo_conta", tipoConta)
+    .eq("ativo", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[CONTA_INTERNA][PARCELAMENTO][ERRO]", { tipoConta, error });
+    throw error;
+  }
+
+  return Boolean(asInt((data as Record<string, unknown> | null)?.id));
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -149,16 +198,22 @@ async function carregarContaInternaPorTitulares(params: {
   alunoPessoaId?: number | null;
 }): Promise<ContaInternaResolvida> {
   const { supabase, pessoaTitularIds, tipoConta, alunoPessoaId = null } = params;
+  const permiteParcelamento = await verificarPermiteParcelamento(supabase, tipoConta);
+
   if (pessoaTitularIds.length === 0) {
     console.warn("[CONTA_INTERNA][SEM_TITULAR]", { tipoConta });
     return {
       elegivel: false,
       tipo: tipoConta,
+      tipo_titular: resolveContaInternaTipoTitular(tipoConta),
       conta_id: null,
       titular_pessoa_id: null,
       responsavel_financeiro_pessoa_id: null,
       dia_vencimento: null,
-      tipo_liquidacao: tipoConta === "COLABORADOR" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
+      tipo_fatura: "MENSAL",
+      tipo_liquidacao: "FATURA_MENSAL",
+      destino_liquidacao_fatura: resolveDestinoLiquidacaoFatura(tipoConta),
+      permite_parcelamento: permiteParcelamento,
       motivo:
         tipoConta === "ALUNO"
           ? "Nenhum responsavel financeiro elegivel foi encontrado."
@@ -185,7 +240,7 @@ async function carregarContaInternaPorTitulares(params: {
       pessoa_titular_id: asInt(item.pessoa_titular_id),
       dia_vencimento: asInt(item.dia_vencimento),
       descricao_exibicao: asString(item.descricao_exibicao),
-      tipo_liquidacao: tipoConta === "COLABORADOR" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
+      tipo_liquidacao: "FATURA_MENSAL" as const,
     }))
     .filter((item) => item.id && item.pessoa_titular_id) as Array<{
     id: number;
@@ -205,11 +260,15 @@ async function carregarContaInternaPorTitulares(params: {
     return {
       elegivel: false,
       tipo: tipoConta,
+      tipo_titular: resolveContaInternaTipoTitular(tipoConta),
       conta_id: null,
       titular_pessoa_id: null,
       responsavel_financeiro_pessoa_id: null,
       dia_vencimento: null,
-      tipo_liquidacao: tipoConta === "COLABORADOR" ? "FOLHA_PAGAMENTO" : "FATURA_MENSAL",
+      tipo_fatura: "MENSAL",
+      tipo_liquidacao: "FATURA_MENSAL",
+      destino_liquidacao_fatura: resolveDestinoLiquidacaoFatura(tipoConta),
+      permite_parcelamento: permiteParcelamento,
       motivo:
         tipoConta === "ALUNO"
           ? "Aluno ou responsavel financeiro sem conta interna ativa."
@@ -221,6 +280,14 @@ async function carregarContaInternaPorTitulares(params: {
   return {
     elegivel: true,
     tipo: tipoConta,
+    tipo_titular: resolveContaInternaTipoTitular(tipoConta, {
+      tipo_conta:
+        tipoConta === "ALUNO" &&
+        alunoPessoaId &&
+        conta.pessoa_titular_id !== alunoPessoaId
+          ? "RESPONSAVEL_FINANCEIRO"
+          : tipoConta,
+    }),
     conta_id: conta.id,
     titular_pessoa_id: conta.pessoa_titular_id,
     responsavel_financeiro_pessoa_id:
@@ -228,7 +295,10 @@ async function carregarContaInternaPorTitulares(params: {
         ? conta.pessoa_titular_id
         : null,
     dia_vencimento: conta.dia_vencimento,
+    tipo_fatura: "MENSAL",
     tipo_liquidacao: conta.tipo_liquidacao,
+    destino_liquidacao_fatura: resolveDestinoLiquidacaoFatura(tipoConta),
+    permite_parcelamento: permiteParcelamento,
     motivo: null,
     descricao: conta.descricao_exibicao,
   };
@@ -244,11 +314,15 @@ export async function resolverContaInternaDoAlunoOuResponsavel(params: {
     return {
       elegivel: false,
       tipo: "ALUNO",
+      tipo_titular: "ALUNO",
       conta_id: null,
       titular_pessoa_id: null,
       responsavel_financeiro_pessoa_id: null,
       dia_vencimento: null,
+      tipo_fatura: "MENSAL",
       tipo_liquidacao: "FATURA_MENSAL",
+      destino_liquidacao_fatura: "NEOFIN",
+      permite_parcelamento: false,
       motivo: "Aluno nao informado.",
       descricao: null,
     };
@@ -278,11 +352,15 @@ export async function resolverContaInternaDoColaborador(params: {
     return {
       elegivel: false,
       tipo: "COLABORADOR",
+      tipo_titular: "COLABORADOR",
       conta_id: null,
       titular_pessoa_id: null,
       responsavel_financeiro_pessoa_id: null,
       dia_vencimento: null,
-      tipo_liquidacao: "FOLHA_PAGAMENTO",
+      tipo_fatura: "MENSAL",
+      tipo_liquidacao: "FATURA_MENSAL",
+      destino_liquidacao_fatura: "INTEGRACAO_FOLHA_MES_SEGUINTE",
+      permite_parcelamento: false,
       motivo: "Colaborador nao informado.",
       descricao: null,
     };
@@ -314,11 +392,15 @@ export async function resolverContaInternaDoColaborador(params: {
     return {
       elegivel: false,
       tipo: "COLABORADOR",
+      tipo_titular: "COLABORADOR",
       conta_id: null,
       titular_pessoa_id: null,
       responsavel_financeiro_pessoa_id: null,
       dia_vencimento: null,
-      tipo_liquidacao: "FOLHA_PAGAMENTO",
+      tipo_fatura: "MENSAL",
+      tipo_liquidacao: "FATURA_MENSAL",
+      destino_liquidacao_fatura: "INTEGRACAO_FOLHA_MES_SEGUINTE",
+      permite_parcelamento: false,
       motivo: "Pessoa selecionada nao possui vinculo ativo de colaborador.",
       descricao: null,
     };
@@ -434,10 +516,12 @@ export async function agendarFaturamentoMensalAluno(params: {
   return {
     fatura_id: faturaId,
     tipo_liquidacao: "FATURA_MENSAL" as const,
+    tipo_fatura: "MENSAL" as const,
+    destino_liquidacao_fatura: "NEOFIN" as const,
   };
 }
 
-export async function vincularLiquidacaoFolhaColaborador(params: {
+export async function agendarFaturamentoMensalColaborador(params: {
   supabase: SupabaseLike;
   contaInternaId: number;
   competencia: string;
@@ -467,6 +551,10 @@ export async function vincularLiquidacaoFolhaColaborador(params: {
 
   return {
     fatura_id: faturaId,
-    tipo_liquidacao: "FOLHA_PAGAMENTO" as const,
+    tipo_liquidacao: "FATURA_MENSAL" as const,
+    tipo_fatura: "MENSAL" as const,
+    destino_liquidacao_fatura: "INTEGRACAO_FOLHA_MES_SEGUINTE" as const,
   };
 }
+
+export const vincularLiquidacaoFolhaColaborador = agendarFaturamentoMensalColaborador;
