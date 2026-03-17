@@ -15,9 +15,44 @@ type PessoaBusca = {
   email?: string | null;
 };
 
+type CafeCompradorTipo =
+  | "NAO_IDENTIFICADO"
+  | "ALUNO"
+  | "COLABORADOR"
+  | "PESSOA_AVULSA";
+
+type PagamentoOpcao = {
+  id: number | null;
+  codigo: string;
+  label: string;
+  tipo_fluxo:
+    | "IMEDIATO"
+    | "CARTAO_EXTERNO"
+    | "CARTAO_CONEXAO_ALUNO"
+    | "CARTAO_CONEXAO_COLABORADOR"
+    | "CONTA_INTERNA";
+  exige_conta_conexao: boolean;
+  habilitado: boolean;
+  motivo_bloqueio: string | null;
+};
+
+type PagamentosResponse = {
+  centro_custo_id: number;
+  comprador: {
+    pessoa_id: number | null;
+    tipo: CafeCompradorTipo;
+  };
+  opcoes: PagamentoOpcao[];
+};
+
 type CaixaResponse = {
   data?: {
     id?: number;
+    cobranca_id?: number | null;
+    recebimento_id?: number | null;
+    movimento_financeiro_id?: number | null;
+    status_financeiro?: string | null;
+    forma_pagamento?: string | null;
   };
   error?: string;
   detalhe?: string;
@@ -31,12 +66,6 @@ type ItemCarrinho = {
   unidade_venda: string | null;
 };
 
-const PAGAMENTOS = [
-  { value: "DINHEIRO", label: "Dinheiro" },
-  { value: "PIX", label: "Pix" },
-  { value: "TRANSFERENCIA", label: "Transferencia" },
-] as const;
-
 function brl(value: number) {
   return (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -47,12 +76,51 @@ function todayIso() {
   return local.toISOString().slice(0, 10);
 }
 
+function competenciaFromDate(dateIso: string) {
+  return dateIso.slice(0, 7);
+}
+
+function formatBuyerType(value: CafeCompradorTipo) {
+  switch (value) {
+    case "ALUNO":
+      return "Aluno";
+    case "COLABORADOR":
+      return "Colaborador";
+    case "PESSOA_AVULSA":
+      return "Pessoa avulsa";
+    default:
+      return "Nao identificado";
+  }
+}
+
+function buildFinancialEffect(option: PagamentoOpcao | null, buyerType: CafeCompradorTipo) {
+  if (!option) return "Selecione uma forma de pagamento valida para continuar.";
+  switch (option.tipo_fluxo) {
+    case "CARTAO_CONEXAO_ALUNO":
+      return "Esta venda sera enviada para o Cartao Conexao do aluno, sem recebimento imediato.";
+    case "CARTAO_CONEXAO_COLABORADOR":
+      return "Esta venda ficara no fluxo futuro do colaborador, vinculada ao Cartao Conexao.";
+    case "CONTA_INTERNA":
+      return "Esta venda ficara em conta interna do colaborador para fechamento futuro.";
+    case "CARTAO_EXTERNO":
+      return "Esta venda seguira o fluxo financeiro do cartao externo do Ballet Cafe.";
+    default:
+      return buyerType === "NAO_IDENTIFICADO"
+        ? "Esta venda entrara imediatamente no caixa do Ballet Cafe."
+        : "Esta venda gerara efeito financeiro imediato no Ballet Cafe.";
+  }
+}
+
 export default function CafeVendasPage() {
   const [buscaComprador, setBuscaComprador] = useState("");
   const [compradores, setCompradores] = useState<PessoaBusca[]>([]);
   const [compradoresLoading, setCompradoresLoading] = useState(false);
   const [compradorSelecionado, setCompradorSelecionado] = useState<PessoaBusca | null>(null);
-  const [pagamento, setPagamento] = useState<(typeof PAGAMENTOS)[number]["value"]>("DINHEIRO");
+  const [compradorTipo, setCompradorTipo] = useState<CafeCompradorTipo>("NAO_IDENTIFICADO");
+  const [centroCustoId, setCentroCustoId] = useState<number | null>(null);
+  const [pagamentos, setPagamentos] = useState<PagamentoOpcao[]>([]);
+  const [pagamentosLoading, setPagamentosLoading] = useState(false);
+  const [pagamentoCodigo, setPagamentoCodigo] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [saving, setSaving] = useState(false);
@@ -98,6 +166,55 @@ export default function CafeVendasPage() {
     return () => controller.abort();
   }, [buscaComprador]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function carregarPagamentos() {
+      setPagamentosLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (compradorSelecionado?.id) params.set("comprador_pessoa_id", String(compradorSelecionado.id));
+        const response = await fetch(`/api/cafe/pagamentos/opcoes?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as PagamentosResponse | { detalhe?: string } | null;
+        if (!response.ok) {
+          throw new Error(
+            payload && typeof payload === "object" && "detalhe" in payload && payload.detalhe
+              ? String(payload.detalhe)
+              : "falha_carregar_formas_pagamento_cafe",
+          );
+        }
+
+        const nextPayments = Array.isArray(payload?.opcoes) ? payload.opcoes : [];
+        const fallback = nextPayments.find((item) => item.habilitado) ?? null;
+
+        setPagamentos(nextPayments);
+        setCentroCustoId(payload?.centro_custo_id ?? null);
+        setCompradorTipo(payload?.comprador.tipo ?? "NAO_IDENTIFICADO");
+        setPagamentoCodigo((current) => {
+          const existing = nextPayments.find((item) => item.codigo === current && item.habilitado);
+          return existing?.codigo ?? fallback?.codigo ?? "";
+        });
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setPagamentos([]);
+          setPagamentoCodigo("");
+          setMensagem(error instanceof Error ? error.message : "falha_carregar_formas_pagamento_cafe");
+          setMensagemTipo("error");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setPagamentosLoading(false);
+        }
+      }
+    }
+
+    void carregarPagamentos();
+    return () => controller.abort();
+  }, [compradorSelecionado]);
+
   const totalItens = useMemo(
     () => itens.reduce((acc, item) => acc + item.quantidade, 0),
     [itens],
@@ -115,6 +232,14 @@ export default function CafeVendasPage() {
         return acc;
       }, {}),
     [itens],
+  );
+  const pagamentoSelecionado = useMemo(
+    () => pagamentos.find((item) => item.codigo === pagamentoCodigo) ?? null,
+    [pagamentoCodigo, pagamentos],
+  );
+  const efeitoFinanceiro = useMemo(
+    () => buildFinancialEffect(pagamentoSelecionado, compradorTipo),
+    [compradorTipo, pagamentoSelecionado],
   );
 
   function adicionarProduto(produto: CafeCatalogoProduto) {
@@ -155,7 +280,7 @@ export default function CafeVendasPage() {
     setCompradorSelecionado(null);
     setBuscaComprador("");
     setCompradores([]);
-    setPagamento("DINHEIRO");
+    setPagamentoCodigo("");
   }
 
   async function finalizarVenda() {
@@ -165,21 +290,44 @@ export default function CafeVendasPage() {
       return;
     }
 
+    if (!pagamentoSelecionado?.habilitado) {
+      setMensagem("Selecione uma forma de pagamento valida para concluir a venda.");
+      setMensagemTipo("error");
+      return;
+    }
+
     setSaving(true);
     setMensagem(null);
     setMensagemTipo(null);
 
     try {
+      const valorPagoCentavos =
+        pagamentoSelecionado.tipo_fluxo === "IMEDIATO" || pagamentoSelecionado.tipo_fluxo === "CARTAO_EXTERNO"
+          ? totalCentavos
+          : 0;
       const response = await fetch("/api/cafe/caixa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           data_operacao: todayIso(),
+          origem_operacao: "PDV",
+          comprador_tipo: compradorTipo,
+          comprador_id: compradorSelecionado?.id ?? null,
+          comprador_pessoa_id: compradorSelecionado?.id ?? null,
           pagador_pessoa_id: compradorSelecionado?.id ?? null,
           cliente_pessoa_id: compradorSelecionado?.id ?? null,
-          tipo_quitacao: "IMEDIATA",
-          metodo_pagamento: pagamento,
-          valor_pago_centavos: totalCentavos,
+          tipo_quitacao:
+            pagamentoSelecionado.tipo_fluxo === "CONTA_INTERNA"
+              ? "CONTA_INTERNA_COLABORADOR"
+              : pagamentoSelecionado.tipo_fluxo === "CARTAO_CONEXAO_ALUNO" ||
+                  pagamentoSelecionado.tipo_fluxo === "CARTAO_CONEXAO_COLABORADOR"
+                ? "CARTAO_CONEXAO"
+                : "IMEDIATA",
+          forma_pagamento_id: pagamentoSelecionado.id,
+          forma_pagamento_codigo: pagamentoSelecionado.codigo,
+          metodo_pagamento: pagamentoSelecionado.codigo,
+          data_competencia: pagamentoSelecionado.exige_conta_conexao ? competenciaFromDate(todayIso()) : null,
+          valor_pago_centavos: valorPagoCentavos,
           observacoes: observacoes || "Venda registrada pelo PDV do Ballet Cafe.",
           observacoes_internas: observacoes ? `PDV: ${observacoes}` : "PDV / Vendas",
           itens: itens.map((item) => ({
@@ -197,9 +345,16 @@ export default function CafeVendasPage() {
       }
 
       const vendaId = payload?.data?.id;
+      const complemento = [
+        payload?.data?.recebimento_id ? `recebimento #${payload.data.recebimento_id}` : null,
+        payload?.data?.cobranca_id ? `cobranca #${payload.data.cobranca_id}` : null,
+        payload?.data?.movimento_financeiro_id ? `movimento #${payload.data.movimento_financeiro_id}` : null,
+      ].filter(Boolean);
       limparVenda();
       setMensagem(
-        vendaId ? `Venda registrada no PDV com sucesso. Comanda #${vendaId}.` : "Venda registrada no PDV com sucesso.",
+        vendaId
+          ? `Venda registrada no PDV com sucesso. Comanda #${vendaId}${complemento.length ? `, ${complemento.join(", ")}` : ""}.`
+          : "Venda registrada no PDV com sucesso.",
       );
       setMensagemTipo("success");
     } catch (error) {
@@ -241,12 +396,17 @@ export default function CafeVendasPage() {
           <CafeStatCard
             label="Total"
             value={brl(totalCentavos)}
-            description="O fechamento do PDV sempre envia venda imediata para a regra central do caixa."
+            description="O fechamento do PDV usa a mesma regra operacional e financeira central do Caixa."
           />
           <CafeStatCard
             label="Comprador"
-            value={compradorSelecionado?.nome ?? "Nao informado"}
-            description="Opcional. Use a busca rapida quando precisar vincular a venda a uma pessoa."
+            value={compradorSelecionado?.nome ?? formatBuyerType(compradorTipo)}
+            description={`Perfil resolvido: ${formatBuyerType(compradorTipo)}.`}
+          />
+          <CafeStatCard
+            label="Liquidacao"
+            value={pagamentoSelecionado?.label ?? "Nao selecionada"}
+            description={efeitoFinanceiro}
           />
         </>
       }
@@ -278,7 +438,7 @@ export default function CafeVendasPage() {
         <div className="flex flex-col gap-6">
           <CafeCard
             title="Venda atual"
-            description="Comprador opcional, pagamento imediato e fechamento rapido do PDV."
+            description="Comprador opcional, formas de pagamento por contexto e fechamento rapido do PDV."
             className="xl:sticky xl:top-6"
           >
             <div className="grid gap-4">
@@ -342,15 +502,25 @@ export default function CafeVendasPage() {
                   <span className="font-medium text-slate-700">Pagamento</span>
                   <select
                     className="w-full rounded-2xl border border-[#eadfcd] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#c57f39]"
-                    value={pagamento}
-                    onChange={(event) => setPagamento(event.target.value as (typeof PAGAMENTOS)[number]["value"])}
+                    value={pagamentoCodigo}
+                    onChange={(event) => setPagamentoCodigo(event.target.value)}
+                    disabled={pagamentosLoading || pagamentos.length === 0}
                   >
-                    {PAGAMENTOS.map((item) => (
-                      <option key={item.value} value={item.value}>
+                    {pagamentos.length === 0 ? (
+                      <option value="">Sem opcoes configuradas</option>
+                    ) : null}
+                    {pagamentos.map((item) => (
+                      <option key={item.codigo} value={item.codigo} disabled={!item.habilitado}>
                         {item.label}
+                        {item.habilitado ? "" : " - indisponivel"}
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs leading-5 text-slate-500">
+                    {pagamentosLoading
+                      ? "Resolvendo meios validos para este comprador..."
+                      : pagamentoSelecionado?.motivo_bloqueio ?? efeitoFinanceiro}
+                  </p>
                 </label>
 
                 <label className="space-y-2 text-sm">
@@ -369,6 +539,9 @@ export default function CafeVendasPage() {
                   <div>
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Carrinho</div>
                     <div className="mt-1 text-lg font-semibold text-slate-950">{brl(totalCentavos)}</div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      Centro de custo: {centroCustoId ? `#${centroCustoId} Ballet Cafe` : "resolvendo..."}
+                    </div>
                   </div>
                   <div className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
                     {totalItens} item{totalItens === 1 ? "" : "s"}
@@ -438,7 +611,7 @@ export default function CafeVendasPage() {
                 <button
                   type="button"
                   className="flex-1 rounded-full bg-[#9a3412] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#7c2d12] disabled:opacity-60"
-                  disabled={saving || itens.length === 0}
+                  disabled={saving || itens.length === 0 || !pagamentoSelecionado?.habilitado}
                   onClick={() => void finalizarVenda()}
                 >
                   {saving ? "Finalizando..." : "Finalizar venda"}

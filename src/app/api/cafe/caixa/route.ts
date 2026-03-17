@@ -40,6 +40,10 @@ function statusFromError(message: string): number {
     case "forma_pagamento_obrigatoria":
     case "saldo_em_aberto_obrigatorio_para_conta_interna":
     case "competencia_invalida":
+    case "comprador_nao_identificado_nao_pode_usar_conta_interna":
+    case "cartao_conexao_aluno_exige_aluno_identificado":
+    case "comprador_obrigatorio_para_fluxo_futuro":
+    case "conta_conexao_nao_encontrada":
       return 400;
     case "saldo_insuficiente":
       return 409;
@@ -93,8 +97,10 @@ export async function POST(request: NextRequest) {
       const tipoQuitacao = firstString(body, ["tipo_quitacao", "tipoQuitacao"])?.toUpperCase();
       const contaInternaSolicitada =
         formaPagamento === "CONTA_INTERNA" ||
+        formaPagamento === "CREDIARIO_COLAB" ||
         formaPagamento === "CONTA_INTERNA_COLABORADOR" ||
         formaPagamento === "CARTAO_CONEXAO_COLABORADOR" ||
+        formaPagamento === "CARTAO_CONEXAO_COLAB" ||
         tipoQuitacao === "CONTA_INTERNA_COLABORADOR";
 
       if (contaInternaSolicitada) {

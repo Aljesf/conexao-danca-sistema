@@ -21,6 +21,36 @@ type PessoaBuscaItem = {
   email?: string | null;
 };
 
+type CafeCompradorTipo =
+  | "NAO_IDENTIFICADO"
+  | "ALUNO"
+  | "COLABORADOR"
+  | "PESSOA_AVULSA";
+
+type PagamentoOpcao = {
+  id: number | null;
+  codigo: string;
+  label: string;
+  tipo_fluxo:
+    | "IMEDIATO"
+    | "CARTAO_EXTERNO"
+    | "CARTAO_CONEXAO_ALUNO"
+    | "CARTAO_CONEXAO_COLABORADOR"
+    | "CONTA_INTERNA";
+  exige_conta_conexao: boolean;
+  habilitado: boolean;
+  motivo_bloqueio: string | null;
+};
+
+type PagamentosResponse = {
+  centro_custo_id: number;
+  comprador: {
+    pessoa_id: number | null;
+    tipo: CafeCompradorTipo;
+  };
+  opcoes: PagamentoOpcao[];
+};
+
 type ComandaItem = {
   produto_id: number;
   quantidade: number;
@@ -31,18 +61,23 @@ type ComandaItem = {
 type Comanda = {
   id: number;
   pagador_pessoa_id: number | null;
+  comprador_pessoa_id?: number | null;
+  comprador_tipo?: string | null;
   pagador_nome?: string | null;
   data_operacao: string;
   data_competencia: string | null;
+  competencia_ano_mes?: string | null;
   colaborador_pessoa_id: number | null;
   colaborador_nome: string | null;
-  tipo_quitacao: "IMEDIATA" | "PARCIAL" | "CONTA_INTERNA_COLABORADOR";
+  tipo_quitacao: "IMEDIATA" | "PARCIAL" | "CONTA_INTERNA_COLABORADOR" | "CONTA_INTERNA" | "CARTAO_CONEXAO";
   status_pagamento: "PENDENTE" | "PARCIAL" | "PAGO" | "FATURADO" | "CANCELADO";
+  status_financeiro?: string | null;
   valor_total_centavos: number;
   valor_pago_centavos: number;
   valor_em_aberto_centavos: number;
   cobranca_id: number | null;
   forma_pagamento?: string | null;
+  origem_financeira?: string | null;
   observacoes_internas: string | null;
   cafe_venda_itens?: ComandaItem[];
   fatura?: { id?: number; periodo_referencia?: string | null; status?: string | null } | null;
@@ -55,7 +90,7 @@ type ItemForm = {
   valor_unitario_centavos: number;
 };
 
-type BuyerType = "SEM_VINCULO" | "PESSOA_AVULSA" | "COLABORADOR" | "CARGO_SETOR";
+type BuyerType = "SEM_VINCULO" | "PESSOA_AVULSA" | "ALUNO" | "COLABORADOR" | "CARGO_SETOR";
 
 type ShortcutId = "retroativo" | "baixa" | "conta" | "recentes";
 
@@ -141,6 +176,11 @@ const BUYER_TYPE_OPTIONS: Array<{
     description: "Venda normal com comprador identificado, sem conta interna.",
   },
   {
+    value: "ALUNO",
+    label: "Aluno",
+    description: "Permite Cartao Conexao do aluno quando houver elegibilidade.",
+  },
+  {
     value: "COLABORADOR",
     label: "Colaborador",
     description: "Permite saldo em conta interna e integracao com fatura/folha.",
@@ -209,6 +249,9 @@ function formatTipoQuitacao(value: Comanda["tipo_quitacao"]) {
       return "Pagamento imediato";
     case "PARCIAL":
       return "Pagamento parcial";
+    case "CARTAO_CONEXAO":
+      return "Cartao Conexao";
+    case "CONTA_INTERNA":
     case "CONTA_INTERNA_COLABORADOR":
       return "Conta interna";
     default:
@@ -237,6 +280,8 @@ function formatBuyerType(value: BuyerType) {
   switch (value) {
     case "PESSOA_AVULSA":
       return "Pessoa avulsa";
+    case "ALUNO":
+      return "Aluno";
     case "COLABORADOR":
       return "Colaborador";
     case "CARGO_SETOR":
@@ -255,11 +300,21 @@ function formatFormaPagamento(value: string | null | undefined) {
       return "Pix";
     case "CARTAO":
       return "Cartao";
+    case "CREDITO_AVISTA":
+      return "Cartao externo";
     case "TICKET":
       return "Ticket";
     case "TRANSFERENCIA":
       return "Transferencia";
+    case "CREDIARIO_COLAB":
+      return "Conta interna colaborador";
+    case "CARTAO_CONEXAO_ALUNO":
+      return "Cartao Conexao aluno";
+    case "CARTAO_CONEXAO_COLABORADOR":
+    case "CARTAO_CONEXAO_COLAB":
+      return "Cartao Conexao colaborador";
     case "CONTA_INTERNA_COLABORADOR":
+    case "CONTA_INTERNA":
       return "Conta interna";
     default:
       return value?.trim() || "Nao informado";
@@ -404,9 +459,14 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
   const temSaldoAberto = comanda.valor_em_aberto_centavos > 0;
   const emContaInterna =
     comanda.tipo_quitacao === "CONTA_INTERNA_COLABORADOR" ||
-    comanda.status_pagamento === "FATURADO" ||
-    Boolean(comanda.cobranca_id);
-  const podeConverterSaldo = temSaldoAberto && !emContaInterna;
+    comanda.tipo_quitacao === "CONTA_INTERNA" ||
+    comanda.origem_financeira === "CONTA_INTERNA";
+  const emCartaoConexao =
+    comanda.tipo_quitacao === "CARTAO_CONEXAO" ||
+    comanda.origem_financeira === "CARTAO_CONEXAO_ALUNO" ||
+    comanda.origem_financeira === "CARTAO_CONEXAO_COLABORADOR";
+  const emFluxoFuturo = emContaInterna || emCartaoConexao || Boolean(comanda.cobranca_id);
+  const podeConverterSaldo = temSaldoAberto && !emFluxoFuturo;
   const tituloComprador =
     comanda.colaborador_nome ?? comanda.pagador_nome ?? "Comanda administrativa sem vinculo";
   const subtituloComprador = comanda.colaborador_nome
@@ -416,6 +476,8 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
       : "Sem vinculo especifico informado.";
   const resultadoFinanceiro = emContaInterna
     ? `Debito em conta interna${comanda.data_competencia ? ` na competencia ${comanda.data_competencia}` : ""}.`
+    : emCartaoConexao
+      ? `Debito em Cartao Conexao${comanda.data_competencia ? ` na competencia ${comanda.data_competencia}` : ""}.`
     : temSaldoAberto
       ? comanda.valor_pago_centavos > 0
         ? "Parcial no caixa com saldo ainda em aberto."
@@ -440,13 +502,16 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
                 {formatFormaPagamento(comanda.forma_pagamento)}
               </span>
             ) : null}
-            {!emContaInterna && comanda.status_pagamento === "PAGO" ? (
+            {!emFluxoFuturo && comanda.status_pagamento === "PAGO" ? (
               <FinanceiroBadge label="Pago no caixa" tone="success" />
             ) : null}
             {comanda.status_pagamento === "PARCIAL" ? <FinanceiroBadge label="Parcial" tone="warning" /> : null}
             {podeConverterSaldo ? <FinanceiroBadge label="Saldo em aberto" tone="warning" /> : null}
             {emContaInterna && comanda.data_competencia ? (
               <FinanceiroBadge label={`Conta interna ${comanda.data_competencia}`} tone="account" />
+            ) : null}
+            {emCartaoConexao && comanda.data_competencia ? (
+              <FinanceiroBadge label={`Cartao Conexao ${comanda.data_competencia}`} tone="account" />
             ) : null}
             {comanda.status_pagamento === "FATURADO" ? <FinanceiroBadge label="Faturada" tone="muted" /> : null}
           </div>
@@ -519,9 +584,12 @@ export default function CafeCaixaPage() {
   const [colaboradorPessoaId, setColaboradorPessoaId] = useState<string>("");
   const [buscaColaborador, setBuscaColaborador] = useState("");
   const [cargoSetorLabel, setCargoSetorLabel] = useState("");
-  const [tipoQuitacao, setTipoQuitacao] = useState<"IMEDIATA" | "PARCIAL" | "CONTA_INTERNA_COLABORADOR">("IMEDIATA");
+  const [tipoQuitacao, setTipoQuitacao] = useState<"IMEDIATA" | "PARCIAL" | "CONTA_INTERNA_COLABORADOR" | "CARTAO_CONEXAO">("IMEDIATA");
   const [competencia, setCompetencia] = useState(competenciaFromDate(todayIso()));
   const [observacoesInternas, setObservacoesInternas] = useState("");
+  const [centroCustoId, setCentroCustoId] = useState<number | null>(null);
+  const [pagamentosDisponiveis, setPagamentosDisponiveis] = useState<PagamentoOpcao[]>([]);
+  const [pagamentosLoading, setPagamentosLoading] = useState(false);
   const [metodoPagamento, setMetodoPagamento] = useState("DINHEIRO");
   const [valorPagoCentavos, setValorPagoCentavos] = useState("0");
   const [itens, setItens] = useState<ItemForm[]>([]);
@@ -556,6 +624,7 @@ export default function CafeCaixaPage() {
   const valorPagoAberturaCentavos = Number(valorPagoCentavos || "0");
   const saldoPrevistoCentavos = Math.max(totalItensCentavos - valorPagoAberturaCentavos, 0);
   const isContaInterna = tipoQuitacao === "CONTA_INTERNA_COLABORADOR";
+  const isCartaoConexao = tipoQuitacao === "CARTAO_CONEXAO";
   const competenciaSugerida = competencia || competenciaFromDate(dataOperacao);
   const competenciaAtual = competenciaFromDate(todayIso());
 
@@ -605,21 +674,53 @@ export default function CafeCaixaPage() {
   const compradorNome =
     tipoComprador === "COLABORADOR"
       ? colaboradorAtual?.nome ?? "Nenhum colaborador selecionado"
+      : tipoComprador === "ALUNO"
+        ? compradorSelecionado?.nome ?? "Nenhum aluno selecionado"
       : tipoComprador === "PESSOA_AVULSA"
         ? compradorSelecionado?.nome ?? "Nenhuma pessoa selecionada"
         : tipoComprador === "CARGO_SETOR"
           ? cargoSetorLabel || "Preparado para vinculo futuro"
           : "Sem vinculo especifico";
 
-  const compradorPessoaId = tipoComprador === "PESSOA_AVULSA" ? compradorSelecionado?.id ?? null : null;
+  const compradorPessoaId =
+    tipoComprador === "PESSOA_AVULSA" || tipoComprador === "ALUNO"
+      ? compradorSelecionado?.id ?? null
+      : null;
   const compradorColaboradorId =
     tipoComprador === "COLABORADOR" ? Number(colaboradorPessoaId || "0") || null : null;
   const permiteContaInterna = tipoComprador === "COLABORADOR" && Boolean(compradorColaboradorId);
+  const pagamentoSelecionado = pagamentosDisponiveis.find((item) => item.codigo === metodoPagamento) ?? null;
+  const pagamentosDisponiveisFiltrados = pagamentosDisponiveis.filter((item) => {
+    if (!item.habilitado) return true;
+    if (isContaInterna) return item.tipo_fluxo === "CONTA_INTERNA";
+    if (isCartaoConexao) {
+      return item.tipo_fluxo === "CARTAO_CONEXAO_ALUNO" || item.tipo_fluxo === "CARTAO_CONEXAO_COLABORADOR";
+    }
+    return item.tipo_fluxo === "IMEDIATO" || item.tipo_fluxo === "CARTAO_EXTERNO";
+  });
+  const permiteCartaoConexaoAluno =
+    tipoComprador === "ALUNO" &&
+    Boolean(compradorPessoaId) &&
+    pagamentosDisponiveis.some((item) => item.habilitado && item.tipo_fluxo === "CARTAO_CONEXAO_ALUNO");
+  const permiteCartaoConexaoColaborador =
+    tipoComprador === "COLABORADOR" &&
+    Boolean(compradorColaboradorId) &&
+    pagamentosDisponiveis.some(
+      (item) =>
+        item.habilitado &&
+        (item.tipo_fluxo === "CARTAO_CONEXAO_COLABORADOR" || item.tipo_fluxo === "CONTA_INTERNA"),
+    );
 
   const resultadoFinanceiro = isContaInterna
     ? permiteContaInterna
       ? "Debito em conta interna"
       : "Conta interna aguardando colaborador valido"
+    : isCartaoConexao
+      ? tipoComprador === "ALUNO"
+        ? "Debito em Cartao Conexao do aluno"
+        : permiteCartaoConexaoColaborador
+          ? "Debito em Cartao Conexao do colaborador"
+          : "Cartao Conexao aguardando comprador elegivel"
     : saldoPrevistoCentavos > 0
       ? valorPagoAberturaCentavos > 0
         ? "Parcial no caixa + saldo em aberto"
@@ -630,6 +731,10 @@ export default function CafeCaixaPage() {
     ? "Ajuste operacional"
     : isContaInterna && !permiteContaInterna
       ? "Aguardando colaborador"
+      : isCartaoConexao && !permiteCartaoConexaoAluno && !permiteCartaoConexaoColaborador
+        ? "Aguardando comprador elegivel"
+      : isCartaoConexao
+        ? "Em cobranca no Cartao Conexao"
       : isContaInterna
       ? "Faturado na conta interna"
       : saldoPrevistoCentavos === 0
@@ -637,7 +742,7 @@ export default function CafeCaixaPage() {
         : valorPagoAberturaCentavos > 0
           ? "Parcial"
           : "Pendente";
-  const competenciaCobranca = isContaInterna ? competenciaSugerida : "Nao se aplica";
+  const competenciaCobranca = isContaInterna || isCartaoConexao ? competenciaSugerida : "Nao se aplica";
 
   const filtrosAtivos =
     Boolean(filtroColaboradorPessoaId) ||
@@ -720,16 +825,16 @@ export default function CafeCaixaPage() {
   }, [modo]);
 
   useEffect(() => {
-    if (isContaInterna) {
+    if (isContaInterna || isCartaoConexao) {
       setAtalhoAtivo("conta");
     }
-  }, [isContaInterna]);
+  }, [isCartaoConexao, isContaInterna]);
 
   useEffect(() => {
-    if (isContaInterna && valorPagoCentavos !== "0") {
+    if ((isContaInterna || isCartaoConexao) && valorPagoCentavos !== "0") {
       setValorPagoCentavos("0");
     }
-  }, [isContaInterna, valorPagoCentavos]);
+  }, [isCartaoConexao, isContaInterna, valorPagoCentavos]);
 
   useEffect(() => {
     if (tipoComprador === "COLABORADOR") {
@@ -746,7 +851,7 @@ export default function CafeCaixaPage() {
       setBuscaColaborador("");
     }
 
-    if (tipoComprador !== "PESSOA_AVULSA" && compradorSelecionado) {
+    if (tipoComprador !== "PESSOA_AVULSA" && tipoComprador !== "ALUNO" && compradorSelecionado) {
       setCompradorSelecionado(null);
       setBuscaComprador("");
       setCompradores([]);
@@ -764,11 +869,99 @@ export default function CafeCaixaPage() {
   ]);
 
   useEffect(() => {
-    if (tipoComprador === "COLABORADOR") return;
-    if (tipoQuitacao === "CONTA_INTERNA_COLABORADOR") {
+    if (tipoComprador === "COLABORADOR" || tipoComprador === "ALUNO") return;
+    if (tipoQuitacao === "CONTA_INTERNA_COLABORADOR" || tipoQuitacao === "CARTAO_CONEXAO") {
       setTipoQuitacao(saldoPrevistoCentavos > 0 ? "PARCIAL" : "IMEDIATA");
     }
   }, [saldoPrevistoCentavos, tipoComprador, tipoQuitacao]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function carregarPagamentos() {
+      setPagamentosLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (tipoComprador === "COLABORADOR" && compradorColaboradorId) {
+          params.set("comprador_pessoa_id", String(compradorColaboradorId));
+          params.set("comprador_tipo", "COLABORADOR");
+        } else if (tipoComprador === "ALUNO" && compradorPessoaId) {
+          params.set("comprador_pessoa_id", String(compradorPessoaId));
+          params.set("comprador_tipo", "ALUNO");
+        } else if (tipoComprador === "PESSOA_AVULSA" && compradorPessoaId) {
+          params.set("comprador_pessoa_id", String(compradorPessoaId));
+          params.set("comprador_tipo", "PESSOA_AVULSA");
+        } else {
+          params.set("comprador_tipo", tipoComprador === "CARGO_SETOR" ? "NAO_IDENTIFICADO" : tipoComprador);
+        }
+
+        const response = await fetch(`/api/cafe/pagamentos/opcoes?${params.toString()}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        const payload = (await response.json().catch(() => null)) as PagamentosResponse | { detalhe?: string } | null;
+        if (!response.ok) {
+          throw new Error(
+            payload && typeof payload === "object" && "detalhe" in payload && payload.detalhe
+              ? String(payload.detalhe)
+              : "falha_carregar_pagamentos_cafe",
+          );
+        }
+
+        const nextOptions = Array.isArray(payload?.opcoes) ? payload.opcoes : [];
+        setPagamentosDisponiveis(nextOptions);
+        setCentroCustoId(payload?.centro_custo_id ?? null);
+        setMetodoPagamento((current) => {
+          const availableCurrent = nextOptions.find((item) => item.codigo === current && item.habilitado);
+          return availableCurrent?.codigo ?? nextOptions.find((item) => item.habilitado)?.codigo ?? "";
+        });
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setPagamentosDisponiveis([]);
+          setMetodoPagamento("");
+          setMensagem(error instanceof Error ? error.message : "falha_carregar_pagamentos_cafe");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setPagamentosLoading(false);
+        }
+      }
+    }
+
+    void carregarPagamentos();
+    return () => controller.abort();
+  }, [compradorColaboradorId, compradorPessoaId, tipoComprador]);
+
+  useEffect(() => {
+    const option = pagamentosDisponiveis.find((item) => item.codigo === metodoPagamento);
+    if (!option) return;
+    if (option.tipo_fluxo === "CONTA_INTERNA" && tipoQuitacao !== "CONTA_INTERNA_COLABORADOR") {
+      setTipoQuitacao("CONTA_INTERNA_COLABORADOR");
+      return;
+    }
+    if (
+      (option.tipo_fluxo === "CARTAO_CONEXAO_ALUNO" || option.tipo_fluxo === "CARTAO_CONEXAO_COLABORADOR") &&
+      tipoQuitacao !== "CARTAO_CONEXAO"
+    ) {
+      setTipoQuitacao("CARTAO_CONEXAO");
+      return;
+    }
+    if (
+      (option.tipo_fluxo === "IMEDIATO" || option.tipo_fluxo === "CARTAO_EXTERNO") &&
+      (tipoQuitacao === "CONTA_INTERNA_COLABORADOR" || tipoQuitacao === "CARTAO_CONEXAO")
+    ) {
+      setTipoQuitacao("IMEDIATA");
+    }
+  }, [metodoPagamento, pagamentosDisponiveis, tipoQuitacao]);
+
+  useEffect(() => {
+    const current = pagamentosDisponiveisFiltrados.find((item) => item.codigo === metodoPagamento);
+    if (current?.habilitado) return;
+    const fallback = pagamentosDisponiveisFiltrados.find((item) => item.habilitado);
+    if (fallback && fallback.codigo !== metodoPagamento) {
+      setMetodoPagamento(fallback.codigo);
+    }
+  }, [metodoPagamento, pagamentosDisponiveisFiltrados]);
 
   useEffect(() => {
     if (baixaId) {
@@ -778,7 +971,7 @@ export default function CafeCaixaPage() {
 
   useEffect(() => {
     const term = buscaComprador.trim();
-    if (tipoComprador !== "PESSOA_AVULSA") return;
+    if (tipoComprador !== "PESSOA_AVULSA" && tipoComprador !== "ALUNO") return;
     if (compradorSelecionado && buscaComprador === compradorSelecionado.nome) {
       setCompradores([]);
       return;
@@ -891,8 +1084,8 @@ export default function CafeCaixaPage() {
       return;
     }
 
-    if (tipoComprador === "PESSOA_AVULSA" && !compradorSelecionado) {
-      setMensagem("Selecione a pessoa avulsa para continuar.");
+    if ((tipoComprador === "PESSOA_AVULSA" || tipoComprador === "ALUNO") && !compradorSelecionado) {
+      setMensagem(tipoComprador === "ALUNO" ? "Selecione o aluno para continuar." : "Selecione a pessoa avulsa para continuar.");
       return;
     }
 
@@ -906,12 +1099,23 @@ export default function CafeCaixaPage() {
       return;
     }
 
+    if (!pagamentoSelecionado?.habilitado) {
+      setMensagem("Selecione uma forma de pagamento valida para continuar.");
+      return;
+    }
+
     setSaving(true);
     setMensagem(null);
     try {
       const compradorPayloadId = tipoComprador === "COLABORADOR" ? compradorColaboradorId : compradorPessoaId;
       const colaboradorPayloadId = tipoComprador === "COLABORADOR" ? compradorColaboradorId : null;
-      const formaPagamentoPayload = isContaInterna ? "CONTA_INTERNA_COLABORADOR" : metodoPagamento;
+      const formaPagamentoPayload = pagamentoSelecionado.codigo;
+      const quitacaoPayload = isContaInterna
+        ? "CONTA_INTERNA_COLABORADOR"
+        : isCartaoConexao
+          ? "CARTAO_CONEXAO"
+          : tipoQuitacao;
+      const valorPagoPayload = isContaInterna || isCartaoConexao ? 0 : Number(valorPagoCentavos || "0");
       const payload = editingId
         ? {
             data_operacao: dataOperacao,
@@ -919,9 +1123,10 @@ export default function CafeCaixaPage() {
             comprador_id: compradorPayloadId,
             pagador_pessoa_id: compradorPayloadId,
             colaborador_pessoa_id: colaboradorPayloadId,
-            data_competencia: isContaInterna ? competencia : null,
+            data_competencia: isContaInterna || isCartaoConexao ? competencia : null,
             observacoes_internas: observacoesInternas,
             observacoes: observacoesInternas,
+            forma_pagamento_id: pagamentoSelecionado.id,
             forma_pagamento: formaPagamentoPayload,
           }
         : {
@@ -930,13 +1135,15 @@ export default function CafeCaixaPage() {
             comprador_id: compradorPayloadId,
             pagador_pessoa_id: compradorPayloadId,
             colaborador_pessoa_id: colaboradorPayloadId,
-            tipo_quitacao: tipoQuitacao,
-            data_competencia: isContaInterna ? competencia : null,
+            tipo_quitacao: quitacaoPayload,
+            data_competencia: isContaInterna || isCartaoConexao ? competencia : null,
             observacoes_internas: observacoesInternas,
             observacoes: observacoesInternas,
-            metodo_pagamento: metodoPagamento,
+            forma_pagamento_id: pagamentoSelecionado.id,
+            forma_pagamento_codigo: formaPagamentoPayload,
+            metodo_pagamento: formaPagamentoPayload,
             forma_pagamento: formaPagamentoPayload,
-            valor_pago_centavos: Number(valorPagoCentavos || "0"),
+            valor_pago_centavos: valorPagoPayload,
             itens: itens.map((item) => ({
               produto_id: item.produto_id,
               quantidade: item.quantidade,
@@ -984,6 +1191,18 @@ export default function CafeCaixaPage() {
       setCompradorSelecionado(null);
       setBuscaComprador("");
       setCargoSetorLabel("");
+    } else if (comanda.comprador_tipo === "ALUNO" && (comanda.comprador_pessoa_id ?? comanda.pagador_pessoa_id)) {
+      const pessoaId = comanda.comprador_pessoa_id ?? comanda.pagador_pessoa_id;
+      setTipoComprador("ALUNO");
+      setCompradorSelecionado({
+        id: pessoaId ?? 0,
+        nome: comanda.pagador_nome ?? `Pessoa #${pessoaId}`,
+        email: null,
+      });
+      setBuscaComprador(comanda.pagador_nome ?? `Pessoa #${pessoaId}`);
+      setColaboradorPessoaId("");
+      setBuscaColaborador("");
+      setCargoSetorLabel("");
     } else if (comanda.pagador_pessoa_id) {
       setTipoComprador("PESSOA_AVULSA");
       setCompradorSelecionado({
@@ -1003,7 +1222,9 @@ export default function CafeCaixaPage() {
       setBuscaColaborador("");
       setCargoSetorLabel("");
     }
-    setTipoQuitacao(comanda.tipo_quitacao);
+    setTipoQuitacao(
+      comanda.tipo_quitacao === "CARTAO_CONEXAO" ? "CARTAO_CONEXAO" : comanda.tipo_quitacao === "CONTA_INTERNA" ? "CONTA_INTERNA_COLABORADOR" : comanda.tipo_quitacao,
+    );
     setCompetencia(comanda.data_competencia ?? competenciaFromDate(comanda.data_operacao));
     setObservacoesInternas(comanda.observacoes_internas ?? "");
     setMetodoPagamento(
@@ -1105,11 +1326,13 @@ export default function CafeCaixaPage() {
 
   function ativarFluxoContaInterna() {
     setAtalhoAtivo("conta");
-    if (tipoComprador !== "COLABORADOR") {
-      setTipoComprador("COLABORADOR");
+    const proximoTipo =
+      tipoComprador === "ALUNO" || tipoComprador === "COLABORADOR" ? tipoComprador : "COLABORADOR";
+    if (tipoComprador !== proximoTipo) {
+      setTipoComprador(proximoTipo);
     }
-    if (!isContaInterna) {
-      setTipoQuitacao("CONTA_INTERNA_COLABORADOR");
+    if (!isContaInterna && !isCartaoConexao) {
+      setTipoQuitacao(proximoTipo === "ALUNO" ? "CARTAO_CONEXAO" : "CONTA_INTERNA_COLABORADOR");
     }
     scrollToSection(contaInternaId ? "conta" : "formulario");
   }
@@ -1136,10 +1359,10 @@ export default function CafeCaixaPage() {
             onClick={ativarFluxoBaixa}
           />
           <ShortcutCard
-            badge="Conta interna"
-            title="Lancar direto em conta interna"
-            description="Quando a liquidacao principal for conta interna, a comanda ja nasce vinculada a cobranca da competencia."
-            active={atalhoAtivo === "conta" || isContaInterna || contaInternaId !== null}
+            badge="Fluxo futuro"
+            title="Lancar em cobranca futura"
+            description="Use conta interna para colaborador e Cartao Conexao para aluno. A comanda ja nasce vinculada a cobranca da competencia."
+            active={atalhoAtivo === "conta" || isContaInterna || isCartaoConexao || contaInternaId !== null}
             onClick={ativarFluxoContaInterna}
           />
           <ShortcutCard
@@ -1240,10 +1463,12 @@ export default function CafeCaixaPage() {
                 ))}
               </div>
 
-              {tipoComprador === "PESSOA_AVULSA" ? (
+              {tipoComprador === "PESSOA_AVULSA" || tipoComprador === "ALUNO" ? (
                 <div className="space-y-3">
                   <label className="space-y-2 text-sm">
-                    <span className="font-medium text-slate-700">Pessoa avulsa</span>
+                    <span className="font-medium text-slate-700">
+                      {tipoComprador === "ALUNO" ? "Aluno" : "Pessoa avulsa"}
+                    </span>
                     <div className="relative">
                       <input
                         className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
@@ -1296,9 +1521,13 @@ export default function CafeCaixaPage() {
                   ) : null}
 
                   <CafePanel className="px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Fluxo normal</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">
+                      {tipoComprador === "ALUNO" ? "Cartao Conexao" : "Fluxo normal"}
+                    </p>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Pessoa avulsa segue o fluxo normal de venda. O saldo fica no caixa para baixa posterior e nao vai para conta interna.
+                      {tipoComprador === "ALUNO"
+                        ? "Aluno pode consumir por pagamento imediato ou seguir para Cartao Conexao quando houver elegibilidade financeira."
+                        : "Pessoa avulsa segue o fluxo normal de venda. O saldo fica no caixa para baixa posterior e nao vai para conta interna."}
                     </p>
                   </CafePanel>
                 </div>
@@ -1351,9 +1580,9 @@ export default function CafeCaixaPage() {
                   ) : null}
 
                   <CafePanel className="px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Conta interna habilitada</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Fluxo futuro habilitado</p>
                     <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Quando o comprador e colaborador, o saldo pode seguir para conta interna por competencia e manter coerencia com fatura e folha.
+                      Quando o comprador e colaborador, a comanda pode seguir para conta interna por competencia ou para Cartao Conexao do colaborador, mantendo coerencia com fatura e folha.
                     </p>
                   </CafePanel>
                 </div>
@@ -1527,7 +1756,7 @@ export default function CafeCaixaPage() {
         <CaixaSection
           anchor="caixa-liquidacao"
           title="C. Liquidacao"
-          description="Essa tela registra vendas reais feitas fora do PDV. Por isso, a liquidacao precisa reproduzir como a venda aconteceu: no caixa, parcialmente ou em conta interna quando houver colaborador."
+          description="Essa tela registra vendas reais feitas fora do PDV. Por isso, a liquidacao precisa reproduzir como a venda aconteceu: no caixa, parcialmente, via Cartao Conexao ou em conta interna quando o comprador for elegivel."
           active={atalhoAtivo === "baixa"}
         >
           <div className="grid gap-4 md:grid-cols-3">
@@ -1543,6 +1772,9 @@ export default function CafeCaixaPage() {
                 <option value="CONTA_INTERNA_COLABORADOR" disabled={!permiteContaInterna}>
                   Debito direto em conta interna
                 </option>
+                <option value="CARTAO_CONEXAO" disabled={!permiteCartaoConexaoAluno && !permiteCartaoConexaoColaborador}>
+                  Cartao Conexao / cobranca futura
+                </option>
               </select>
             </label>
 
@@ -1551,15 +1783,21 @@ export default function CafeCaixaPage() {
               <select
                 className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
                 value={metodoPagamento}
-                disabled={isContaInterna}
+                disabled={pagamentosLoading}
                 onChange={(event) => setMetodoPagamento(event.target.value)}
               >
-                {PAGAMENTO_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
+                {pagamentosDisponiveisFiltrados.length === 0 ? <option value="">Sem opcoes disponiveis</option> : null}
+                {pagamentosDisponiveisFiltrados.map((option) => (
+                  <option key={option.codigo} value={option.codigo} disabled={!option.habilitado}>
                     {option.label}
                   </option>
                 ))}
               </select>
+              <p className="text-xs leading-5 text-slate-500">
+                {pagamentosLoading
+                  ? "Carregando meios de pagamento validos do contexto Cafe..."
+                  : pagamentoSelecionado?.motivo_bloqueio ?? `Centro de custo Ballet Cafe${centroCustoId ? ` #${centroCustoId}` : ""}.`}
+              </p>
             </label>
 
             <label className="space-y-2 text-sm">
@@ -1569,7 +1807,7 @@ export default function CafeCaixaPage() {
                 type="number"
                 min={0}
                 value={valorPagoCentavos}
-                disabled={editingId !== null || isContaInterna}
+                disabled={editingId !== null || isContaInterna || isCartaoConexao}
                 onChange={(event) => setValorPagoCentavos(event.target.value)}
               />
             </label>
@@ -1579,7 +1817,7 @@ export default function CafeCaixaPage() {
             <CafePanel className="px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Regra operacional</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Essa tela registra vendas reais feitas fora do PDV. Pagamento imediato gera recebimento no caixa. Pagamento parcial mantem saldo aberto. Conta interna cria o debito diretamente na competencia escolhida.
+                Essa tela registra vendas reais feitas fora do PDV. Pagamento imediato gera recebimento no caixa. Pagamento parcial mantem saldo aberto. Cartao Conexao e conta interna criam cobranca futura na competencia escolhida.
               </p>
             </CafePanel>
             <CafePanel className="px-4 py-4">
@@ -1587,6 +1825,8 @@ export default function CafeCaixaPage() {
               <p className="mt-2 text-sm leading-6 text-slate-600">
                 {isContaInterna
                   ? "A comanda ja nascera como debito em conta interna. A competencia define em qual mes esse valor sera cobrado do colaborador."
+                  : isCartaoConexao
+                    ? "A comanda ja nascera vinculada a cobranca futura. A competencia define em qual mes o debito entrara na fatura do Cartao Conexao."
                   : saldoPrevistoCentavos > 0
                     ? "Ha saldo em aberto previsto. Ele pode receber baixa posterior no caixa e, se necessario, ser convertido depois para conta interna."
                     : "O total atual indica quitacao integral na abertura, sem saldo pendente."}
@@ -1598,9 +1838,9 @@ export default function CafeCaixaPage() {
         <CaixaSection
           anchor="caixa-destino-financeiro"
           title="D. Resultado financeiro da comanda"
-          description="Defina como a comanda nasce no financeiro. Conta interna gera debito direto na competencia escolhida; parcial deixa saldo em aberto para ajuste posterior."
-          active={isContaInterna || contaInternaId !== null || atalhoAtivo === "conta"}
-          variant={isContaInterna || contaInternaId !== null ? "muted" : "default"}
+          description="Defina como a comanda nasce no financeiro. Conta interna e Cartao Conexao geram debito direto na competencia escolhida; parcial deixa saldo em aberto para ajuste posterior."
+          active={isContaInterna || isCartaoConexao || contaInternaId !== null || atalhoAtivo === "conta"}
+          variant={isContaInterna || isCartaoConexao || contaInternaId !== null ? "muted" : "default"}
         >
           <div className="grid gap-4 md:grid-cols-[1fr_180px_1fr]">
             <div className="space-y-2 text-sm">
@@ -1610,10 +1850,10 @@ export default function CafeCaixaPage() {
                 value={competencia}
                 onChange={(event) => setCompetencia(event.target.value)}
                 placeholder="YYYY-MM"
-                disabled={!isContaInterna}
+                disabled={!isContaInterna && !isCartaoConexao}
               />
               <p className="text-xs leading-5 text-slate-500">
-                Define o mes em que o valor sera cobrado na conta interna do colaborador.
+                Define o mes em que o valor sera cobrado na conta interna ou na fatura do Cartao Conexao.
               </p>
             </div>
 
@@ -1628,17 +1868,17 @@ export default function CafeCaixaPage() {
             </div>
           </div>
 
-          {isContaInterna && !permiteContaInterna ? (
+          {(isContaInterna && !permiteContaInterna) || (isCartaoConexao && !permiteCartaoConexaoAluno && !permiteCartaoConexaoColaborador) ? (
             <EmptyState
-              title="Conta interna exige colaborador"
-              description="Selecione um colaborador antes de confirmar este lancamento. A cobranca por competencia depende desse vinculo."
+              title="Fluxo futuro exige comprador elegivel"
+              description="Selecione o colaborador ou aluno correto antes de confirmar este lancamento. A cobranca por competencia depende desse vinculo."
               tone="warning"
             />
           ) : (
             <CafePanel className="px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Uso recomendado</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Se a liquidacao for conta interna, a comanda ja gera debito na conta interna do colaborador. A competencia define o mes de cobranca e a folha importa a fatura da conta interna, nao a comanda isolada.
+                Se a liquidacao for conta interna ou Cartao Conexao, a comanda ja gera debito na competencia escolhida. A folha e as faturas importam a cobranca consolidada, nao a comanda isolada.
               </p>
             </CafePanel>
           )}
@@ -1679,7 +1919,7 @@ export default function CafeCaixaPage() {
         <CafeCard
           title="Resumo operacional"
           description="Confirme comprador, forma de liquidacao, saldo, competencia de cobranca e resultado financeiro antes de gravar."
-          variant={saldoPrevistoCentavos > 0 || isContaInterna ? "muted" : "stats"}
+          variant={saldoPrevistoCentavos > 0 || isContaInterna || isCartaoConexao ? "muted" : "stats"}
         >
           <div className="rounded-[24px] border border-[#ead8be] bg-[linear-gradient(180deg,#fffef9_0%,#fff5e6_100%)] px-5 py-5">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Total da comanda</div>
@@ -1696,15 +1936,19 @@ export default function CafeCaixaPage() {
             <MetricTile label="Comprador selecionado" value={compradorNome} />
             <MetricTile
               label="Forma de pagamento"
-              value={isContaInterna ? "Conta interna" : formatFormaPagamento(metodoPagamento)}
+              value={pagamentoSelecionado?.label ?? formatFormaPagamento(metodoPagamento)}
             />
+            <MetricTile label="Centro de custo" value={centroCustoId ? `#${centroCustoId} Ballet Cafe` : "Resolvendo"} />
             <MetricTile label="Valor pago" value={brl(valorPagoAberturaCentavos)} />
             <MetricTile label="Saldo em aberto" value={brl(saldoPrevistoCentavos)} emphasis={saldoPrevistoCentavos > 0} />
-            <MetricTile label="Competencia de cobranca" value={competenciaCobranca} emphasis={isContaInterna} />
+            <MetricTile label="Competencia de cobranca" value={competenciaCobranca} emphasis={isContaInterna || isCartaoConexao} />
             <MetricTile label="Resultado financeiro" value={resultadoFinanceiro} />
             <MetricTile label="Status operacional previsto" value={statusPrevisto} />
             {tipoComprador === "COLABORADOR" ? (
               <MetricTile label="Conta interna" value={permiteContaInterna ? "Disponivel para cobranca, fatura e folha" : "Aguardando colaborador"} emphasis />
+            ) : null}
+            {tipoComprador === "ALUNO" ? (
+              <MetricTile label="Cartao Conexao" value={permiteCartaoConexaoAluno ? "Disponivel para cobranca futura" : "Aguardando conta elegivel"} emphasis />
             ) : null}
           </div>
         </CafeCard>

@@ -41,6 +41,19 @@ export type CafeDashboardEstoqueAlerta = {
   custo_medio_centavos: number | null;
 };
 
+export type CafeDashboardMeioPagamento = {
+  codigo: string;
+  label: string;
+  vendas: number;
+  faturamento_centavos: number;
+};
+
+export type CafeDashboardContaDistribuicao = {
+  conta_financeira_id: number | null;
+  conta_financeira_nome: string;
+  total_centavos: number;
+};
+
 export type CafeDashboardData = {
   resumo: CafeDashboardResumo;
   horarios: {
@@ -74,6 +87,14 @@ export type CafeDashboardData = {
     quantidade_repor_agora: number;
     quantidade_zerado: number;
   };
+  financeiro: {
+    total_imediato_recebido_centavos: number;
+    total_cartao_conexao_centavos: number;
+    total_conta_interna_centavos: number;
+    total_pendente_liquidacao_centavos: number;
+    distribuicao_contas: CafeDashboardContaDistribuicao[];
+  };
+  meios_pagamento: CafeDashboardMeioPagamento[];
   explicacao: {
     texto_curto: string;
   };
@@ -109,6 +130,16 @@ type CafeInsumoAlertaRow = {
   estoque_minimo: number | string | null;
   status_reposicao: string | null;
   custo_medio_centavos: number | string | null;
+};
+
+type CafeFinanceiroRow = {
+  valor_total_centavos: number | string | null;
+  valor_pago_centavos: number | string | null;
+  valor_em_aberto_centavos: number | string | null;
+  origem_financeira: string | null;
+  forma_pagamento: string | null;
+  conta_financeira_id: number | string | null;
+  status_pagamento?: string | null;
 };
 
 const PERFIS: CafeDashboardPerfil["perfil"][] = [
@@ -181,6 +212,51 @@ function topReceitaFromMap(map: Map<number | null, CafeDashboardTopProduto>, lim
     }));
 }
 
+function upper(value: unknown): string {
+  return typeof value === "string"
+    ? value
+        .trim()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase()
+    : "";
+}
+
+function formatFormaPagamentoLabel(value: string | null) {
+  const codigo = upper(value);
+  switch (codigo) {
+    case "DINHEIRO":
+      return "Dinheiro";
+    case "PIX":
+      return "PIX";
+    case "CREDITO_AVISTA":
+      return "Cartao externo";
+    case "CREDIARIO_COLAB":
+    case "CONTA_INTERNA":
+    case "CONTA_INTERNA_COLABORADOR":
+      return "Conta interna";
+    case "CARTAO_CONEXAO_ALUNO":
+      return "Cartao Conexao aluno";
+    case "CARTAO_CONEXAO_COLAB":
+    case "CARTAO_CONEXAO_COLABORADOR":
+      return "Cartao Conexao colaborador";
+    case "CARTAO_CONEXAO":
+      return "Cartao Conexao";
+    case "":
+      return "Nao informado";
+    default:
+      return codigo.replaceAll("_", " ");
+  }
+}
+
+function isFluxoFuturo(origemFinanceira: string) {
+  return (
+    origemFinanceira === "CARTAO_CONEXAO_ALUNO" ||
+    origemFinanceira === "CARTAO_CONEXAO_COLABORADOR" ||
+    origemFinanceira === "CONTA_INTERNA"
+  );
+}
+
 function buildExplicacao(params: {
   range: { dataInicio: string; dataFim: string };
   resumo: CafeDashboardResumo;
@@ -213,7 +289,11 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
   const supabase = getSupabaseServiceClient();
   const range = resolveCafeDashboardRange(filters);
 
-  const [{ data: analyticsData, error: analyticsError }, { data: alertasData, error: alertasError }] = await Promise.all([
+  const [
+    { data: analyticsData, error: analyticsError },
+    { data: alertasData, error: alertasError },
+    { data: financeiroData, error: financeiroError },
+  ] = await Promise.all([
     supabase
       .from("vw_cafe_vendas_analytics")
       .select(
@@ -226,13 +306,52 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
       .select("insumo_id,nome,estoque_atual,estoque_minimo,status_reposicao,custo_medio_centavos")
       .order("status_reposicao", { ascending: true })
       .order("nome", { ascending: true }),
+    supabase
+      .from("cafe_vendas")
+      .select(
+        "valor_total_centavos,valor_pago_centavos,valor_em_aberto_centavos,origem_financeira,forma_pagamento,conta_financeira_id,status_pagamento",
+      )
+      .gte("data_operacao", range.dataInicio)
+      .lte("data_operacao", range.dataFim)
+      .neq("status_pagamento", "CANCELADO"),
   ]);
 
   if (analyticsError) throw new Error(analyticsError.message);
   if (alertasError) throw new Error(alertasError.message);
+  if (financeiroError) throw new Error(financeiroError.message);
 
   const analytics = (analyticsData ?? []) as CafeAnalyticsRow[];
   const alertas = (alertasData ?? []) as CafeInsumoAlertaRow[];
+  const financeiroRows = (financeiroData ?? []) as CafeFinanceiroRow[];
+
+  const contaIds = Array.from(
+    new Set(
+      financeiroRows
+        .map((row) => toNullableInt(row.conta_financeira_id))
+        .filter((value): value is number => typeof value === "number" && value > 0),
+    ),
+  );
+
+  const contaFinanceiraNomeMap = new Map<number, string>();
+  if (contaIds.length > 0) {
+    const { data: contasData, error: contasError } = await supabase
+      .from("contas_financeiras")
+      .select("id,nome,codigo")
+      .in("id", contaIds);
+
+    if (contasError) throw new Error(contasError.message);
+
+    for (const conta of (contasData ?? []) as Array<Record<string, unknown>>) {
+      const id = toNullableInt(conta.id);
+      if (!id) continue;
+      contaFinanceiraNomeMap.set(
+        id,
+        (typeof conta.nome === "string" && conta.nome.trim()) ||
+          (typeof conta.codigo === "string" && conta.codigo.trim()) ||
+          `Conta #${id}`,
+      );
+    }
+  }
 
   const vendaIds = new Set<number>();
   const vendaIdsIdentificados = new Set<number>();
@@ -252,6 +371,12 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
   const produtosGlobais = new Map<number | null, CafeDashboardTopProduto>();
   const horariosAlunos = new Map<number, { hora: number; vendas: Set<number>; faturamento_centavos: number }>();
   const produtosAlunos = new Map<number | null, CafeDashboardTopProduto>();
+  const meiosPagamentoMap = new Map<string, CafeDashboardMeioPagamento>();
+  const distribuicaoContasMap = new Map<string, CafeDashboardContaDistribuicao>();
+  let totalImediatoRecebido = 0;
+  let totalCartaoConexao = 0;
+  let totalContaInterna = 0;
+  let totalPendenteLiquidacao = 0;
 
   for (const perfil of PERFIS) {
     perfilStats.set(perfil, {
@@ -385,6 +510,54 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
     item.status_reposicao === "ZERADO" || item.status_reposicao === "REPOR_AGORA" || item.status_reposicao === "ATENCAO"
   ).length;
 
+  for (const row of financeiroRows) {
+    const total = Math.max(toInt(row.valor_total_centavos), 0);
+    const pago = Math.max(toInt(row.valor_pago_centavos), 0);
+    const aberto = Math.max(toInt(row.valor_em_aberto_centavos), 0);
+    const origemFinanceira = upper(row.origem_financeira);
+    const formaPagamentoCodigo = upper(row.forma_pagamento) || origemFinanceira || "NAO_INFORMADO";
+    const contaFinanceiraId = toNullableInt(row.conta_financeira_id);
+    const contaKey = String(contaFinanceiraId ?? 0);
+    const contaNome =
+      contaFinanceiraId === null
+        ? "Conta financeira nao resolvida"
+        : contaFinanceiraNomeMap.get(contaFinanceiraId) ?? `Conta #${contaFinanceiraId}`;
+
+    if (origemFinanceira === "IMEDIATO" || origemFinanceira === "CARTAO_EXTERNO" || !origemFinanceira) {
+      totalImediatoRecebido += pago;
+    }
+    if (
+      origemFinanceira === "CARTAO_CONEXAO_ALUNO" ||
+      origemFinanceira === "CARTAO_CONEXAO_COLABORADOR"
+    ) {
+      totalCartaoConexao += total;
+    }
+    if (origemFinanceira === "CONTA_INTERNA") {
+      totalContaInterna += total;
+    }
+    if (!isFluxoFuturo(origemFinanceira)) {
+      totalPendenteLiquidacao += aberto;
+    }
+
+    const meioAtual = meiosPagamentoMap.get(formaPagamentoCodigo) ?? {
+      codigo: formaPagamentoCodigo,
+      label: formatFormaPagamentoLabel(formaPagamentoCodigo),
+      vendas: 0,
+      faturamento_centavos: 0,
+    };
+    meioAtual.vendas += 1;
+    meioAtual.faturamento_centavos += total;
+    meiosPagamentoMap.set(formaPagamentoCodigo, meioAtual);
+
+    const distribuicaoAtual = distribuicaoContasMap.get(contaKey) ?? {
+      conta_financeira_id: contaFinanceiraId,
+      conta_financeira_nome: contaNome,
+      total_centavos: 0,
+    };
+    distribuicaoAtual.total_centavos += total;
+    distribuicaoContasMap.set(contaKey, distribuicaoAtual);
+  }
+
   const resumo: CafeDashboardResumo = {
     faturamento_total_centavos: faturamentoTotal,
     total_vendas: totalVendas,
@@ -414,6 +587,18 @@ export async function buildCafeDashboard(filters: CafeDashboardFilters): Promise
       quantidade_repor_agora: quantidadeReporAgora,
       quantidade_zerado: quantidadeZerado,
     },
+    financeiro: {
+      total_imediato_recebido_centavos: totalImediatoRecebido,
+      total_cartao_conexao_centavos: totalCartaoConexao,
+      total_conta_interna_centavos: totalContaInterna,
+      total_pendente_liquidacao_centavos: totalPendenteLiquidacao,
+      distribuicao_contas: Array.from(distribuicaoContasMap.values()).sort(
+        (a, b) => b.total_centavos - a.total_centavos,
+      ),
+    },
+    meios_pagamento: Array.from(meiosPagamentoMap.values()).sort(
+      (a, b) => b.faturamento_centavos - a.faturamento_centavos,
+    ),
     explicacao: {
       texto_curto: buildExplicacao({
         range,

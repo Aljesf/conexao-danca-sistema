@@ -45,6 +45,14 @@ const EMPTY_DATA: CafeDashboardData = {
     quantidade_repor_agora: 0,
     quantidade_zerado: 0,
   },
+  financeiro: {
+    total_imediato_recebido_centavos: 0,
+    total_cartao_conexao_centavos: 0,
+    total_conta_interna_centavos: 0,
+    total_pendente_liquidacao_centavos: 0,
+    distribuicao_contas: [],
+  },
+  meios_pagamento: [],
   explicacao: {
     texto_curto: "Sem leitura operacional disponivel para o periodo selecionado.",
   },
@@ -271,6 +279,118 @@ export default function CafeDashboard() {
                   </div>
                   <p className="mt-3 text-sm text-slate-600">
                     {formatBRLFromCentavos(faixa.faturamento_centavos)}
+                  </p>
+                </CafePanel>
+              ))}
+            </div>
+          )}
+        </CafeCard>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <CafeCard
+          title="Financeiro do Cafe"
+          description="A leitura financeira combina recebimento imediato, Cartao Conexao, conta interna e saldos que ainda dependem de regularizacao."
+        >
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <CafePanel>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Recebido no ato
+              </p>
+              <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                {formatBRLFromCentavos(data.financeiro.total_imediato_recebido_centavos)}
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                Total que entrou imediatamente no caixa ou nas contas do Ballet Cafe.
+              </p>
+            </CafePanel>
+            <CafePanel>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Cartao Conexao
+              </p>
+              <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                {formatBRLFromCentavos(data.financeiro.total_cartao_conexao_centavos)}
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                Vendas enviadas para cobranca futura de aluno ou colaborador.
+              </p>
+            </CafePanel>
+            <CafePanel>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Conta interna
+              </p>
+              <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                {formatBRLFromCentavos(data.financeiro.total_conta_interna_centavos)}
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                Consumo de colaborador reservado para fechamento futuro por competencia.
+              </p>
+            </CafePanel>
+            <CafePanel>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Pendente de liquidacao
+              </p>
+              <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                {formatBRLFromCentavos(data.financeiro.total_pendente_liquidacao_centavos)}
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                Saldos abertos que ainda exigem baixa real ou regularizacao operacional.
+              </p>
+            </CafePanel>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            <CafeSectionIntro
+              title="Distribuicao por conta financeira"
+              description="Leitura economica das vendas do periodo vinculadas ao centro de custo Ballet Cafe."
+            />
+            {data.financeiro.distribuicao_contas.length === 0 ? (
+              <CafePanel className="border-dashed">
+                <p className="text-sm text-slate-600">Nenhuma conta financeira apareceu no periodo.</p>
+              </CafePanel>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {data.financeiro.distribuicao_contas.map((conta) => (
+                  <CafePanel key={`conta-${conta.conta_financeira_id ?? "nao-resolvida"}`}>
+                    <p className="text-sm font-semibold text-slate-950">{conta.conta_financeira_nome}</p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      {formatBRLFromCentavos(conta.total_centavos)}
+                    </p>
+                  </CafePanel>
+                ))}
+              </div>
+            )}
+          </div>
+        </CafeCard>
+
+        <CafeCard
+          title="Meios de pagamento utilizados"
+          description="Veja quais formas de liquidacao estao puxando o faturamento do Ballet Cafe no periodo."
+        >
+          {data.meios_pagamento.length === 0 ? (
+            <CafePanel className="border-dashed">
+              <p className="text-sm font-medium text-slate-900">Sem meios para comparar.</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Assim que houver vendas, o painel destacara quais pagamentos estao puxando o caixa e a cobranca futura.
+              </p>
+            </CafePanel>
+          ) : (
+            <div className="space-y-3">
+              {data.meios_pagamento.map((meio) => (
+                <CafePanel key={meio.codigo}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">{meio.label}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {meio.vendas.toLocaleString("pt-BR")} venda(s)
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      {meio.codigo}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm text-slate-600">
+                    {formatBRLFromCentavos(meio.faturamento_centavos)}
                   </p>
                 </CafePanel>
               ))}
