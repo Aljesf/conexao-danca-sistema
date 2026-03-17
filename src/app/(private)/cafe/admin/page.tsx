@@ -9,47 +9,47 @@ const gestaoLinks = [
   {
     href: "/cafe/admin/produtos",
     title: "Produtos",
-    description: "Cardápio, receitas, preços por tabela e classificação dos itens vendidos.",
+    description: "Cardapio, receitas, precos por tabela e classificacao dos itens vendidos.",
   },
   {
     href: "/cafe/admin/insumos",
     title: "Insumos",
-    description: "Cadastros, saldo atual, abastecimento manual e histórico operacional.",
+    description: "Cadastros, saldo atual, abastecimento manual e historico operacional.",
   },
   {
     href: "/cafe/admin/tabelas-preco",
-    title: "Tabelas de preço",
-    description: "Estruture preços por perfil e mantenha a política comercial aplicada ao PDV.",
+    title: "Tabelas de preco",
+    description: "Estruture precos por perfil e mantenha a politica comercial aplicada ao PDV.",
   },
   {
     href: "/cafe/admin/compras",
     title: "Compras de insumos",
-    description: "Registre abastecimentos e acompanhe as compras recentes do café.",
+    description: "Registre abastecimentos e acompanhe as compras recentes do cafe.",
   },
 ];
 
 export default function CafeAdminHomePage() {
   return (
     <CafePageShell
-      eyebrow="Gestão do Café"
-      title="Gestão do Ballet Café"
-      description="Cadastros, preços, insumos e abastecimento do café em uma área administrativa própria do módulo."
+      eyebrow="Gestao do Cafe"
+      title="Gestao do Ballet Cafe"
+      description="Cadastros, precos, insumos e abastecimento do cafe em uma area administrativa propria do modulo."
       summary={
         <>
           <CafeStatCard
-            label="Catálogo"
+            label="Catalogo"
             value="Produtos"
-            description="Cardápio, receitas, categorias e composição comercial do café."
+            description="Cardapio, receitas, categorias e composicao comercial do cafe."
           />
           <CafeStatCard
             label="Insumos e estoque"
             value="Controle operacional"
-            description="Acompanhamento de saldo, validade e abastecimento manual."
+            description="Acompanhamento de saldo, abastecimento e leitura do custo medio."
           />
           <CafeStatCard
-            label="Política comercial"
-            value="Tabelas de preço"
-            description="Preço principal e tabelas auxiliares centralizados no mesmo contexto."
+            label="Politica comercial"
+            value="Tabelas de preco"
+            description="Preco principal e tabelas auxiliares centralizados no mesmo contexto."
           />
           <CafeStatCard
             label="Abastecimento"
@@ -60,12 +60,37 @@ export default function CafeAdminHomePage() {
       }
     >
       <CafeCard
-        title="Hub administrativo do módulo"
-        description="Escolha a área de gestão que precisa ajustar. O módulo foi reorganizado para concentrar o trabalho operacional e comercial dentro do próprio contexto Café."
+        title="Visoes do modulo"
+        description="O contexto Cafe agora separa claramente a operacao inteligente da governanca do modulo."
+      >
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <CafeShortcutCard
+            href="/cafe"
+            title="Dashboard do Ballet Cafe"
+            description="Use /cafe como home operacional inteligente para vendas, consumo, horarios e alertas de reposicao."
+            eyebrow="Dashboard"
+            featured
+          />
+          <CafePanel>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Separacao de escopo
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              <strong>/cafe</strong> concentra leitura operacional e tomada de decisao.{" "}
+              <strong>/cafe/admin</strong> permanece como area de governanca, cadastros, tabelas e
+              abastecimento do modulo.
+            </p>
+          </CafePanel>
+        </div>
+      </CafeCard>
+
+      <CafeCard
+        title="Hub administrativo do modulo"
+        description="Escolha a area de gestao que precisa ajustar. O modulo foi reorganizado para concentrar o trabalho operacional e comercial dentro do proprio contexto Cafe."
       >
         <CafeSectionIntro
           title="Atalhos principais"
-          description="Acesse diretamente os cadastros que sustentam a operação do caixa, o abastecimento e a política comercial."
+          description="Acesse diretamente os cadastros que sustentam a operacao do caixa, o abastecimento e a politica comercial."
         />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {gestaoLinks.map((item) => (
@@ -80,19 +105,19 @@ export default function CafeAdminHomePage() {
       </CafeCard>
 
       <CafeCard
-        title="Configuração institucional do café"
-        description="Branding, vínculo institucional e definições globais do contexto permanecem na Administração do Sistema."
+        title="Configuracao institucional do cafe"
+        description="Branding, vinculo institucional e definicoes globais do contexto permanecem na Administracao do Sistema."
       >
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <CafeSectionIntro
-            title="Administração institucional"
-            description="Use a configuração institucional apenas para identidade, vínculos e parâmetros globais do Ballet Café."
+            title="Administracao institucional"
+            description="Use a configuracao institucional apenas para identidade, vinculos e parametros globais do Ballet Cafe."
             actions={
               <a
                 href="/admin/config/cafe"
                 className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
-                Abrir configuração institucional
+                Abrir configuracao institucional
               </a>
             }
           />
@@ -101,8 +126,8 @@ export default function CafeAdminHomePage() {
               Escopo institucional
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Esse espaço não mistura produtos, insumos, tabelas de preço ou compras. Ele existe
-              apenas para a configuração global do contexto.
+              Esse espaco nao mistura produtos, insumos, tabelas de preco ou compras. Ele existe
+              apenas para a configuracao global do contexto.
             </p>
           </CafePanel>
         </div>

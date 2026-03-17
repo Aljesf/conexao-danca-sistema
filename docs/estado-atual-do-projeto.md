@@ -1,53 +1,41 @@
 ## Modulo atual
-Refatoracao visual e funcional do Ballet Cafe e do Financeiro de colaboradores para um padrao SaaS mais claro, separando PDV, caixa administrativo, cockpit financeiro de colaboradores e folha por competencia.
+Ballet Cafe com dashboard operacional na home do contexto e preferencia de pagina principal por contexto para cada usuario autenticado.
 
 ## SQL concluido
-- Nenhuma nova migration nesta etapa.
-- A refatoracao reaproveita a base operacional e financeira ja criada para cafe, cobrancas, recebimentos, movimento financeiro, lancamentos e faturas da conta interna.
+- Tabela `public.usuario_contexto_preferencias` para persistir a home por contexto e por usuario.
+- Funcao `public.fn_cafe_classificar_consumidor` para classificar consumo do cafe por perfil.
+- View `public.vw_cafe_vendas_analytics` para leitura analitica de vendas, horario, produto e perfil.
+- View `public.vw_cafe_insumos_alertas` para leitura operacional de estoque e reposicao no schema atual do cafe.
 
 ## APIs concluidas
-- Nova API agregadora: `src/app/api/financeiro/colaboradores/route.ts`.
-- API de resumo financeiro do colaborador reforcada em `src/app/api/admin/colaboradores/[id]/financeiro-resumo/route.ts`.
-- O resumo do colaborador agora devolve `competencias_folha` com valor por competencia, status da conta interna, status da folha e status de importacao.
-- A logica central do cafe continua concentrada em `/api/cafe/caixa`, inclusive para vendas do PDV.
+- `/api/me/contexto-home` para listar e salvar a pagina principal por contexto do usuario.
+- `/api/me/contexto-home/resolver` para resolver a home efetiva do contexto com fallback institucional.
+- `/api/cafe/dashboard` para expor metricas operacionais, financeiras e de consumo do Ballet Cafe.
 
 ## Paginas/componentes concluidos
-- Restauracao do PDV do Ballet Cafe em `/cafe/vendas`, com cards de produto, categorias, carrinho rapido e fechamento imediato.
-- Separacao explicita entre `/cafe/vendas` (PDV) e `/cafe/caixa` (registro retroativo, baixa parcial e regularizacao operacional).
-- Reorganizacao da entrada do modulo Cafe e da sidebar do contexto para priorizar `Vendas` e destacar `Caixa / Lancamentos`.
-- Criacao da tela `/financeiro/colaboradores` como cockpit SaaS de colaboradores financeiros.
-- Reforco da tela geral de folha para foco em competencia/processamento, com CTA para colaboradores financeiros.
-- Reorganizacao do perfil do colaborador para destacar:
-  - resumo financeiro;
-  - acoes rapidas;
-  - competencias e folhas;
-  - conta interna e debitos;
-  - ultimos lancamentos.
-- Unificacao visual do conceito de `Conta interna`, usando `Conta interna (Cartao Conexao)` apenas quando a transicao de nomenclatura precisa ficar explicita.
+- `/cafe` agora funciona como Dashboard do Ballet Cafe.
+- `src/components/cafe/CafeDashboard.tsx` centraliza a UI do dashboard.
+- `/administracao/configuracoes/contextos` permite configurar a home por contexto de forma individual.
+- O seletor global de contexto passou a navegar para a rota principal configurada do usuario.
+- `/cafe/admin` agora destaca explicitamente a separacao entre dashboard operacional e governanca do modulo.
 
 ## Pendencias
-- Validar manualmente o fluxo do novo PDV com operacao real de balcao.
-- Validar o consumo da nova API de colaboradores financeiros com base completa de colaboradores.
-- Revisar, em homologacao, se a leitura de competencias e folhas atende todos os cenarios de importacao da conta interna.
+- Previsoes mais avancadas de reposicao com historico temporal.
+- Alertas inteligentes de abastecimento baseados em consumo recorrente.
+- Validacao visual final por prints das telas novas e do comportamento do seletor de contexto.
 
 ## Bloqueios
-- `npm run lint` continua falhando no repositorio por erros legados fora do escopo desta entrega.
-- O escopo desta tarefa nao incluiu refatoracao dos erros historicos de lint em outros modulos.
+- Nenhum bloqueio funcional conhecido, salvo eventual divergencia futura de nomes reais das tabelas do cafe em outros ambientes.
+- `npm run lint` pode continuar apontando erros legados fora do escopo desta entrega.
 
 ## Versao do sistema
 Conectarte v0.9 com:
-- PDV do Ballet Cafe restaurado;
-- separacao entre PDV e Caixa / Lancamentos;
-- cockpit de colaboradores financeiros;
-- perfil financeiro do colaborador com foco mensal;
-- folha geral orientada a competencia e processamento.
+- dashboard operacional do Ballet Cafe;
+- home por contexto configuravel por usuario;
+- seletor global com navegacao orientada por preferencia;
+- base pronta para expansao do modelo em outros modulos.
 
 ## Proximas acoes
-- Homologar os cinco fluxos principais:
-  - `/cafe/vendas`;
-  - `/cafe/caixa`;
-  - `/financeiro/colaboradores`;
-  - perfil financeiro do colaborador;
-  - `/financeiro/folha/colaboradores`.
-- Consolidar a nova nomenclatura de `Conta interna` em outras telas financeiras fora deste escopo.
-- Produzir prints finais de validacao operacional e UX.
+- Validar `/cafe` com base real de vendas e insumos.
+- Produzir prints finais de dashboard, configuracao de contexto e troca de contexto.
+- Expandir o padrao de dashboard operacional para Loja quando a homologacao do Cafe fechar.
