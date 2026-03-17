@@ -44,6 +44,12 @@ Suporte ao Usuário / Sistema de Tickets
 - casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` permanecem em revisao manual
 - ainda nao houve alteracao de dados no banco
 
+## Execucao do lote 1 de saneamento
+- lote 1 de saneamento revisavel executado
+- 6 cobrancas de origem `MATRICULA` foram canceladas de forma controlada
+- casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` continuam pendentes de revisao manual
+- proxima frente: investigacao da causa raiz no codigo
+
 ## Bloqueios
 nenhum
 

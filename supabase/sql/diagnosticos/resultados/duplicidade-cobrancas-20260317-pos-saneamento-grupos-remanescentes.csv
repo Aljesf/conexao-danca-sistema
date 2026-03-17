@@ -1,0 +1,8 @@
+pessoa_id,pessoa_nome,competencia_ano_mes,valor_centavos,quantidade_cobrancas,cobrancas_ids,classificacao_grupo
+85,Alanna Costa Alves ,,12000,2,"[""241"",""376""]",FATURA_DUPLA
+46,Barbara Lilian Miranda de Souza,,16500,2,"[""240"",""377""]",FATURA_DUPLA
+75,Halanna Denise de Oliveira Demétrio,,30334,2,"[""242"",""373""]",FATURA_DUPLA
+156,Maria de Nazaré de Sousa Moura Monteiro ,,11000,2,"[""234"",""371""]",FATURA_DUPLA
+79,Maria Madalena de Vasconcelos,,16500,2,"[""243"",""375""]",FATURA_DUPLA
+87,Tedy de Figueiredo da Costa Pinheiro,,12000,2,"[""231"",""370""]",FATURA_DUPLA
+59,Carla Velasco Silvestre Luján,,42000,3,"[""25"",""245"",""374""]",TRIPLA_OU_MAIS
