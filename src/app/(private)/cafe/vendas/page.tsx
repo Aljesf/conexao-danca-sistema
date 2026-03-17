@@ -29,9 +29,8 @@ type PagamentoOpcao = {
   tipo_fluxo:
     | "IMEDIATO"
     | "CARTAO_EXTERNO"
-    | "CARTAO_CONEXAO_ALUNO"
-    | "CARTAO_CONEXAO_COLABORADOR"
-    | "CONTA_INTERNA";
+    | "CONTA_INTERNA_ALUNO"
+    | "CONTA_INTERNA_COLABORADOR";
   exige_conta_conexao: boolean;
   exige_troco?: boolean;
   exige_maquininha?: boolean;
@@ -122,11 +121,9 @@ function formatBuyerType(value: CafeCompradorTipo) {
 function buildFinancialEffect(option: PagamentoOpcao | null, buyerType: CafeCompradorTipo) {
   if (!option) return "Selecione uma forma de pagamento valida para continuar.";
   switch (option.tipo_fluxo) {
-    case "CARTAO_CONEXAO_ALUNO":
+    case "CONTA_INTERNA_ALUNO":
       return "Esta venda sera lancada na conta interna do aluno e seguira para faturamento mensal.";
-    case "CARTAO_CONEXAO_COLABORADOR":
-      return "Esta venda ficara na conta interna do colaborador para fechamento futuro em folha.";
-    case "CONTA_INTERNA":
+    case "CONTA_INTERNA_COLABORADOR":
       return "Esta venda ficara em conta interna do colaborador para fechamento futuro.";
     case "CARTAO_EXTERNO":
       return "Esta venda seguira o fluxo financeiro do cartao externo e do recebivel configurado.";
@@ -415,10 +412,9 @@ export default function CafeVendasPage() {
           pagador_pessoa_id: compradorSelecionado?.id ?? null,
           cliente_pessoa_id: compradorSelecionado?.id ?? null,
           tipo_quitacao:
-            pagamentoSelecionado.tipo_fluxo === "CONTA_INTERNA"
+            pagamentoSelecionado.tipo_fluxo === "CONTA_INTERNA_COLABORADOR"
               ? "CONTA_INTERNA_COLABORADOR"
-              : pagamentoSelecionado.tipo_fluxo === "CARTAO_CONEXAO_ALUNO" ||
-                  pagamentoSelecionado.tipo_fluxo === "CARTAO_CONEXAO_COLABORADOR"
+              : pagamentoSelecionado.tipo_fluxo === "CONTA_INTERNA_ALUNO"
                 ? "CARTAO_CONEXAO"
                 : "IMEDIATA",
           forma_pagamento_id: pagamentoSelecionado.id,

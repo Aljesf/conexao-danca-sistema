@@ -119,6 +119,82 @@ function normalizarCompradorTipo(value: string | null | undefined): CompradorTip
   return "NAO_IDENTIFICADO";
 }
 
+async function resolverPerfilComprador(params: {
+  supabase: SupabaseLike;
+  compradorPessoaId: number | null;
+  compradorTipoInformado: string | null | undefined;
+}) {
+  const tipoInformado = normalizarCompradorTipo(params.compradorTipoInformado);
+  if (!params.compradorPessoaId) {
+    return {
+      tipo: tipoInformado,
+      tipoInformado,
+      colaboradorEncontrado: false,
+      alunoEncontrado: false,
+    };
+  }
+
+  const [colaboradorResult, alunoResult] = await Promise.all([
+    params.supabase
+      .from("colaboradores")
+      .select("id,pessoa_id,ativo")
+      .eq("pessoa_id", params.compradorPessoaId)
+      .eq("ativo", true)
+      .limit(1)
+      .maybeSingle(),
+    params.supabase
+      .from("pessoas_roles")
+      .select("pessoa_id,role")
+      .eq("pessoa_id", params.compradorPessoaId)
+      .eq("role", "ALUNO")
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (colaboradorResult.error) {
+    console.error("[FORMAS_PAGAMENTO][COMPRADOR][COLABORADOR][ERRO]", {
+      compradorPessoaId: params.compradorPessoaId,
+      error: colaboradorResult.error,
+    });
+    throw colaboradorResult.error;
+  }
+
+  if (alunoResult.error) {
+    console.error("[FORMAS_PAGAMENTO][COMPRADOR][ALUNO][ERRO]", {
+      compradorPessoaId: params.compradorPessoaId,
+      error: alunoResult.error,
+    });
+    throw alunoResult.error;
+  }
+
+  const colaboradorEncontrado = Boolean(asInt((colaboradorResult.data as Record<string, unknown> | null)?.id));
+  const alunoEncontrado = Boolean(asInt((alunoResult.data as Record<string, unknown> | null)?.pessoa_id));
+
+  let tipoResolvido = tipoInformado;
+  if (colaboradorEncontrado) {
+    tipoResolvido = "COLABORADOR";
+  } else if (alunoEncontrado) {
+    tipoResolvido = "ALUNO";
+  } else if (tipoInformado === "NAO_IDENTIFICADO") {
+    tipoResolvido = "PESSOA_AVULSA";
+  }
+
+  console.log("[FORMAS_PAGAMENTO][COMPRADOR][RESOLVIDO]", {
+    compradorPessoaId: params.compradorPessoaId,
+    tipoInformado,
+    colaboradorEncontrado,
+    alunoEncontrado,
+    tipoResolvido,
+  });
+
+  return {
+    tipo: tipoResolvido,
+    tipoInformado,
+    colaboradorEncontrado,
+    alunoEncontrado,
+  };
+}
+
 function contextFallbacks(contexto: ContextoPagamento) {
   switch (contexto) {
     case "CAFE":
@@ -645,11 +721,19 @@ export async function resolverFormasPagamentoDisponiveis(params: {
   compradorTipo: string | null | undefined;
   centroCustoId?: number | null;
 }): Promise<ResolverFormasPagamentoResult> {
-  const compradorTipo = normalizarCompradorTipo(params.compradorTipo);
+  const comprador = await resolverPerfilComprador({
+    supabase: params.supabase,
+    compradorPessoaId: params.compradorPessoaId,
+    compradorTipoInformado: params.compradorTipo,
+  });
+
   console.log("[FORMAS_PAGAMENTO][RESOLVER]", {
     contexto: params.contexto,
     compradorPessoaId: params.compradorPessoaId,
-    compradorTipo,
+    compradorTipoInformado: comprador.tipoInformado,
+    compradorTipoResolvido: comprador.tipo,
+    colaboradorEncontrado: comprador.colaboradorEncontrado,
+    alunoEncontrado: comprador.alunoEncontrado,
     centroCustoId: params.centroCustoId ?? null,
   });
 
@@ -664,7 +748,7 @@ export async function resolverFormasPagamentoDisponiveis(params: {
       contexto: params.contexto,
       centroCustoId: params.centroCustoId ?? null,
     }),
-    compradorTipo === "ALUNO"
+    comprador.tipo === "ALUNO"
       ? resolverContaInternaDoAlunoOuResponsavel({
           supabase: params.supabase,
           alunoPessoaId: params.compradorPessoaId,
@@ -680,7 +764,7 @@ export async function resolverFormasPagamentoDisponiveis(params: {
           motivo: "Nao se aplica.",
           descricao: null,
         }),
-    compradorTipo === "COLABORADOR"
+    comprador.tipo === "COLABORADOR"
       ? resolverContaInternaDoColaborador({
           supabase: params.supabase,
           colaboradorPessoaId: params.compradorPessoaId,
@@ -700,7 +784,7 @@ export async function resolverFormasPagamentoDisponiveis(params: {
 
   const centroCustoId = saas.centro_custo_id ?? legado.centro_custo_id ?? null;
   const contaInterna = buildContaInternaResponse({
-    compradorTipo,
+    compradorTipo: comprador.tipo,
     compradorPessoaId: params.compradorPessoaId,
     contexto: params.contexto,
     contaAluno,
@@ -712,11 +796,39 @@ export async function resolverFormasPagamentoDisponiveis(params: {
     legado: legado.opcoes,
   });
 
+  console.log("[FORMAS_PAGAMENTO][FORMAS][ANTES_FILTRO]", {
+    compradorPessoaId: params.compradorPessoaId,
+    compradorTipo: comprador.tipo,
+    centroCustoId,
+    formas: merged.map((item) => ({
+      codigo: item.codigo,
+      label: item.descricao_exibicao,
+      tipo_fluxo: item.tipo_fluxo,
+      ativo: item.ativo,
+      carteira_tipo: item.carteira_tipo,
+    })),
+  });
+
   const opcoes = aplicarElegibilidade({
-    compradorTipo,
+    compradorTipo: comprador.tipo,
     compradorPessoaId: params.compradorPessoaId,
     contaInterna,
     opcoes: merged,
+  });
+
+  console.log("[FORMAS_PAGAMENTO][FORMAS][FINAIS]", {
+    compradorPessoaId: params.compradorPessoaId,
+    compradorTipo: comprador.tipo,
+    contaInternaElegivel: contaInterna.elegivel,
+    contaInternaTipo: contaInterna.tipo,
+    contaInternaId: contaInterna.conta_id,
+    formas: opcoes.map((item) => ({
+      codigo: item.codigo,
+      label: item.descricao_exibicao,
+      tipo_fluxo: item.tipo_fluxo,
+      habilitado: item.habilitado,
+      motivo_bloqueio: item.motivo_bloqueio,
+    })),
   });
 
   const erroControlado =
@@ -733,7 +845,7 @@ export async function resolverFormasPagamentoDisponiveis(params: {
     centro_custo_id: centroCustoId,
     comprador: {
       pessoa_id: params.compradorPessoaId,
-      tipo: compradorTipo,
+      tipo: comprador.tipo,
     },
     conta_interna: contaInterna,
     opcoes,

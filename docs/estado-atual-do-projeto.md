@@ -20,6 +20,7 @@ Financeiro com formas de pagamento centralizadas por contexto e centro de custo 
 - Correcoes de compatibilidade aplicadas para que `/api/cafe/pagamentos/opcoes` e `/api/cafe/dashboard` nao dependam de colunas novas ausentes no banco atual.
 - A API central de formas suporta listagem e upsert explicito para criacao e edicao posterior sem quebrar vinculos de contexto e centro de custo.
 - A resolucao das formas do Cafe e da Loja agora respeita a parametrizacao inicial por contexto, centro de custo, maquininha padrao e conta financeira de destino, com fallback controlado para o legado quando o schema novo ainda nao estiver completo.
+- Corrigida a elegibilidade da conta interna do colaborador no PDV do Cafe: o resolvedor agora identifica colaborador ativo pelo `comprador_pessoa_id`, preserva a forma `Conta interna do colaborador` no filtro final e nao cai em `NAO_IDENTIFICADO` quando a pessoa selecionada ja e um colaborador valido.
 
 ## Paginas/componentes concluidos
 - `/cafe` como dashboard operacional inteligente do Ballet Cafe.

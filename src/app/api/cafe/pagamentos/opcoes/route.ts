@@ -28,7 +28,7 @@ function upper(value: string | null | undefined) {
     : "";
 }
 
-function mapTipoFluxoCafe(value: string, codigo: string) {
+function mapTipoFluxoCafe(value: string) {
   switch (value) {
     case "DINHEIRO":
     case "PIX":
@@ -37,11 +37,9 @@ function mapTipoFluxoCafe(value: string, codigo: string) {
     case "CARTAO":
       return "CARTAO_EXTERNO" as const;
     case "CONTA_INTERNA_ALUNO":
-      return "CARTAO_CONEXAO_ALUNO" as const;
+      return "CONTA_INTERNA_ALUNO" as const;
     case "CONTA_INTERNA_COLABORADOR":
-      return upper(codigo).includes("CARTAO_CONEXAO")
-        ? ("CARTAO_CONEXAO_COLABORADOR" as const)
-        : ("CONTA_INTERNA" as const);
+      return "CONTA_INTERNA_COLABORADOR" as const;
     default:
       return "IMEDIATO" as const;
   }
@@ -114,6 +112,15 @@ export async function GET(request: NextRequest) {
       centro_custo_id: data.centro_custo_id,
       opcoes: data.opcoes.length,
       erro_controlado: data.erro_controlado,
+      conta_interna_elegivel: data.conta_interna.elegivel,
+      conta_interna_tipo: data.conta_interna.tipo,
+      conta_interna_id: data.conta_interna.conta_id,
+      formas_antes_filtro: data.opcoes.map((item) => ({
+        codigo: item.codigo,
+        label: item.descricao_exibicao,
+        tipo_fluxo: item.tipo_fluxo,
+        habilitado: item.habilitado,
+      })),
     });
 
     const opcoesFiltradas = data.opcoes
@@ -125,6 +132,18 @@ export async function GET(request: NextRequest) {
         if (a.ordem_exibicao !== b.ordem_exibicao) return a.ordem_exibicao - b.ordem_exibicao;
         return a.descricao_exibicao.localeCompare(b.descricao_exibicao);
       });
+
+    console.log("[CAFE_PAGAMENTOS][OPCOES][FILTRO_FINAL]", {
+      comprador_pessoa_id: data.comprador.pessoa_id,
+      comprador_tipo: data.comprador.tipo,
+      opcoes_finais: opcoesFiltradas.map((item) => ({
+        codigo: item.codigo,
+        label: item.descricao_exibicao,
+        tipo_fluxo: item.tipo_fluxo,
+        habilitado: item.habilitado,
+        motivo_bloqueio: item.motivo_bloqueio,
+      })),
+    });
 
     return NextResponse.json(
       {
@@ -139,7 +158,7 @@ export async function GET(request: NextRequest) {
           codigo: item.codigo,
           nome: item.nome,
           label: item.descricao_exibicao,
-          tipo_fluxo: mapTipoFluxoCafe(item.tipo_fluxo, item.codigo),
+          tipo_fluxo: mapTipoFluxoCafe(item.tipo_fluxo),
           exige_conta_conexao: item.exige_conta_interna,
           exige_troco: item.exige_troco,
           exige_maquininha: item.exige_maquininha,

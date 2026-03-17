@@ -263,12 +263,57 @@ export async function resolverContaInternaDoColaborador(params: {
     };
   }
 
-  console.log("[CONTA_INTERNA][COLABORADOR][RESOLVER]", { colaboradorPessoaId });
-  return carregarContaInternaPorTitulares({
+  const { data: colaborador, error: colaboradorError } = await supabase
+    .from("colaboradores")
+    .select("id,pessoa_id,ativo")
+    .eq("pessoa_id", colaboradorPessoaId)
+    .eq("ativo", true)
+    .limit(1)
+    .maybeSingle();
+
+  if (colaboradorError) {
+    console.error("[CONTA_INTERNA][COLABORADOR][VINCULO][ERRO]", {
+      colaboradorPessoaId,
+      error: colaboradorError,
+    });
+    throw colaboradorError;
+  }
+
+  const colaboradorEncontrado = Boolean(asInt((colaborador as Record<string, unknown> | null)?.id));
+  console.log("[CONTA_INTERNA][COLABORADOR][RESOLVER]", {
+    colaboradorPessoaId,
+    colaboradorEncontrado,
+  });
+
+  if (!colaboradorEncontrado) {
+    return {
+      elegivel: false,
+      tipo: "COLABORADOR",
+      conta_id: null,
+      titular_pessoa_id: null,
+      responsavel_financeiro_pessoa_id: null,
+      dia_vencimento: null,
+      tipo_liquidacao: "FOLHA_PAGAMENTO",
+      motivo: "Pessoa selecionada nao possui vinculo ativo de colaborador.",
+      descricao: null,
+    };
+  }
+
+  const conta = await carregarContaInternaPorTitulares({
     supabase,
     pessoaTitularIds: [colaboradorPessoaId],
     tipoConta: "COLABORADOR",
   });
+
+  console.log("[CONTA_INTERNA][COLABORADOR][RESULTADO]", {
+    colaboradorPessoaId,
+    colaboradorEncontrado,
+    contaEncontrada: conta.elegivel,
+    contaId: conta.conta_id,
+    motivo: conta.motivo,
+  });
+
+  return conta;
 }
 
 export async function criarLancamentoContaInterna(
