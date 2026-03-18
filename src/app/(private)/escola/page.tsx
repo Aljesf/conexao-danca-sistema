@@ -1,6 +1,10 @@
 "use client";
 
 import * as React from "react";
+import {
+  EscolaTurmaComposicaoCard,
+  type DashboardTurmaComposicao,
+} from "@/components/escola/EscolaTurmaComposicaoCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   CartesianGrid,
@@ -28,16 +32,6 @@ type DashboardSerie = {
   matriculas_efetivadas: number;
 };
 
-type DashboardTurma = {
-  turma_id: number;
-  nome: string;
-  tipo_turma: string | null;
-  ano_referencia: number | null;
-  status: string | null;
-  capacidade: number | null;
-  alunos_ativos: number;
-};
-
 type DashboardTrends30d = {
   pessoas_30d: number;
   pessoas_prev30d: number;
@@ -54,8 +48,8 @@ type DashboardTrends30d = {
 type DashboardPayload = {
   kpis: DashboardKpis;
   series7d: DashboardSerie[];
-  turmas: DashboardTurma[];
   trends30d: DashboardTrends30d;
+  turmasComposicao: DashboardTurmaComposicao[];
 };
 
 function formatDiaBR(iso: string) {
@@ -122,7 +116,21 @@ export default function EscolaDashboardPage() {
     ? trendLabel(trends.alunos_saldo_30d, trends.alunos_saldo_prev30d)
     : null;
 
-  const turmas = data?.turmas ?? [];
+  const turmasComposicao = [...(data?.turmasComposicao ?? [])].sort((a, b) => {
+    if (b.alunos_ativos_total !== a.alunos_ativos_total) {
+      return b.alunos_ativos_total - a.alunos_ativos_total;
+    }
+
+    const ocupacaoA = typeof a.ocupacao_percentual === "number" ? a.ocupacao_percentual : -1;
+    const ocupacaoB = typeof b.ocupacao_percentual === "number" ? b.ocupacao_percentual : -1;
+    if (ocupacaoB !== ocupacaoA) {
+      return ocupacaoB - ocupacaoA;
+    }
+
+    return a.nome.localeCompare(b.nome, "pt-BR");
+  });
+
+  const turmaSkeletons = Array.from({ length: 4 }, (_, index) => index);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white p-4 md:p-8">
@@ -131,7 +139,7 @@ export default function EscolaDashboardPage() {
           <CardHeader>
             <CardTitle>Escola - Dashboard</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Visao ampla do cenario: cadastros, matriculas e alunos por turma.
+              Visao ampla do cenario: cadastros, matriculas, tendencias e composicao institucional das turmas.
             </p>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -267,37 +275,36 @@ export default function EscolaDashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Alunos por Turma</CardTitle>
+            <CardTitle className="text-base">Saude das Turmas</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Ordenado da turma com mais alunos para a com menos alunos.
+              Composicao operacional e institucional das turmas ativas.
             </p>
           </CardHeader>
           <CardContent>
-            <div className="overflow-auto rounded-md border bg-white">
-              <table className="w-full border-collapse text-sm">
-                <thead className="bg-slate-50">
-                  <tr className="text-left">
-                    <th className="border-b px-3 py-2">Turma</th>
-                    <th className="border-b px-3 py-2 w-[140px]">Alunos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {turmas.map((t) => (
-                    <tr key={t.turma_id} className="hover:bg-slate-50">
-                      <td className="border-b px-3 py-2">{t.nome}</td>
-                      <td className="border-b px-3 py-2 font-medium">{t.alunos_ativos}</td>
-                    </tr>
-                  ))}
-                  {!loading && turmas.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-6 text-center text-muted-foreground" colSpan={2}>
-                        Nenhuma turma encontrada.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
+            {loading ? (
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {turmaSkeletons.map((item) => (
+                  <div
+                    key={`turma-skeleton-${item}`}
+                    className="h-80 animate-pulse rounded-2xl border border-slate-200 bg-slate-100/80"
+                  />
+                ))}
+              </div>
+            ) : turmasComposicao.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center text-sm text-slate-500">
+                Nenhuma turma encontrada para composicao.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {turmasComposicao.map((turma) => (
+                  <EscolaTurmaComposicaoCard
+                    key={turma.turma_id}
+                    turma={turma}
+                    hrefDetalhe={`/escola/academico/turmas/${turma.turma_id}`}
+                  />
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

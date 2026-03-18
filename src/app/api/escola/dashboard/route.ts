@@ -1,5 +1,11 @@
-﻿import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
+
+type DashboardJsonPrimitive = string | number | boolean | null;
+type DashboardJsonValue =
+  | DashboardJsonPrimitive
+  | { [key: string]: DashboardJsonValue }
+  | DashboardJsonValue[];
 
 type DashboardKpisRow = {
   total_pessoas: number;
@@ -10,14 +16,27 @@ type DashboardKpisRow = {
   matriculas_efetivadas_ontem: number;
 };
 
-type DashboardTurmaRow = {
+type DashboardTurmaComposicaoRow = {
   turma_id: number;
   nome: string;
   tipo_turma: string | null;
   ano_referencia: number | null;
   status: string | null;
+  curso: string | null;
+  nivel: string | null;
+  turno: string | null;
   capacidade: number | null;
-  alunos_ativos: number;
+  professor_nome: string | null;
+  alunos_ativos_total: number;
+  vagas_disponiveis: number | null;
+  ocupacao_percentual: number | null;
+  pagantes_total: number;
+  concessao_total: number;
+  concessao_integral_total: number;
+  concessao_parcial_total: number;
+  outros_vinculos_total: number;
+  distribuicao_niveis_json: DashboardJsonValue | null;
+  distribuicao_vinculos_json: DashboardJsonValue | null;
 };
 
 type DashboardSerieRow = {
@@ -57,15 +76,19 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data: turmasData, error: turmasError } = await supabase
-    .from("vw_escola_dashboard_turmas")
+  const { data: turmasComposicaoData, error: turmasComposicaoError } = await supabase
+    .from("vw_escola_dashboard_turmas_composicao")
     .select("*")
-    .order("alunos_ativos", { ascending: false })
+    .order("alunos_ativos_total", { ascending: false })
+    .order("ocupacao_percentual", { ascending: false, nullsFirst: false })
     .order("nome", { ascending: true });
 
-  if (turmasError) {
+  if (turmasComposicaoError) {
     return NextResponse.json(
-      { error: "falha_turmas", details: turmasError.message },
+      {
+        error: "falha_turmas_composicao",
+        details: turmasComposicaoError.message,
+      },
       { status: 500 },
     );
   }
@@ -97,12 +120,10 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     {
       kpis: kpisData as DashboardKpisRow,
-      turmas: (turmasData ?? []) as DashboardTurmaRow[],
       series7d: (serieData ?? []) as DashboardSerieRow[],
       trends30d: trendsData as DashboardTrendsRow,
+      turmasComposicao: (turmasComposicaoData ?? []) as DashboardTurmaComposicaoRow[],
     },
     { status: 200 },
   );
 }
-
-

@@ -1,109 +1,33 @@
-# Módulo atual
+# Modulo atual
 
-Financeiro — Contas a Receber (Refatoração SaaS + Auditoria + Expurgo)
+Dashboard Escola - composicao de turmas
 
-# SQL concluído
+# SQL concluido
 
-- Criação de migration de suporte ao expurgo lógico:
-  - `cobrancas.expurgada`
-  - `cobrancas.expurgada_em`
-  - `cobrancas.expurgada_por`
-  - `cobrancas.expurgo_motivo`
-- Script diagnóstico de auditoria financeira:
-  - `20260317_contas_receber_auditoria_contextos.sql`
+- Nova view canonica para o dashboard da Escola:
+  - `public.vw_escola_dashboard_turmas_composicao`
 
-# APIs concluídas
+# APIs concluidas
 
-- Refatoração da API principal:
-  - `/api/financeiro/contas-a-receber`
-  - Payload unificado com:
-    - resumo
-    - devedores
-    - cobranças
-    - auditoria
-    - composição de fatura
-    - perdas por cancelamento
+- `/api/escola/dashboard` passa a devolver:
+  - `kpis`
+  - `series7d`
+  - `trends30d`
+  - `turmasComposicao`
 
-- Novas APIs:
-  - `POST /api/financeiro/cobrancas/expurgar`
-  - `POST /api/financeiro/cobrancas/expurgar-lote`
-  - Suporte a expurgo lógico com auditoria unitária e em lote
+# Paginas / componentes concluidos
 
-- API de resumo financeiro da pessoa ajustada:
-  - `/api/pessoas/[id]/resumo-financeiro`
-  - Suporte a leitura de cobranças canceladas elegíveis a expurgo
+- `src/app/(private)/escola/page.tsx`
+- `src/components/escola/EscolaTurmaComposicaoCard.tsx`
 
-# Páginas / componentes concluídos
+# Pendencias
 
-Página principal:
-- `/admin/financeiro/contas-receber`
+- Revisar regra de "matriculas efetivadas"
+- Validar classificacao institucional de concessao
+- Decidir proximos drill-downs por turma
 
-Páginas e navegação relacionadas:
-- `/pessoas/[id]?aba=financeiro`
+# Proximas acoes
 
-Componentes criados/refatorados:
-- `DevedoresTable`
-- `CobrancasTable`
-- `CobrancaAuditDetail`
-- `PerdasCancelamentoCard`
-- `ContasReceberFilters`
-- `ResumoRankingTable`
-- `PessoaResumoFinanceiro`
-
-# Comportamentos implementados
-
-- Separação por contexto financeiro:
-  - Escola / Café / Loja / Outro
-
-- Classificação por origem detalhada
-
-- Filtros inteligentes com tipo de período
-
-- KPIs adaptados por visão:
-  - Vencidas
-  - A vencer
-  - Recebidas
-  - Inconsistências
-
-- Ranking dinâmico por visão
-
-- Exclusão de cobranças `CANCELADA` da leitura financeira principal
-
-- Implementação de expurgo lógico:
-  - remove da UI principal
-  - remove de KPIs
-  - remove de dashboard financeiro
-  - mantém rastreabilidade
-
-- Visão de inconsistências para análise técnica
-
-- Navegação direta da cobrança para o resumo financeiro da pessoa
-
-- Seleção múltipla de cobranças canceladas elegíveis a expurgo
-
-- Agrupamento por origem para expurgo em lote no resumo financeiro da pessoa
-
-# Pendências
-
-- Garantir aplicação da migration de expurgo em todos os ambientes ativos
-- Validar operacionalmente o expurgo em lote em sessão autenticada de uso real
-- Evoluir a classificação formal de cancelamento:
-  - cancelamento real vs técnico
-- Coletar feedback de operação para ajustes finos de UX
-
-# Bloqueios
-
-Nenhum bloqueio técnico crítico.
-
-# Versão do sistema
-
-Sistema Conexão Dança — Financeiro
-Versão lógica: v2.1 (Contas a Receber SaaS + Auditoria + Expurgo + Expurgo em lote)
-
-# Próximas ações
-
-1. Uso real do módulo para validação operacional
-2. Ajustes finos de UX baseados no uso
-3. Validação assistida do expurgo em lote
-4. Evolução da classificação de cancelamentos
-5. Expansão dos critérios de auditoria conforme feedback financeiro
+1. Clique no card levando ao detalhe da turma
+2. Filtro por curso/professor/turno
+3. Receita estimada por turma
