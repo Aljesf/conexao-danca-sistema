@@ -5,6 +5,11 @@ import {
   validarContasReceberInput,
   type ContasReceberAuditoriaInput,
 } from "@/lib/financeiro/contas-receber-auditoria";
+import {
+  normalizeContasReceberOrdenacao,
+  normalizeContasReceberTipoPeriodo,
+  normalizeContasReceberVisao,
+} from "@/lib/financeiro/contas-receber-view-config";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 const BUCKETS_VALIDOS = new Set([
@@ -17,7 +22,23 @@ const BUCKETS_VALIDOS = new Set([
 ]);
 
 const SITUACOES_VALIDAS = new Set(["QUITADA", "EM_ABERTO", "VENCIDA"]);
-const VISOES_VALIDAS = new Set(["VENCIDAS", "AVENCER", "RECEBIDAS", "INCONSISTENCIAS"]);
+const CONTEXTOS_VALIDOS = new Set(["ESCOLA", "CAFE", "LOJA", "OUTRO"]);
+
+function buildMonthRange(ano: string, mes: string): { inicio: string; fim: string } {
+  const startDate = new Date(Date.UTC(Number(ano), Number(mes) - 1, 1));
+  const endDate = new Date(Date.UTC(Number(ano), Number(mes), 0));
+  return {
+    inicio: startDate.toISOString().slice(0, 10),
+    fim: endDate.toISOString().slice(0, 10),
+  };
+}
+
+function buildYearRange(ano: string): { inicio: string; fim: string } {
+  return {
+    inicio: `${ano}-01-01`,
+    fim: `${ano}-12-31`,
+  };
+}
 
 function parsePositiveInt(value: string | null, fallback: number, min = 1, max = 200): number {
   const parsed = Number(value);
@@ -30,10 +51,20 @@ export async function GET(req: NextRequest) {
   if (denied) return denied;
 
   const { searchParams } = new URL(req.url);
-  const visao = (searchParams.get("visao") ?? "VENCIDAS").toUpperCase();
+  const visao = normalizeContasReceberVisao(searchParams.get("visao"));
+  const tipoPeriodo = normalizeContasReceberTipoPeriodo(searchParams.get("tipo_periodo"));
+  const ordenacao = normalizeContasReceberOrdenacao(searchParams.get("ordenacao"), visao);
   const situacao = searchParams.get("situacao");
   const status = searchParams.get("status");
   const bucket = searchParams.get("bucket");
+  const contexto = (searchParams.get("contexto") ?? "").toUpperCase();
+  const ano = searchParams.get("ano") ?? undefined;
+  const mes = searchParams.get("mes") ?? undefined;
+  const competenciaInicio = searchParams.get("competencia_inicio") ?? undefined;
+  const competenciaFim = searchParams.get("competencia_fim") ?? undefined;
+  let vencimentoInicio = searchParams.get("vencimento_inicio") ?? undefined;
+  let vencimentoFim = searchParams.get("vencimento_fim") ?? undefined;
+  let competencia = searchParams.get("competencia") ?? undefined;
 
   if (bucket && !BUCKETS_VALIDOS.has(bucket)) {
     return NextResponse.json({ ok: false, error: "bucket_invalido" }, { status: 400 });
@@ -43,14 +74,41 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "situacao_invalida" }, { status: 400 });
   }
 
+  if (contexto && contexto !== "TODOS" && !CONTEXTOS_VALIDOS.has(contexto)) {
+    return NextResponse.json({ ok: false, error: "contexto_invalido" }, { status: 400 });
+  }
+
+  if (tipoPeriodo === "MES_ANO" && ano && mes) {
+    const range = buildMonthRange(ano, mes);
+    vencimentoInicio = range.inicio;
+    vencimentoFim = range.fim;
+  }
+
+  if (tipoPeriodo === "ANO_INTEIRO" && ano) {
+    const range = buildYearRange(ano);
+    vencimentoInicio = range.inicio;
+    vencimentoFim = range.fim;
+  }
+
+  if (tipoPeriodo === "COMPETENCIA" && competenciaInicio && competenciaFim && competenciaInicio === competenciaFim) {
+    competencia = competenciaInicio;
+  }
+
   const input: ContasReceberAuditoriaInput = {
-    visao: VISOES_VALIDAS.has(visao) ? visao : "VENCIDAS",
+    visao,
+    tipoPeriodo,
+    ordenacao,
     situacao: situacao ?? undefined,
     status: status ?? undefined,
     bucket: bucket ?? undefined,
-    competencia: searchParams.get("competencia") ?? undefined,
-    vencimentoInicio: searchParams.get("vencimento_inicio") ?? undefined,
-    vencimentoFim: searchParams.get("vencimento_fim") ?? undefined,
+    contexto: contexto && contexto !== "TODOS" ? contexto : undefined,
+    competencia,
+    competenciaInicio,
+    competenciaFim,
+    ano,
+    mes,
+    vencimentoInicio,
+    vencimentoFim,
     somenteAbertas: searchParams.get("somente_abertas") === "1",
     q: searchParams.get("q") ?? undefined,
     page: parsePositiveInt(searchParams.get("page"), 1, 1, 10000),

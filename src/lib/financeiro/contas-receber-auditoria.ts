@@ -1,4 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getContextoLabel,
+  normalizeContasReceberOrdenacao,
+  normalizeContasReceberTipoPeriodo,
+  normalizeContasReceberVisao,
+  type ContasReceberOrdenacao,
+  type ContasReceberTipoPeriodo,
+  type ContasReceberVisao,
+} from "@/lib/financeiro/contas-receber-view-config";
 import type { Database, Json } from "@/types/supabase.generated";
 
 export type ContextoPrincipal = "ESCOLA" | "CAFE" | "LOJA" | "OUTRO";
@@ -28,8 +37,15 @@ export interface ContasReceberAuditoriaInput {
   status?: string;
   bucket?: string;
   competencia?: string;
+  competenciaInicio?: string;
+  competenciaFim?: string;
   vencimentoInicio?: string;
   vencimentoFim?: string;
+  contexto?: string;
+  tipoPeriodo?: string;
+  ano?: string;
+  mes?: string;
+  ordenacao?: string;
   somenteAbertas?: boolean;
   q?: string;
   page?: number;
@@ -101,6 +117,10 @@ export interface CobrancaListaItem {
   origem_tipo: string | null;
   origem_subtipo: string | null;
   origem_id: number | null;
+  ultima_data_recebimento: string | null;
+  quantidade_recebimentos: number;
+  tipo_inconsistencia: string | null;
+  criticidade_inconsistencia: number;
 }
 
 export interface DetalheDocumentoVinculado {
@@ -160,6 +180,9 @@ export interface ContasReceberAuditoriaPayload {
   resumo: ContasReceberResumo;
   top_devedores: DevedorAuditoriaItem[];
   devedores_lista: DevedorAuditoriaItem[];
+  metricas_visao: KpiVisaoCard[];
+  contextos_visao: ContextoVisaoItem[];
+  ranking_principal: RankingResumoItem[];
   cobrancas_lista: CobrancaListaItem[];
   detalhe_cobranca: DetalheCobrancaAuditoria | null;
   composicao_fatura_conexao: ComposicaoFaturaConexao | null;
@@ -171,15 +194,54 @@ export interface ContasReceberAuditoriaPayload {
     total_paginas: number;
   };
   filtros_aplicados: {
-    visao: string;
+    visao: ContasReceberVisao;
+    tipo_periodo: ContasReceberTipoPeriodo;
+    ordenacao: ContasReceberOrdenacao;
     q: string;
+    contexto: ContextoPrincipal | null;
     situacao: string | null;
     status: string | null;
     bucket: string | null;
     competencia: string | null;
+    competencia_inicio: string | null;
+    competencia_fim: string | null;
+    ano: string | null;
+    mes: string | null;
     vencimento_inicio: string | null;
     vencimento_fim: string | null;
   };
+}
+
+export interface KpiVisaoCard {
+  id: string;
+  label: string;
+  tipo: "currency" | "count" | "days" | "date";
+  valor_centavos: number | null;
+  valor_numero: number | null;
+  valor_data: string | null;
+  descricao: string;
+}
+
+export interface ContextoVisaoItem {
+  contexto: ContextoPrincipal;
+  label: string;
+  valor_centavos: number;
+  quantidade_cobrancas: number;
+}
+
+export interface RankingResumoItem {
+  chave: string;
+  pessoa_id: number | null;
+  pessoa_nome: string;
+  total_centavos: number;
+  quantidade_titulos: number;
+  maior_atraso_dias: number;
+  vencimento_mais_antigo: string | null;
+  vencimento_mais_proximo: string | null;
+  data_mais_recente: string | null;
+  maior_valor_centavos: number;
+  criticidade: number;
+  observacao: string | null;
 }
 
 type FlatRow = {
@@ -211,6 +273,7 @@ type MatriculaEncerramentoRow = Database["public"]["Tables"]["matriculas_encerra
 type TurmaAlunoRow = Database["public"]["Tables"]["turma_aluno"]["Row"];
 type TurmaRow = Database["public"]["Tables"]["turmas"]["Row"];
 type VinculoRow = Database["public"]["Tables"]["vinculos"]["Row"];
+type RecebimentoRow = Database["public"]["Tables"]["recebimentos"]["Row"];
 
 type FaturaLancamentoLinkRow = {
   fatura_id: number | null;
@@ -235,6 +298,7 @@ type DataMaps = {
   turmaAlunoPorMatricula: Map<number, TurmaAlunoRow>;
   turmas: Map<number, TurmaRow>;
   vinculos: Map<number, VinculoRow>;
+  recebimentosPorCobranca: Map<number, RecebimentoRow[]>;
 };
 
 const ORIGEM_LABELS: Record<OrigemDetalhada, string> = {
@@ -847,11 +911,11 @@ function devedorFromItems(items: CobrancaListaItem[]): DevedorAuditoriaItem[] {
   }
 
   return Array.from(mapa.values()).sort((left, right) => {
-    if (left.total_vencido_centavos !== right.total_vencido_centavos) {
-      return right.total_vencido_centavos - left.total_vencido_centavos;
-    }
     if (left.maior_atraso_dias !== right.maior_atraso_dias) {
       return right.maior_atraso_dias - left.maior_atraso_dias;
+    }
+    if (left.total_vencido_centavos !== right.total_vencido_centavos) {
+      return right.total_vencido_centavos - left.total_vencido_centavos;
     }
     return left.pessoa_nome.localeCompare(right.pessoa_nome);
   });
@@ -907,11 +971,457 @@ function construirResumo(items: CobrancaListaItem[]): ContasReceberResumo {
   };
 }
 
+function normalizeContextoFilter(value: string | undefined): ContextoPrincipal | null {
+  const normalized = upper(value);
+  if (normalized === "ESCOLA" || normalized === "CAFE" || normalized === "LOJA" || normalized === "OUTRO") {
+    return normalized;
+  }
+  return null;
+}
+
+function compareNullableDateAsc(left: string | null, right: string | null): number {
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return left.localeCompare(right);
+}
+
+function compareNullableDateDesc(left: string | null, right: string | null): number {
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return right.localeCompare(left);
+}
+
+function buildInconsistenciaMeta(item: CobrancaListaItem): {
+  tipo: string | null;
+  criticidade: number;
+} {
+  const statusInterno = upper(item.status_interno);
+  const statusBruto = upper(item.status_cobranca);
+  const saldoAberto = Math.max(0, item.valor_aberto_centavos);
+  const origemNaoResolvida = item.origem_detalhada === "ORIGEM_NAO_RESOLVIDA";
+  const contextoOutro = item.contexto_principal === "OUTRO";
+
+  if (statusBruto === "CANCELADA" && saldoAberto > 0) {
+    return { tipo: "Status cancelado com saldo aberto", criticidade: 100 + item.atraso_dias };
+  }
+
+  if (statusInterno === "QUITADA" && saldoAberto > 0) {
+    return { tipo: "Quitada com saldo em aberto", criticidade: 95 + item.atraso_dias };
+  }
+
+  if (statusInterno !== "QUITADA" && saldoAberto === 0) {
+    return { tipo: "Saldo zerado fora da leitura de quitacao", criticidade: 90 + item.atraso_dias };
+  }
+
+  if (!item.pessoa_id) {
+    return { tipo: "Pessoa devedora pendente", criticidade: 85 + item.atraso_dias };
+  }
+
+  if (origemNaoResolvida && contextoOutro) {
+    return { tipo: "Origem pendente de classificacao", criticidade: 70 + item.atraso_dias };
+  }
+
+  if (origemNaoResolvida) {
+    return { tipo: "Origem em revisao", criticidade: 60 + item.atraso_dias };
+  }
+
+  if (contextoOutro) {
+    return { tipo: "Contexto em revisao", criticidade: 55 + item.atraso_dias };
+  }
+
+  return { tipo: "Revisar trilha financeira", criticidade: Math.max(10, item.atraso_dias) };
+}
+
+function filtrarPorContexto(
+  items: CobrancaListaItem[],
+  contexto: ContextoPrincipal | null,
+): CobrancaListaItem[] {
+  if (!contexto) return items;
+  return items.filter((item) => item.contexto_principal === contexto);
+}
+
+function valorPrincipalPorVisao(item: CobrancaListaItem, visao: ContasReceberVisao): number {
+  if (visao === "RECEBIDAS") {
+    return Math.max(item.valor_recebido_centavos, item.valor_centavos);
+  }
+  return Math.max(item.valor_aberto_centavos, 0);
+}
+
+function sortItemsByOrdenacao(
+  items: CobrancaListaItem[],
+  visao: ContasReceberVisao,
+  ordenacao: ContasReceberOrdenacao,
+): CobrancaListaItem[] {
+  return [...items].sort((left, right) => {
+    if (ordenacao === "NOME_PESSOA") {
+      return left.pessoa_nome.localeCompare(right.pessoa_nome);
+    }
+
+    if (ordenacao === "MAIOR_VALOR") {
+      const diff = valorPrincipalPorVisao(right, visao) - valorPrincipalPorVisao(left, visao);
+      if (diff !== 0) return diff;
+      if (visao === "A_VENCER") {
+        return compareNullableDateAsc(left.vencimento, right.vencimento);
+      }
+      return left.pessoa_nome.localeCompare(right.pessoa_nome);
+    }
+
+    if (ordenacao === "VENCIMENTO_MAIS_ANTIGO") {
+      const diff = compareNullableDateAsc(left.vencimento, right.vencimento);
+      if (diff !== 0) return diff;
+      return right.atraso_dias - left.atraso_dias;
+    }
+
+    if (ordenacao === "VENCIMENTO_MAIS_PROXIMO") {
+      const diff = compareNullableDateAsc(left.vencimento, right.vencimento);
+      if (diff !== 0) return diff;
+      return valorPrincipalPorVisao(right, visao) - valorPrincipalPorVisao(left, visao);
+    }
+
+    if (ordenacao === "DATA_MAIS_RECENTE") {
+      const diff = compareNullableDateDesc(left.ultima_data_recebimento, right.ultima_data_recebimento);
+      if (diff !== 0) return diff;
+      return valorPrincipalPorVisao(right, visao) - valorPrincipalPorVisao(left, visao);
+    }
+
+    if (ordenacao === "CRITICIDADE") {
+      if (right.criticidade_inconsistencia !== left.criticidade_inconsistencia) {
+        return right.criticidade_inconsistencia - left.criticidade_inconsistencia;
+      }
+      const diff = valorPrincipalPorVisao(right, visao) - valorPrincipalPorVisao(left, visao);
+      if (diff !== 0) return diff;
+      return compareNullableDateAsc(left.vencimento, right.vencimento);
+    }
+
+    if (right.atraso_dias !== left.atraso_dias) {
+      return right.atraso_dias - left.atraso_dias;
+    }
+    const diff = valorPrincipalPorVisao(right, visao) - valorPrincipalPorVisao(left, visao);
+    if (diff !== 0) return diff;
+    return left.pessoa_nome.localeCompare(right.pessoa_nome);
+  });
+}
+
+function construirMetricasVisao(
+  items: CobrancaListaItem[],
+  devedores: DevedorAuditoriaItem[],
+  visao: ContasReceberVisao,
+): KpiVisaoCard[] {
+  if (visao === "VENCIDAS") {
+    const totalVencido = items.reduce((acc, item) => acc + Math.max(0, item.valor_aberto_centavos), 0);
+    const totalTitulos = items.length;
+    const maiorAtraso = items.reduce((acc, item) => Math.max(acc, item.atraso_dias), 0);
+    const ticketMedio = totalTitulos > 0 ? Math.round(totalVencido / totalTitulos) : 0;
+    return [
+      {
+        id: "total_vencido",
+        label: "Total vencido",
+        tipo: "currency",
+        valor_centavos: totalVencido,
+        valor_numero: null,
+        valor_data: null,
+        descricao: "Saldo vencido em aberto nos filtros atuais.",
+      },
+      {
+        id: "devedores_vencidos",
+        label: "Devedores vencidos",
+        tipo: "count",
+        valor_centavos: null,
+        valor_numero: devedores.length,
+        valor_data: null,
+        descricao: "Pessoas com pelo menos um titulo vencido em aberto.",
+      },
+      {
+        id: "maior_atraso",
+        label: "Maior atraso",
+        tipo: "days",
+        valor_centavos: null,
+        valor_numero: maiorAtraso,
+        valor_data: null,
+        descricao: "Maior atraso identificado na leitura atual.",
+      },
+      {
+        id: "ticket_medio_vencido",
+        label: "Ticket medio vencido",
+        tipo: "currency",
+        valor_centavos: ticketMedio,
+        valor_numero: null,
+        valor_data: null,
+        descricao: "Media por titulo vencido em aberto.",
+      },
+    ];
+  }
+
+  if (visao === "A_VENCER") {
+    const total = items.reduce((acc, item) => acc + Math.max(0, item.valor_aberto_centavos), 0);
+    const maiorValor = items.reduce((acc, item) => Math.max(acc, item.valor_aberto_centavos), 0);
+    const proximoVencimento =
+      [...items]
+        .map((item) => item.vencimento)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .sort()[0] ?? null;
+    return [
+      {
+        id: "total_a_vencer",
+        label: "Total a vencer",
+        tipo: "currency",
+        valor_centavos: total,
+        valor_numero: null,
+        valor_data: null,
+        descricao: "Exposicao futura dentro do recorte selecionado.",
+      },
+      {
+        id: "quantidade_a_vencer",
+        label: "Cobrancas a vencer",
+        tipo: "count",
+        valor_centavos: null,
+        valor_numero: items.length,
+        valor_data: null,
+        descricao: "Quantidade de titulos em aberto ainda no prazo.",
+      },
+      {
+        id: "maior_valor_a_vencer",
+        label: "Maior valor a vencer",
+        tipo: "currency",
+        valor_centavos: maiorValor,
+        valor_numero: null,
+        valor_data: null,
+        descricao: "Maior exposicao individual nos filtros atuais.",
+      },
+      {
+        id: "proximo_vencimento",
+        label: "Proximo vencimento",
+        tipo: "date",
+        valor_centavos: null,
+        valor_numero: null,
+        valor_data: proximoVencimento,
+        descricao: "Data mais proxima de vencimento relevante.",
+      },
+    ];
+  }
+
+  if (visao === "RECEBIDAS") {
+    const total = items.reduce((acc, item) => acc + Math.max(item.valor_recebido_centavos, item.valor_centavos), 0);
+    const maiorRecebimento = items.reduce(
+      (acc, item) => Math.max(acc, Math.max(item.valor_recebido_centavos, item.valor_centavos)),
+      0,
+    );
+    const ticketMedio = items.length > 0 ? Math.round(total / items.length) : 0;
+    const dataMaisRecente =
+      [...items]
+        .map((item) => item.ultima_data_recebimento)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .sort()
+        .at(-1) ?? null;
+    return [
+      {
+        id: "total_recebido",
+        label: "Total recebido",
+        tipo: "currency",
+        valor_centavos: total,
+        valor_numero: null,
+        valor_data: null,
+        descricao: "Volume recebido no periodo filtrado.",
+      },
+      {
+        id: "quantidade_recebida",
+        label: "Cobrancas recebidas",
+        tipo: "count",
+        valor_centavos: null,
+        valor_numero: items.length,
+        valor_data: null,
+        descricao: "Quantidade de cobrancas quitadas na leitura atual.",
+      },
+      {
+        id: "ticket_medio_recebido",
+        label: "Ticket medio recebido",
+        tipo: "currency",
+        valor_centavos: ticketMedio,
+        valor_numero: null,
+        valor_data: null,
+        descricao: "Media por cobranca recebida.",
+      },
+      {
+        id: "maior_recebimento",
+        label: "Maior recebimento",
+        tipo: "currency",
+        valor_centavos: maiorRecebimento,
+        valor_numero: null,
+        valor_data: dataMaisRecente,
+        descricao: "Maior valor individual recebido no periodo.",
+      },
+    ];
+  }
+
+  const total = items.reduce((acc, item) => acc + Math.max(0, item.valor_aberto_centavos), 0);
+  const inconsistenciasVencidas = items.filter((item) => upper(item.status_interno) === "VENCIDA").length;
+  const inconsistenciasAVencer = items.filter((item) => upper(item.status_interno) === "EM_ABERTO").length;
+  return [
+    {
+      id: "total_inconsistente",
+      label: "Total inconsistente",
+      tipo: "currency",
+      valor_centavos: total,
+      valor_numero: null,
+      valor_data: null,
+      descricao: "Volume financeiro preso em casos que pedem revisao.",
+    },
+    {
+      id: "quantidade_inconsistencias",
+      label: "Quantidade de inconsistencias",
+      tipo: "count",
+      valor_centavos: null,
+      valor_numero: items.length,
+      valor_data: null,
+      descricao: "Registros sinalizados para auditoria manual.",
+    },
+    {
+      id: "inconsistencias_vencidas",
+      label: "Inconsistencias vencidas",
+      tipo: "count",
+      valor_centavos: null,
+      valor_numero: inconsistenciasVencidas,
+      valor_data: null,
+      descricao: "Casos inconsistentes com vencimento ja ultrapassado.",
+    },
+    {
+      id: "inconsistencias_a_vencer",
+      label: "Inconsistencias a vencer",
+      tipo: "count",
+      valor_centavos: null,
+      valor_numero: inconsistenciasAVencer,
+      valor_data: null,
+      descricao: "Casos inconsistentes ainda dentro do prazo.",
+    },
+  ];
+}
+
+function construirContextosVisao(
+  items: CobrancaListaItem[],
+  visao: ContasReceberVisao,
+): ContextoVisaoItem[] {
+  const mapa = new Map<ContextoPrincipal, ContextoVisaoItem>();
+  for (const contexto of ["ESCOLA", "CAFE", "LOJA", "OUTRO"] as const) {
+    mapa.set(contexto, {
+      contexto,
+      label: getContextoLabel(contexto),
+      valor_centavos: 0,
+      quantidade_cobrancas: 0,
+    });
+  }
+
+  for (const item of items) {
+    const atual = mapa.get(item.contexto_principal);
+    if (!atual) continue;
+    atual.valor_centavos += visao === "RECEBIDAS"
+      ? Math.max(item.valor_recebido_centavos, item.valor_centavos)
+      : Math.max(item.valor_aberto_centavos, 0);
+    atual.quantidade_cobrancas += 1;
+  }
+
+  return Array.from(mapa.values());
+}
+
+function construirRankingPrincipal(
+  items: CobrancaListaItem[],
+  visao: ContasReceberVisao,
+): RankingResumoItem[] {
+  const mapa = new Map<string, RankingResumoItem>();
+
+  for (const item of items) {
+    const chave = item.pessoa_id ? `pessoa:${item.pessoa_id}` : `cobranca:${item.cobranca_id}`;
+    const atual = mapa.get(chave) ?? {
+      chave,
+      pessoa_id: item.pessoa_id,
+      pessoa_nome: item.pessoa_nome,
+      total_centavos: 0,
+      quantidade_titulos: 0,
+      maior_atraso_dias: 0,
+      vencimento_mais_antigo: item.vencimento,
+      vencimento_mais_proximo: item.vencimento,
+      data_mais_recente: item.ultima_data_recebimento,
+      maior_valor_centavos: 0,
+      criticidade: 0,
+      observacao: item.tipo_inconsistencia,
+    };
+
+    const valor = visao === "RECEBIDAS"
+      ? Math.max(item.valor_recebido_centavos, item.valor_centavos)
+      : Math.max(item.valor_aberto_centavos, 0);
+
+    atual.total_centavos += valor;
+    atual.quantidade_titulos += 1;
+    atual.maior_atraso_dias = Math.max(atual.maior_atraso_dias, item.atraso_dias);
+    atual.maior_valor_centavos = Math.max(atual.maior_valor_centavos, valor);
+    atual.criticidade = Math.max(atual.criticidade, item.criticidade_inconsistencia);
+    if (item.vencimento && (!atual.vencimento_mais_antigo || item.vencimento < atual.vencimento_mais_antigo)) {
+      atual.vencimento_mais_antigo = item.vencimento;
+    }
+    if (item.vencimento && (!atual.vencimento_mais_proximo || item.vencimento < atual.vencimento_mais_proximo)) {
+      atual.vencimento_mais_proximo = item.vencimento;
+    }
+    if (
+      item.ultima_data_recebimento &&
+      (!atual.data_mais_recente || item.ultima_data_recebimento > atual.data_mais_recente)
+    ) {
+      atual.data_mais_recente = item.ultima_data_recebimento;
+    }
+    if (item.tipo_inconsistencia && !atual.observacao) {
+      atual.observacao = item.tipo_inconsistencia;
+    }
+
+    mapa.set(chave, atual);
+  }
+
+  const itemsAgrupados = Array.from(mapa.values());
+  if (visao === "VENCIDAS") {
+    return itemsAgrupados.sort((left, right) => {
+      if (right.maior_atraso_dias !== left.maior_atraso_dias) {
+        return right.maior_atraso_dias - left.maior_atraso_dias;
+      }
+      if (right.total_centavos !== left.total_centavos) {
+        return right.total_centavos - left.total_centavos;
+      }
+      return left.pessoa_nome.localeCompare(right.pessoa_nome);
+    });
+  }
+
+  if (visao === "A_VENCER") {
+    return itemsAgrupados.sort((left, right) => {
+      if (right.total_centavos !== left.total_centavos) {
+        return right.total_centavos - left.total_centavos;
+      }
+      return compareNullableDateAsc(left.vencimento_mais_proximo, right.vencimento_mais_proximo);
+    });
+  }
+
+  if (visao === "RECEBIDAS") {
+    return itemsAgrupados.sort((left, right) => {
+      if (right.maior_valor_centavos !== left.maior_valor_centavos) {
+        return right.maior_valor_centavos - left.maior_valor_centavos;
+      }
+      return compareNullableDateDesc(left.data_mais_recente, right.data_mais_recente);
+    });
+  }
+
+  return itemsAgrupados.sort((left, right) => {
+    if (right.criticidade !== left.criticidade) {
+      return right.criticidade - left.criticidade;
+    }
+    if (right.total_centavos !== left.total_centavos) {
+      return right.total_centavos - left.total_centavos;
+    }
+    return compareNullableDateAsc(left.vencimento_mais_antigo, right.vencimento_mais_antigo);
+  });
+}
+
 async function fetchFlatRows(
   supabase: SupabaseClient,
   input: ContasReceberAuditoriaInput,
 ): Promise<FlatRow[]> {
-  const visao = upper(input.visao) || "VENCIDAS";
+  const visao = normalizeContasReceberVisao(input.visao);
   const baseSelect =
     "cobranca_id,pessoa_id,vencimento,status_cobranca,origem_tipo,origem_id,valor_centavos,valor_recebido_centavos,saldo_aberto_centavos,competencia_ano_mes,dias_atraso,situacao_saas,bucket_vencimento";
 
@@ -939,6 +1449,8 @@ async function fetchFlatRows(
   if (input.status) query = query.eq("status_cobranca", input.status);
   if (input.bucket) query = query.eq("bucket_vencimento", input.bucket);
   if (input.competencia) query = query.eq("competencia_ano_mes", input.competencia);
+  if (input.competenciaInicio) query = query.gte("competencia_ano_mes", input.competenciaInicio);
+  if (input.competenciaFim) query = query.lte("competencia_ano_mes", input.competenciaFim);
   if (input.vencimentoInicio) query = query.gte("vencimento", input.vencimentoInicio);
   if (input.vencimentoFim) query = query.lte("vencimento", input.vencimentoFim);
   if (upper(input.status) !== "CANCELADA" && visao !== "INCONSISTENCIAS") {
@@ -949,7 +1461,7 @@ async function fetchFlatRows(
     case "VENCIDAS":
       query = query.eq("situacao_saas", "VENCIDA").gt("saldo_aberto_centavos", 0);
       break;
-    case "AVENCER":
+    case "A_VENCER":
       query = query.eq("situacao_saas", "EM_ABERTO").gt("saldo_aberto_centavos", 0);
       break;
     case "RECEBIDAS":
@@ -1134,6 +1646,15 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     return (data ?? []) as LancamentoRow[];
   }, cobrancaIds);
 
+  const recebimentos = await selectMany<RecebimentoRow>(async (chunk) => {
+    const { data, error } = await supabase
+      .from("recebimentos")
+      .select("id,cobranca_id,valor_centavos,data_pagamento,created_at")
+      .in("cobranca_id", chunk);
+    if (error) throw new Error(`erro_carregar_recebimentos: ${error.message}`);
+    return (data ?? []) as RecebimentoRow[];
+  }, cobrancaIds);
+
   const cafeVendasPorCobranca = await selectMany<CafeVendaRow>(async (chunk) => {
     const { data, error } = await supabase
       .from("cafe_vendas")
@@ -1254,6 +1775,7 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
   const mapTurmas = new Map(turmas.map((row) => [row.turma_id, row]));
   const mapVinculos = new Map(vinculos.map((row) => [row.id, row]));
   const mapLancamentosDiretosPorCobranca = new Map<number, LancamentoRow[]>();
+  const mapRecebimentosPorCobranca = new Map<number, RecebimentoRow[]>();
 
   for (const venda of cafeVendasPorCobranca) {
     const cobrancaId = numberOrNull(venda.cobranca_id);
@@ -1279,6 +1801,14 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     mapLancamentosDiretosPorCobranca.set(cobrancaId, atual);
   }
 
+  for (const recebimento of recebimentos) {
+    const cobrancaId = numberOrNull(recebimento.cobranca_id);
+    if (!cobrancaId) continue;
+    const atual = mapRecebimentosPorCobranca.get(cobrancaId) ?? [];
+    atual.push(recebimento);
+    mapRecebimentosPorCobranca.set(cobrancaId, atual);
+  }
+
   return {
     cobrancas: mapCobrancas,
     pessoas: mapPessoas,
@@ -1297,6 +1827,7 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     turmaAlunoPorMatricula: mapTurmaAluno,
     turmas: mapTurmas,
     vinculos: mapVinculos,
+    recebimentosPorCobranca: mapRecebimentosPorCobranca,
   };
 }
 
@@ -1329,6 +1860,9 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
       : undefined;
   const turmaAluno = matricula ? maps.turmaAlunoPorMatricula.get(matricula.id) : undefined;
   const turma = turmaAluno?.turma_id ? maps.turmas.get(turmaAluno.turma_id) : undefined;
+  const recebimentos = [...(maps.recebimentosPorCobranca.get(baseRow.cobranca_id) ?? [])].sort((left, right) =>
+    right.data_pagamento.localeCompare(left.data_pagamento),
+  );
   const classificacao = classificarCobranca({
     cobranca,
     centroCusto,
@@ -1340,8 +1874,9 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     matricula,
     turma,
   });
+  const ultimaDataRecebimento = normalizeDate(recebimentos[0]?.data_pagamento);
 
-  return {
+  const item: CobrancaListaItem = {
     cobranca_id: baseRow.cobranca_id,
     pessoa_id: baseRow.pessoa_id,
     pessoa_nome: pessoaNome(baseRow.pessoa_id, pessoa),
@@ -1365,7 +1900,17 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     origem_tipo: textOrNull(cobranca?.origem_tipo) ?? baseRow.origem_tipo,
     origem_subtipo: textOrNull(cobranca?.origem_subtipo),
     origem_id: numberOrNull(cobranca?.origem_id) ?? baseRow.origem_id,
+    ultima_data_recebimento: ultimaDataRecebimento,
+    quantidade_recebimentos: recebimentos.length,
+    tipo_inconsistencia: null,
+    criticidade_inconsistencia: 0,
   };
+
+  const inconsistencia = buildInconsistenciaMeta(item);
+  item.tipo_inconsistencia = inconsistencia.tipo;
+  item.criticidade_inconsistencia = inconsistencia.criticidade;
+
+  return item;
 }
 
 async function buildPerdasCancelamento(
@@ -1488,16 +2033,21 @@ export async function listarContasReceberAuditoria(
   supabase: SupabaseClient,
   input: ContasReceberAuditoriaInput,
 ): Promise<ContasReceberAuditoriaPayload> {
-  const visao = upper(input.visao) || "VENCIDAS";
+  const visao = normalizeContasReceberVisao(input.visao);
+  const tipoPeriodo = normalizeContasReceberTipoPeriodo(input.tipoPeriodo);
+  const ordenacao = normalizeContasReceberOrdenacao(input.ordenacao, visao);
+  const contexto = normalizeContextoFilter(input.contexto);
   const page = Math.max(input.page ?? 1, 1);
   const pageSize = Math.min(Math.max(input.pageSize ?? 50, 1), 200);
 
   const baseRows = await fetchFlatRows(supabase, input);
   const maps = await buildMaps(supabase, baseRows);
   const itensEnriquecidos = baseRows.map((row) => buildItem(row, maps));
-  const filtradosPorBusca = filtrarPorBusca(itensEnriquecidos, input.q ?? null);
-  const devedoresBase = devedorFromItems(itensEnriquecidos);
-  const paginacao = paginate(filtradosPorBusca, page, pageSize);
+  const filtradosPorContexto = filtrarPorContexto(itensEnriquecidos, contexto);
+  const filtradosPorBusca = filtrarPorBusca(filtradosPorContexto, input.q ?? null);
+  const ordenados = sortItemsByOrdenacao(filtradosPorBusca, visao, ordenacao);
+  const devedoresBase = devedorFromItems(ordenados);
+  const paginacao = paginate(ordenados, page, pageSize);
   const detalheItem =
     typeof input.detalheCobrancaId === "number"
       ? itensEnriquecidos.find((item) => item.cobranca_id === input.detalheCobrancaId) ?? null
@@ -1505,9 +2055,12 @@ export async function listarContasReceberAuditoria(
   const detalhe = detalheItem ? buildDetalhe(detalheItem, maps) : null;
 
   return {
-    resumo: construirResumo(filtradosPorBusca),
+    resumo: construirResumo(ordenados),
     top_devedores: devedoresBase.slice(0, 10),
     devedores_lista: devedoresBase,
+    metricas_visao: construirMetricasVisao(ordenados, devedoresBase, visao),
+    contextos_visao: construirContextosVisao(ordenados, visao),
+    ranking_principal: construirRankingPrincipal(ordenados, visao),
     cobrancas_lista: paginacao.rows,
     detalhe_cobranca: detalhe,
     composicao_fatura_conexao: detalhe?.composicao_fatura_conexao ?? null,
@@ -1520,11 +2073,18 @@ export async function listarContasReceberAuditoria(
     },
     filtros_aplicados: {
       visao,
+      tipo_periodo: tipoPeriodo,
+      ordenacao,
       q: textOrNull(input.q) ?? "",
+      contexto,
       situacao: textOrNull(input.situacao),
       status: textOrNull(input.status),
       bucket: textOrNull(input.bucket),
       competencia: textOrNull(input.competencia),
+      competencia_inicio: textOrNull(input.competenciaInicio),
+      competencia_fim: textOrNull(input.competenciaFim),
+      ano: textOrNull(input.ano),
+      mes: textOrNull(input.mes),
       vencimento_inicio: isDateLike(input.vencimentoInicio ?? null) ? input.vencimentoInicio ?? null : null,
       vencimento_fim: isDateLike(input.vencimentoFim ?? null) ? input.vencimentoFim ?? null : null,
     },
@@ -1533,7 +2093,11 @@ export async function listarContasReceberAuditoria(
 
 export function validarContasReceberInput(input: ContasReceberAuditoriaInput): string | null {
   if (input.competencia && !isAnoMes(input.competencia)) return "competencia_invalida";
+  if (input.competenciaInicio && !isAnoMes(input.competenciaInicio)) return "competencia_inicio_invalida";
+  if (input.competenciaFim && !isAnoMes(input.competenciaFim)) return "competencia_fim_invalida";
   if (input.vencimentoInicio && !isDateLike(input.vencimentoInicio)) return "vencimento_inicio_invalido";
   if (input.vencimentoFim && !isDateLike(input.vencimentoFim)) return "vencimento_fim_invalido";
+  if (input.ano && !/^\d{4}$/.test(input.ano)) return "ano_invalido";
+  if (input.mes && !/^(0[1-9]|1[0-2])$/.test(input.mes)) return "mes_invalido";
   return null;
 }

@@ -124,3 +124,13 @@ Conectarte v0.9 com:
 - Bloqueios: `npm run lint` continua falhando por erros preexistentes amplos fora do escopo em modulos antigos de loja, pessoas, matriculas e componentes; os arquivos tocados nesta refatoracao passaram em lint isolado.
 - Versao do sistema: Conectarte v0.9 com Contas a Receber refatorado para auditoria financeira orientada por contexto.
 - Proximas acoes: validar visualmente em sessao autenticada, gerar os prints finais do modulo e decidir se a proxima iteracao inclui cobrancas avulsas em leitura secundaria ou permanece separada do nucleo principal de auditoria.
+
+## 2026-03-17 - UX SaaS de Contas a Receber
+
+- A UX do modulo passou a reagir por visao (`VENCIDAS`, `A_VENCER`, `RECEBIDAS`, `INCONSISTENCIAS`) com semantica propria de KPIs, ranking principal, ordenacao padrao e titulo da tabela.
+- O card de filtros foi reorganizado em tres camadas: filtros principais, filtros contextuais e periodo dinamico por `tipo_periodo`, evitando expor todos os controles de data ao mesmo tempo.
+- O endpoint `GET /api/financeiro/contas-a-receber` foi expandido sem quebrar compatibilidade, passando a aceitar `contexto`, `tipo_periodo`, `ano`, `mes`, `competencia_inicio`, `competencia_fim` e `ordenacao`, alem de devolver `metricas_visao`, `contextos_visao` e `ranking_principal`.
+- Novos artefatos concluídos: `src/lib/financeiro/contas-receber-view-config.ts`, `src/components/financeiro/contas-receber/ContasReceberFilters.tsx` e `src/components/financeiro/contas-receber/ResumoRankingTable.tsx`.
+- A tabela principal deixou de enfatizar linguagem de bastidor, passou a usar badges de contexto, origem detalhada amigavel e leitura executiva adaptada por visao, com destaque proprio para recebimentos e inconsistencias.
+- Validacao tecnica: `npm run build` passou; `npm run lint` continua falhando apenas por legado amplo fora do escopo, enquanto o lint isolado dos arquivos tocados nesta rodada passou sem warnings.
+- Pendencia remanescente: validacao visual autenticada com prints das visoes `VENCIDAS`, `A_VENCER`, `RECEBIDAS`, `INCONSISTENCIAS`, detalhe de cobranca e bloco de filtros dinamico.
