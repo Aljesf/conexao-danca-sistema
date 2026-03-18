@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { RecibosContaConexao } from "@/components/documentos/RecibosContaConexao";
 import { ReciboModal, type ReciboModalParams } from "@/components/documentos/ReciboModal";
+import { EXPURGO_TIPO_LABELS, type ExpurgoTipo } from "@/lib/financeiro/expurgo-types";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shadcn/ui";
 
 type ResumoFinanceiro = {
   pessoa_id: number;
@@ -20,6 +23,17 @@ type ResumoFinanceiro = {
     origem_tipo: string;
     origem_subtipo: string;
     vencida: boolean;
+    created_at: string | null;
+  }>;
+  cobrancas_canceladas_expurgaveis: Array<{
+    cobranca_id: number;
+    devedor_pessoa_id: number;
+    data_vencimento: string | null;
+    valor_centavos: number;
+    status: string;
+    origem_tipo: string;
+    origem_subtipo: string;
+    origem_id: number | null;
     created_at: string | null;
   }>;
   cobrancas_matricula?: Array<{
@@ -79,6 +93,13 @@ type DependenteFinanceiro = {
   atualizado_em: string | null;
 };
 
+type GrupoExpurgoOrigem = {
+  chave: string;
+  label: string;
+  ids: number[];
+  items: ResumoFinanceiro["cobrancas_canceladas_expurgaveis"];
+};
+
 function formatBRLFromCentavos(v: number): string {
   const reais = (v ?? 0) / 100;
   return reais.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -91,6 +112,18 @@ function statusBadge(label: string, tone: "neutral" | "warning") {
       ? "border-rose-200 bg-rose-50 text-rose-700"
       : "border-slate-200 bg-slate-50 text-slate-700";
   return <span className={`${base} ${toneClass}`}>{label}</span>;
+}
+
+function formatDateTimeOrDash(value: string | null): string {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("pt-BR");
+}
+
+function origemGroupLabel(origemTipo: string, origemId: number | null): string {
+  const tipo = origemTipo.trim() || "SEM ORIGEM";
+  return origemId ? `${tipo} #${origemId}` : `${tipo} sem ID`;
 }
 
 export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
@@ -113,6 +146,13 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
   const [payLoading, setPayLoading] = useState(false);
   const [reciboOpen, setReciboOpen] = useState(false);
   const [reciboParams, setReciboParams] = useState<ReciboModalParams | null>(null);
+  const [selectedCobrancas, setSelectedCobrancas] = useState<number[]>([]);
+  const [expurgoOpen, setExpurgoOpen] = useState(false);
+  const [expurgoTarget, setExpurgoTarget] = useState<{ ids: number[]; label: string } | null>(null);
+  const [expurgoTipo, setExpurgoTipo] = useState<ExpurgoTipo>("ERRO_TECNICO");
+  const [expurgoMotivo, setExpurgoMotivo] = useState("");
+  const [expurgoError, setExpurgoError] = useState<string | null>(null);
+  const [expurgoLoading, setExpurgoLoading] = useState(false);
 
   const loadDependentes = useCallback(async (basePessoaId: number) => {
     if (!Number.isFinite(basePessoaId) || basePessoaId <= 0) {
@@ -190,12 +230,125 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
     void loadResumo();
   }, [loadResumo]);
 
+  const canceladasExpurgaveis = useMemo(
+    () => data?.cobrancas_canceladas_expurgaveis ?? [],
+    [data?.cobrancas_canceladas_expurgaveis],
+  );
+  const canceladasExpurgaveisIds = useMemo(
+    () => canceladasExpurgaveis.map((item) => item.cobranca_id),
+    [canceladasExpurgaveis],
+  );
+
+  const gruposExpurgoPorOrigem = useMemo<GrupoExpurgoOrigem[]>(() => {
+    const groups = new Map<string, GrupoExpurgoOrigem>();
+
+    for (const item of canceladasExpurgaveis) {
+      const chave = `${item.origem_tipo || "SEM_ORIGEM"}:${item.origem_id ?? "SEM_ID"}`;
+      const existente = groups.get(chave);
+      if (existente) {
+        existente.ids.push(item.cobranca_id);
+        existente.items.push(item);
+        continue;
+      }
+
+      groups.set(chave, {
+        chave,
+        label: origemGroupLabel(item.origem_tipo, item.origem_id),
+        ids: [item.cobranca_id],
+        items: [item],
+      });
+    }
+
+    return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [canceladasExpurgaveis]);
+
+  useEffect(() => {
+    const validIds = new Set(canceladasExpurgaveisIds);
+    setSelectedCobrancas((current) => current.filter((id) => validIds.has(id)));
+  }, [canceladasExpurgaveisIds]);
+
   const responsavelLabel = useMemo(() => {
     if (!data) return null;
     const rf = data.responsavel_financeiro;
     if (!rf) return `#${data.responsavel_financeiro_id}`;
     return rf.nome ? `${rf.nome} (#${rf.id})` : `#${rf.id}`;
   }, [data]);
+
+  const allSelecionadas =
+    canceladasExpurgaveisIds.length > 0 && canceladasExpurgaveisIds.every((id) => selectedCobrancas.includes(id));
+
+  function toggleCobrancaSelecionada(cobrancaId: number) {
+    setSelectedCobrancas((current) =>
+      current.includes(cobrancaId) ? current.filter((id) => id !== cobrancaId) : [...current, cobrancaId],
+    );
+  }
+
+  function toggleSelecionarTodas() {
+    setSelectedCobrancas(allSelecionadas ? [] : canceladasExpurgaveisIds);
+  }
+
+  function toggleSelecionarGrupo(ids: number[]) {
+    const todosSelecionados = ids.every((id) => selectedCobrancas.includes(id));
+    setSelectedCobrancas((current) => {
+      if (todosSelecionados) {
+        return current.filter((id) => !ids.includes(id));
+      }
+      return Array.from(new Set([...current, ...ids]));
+    });
+  }
+
+  function abrirExpurgo(ids: number[], label: string) {
+    if (ids.length === 0) return;
+    setExpurgoTarget({ ids, label });
+    setExpurgoTipo("ERRO_TECNICO");
+    setExpurgoMotivo("");
+    setExpurgoError(null);
+    setExpurgoOpen(true);
+  }
+
+  async function confirmarExpurgoLote() {
+    if (!expurgoTarget) return;
+    const motivo = expurgoMotivo.trim();
+    if (!motivo) {
+      setExpurgoError("Informe o motivo do expurgo.");
+      return;
+    }
+
+    setExpurgoLoading(true);
+    setExpurgoError(null);
+
+    try {
+      const response = await fetch("/api/financeiro/cobrancas/expurgar-lote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cobranca_ids: expurgoTarget.ids,
+          motivo,
+          tipo: expurgoTipo,
+        }),
+      });
+
+      const json = (await response.json().catch(() => null)) as { ok?: boolean; error?: string; details?: unknown } | null;
+      if (!response.ok || !json?.ok) {
+        const details =
+          typeof json?.details === "string"
+            ? json.details
+            : json?.details
+              ? JSON.stringify(json.details)
+              : null;
+        throw new Error(details ?? json?.error ?? "erro_expurgar_lote");
+      }
+
+      setExpurgoOpen(false);
+      setExpurgoTarget(null);
+      setSelectedCobrancas((current) => current.filter((id) => !expurgoTarget.ids.includes(id)));
+      await loadResumo();
+    } catch (error) {
+      setExpurgoError(error instanceof Error ? error.message : "erro_expurgar_lote");
+    } finally {
+      setExpurgoLoading(false);
+    }
+  }
 
   async function pagarCobranca() {
     if (!payCobrancaId) return;
@@ -340,6 +493,122 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                 )}
               </CardDescription>
             </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Canceladas elegiveis a expurgo</CardTitle>
+              <CardDescription>
+                Cobrancas canceladas ainda nao expurgadas, agrupadas por origem operacional para saneamento auditavel.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
+              {canceladasExpurgaveis.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  Nenhuma cobranca cancelada elegivel a expurgo foi encontrada para este responsavel financeiro.
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input type="checkbox" checked={allSelecionadas} onChange={toggleSelecionarTodas} />
+                      Selecionar todas as canceladas exibidas
+                    </label>
+                    <div className="flex flex-col gap-2 text-sm text-slate-600 md:items-end">
+                      <span>{selectedCobrancas.length} cobranca(s) selecionada(s)</span>
+                      {selectedCobrancas.length > 0 ? (
+                        <Button type="button" variant="secondary" onClick={() => abrirExpurgo(selectedCobrancas, "cobrancas selecionadas")}>
+                          Expurgar selecionadas
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {gruposExpurgoPorOrigem.map((grupo) => {
+                      const grupoSelecionado = grupo.ids.every((id) => selectedCobrancas.includes(id));
+                      return (
+                        <div key={grupo.chave} className="rounded-xl border border-slate-200 bg-white">
+                          <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">{grupo.label}</div>
+                              <div className="text-xs text-slate-500">
+                                {grupo.items.length} cobranca(s) cancelada(s) nesta origem
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2 md:items-end">
+                              <label className="flex items-center gap-2 text-sm text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={grupoSelecionado}
+                                  onChange={() => toggleSelecionarGrupo(grupo.ids)}
+                                />
+                                Selecionar origem
+                              </label>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => abrirExpurgo(grupo.ids, grupo.label)}
+                              >
+                                Expurgar todas desta origem
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="overflow-x-auto px-4 py-4">
+                            <table className="w-full text-sm">
+                              <thead className="text-xs uppercase text-muted-foreground">
+                                <tr>
+                                  <th className="py-2 text-left">Sel.</th>
+                                  <th className="py-2 text-left">Cobranca</th>
+                                  <th className="py-2 text-left">Vencimento</th>
+                                  <th className="py-2 text-right">Valor</th>
+                                  <th className="py-2 text-left">Criada em</th>
+                                  <th className="py-2 text-left">Origem fina</th>
+                                  <th className="py-2 text-right">Acao</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {grupo.items.map((item) => (
+                                  <tr key={item.cobranca_id} className="border-t">
+                                    <td className="py-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedCobrancas.includes(item.cobranca_id)}
+                                        onChange={() => toggleCobrancaSelecionada(item.cobranca_id)}
+                                      />
+                                    </td>
+                                    <td className="py-2">
+                                      <div className="font-medium text-slate-900">#{item.cobranca_id}</div>
+                                      <div className="text-xs text-slate-500">{item.status}</div>
+                                    </td>
+                                    <td className="py-2">{item.data_vencimento ?? "-"}</td>
+                                    <td className="py-2 text-right">{formatBRLFromCentavos(item.valor_centavos)}</td>
+                                    <td className="py-2">{formatDateTimeOrDash(item.created_at)}</td>
+                                    <td className="py-2 text-xs text-slate-600">
+                                      {item.origem_subtipo || "Sem subtipo"}
+                                    </td>
+                                    <td className="py-2 text-right">
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() => abrirExpurgo([item.cobranca_id], `cobranca #${item.cobranca_id}`)}
+                                      >
+                                        Expurgar
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </CardContent>
           </Card>
 
           <Card>
@@ -587,6 +856,74 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
         params={reciboParams}
         title="Recibo da cobranca avulsa"
       />
+
+      <Dialog open={expurgoOpen} onOpenChange={setExpurgoOpen}>
+        <DialogContent className="max-w-xl p-0">
+          <DialogHeader>
+            <div className="border-b border-slate-100 px-6 py-5">
+              <DialogTitle>Confirmar expurgo</DialogTitle>
+              <DialogDescription>
+                O expurgo remove as cobrancas canceladas da leitura financeira principal, sem alterar o historico bruto.
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+          <div className="space-y-4 p-6">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Alvo</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {expurgoTarget ? `${expurgoTarget.label} · ${expurgoTarget.ids.length} cobranca(s)` : "--"}
+              </div>
+            </div>
+
+            <label className="space-y-1 text-sm text-slate-700">
+              <span>Tipo do expurgo</span>
+              <select
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                value={expurgoTipo}
+                onChange={(event) => setExpurgoTipo(event.target.value as ExpurgoTipo)}
+              >
+                {Object.entries(EXPURGO_TIPO_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="space-y-1 text-sm text-slate-700">
+              <span>Motivo</span>
+              <Textarea
+                className="min-h-28 border-slate-200 bg-white text-slate-900"
+                value={expurgoMotivo}
+                onChange={(event) => setExpurgoMotivo(event.target.value)}
+                placeholder="Descreva por que essas cobrancas canceladas devem ser expurgadas."
+              />
+            </label>
+
+            {expurgoError ? (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {expurgoError}
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="secondary" disabled={expurgoLoading}>
+                  Cancelar
+                </Button>
+              </DialogClose>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void confirmarExpurgoLote()}
+                disabled={expurgoLoading || !expurgoTarget}
+              >
+                {expurgoLoading ? "Expurgando..." : "Confirmar expurgo"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {data && payOpen && payCobrancaId ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">

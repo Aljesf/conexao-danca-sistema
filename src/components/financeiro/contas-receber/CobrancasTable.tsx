@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { formatDateISO } from "@/lib/formatters/date";
 import { formatBRLFromCents } from "@/lib/formatters/money";
+import { EXPURGO_TIPO_LABELS, type ExpurgoTipo } from "@/lib/financeiro/expurgo-types";
 import type { CobrancaListaItem, ContextoPrincipal } from "@/lib/financeiro/contas-receber-auditoria";
 import type { ContasReceberVisao } from "@/lib/financeiro/contas-receber-view-config";
 import { getContextoLabel } from "@/lib/financeiro/contas-receber-view-config";
@@ -27,6 +30,7 @@ type Props = {
 type ExpurgoResponse = {
   ok?: boolean;
   error?: string;
+  details?: unknown;
 };
 
 const CONTEXTO_STYLES: Record<ContextoPrincipal, string> = {
@@ -136,7 +140,13 @@ function Row({
     return (
       <tr className="border-b border-slate-100 align-top last:border-b-0">
         <td className="px-3 py-3">
-          <div className="font-medium text-slate-900">{item.pessoa_nome}</div>
+          {item.pessoa_id ? (
+            <Link href={`/pessoas/${item.pessoa_id}?aba=financeiro`} className="font-medium text-slate-900 underline-offset-2 hover:text-slate-700 hover:underline">
+              {item.pessoa_nome}
+            </Link>
+          ) : (
+            <div className="font-medium text-slate-900">{item.pessoa_nome}</div>
+          )}
           <div className="text-xs text-slate-500">#{item.cobranca_id}</div>
         </td>
         <td className="px-3 py-3">
@@ -178,7 +188,13 @@ function Row({
     return (
       <tr className="border-b border-slate-100 align-top last:border-b-0">
         <td className="px-3 py-3">
-          <div className="font-medium text-slate-900">{item.pessoa_nome}</div>
+          {item.pessoa_id ? (
+            <Link href={`/pessoas/${item.pessoa_id}?aba=financeiro`} className="font-medium text-slate-900 underline-offset-2 hover:text-slate-700 hover:underline">
+              {item.pessoa_nome}
+            </Link>
+          ) : (
+            <div className="font-medium text-slate-900">{item.pessoa_nome}</div>
+          )}
           <div className="text-xs text-slate-500">#{item.cobranca_id}</div>
         </td>
         <td className="px-3 py-3 text-slate-700">
@@ -224,7 +240,13 @@ function Row({
   return (
     <tr className="border-b border-slate-100 align-top last:border-b-0">
       <td className="px-3 py-3">
-        <div className="font-medium text-slate-900">{item.pessoa_nome}</div>
+        {item.pessoa_id ? (
+          <Link href={`/pessoas/${item.pessoa_id}?aba=financeiro`} className="font-medium text-slate-900 underline-offset-2 hover:text-slate-700 hover:underline">
+            {item.pessoa_nome}
+          </Link>
+        ) : (
+          <div className="font-medium text-slate-900">{item.pessoa_nome}</div>
+        )}
         <div className="text-xs text-slate-500">#{item.cobranca_id}</div>
       </td>
       <td className="px-3 py-3">
@@ -288,12 +310,14 @@ export function CobrancasTable({
   const [expurgoOpen, setExpurgoOpen] = useState(false);
   const [expurgoItem, setExpurgoItem] = useState<CobrancaListaItem | null>(null);
   const [expurgoMotivo, setExpurgoMotivo] = useState("");
+  const [expurgoTipo, setExpurgoTipo] = useState<ExpurgoTipo>("ERRO_TECNICO");
   const [expurgoLoading, setExpurgoLoading] = useState(false);
   const [expurgoError, setExpurgoError] = useState<string | null>(null);
 
   function abrirExpurgo(item: CobrancaListaItem) {
     setExpurgoItem(item);
     setExpurgoMotivo("");
+    setExpurgoTipo("ERRO_TECNICO");
     setExpurgoError(null);
     setExpurgoOpen(true);
   }
@@ -315,6 +339,7 @@ export function CobrancasTable({
         body: JSON.stringify({
           cobranca_id: expurgoItem.cobranca_id,
           motivo,
+          tipo: expurgoTipo,
         }),
       });
       const json = (await response.json().catch(() => null)) as ExpurgoResponse | null;
@@ -324,6 +349,7 @@ export function CobrancasTable({
       setExpurgoOpen(false);
       setExpurgoItem(null);
       setExpurgoMotivo("");
+      setExpurgoTipo("ERRO_TECNICO");
       onExpurgoConcluido();
     } catch (error) {
       setExpurgoError(error instanceof Error ? error.message : "erro_expurgar_cobranca");
@@ -402,9 +428,23 @@ export function CobrancasTable({
               </div>
             </div>
             <label className="space-y-1 text-sm text-slate-700">
+              <span>Tipo do expurgo</span>
+              <select
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                value={expurgoTipo}
+                onChange={(event) => setExpurgoTipo(event.target.value as ExpurgoTipo)}
+              >
+                {Object.entries(EXPURGO_TIPO_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm text-slate-700">
               <span>Motivo do expurgo</span>
-              <textarea
-                className="min-h-28 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+              <Textarea
+                className="min-h-28 border-slate-200 bg-white text-slate-900"
                 value={expurgoMotivo}
                 onChange={(event) => setExpurgoMotivo(event.target.value)}
                 placeholder="Explique por que esta cobranca cancelada deve sair da leitura financeira."

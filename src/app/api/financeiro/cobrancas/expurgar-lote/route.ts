@@ -5,20 +5,28 @@ import { isExpurgoTipo, type ExpurgoTipo } from "@/lib/financeiro/expurgo-types"
 import { getSupabaseServerAuth } from "@/lib/supabaseServer";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
-type ExpurgoBody = {
-  cobranca_id?: unknown;
+type ExpurgoLoteBody = {
+  cobranca_ids?: unknown;
   motivo?: unknown;
   tipo?: unknown;
 };
 
-function parseBody(body: ExpurgoBody): { cobrancaId: number | null; motivo: string | null; tipo: ExpurgoTipo | null } {
-  const cobrancaId =
-    typeof body.cobranca_id === "number" && Number.isFinite(body.cobranca_id)
-      ? Math.trunc(body.cobranca_id)
-      : null;
+function parseBody(body: ExpurgoLoteBody): {
+  cobrancaIds: number[];
+  motivo: string | null;
+  tipo: ExpurgoTipo | null;
+} {
+  const cobrancaIds = Array.isArray(body.cobranca_ids)
+    ? body.cobranca_ids
+        .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+        .map((value) => Math.trunc(value))
+        .filter((value) => value > 0)
+    : [];
+
   const motivo = typeof body.motivo === "string" ? body.motivo.trim() : "";
+
   return {
-    cobrancaId: cobrancaId && cobrancaId > 0 ? cobrancaId : null,
+    cobrancaIds,
     motivo: motivo.length > 0 ? motivo : null,
     tipo: isExpurgoTipo(body.tipo) ? body.tipo : null,
   };
@@ -37,11 +45,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "usuario_nao_autenticado" }, { status: 401 });
   }
 
-  const body = (await req.json().catch(() => null)) as ExpurgoBody | null;
-  const { cobrancaId, motivo, tipo } = parseBody(body ?? {});
+  const body = (await req.json().catch(() => null)) as ExpurgoLoteBody | null;
+  const { cobrancaIds, motivo, tipo } = parseBody(body ?? {});
 
-  if (!cobrancaId) {
-    return NextResponse.json({ ok: false, error: "cobranca_id_invalido" }, { status: 400 });
+  if (cobrancaIds.length === 0) {
+    return NextResponse.json({ ok: false, error: "cobranca_ids_invalidos" }, { status: 400 });
   }
 
   if (!motivo) {
@@ -57,7 +65,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await expurgarCobrancas({
       supabase,
-      cobrancaIds: [cobrancaId],
+      cobrancaIds,
       motivo,
       tipo,
       userId: user.id,
@@ -65,8 +73,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      cobranca_id: cobrancaId,
-      expurgada: true,
+      cobranca_ids: result.cobrancaIds,
+      expurgadas_qtd: result.cobrancaIds.length,
       expurgada_por: user.id,
       expurgo_motivo: result.expurgoMotivo,
       tipo,
@@ -79,7 +87,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const message = error instanceof Error ? error.message : "erro_expurgar_cobranca";
-    return NextResponse.json({ ok: false, error: "erro_expurgar_cobranca", details: message }, { status: 500 });
+    const message = error instanceof Error ? error.message : "erro_expurgar_lote";
+    return NextResponse.json({ ok: false, error: "erro_expurgar_lote", details: message }, { status: 500 });
   }
 }
+

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import PessoaAvatar from "@/components/PessoaAvatar";
 import EditarFotoModal from "@/components/EditarFotoModal";
 import SectionCard from "@/components/layout/SectionCard";
@@ -84,17 +84,9 @@ function formatGenero(
   }
 }
 
-
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
-}
-
 export default function PessoaDetalhesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ id: string }>();
   const id = params.id;
 
@@ -214,6 +206,41 @@ export default function PessoaDetalhesPage() {
 
     carregar();
   }, [id, supabase, router]);
+
+  useEffect(() => {
+    const abaQuery = (searchParams.get("aba") ?? "").toLowerCase();
+    const abaMap: Record<string, AbaId> = {
+      dados: "dados",
+      escolar: "escolar",
+      observacoes: "observacoes",
+      cuidados: "cuidados",
+      medidas: "medidas",
+      observacoes_gerais: "observacoes_gerais",
+      observacoes_pedagogicas: "observacoes_pedagogicas",
+      contato: "contato",
+      endereco: "endereco",
+      vinculos: "vinculos",
+      resumo: "resumo",
+      financeiro: "resumo",
+      sistema: "sistema",
+      formularios_internos: "formularios_internos",
+      movimento_mcd: "movimento_mcd",
+    };
+
+    const abaNormalizada = abaMap[abaQuery];
+    if (abaNormalizada && abaNormalizada !== abaAtiva) {
+      setAbaAtiva(abaNormalizada);
+    }
+  }, [abaAtiva, searchParams]);
+
+  function handleTabChange(aba: AbaId) {
+    setAbaAtiva(aba);
+    if (!id) return;
+
+    const paramsAtualizados = new URLSearchParams(searchParams.toString());
+    paramsAtualizados.set("aba", aba === "resumo" ? "financeiro" : aba);
+    router.replace(`/pessoas/${id}?${paramsAtualizados.toString()}`, { scroll: false });
+  }
 
   function formatDate(dateStr: string | null) {
     if (!dateStr) return "-";
@@ -618,7 +645,7 @@ export default function PessoaDetalhesPage() {
                   <button
                     key={aba.id}
                     type="button"
-                    onClick={() => setAbaAtiva(aba.id)}
+                    onClick={() => handleTabChange(aba.id)}
                     className={
                       "inline-flex items-center gap-2 rounded-full px-4 py-1.5 font-medium transition " +
                       (ativa

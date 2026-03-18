@@ -23,6 +23,17 @@ type ResumoFinanceiroResponse = {
     vencida: boolean;
     created_at: string | null;
   }>;
+  cobrancas_canceladas_expurgaveis: Array<{
+    cobranca_id: number;
+    devedor_pessoa_id: number;
+    data_vencimento: string | null;
+    valor_centavos: number;
+    status: string;
+    origem_tipo: string;
+    origem_subtipo: string;
+    origem_id: number | null;
+    created_at: string | null;
+  }>;
   cobrancas_matricula: Array<{
     cobranca_id: number;
     vencimento: string | null;
@@ -166,6 +177,35 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     bucket_vencimento: String((c as any).bucket_vencimento ?? ""),
   }));
 
+  const { data: canceladasRaw, error: canceladasErr } = await supabase
+    .from("cobrancas")
+    .select("id,pessoa_id,vencimento,valor_centavos,status,origem_tipo,origem_subtipo,origem_id,created_at,expurgada")
+    .eq("pessoa_id", responsavelId)
+    .eq("status", "CANCELADA")
+    .or("expurgada.is.null,expurgada.eq.false")
+    .order("origem_tipo", { ascending: true })
+    .order("origem_id", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true, nullsFirst: false });
+
+  if (canceladasErr) {
+    return NextResponse.json(
+      { error: "erro_listar_cobrancas_canceladas_expurgaveis", details: canceladasErr.message },
+      { status: 500 }
+    );
+  }
+
+  const cobrancasCanceladasExpurgaveis = (canceladasRaw ?? []).map((c) => ({
+    cobranca_id: Number((c as any).id),
+    devedor_pessoa_id: Number((c as any).pessoa_id),
+    data_vencimento: (c as any).vencimento ? String((c as any).vencimento) : null,
+    valor_centavos: Number((c as any).valor_centavos ?? 0),
+    status: String((c as any).status ?? ""),
+    origem_tipo: String((c as any).origem_tipo ?? ""),
+    origem_subtipo: String((c as any).origem_subtipo ?? ""),
+    origem_id: Number((c as any).origem_id ?? 0) || null,
+    created_at: (c as any).created_at ? String((c as any).created_at) : null,
+  }));
+
   const { data: conta } = await supabase
     .from("credito_conexao_contas")
     .select("id,pessoa_titular_id")
@@ -206,6 +246,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     cobrancas: cobrancas.sort((a, b) =>
       (a.data_vencimento ?? "").localeCompare(b.data_vencimento ?? "")
     ),
+    cobrancas_canceladas_expurgaveis: cobrancasCanceladasExpurgaveis,
     cobrancas_matricula: cobrancasMatricula,
     faturas_credito_conexao: faturas,
     agregados: {
