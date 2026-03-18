@@ -48,6 +48,31 @@ type ResumoFinanceiro = {
     situacao_saas: string;
     bucket_vencimento: string;
   }>;
+  cobrancas_canonicas?: Array<{
+    cobranca_id: number;
+    vencimento: string | null;
+    valor_centavos: number;
+    saldo_aberto_centavos: number;
+    dias_atraso: number;
+    status_cobranca: string;
+    situacao_saas: string;
+    bucket_vencimento: string | null;
+    origem_tipo: string | null;
+    origem_subtipo: string | null;
+    origem_id: number | null;
+    origem_label: string;
+    origem_secundaria: string | null;
+    origem_tecnica: string | null;
+    origem_badge_label: string | null;
+    origem_badge_tone: "success" | "warning" | "neutral";
+    origemAgrupadorTipo: string | null;
+    origemAgrupadorId: number | null;
+    origemItemTipo: string | null;
+    origemItemId: number | null;
+    contaInternaId: number | null;
+    origemLabel: string;
+    migracaoContaInternaStatus: string | null;
+  }>;
   faturas_credito_conexao: Array<{
     id: number;
     conta_conexao_id: number;
@@ -100,6 +125,8 @@ type GrupoExpurgoOrigem = {
   items: ResumoFinanceiro["cobrancas_canceladas_expurgaveis"];
 };
 
+type CobrancaCanonicaResumo = NonNullable<ResumoFinanceiro["cobrancas_canonicas"]>[number];
+
 function formatBRLFromCentavos(v: number): string {
   const reais = (v ?? 0) / 100;
   return reais.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -124,6 +151,12 @@ function formatDateTimeOrDash(value: string | null): string {
 function origemGroupLabel(origemTipo: string, origemId: number | null): string {
   const tipo = origemTipo.trim() || "SEM ORIGEM";
   return origemId ? `${tipo} #${origemId}` : `${tipo} sem ID`;
+}
+
+function origemBadgeClass(tone: CobrancaCanonicaResumo["origem_badge_tone"]) {
+  if (tone === "success") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (tone === "warning") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
@@ -272,6 +305,36 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
     const rf = data.responsavel_financeiro;
     if (!rf) return `#${data.responsavel_financeiro_id}`;
     return rf.nome ? `${rf.nome} (#${rf.id})` : `#${rf.id}`;
+  }, [data]);
+
+  const cobrancasAbertas = useMemo<CobrancaCanonicaResumo[]>(() => {
+    if (!data) return [];
+    if (Array.isArray(data.cobrancas_canonicas)) return data.cobrancas_canonicas;
+    return (data.cobrancas_matricula ?? []).map((item) => ({
+      cobranca_id: item.cobranca_id,
+      vencimento: item.vencimento,
+      valor_centavos: item.valor_centavos,
+      saldo_aberto_centavos: item.saldo_aberto_centavos,
+      dias_atraso: item.dias_atraso,
+      status_cobranca: item.status_cobranca,
+      situacao_saas: item.situacao_saas,
+      bucket_vencimento: item.bucket_vencimento,
+      origem_tipo: item.origem_tipo,
+      origem_subtipo: null,
+      origem_id: item.origem_id,
+      origem_label: item.origem_tipo ? `${item.origem_tipo}${item.origem_id ? ` #${item.origem_id}` : ""}` : "Origem em revisao",
+      origem_secundaria: null,
+      origem_tecnica: item.origem_tipo ? `${item.origem_tipo}${item.origem_id ? ` #${item.origem_id}` : ""}` : null,
+      origem_badge_label: null,
+      origem_badge_tone: "neutral",
+      origemAgrupadorTipo: null,
+      origemAgrupadorId: null,
+      origemItemTipo: null,
+      origemItemId: null,
+      contaInternaId: null,
+      origemLabel: item.origem_tipo ? `${item.origem_tipo}${item.origem_id ? ` #${item.origem_id}` : ""}` : "Origem em revisao",
+      migracaoContaInternaStatus: null,
+    }));
   }, [data]);
 
   const allSelecionadas =
@@ -613,9 +676,9 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
           <Card>
             <CardHeader>
-              <CardTitle>Cobrancas de matricula (em aberto)</CardTitle>
+              <CardTitle>Titulos em aberto</CardTitle>
               <CardDescription>
-                Titulos com origem MATRICULA em aberto para o responsavel financeiro.
+                Leitura canonica das cobrancas em aberto, sem ocultar casos ambiguos ou sem conta interna associada.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -632,14 +695,14 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {(data.cobrancas_matricula ?? []).length === 0 ? (
+                    {cobrancasAbertas.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-3 text-muted-foreground">
-                          Nenhuma cobranca de matricula em aberto encontrada.
+                          Nenhuma cobranca em aberto encontrada.
                         </td>
                       </tr>
                     ) : (
-                      (data.cobrancas_matricula ?? []).map((c) => (
+                      cobrancasAbertas.map((c) => (
                         <tr key={c.cobranca_id} className="border-t">
                           <td className="py-2">#{c.cobranca_id}</td>
                           <td className="py-2">
@@ -656,9 +719,23 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                             <div className="text-xs text-muted-foreground">
                               Status interno: {c.status_cobranca || "-"}
                             </div>
+                            {c.contaInternaId ? (
+                              <div className="text-xs text-slate-500">Conta interna #{c.contaInternaId}</div>
+                            ) : null}
                           </td>
-                          <td className="py-2 text-xs text-slate-600">
-                            {c.origem_tipo || "-"} {c.origem_id ? `#${c.origem_id}` : ""}
+                          <td className="py-2">
+                            <div className="font-medium text-slate-900">{c.origem_label || c.origemLabel || "Origem em revisao"}</div>
+                            {c.origem_secundaria ? <div className="text-xs text-slate-500">{c.origem_secundaria}</div> : null}
+                            {c.origem_badge_label || c.origem_tecnica ? (
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                {c.origem_badge_label ? (
+                                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${origemBadgeClass(c.origem_badge_tone)}`}>
+                                    {c.origem_badge_label}
+                                  </span>
+                                ) : null}
+                                {c.origem_tecnica ? <span className="text-[11px] text-slate-400">{c.origem_tecnica}</span> : null}
+                              </div>
+                            ) : null}
                           </td>
                           <td className="py-2 text-right">
                             <div className="flex justify-end gap-2">

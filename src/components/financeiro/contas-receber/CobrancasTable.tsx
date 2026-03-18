@@ -67,10 +67,46 @@ function situacaoSecundaria(item: CobrancaListaItem) {
   return item.status_cobranca ?? "Sem status bruto";
 }
 
-function origemSecundaria(item: CobrancaListaItem) {
+function origemBruta(item: CobrancaListaItem) {
   const base = item.origem_tipo ?? "COBRANCA";
   const complemento = item.origem_id ? `#${item.origem_id}` : null;
   return complemento ? `${base} ${complemento}` : base;
+}
+
+function origemBadgeClass(tone: CobrancaListaItem["origem_badge_tone"]) {
+  if (tone === "success") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (tone === "warning") return "bg-amber-50 text-amber-700 ring-amber-200";
+  return "bg-slate-100 text-slate-600 ring-slate-200";
+}
+
+function origemTecnica(item: CobrancaListaItem) {
+  const technical = item.origem_tecnica ?? origemBruta(item);
+  if (!technical) return null;
+  if (technical === item.origem_label || technical === item.origem_secundaria) return null;
+  return technical;
+}
+
+function OrigemCell({ item }: { item: CobrancaListaItem }) {
+  const technical = origemTecnica(item);
+
+  return (
+    <td className="px-3 py-3">
+      <div className="space-y-1">
+        <div className="font-medium text-slate-800">{item.origem_label}</div>
+        {item.origem_secundaria ? <div className="text-xs text-slate-500">{item.origem_secundaria}</div> : null}
+        {item.origem_badge_label || technical ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {item.origem_badge_label ? (
+              <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${origemBadgeClass(item.origem_badge_tone)}`}>
+                {item.origem_badge_label}
+              </span>
+            ) : null}
+            {technical ? <span className="text-[11px] text-slate-400">{technical}</span> : null}
+          </div>
+        ) : null}
+      </div>
+    </td>
+  );
 }
 
 function TableHeader({ visao }: { visao: ContasReceberVisao }) {
@@ -155,12 +191,7 @@ function Row({
           </span>
           <div className="mt-1 text-xs text-slate-500">{item.centro_custo_nome ?? "Sem centro definido"}</div>
         </td>
-        <td className="px-3 py-3">
-          <div className="text-slate-800">{item.origem_label}</div>
-          <div className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-            {origemSecundaria(item)}
-          </div>
-        </td>
+        <OrigemCell item={item} />
         <td className="px-3 py-3 text-slate-700">{formatDateISO(item.ultima_data_recebimento)}</td>
         <td className="px-3 py-3 text-slate-700">
           <div>{formatBRLFromCents(Math.max(item.valor_recebido_centavos, item.valor_centavos))}</div>
@@ -207,12 +238,7 @@ function Row({
           </span>
           <div className="mt-1 text-xs text-slate-500">{item.centro_custo_nome ?? "Sem centro definido"}</div>
         </td>
-        <td className="px-3 py-3">
-          <div className="text-slate-800">{item.origem_label}</div>
-          <div className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-            {origemSecundaria(item)}
-          </div>
-        </td>
+        <OrigemCell item={item} />
         <td className="px-3 py-3 text-slate-700">{formatBRLFromCents(Math.max(item.valor_aberto_centavos, item.valor_centavos))}</td>
         <td className="px-3 py-3 text-slate-700">
           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${situacaoBadge(item)}`}>
@@ -255,12 +281,7 @@ function Row({
         </span>
         <div className="mt-1 text-xs text-slate-500">{item.centro_custo_nome ?? "Sem centro definido"}</div>
       </td>
-      <td className="px-3 py-3">
-        <div className="text-slate-800">{item.origem_label}</div>
-        <div className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
-          {origemSecundaria(item)}
-        </div>
-      </td>
+      <OrigemCell item={item} />
       <td className="px-3 py-3 text-slate-700">{formatDateISO(item.vencimento)}</td>
       <td className="px-3 py-3 text-slate-700">
         <div>{formatBRLFromCents(item.valor_aberto_centavos)}</div>

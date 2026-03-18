@@ -1,110 +1,72 @@
-# Módulo atual
-Suporte ao Usuário / Sistema de Tickets
+# Modulo atual
 
-## SQL concluído
-- tabela `suporte_tickets`
-- triggers de código automático
-- campos de contexto técnico
-- prioridade, status e timestamps
+Financeiro - migracao semantica de cobrancas para conta interna do aluno, com preservacao de legado e sem ocultar valores em aberto.
 
-## APIs concluídas
-- `POST /api/suporte/tickets`
-- `GET /api/suporte/tickets`
-- `GET /api/suporte/tickets/[id]`
-- `PATCH /api/suporte/tickets/[id]`
-- `POST /api/suporte/upload` (screenshot)
+## SQL concluido
 
-## Páginas / componentes concluídos
-- botão flutuante global de suporte
-- modal de abertura de chamado
-- separação erro do sistema / melhoria
-- captura automática de contexto
-- captura de screenshot com `html2canvas`
-- sanitização de estilos incompatíveis (`oklch`)
-- painel administrativo de tickets
-- listagem com filtros
-- tela de detalhe do ticket
-- atualização de status e prioridade
-- exportação de tickets
+- criado o diagnostico `supabase/sql/diagnosticos/20260318_diagnostico_migracao_cobrancas_conta_interna.sql`
+- criados os campos canonicos em `public.cobrancas` via `supabase/migrations/20260318_prepare_migracao_conta_interna_cobrancas.sql`
+- criada a auditoria de migracao em `public.auditoria_migracao_conta_interna_cobrancas` via `supabase/migrations/20260318_create_auditoria_migracao_conta_interna.sql`
+- criado o backfill controlado e nao destrutivo em `supabase/sql/scripts/20260318_backfill_migracao_conta_interna_cobrancas.sql`
+- nenhum campo legado foi removido
+- nenhuma cobranca foi recriada, cancelada ou alterada por migration nesta etapa
 
-## Pendências
-- comentários internos em ticket
-- atribuição de responsável interno
-- notificações automáticas
-- painel de saúde do sistema
+## APIs concluidas
 
-## PendÃªncias tÃ©cnicas de financeiro
-- diagnÃ³stico concluÃ­do de duplicidade de cobranÃ§as no CrÃ©dito ConexÃ£o: 13 grupos duplicados e 27 cobranÃ§as envolvidas
-- padrÃ£o forte de mistura entre `MATRICULA` e `FATURA_CREDITO_CONEXAO`, exigindo saneamento controlado e correÃ§Ã£o da causa raiz
-- todos os grupos diagnosticados possuem `competencia_ano_mes` nula e pedem revisÃ£o do fluxo de geraÃ§Ã£o e consolidaÃ§Ã£o
+- `GET /api/financeiro/contas-a-receber` segue compatível e agora entrega leitura canonica com:
+  - `origemAgrupadorTipo`
+  - `origemAgrupadorId`
+  - `origemItemTipo`
+  - `origemItemId`
+  - `contaInternaId`
+  - `origemLabel`
+  - `migracaoContaInternaStatus`
+  - campos auxiliares `origem_label`, `origem_secundaria`, `origem_tecnica` e badge
+- `GET /api/financeiro/contas-a-receber/vencidas/por-pessoa` agora retorna os mesmos campos canonicos sem quebrar o payload antigo
+- `GET /api/pessoas/[id]/resumo-financeiro` passou a expor `cobrancas_canonicas`, mantendo `cobrancas_matricula` por compatibilidade
+- o mapa tecnico das rotas reais foi documentado em `docs/diagnosticos/20260318_mapa_api_cobrancas_conta_interna.md`
 
-## Saneamento controlado de financeiro
-- etapa de saneamento controlado preparada em arquivos SQL locais
-- casos `MATRICULA_X_FATURA` ja possuem lista de cancelamento revisavel
-- casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` permanecem em revisao manual
-- ainda nao houve alteracao de dados no banco
+## Paginas/componentes concluidos
 
-## Execucao do lote 1 de saneamento
-- lote 1 de saneamento revisavel executado
-- 6 cobrancas de origem `MATRICULA` foram canceladas de forma controlada
-- casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` continuam pendentes de revisao manual
-- proxima frente: investigacao da causa raiz no codigo
+- `src/components/financeiro/contas-receber/CobrancasTable.tsx` agora exibe origem semantica como destaque principal e usa badge de migracao
+- `src/components/financeiro/contas-receber/CobrancaAuditDetail.tsx` passou a mostrar metadados canonicos, status da migracao e origem tecnica apenas como apoio
+- `src/app/(private)/admin/financeiro/contas-receber/page.tsx` ajustado para o modal "Titulos vencidos" exibir origem semantica
+- `src/components/pessoas/PessoaResumoFinanceiro.tsx` agora usa `cobrancas_canonicas` para nao esconder cobrancas fora da matricula e manter casos ambiguos visiveis
+- `src/app/(private)/financeiro/cobrancas/[id]/page.tsx` passou a usar leitura semantica canonica com fallback seguro quando as colunas novas ainda nao existem no banco
+- a UI foi ajustada para:
+  - nao destacar mais `MATRICULA #x` e `FATURA_CREDITO_CONEXAO #x` como label principal
+  - mostrar "Conta interna do aluno" como contexto pai quando houver `contaInternaId`
+  - manter cobrancas diretas fora da conta interna visiveis e explicitamente rotuladas
+  - manter casos `AMBIGUO` visiveis com sinalizacao de revisao
 
-## Investigacao da causa raiz de duplicidade de cobrancas
-- investigacao no codigo concluida nesta etapa, sem alteracao de regra de negocio e sem alteracao no banco
-- hipotese principal: o fluxo de matricula cria cobranca mensal `MATRICULA` com subtipo `CARTAO_CONEXAO`, enquanto o fluxo de fechamento/geracao de fatura cria a cobranca canonica `FATURA_CREDITO_CONEXAO` sem coordenacao entre os dois fluxos
-- ha falha de idempotencia transversal: existem guardas locais por `matricula + competencia` e por `fatura + cobranca`, mas nao existe guarda unica por pessoa + competencia + contexto financeiro para impedir cobrancas paralelas
-- arquivos criticos mapeados: `src/app/api/matriculas/novo/route.ts`, `src/app/api/matriculas/liquidacao-primeira/route.ts`, `src/app/api/escola/matriculas/[id]/reprocessar-financeiro/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`, `src/app/api/financeiro/credito-conexao/faturas/fechar/route.ts`, `src/app/api/financeiro/credito-conexao/cobrancas/vincular-fatura/route.ts`, `src/lib/credito-conexao/upsertLancamentoPorCobranca.ts`, `src/lib/cobrancasNeofin.ts`, `src/lib/financeiro/creditoConexaoFaturas.ts`
+## Pendencias
 
-## Correcao da causa raiz de duplicidade de cobrancas
-- correcao da causa raiz iniciada e concluida nesta etapa, com ajuste de SQL e API
-- a cobranca canonica da fatura virou fonte unica e passou a ter protecao de unicidade por `origem_tipo + origem_id` quando ativa
-- a matricula nao gera mais cobranca paralela para mensalidade do Cartao Conexao nas rotas corrigidas; agora gera apenas lancamento elegivel ao faturamento
-- a idempotencia da cobranca canonica foi centralizada em `src/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura.ts`
-- pendencia remanescente: saneamento manual dos casos `FATURA_DUPLA` e `TRIPLA_OU_MAIS` ainda existentes no diagnostico anterior, alem da revisao de fluxos legados fora do escopo desta etapa
-
-## Saneamento final de duplicidade de cobrancas
-- o saneamento final nao foi executado nesta etapa porque a auditoria mostrou ambiguidades remanescentes com recebimento ja registrado
-- a validacao final confirmou `0` duplicidades ativas de `FATURA_CREDITO_CONEXAO` por `origem_id` e indice canonico consistente
-- a auditoria por competencia real identificou `27` grupos duplicados ativos (`54` cobrancas) entre legado `MATRICULA/CARTAO_CONEXAO` e cobranca canonica
-- existe um lote seguro proposto com `14` cobrancas legado sem recebimento: `50, 51, 72, 73, 116, 117, 127, 149, 160, 172, 193, 217, 261, 338`
-- permanecem `13` cobrancas legado em revisao manual por ja possuirem recebimento, alem do caso historico `25` sem competencia explicita
-- total efetivamente saneado ate agora permanece em `6` cobrancas canceladas no lote 1
-- a correcao estrutural do Cartao Conexao esta concluida, mas a frente de passivo historico ainda nao pode ser considerada encerrada
-
-## Execucao do lote seguro legado
-- a correcao estrutural do Cartao Conexao esta concluida e o lote seguro legado foi executado com sucesso
-- `14` cobrancas legado sem recebimento foram canceladas de forma controlada: `50, 51, 72, 73, 116, 117, 127, 149, 160, 172, 193, 217, 261, 338`
-- restam apenas `13` casos historicos com recebimento legado e o id `25` para decisao manual
-- a frente tecnica fica praticamente encerrada, restando apenas passivo historico excepcional para revisao financeira manual
-
-## Encerramento tecnico da duplicidade de cobrancas do Cartao Conexao
-- a frente tecnica de duplicidade de cobrancas do Cartao Conexao esta encerrada
-- a correcao estrutural foi concluida e nao bloqueia a evolucao normal do sistema
-- o residual remanescente e historico/manual e nao exige reabertura da frente tecnica
-- passivo excepcional remanescente: `25, 26, 27, 38, 61, 138, 171, 182, 204, 205, 247, 274, 302, 402`
-
-## Saneamento final do passivo historico de cobrancas
-- saneamento final do passivo historico executado com criterio objetivo por grupo e com atualizacao apenas de `public.cobrancas.status`
-- criterio aplicado: recebimento legado prevalece; na ausencia dele, prevalece a fatura unica; em caso de multiplos recebimentos, prevalece a cobranca mais antiga
-- validacao final confirmou `0` duplicidades ativas canonicas por `origem_id` e `0` grupos duplicados ativos por competencia real
-- total geral cancelado em toda a frente: `34` cobrancas (`6` no lote 1, `14` no lote seguro legado e `14` no lote final historico)
-- nao restou caso residual de duplicidade historica auditada nesta frente
-
-## Fechamento da frente de duplicidade de cobrancas do Cartao Conexao
-- a frente de duplicidade de cobrancas do Cartao Conexao foi encerrada
-- total consolidado de `34` cobrancas canceladas
-- duplicidades ativas remanescentes zeradas
-- correcao estrutural concluida
-- nao ha pendencia tecnica aberta nesta frente
+- executar as migrations e revisar o diagnostico no banco real antes de rodar o backfill
+- executar o backfill controlado por blocos e conferir os `SELECT`s finais de conferencia
+- saneamento manual dos casos marcados como `AMBIGUO`, se existirem
+- consolidar em etapa futura a desativacao gradual das labels legadas na UI depois da migracao validada
+- gerar evidencias visuais autenticadas da fila vencida, do modal de titulos e do painel financeiro
 
 ## Bloqueios
-nenhum
 
-## Versão do sistema
-Conectarte v0.9 — módulo de suporte implementado
+- `npm run lint` continua falhando por erros antigos e fora deste escopo em modulos de loja, perfis, permissoes, formularios e outros arquivos nao alterados nesta frente
+- nao ha harness de navegador autenticado pronto no repositório para gerar prints confiaveis das telas privadas nesta etapa
 
-## Próximas ações
-- evolução do módulo financeiro
-- melhorias no app de professores
-- painel de monitoramento de erros do sistema
+## Versao do sistema
+
+Conectarte v0.9 - estrutura de migracao de cobrancas para conta interna preparada, com leitura canonica ativa na API e na UI.
+
+## Proximas acoes
+
+- aplicar `20260318_prepare_migracao_conta_interna_cobrancas.sql`
+- aplicar `20260318_create_auditoria_migracao_conta_interna.sql`
+- revisar a saida do diagnostico `20260318_diagnostico_migracao_cobrancas_conta_interna.sql`
+- executar `20260318_backfill_migracao_conta_interna_cobrancas.sql` de forma controlada
+- revisar manualmente os casos `AMBIGUO`
+- depois da revisao semantica, consolidar a conta interna do aluno como contexto pai definitivo
+
+## Validacao
+
+- `npm run build`: ok
+- `npm run lint -- --quiet`: falhou por passivo antigo fora dos arquivos alterados
+- `npx next lint --file ...` nos arquivos alterados nesta frente: ok

@@ -56,6 +56,18 @@ type TituloVencido = {
   status_cobranca: string | null;
   bucket_vencimento: string | null;
   situacao_saas: string | null;
+  origem_label: string;
+  origem_secundaria: string | null;
+  origem_tecnica: string | null;
+  origem_badge_label: string | null;
+  origem_badge_tone: "success" | "warning" | "neutral";
+  origemAgrupadorTipo: string | null;
+  origemAgrupadorId: number | null;
+  origemItemTipo: string | null;
+  origemItemId: number | null;
+  contaInternaId: number | null;
+  origemLabel: string;
+  migracaoContaInternaStatus: string | null;
 };
 
 type TitulosResponse = {
@@ -106,6 +118,12 @@ function contextoDescricao(visao: ContasReceberVisao, quantidade: number) {
   if (visao === "INCONSISTENCIAS") return `${quantidade} caso(s) em revisao`;
   if (visao === "A_VENCER") return `${quantidade} titulo(s) a vencer`;
   return `${quantidade} titulo(s) vencidos`;
+}
+
+function origemBadgeClass(tone: TituloVencido["origem_badge_tone"]) {
+  if (tone === "success") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (tone === "warning") return "bg-amber-50 text-amber-700 ring-amber-200";
+  return "bg-slate-100 text-slate-600 ring-slate-200";
 }
 
 export default function AdminContasReceberPage() {
@@ -535,9 +553,21 @@ export default function AdminContasReceberPage() {
                       <td className="px-3 py-3 text-slate-700">#{item.cobranca_id}</td>
                       <td className="px-3 py-3 text-slate-700">{formatDateISO(item.vencimento)}</td>
                       <td className="px-3 py-3 text-slate-700">{item.dias_atraso} dias</td>
-                      <td className="px-3 py-3 text-slate-700">
-                        {item.origem_tipo ?? "--"}
-                        {item.origem_id ? ` #${item.origem_id}` : ""}
+                      <td className="px-3 py-3">
+                        <div className="space-y-1">
+                          <div className="font-medium text-slate-900">{item.origem_label ?? item.origemLabel ?? "Origem em revisao"}</div>
+                          {item.origem_secundaria ? <div className="text-xs text-slate-500">{item.origem_secundaria}</div> : null}
+                          {item.origem_badge_label || item.origem_tecnica ? (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {item.origem_badge_label ? (
+                                <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${origemBadgeClass(item.origem_badge_tone)}`}>
+                                  {item.origem_badge_label}
+                                </span>
+                              ) : null}
+                              {item.origem_tecnica ? <span className="text-[11px] text-slate-400">{item.origem_tecnica}</span> : null}
+                            </div>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-slate-700">{formatBRLFromCents(item.saldo_aberto_centavos)}</td>
                     </tr>

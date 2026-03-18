@@ -8,6 +8,7 @@ import {
   type ContasReceberTipoPeriodo,
   type ContasReceberVisao,
 } from "@/lib/financeiro/contas-receber-view-config";
+import { buildCanonicalOriginDisplay, type BadgeTone } from "@/lib/financeiro/cobranca-origem-canonica";
 import { isMissingExpurgoColumnError, logExpurgoMigrationWarning } from "@/lib/financeiro/expurgo-compat";
 import type { Database, Json } from "@/types/supabase.generated";
 
@@ -97,7 +98,28 @@ export interface ComposicaoFaturaConexao {
   itens: FaturaConexaoItem[];
 }
 
-export interface CobrancaListaItem {
+export interface CanonicalOriginPayloadFields {
+  origem_agrupador_tipo: string | null;
+  origem_agrupador_id: number | null;
+  origem_item_tipo: string | null;
+  origem_item_id: number | null;
+  conta_interna_id: number | null;
+  migracao_conta_interna_status: string | null;
+  migracao_conta_interna_observacao: string | null;
+  origem_secundaria: string | null;
+  origem_tecnica: string | null;
+  origem_badge_label: string | null;
+  origem_badge_tone: BadgeTone;
+  origemAgrupadorTipo: string | null;
+  origemAgrupadorId: number | null;
+  origemItemTipo: string | null;
+  origemItemId: number | null;
+  contaInternaId: number | null;
+  origemLabel: string;
+  migracaoContaInternaStatus: string | null;
+}
+
+type CobrancaListaItemBase = {
   cobranca_id: number;
   pessoa_id: number | null;
   pessoa_nome: string;
@@ -122,7 +144,9 @@ export interface CobrancaListaItem {
   quantidade_recebimentos: number;
   tipo_inconsistencia: string | null;
   criticidade_inconsistencia: number;
-}
+};
+
+export type CobrancaListaItem = CobrancaListaItemBase & CanonicalOriginPayloadFields;
 
 export interface DetalheDocumentoVinculado {
   tipo: string;
@@ -155,7 +179,7 @@ export interface DetalheCobrancaAuditoria {
     origem_id: number | null;
     created_at: string | null;
     updated_at: string | null;
-  };
+  } & CanonicalOriginPayloadFields;
   contexto_principal: ContextoPrincipal;
   origem_detalhada: OrigemDetalhada;
   origem_label: string;
@@ -263,6 +287,14 @@ type FlatRow = {
 
 type CobrancaBaseRow = Database["public"]["Tables"]["cobrancas"]["Row"];
 type CobrancaRow = CobrancaBaseRow & {
+  origem_agrupador_tipo?: string | null;
+  origem_agrupador_id?: number | null;
+  origem_item_tipo?: string | null;
+  origem_item_id?: number | null;
+  conta_interna_id?: number | null;
+  origem_label?: string | null;
+  migracao_conta_interna_status?: string | null;
+  migracao_conta_interna_observacao?: string | null;
   expurgada?: boolean | null;
   expurgada_em?: string | null;
   expurgada_por?: string | null;
@@ -350,6 +382,18 @@ function normalizeDate(value: unknown): string | null {
   return date.length >= 10 ? date.slice(0, 10) : date;
 }
 
+const COBRANCA_SELECT_CANONICAL =
+  "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes,origem_agrupador_tipo,origem_agrupador_id,origem_item_tipo,origem_item_id,conta_interna_id,origem_label,migracao_conta_interna_status,migracao_conta_interna_observacao";
+
+const COBRANCA_SELECT_CANONICAL_WITH_EXPURGO =
+  `${COBRANCA_SELECT_CANONICAL},expurgada,expurgada_em,expurgada_por,expurgo_motivo`;
+
+const COBRANCA_SELECT_LEGACY =
+  "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes";
+
+const FLAT_SELECT_BASE =
+  "cobranca_id,pessoa_id,vencimento,status_cobranca,origem_tipo,origem_id,valor_centavos,valor_recebido_centavos,saldo_aberto_centavos,competencia_ano_mes,dias_atraso,situacao_saas,bucket_vencimento";
+
 function pessoaNome(pessoaId: number | null, pessoa: PessoaRow | undefined): string {
   const nome = textOrNull(pessoa?.nome);
   if (nome) return nome;
@@ -413,6 +457,14 @@ async function carregarCobrancasPorIds(
 
     return ((fallback.data ?? []) as CobrancaRow[]).map((row) => ({
       ...row,
+      origem_agrupador_tipo: null,
+      origem_agrupador_id: null,
+      origem_item_tipo: null,
+      origem_item_id: null,
+      conta_interna_id: null,
+      origem_label: null,
+      migracao_conta_interna_status: null,
+      migracao_conta_interna_observacao: null,
       expurgada: false,
       expurgada_em: null,
       expurgada_por: null,
@@ -605,7 +657,7 @@ function classificarCobranca(context: ClassificacaoContexto): ClassificacaoCobra
     };
   }
 
-  if (origemTipo === "LOJA") {
+  if (origemTipo === "LOJA" || origemTipo === "LOJA_VENDA") {
     let origemDetalhada: OrigemDetalhada = "VENDA_LOJA";
     if (origemSubtipo.includes("CREDITO")) origemDetalhada = "CREDITO_INTERNO_LOJA";
     if (origemSubtipo.includes("COMPLEMENTO")) origemDetalhada = "COMPLEMENTO_LOJA";
@@ -617,7 +669,7 @@ function classificarCobranca(context: ClassificacaoContexto): ClassificacaoCobra
     };
   }
 
-  if (origemTipo === "MATRICULA") {
+  if (origemTipo === "MATRICULA" || origemTipo === "MATRICULA_MENSALIDADE") {
     let origemDetalhada: OrigemDetalhada = "MATRICULA";
     const descricao = upper(context.cobranca?.descricao);
 
@@ -738,7 +790,7 @@ function buildDocumentoVinculado(
 
   const origemTipo = upper(cobranca.origem_tipo);
 
-  if (origemTipo === "MATRICULA" && matricula) {
+  if ((origemTipo === "MATRICULA" || origemTipo === "MATRICULA_MENSALIDADE") && matricula) {
     const turmaLabel = textOrNull(turma?.nome);
     return {
       tipo: "Matrícula",
@@ -756,7 +808,7 @@ function buildDocumentoVinculado(
     };
   }
 
-  if (origemTipo === "LOJA") {
+  if (origemTipo === "LOJA" || origemTipo === "LOJA_VENDA") {
     const vendaId = lojaVenda?.id ?? numberOrNull(cobranca.origem_id);
     return {
       tipo: "Venda da Loja",
@@ -797,6 +849,18 @@ function buildTrilhaAuditavel(
   trilha.push({ titulo: "Pessoa devedora", valor: item.pessoa_nome });
   trilha.push({ titulo: "Contexto principal", valor: item.contexto_principal });
   trilha.push({ titulo: "Origem detalhada", valor: item.origem_label });
+  if (item.origem_secundaria) {
+    trilha.push({ titulo: "Origem secundaria", valor: item.origem_secundaria });
+  }
+  if (item.origem_badge_label) {
+    trilha.push({ titulo: "Status da migracao", valor: item.origem_badge_label });
+  }
+  if (item.conta_interna_id) {
+    trilha.push({ titulo: "Conta interna", valor: `Conta #${item.conta_interna_id}` });
+  }
+  if (item.migracao_conta_interna_observacao) {
+    trilha.push({ titulo: "Observacao da migracao", valor: item.migracao_conta_interna_observacao });
+  }
 
   if (documento) {
     trilha.push({ titulo: "Documento / entidade vinculada", valor: documento.label });
@@ -869,15 +933,21 @@ function buildDetalhe(item: CobrancaListaItem, maps: DataMaps): DetalheCobrancaA
     (item.origem_tipo && upper(item.origem_tipo).includes("FATURA")
       ? maps.faturasPorId.get(item.origem_id ?? 0)
       : undefined);
-  const conta = fatura?.conta_conexao_id ? maps.contasConexao.get(fatura.conta_conexao_id) : undefined;
+  const conta =
+    (fatura?.conta_conexao_id ? maps.contasConexao.get(fatura.conta_conexao_id) : undefined) ??
+    (item.conta_interna_id ? maps.contasConexao.get(item.conta_interna_id) : undefined);
   const cafeVenda =
     maps.cafeVendasPorCobranca.get(item.cobranca_id)?.[0] ??
     (item.origem_tipo && upper(item.origem_tipo) === "CAFE" ? maps.cafeVendasPorId.get(item.origem_id ?? 0) : undefined);
   const lojaVenda =
     maps.lojaVendasPorCobranca.get(item.cobranca_id)?.[0] ??
-    (item.origem_tipo && upper(item.origem_tipo) === "LOJA" ? maps.lojaVendasPorId.get(item.origem_id ?? 0) : undefined);
+    (item.origem_tipo && ["LOJA", "LOJA_VENDA"].includes(upper(item.origem_tipo))
+      ? maps.lojaVendasPorId.get(item.origem_id ?? 0)
+      : undefined);
   const matricula =
-    item.origem_tipo && upper(item.origem_tipo) === "MATRICULA" ? maps.matriculas.get(item.origem_id ?? 0) : undefined;
+    item.origem_tipo && upper(item.origem_tipo).startsWith("MATRICULA")
+      ? maps.matriculas.get(item.origem_id ?? 0)
+      : undefined;
   const turmaAluno = matricula ? maps.turmaAlunoPorMatricula.get(matricula.id) : undefined;
   const turma = turmaAluno?.turma_id ? maps.turmas.get(turmaAluno.turma_id) : undefined;
   const vinculo = matricula?.vinculo_id ? maps.vinculos.get(matricula.vinculo_id) : undefined;
@@ -912,6 +982,24 @@ function buildDetalhe(item: CobrancaListaItem, maps: DataMaps): DetalheCobrancaA
       origem_id: item.origem_id,
       created_at: textOrNull(cobranca?.created_at),
       updated_at: textOrNull(cobranca?.updated_at),
+      origem_agrupador_tipo: item.origem_agrupador_tipo,
+      origem_agrupador_id: item.origem_agrupador_id,
+      origem_item_tipo: item.origem_item_tipo,
+      origem_item_id: item.origem_item_id,
+      conta_interna_id: item.conta_interna_id,
+      migracao_conta_interna_status: item.migracao_conta_interna_status,
+      migracao_conta_interna_observacao: item.migracao_conta_interna_observacao,
+      origem_secundaria: item.origem_secundaria,
+      origem_tecnica: item.origem_tecnica,
+      origem_badge_label: item.origem_badge_label,
+      origem_badge_tone: item.origem_badge_tone,
+      origemAgrupadorTipo: item.origemAgrupadorTipo,
+      origemAgrupadorId: item.origemAgrupadorId,
+      origemItemTipo: item.origemItemTipo,
+      origemItemId: item.origemItemId,
+      contaInternaId: item.contaInternaId,
+      origemLabel: item.origemLabel,
+      migracaoContaInternaStatus: item.migracaoContaInternaStatus,
     },
     contexto_principal: item.contexto_principal,
     origem_detalhada: item.origem_detalhada,
@@ -985,6 +1073,7 @@ function filtrarPorBusca(items: CobrancaListaItem[], rawQuery: string | null): C
       item.pessoa_nome,
       item.contexto_principal,
       item.origem_label,
+      item.origem_secundaria ?? "",
       item.origem_detalhada,
       item.centro_custo_nome ?? "",
       item.origem_tipo ?? "",
@@ -1056,6 +1145,7 @@ function buildInconsistenciaMeta(item: CobrancaListaItem): {
   const saldoAberto = Math.max(0, item.valor_aberto_centavos);
   const origemNaoResolvida = item.origem_detalhada === "ORIGEM_NAO_RESOLVIDA";
   const contextoOutro = item.contexto_principal === "OUTRO";
+  const migracaoStatus = upper(item.migracao_conta_interna_status);
 
   if (statusBruto === "CANCELADA" && saldoAberto > 0) {
     return { tipo: "Status cancelado com saldo aberto", criticidade: 100 + item.atraso_dias };
@@ -1071,6 +1161,13 @@ function buildInconsistenciaMeta(item: CobrancaListaItem): {
 
   if (!item.pessoa_id) {
     return { tipo: "Pessoa devedora pendente", criticidade: 85 + item.atraso_dias };
+  }
+
+  if (migracaoStatus === "AMBIGUO") {
+    return {
+      tipo: item.migracao_conta_interna_observacao ?? "Migracao da conta interna em revisao",
+      criticidade: 75 + item.atraso_dias,
+    };
   }
 
   if (origemNaoResolvida && contextoOutro) {
@@ -1476,8 +1573,6 @@ async function fetchFlatRows(
   input: ContasReceberAuditoriaInput,
 ): Promise<FlatRow[]> {
   const visao = normalizeContasReceberVisao(input.visao);
-  const baseSelect =
-    "cobranca_id,pessoa_id,vencimento,status_cobranca,origem_tipo,origem_id,valor_centavos,valor_recebido_centavos,saldo_aberto_centavos,competencia_ano_mes,dias_atraso,situacao_saas,bucket_vencimento";
 
   let idsInconsistentes: number[] = [];
   if (visao === "INCONSISTENCIAS") {
@@ -1495,7 +1590,7 @@ async function fetchFlatRows(
 
   let query = supabase
     .from("vw_financeiro_contas_receber_flat")
-    .select(baseSelect)
+    .select(FLAT_SELECT_BASE)
     .order("vencimento", { ascending: true, nullsFirst: false })
     .order("cobranca_id", { ascending: false });
 
@@ -1565,10 +1660,10 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     .filter((row) => upper(row.origem_tipo) === "CAFE" && typeof row.origem_id === "number")
     .map((row) => row.origem_id as number);
   const origemLojaIds = baseRows
-    .filter((row) => upper(row.origem_tipo) === "LOJA" && typeof row.origem_id === "number")
+    .filter((row) => ["LOJA", "LOJA_VENDA"].includes(upper(row.origem_tipo)) && typeof row.origem_id === "number")
     .map((row) => row.origem_id as number);
   const matriculaIds = baseRows
-    .filter((row) => upper(row.origem_tipo) === "MATRICULA" && typeof row.origem_id === "number")
+    .filter((row) => upper(row.origem_tipo).startsWith("MATRICULA") && typeof row.origem_id === "number")
     .map((row) => row.origem_id as number);
   const faturaOrigemIds = baseRows
     .filter(
@@ -1582,8 +1677,8 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     supabase,
     cobrancaIds,
     "erro_carregar_cobrancas",
-    "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes,expurgada,expurgada_em,expurgada_por,expurgo_motivo",
-    "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes",
+    COBRANCA_SELECT_CANONICAL_WITH_EXPURGO,
+    COBRANCA_SELECT_LEGACY,
   );
 
   const pessoas = await selectMany<PessoaRow>(async (chunk) => {
@@ -1637,8 +1732,10 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
   const faturaIds = faturas.map((fatura) => fatura.id);
   const contaConexaoIds = Array.from(
     new Set(
-      faturas
-        .map((fatura) => numberOrNull(fatura.conta_conexao_id))
+      [
+        ...faturas.map((fatura) => numberOrNull(fatura.conta_conexao_id)),
+        ...cobrancas.map((cobranca) => numberOrNull(cobranca.conta_interna_id)),
+      ]
         .filter((id): id is number => typeof id === "number" && id > 0),
     ),
   );
@@ -1902,11 +1999,11 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
       : undefined);
   const lojaVenda =
     maps.lojaVendasPorCobranca.get(baseRow.cobranca_id)?.[0] ??
-    (upper(cobranca?.origem_tipo) === "LOJA" && typeof cobranca?.origem_id === "number"
+    (["LOJA", "LOJA_VENDA"].includes(upper(cobranca?.origem_tipo)) && typeof cobranca?.origem_id === "number"
       ? maps.lojaVendasPorId.get(cobranca.origem_id)
       : undefined);
   const matricula =
-    upper(cobranca?.origem_tipo) === "MATRICULA" && typeof cobranca?.origem_id === "number"
+    upper(cobranca?.origem_tipo).startsWith("MATRICULA") && typeof cobranca?.origem_id === "number"
       ? maps.matriculas.get(cobranca.origem_id)
       : undefined;
   const turmaAluno = matricula ? maps.turmaAlunoPorMatricula.get(matricula.id) : undefined;
@@ -1926,6 +2023,27 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     turma,
   });
   const ultimaDataRecebimento = normalizeDate(recebimentos[0]?.data_pagamento);
+  const origemAgrupadorTipo = textOrNull(cobranca?.origem_agrupador_tipo);
+  const origemAgrupadorId = numberOrNull(cobranca?.origem_agrupador_id);
+  const origemItemTipo = textOrNull(cobranca?.origem_item_tipo);
+  const origemItemId = numberOrNull(cobranca?.origem_item_id);
+  const contaInternaId = numberOrNull(cobranca?.conta_interna_id) ?? numberOrNull(conta?.id);
+  const migracaoContaInternaStatus = textOrNull(cobranca?.migracao_conta_interna_status);
+  const migracaoContaInternaObservacao = textOrNull(cobranca?.migracao_conta_interna_observacao);
+  const display = buildCanonicalOriginDisplay({
+    origemAgrupadorTipo,
+    origemAgrupadorId,
+    origemItemTipo,
+    origemItemId,
+    contaInternaId,
+    origemLabel: textOrNull(cobranca?.origem_label),
+    migracaoContaInternaStatus,
+    legacyOrigemTipo: textOrNull(cobranca?.origem_tipo) ?? baseRow.origem_tipo,
+    legacyOrigemSubtipo: textOrNull(cobranca?.origem_subtipo),
+    legacyOrigemId: numberOrNull(cobranca?.origem_id) ?? baseRow.origem_id,
+    legacyDescricao: textOrNull(cobranca?.descricao),
+    legacyLabel: classificacao.origemLabel,
+  });
 
   const item: CobrancaListaItem = {
     cobranca_id: baseRow.cobranca_id,
@@ -1933,7 +2051,7 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     pessoa_nome: pessoaNome(baseRow.pessoa_id, pessoa),
     contexto_principal: classificacao.contextoPrincipal,
     origem_detalhada: classificacao.origemDetalhada,
-    origem_label: classificacao.origemLabel,
+    origem_label: display.principal,
     vencimento: baseRow.vencimento,
     competencia_ano_mes:
       textOrNull(cobranca?.competencia_ano_mes) ??
@@ -1955,6 +2073,24 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     quantidade_recebimentos: recebimentos.length,
     tipo_inconsistencia: null,
     criticidade_inconsistencia: 0,
+    origem_agrupador_tipo: origemAgrupadorTipo,
+    origem_agrupador_id: origemAgrupadorId,
+    origem_item_tipo: origemItemTipo,
+    origem_item_id: origemItemId,
+    conta_interna_id: contaInternaId,
+    migracao_conta_interna_status: migracaoContaInternaStatus,
+    migracao_conta_interna_observacao: migracaoContaInternaObservacao,
+    origem_secundaria: display.secondary,
+    origem_tecnica: display.technical,
+    origem_badge_label: display.badgeLabel,
+    origem_badge_tone: display.badgeTone,
+    origemAgrupadorTipo: origemAgrupadorTipo,
+    origemAgrupadorId: origemAgrupadorId,
+    origemItemTipo: origemItemTipo,
+    origemItemId: origemItemId,
+    contaInternaId,
+    origemLabel: display.principal,
+    migracaoContaInternaStatus,
   };
 
   const inconsistencia = buildInconsistenciaMeta(item);
@@ -1962,6 +2098,84 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
   item.criticidade_inconsistencia = inconsistencia.criticidade;
 
   return item;
+}
+
+function buildVisibleItems(baseRows: FlatRow[], maps: DataMaps, visao: ContasReceberVisao): CobrancaListaItem[] {
+  return baseRows
+    .filter((row) => cobrancaVisivel(maps.cobrancas.get(row.cobranca_id), visao))
+    .map((row) => buildItem(row, maps));
+}
+
+async function fetchFlatRowsByPessoa(
+  supabase: SupabaseClient,
+  pessoaId: number,
+  onlyOverdue: boolean,
+): Promise<FlatRow[]> {
+  let query = supabase
+    .from("vw_financeiro_contas_receber_flat")
+    .select(FLAT_SELECT_BASE)
+    .eq("pessoa_id", pessoaId)
+    .gt("saldo_aberto_centavos", 0)
+    .not("status_cobranca", "ilike", "CANCELADA")
+    .order("vencimento", { ascending: true, nullsFirst: false })
+    .order("cobranca_id", { ascending: false });
+
+  if (onlyOverdue) {
+    query = query.eq("situacao_saas", "VENCIDA");
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`erro_listar_contas_receber_por_pessoa: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown[]).map((row) => {
+    const typed = row as Record<string, unknown>;
+    return {
+      cobranca_id: numberOrZero(typed.cobranca_id),
+      pessoa_id: numberOrNull(typed.pessoa_id),
+      vencimento: normalizeDate(typed.vencimento),
+      status_cobranca: textOrNull(typed.status_cobranca),
+      origem_tipo: textOrNull(typed.origem_tipo),
+      origem_id: numberOrNull(typed.origem_id),
+      valor_centavos: numberOrZero(typed.valor_centavos),
+      valor_recebido_centavos: numberOrZero(typed.valor_recebido_centavos),
+      saldo_aberto_centavos: numberOrZero(typed.saldo_aberto_centavos),
+      competencia_ano_mes: textOrNull(typed.competencia_ano_mes),
+      dias_atraso: numberOrZero(typed.dias_atraso),
+      situacao_saas: textOrNull(typed.situacao_saas),
+      bucket_vencimento: textOrNull(typed.bucket_vencimento),
+    };
+  });
+}
+
+export async function listarTitulosVencidosPorPessoa(
+  supabase: SupabaseClient,
+  pessoaId: number,
+): Promise<CobrancaListaItem[]> {
+  const baseRows = await fetchFlatRowsByPessoa(supabase, pessoaId, true);
+  const maps = await buildMaps(supabase, baseRows);
+  const items = buildVisibleItems(baseRows, maps, "VENCIDAS");
+  return items.sort((left, right) => {
+    const byDate = compareNullableDateAsc(left.vencimento, right.vencimento);
+    if (byDate !== 0) return byDate;
+    if (right.atraso_dias !== left.atraso_dias) return right.atraso_dias - left.atraso_dias;
+    return left.cobranca_id - right.cobranca_id;
+  });
+}
+
+export async function listarCobrancasEmAbertoPorPessoa(
+  supabase: SupabaseClient,
+  pessoaId: number,
+): Promise<CobrancaListaItem[]> {
+  const baseRows = await fetchFlatRowsByPessoa(supabase, pessoaId, false);
+  const maps = await buildMaps(supabase, baseRows);
+  const items = buildVisibleItems(baseRows, maps, "VENCIDAS");
+  return items.sort((left, right) => {
+    const byDate = compareNullableDateAsc(left.vencimento, right.vencimento);
+    if (byDate !== 0) return byDate;
+    return left.pessoa_nome.localeCompare(right.pessoa_nome);
+  });
 }
 
 async function buildPerdasCancelamento(
@@ -2107,8 +2321,7 @@ export async function listarContasReceberAuditoria(
 
   const baseRows = await fetchFlatRows(supabase, input);
   const maps = await buildMaps(supabase, baseRows);
-  const linhasVisiveis = baseRows.filter((row) => cobrancaVisivel(maps.cobrancas.get(row.cobranca_id), visao));
-  const itensEnriquecidos = linhasVisiveis.map((row) => buildItem(row, maps));
+  const itensEnriquecidos = buildVisibleItems(baseRows, maps, visao);
   const filtradosPorContexto = filtrarPorContexto(itensEnriquecidos, contexto);
   const filtradosPorBusca = filtrarPorBusca(filtradosPorContexto, input.q ?? null);
   const ordenados = sortItemsByOrdenacao(filtradosPorBusca, visao, ordenacao);

@@ -1,8 +1,47 @@
-﻿import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { listarCobrancasEmAbertoPorPessoa } from "@/lib/financeiro/contas-receber-auditoria";
 import { requireUser } from "@/lib/supabase/api-auth";
 
 type RouteParams = {
   params: Promise<{ id?: string }>;
+};
+
+type PessoaResumoFinanceiroViewRow = {
+  pessoa_id: number | null;
+  responsavel_financeiro_id: number | null;
+};
+
+type PessoaBasicaRow = {
+  id: number;
+  nome: string | null;
+};
+
+type CobrancaCanceladaRow = {
+  id: number;
+  pessoa_id: number;
+  vencimento: string | null;
+  valor_centavos: number;
+  status: string;
+  origem_tipo: string | null;
+  origem_subtipo: string | null;
+  origem_id: number | null;
+  created_at: string | null;
+  expurgada?: boolean | null;
+};
+
+type ContaConexaoPessoaRow = {
+  id: number;
+  pessoa_titular_id: number;
+};
+
+type FaturaResumoRow = {
+  id: number;
+  conta_conexao_id: number;
+  periodo_referencia: string;
+  data_vencimento: string | null;
+  valor_total_centavos: number;
+  status: string;
+  created_at: string | null;
 };
 
 type ResumoFinanceiroResponse = {
@@ -46,6 +85,31 @@ type ResumoFinanceiroResponse = {
     situacao_saas: string;
     bucket_vencimento: string;
   }>;
+  cobrancas_canonicas: Array<{
+    cobranca_id: number;
+    vencimento: string | null;
+    valor_centavos: number;
+    saldo_aberto_centavos: number;
+    dias_atraso: number;
+    status_cobranca: string;
+    situacao_saas: string;
+    bucket_vencimento: string | null;
+    origem_tipo: string | null;
+    origem_subtipo: string | null;
+    origem_id: number | null;
+    origem_label: string;
+    origem_secundaria: string | null;
+    origem_tecnica: string | null;
+    origem_badge_label: string | null;
+    origem_badge_tone: string;
+    origemAgrupadorTipo: string | null;
+    origemAgrupadorId: number | null;
+    origemItemTipo: string | null;
+    origemItemId: number | null;
+    contaInternaId: number | null;
+    origemLabel: string;
+    migracaoContaInternaStatus: string | null;
+  }>;
   faturas_credito_conexao: Array<{
     id: number;
     conta_conexao_id: number;
@@ -84,17 +148,16 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (auth instanceof NextResponse) return auth;
 
   const { supabase } = auth;
-
   const { data: resumo, error: resumoErr } = await supabase
     .from("vw_pessoa_resumo_financeiro")
-    .select("*")
+    .select("pessoa_id,responsavel_financeiro_id")
     .eq("pessoa_id", pessoaId)
-    .maybeSingle();
+    .maybeSingle<PessoaResumoFinanceiroViewRow>();
 
   if (resumoErr) {
     return NextResponse.json(
       { error: "erro_resumo_financeiro_view", details: resumoErr.message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -102,80 +165,44 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "pessoa_nao_encontrada" }, { status: 404 });
   }
 
-  const responsavelId = Number(resumo.responsavel_financeiro_id) || pessoaId;
+  const responsavelId = Number(resumo.responsavel_financeiro_id ?? pessoaId) || pessoaId;
+  const hojeISO = new Date().toISOString().slice(0, 10);
 
   const { data: responsavel } = await supabase
     .from("pessoas")
     .select("id,nome")
     .eq("id", responsavelId)
-    .maybeSingle();
+    .maybeSingle<PessoaBasicaRow>();
 
-  const { data: cobrancasRaw, error: cobrancasErr } = await supabase
-    .from("vw_financeiro_contas_receber_flat")
-    .select(
-      "cobranca_id,pessoa_id,vencimento,status_cobranca,origem_tipo,origem_id,created_at,valor_centavos,saldo_aberto_centavos,situacao_saas,bucket_vencimento"
-    )
-    .eq("pessoa_id", responsavelId)
-    .gt("saldo_aberto_centavos", 0)
-    .not("status_cobranca", "ilike", "CANCELADA")
-    .order("vencimento", { ascending: true, nullsFirst: false });
+  let cobrancasCanonicas = await listarCobrancasEmAbertoPorPessoa(supabase, responsavelId);
+  cobrancasCanonicas = cobrancasCanonicas.filter((item) => item.valor_aberto_centavos > 0);
 
-  if (cobrancasErr) {
-    return NextResponse.json(
-      { error: "erro_listar_cobrancas_saas", details: cobrancasErr.message },
-      { status: 500 }
-    );
-  }
-
-  const hojeISO = new Date().toISOString().slice(0, 10);
-  const cobrancas = (cobrancasRaw ?? []).map((c) => {
-    const dataVenc = (c as any).vencimento ?? null;
-    const saldoAberto = Number((c as any).saldo_aberto_centavos ?? 0);
-    const situacaoSaas = String((c as any).situacao_saas ?? "");
-
-    return {
-      id: Number((c as any).cobranca_id),
-      devedor_pessoa_id: Number((c as any).pessoa_id),
-      data_vencimento: dataVenc ? String(dataVenc) : null,
-      valor_centavos: saldoAberto,
-      status: String((c as any).status_cobranca ?? ""),
-      origem_tipo: String((c as any).origem_tipo ?? ""),
-      origem_subtipo: String((c as any).origem_id ?? ""),
-      vencida: situacaoSaas === "VENCIDA" || isVencida(dataVenc ? String(dataVenc) : null, hojeISO),
-      created_at: (c as any).created_at ? String((c as any).created_at) : null,
-    };
-  });
-
-  const { data: cobrancasMatriculaRaw, error: errM } = await supabase
-    .from("vw_financeiro_contas_receber_flat")
-    .select(
-      "cobranca_id,vencimento,valor_centavos,saldo_aberto_centavos,dias_atraso,status_cobranca,origem_tipo,origem_id,situacao_saas,bucket_vencimento"
-    )
-    .eq("pessoa_id", responsavelId)
-    .eq("origem_tipo", "MATRICULA")
-    .gt("saldo_aberto_centavos", 0)
-    .not("status_cobranca", "ilike", "CANCELADA")
-    .order("vencimento", { ascending: true, nullsFirst: false });
-
-  if (errM) {
-    return NextResponse.json(
-      { error: "erro_listar_cobrancas_matricula", details: errM.message },
-      { status: 500 }
-    );
-  }
-
-  const cobrancasMatricula = (cobrancasMatriculaRaw ?? []).map((c) => ({
-    cobranca_id: Number((c as any).cobranca_id),
-    vencimento: (c as any).vencimento ? String((c as any).vencimento) : null,
-    valor_centavos: Number((c as any).valor_centavos ?? 0),
-    saldo_aberto_centavos: Number((c as any).saldo_aberto_centavos ?? 0),
-    dias_atraso: Number((c as any).dias_atraso ?? 0),
-    status_cobranca: String((c as any).status_cobranca ?? ""),
-    origem_tipo: String((c as any).origem_tipo ?? ""),
-    origem_id: Number((c as any).origem_id ?? 0) || null,
-    situacao_saas: String((c as any).situacao_saas ?? ""),
-    bucket_vencimento: String((c as any).bucket_vencimento ?? ""),
+  const cobrancas = cobrancasCanonicas.map((item) => ({
+    id: item.cobranca_id,
+    devedor_pessoa_id: item.pessoa_id ?? responsavelId,
+    data_vencimento: item.vencimento,
+    valor_centavos: item.valor_aberto_centavos,
+    status: item.status_cobranca ?? "",
+    origem_tipo: item.origem_tipo ?? "",
+    origem_subtipo: item.origem_subtipo ?? "",
+    vencida: item.status_interno === "VENCIDA" || isVencida(item.vencimento, hojeISO),
+    created_at: null,
   }));
+
+  const cobrancasMatricula = cobrancasCanonicas
+    .filter((item) => item.origemItemTipo === "MATRICULA" || (item.origem_tipo ?? "").startsWith("MATRICULA"))
+    .map((item) => ({
+      cobranca_id: item.cobranca_id,
+      vencimento: item.vencimento,
+      valor_centavos: item.valor_centavos,
+      saldo_aberto_centavos: item.valor_aberto_centavos,
+      dias_atraso: item.atraso_dias,
+      status_cobranca: item.status_cobranca ?? "",
+      origem_tipo: item.origem_tipo ?? "",
+      origem_id: item.origem_id,
+      situacao_saas: item.status_interno ?? "",
+      bucket_vencimento: item.bucket ?? "",
+    }));
 
   const { data: canceladasRaw, error: canceladasErr } = await supabase
     .from("cobrancas")
@@ -190,27 +217,27 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (canceladasErr) {
     return NextResponse.json(
       { error: "erro_listar_cobrancas_canceladas_expurgaveis", details: canceladasErr.message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
-  const cobrancasCanceladasExpurgaveis = (canceladasRaw ?? []).map((c) => ({
-    cobranca_id: Number((c as any).id),
-    devedor_pessoa_id: Number((c as any).pessoa_id),
-    data_vencimento: (c as any).vencimento ? String((c as any).vencimento) : null,
-    valor_centavos: Number((c as any).valor_centavos ?? 0),
-    status: String((c as any).status ?? ""),
-    origem_tipo: String((c as any).origem_tipo ?? ""),
-    origem_subtipo: String((c as any).origem_subtipo ?? ""),
-    origem_id: Number((c as any).origem_id ?? 0) || null,
-    created_at: (c as any).created_at ? String((c as any).created_at) : null,
+  const cobrancasCanceladasExpurgaveis = ((canceladasRaw ?? []) as CobrancaCanceladaRow[]).map((cobranca) => ({
+    cobranca_id: cobranca.id,
+    devedor_pessoa_id: cobranca.pessoa_id,
+    data_vencimento: cobranca.vencimento,
+    valor_centavos: cobranca.valor_centavos,
+    status: cobranca.status,
+    origem_tipo: cobranca.origem_tipo ?? "",
+    origem_subtipo: cobranca.origem_subtipo ?? "",
+    origem_id: cobranca.origem_id ?? null,
+    created_at: cobranca.created_at,
   }));
 
   const { data: conta } = await supabase
     .from("credito_conexao_contas")
     .select("id,pessoa_titular_id")
     .eq("pessoa_titular_id", responsavelId)
-    .maybeSingle();
+    .maybeSingle<ContaConexaoPessoaRow>();
 
   let faturas: ResumoFinanceiroResponse["faturas_credito_conexao"] = [];
   if (conta?.id) {
@@ -221,50 +248,63 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       .in("status", ["ABERTA", "EM_ATRASO", "PENDENTE", "OPEN"])
       .order("data_vencimento", { ascending: true });
 
-    faturas = (faturasRaw ?? []).map((f) => {
-      const dataVenc = (f as any).data_vencimento ?? null;
-      const valorTotal = Number((f as any).valor_total_centavos ?? 0);
-      return {
-        id: Number((f as any).id),
-        conta_conexao_id: Number((f as any).conta_conexao_id),
-        periodo_referencia: String((f as any).periodo_referencia ?? ""),
-        data_vencimento: dataVenc ? String(dataVenc) : null,
-        valor_total_centavos: valorTotal,
-        status: String((f as any).status ?? ""),
-        vencida: valorTotal > 0 && isVencida(dataVenc ? String(dataVenc) : null, hojeISO),
-        created_at: (f as any).created_at ? String((f as any).created_at) : null,
-      };
-    });
+    faturas = ((faturasRaw ?? []) as FaturaResumoRow[]).map((fatura) => ({
+      id: fatura.id,
+      conta_conexao_id: fatura.conta_conexao_id,
+      periodo_referencia: fatura.periodo_referencia,
+      data_vencimento: fatura.data_vencimento,
+      valor_total_centavos: fatura.valor_total_centavos,
+      status: fatura.status,
+      vencida: fatura.valor_total_centavos > 0 && isVencida(fatura.data_vencimento, hojeISO),
+      created_at: fatura.created_at,
+    }));
   }
 
   const payload: ResumoFinanceiroResponse = {
     pessoa_id: pessoaId,
     responsavel_financeiro_id: responsavelId,
-    responsavel_financeiro: responsavel
-      ? { id: responsavel.id, nome: responsavel.nome ?? null }
-      : null,
-    cobrancas: cobrancas.sort((a, b) =>
-      (a.data_vencimento ?? "").localeCompare(b.data_vencimento ?? "")
-    ),
+    responsavel_financeiro: responsavel ? { id: responsavel.id, nome: responsavel.nome ?? null } : null,
+    cobrancas: cobrancas.sort((left, right) => (left.data_vencimento ?? "").localeCompare(right.data_vencimento ?? "")),
     cobrancas_canceladas_expurgaveis: cobrancasCanceladasExpurgaveis,
     cobrancas_matricula: cobrancasMatricula,
+    cobrancas_canonicas: cobrancasCanonicas.map((item) => ({
+      cobranca_id: item.cobranca_id,
+      vencimento: item.vencimento,
+      valor_centavos: item.valor_centavos,
+      saldo_aberto_centavos: item.valor_aberto_centavos,
+      dias_atraso: item.atraso_dias,
+      status_cobranca: item.status_cobranca ?? "",
+      situacao_saas: item.status_interno ?? "",
+      bucket_vencimento: item.bucket,
+      origem_tipo: item.origem_tipo,
+      origem_subtipo: item.origem_subtipo,
+      origem_id: item.origem_id,
+      origem_label: item.origem_label,
+      origem_secundaria: item.origem_secundaria,
+      origem_tecnica: item.origem_tecnica,
+      origem_badge_label: item.origem_badge_label,
+      origem_badge_tone: item.origem_badge_tone,
+      origemAgrupadorTipo: item.origemAgrupadorTipo,
+      origemAgrupadorId: item.origemAgrupadorId,
+      origemItemTipo: item.origemItemTipo,
+      origemItemId: item.origemItemId,
+      contaInternaId: item.contaInternaId,
+      origemLabel: item.origemLabel,
+      migracaoContaInternaStatus: item.migracaoContaInternaStatus,
+    })),
     faturas_credito_conexao: faturas,
     agregados: {
-      cobrancas_pendentes_qtd: cobrancas.length,
-      cobrancas_pendentes_total_centavos: cobrancas.reduce(
-        (acc, c) => acc + Number(c.valor_centavos ?? 0),
-        0
+      cobrancas_pendentes_qtd: cobrancasCanonicas.length,
+      cobrancas_pendentes_total_centavos: cobrancasCanonicas.reduce(
+        (acc, item) => acc + Number(item.valor_aberto_centavos ?? 0),
+        0,
       ),
-      cobrancas_vencidas_qtd: cobrancas.filter((c) => c.vencida).length,
+      cobrancas_vencidas_qtd: cobrancasCanonicas.filter((item) => item.status_interno === "VENCIDA").length,
       faturas_pendentes_qtd: faturas.length,
-      faturas_pendentes_total_centavos: faturas.reduce(
-        (acc, f) => acc + Number(f.valor_total_centavos ?? 0),
-        0
-      ),
-      faturas_vencidas_qtd: faturas.filter((f) => f.vencida).length,
+      faturas_pendentes_total_centavos: faturas.reduce((acc, item) => acc + Number(item.valor_total_centavos ?? 0), 0),
+      faturas_vencidas_qtd: faturas.filter((item) => item.vencida).length,
     },
   };
 
   return NextResponse.json(payload);
 }
-

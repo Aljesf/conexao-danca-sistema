@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { buildCanonicalOriginDisplay } from "@/lib/financeiro/cobranca-origem-canonica";
 import { createClient } from "@/lib/supabase/server";
 import { MatriculaAuditoriaAcoes } from "./_components/MatriculaAuditoriaAcoes";
 
@@ -10,12 +11,23 @@ type PageProps = {
 type CobrancaDetalhe = {
   id: number;
   pessoa_id: number | null;
+  descricao: string | null;
   origem_tipo: string | null;
+  origem_subtipo: string | null;
   origem_id: number | null;
   status: string | null;
   valor_centavos: number | null;
   vencimento: string | null;
   created_at: string | null;
+  updated_at: string | null;
+  origem_agrupador_tipo: string | null;
+  origem_agrupador_id: number | null;
+  origem_item_tipo: string | null;
+  origem_item_id: number | null;
+  conta_interna_id: number | null;
+  origem_label: string | null;
+  migracao_conta_interna_status: string | null;
+  migracao_conta_interna_observacao: string | null;
 };
 
 type PessoaBasica = {
@@ -51,6 +63,12 @@ type MatriculaResumoUi = {
   fallbackMessage: string | null;
 };
 
+const COBRANCA_SELECT_CANONICAL =
+  "id,pessoa_id,descricao,origem_tipo,origem_subtipo,origem_id,status,valor_centavos,vencimento,created_at,updated_at,origem_agrupador_tipo,origem_agrupador_id,origem_item_tipo,origem_item_id,conta_interna_id,origem_label,migracao_conta_interna_status,migracao_conta_interna_observacao";
+
+const COBRANCA_SELECT_LEGACY =
+  "id,pessoa_id,descricao,origem_tipo,origem_subtipo,origem_id,status,valor_centavos,vencimento,created_at,updated_at";
+
 function isMatriculaOrigem(origemTipo: string | null): boolean {
   const normalized = String(origemTipo ?? "").trim().toUpperCase();
   return normalized === "MATRICULA" || normalized.startsWith("MATRICULA_");
@@ -68,17 +86,69 @@ function brlFromCentavos(value: number | null | undefined): string {
   });
 }
 
+async function carregarCobrancaDetalhe(supabase: Awaited<ReturnType<typeof createClient>>, cobrancaId: number) {
+  const primary = await supabase
+    .from("cobrancas")
+    .select(COBRANCA_SELECT_CANONICAL)
+    .eq("id", cobrancaId)
+    .maybeSingle<CobrancaDetalhe>();
+
+  if (!primary.error) {
+    return primary;
+  }
+
+  if (!isMissingColumnError(primary.error)) {
+    return primary;
+  }
+
+  const fallback = await supabase
+    .from("cobrancas")
+    .select(COBRANCA_SELECT_LEGACY)
+    .eq("id", cobrancaId)
+    .maybeSingle<
+      Pick<
+        CobrancaDetalhe,
+        | "id"
+        | "pessoa_id"
+        | "descricao"
+        | "origem_tipo"
+        | "origem_subtipo"
+        | "origem_id"
+        | "status"
+        | "valor_centavos"
+        | "vencimento"
+        | "created_at"
+        | "updated_at"
+      >
+    >();
+
+  if (fallback.error || !fallback.data) {
+    return { data: null, error: fallback.error };
+  }
+
+  return {
+    data: {
+      ...fallback.data,
+      origem_agrupador_tipo: null,
+      origem_agrupador_id: null,
+      origem_item_tipo: null,
+      origem_item_id: null,
+      conta_interna_id: null,
+      origem_label: null,
+      migracao_conta_interna_status: null,
+      migracao_conta_interna_observacao: null,
+    } satisfies CobrancaDetalhe,
+    error: null,
+  };
+}
+
 export default async function CobrancaDetalhePage({ params }: PageProps) {
   const { id } = await params;
   const idNum = Number(id);
   if (!Number.isFinite(idNum) || idNum <= 0) return notFound();
 
   const supabase = await createClient();
-  const { data: cobranca, error } = await supabase
-    .from("cobrancas")
-    .select("id,pessoa_id,origem_tipo,origem_id,status,valor_centavos,vencimento,created_at")
-    .eq("id", idNum)
-    .maybeSingle<CobrancaDetalhe>();
+  const { data: cobranca, error } = await carregarCobrancaDetalhe(supabase, idNum);
 
   if (error) {
     return (
@@ -100,18 +170,36 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
       ? await supabase.from("pessoas").select("id,nome").eq("id", pessoaId).maybeSingle<PessoaBasica>()
       : { data: null };
 
+  const origemDisplay = buildCanonicalOriginDisplay({
+    origemAgrupadorTipo: cobranca.origem_agrupador_tipo,
+    origemAgrupadorId: cobranca.origem_agrupador_id,
+    origemItemTipo: cobranca.origem_item_tipo,
+    origemItemId: cobranca.origem_item_id,
+    contaInternaId: cobranca.conta_interna_id,
+    origemLabel: cobranca.origem_label,
+    migracaoContaInternaStatus: cobranca.migracao_conta_interna_status,
+    legacyOrigemTipo: cobranca.origem_tipo,
+    legacyOrigemSubtipo: cobranca.origem_subtipo,
+    legacyOrigemId: cobranca.origem_id,
+    legacyDescricao: cobranca.descricao,
+  });
+
   let matriculaResumo: MatriculaResumoUi | null = null;
-  const origemId = Number(cobranca.origem_id ?? 0);
-  if (isMatriculaOrigem(cobranca.origem_tipo) && origemId > 0) {
+  const origemMatriculaId =
+    String(cobranca.origem_item_tipo ?? "").trim().toUpperCase() === "MATRICULA"
+      ? Number(cobranca.origem_item_id ?? cobranca.origem_id ?? 0)
+      : Number(isMatriculaOrigem(cobranca.origem_tipo) ? cobranca.origem_id ?? 0 : 0);
+
+  if (origemMatriculaId > 0) {
     const { data: matricula, error: matriculaErr } = await supabase
       .from("matriculas")
       .select("id,pessoa_id,responsavel_financeiro_id,vinculo_id,ano_referencia,status,data_matricula")
-      .eq("id", origemId)
+      .eq("id", origemMatriculaId)
       .maybeSingle<MatriculaDetalhe>();
 
     if (matriculaErr) {
       matriculaResumo = {
-        id: origemId,
+        id: origemMatriculaId,
         aluna: null,
         responsavel_financeiro: null,
         turmas: [],
@@ -122,7 +210,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
       };
     } else if (!matricula) {
       matriculaResumo = {
-        id: origemId,
+        id: origemMatriculaId,
         aluna: null,
         responsavel_financeiro: null,
         turmas: [],
@@ -301,20 +389,35 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
                 {brlFromCentavos(cobranca.valor_centavos)}
               </div>
               <div>
-                <span className="font-medium">Origem:</span> {cobranca.origem_tipo ?? "-"}{" "}
-                {cobranca.origem_id ? `(#${cobranca.origem_id})` : ""}
+                <span className="font-medium">Conta interna:</span>{" "}
+                {cobranca.conta_interna_id ? `#${cobranca.conta_interna_id}` : "Nao associada"}
               </div>
             </div>
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-            <div className="font-semibold text-slate-900">Origem detalhada</div>
-
-            {!matriculaResumo ? (
-              <div className="mt-2 text-slate-700">
-                {cobranca.origem_tipo ?? "SEM_ORIGEM"} {cobranca.origem_id ? `(#${cobranca.origem_id})` : ""}
+            <div className="font-semibold text-slate-900">{origemDisplay.principal}</div>
+            {origemDisplay.secondary ? <div className="mt-1 text-xs text-slate-500">{origemDisplay.secondary}</div> : null}
+            {origemDisplay.badgeLabel || origemDisplay.technical ? (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {origemDisplay.badgeLabel ? (
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                      origemDisplay.badgeTone === "success"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : origemDisplay.badgeTone === "warning"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-slate-200 bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {origemDisplay.badgeLabel}
+                  </span>
+                ) : null}
+                {origemDisplay.technical ? <span className="text-[11px] text-slate-400">{origemDisplay.technical}</span> : null}
               </div>
-            ) : (
+            ) : null}
+
+            {matriculaResumo ? (
               <div className="mt-2 space-y-2">
                 <div>
                   <span className="font-medium">Matricula:</span> #{matriculaResumo.id}
@@ -367,7 +470,30 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
                   ) : null}
                 </div>
               </div>
-            )}
+            ) : null}
+
+            <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
+              <div>
+                <span className="font-medium">Origem bruta:</span> {cobranca.origem_tipo ?? "-"}
+                {cobranca.origem_id ? ` (#${cobranca.origem_id})` : ""}
+              </div>
+              <div>
+                <span className="font-medium">Item canonico:</span> {cobranca.origem_item_tipo ?? "-"}
+                {cobranca.origem_item_id ? ` (#${cobranca.origem_item_id})` : ""}
+              </div>
+              <div>
+                <span className="font-medium">Agrupador:</span> {cobranca.origem_agrupador_tipo ?? "-"}
+                {cobranca.origem_agrupador_id ? ` (#${cobranca.origem_agrupador_id})` : ""}
+              </div>
+              <div>
+                <span className="font-medium">Descricao legada:</span> {cobranca.descricao ?? "-"}
+              </div>
+              {cobranca.migracao_conta_interna_observacao ? (
+                <div className="md:col-span-2">
+                  <span className="font-medium">Observacao da migracao:</span> {cobranca.migracao_conta_interna_observacao}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
