@@ -1,60 +1,29 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
-import { GerarReciboButton } from "@/components/documentos/recibos/GerarReciboButton";
-import { PessoaResumoFinanceiro } from "@/components/pessoas/PessoaResumoFinanceiro";
-import { formatBRLFromCents } from "@/lib/formatters/money";
+import { CobrancaAuditDetail } from "@/components/financeiro/contas-receber/CobrancaAuditDetail";
+import { CobrancasTable } from "@/components/financeiro/contas-receber/CobrancasTable";
+import { DevedoresTable } from "@/components/financeiro/contas-receber/DevedoresTable";
+import { PerdasCancelamentoCard } from "@/components/financeiro/contas-receber/PerdasCancelamentoCard";
+import { FinancePageShell } from "@/components/financeiro/FinancePageShell";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { formatDateISO } from "@/lib/formatters/date";
+import { formatBRLFromCents } from "@/lib/formatters/money";
+import type {
+  CobrancaListaItem,
+  ContasReceberAuditoriaPayload,
+  DevedorAuditoriaItem,
+  DetalheCobrancaAuditoria,
+} from "@/lib/financeiro/contas-receber-auditoria";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shadcn/ui";
 
-type Cobranca = {
-  id: number;
-  descricao: string;
-  valor_centavos: number;
-  vencimento: string | null;
-  status: string;
-  situacao_saas?: "QUITADA" | "EM_ABERTO" | "VENCIDA" | null;
-  competencia_ano_mes?: string | null;
-  bucket_vencimento?: string | null;
-  dias_atraso?: number;
-  pessoa_id?: number | null;
-  pessoa_nome?: string | null;
-  centro_custo_nome?: string | null;
-  centro_custo_codigo?: string | null;
-  total_recebido_centavos: number;
-  saldo_centavos: number;
-  ultimo_recebimento_id?: number | null;
-  recebimentos_qtd?: number;
-};
-
-type ContaReceberSaasRow = {
-  cobranca_id: number;
-  pessoa_id: number | null;
-  pessoa_nome: string | null;
-  data_vencimento: string | null;
-  status_cobranca: string | null;
-  origem_tipo: string | null;
-  origem_id: number | null;
-  valor_total_centavos: number;
-  valor_recebido_centavos: number;
-  saldo_aberto_centavos: number;
-  competencia_ano_mes: string | null;
-  dias_atraso: number;
-  situacao_saas: "QUITADA" | "EM_ABERTO" | "VENCIDA";
-  bucket_vencimento: string | null;
-  ultimo_recebimento_id?: number | null;
-  recebimentos_qtd?: number;
-};
-
-type DevedorAtrasadoRow = {
-  pessoa_id: number;
-  titulos_vencidos_qtd: number;
-  total_vencido_centavos: number;
-  vencimento_mais_antigo: string | null;
-  maior_dias_atraso: number;
-  pessoa: { id: number; nome: string | null };
+type ApiResponse = ContasReceberAuditoriaPayload & {
+  ok: boolean;
+  error?: string;
+  details?: string;
 };
 
 type TituloVencido = {
@@ -71,1375 +40,414 @@ type TituloVencido = {
   situacao_saas: string | null;
 };
 
-type CobrancaAvulsa = {
-  id: number;
-  pessoa_id: number;
-  origem_tipo: string;
-  origem_id: number;
-  valor_centavos: number;
-  vencimento: string | null;
-  status: string;
-  meio: string;
-  motivo_excecao: string;
-  observacao?: string | null;
-  criado_em?: string | null;
-  pago_em?: string | null;
-};
-
-type ReceberItem = {
-  tipo: "COBRANCA" | "AVULSA";
-  id: number;
-  pessoa_label: string;
-  vencimento: string | null;
-  valor_centavos: number;
-  status: string;
-  origem_label: string;
-  cobranca?: Cobranca;
-  avulsa?: CobrancaAvulsa;
-};
-
-type ContasReceberListResponse = {
-  ok: boolean;
-  visao?: string;
-  itens?: ContaReceberSaasRow[];
-  kpis?: { total_aberto_centavos?: number };
-  total?: number;
+type TitulosResponse = {
+  ok?: boolean;
   error?: string;
-};
-
-type DevedoresResponse = {
-  ok: boolean;
-  itens?: DevedorAtrasadoRow[];
-  total_vencido_centavos?: number;
-  error?: string;
-};
-
-type AvulsasResponse = {
-  ok: boolean;
-  data?: CobrancaAvulsa[];
-  error?: string;
+  titulos?: TituloVencido[];
 };
 
 type ReceberResponse = {
-  ok: boolean;
+  ok?: boolean;
   error?: string;
 };
 
 type ReceberForm = {
-  valor_centavos: number;
   data_pagamento: string;
-  forma_pagamento_codigo: string;
-  metodo_pagamento_texto: string;
-  cartao_maquina_id: number | null;
-  cartao_bandeira_id: number | null;
-  cartao_numero_parcelas: number | null;
-  observacoes: string;
+  metodo_pagamento: "PIX" | "DINHEIRO";
 };
 
-type FormaPagamento = {
-  id: number;
-  codigo: string;
-  nome: string;
-  tipo_base: string;
-  ativo: boolean;
-};
+const VISOES = ["VENCIDAS", "AVENCER", "RECEBIDAS", "INCONSISTENCIAS"] as const;
+const SITUACOES = ["TODAS", "VENCIDA", "EM_ABERTO", "QUITADA"] as const;
+const STATUS = ["TODOS", "PENDENTE", "RECEBIDO", "CANCELADA"] as const;
+const BUCKETS = ["", "VENCIDA", "A_VENCER_7", "A_VENCER_30", "FUTURA", "SEM_VENCIMENTO"] as const;
 
-type MaquinaOp = { id: number; nome?: string | null };
-type BandeiraOp = { id: number; nome?: string | null; codigo?: string | null };
-
-const SITUACAO_OPCOES = ["TODAS", "VENCIDA", "EM_ABERTO", "QUITADA"] as const;
-const STATUS_INTERNO_OPCOES = ["TODOS", "PENDENTE", "RECEBIDO", "PAGO", "PAGA"] as const;
-type QuickPreset = "VENCIDAS" | "A_VENCER_7" | "A_VENCER_30" | "MES_ATUAL" | "PROXIMO_MES" | "LIMPAR";
-type VisaoSaas = "VENCIDAS" | "AVENCER" | "RECEBIDAS" | "INCONSISTENCIAS";
-
-function hojeISO() {
+function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function anoMesAtual() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+function KpiCard({ title, value, subtitle }: { title: string; value: string; subtitle: string }) {
+  return (
+    <Card className="border-slate-200 bg-white">
+      <CardContent className="space-y-1 py-5">
+        <p className="text-xs uppercase tracking-wide text-slate-500">{title}</p>
+        <p className="text-2xl font-semibold text-slate-900">{value}</p>
+        <p className="text-sm text-slate-600">{subtitle}</p>
+      </CardContent>
+    </Card>
+  );
 }
 
-function anoMesProximo() {
-  const d = new Date();
-  d.setMonth(d.getMonth() + 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-export default function ContasReceberPage() {
-  const pessoaHref = (id: number) => `/pessoas/${id}`;
-
-  const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function AdminContasReceberPage() {
+  const [q, setQ] = useState("");
+  const [visao, setVisao] = useState<(typeof VISOES)[number]>("VENCIDAS");
+  const [situacao, setSituacao] = useState<(typeof SITUACOES)[number]>("TODAS");
+  const [status, setStatus] = useState<(typeof STATUS)[number]>("TODOS");
+  const [bucket, setBucket] = useState<string>("");
+  const [competencia, setCompetencia] = useState("");
+  const [vencimentoInicio, setVencimentoInicio] = useState("");
+  const [vencimentoFim, setVencimentoFim] = useState("");
+  const [page, setPage] = useState(1);
+  const [payload, setPayload] = useState<ContasReceberAuditoriaPayload | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [situacaoFiltro, setSituacaoFiltro] = useState<(typeof SITUACAO_OPCOES)[number]>("TODAS");
-  const [statusInternoFiltro, setStatusInternoFiltro] = useState<(typeof STATUS_INTERNO_OPCOES)[number]>("TODOS");
-  const [visao, setVisao] = useState<VisaoSaas>("VENCIDAS");
-  const [bucketFiltro, setBucketFiltro] = useState<string>("");
-  const [competenciaFiltro, setCompetenciaFiltro] = useState<string>("");
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
-  const [totalAbertoKpi, setTotalAbertoKpi] = useState<number>(0);
-  const [devedores, setDevedores] = useState<DevedorAtrasadoRow[]>([]);
-  const [devedoresLoading, setDevedoresLoading] = useState(false);
-  const [devedoresError, setDevedoresError] = useState<string | null>(null);
-  const [totalVencidoKpi, setTotalVencidoKpi] = useState<number>(0);
-  const [modalCobranca, setModalCobranca] = useState<Cobranca | null>(null);
-  const [salvando, setSalvando] = useState(false);
-  const [formas, setFormas] = useState<FormaPagamento[]>([]);
-  const [maquinas, setMaquinas] = useState<MaquinaOp[]>([]);
-  const [bandeiras, setBandeiras] = useState<BandeiraOp[]>([]);
-  const [refsErro, setRefsErro] = useState<string | null>(null);
-  const [refsLoading, setRefsLoading] = useState(false);
-  const [avulsas, setAvulsas] = useState<CobrancaAvulsa[]>([]);
-  const [avulsasLoading, setAvulsasLoading] = useState(false);
-  const [avulsasError, setAvulsasError] = useState<string | null>(null);
-  const [form, setForm] = useState<ReceberForm>({
-    valor_centavos: 0,
-    data_pagamento: hojeISO(),
-    forma_pagamento_codigo: "",
-    metodo_pagamento_texto: "",
-    cartao_maquina_id: null,
-    cartao_bandeira_id: null,
-    cartao_numero_parcelas: null,
-    observacoes: "",
-  });
-  const [modalAvulsa, setModalAvulsa] = useState<CobrancaAvulsa | null>(null);
-  const [avulsaForma, setAvulsaForma] = useState<string>("PIX");
-  const [avulsaValor, setAvulsaValor] = useState<number>(0);
-  const [avulsaComprovante, setAvulsaComprovante] = useState<string>("");
-  const [avulsaPayError, setAvulsaPayError] = useState<string | null>(null);
-  const [avulsaPayLoading, setAvulsaPayLoading] = useState(false);
-  const [openPessoaResumo, setOpenPessoaResumo] = useState(false);
-  const [pessoaResumoId, setPessoaResumoId] = useState<number | null>(null);
-  const [pessoaResumoNome, setPessoaResumoNome] = useState<string | null>(null);
-  const [openTitulos, setOpenTitulos] = useState(false);
-  const [titulosPessoaId, setTitulosPessoaId] = useState<number | null>(null);
-  const [titulosPessoaNome, setTitulosPessoaNome] = useState<string | null>(null);
+  const [showAllDevedores, setShowAllDevedores] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<DetalheCobrancaAuditoria | null>(null);
+  const [receberOpen, setReceberOpen] = useState(false);
+  const [receberItem, setReceberItem] = useState<CobrancaListaItem | null>(null);
+  const [receberForm, setReceberForm] = useState<ReceberForm>({ data_pagamento: todayIso(), metodo_pagamento: "PIX" });
+  const [receberLoading, setReceberLoading] = useState(false);
+  const [titulosOpen, setTitulosOpen] = useState(false);
+  const [titulosPessoa, setTitulosPessoa] = useState<DevedorAuditoriaItem | null>(null);
+  const [titulos, setTitulos] = useState<TituloVencido[]>([]);
   const [titulosLoading, setTitulosLoading] = useState(false);
   const [titulosError, setTitulosError] = useState<string | null>(null);
-  const [titulos, setTitulos] = useState<TituloVencido[]>([]);
 
-  const loadCobrancas = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set("visao", visao);
-      if (situacaoFiltro && situacaoFiltro !== "TODAS") params.set("situacao", situacaoFiltro);
-      if (statusInternoFiltro && statusInternoFiltro !== "TODOS") params.set("status", statusInternoFiltro);
-      if (bucketFiltro) params.set("bucket", bucketFiltro);
-      if (competenciaFiltro) params.set("competencia", competenciaFiltro);
-      if (dataInicio) params.set("vencimento_inicio", dataInicio);
-      if (dataFim) params.set("vencimento_fim", dataFim);
-      params.set("page", "1");
-      params.set("page_size", "100");
-
-      const res = await fetch(`/api/financeiro/contas-a-receber?${params.toString()}`);
-      const json = (await res.json()) as ContasReceberListResponse;
-      if (!res.ok || !json?.ok || !Array.isArray(json.itens)) {
-        throw new Error(json?.error || "Erro ao carregar contas a receber.");
-      }
-
-      const mapped: Cobranca[] = json.itens.map((row) => {
-        const origemLabel = row.origem_tipo
-          ? `${row.origem_tipo}${row.origem_id ? ` #${row.origem_id}` : ""}`
-          : `Cobranca #${row.cobranca_id}`;
-
-        return {
-          id: row.cobranca_id,
-          descricao: origemLabel,
-          valor_centavos: Number(row.valor_total_centavos || 0),
-          vencimento: row.data_vencimento,
-          status: row.status_cobranca || "PENDENTE",
-          situacao_saas: row.situacao_saas,
-          pessoa_id: row.pessoa_id,
-          pessoa_nome: row.pessoa_nome,
-          total_recebido_centavos: Number(row.valor_recebido_centavos || 0),
-          saldo_centavos: Number(row.saldo_aberto_centavos || 0),
-          competencia_ano_mes: row.competencia_ano_mes,
-          bucket_vencimento: row.bucket_vencimento,
-          dias_atraso: Number(row.dias_atraso || 0),
-          ultimo_recebimento_id: typeof row.ultimo_recebimento_id === "number" ? row.ultimo_recebimento_id : null,
-          recebimentos_qtd: Number(row.recebimentos_qtd || 0),
-        };
-      });
-
-      setCobrancas(mapped);
-      setTotalAbertoKpi(Number(json?.kpis?.total_aberto_centavos ?? 0));
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro inesperado ao carregar contas.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [visao, situacaoFiltro, statusInternoFiltro, bucketFiltro, competenciaFiltro, dataInicio, dataFim]);
-
-  const loadDevedores = useCallback(async () => {
-    setDevedoresLoading(true);
-    setDevedoresError(null);
-    try {
-      const res = await fetch("/api/financeiro/contas-a-receber/devedores-atrasados?limit=10", {
-        cache: "no-store",
-      });
-      const json = (await res.json()) as DevedoresResponse;
-      if (!res.ok || !json?.ok || !Array.isArray(json.itens)) {
-        throw new Error(json?.error || "Erro ao carregar devedores atrasados.");
-      }
-      setDevedores(json.itens);
-      setTotalVencidoKpi(Number(json.total_vencido_centavos ?? 0));
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao carregar devedores atrasados.";
-      setDevedoresError(message);
-      setDevedores([]);
-      setTotalVencidoKpi(0);
-    } finally {
-      setDevedoresLoading(false);
-    }
-  }, []);
-
-  const loadAvulsas = useCallback(async () => {
-    setAvulsasLoading(true);
-    setAvulsasError(null);
-    try {
-      const params = new URLSearchParams();
-      const statusMap = statusInternoFiltro === "RECEBIDO" ? "PAGO" : statusInternoFiltro;
-      if (statusMap && statusMap !== "TODOS") params.set("status", statusMap);
-      if (dataInicio) params.set("data_inicio", dataInicio);
-      if (dataFim) params.set("data_fim", dataFim);
-
-      const res = await fetch(`/api/financeiro/cobrancas-avulsas?${params.toString()}`);
-      const json = (await res.json()) as AvulsasResponse;
-      if (!res.ok || !json?.ok || !Array.isArray(json.data)) {
-        throw new Error(json?.error || "Erro ao carregar cobrancas avulsas.");
-      }
-      setAvulsas(json.data);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao carregar cobrancas avulsas.";
-      setAvulsasError(message);
-      setAvulsas([]);
-    } finally {
-      setAvulsasLoading(false);
-    }
-  }, [statusInternoFiltro, dataInicio, dataFim]);
-
-  const loadRefs = useCallback(async () => {
-    setRefsLoading(true);
-    setRefsErro(null);
-    try {
-      const [formasRes, maquinasRes, bandeirasRes] = await Promise.all([
-        fetch("/api/financeiro/formas-pagamento/dicionario"),
-        fetch("/api/financeiro/cartao/maquinas/opcoes"),
-        fetch("/api/financeiro/cartao/bandeiras/opcoes"),
-      ]);
-      const formasJson = await formasRes.json().catch(() => ({}));
-      const maquinasJson = await maquinasRes.json().catch(() => ({}));
-      const bandeirasJson = await bandeirasRes.json().catch(() => ({}));
-
-      if (formasRes.ok && formasJson?.ok && Array.isArray(formasJson.formas)) {
-        setFormas(formasJson.formas);
-      } else {
-        setRefsErro("Falha ao carregar dicionario de formas de pagamento.");
-      }
-      if (maquinasRes.ok && maquinasJson?.ok && Array.isArray(maquinasJson.maquinas)) {
-        setMaquinas(maquinasJson.maquinas);
-      }
-      if (bandeirasRes.ok && bandeirasJson?.ok && Array.isArray(bandeirasJson.bandeiras)) {
-        setBandeiras(bandeirasJson.bandeiras);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao carregar bases auxiliares.";
-      setRefsErro(message);
-    } finally {
-      setRefsLoading(false);
-    }
-  }, []);
+  const qDeferred = useDeferredValue(q);
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("visao", visao);
+    if (situacao !== "TODAS") params.set("situacao", situacao);
+    if (status !== "TODOS") params.set("status", status);
+    if (bucket) params.set("bucket", bucket);
+    if (competencia) params.set("competencia", competencia);
+    if (vencimentoInicio) params.set("vencimento_inicio", vencimentoInicio);
+    if (vencimentoFim) params.set("vencimento_fim", vencimentoFim);
+    if (qDeferred.trim()) params.set("q", qDeferred.trim());
+    params.set("page", String(page));
+    params.set("page_size", "50");
+    return params.toString();
+  }, [bucket, competencia, page, qDeferred, situacao, status, vencimentoFim, vencimentoInicio, visao]);
 
   useEffect(() => {
-    void loadCobrancas();
-    void loadRefs();
-    void loadAvulsas();
-    void loadDevedores();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const controller = new AbortController();
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/financeiro/contas-a-receber?${queryString}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const json = (await response.json().catch(() => null)) as ApiResponse | null;
+        if (!response.ok || !json?.ok) {
+          throw new Error(json?.error ?? "erro_carregar_contas_receber");
+        }
+        setPayload(json);
+      } catch (loadError: unknown) {
+        if ((loadError as { name?: string }).name === "AbortError") return;
+        setPayload(null);
+        setError(loadError instanceof Error ? loadError.message : "erro_carregar_contas_receber");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void load();
+    return () => controller.abort();
+  }, [queryString]);
 
   useEffect(() => {
-    void loadCobrancas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visao]);
+    setPage(1);
+  }, [bucket, competencia, qDeferred, situacao, status, vencimentoFim, vencimentoInicio, visao]);
 
-  function aplicarPreset(p: QuickPreset) {
-    if (p === "LIMPAR") {
-      setSituacaoFiltro("TODAS");
-      setBucketFiltro("");
-      setCompetenciaFiltro("");
-      setDataInicio("");
-      setDataFim("");
-      return;
-    }
-
-    if (p === "VENCIDAS") {
-      setSituacaoFiltro("VENCIDA");
-      setBucketFiltro("VENCIDA");
-      setCompetenciaFiltro("");
-      setDataInicio("");
-      setDataFim("");
-      return;
-    }
-
-    if (p === "A_VENCER_7") {
-      setSituacaoFiltro("EM_ABERTO");
-      setBucketFiltro("A_VENCER_7");
-      setCompetenciaFiltro("");
-      setDataInicio("");
-      setDataFim("");
-      return;
-    }
-
-    if (p === "A_VENCER_30") {
-      setSituacaoFiltro("EM_ABERTO");
-      setBucketFiltro("A_VENCER_30");
-      setCompetenciaFiltro("");
-      setDataInicio("");
-      setDataFim("");
-      return;
-    }
-
-    if (p === "MES_ATUAL") {
-      setSituacaoFiltro("TODAS");
-      setCompetenciaFiltro(anoMesAtual());
-      setBucketFiltro("");
-      setDataInicio("");
-      setDataFim("");
-      return;
-    }
-
-    setSituacaoFiltro("TODAS");
-    setCompetenciaFiltro(anoMesProximo());
-    setBucketFiltro("");
-    setDataInicio("");
-    setDataFim("");
-  }
-
-  function abrirModal(c: Cobranca) {
-    setModalCobranca(c);
-    setForm({
-      valor_centavos: c.saldo_centavos || c.valor_centavos,
-      data_pagamento: hojeISO(),
-      forma_pagamento_codigo: "",
-      metodo_pagamento_texto: "",
-      cartao_maquina_id: null,
-      cartao_bandeira_id: null,
-      cartao_numero_parcelas: null,
-      observacoes: "",
-    });
-  }
-
-  function abrirResumoPessoa(pessoaId: number, pessoaNome?: string | null) {
-    if (!Number.isFinite(pessoaId) || pessoaId <= 0) return;
-    setPessoaResumoId(pessoaId);
-    setPessoaResumoNome(pessoaNome ?? null);
-    setOpenPessoaResumo(true);
-  }
-
-  async function abrirTitulosVencidos(pessoaId: number, pessoaNome?: string | null) {
-    if (!Number.isFinite(pessoaId) || pessoaId <= 0) return;
-    setTitulosPessoaId(pessoaId);
-    setTitulosPessoaNome(pessoaNome ?? null);
-    setOpenTitulos(true);
+  async function abrirTitulos(item: DevedorAuditoriaItem) {
+    setTitulosPessoa(item);
+    setTitulosOpen(true);
     setTitulosLoading(true);
     setTitulosError(null);
     setTitulos([]);
     try {
-      const res = await fetch(`/api/financeiro/contas-a-receber/vencidas/por-pessoa?pessoa_id=${pessoaId}`, {
+      const response = await fetch(`/api/financeiro/contas-a-receber/vencidas/por-pessoa?pessoa_id=${item.pessoa_id}`, {
         cache: "no-store",
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || `erro_http_${res.status}`);
+      const json = (await response.json().catch(() => null)) as TitulosResponse | null;
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.error ?? "erro_carregar_titulos");
       }
-      setTitulos(Array.isArray(json?.titulos) ? (json.titulos as TituloVencido[]) : []);
-    } catch (err: unknown) {
-      setTitulos([]);
-      setTitulosError(err instanceof Error ? err.message : "falha_ao_carregar_titulos_vencidos");
+      setTitulos(json.titulos ?? []);
+    } catch (loadError: unknown) {
+      setTitulosError(loadError instanceof Error ? loadError.message : "erro_carregar_titulos");
     } finally {
       setTitulosLoading(false);
     }
   }
 
-  function abrirRecebimentoPorTitulo(titulo: TituloVencido) {
-    const origemLabel = titulo.origem_tipo
-      ? `${titulo.origem_tipo}${titulo.origem_id ? ` #${titulo.origem_id}` : ""}`
-      : `Cobranca #${titulo.cobranca_id}`;
-    const situacao =
-      titulo.situacao_saas === "VENCIDA" || titulo.situacao_saas === "EM_ABERTO" || titulo.situacao_saas === "QUITADA"
-        ? titulo.situacao_saas
-        : null;
-
-    setOpenTitulos(false);
-    abrirModal({
-      id: titulo.cobranca_id,
-      descricao: origemLabel,
-      valor_centavos: Number(titulo.valor_centavos || 0),
-      vencimento: titulo.vencimento,
-      status: titulo.status_cobranca || "PENDENTE",
-      situacao_saas: situacao,
-      bucket_vencimento: titulo.bucket_vencimento ?? null,
-      dias_atraso: Number(titulo.dias_atraso || 0),
-      pessoa_id: Number(titulo.pessoa_id || 0) || null,
-      pessoa_nome: titulosPessoaNome ?? null,
-      total_recebido_centavos: Math.max(
-        Number(titulo.valor_centavos || 0) - Number(titulo.saldo_aberto_centavos || 0),
-        0
-      ),
-      saldo_centavos: Number(titulo.saldo_aberto_centavos || 0),
-    });
+  async function abrirAuditoria(item: CobrancaListaItem) {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetailError(null);
+    setDetailData(null);
+    try {
+      const response = await fetch(`/api/financeiro/contas-a-receber?${queryString}&detalhe_cobranca_id=${item.cobranca_id}`, {
+        cache: "no-store",
+      });
+      const json = (await response.json().catch(() => null)) as ApiResponse | null;
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.error ?? "erro_carregar_detalhe");
+      }
+      setDetailData(json.detalhe_cobranca);
+    } catch (loadError: unknown) {
+      setDetailError(loadError instanceof Error ? loadError.message : "erro_carregar_detalhe");
+    } finally {
+      setDetailLoading(false);
+    }
   }
 
-  function abrirModalAvulsa(c: CobrancaAvulsa) {
-    setModalAvulsa(c);
-    setAvulsaForma("PIX");
-    setAvulsaValor(c.valor_centavos);
-    setAvulsaComprovante("");
-    setAvulsaPayError(null);
+  function abrirRecebimento(item: CobrancaListaItem) {
+    setReceberItem(item);
+    setReceberForm({ data_pagamento: todayIso(), metodo_pagamento: "PIX" });
+    setReceberOpen(true);
   }
 
-  const formaSelecionada = useMemo(
-    () => formas.find((f) => f.codigo === form.forma_pagamento_codigo),
-    [formas, form.forma_pagamento_codigo]
-  );
-  const isCartao = useMemo(() => {
-    const tipo = (formaSelecionada?.tipo_base || "").toUpperCase();
-    return tipo.includes("CARTAO") || tipo.includes("CREDITO") || tipo.includes("DEBITO");
-  }, [formaSelecionada]);
-
-  async function salvarRecebimento(e: React.FormEvent) {
-    e.preventDefault();
-    if (!modalCobranca) return;
-    setSalvando(true);
+  async function confirmarRecebimento() {
+    if (!receberItem) return;
+    setReceberLoading(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = {
-        cobranca_id: modalCobranca.id,
-        valor_centavos: form.valor_centavos,
-        data_pagamento: form.data_pagamento,
-        forma_pagamento_codigo: form.forma_pagamento_codigo || undefined,
-        metodo_pagamento: form.metodo_pagamento_texto || undefined,
-        observacoes: form.observacoes || null,
-      };
-      if (isCartao) {
-        payload.cartao_maquina_id = form.cartao_maquina_id || null;
-        payload.cartao_bandeira_id = form.cartao_bandeira_id || null;
-        payload.cartao_numero_parcelas = form.cartao_numero_parcelas || null;
-      }
-
-      const res = await fetch("/api/financeiro/contas-receber/receber", {
+      const response = await fetch("/api/financeiro/contas-receber/receber", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          cobranca_id: receberItem.cobranca_id,
+          valor_centavos: receberItem.valor_aberto_centavos,
+          data_pagamento: receberForm.data_pagamento,
+          metodo_pagamento: receberForm.metodo_pagamento,
+        }),
       });
-      const json = (await res.json()) as ReceberResponse;
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Erro ao registrar recebimento.");
+      const json = (await response.json().catch(() => null)) as ReceberResponse | null;
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.error ?? "erro_registrar_recebimento");
       }
-      setModalCobranca(null);
-      await loadCobrancas();
-      await loadAvulsas();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao registrar recebimento.";
-      setError(message);
+      setReceberOpen(false);
+      setReceberItem(null);
+      setPage(1);
+      const refreshed = await fetch(`/api/financeiro/contas-a-receber?${queryString}`, { cache: "no-store" });
+      const refreshedJson = (await refreshed.json().catch(() => null)) as ApiResponse | null;
+      if (refreshed.ok && refreshedJson?.ok) setPayload(refreshedJson);
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : "erro_registrar_recebimento");
     } finally {
-      setSalvando(false);
+      setReceberLoading(false);
     }
   }
 
-  async function registrarPagamentoAvulsa() {
-    if (!modalAvulsa) return;
-    setAvulsaPayLoading(true);
-    setAvulsaPayError(null);
-
-    try {
-      const res = await fetch(
-        `/api/financeiro/cobrancas-avulsas/${modalAvulsa.id}/registrar-recebimento`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            forma_pagamento: avulsaForma,
-            valor_pago_centavos: avulsaValor,
-            comprovante: avulsaComprovante || null,
-          }),
-        },
-      );
-      const json = (await res.json().catch(() => ({}))) as ReceberResponse & {
-        message?: string;
-        details?: string;
-      };
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.message || json?.details || json?.error || "Erro ao registrar pagamento.");
-      }
-
-      setModalAvulsa(null);
-      await loadAvulsas();
-      await loadCobrancas();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Erro ao registrar pagamento.";
-      setAvulsaPayError(message);
-    } finally {
-      setAvulsaPayLoading(false);
-    }
-  }
-
-  const receberItens = useMemo<ReceberItem[]>(() => {
-    const itensCobranca = cobrancas.map((c) => {
-      const saldo = Number(c.saldo_centavos || 0);
-      return {
-        tipo: "COBRANCA" as const,
-        id: c.id,
-        pessoa_label: c.pessoa_nome ? `${c.pessoa_nome} (#${c.pessoa_id ?? "--"})` : c.pessoa_id ? `Pessoa #${c.pessoa_id}` : "--",
-        vencimento: c.vencimento,
-        valor_centavos: saldo > 0 ? saldo : Number(c.valor_centavos || 0),
-        status: c.status,
-        origem_label: c.descricao,
-        cobranca: c,
-      };
-    });
-
-    const itensAvulsas = avulsas.map((a) => {
-      const origem =
-        a.origem_tipo && a.origem_id
-          ? `${a.origem_tipo} #${a.origem_id}`
-          : a.origem_tipo || "Cobranca avulsa";
-      return {
-        tipo: "AVULSA" as const,
-        id: a.id,
-        pessoa_label: `Pessoa #${a.pessoa_id}`,
-        vencimento: a.vencimento,
-        valor_centavos: Number(a.valor_centavos || 0),
-        status: a.status,
-        origem_label: origem,
-        avulsa: a,
-      };
-    });
-
-    const itens = [...itensCobranca, ...itensAvulsas];
-    itens.sort((a, b) => {
-      const va = a.vencimento || "9999-12-31";
-      const vb = b.vencimento || "9999-12-31";
-      if (va < vb) return -1;
-      if (va > vb) return 1;
-      return a.id - b.id;
-    });
-    const hoje = hojeISO();
-    return itens.filter((item) => {
-      if (item.tipo === "COBRANCA") {
-        const situacao = item.cobranca?.situacao_saas ?? null;
-        const statusInterno = String(item.status || "").toUpperCase();
-        if (visao === "VENCIDAS") return situacao === "VENCIDA";
-        if (visao === "AVENCER") return situacao === "EM_ABERTO";
-        if (visao === "RECEBIDAS") return situacao === "QUITADA";
-        return statusInterno === "CANCELADA";
-      }
-
-      const statusAvulsa = String(item.status || "").toUpperCase();
-      const vencimento = item.vencimento ?? null;
-      if (visao === "RECEBIDAS") {
-        return statusAvulsa === "PAGO" || statusAvulsa === "RECEBIDO" || statusAvulsa === "QUITADA";
-      }
-      if (visao === "INCONSISTENCIAS") return statusAvulsa === "CANCELADA";
-      if (visao === "VENCIDAS") return statusAvulsa === "PENDENTE" && Boolean(vencimento) && String(vencimento) < hoje;
-      return statusAvulsa === "PENDENTE" && (!vencimento || String(vencimento) >= hoje);
-    });
-  }, [cobrancas, avulsas, visao]);
-
-  const totalAberto = useMemo(() => {
-    return receberItens.reduce((acc, item) => {
-      if (item.tipo === "COBRANCA") {
-        const saldo = item.cobranca?.saldo_centavos ?? 0;
-        return acc + Math.max(0, Number(saldo));
-      }
-      const status = String(item.status || "").toUpperCase();
-      if (status === "PAGO" || status === "CANCELADO") return acc;
-      return acc + Math.max(0, Number(item.valor_centavos || 0));
-    }, 0);
-  }, [receberItens]);
-
-  const descricaoTabela = useMemo(() => {
-    if (visao === "VENCIDAS") return "Somente titulos vencidos.";
-    if (visao === "AVENCER") return "Somente titulos em aberto (a vencer).";
-    if (visao === "RECEBIDAS") return "Somente titulos quitados.";
-    return "Casos para auditoria.";
-  }, [visao]);
+  const resumo = payload?.resumo;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
-      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-800">Contas a receber</h1>
-            <p className="text-sm text-slate-600">
-              Central SaaS de cobrança com foco em vencimento, competência e recuperação de inadimplência.
-            </p>
-          </div>
-          <button
-            className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            onClick={() => {
-              loadCobrancas();
-              loadAvulsas();
-              loadDevedores();
-            }}
-            disabled={loading}
-          >
-            Recarregar
-          </button>
-        </div>
-        <FinanceHelpCard
-          subtitle="Operacao real"
-          items={[
-            "Filtros rapidos por vencimento: vencidas, 7 dias e 30 dias.",
-            "Filtro por competencia (YYYY-MM) para operacao mensal.",
-            "Card de principais devedores atrasados (top 10) para cobrança ativa.",
-          ]}
-        />
+    <FinancePageShell
+      title="Contas a Receber"
+      subtitle="Saúde financeira, auditoria por devedor e origem operacional das dívidas."
+      actions={
+        <Button type="button" variant="secondary" onClick={() => { setQ(""); setBucket(""); setCompetencia(""); setSituacao("TODAS"); setStatus("TODOS"); setVencimentoInicio(""); setVencimentoFim(""); setVisao("VENCIDAS"); }}>
+          Limpar filtros
+        </Button>
+      }
+    >
+      <FinanceHelpCard
+        items={[
+          "Use os cards de contexto para entender onde o saldo aberto realmente nasce.",
+          "A lista de devedores sempre considera títulos vencidos com saldo em aberto.",
+          "A coluna de origem detalhada mostra a leitura operacional mais próxima da dívida real.",
+          "Cobranças de fatura do Cartão Conexão podem abrir a composição completa no detalhe auditável.",
+        ]}
+      />
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("VENCIDAS")}>
-            Vencidas
-          </button>
-          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("A_VENCER_7")}>
-            Vence em 7 dias
-          </button>
-          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("A_VENCER_30")}>
-            Vence em 30 dias
-          </button>
-          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("MES_ATUAL")}>
-            Mes atual
-          </button>
-          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("PROXIMO_MES")}>
-            Proximo mes
-          </button>
-          <button className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" onClick={() => aplicarPreset("LIMPAR")}>
-            Limpar
-          </button>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-5">
-          <label className="text-sm text-slate-700">
-            Situacao (SaaS)
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={situacaoFiltro}
-              onChange={(e) => setSituacaoFiltro(e.target.value as (typeof SITUACAO_OPCOES)[number])}
-            >
-              {SITUACAO_OPCOES.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
+      <Card className="border-slate-200 bg-white">
+        <CardHeader className="border-slate-100">
+          <CardTitle className="text-slate-900">Filtros e leitura</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Busca</span>
+            <Input value={q} onChange={(event) => setQ(event.target.value)} placeholder="Pessoa, origem, contexto..." />
+          </label>
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Visão</span>
+            <select className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm" value={visao} onChange={(event) => setVisao(event.target.value as (typeof VISOES)[number])}>
+              {VISOES.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <label className="text-sm text-slate-700">
-            Status interno (opcional)
-            <select
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={statusInternoFiltro}
-              onChange={(e) => setStatusInternoFiltro(e.target.value as (typeof STATUS_INTERNO_OPCOES)[number])}
-            >
-              {STATUS_INTERNO_OPCOES.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Situação</span>
+            <select className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm" value={situacao} onChange={(event) => setSituacao(event.target.value as (typeof SITUACOES)[number])}>
+              {SITUACOES.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </label>
-          <label className="text-sm text-slate-700">
-            Competencia (YYYY-MM)
-            <input
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              placeholder="2026-03"
-              value={competenciaFiltro}
-              onChange={(e) => setCompetenciaFiltro(e.target.value)}
-            />
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Status bruto</span>
+            <select className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as (typeof STATUS)[number])}>
+              {STATUS.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
           </label>
-          <label className="text-sm text-slate-700">
-            Vencimento inicio
-            <input
-              type="date"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-            />
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Bucket</span>
+            <select className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm" value={bucket} onChange={(event) => setBucket(event.target.value)}>
+              {BUCKETS.map((item) => <option key={item || "todos"} value={item}>{item || "Todos"}</option>)}
+            </select>
           </label>
-          <label className="text-sm text-slate-700">
-            Vencimento fim
-            <input
-              type="date"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-              value={dataFim}
-              onChange={(e) => setDataFim(e.target.value)}
-            />
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Competência</span>
+            <Input type="month" value={competencia} onChange={(event) => setCompetencia(event.target.value)} />
           </label>
-        </div>
-        <div className="mt-3 flex gap-2 text-sm">
-          <button
-            className="rounded-md bg-purple-600 px-3 py-2 text-white shadow-sm hover:bg-purple-500 disabled:opacity-60"
-            onClick={() => {
-              loadCobrancas();
-              loadAvulsas();
-              loadDevedores();
-            }}
-            disabled={loading}
-          >
-            Aplicar filtros
-          </button>
-          <div className="text-xs text-slate-500 flex items-center gap-2">
-            <span>Total em aberto:</span>
-            <span className="font-semibold text-slate-800">{formatBRLFromCents(totalAbertoKpi)}</span>
-          </div>
-          <div className="text-xs text-slate-500 flex items-center gap-2">
-            <span>Total em aberto (operacao):</span>
-            <span className="font-semibold text-slate-800">{formatBRLFromCents(totalAberto)}</span>
-          </div>
-          <div className="text-xs text-slate-500 flex items-center gap-2">
-            <span>Total vencido:</span>
-            <span className="font-semibold text-slate-800">{formatBRLFromCents(totalVencidoKpi)}</span>
-          </div>
-        </div>
-        {error ? (
-          <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {error}
-          </div>
-        ) : null}
-        {refsErro ? (
-          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
-            {refsErro} (usando fallback se necessario)
-          </div>
-        ) : null}
-        {refsLoading ? <div className="mt-2 text-xs text-slate-500">Carregando bases auxiliares...</div> : null}
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Vencimento inicial</span>
+            <Input type="date" value={vencimentoInicio} onChange={(event) => setVencimentoInicio(event.target.value)} />
+          </label>
+          <label className="space-y-1 text-sm text-slate-700">
+            <span>Vencimento final</span>
+            <Input type="date" value={vencimentoFim} onChange={(event) => setVencimentoFim(event.target.value)} />
+          </label>
+        </CardContent>
+      </Card>
+
+      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KpiCard title="Total aberto" value={formatBRLFromCents(resumo?.total_aberto_centavos ?? 0)} subtitle={loading ? "Atualizando..." : "Saldo aberto nos filtros atuais"} />
+        <KpiCard title="Total vencido" value={formatBRLFromCents(resumo?.total_vencido_centavos ?? 0)} subtitle="Saldo vencido em aberto" />
+        <KpiCard title="Total a vencer" value={formatBRLFromCents(resumo?.total_a_vencer_centavos ?? 0)} subtitle="Saldo ainda dentro do prazo" />
+        <KpiCard title="Cobranças listadas" value={String(payload?.paginacao.total ?? 0)} subtitle={`Página ${payload?.paginacao.page ?? 1} de ${payload?.paginacao.total_paginas ?? 1}`} />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800">Principais devedores atrasados</h2>
-            <p className="text-sm text-slate-600">Top 10 por saldo vencido para priorizar régua de cobrança.</p>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-slate-500">Total vencido (top)</div>
-            <div className="text-sm font-semibold text-slate-800">{formatBRLFromCents(totalVencidoKpi)}</div>
-          </div>
-        </div>
-
-        {devedoresError ? (
-          <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {devedoresError}
-          </div>
-        ) : null}
-
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-sm text-slate-800">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-left">Pessoa</th>
-                <th className="px-3 py-2 text-right">Titulos vencidos</th>
-                <th className="px-3 py-2 text-right">Total vencido</th>
-                <th className="px-3 py-2 text-right">Maior atraso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {devedoresLoading ? (
-                <tr>
-                  <td className="px-3 py-3 text-slate-600" colSpan={4}>
-                    Carregando devedores...
-                  </td>
-                </tr>
-              ) : devedores.length === 0 ? (
-                <tr>
-                  <td className="px-3 py-3 text-slate-600" colSpan={4}>
-                    Nenhum devedor atrasado encontrado.
-                  </td>
-                </tr>
-              ) : (
-                devedores.map((d) => (
-                  <tr key={d.pessoa_id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        className="text-left font-medium text-slate-900 hover:underline"
-                        onClick={() => abrirResumoPessoa(d.pessoa_id, d.pessoa?.nome ?? null)}
-                      >
-                        {d.pessoa?.nome ? `${d.pessoa.nome} (#${d.pessoa_id})` : `Pessoa #${d.pessoa_id}`}
-                      </button>
-                      <div className="text-xs text-slate-500">Vencimento mais antigo: {d.vencimento_mais_antigo ?? "--"}</div>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        className="rounded-md border px-2 py-1 text-xs hover:bg-slate-50"
-                        onClick={() => abrirTitulosVencidos(d.pessoa_id, d.pessoa?.nome ?? null)}
-                        title="Ver quais sao os titulos vencidos"
-                      >
-                        {d.titulos_vencidos_qtd}
-                      </button>
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold">{formatBRLFromCents(d.total_vencido_centavos)}</td>
-                    <td className="px-3 py-2 text-right">{d.maior_dias_atraso} dias</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KpiCard title="Escola" value={formatBRLFromCents(resumo?.total_por_contexto.escola ?? 0)} subtitle="Saldo aberto da Escola" />
+        <KpiCard title="Café" value={formatBRLFromCents(resumo?.total_por_contexto.cafe ?? 0)} subtitle="Saldo aberto do Café" />
+        <KpiCard title="Loja" value={formatBRLFromCents(resumo?.total_por_contexto.loja ?? 0)} subtitle="Saldo aberto da Loja" />
+        <KpiCard title="Outro" value={formatBRLFromCents(resumo?.total_por_contexto.outro ?? 0)} subtitle="Fallback técnico / origem mista" />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex flex-col gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-800">Lista de cobrancas</h2>
-            <p className="text-sm text-slate-600">{descricaoTabela}</p>
-          </div>
+      <DevedoresTable
+        items={payload?.devedores_lista ?? []}
+        showAll={showAllDevedores}
+        onToggleAll={() => setShowAllDevedores((current) => !current)}
+        onVerTitulos={abrirTitulos}
+      />
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={`rounded-lg border px-3 py-2 text-sm ${visao === "VENCIDAS" ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}
-              onClick={() => setVisao("VENCIDAS")}
-            >
-              Vencidas
-            </button>
-            <button
-              type="button"
-              className={`rounded-lg border px-3 py-2 text-sm ${visao === "AVENCER" ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}
-              onClick={() => setVisao("AVENCER")}
-            >
-              A vencer
-            </button>
-            <button
-              type="button"
-              className={`rounded-lg border px-3 py-2 text-sm ${visao === "RECEBIDAS" ? "bg-slate-900 text-white" : "hover:bg-slate-50"}`}
-              onClick={() => setVisao("RECEBIDAS")}
-            >
-              Recebidas
-            </button>
-            <button
-              type="button"
-              className={`rounded-lg border px-3 py-2 text-sm ${visao === "INCONSISTENCIAS" ? "bg-amber-600 text-white" : "hover:bg-slate-50"}`}
-              onClick={() => setVisao("INCONSISTENCIAS")}
-              title="Casos com status incoerente (ex.: cancelada com saldo)"
-            >
-              Inconsistencias
-            </button>
-          </div>
-        </div>
+      <CobrancasTable
+        items={payload?.cobrancas_lista ?? []}
+        page={payload?.paginacao.page ?? 1}
+        totalPages={payload?.paginacao.total_paginas ?? 1}
+        total={payload?.paginacao.total ?? 0}
+        onPageChange={(nextPage) => setPage(nextPage)}
+        onAuditar={abrirAuditoria}
+        onReceber={abrirRecebimento}
+      />
 
-        {avulsasError ? (
-          <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {avulsasError}
-          </div>
-        ) : null}
-        {loading || avulsasLoading ? (
-          <p className="text-sm text-slate-600">Carregando...</p>
-        ) : receberItens.length === 0 ? (
-          <p className="text-sm text-slate-600">Nenhum item encontrado para a visao selecionada.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm text-slate-800">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-600">
-                <tr>
-                  <th className="px-3 py-2 text-left">Tipo</th>
-                  <th className="px-3 py-2 text-left">Pessoa</th>
-                  <th className="px-3 py-2 text-left">Vencimento</th>
-                  <th className="px-3 py-2 text-left">Competencia/Bucket</th>
-                  <th className="px-3 py-2 text-right">Valor</th>
-                  <th className="px-3 py-2 text-center">Situacao</th>
-                  <th className="px-3 py-2 text-left">Origem</th>
-                  <th className="px-3 py-2 text-center">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receberItens.map((item) => {
-                  const isAvulsa = item.tipo === "AVULSA";
-                  const cobranca = item.cobranca;
-                  const avulsa = item.avulsa;
-                  const pessoaId = cobranca?.pessoa_id ?? avulsa?.pessoa_id ?? null;
-                  const vencidaAvulsa =
-                    avulsa?.vencimento && avulsa.vencimento < hojeISO() && avulsa.status === "PENDENTE";
-                  const statusLabel = vencidaAvulsa ? "VENCIDA" : item.status;
-                  const situacaoLabel = cobranca?.situacao_saas ?? statusLabel;
-                  const canReceiveCobranca =
-                    cobranca && !(cobranca.status === "RECEBIDO" || cobranca.saldo_centavos <= 0);
-                  return (
-                    <tr key={`${item.tipo}-${item.id}`} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="px-3 py-2 text-slate-700">{isAvulsa ? "Avulsa" : "Cobranca"}</td>
-                      <td className="px-3 py-2 text-slate-700">
-                        {pessoaId ? (
-                          <button
-                            type="button"
-                            className="text-left font-medium text-slate-900 hover:underline"
-                            onClick={() => abrirResumoPessoa(Number(pessoaId), cobranca?.pessoa_nome ?? null)}
-                          >
-                            {item.pessoa_label}
-                          </button>
-                        ) : (
-                          item.pessoa_label
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">
-                        {item.vencimento ? formatDateISO(item.vencimento) : "-"}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-600">
-                        {cobranca ? (
-                          <div>
-                            <div>Comp: {cobranca.competencia_ano_mes || "--"}</div>
-                            <div>Bucket: {cobranca.bucket_vencimento || "--"}</div>
-                            {cobranca.situacao_saas === "VENCIDA" &&
-                            Number(cobranca.saldo_centavos || 0) > 0 &&
-                            Number(cobranca.dias_atraso || 0) > 0 ? (
-                              <div className="text-rose-600">{cobranca.dias_atraso} dia(s) em atraso</div>
-                            ) : null}
-                          </div>
-                        ) : (
-                          "--"
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {formatBRLFromCents(item.valor_centavos)}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <div className="space-y-1">
-                          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                            {situacaoLabel}
-                          </span>
-                          <div className="text-[11px] text-slate-500">Interno: {item.status || "-"}</div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">{item.origem_label || "--"}</td>
-                      <td className="px-3 py-2 text-center">
-                        {isAvulsa ? (
-                          avulsa?.status === "PENDENTE" ? (
-                            <button
-                              className="rounded-md bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700"
-                              onClick={() => avulsa && abrirModalAvulsa(avulsa)}
-                            >
-                              Registrar recebimento
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-400">-</span>
-                          )
-                        ) : (
-                          <button
-                            className="rounded-md bg-purple-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
-                            disabled={!canReceiveCobranca}
-                            onClick={() => cobranca && abrirModal(cobranca)}
-                          >
-                            Registrar recebimento
-                          </button>
-                        )}
-                        {!isAvulsa && cobranca?.ultimo_recebimento_id ? (
-                          <div className="mt-2 flex justify-center">
-                            <GerarReciboButton
-                              recebimentoId={cobranca.ultimo_recebimento_id}
-                              label="Gerar recibo"
-                              className="flex flex-col items-center"
-                            />
-                          </div>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-      <Dialog open={openPessoaResumo} onOpenChange={setOpenPessoaResumo}>
-        <DialogContent className="max-w-5xl">
-          <div className="p-5">
-            <DialogHeader>
-              <DialogTitle>Resumo financeiro da pessoa</DialogTitle>
-              <DialogDescription>
-                {pessoaResumoId ? (
-                  <span className="inline-flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-slate-900">
-                      {pessoaResumoNome ? `${pessoaResumoNome} (#${pessoaResumoId})` : `Pessoa #${pessoaResumoId}`}
-                    </span>
-                    <Link className="text-slate-900 underline" href={pessoaHref(pessoaResumoId)} target="_blank">
-                      Abrir em nova aba
-                    </Link>
-                  </span>
-                ) : (
-                  <span>Selecione uma pessoa.</span>
-                )}
-              </DialogDescription>
-            </DialogHeader>
+      <PerdasCancelamentoCard items={payload?.perdas_cancelamento ?? []} />
 
-            <div className="mt-4 max-h-[75vh] overflow-auto rounded-xl border bg-white p-4">
-              {pessoaResumoId ? <PessoaResumoFinanceiro pessoaId={pessoaResumoId} /> : null}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-5xl p-0">
+          <DialogHeader>
+            <div className="border-b border-slate-100 px-6 py-5">
+              <DialogTitle>Detalhe da cobrança / auditoria</DialogTitle>
+              <DialogDescription>Trilha financeira, contexto real e composição de fatura quando aplicável.</DialogDescription>
             </div>
-
-            <div className="mt-4 flex justify-end">
-              <DialogClose asChild>
-                <button className="rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
-                  Fechar
-                </button>
-              </DialogClose>
-            </div>
-          </div>
+          </DialogHeader>
+          <CobrancaAuditDetail detalhe={detailData} loading={detailLoading} error={detailError} />
         </DialogContent>
       </Dialog>
-      <Dialog
-        open={openTitulos}
-        onOpenChange={(open) => {
-          setOpenTitulos(open);
-          if (!open) {
-            setTitulosError(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-5xl">
-          <div className="p-5">
-            <DialogHeader>
-              <DialogTitle>Titulos vencidos</DialogTitle>
-              <DialogDescription>
-                {titulosPessoaId ? (
-                  <span className="font-medium text-slate-900">
-                    {titulosPessoaNome ? `${titulosPessoaNome} (#${titulosPessoaId})` : `Pessoa #${titulosPessoaId}`}
-                  </span>
-                ) : null}
-              </DialogDescription>
-            </DialogHeader>
 
-            <div className="mt-4 max-h-[70vh] overflow-auto rounded-xl border bg-white">
+      <Dialog open={titulosOpen} onOpenChange={setTitulosOpen}>
+        <DialogContent className="max-w-4xl p-0">
+          <DialogHeader>
+            <div className="border-b border-slate-100 px-6 py-5">
+              <DialogTitle>Títulos vencidos</DialogTitle>
+              <DialogDescription>{titulosPessoa ? titulosPessoa.pessoa_nome : "Pessoa selecionada"}</DialogDescription>
+            </div>
+          </DialogHeader>
+          <div className="p-6">
+            {titulosLoading ? (
+              <div className="text-sm text-slate-500">Carregando títulos...</div>
+            ) : titulosError ? (
+              <div className="text-sm text-rose-700">{titulosError}</div>
+            ) : (
               <table className="min-w-full text-sm">
-                <thead className="text-xs uppercase text-slate-500">
-                  <tr className="border-b">
-                    <th className="px-3 py-2 text-left">Cobranca</th>
-                    <th className="px-3 py-2 text-left">Vencimento</th>
-                    <th className="px-3 py-2 text-right">Atraso</th>
-                    <th className="px-3 py-2 text-right">Valor</th>
-                    <th className="px-3 py-2 text-left">Origem</th>
-                    <th className="px-3 py-2 text-left">Status interno</th>
-                    <th className="px-3 py-2 text-right">Acao</th>
+                <thead>
+                  <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-3 font-medium">Cobrança</th>
+                    <th className="px-3 py-3 font-medium">Vencimento</th>
+                    <th className="px-3 py-3 font-medium">Atraso</th>
+                    <th className="px-3 py-3 font-medium">Origem</th>
+                    <th className="px-3 py-3 font-medium">Saldo</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {titulosLoading ? (
-                    <tr>
-                      <td className="px-3 py-3 text-slate-600" colSpan={7}>
-                        Carregando...
+                  {titulos.map((item) => (
+                    <tr key={item.cobranca_id} className="border-b border-slate-100 last:border-b-0">
+                      <td className="px-3 py-3 text-slate-700">#{item.cobranca_id}</td>
+                      <td className="px-3 py-3 text-slate-700">{formatDateISO(item.vencimento)}</td>
+                      <td className="px-3 py-3 text-slate-700">{item.dias_atraso} dias</td>
+                      <td className="px-3 py-3 text-slate-700">
+                        {item.origem_tipo ?? "--"}
+                        {item.origem_id ? ` #${item.origem_id}` : ""}
                       </td>
+                      <td className="px-3 py-3 text-slate-700">{formatBRLFromCents(item.saldo_aberto_centavos)}</td>
                     </tr>
-                  ) : titulosError ? (
-                    <tr>
-                      <td className="px-3 py-3 text-rose-700" colSpan={7}>
-                        {titulosError}
-                      </td>
-                    </tr>
-                  ) : titulos.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-3 text-slate-600" colSpan={7}>
-                        Nenhum titulo vencido encontrado.
-                      </td>
-                    </tr>
-                  ) : (
-                    titulos.map((t) => (
-                      <tr key={t.cobranca_id} className="border-t">
-                        <td className="px-3 py-2 font-medium">#{t.cobranca_id}</td>
-                        <td className="px-3 py-2">{t.vencimento ? formatDateISO(t.vencimento) : "-"}</td>
-                        <td className="px-3 py-2 text-right">{t.dias_atraso} dias</td>
-                        <td className="px-3 py-2 text-right">
-                          {formatBRLFromCents(Number(t.saldo_aberto_centavos || 0))}
-                          <div className="text-[11px] text-slate-500">
-                            Total: {formatBRLFromCents(Number(t.valor_centavos || 0))}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-slate-600">
-                          {t.origem_tipo ?? "-"} {t.origem_id ? `#${t.origem_id}` : ""}
-                        </td>
-                        <td className="px-3 py-2 text-xs">{t.status_cobranca ?? "-"}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex justify-end gap-2">
-                            <Link
-                              className="rounded-md border px-2 py-1 text-xs hover:bg-slate-50"
-                              href={`/financeiro/cobrancas/${t.cobranca_id}`}
-                            >
-                              Abrir
-                            </Link>
-                            <a
-                              className="rounded-md border px-2 py-1 text-xs hover:bg-slate-50"
-                              href={`/financeiro/cobrancas/${t.cobranca_id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              Nova aba
-                            </a>
-                            <button
-                              type="button"
-                              className="rounded-md border border-purple-200 bg-purple-50 px-2 py-1 text-xs text-purple-700 hover:bg-purple-100"
-                              onClick={() => abrirRecebimentoPorTitulo(t)}
-                            >
-                              Receber
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ))}
                 </tbody>
               </table>
-            </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-            <div className="mt-4 flex justify-end">
+      <Dialog open={receberOpen} onOpenChange={setReceberOpen}>
+        <DialogContent className="max-w-xl p-0">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <DialogTitle>Registrar recebimento</DialogTitle>
+            <DialogDescription>{receberItem?.pessoa_nome ?? "Cobrança selecionada"}</DialogDescription>
+          </div>
+          <div className="space-y-4 p-6">
+            <LinhaFormulario label="Cobrança" value={receberItem ? `#${receberItem.cobranca_id} · ${receberItem.origem_label}` : "--"} />
+            <LinhaFormulario label="Saldo aberto" value={formatBRLFromCents(receberItem?.valor_aberto_centavos ?? 0)} />
+            <label className="space-y-1 text-sm text-slate-700">
+              <span>Data do pagamento</span>
+              <Input
+                type="date"
+                value={receberForm.data_pagamento}
+                onChange={(event) => setReceberForm((current) => ({ ...current, data_pagamento: event.target.value }))}
+              />
+            </label>
+            <label className="space-y-1 text-sm text-slate-700">
+              <span>Método</span>
+              <select
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+                value={receberForm.metodo_pagamento}
+                onChange={(event) =>
+                  setReceberForm((current) => ({
+                    ...current,
+                    metodo_pagamento: event.target.value === "DINHEIRO" ? "DINHEIRO" : "PIX",
+                  }))
+                }
+              >
+                <option value="PIX">PIX</option>
+                <option value="DINHEIRO">Dinheiro</option>
+              </select>
+            </label>
+            <div className="flex justify-end gap-2">
               <DialogClose asChild>
-                <button className="rounded-md border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50">
-                  Fechar
-                </button>
+                <Button type="button" variant="secondary">Cancelar</Button>
               </DialogClose>
+              <Button type="button" onClick={() => void confirmarRecebimento()} disabled={receberLoading || !receberItem}>
+                {receberLoading ? "Registrando..." : "Confirmar recebimento"}
+              </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
-      {modalCobranca ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-10 sm:items-center">
-          <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500">Recebimento</p>
-                <h2 className="text-lg font-semibold text-slate-800">{modalCobranca.descricao}</h2>
-                <p className="text-sm text-slate-600">
-                  Saldo: {formatBRLFromCents(modalCobranca.saldo_centavos)}
-                </p>
-              </div>
-              <button
-                className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={() => setModalCobranca(null)}
-              >
-                Fechar
-              </button>
-            </div>
+    </FinancePageShell>
+  );
+}
 
-            <form className="mt-4 space-y-3" onSubmit={salvarRecebimento}>
-              <label className="text-sm text-slate-700">
-                Valor (centavos)
-                <input
-                  type="number"
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={form.valor_centavos}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, valor_centavos: Number(e.target.value || 0) }))
-                  }
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm text-slate-700">
-                  Data pagamento
-                  <input
-                    type="date"
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    value={form.data_pagamento}
-                    onChange={(e) => setForm((f) => ({ ...f, data_pagamento: e.target.value }))}
-                  />
-                </label>
-                {formas.length > 0 ? (
-                  <label className="text-sm text-slate-700">
-                    Forma de pagamento
-                    <select
-                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                      value={form.forma_pagamento_codigo}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, forma_pagamento_codigo: e.target.value }))
-                      }
-                    >
-                      <option value="">Selecione</option>
-                      {formas
-                        .filter((f) => f.ativo)
-                        .map((f) => (
-                          <option key={f.codigo} value={f.codigo}>
-                            {f.nome} ({f.codigo})
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                ) : (
-                  <label className="text-sm text-slate-700">
-                    Metodo (texto)
-                    <input
-                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                      value={form.metodo_pagamento_texto}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, metodo_pagamento_texto: e.target.value }))
-                      }
-                      placeholder="PIX, Cartao..."
-                    />
-                  </label>
-                )}
-              </div>
-
-              {isCartao ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-sm text-slate-700">
-                    Maquininha
-                    <select
-                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                      value={form.cartao_maquina_id ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          cartao_maquina_id: e.target.value ? Number(e.target.value) : null,
-                        }))
-                      }
-                    >
-                      <option value="">Nao especificado</option>
-                      {maquinas.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.nome || `Maquina #${m.id}`}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-sm text-slate-700">
-                    Bandeira
-                    <select
-                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                      value={form.cartao_bandeira_id ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          cartao_bandeira_id: e.target.value ? Number(e.target.value) : null,
-                        }))
-                      }
-                    >
-                      <option value="">Nao especificada</option>
-                      {bandeiras.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.nome || b.codigo || `Bandeira #${b.id}`}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-sm text-slate-700">
-                    Parcelas
-                    <input
-                      type="number"
-                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                      value={form.cartao_numero_parcelas ?? ""}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          cartao_numero_parcelas: e.target.value ? Number(e.target.value) : null,
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-              ) : null}
-
-              <label className="text-sm text-slate-700">
-                Observacoes
-                <textarea
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={form.observacoes}
-                  onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
-                  rows={3}
-                />
-              </label>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                  onClick={() => setModalCobranca(null)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-md bg-purple-600 px-3 py-2 text-sm font-semibold text-white hover:bg-purple-500 disabled:opacity-60"
-                  disabled={salvando}
-                >
-                  {salvando ? "Salvando..." : "Confirmar recebimento"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
-
-      {modalAvulsa ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-10 sm:items-center">
-          <div className="w-full max-w-lg rounded-lg border border-slate-200 bg-white p-5 shadow-xl">
-            <div className="font-semibold text-slate-800">Registrar recebimento</div>
-            <div className="mt-1 text-sm text-slate-600">Cobranca avulsa #{modalAvulsa.id}</div>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="text-sm text-slate-700">
-                Forma de pagamento
-                <select
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={avulsaForma}
-                  onChange={(e) => setAvulsaForma(e.target.value)}
-                >
-                  <option value="PIX">PIX</option>
-                  <option value="DINHEIRO">Dinheiro</option>
-                  <option value="CARTAO_CREDITO_AVISTA">Cartao de credito (a vista)</option>
-                  <option value="CARTAO_CREDITO_PARCELADO">Cartao de credito (parcelado)</option>
-                  <option value="CARTAO_CONEXAO_ALUNO">Cartao Conexao (Aluno)</option>
-                  <option value="CARTAO_CONEXAO_COLABORADOR">Cartao Conexao (Colaborador)</option>
-                  <option value="CREDITO_INTERNO_ALUNO">Credito interno (Aluno)</option>
-                  <option value="CREDIARIO_COLABORADOR">Crediario (Colaborador)</option>
-                  <option value="OUTRO">Outro</option>
-                </select>
-              </label>
-
-              <label className="text-sm text-slate-700">
-                Valor pago (centavos)
-                <input
-                  type="number"
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={avulsaValor}
-                  onChange={(e) => setAvulsaValor(Number(e.target.value || 0))}
-                />
-                <div className="mt-1 text-xs text-muted-foreground">
-                  Padrao: {formatBRLFromCents(avulsaValor)}.
-                </div>
-              </label>
-
-              <label className="text-sm text-slate-700 md:col-span-2">
-                Comprovante (opcional)
-                <input
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  value={avulsaComprovante}
-                  onChange={(e) => setAvulsaComprovante(e.target.value)}
-                />
-              </label>
-            </div>
-
-            {avulsaPayError ? (
-              <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
-                {avulsaPayError}
-              </div>
-            ) : null}
-
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                onClick={() => {
-                  setModalAvulsa(null);
-                  setAvulsaPayError(null);
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
-                onClick={registrarPagamentoAvulsa}
-                disabled={avulsaPayLoading}
-              >
-                {avulsaPayLoading ? "Processando..." : "Confirmar pagamento"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+function LinhaFormulario({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-medium text-slate-900">{value}</div>
     </div>
   );
 }

@@ -111,3 +111,16 @@ Conectarte v0.9 com:
 - Modulo encerrado neste chat com PDV, Caixa, integracao financeira, conta interna por perfil, tabela de preco no fluxo, formas de pagamento centralizadas e recibo operacional.
 - O fluxo canonico de conta interna ficou consolidado para aluno e colaborador na mesma base mensal de fatura, com diferenca apenas no destino da liquidacao posterior.
 - O deploy final desta etapa depende do push na branch principal e do disparo automatico configurado no Vercel, salvo necessidade operacional externa da equipe.
+
+## 2026-03-17 - Refatoracao de Contas a Receber
+
+- Modulo atual: Financeiro / Contas a Receber, agora reorganizado como visao de saude financeira, auditoria por devedor e origem real das dividas.
+- SQL concluido: `supabase/sql/diagnosticos/20260317_contas_receber_auditoria_contextos.sql` com blocos de leitura para pessoa, devedores, contexto principal, origem detalhada, composicao de fatura do Cartao Conexao e perdas por cancelamento de matricula.
+- API concluida: `GET /api/financeiro/contas-a-receber` agora retorna payload unico de auditoria com resumo, top devedores, lista completa de devedores, lista paginada de cobrancas, detalhe auditavel por cobranca, composicao de fatura e perdas por cancelamento.
+- Paginas/componentes concluidos: `/admin/financeiro/contas-receber` foi reescrita; aliases antigos continuam apontando para a pagina real; novos componentes dedicados `DevedoresTable`, `CobrancasTable`, `CobrancaAuditDetail` e `PerdasCancelamentoCard` foram adicionados em `src/components/financeiro/contas-receber/`.
+- Taxonomia oficial aplicada na UI e na API: contexto principal `ESCOLA | CAFE | LOJA | OUTRO`, com origem detalhada humanizada e sem usar "AVULSA" como categoria principal da leitura.
+- Cartao Conexao: o detalhe da cobranca passou a exibir trilha auditavel e composicao de fatura quando a cobranca estiver vinculada a fatura canonica.
+- Pendencias: homologacao visual autenticada com prints da tela principal, tabela completa de devedores, lista de cobrancas, detalhe com fatura conexao e card de perdas por cancelamento.
+- Bloqueios: `npm run lint` continua falhando por erros preexistentes amplos fora do escopo em modulos antigos de loja, pessoas, matriculas e componentes; os arquivos tocados nesta refatoracao passaram em lint isolado.
+- Versao do sistema: Conectarte v0.9 com Contas a Receber refatorado para auditoria financeira orientada por contexto.
+- Proximas acoes: validar visualmente em sessao autenticada, gerar os prints finais do modulo e decidir se a proxima iteracao inclui cobrancas avulsas em leitura secundaria ou permanece separada do nucleo principal de auditoria.
