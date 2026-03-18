@@ -1,55 +1,43 @@
-# Modulo atual
+## Modulo atual
+Dashboard Escola - leitura institucional, leitura por modalidade e saude das turmas
 
-Dashboard Escola - refino analitico do drill-down por vinculo
+## SQL concluido
+- views e refinamentos para composicao por turma
+- resumo institucional
+- resumo por modalidade
+- detalhamento operacional por vinculo/aluno para drill-down
+- separacao de receita pagante e absorcao institucional
 
-# SQL concluido
+## APIs concluidas
+- `src/app/api/escola/dashboard/route.ts`
+- `src/app/api/escola/dashboard/detalhes/route.ts`
 
-- View canonica de composicao por turma:
-  - `public.vw_escola_dashboard_turmas_composicao`
-- View agregada institucional:
-  - `public.vw_escola_dashboard_resumo_institucional`
-- View de detalhamento operacional por vinculo ativo:
-  - `public.vw_escola_dashboard_alunos_detalhe`
-
-# APIs concluidas
-
-- `/api/escola/dashboard` devolve:
-  - `kpis`
-  - `series7d`
-  - `trends30d`
-  - `resumoInstitucional`
-  - `turmasComposicao`
-  - `cursosDisponiveis`
-- `/api/escola/dashboard/detalhes` suporta drill-down por:
-  - alunos ativos
-  - pagantes
-  - concessoes
-  - concessoes integrais
-  - concessoes parciais
-
-# Paginas / componentes concluidos
-
+## Paginas / componentes concluidos
 - `src/app/(private)/escola/page.tsx`
 - `src/components/escola/EscolaTurmaComposicaoCard.tsx`
 - `src/components/escola/EscolaDashboardAlunosModal.tsx`
 
-# Entregas do refinamento
+## O que foi consolidado neste chat
+- cards institucionais refinados
+- concessoes unificadas
+- drill-down por pagantes, concessoes e alunos ativos
+- leitura por modalidade filtrada
+- receita total, receita pagante e absorcao institucional
+- padronizacao conceitual:
+  - alunos ativos = ocupacao real
+  - vagas disponiveis = capacidade - alunos ativos
 
-- Unificacao de concessoes nos cards de turma
-- Remocao da composicao institucional redundante da turma
-- Drill-down por alunos ativos, pagantes e concessoes
-- Modal institucional com repeticao correta por vinculo/turma
-- Modal da turma agrupado por serie/nivel
-- Exibicao de valor mensal nos drill-downs
+## Pendencias
+- abrir ficha do aluno ou matricula diretamente a partir do modal
+- revisar turmas sem capacidade preenchida
+- evoluir comparativos entre modalidades
+- validar continuamente a regra de valor mensal por vinculo
 
-# Pendencias
+## Versao do sistema
+Sistema Conexao Danca - Dashboard Escola
+Versao logica: v1.0 consolidada do dashboard analitico da Escola
 
-- Validar classificacao real de concessao no banco
-- Validar regra definitiva do valor mensal por vinculo
-- No futuro, permitir abertura direta da ficha do aluno/matricula
-
-# Proximas acoes
-
-1. Permitir abertura contextual da ficha do aluno a partir do modal
-2. Evoluir indicadores de sustentabilidade por turma
-3. Expandir drill-down para receita e demais grupos operacionais
+## Proximas acoes
+1. drill-down com abertura da ficha do aluno/matricula
+2. comparativo entre modalidades
+3. indicadores de sustentabilidade por modalidade/turma

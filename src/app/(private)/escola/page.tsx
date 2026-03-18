@@ -33,6 +33,21 @@ type DashboardResumoInstitucional = {
   concessao_integral_total: number;
   concessao_parcial_total: number;
   receita_mensal_estimada_centavos: number;
+  receita_pagante_estimada_centavos: number;
+  receita_concessao_absorvida_centavos: number;
+};
+
+type DashboardResumoModalidade = {
+  cursoLabel: string;
+  totalTurmas: number;
+  alunosAtivosTotal: number;
+  pagantesTotal: number;
+  concessaoTotal: number;
+  concessaoIntegralTotal: number;
+  concessaoParcialTotal: number;
+  receitaMensalEstimadaCentavos: number;
+  receitaPaganteEstimadaCentavos: number;
+  receitaConcessaoAbsorvidaCentavos: number;
 };
 
 type DashboardSerie = {
@@ -59,6 +74,7 @@ type DashboardPayload = {
   series7d: DashboardSerie[];
   trends30d: DashboardTrends30d;
   resumoInstitucional: DashboardResumoInstitucional;
+  resumoModalidadeAtual: DashboardResumoModalidade;
   turmasComposicao: DashboardTurmaComposicao[];
   cursosDisponiveis: string[];
 };
@@ -118,6 +134,39 @@ function formatDiaBR(iso: string) {
 function formatCurrencyFromCentavos(value: number | null | undefined) {
   if (typeof value !== "number") return "Nao disponivel";
   return moedaFormatter.format(value / 100);
+}
+
+function buildResumoModalidade(
+  turmas: DashboardTurmaComposicao[],
+  cursoLabel: string,
+): DashboardResumoModalidade {
+  return {
+    cursoLabel,
+    totalTurmas: turmas.length,
+    alunosAtivosTotal: turmas.reduce((acc, turma) => acc + turma.alunos_ativos_total, 0),
+    pagantesTotal: turmas.reduce((acc, turma) => acc + turma.pagantes_total, 0),
+    concessaoTotal: turmas.reduce((acc, turma) => acc + turma.concessao_total, 0),
+    concessaoIntegralTotal: turmas.reduce(
+      (acc, turma) => acc + turma.concessao_integral_total,
+      0,
+    ),
+    concessaoParcialTotal: turmas.reduce(
+      (acc, turma) => acc + turma.concessao_parcial_total,
+      0,
+    ),
+    receitaMensalEstimadaCentavos: turmas.reduce(
+      (acc, turma) => acc + (turma.receita_mensal_estimada_centavos ?? 0),
+      0,
+    ),
+    receitaPaganteEstimadaCentavos: turmas.reduce(
+      (acc, turma) => acc + (turma.receita_pagante_estimada_centavos ?? 0),
+      0,
+    ),
+    receitaConcessaoAbsorvidaCentavos: turmas.reduce(
+      (acc, turma) => acc + (turma.receita_concessao_absorvida_centavos ?? 0),
+      0,
+    ),
+  };
 }
 
 function trendLabel(atual: number, anterior: number) {
@@ -333,6 +382,18 @@ export default function EscolaDashboardPage() {
     return turma.curso === cursoSelecionado;
   });
 
+  const resumoModalidadeAtual = data
+    ? buildResumoModalidade(
+        turmasFiltradas,
+        cursoSelecionado === "Todos" ? "Recorte geral" : cursoSelecionado,
+      )
+    : null;
+
+  const queryCursoSelecionado =
+    cursoSelecionado === "Todos"
+      ? ""
+      : `&curso=${encodeURIComponent(cursoSelecionado)}`;
+
   const turmaSkeletons = Array.from({ length: 4 }, (_, index) => index);
 
   return (
@@ -418,7 +479,7 @@ export default function EscolaDashboardPage() {
                 Leitura institucional
               </h2>
               <p className="text-sm text-slate-500">
-                Totais agregados de pagantes, concessoes e receita mensal estimada da Escola.
+                Totais agregados de pagantes, concessoes e financeiro operacional da Escola.
               </p>
             </div>
 
@@ -474,7 +535,7 @@ export default function EscolaDashboardPage() {
               />
               <DashboardMetricCard
                 eyebrow="Financeiro operacional"
-                title="Receita mensal estimada"
+                title="Receita mensal estimada total"
                 value={
                   loading
                     ? "..."
@@ -482,7 +543,35 @@ export default function EscolaDashboardPage() {
                         resumoInstitucional?.receita_mensal_estimada_centavos,
                       )
                 }
-                meta="Leitura operacional; nao substitui o financeiro oficial."
+                meta="Total estimado = receita pagante + absorcao institucional."
+                details={
+                  <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-50/85 px-3 py-3 text-sm text-slate-600 ring-1 ring-inset ring-slate-200/70">
+                    <div className="rounded-xl bg-white/70 px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Receita pagante
+                      </p>
+                      <p className="mt-1 text-base font-semibold text-slate-900">
+                        {loading
+                          ? "..."
+                          : formatCurrencyFromCentavos(
+                              resumoInstitucional?.receita_pagante_estimada_centavos,
+                            )}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-white/70 px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                        Absorcao institucional
+                      </p>
+                      <p className="mt-1 text-base font-semibold text-slate-900">
+                        {loading
+                          ? "..."
+                          : formatCurrencyFromCentavos(
+                              resumoInstitucional?.receita_concessao_absorvida_centavos,
+                            )}
+                      </p>
+                    </div>
+                  </div>
+                }
                 accent="emerald"
               />
             </div>
@@ -605,6 +694,118 @@ export default function EscolaDashboardPage() {
             </CardHeader>
 
             <CardContent className="space-y-4">
+              <div className="rounded-[24px] border border-slate-200/75 bg-slate-50/80 px-4 py-4 shadow-[0_18px_45px_-38px_rgba(15,23,42,0.25)]">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Resumo da modalidade filtrada
+                    </h3>
+                    <p className="text-sm text-slate-600">
+                      {loading
+                        ? "..."
+                        : `${resumoModalidadeAtual?.cursoLabel ?? data?.resumoModalidadeAtual.cursoLabel ?? "Recorte geral"} em leitura operacional.`}
+                    </p>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Alunos ativos representam a ocupacao real do recorte atual.
+                  </p>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl bg-white/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Total de turmas
+                    </p>
+                    <p className="mt-1.5 text-xl font-semibold text-slate-900">
+                      {loading ? "..." : resumoModalidadeAtual?.totalTurmas ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Alunos ativos
+                    </p>
+                    <p className="mt-1.5 text-xl font-semibold text-slate-900">
+                      {loading ? "..." : resumoModalidadeAtual?.alunosAtivosTotal ?? 0}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void abrirModalDetalhes(
+                        `escopo=institucional&tipo=pagantes${queryCursoSelecionado}`,
+                      )
+                    }
+                    className="rounded-2xl bg-white/85 px-4 py-3 text-left ring-1 ring-inset ring-slate-200/70 transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Pagantes
+                    </p>
+                    <p className="mt-1.5 text-xl font-semibold text-slate-900">
+                      {loading ? "..." : resumoModalidadeAtual?.pagantesTotal ?? 0}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void abrirModalDetalhes(
+                        `escopo=institucional&tipo=concessoes${queryCursoSelecionado}`,
+                      )
+                    }
+                    className="rounded-2xl bg-white/85 px-4 py-3 text-left ring-1 ring-inset ring-slate-200/70 transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Concessoes
+                    </p>
+                    <p className="mt-1.5 text-xl font-semibold text-slate-900">
+                      {loading ? "..." : resumoModalidadeAtual?.concessaoTotal ?? 0}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Integrais: {loading ? "..." : resumoModalidadeAtual?.concessaoIntegralTotal ?? 0}{" "}
+                      | Parciais: {loading ? "..." : resumoModalidadeAtual?.concessaoParcialTotal ?? 0}
+                    </p>
+                  </button>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl bg-white/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Receita pagante
+                    </p>
+                    <p className="mt-1.5 text-lg font-semibold text-slate-900">
+                      {loading
+                        ? "..."
+                        : formatCurrencyFromCentavos(
+                            resumoModalidadeAtual?.receitaPaganteEstimadaCentavos,
+                          )}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Absorcao institucional
+                    </p>
+                    <p className="mt-1.5 text-lg font-semibold text-slate-900">
+                      {loading
+                        ? "..."
+                        : formatCurrencyFromCentavos(
+                            resumoModalidadeAtual?.receitaConcessaoAbsorvidaCentavos,
+                          )}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Receita total estimada
+                    </p>
+                    <p className="mt-1.5 text-lg font-semibold text-slate-900">
+                      {loading
+                        ? "..."
+                        : formatCurrencyFromCentavos(
+                            resumoModalidadeAtual?.receitaMensalEstimadaCentavos,
+                          )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] bg-slate-50/80 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
                 <div className="text-sm text-slate-600">
                   Exibindo{" "}

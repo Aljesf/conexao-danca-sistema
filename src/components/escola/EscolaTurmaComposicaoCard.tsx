@@ -278,10 +278,12 @@ function formatCurrency(value: number | null): string {
 function MetricStat({
   label,
   value,
+  secondaryText,
   onClick,
 }: {
   label: string;
   value: string | number;
+  secondaryText?: string;
   onClick?: () => void;
 }) {
   const content = (
@@ -290,6 +292,7 @@ function MetricStat({
         {label}
       </p>
       <p className="mt-1.5 text-xl font-semibold text-slate-900">{value}</p>
+      {secondaryText ? <p className="mt-1 text-xs text-slate-500">{secondaryText}</p> : null}
     </div>
   );
 
@@ -465,16 +468,27 @@ export function EscolaTurmaComposicaoCard({
       </div>
 
       <CardContent className="space-y-5 px-5 py-5">
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <MetricStat
             label="Alunos ativos"
             value={turma.alunos_ativos_total}
             onClick={onClickAlunosAtivos}
           />
-          <MetricStat label="Capacidade" value={formatCapacity(turma.capacidade)} />
-          <MetricStat label="Ocupacao" value={formatOcupacao(turma.ocupacao_percentual)} />
-          <MetricStat label="Vagas disponiveis" value={formatVagas(turma.vagas_disponiveis)} />
+          <MetricStat
+            label="Capacidade"
+            value={formatCapacity(turma.capacidade)}
+            secondaryText={`Ocupacao: ${formatOcupacao(turma.ocupacao_percentual)}`}
+          />
+          <MetricStat
+            label="Vagas disponiveis"
+            value={formatVagas(turma.vagas_disponiveis)}
+            secondaryText="Capacidade cadastrada menos alunos ativos."
+          />
         </div>
+
+        <p className="text-xs text-slate-500">
+          Alunos ativos representam a ocupacao atual da turma.
+        </p>
 
         <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
           <div className="flex flex-wrap gap-2 text-sm">

@@ -70,6 +70,15 @@ function parseTipo(value: string | null): TipoDetalhe | null {
   return null;
 }
 
+function slugifyCurso(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
 function toNumber(value: number | string | null | undefined): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -93,9 +102,14 @@ function buildTitulo(escopo: EscopoDetalhe, tipo: TipoDetalhe): string {
     : `${basePorTipo[tipo]} da turma`;
 }
 
-function buildSubtitulo(escopo: EscopoDetalhe, turmaNome: string | null): string {
+function buildSubtitulo(
+  escopo: EscopoDetalhe,
+  turmaNome: string | null,
+  curso: string | null,
+): string {
   if (escopo === "institucional") {
-    return "Inclui vinculos ativos por turma. Um mesmo aluno pode aparecer mais de uma vez quando participa de mais de uma turma/modalidade.";
+    const recorteCurso = curso ? ` Recorte de curso: ${curso}.` : "";
+    return `Inclui vinculos ativos por turma. Um mesmo aluno pode aparecer mais de uma vez quando participa de mais de uma turma/modalidade.${recorteCurso}`;
   }
 
   return turmaNome
@@ -143,6 +157,9 @@ export async function GET(request: NextRequest) {
   const escopo = parseEscopo(request.nextUrl.searchParams.get("escopo"));
   const tipo = parseTipo(request.nextUrl.searchParams.get("tipo"));
   const turmaIdParam = request.nextUrl.searchParams.get("turma_id");
+  const cursoParam = request.nextUrl.searchParams.get("curso")?.trim() ?? "";
+  const cursoFilter = cursoParam.length > 0 ? cursoParam : null;
+  const cursoFilterSlug = cursoFilter ? slugifyCurso(cursoFilter) : null;
 
   if (!escopo) {
     return badRequest("escopo_invalido");
@@ -203,10 +220,14 @@ export async function GET(request: NextRequest) {
   }
 
   const rows = (data ?? []) as DashboardAlunoDetalheRow[];
+  const rowsComFiltroCurso =
+    cursoFilter && cursoFilterSlug
+      ? rows.filter((row) => slugifyCurso(row.curso ?? "") === cursoFilterSlug)
+      : rows;
   const rowsFiltradas =
     tipo === "alunos_ativos"
-      ? rows.filter((row) => row.aluno_ativo !== false)
-      : rows;
+      ? rowsComFiltroCurso.filter((row) => row.aluno_ativo !== false)
+      : rowsComFiltroCurso;
 
   let turmaNome: string | null = null;
   if (escopo === "turma" && turmaId) {
@@ -245,7 +266,7 @@ export async function GET(request: NextRequest) {
     {
       modo: escopo,
       titulo: buildTitulo(escopo, tipo),
-      subtitulo: buildSubtitulo(escopo, turmaNome),
+      subtitulo: buildSubtitulo(escopo, turmaNome, cursoFilter),
       total: totalRegistros,
       totalRegistros,
       somaValoresCentavos,

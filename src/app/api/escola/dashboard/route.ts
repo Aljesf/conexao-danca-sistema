@@ -49,6 +49,34 @@ type DashboardResumoInstitucional = {
   concessao_integral_total: number;
   concessao_parcial_total: number;
   receita_mensal_estimada_centavos: number;
+  receita_pagante_estimada_centavos: number;
+  receita_concessao_absorvida_centavos: number;
+};
+
+type DashboardResumoModalidadeRow = {
+  curso: string | null;
+  total_turmas: number | string;
+  alunos_ativos_total: number | string;
+  pagantes_total: number | string;
+  concessao_total: number | string;
+  concessao_integral_total: number | string;
+  concessao_parcial_total: number | string;
+  receita_mensal_estimada_centavos: number | string;
+  receita_pagante_estimada_centavos: number | string;
+  receita_concessao_absorvida_centavos: number | string;
+};
+
+type DashboardResumoModalidade = {
+  cursoLabel: string;
+  totalTurmas: number;
+  alunosAtivosTotal: number;
+  pagantesTotal: number;
+  concessaoTotal: number;
+  concessaoIntegralTotal: number;
+  concessaoParcialTotal: number;
+  receitaMensalEstimadaCentavos: number;
+  receitaPaganteEstimadaCentavos: number;
+  receitaConcessaoAbsorvidaCentavos: number;
 };
 
 type DashboardSerieRow = {
@@ -98,6 +126,68 @@ function slugifyCurso(value: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+function cursoMatches(
+  turma: Pick<DashboardTurmaComposicaoRow, "curso" | "curso_slug_ou_chave_filtro">,
+  cursoFilter: string,
+  cursoFilterSlug: string,
+): boolean {
+  const cursoRaw = turma.curso?.trim().toLowerCase() ?? "";
+  const cursoSlug = turma.curso_slug_ou_chave_filtro?.trim().toLowerCase() ?? "";
+  return cursoRaw === cursoFilter.toLowerCase() || cursoSlug === cursoFilterSlug;
+}
+
+function mapResumoModalidade(
+  row: DashboardResumoModalidadeRow | null | undefined,
+): DashboardResumoModalidade {
+  return {
+    cursoLabel: row?.curso?.trim() || "Recorte geral",
+    totalTurmas: toNumber(row?.total_turmas),
+    alunosAtivosTotal: toNumber(row?.alunos_ativos_total),
+    pagantesTotal: toNumber(row?.pagantes_total),
+    concessaoTotal: toNumber(row?.concessao_total),
+    concessaoIntegralTotal: toNumber(row?.concessao_integral_total),
+    concessaoParcialTotal: toNumber(row?.concessao_parcial_total),
+    receitaMensalEstimadaCentavos: toNumber(row?.receita_mensal_estimada_centavos),
+    receitaPaganteEstimadaCentavos: toNumber(row?.receita_pagante_estimada_centavos),
+    receitaConcessaoAbsorvidaCentavos: toNumber(
+      row?.receita_concessao_absorvida_centavos,
+    ),
+  };
+}
+
+function aggregateResumoModalidade(
+  rows: DashboardTurmaComposicaoRow[],
+  cursoLabel: string,
+): DashboardResumoModalidade {
+  return {
+    cursoLabel,
+    totalTurmas: rows.length,
+    alunosAtivosTotal: rows.reduce((acc, row) => acc + toNumber(row.alunos_ativos_total), 0),
+    pagantesTotal: rows.reduce((acc, row) => acc + toNumber(row.pagantes_total), 0),
+    concessaoTotal: rows.reduce((acc, row) => acc + toNumber(row.concessao_total), 0),
+    concessaoIntegralTotal: rows.reduce(
+      (acc, row) => acc + toNumber(row.concessao_integral_total),
+      0,
+    ),
+    concessaoParcialTotal: rows.reduce(
+      (acc, row) => acc + toNumber(row.concessao_parcial_total),
+      0,
+    ),
+    receitaMensalEstimadaCentavos: rows.reduce(
+      (acc, row) => acc + toNumber(row.receita_mensal_estimada_centavos),
+      0,
+    ),
+    receitaPaganteEstimadaCentavos: rows.reduce(
+      (acc, row) => acc + toNumber(row.receita_pagante_estimada_centavos),
+      0,
+    ),
+    receitaConcessaoAbsorvidaCentavos: rows.reduce(
+      (acc, row) => acc + toNumber(row.receita_concessao_absorvida_centavos),
+      0,
+    ),
+  };
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
@@ -134,6 +224,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const { data: resumoModalidadeData, error: resumoModalidadeError } = await supabase
+    .from("vw_escola_dashboard_modalidade_resumo")
+    .select("*")
+    .order("curso", { ascending: true });
+
+  if (resumoModalidadeError) {
+    return NextResponse.json(
+      {
+        error: "falha_resumo_modalidade",
+        details: resumoModalidadeError.message,
+      },
+      { status: 500 },
+    );
+  }
+
   const { data: turmasComposicaoData, error: turmasComposicaoError } = await supabase
     .from("vw_escola_dashboard_turmas_composicao")
     .select("*")
@@ -151,37 +256,36 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const turmasComposicao = ((turmasComposicaoData ?? []) as DashboardTurmaComposicaoRow[]).filter(
-    (turma) => {
-      if (!cursoFilter || !cursoFilterSlug) return true;
+  const turmasComposicaoTodas = ((turmasComposicaoData ?? []) as DashboardTurmaComposicaoRow[]).map(
+    (turma) => ({
+      ...turma,
+      turma_id: toNumber(turma.turma_id),
+      ano_referencia: toNullableNumber(turma.ano_referencia),
+      capacidade: toNullableNumber(turma.capacidade),
+      alunos_ativos_total: toNumber(turma.alunos_ativos_total),
+      vagas_disponiveis: toNullableNumber(turma.vagas_disponiveis),
+      ocupacao_percentual: toNullableNumber(turma.ocupacao_percentual),
+      pagantes_total: toNumber(turma.pagantes_total),
+      concessao_total: toNumber(turma.concessao_total),
+      concessao_integral_total: toNumber(turma.concessao_integral_total),
+      concessao_parcial_total: toNumber(turma.concessao_parcial_total),
+      outros_vinculos_total: toNumber(turma.outros_vinculos_total),
+      receita_mensal_estimada_centavos: toNumber(turma.receita_mensal_estimada_centavos),
+      receita_pagante_estimada_centavos: toNumber(turma.receita_pagante_estimada_centavos),
+      receita_concessao_absorvida_centavos: toNumber(
+        turma.receita_concessao_absorvida_centavos,
+      ),
+    }),
+  );
 
-      const cursoRaw = turma.curso?.trim().toLowerCase() ?? "";
-      const cursoSlug = turma.curso_slug_ou_chave_filtro?.trim().toLowerCase() ?? "";
-      return cursoRaw === cursoFilter.toLowerCase() || cursoSlug === cursoFilterSlug;
-    },
-  ).map((turma) => ({
-    ...turma,
-    turma_id: toNumber(turma.turma_id),
-    ano_referencia: toNullableNumber(turma.ano_referencia),
-    capacidade: toNullableNumber(turma.capacidade),
-    alunos_ativos_total: toNumber(turma.alunos_ativos_total),
-    vagas_disponiveis: toNullableNumber(turma.vagas_disponiveis),
-    ocupacao_percentual: toNullableNumber(turma.ocupacao_percentual),
-    pagantes_total: toNumber(turma.pagantes_total),
-    concessao_total: toNumber(turma.concessao_total),
-    concessao_integral_total: toNumber(turma.concessao_integral_total),
-    concessao_parcial_total: toNumber(turma.concessao_parcial_total),
-    outros_vinculos_total: toNumber(turma.outros_vinculos_total),
-    receita_mensal_estimada_centavos: toNumber(turma.receita_mensal_estimada_centavos),
-    receita_pagante_estimada_centavos: toNumber(turma.receita_pagante_estimada_centavos),
-    receita_concessao_absorvida_centavos: toNumber(
-      turma.receita_concessao_absorvida_centavos,
-    ),
-  }));
+  const turmasComposicao = turmasComposicaoTodas.filter((turma) => {
+    if (!cursoFilter || !cursoFilterSlug) return true;
+    return cursoMatches(turma, cursoFilter, cursoFilterSlug);
+  });
 
   const cursosDisponiveis = Array.from(
     new Set(
-      turmasComposicao
+      turmasComposicaoTodas
         .map((turma) => turma.curso?.trim())
         .filter((curso): curso is string => Boolean(curso)),
     ),
@@ -220,8 +324,30 @@ export async function GET(request: NextRequest) {
         receita_mensal_estimada_centavos: toNumber(
           resumoInstitucionalData.receita_mensal_estimada_centavos,
         ),
+        receita_pagante_estimada_centavos: toNumber(
+          resumoInstitucionalData.receita_pagante_estimada_centavos,
+        ),
+        receita_concessao_absorvida_centavos: toNumber(
+          resumoInstitucionalData.receita_concessao_absorvida_centavos,
+        ),
       }
     : null;
+
+  const resumoModalidadeAtual = (() => {
+    if (!cursoFilter || !cursoFilterSlug) {
+      return aggregateResumoModalidade(turmasComposicaoTodas, "Recorte geral");
+    }
+
+    const resumoEncontrado = ((resumoModalidadeData ?? []) as DashboardResumoModalidadeRow[]).find(
+      (row) => slugifyCurso(row.curso ?? "") === cursoFilterSlug,
+    );
+
+    if (resumoEncontrado) {
+      return mapResumoModalidade(resumoEncontrado);
+    }
+
+    return aggregateResumoModalidade(turmasComposicao, cursoFilter);
+  })();
 
   return NextResponse.json(
     {
@@ -229,6 +355,7 @@ export async function GET(request: NextRequest) {
       series7d: (serieData ?? []) as DashboardSerieRow[],
       trends30d: trendsData as DashboardTrendsRow,
       resumoInstitucional: resumoInstitucional as DashboardResumoInstitucional,
+      resumoModalidadeAtual,
       turmasComposicao,
       cursosDisponiveis,
     },
