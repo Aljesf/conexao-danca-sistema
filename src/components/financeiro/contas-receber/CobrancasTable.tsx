@@ -77,6 +77,19 @@ function origemPrincipal(item: CobrancaListaItem) {
   return item.origem_label || item.origemLabel || item.origem_tecnica || origemBruta(item) || "Origem em revisao";
 }
 
+function origemPrincipalVisivel(item: CobrancaListaItem) {
+  if (item.contaInternaId) return `Conta interna #${item.contaInternaId}`;
+  return origemPrincipal(item);
+}
+
+function origemContextoLinhas(item: CobrancaListaItem) {
+  const linhas: string[] = [];
+  if (item.alunoNome) linhas.push(`Aluno: ${item.alunoNome}`);
+  if (item.matriculaId) linhas.push(`Matricula #${item.matriculaId}`);
+  if (item.origem_secundaria) linhas.push(item.origem_secundaria);
+  return linhas;
+}
+
 function origemBadgeClass(tone: CobrancaListaItem["origem_badge_tone"]) {
   if (tone === "success") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
   if (tone === "warning") return "bg-amber-50 text-amber-700 ring-amber-200";
@@ -92,12 +105,17 @@ function origemTecnica(item: CobrancaListaItem) {
 
 function OrigemCell({ item }: { item: CobrancaListaItem }) {
   const technical = origemTecnica(item);
+  const contextoLinhas = origemContextoLinhas(item);
 
   return (
     <td className="px-3 py-3">
       <div className="space-y-1">
-        <div className="font-medium text-slate-800">{origemPrincipal(item)}</div>
-        {item.origem_secundaria ? <div className="text-xs text-slate-500">{item.origem_secundaria}</div> : null}
+        <div className="font-medium text-slate-800">{origemPrincipalVisivel(item)}</div>
+        {contextoLinhas.map((linha) => (
+          <div key={linha} className="text-xs text-slate-500">
+            {linha}
+          </div>
+        ))}
         {item.origem_badge_label || technical ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {item.origem_badge_label ? (

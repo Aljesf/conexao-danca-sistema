@@ -104,6 +104,8 @@ export interface CanonicalOriginPayloadFields {
   origem_item_tipo: string | null;
   origem_item_id: number | null;
   conta_interna_id: number | null;
+  alunoNome: string | null;
+  matriculaId: number | null;
   migracao_conta_interna_status: string | null;
   migracao_conta_interna_observacao: string | null;
   origem_secundaria: string | null;
@@ -399,6 +401,69 @@ function pessoaNome(pessoaId: number | null, pessoa: PessoaRow | undefined): str
   if (nome) return nome;
   if (typeof pessoaId === "number" && pessoaId > 0) return `Pessoa #${pessoaId}`;
   return "Pessoa não identificada";
+}
+
+function nomePessoaOpcional(pessoaId: number | null, maps: Pick<DataMaps, "pessoas">): string | null {
+  if (!pessoaId) return null;
+  const nome = textOrNull(maps.pessoas.get(pessoaId)?.nome);
+  return nome ?? `Aluno #${pessoaId}`;
+}
+
+function alunoIdDoLancamento(lancamento: LancamentoRow | undefined): number | null {
+  return numberOrNull(lancamento?.aluno_id);
+}
+
+function matriculaIdDoLancamento(lancamento: LancamentoRow | undefined): number | null {
+  const matriculaId = numberOrNull(lancamento?.matricula_id);
+  if (matriculaId) return matriculaId;
+  if (upper(lancamento?.origem_sistema) === "MATRICULA") {
+    return numberOrNull(lancamento?.origem_id);
+  }
+  return null;
+}
+
+function alunoIdDaComposicao(value: Json | null): number | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return numberOrNull((value as Record<string, unknown>).aluno_pessoa_id);
+}
+
+function resolveAlunoContext(params: {
+  matricula?: MatriculaRow;
+  lancamentosDiretos: LancamentoRow[];
+  composicao: ComposicaoFaturaConexao | null;
+  maps: DataMaps;
+}): { alunoNome: string | null; matriculaId: number | null } {
+  const { matricula, lancamentosDiretos, composicao, maps } = params;
+
+  if (matricula?.id) {
+    return {
+      alunoNome: nomePessoaOpcional(numberOrNull(matricula.pessoa_id), maps),
+      matriculaId: matricula.id,
+    };
+  }
+
+  const lancamentosDaComposicao =
+    composicao?.itens
+      .map((item) => maps.lancamentosPorId.get(item.lancamento_id))
+      .filter((item): item is LancamentoRow => Boolean(item)) ?? [];
+
+  for (const lancamento of [...lancamentosDiretos, ...lancamentosDaComposicao]) {
+    const matriculaId = matriculaIdDoLancamento(lancamento);
+    const matriculaRelacionada = matriculaId ? maps.matriculas.get(matriculaId) : undefined;
+    const alunoId =
+      numberOrNull(matriculaRelacionada?.pessoa_id) ??
+      alunoIdDoLancamento(lancamento) ??
+      alunoIdDaComposicao(lancamento.composicao_json);
+
+    if (matriculaId || alunoId) {
+      return {
+        alunoNome: nomePessoaOpcional(alunoId, maps),
+        matriculaId,
+      };
+    }
+  }
+
+  return { alunoNome: null, matriculaId: null };
 }
 
 function safeErrorMessage(error: unknown): string {
@@ -1019,6 +1084,8 @@ function buildDetalhe(item: CobrancaListaItem, maps: DataMaps): DetalheCobrancaA
       origem_item_tipo: item.origem_item_tipo,
       origem_item_id: item.origem_item_id,
       conta_interna_id: item.conta_interna_id,
+      alunoNome: item.alunoNome,
+      matriculaId: item.matriculaId,
       migracao_conta_interna_status: item.migracao_conta_interna_status,
       migracao_conta_interna_observacao: item.migracao_conta_interna_observacao,
       origem_secundaria: item.origem_secundaria,
@@ -1090,6 +1157,8 @@ function buildFallbackDetalhe(
       origem_item_tipo: item.origem_item_tipo,
       origem_item_id: item.origem_item_id,
       conta_interna_id: item.conta_interna_id,
+      alunoNome: item.alunoNome,
+      matriculaId: item.matriculaId,
       migracao_conta_interna_status: item.migracao_conta_interna_status,
       migracao_conta_interna_observacao:
         item.migracao_conta_interna_observacao ?? (error ? "Detalhe retornado em fallback legado seguro." : null),
@@ -1853,7 +1922,9 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
   const contasConexao = await selectMany<ContaConexaoRow>(async (chunk) => {
     const { data, error } = await supabase
       .from("credito_conexao_contas")
-      .select("id,pessoa_titular_id,tipo_conta,descricao_exibicao,ativo,centro_custo_principal_id")
+      .select(
+        "id,pessoa_titular_id,responsavel_financeiro_pessoa_id,tipo_conta,descricao_exibicao,ativo,centro_custo_principal_id",
+      )
       .in("id", chunk);
     if (error) throw new Error(`erro_carregar_contas_conexao: ${error.message}`);
     return (data ?? []) as ContaConexaoRow[];
@@ -1886,7 +1957,7 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     const { data, error } = await supabase
       .from("credito_conexao_lancamentos")
       .select(
-        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,created_at,updated_at,numero_parcelas,competencia,referencia_item,composicao_json,cobranca_id",
+        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,created_at,updated_at,numero_parcelas,competencia,referencia_item,composicao_json,cobranca_id,aluno_id,matricula_id",
       )
       .in("id", chunk);
     if (error) throw new Error(`erro_carregar_lancamentos_fatura: ${error.message}`);
@@ -1897,7 +1968,7 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     const { data, error } = await supabase
       .from("credito_conexao_lancamentos")
       .select(
-        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,created_at,updated_at,numero_parcelas,competencia,referencia_item,composicao_json,cobranca_id",
+        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,created_at,updated_at,numero_parcelas,competencia,referencia_item,composicao_json,cobranca_id,aluno_id,matricula_id",
       )
       .in("cobranca_id", chunk);
     if (error) throw new Error(`erro_carregar_lancamentos_diretos: ${error.message}`);
@@ -1957,6 +2028,17 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     return (data ?? []) as LojaVendaRow[];
   }, origemLojaIds);
 
+  const matriculaIdsConsolidados = Array.from(
+    new Set(
+      [
+        ...matriculaIds,
+        ...[...lancamentosDasFaturas, ...lancamentosDiretos]
+          .map((row) => matriculaIdDoLancamento(row))
+          .filter((id): id is number => typeof id === "number" && id > 0),
+      ],
+    ),
+  );
+
   const matriculas = await selectMany<MatriculaRow>(async (chunk) => {
     const { data, error } = await supabase
       .from("matriculas")
@@ -1964,7 +2046,7 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
       .in("id", chunk);
     if (error) throw new Error(`erro_carregar_matriculas: ${error.message}`);
     return (data ?? []) as MatriculaRow[];
-  }, matriculaIds);
+  }, matriculaIdsConsolidados);
 
   const turmaAluno = await selectMany<TurmaAlunoRow>(async (chunk) => {
     const { data, error } = await supabase
@@ -1973,7 +2055,7 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
       .in("matricula_id", chunk);
     if (error) throw new Error(`erro_carregar_turma_aluno: ${error.message}`);
     return (data ?? []) as TurmaAlunoRow[];
-  }, matriculaIds);
+  }, matriculaIdsConsolidados);
 
   const turmaIds = Array.from(
     new Set(
@@ -2010,7 +2092,24 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
   }, vinculoIds);
 
   const mapCobrancas = new Map(cobrancas.map((row) => [row.id, row]));
-  const mapPessoas = new Map(pessoas.map((row) => [row.id, row]));
+  const pessoaIdsAdicionais = Array.from(
+    new Set(
+      [
+        ...matriculas
+          .map((row) => numberOrNull(row.pessoa_id))
+          .filter((id): id is number => typeof id === "number" && id > 0),
+        ...[...lancamentosDasFaturas, ...lancamentosDiretos]
+          .map((row) => alunoIdDoLancamento(row) ?? alunoIdDaComposicao(row.composicao_json))
+          .filter((id): id is number => typeof id === "number" && id > 0),
+      ].filter((id) => !pessoaIds.includes(id)),
+    ),
+  );
+  const pessoasAdicionais = await selectMany<PessoaRow>(async (chunk) => {
+    const { data, error } = await supabase.from("pessoas").select("id,nome").in("id", chunk);
+    if (error) throw new Error(`erro_carregar_pessoas_adicionais: ${error.message}`);
+    return (data ?? []) as PessoaRow[];
+  }, pessoaIdsAdicionais);
+  const mapPessoas = new Map([...pessoas, ...pessoasAdicionais].map((row) => [row.id, row]));
   const mapCentros = new Map(centrosCusto.map((row) => [row.id, row]));
   const mapFaturasPorId = new Map(faturas.map((row) => [row.id, row]));
   const mapFaturasPorCobranca = new Map(
@@ -2102,6 +2201,7 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
       : undefined);
   const conta = fatura?.conta_conexao_id ? maps.contasConexao.get(fatura.conta_conexao_id) : undefined;
   const composicao = fatura ? maps.composicaoPorFatura.get(fatura.id) ?? null : null;
+  const lancamentosDiretos = maps.lancamentosDiretosPorCobranca.get(baseRow.cobranca_id) ?? [];
   const cafeVenda =
     maps.cafeVendasPorCobranca.get(baseRow.cobranca_id)?.[0] ??
     (upper(cobranca?.origem_tipo) === "CAFE" && typeof cobranca?.origem_id === "number"
@@ -2140,12 +2240,20 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
   const contaInternaId = numberOrNull(cobranca?.conta_interna_id) ?? numberOrNull(conta?.id);
   const migracaoContaInternaStatus = textOrNull(cobranca?.migracao_conta_interna_status);
   const migracaoContaInternaObservacao = textOrNull(cobranca?.migracao_conta_interna_observacao);
+  const alunoContext = resolveAlunoContext({
+    matricula,
+    lancamentosDiretos,
+    composicao,
+    maps,
+  });
   const display = buildCanonicalOriginDisplay({
     origemAgrupadorTipo,
     origemAgrupadorId,
     origemItemTipo,
     origemItemId,
     contaInternaId,
+    alunoNome: alunoContext.alunoNome,
+    matriculaId: alunoContext.matriculaId,
     origemLabel: textOrNull(cobranca?.origem_label),
     migracaoContaInternaStatus,
     legacyOrigemTipo: textOrNull(cobranca?.origem_tipo) ?? baseRow.origem_tipo,
@@ -2192,6 +2300,8 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     origem_item_tipo: origemItemTipoResolvido,
     origem_item_id: origemItemId,
     conta_interna_id: contaInternaId,
+    alunoNome: display.alunoNome,
+    matriculaId: display.matriculaId,
     migracao_conta_interna_status: migracaoContaInternaStatusResolvido,
     migracao_conta_interna_observacao: migracaoContaInternaObservacao,
     origem_secundaria: display.secondary,
@@ -2246,12 +2356,14 @@ function buildFallbackItem(
   const pessoa = baseRow.pessoa_id ? maps.pessoas.get(baseRow.pessoa_id) : undefined;
   const origemTipo = textOrNull(cobranca?.origem_tipo) ?? baseRow.origem_tipo;
   const origemId = numberOrNull(cobranca?.origem_id) ?? baseRow.origem_id;
+  const matriculaId = upper(origemTipo).startsWith("MATRICULA") ? origemId : null;
   const display = buildCanonicalOriginDisplay({
     origemAgrupadorTipo: textOrNull(cobranca?.origem_agrupador_tipo),
     origemAgrupadorId: numberOrNull(cobranca?.origem_agrupador_id),
     origemItemTipo: textOrNull(cobranca?.origem_item_tipo),
     origemItemId: numberOrNull(cobranca?.origem_item_id),
     contaInternaId: numberOrNull(cobranca?.conta_interna_id),
+    matriculaId,
     origemLabel: textOrNull(cobranca?.origem_label),
     migracaoContaInternaStatus: textOrNull(cobranca?.migracao_conta_interna_status) ?? "AMBIGUO",
     legacyOrigemTipo: origemTipo,
@@ -2290,6 +2402,8 @@ function buildFallbackItem(
     origem_item_tipo: textOrNull(cobranca?.origem_item_tipo) ?? display.origemItemTipo,
     origem_item_id: numberOrNull(cobranca?.origem_item_id),
     conta_interna_id: numberOrNull(cobranca?.conta_interna_id),
+    alunoNome: display.alunoNome,
+    matriculaId: display.matriculaId,
     migracao_conta_interna_status:
       textOrNull(cobranca?.migracao_conta_interna_status) ?? display.migracaoContaInternaStatus ?? "AMBIGUO",
     migracao_conta_interna_observacao:

@@ -8,6 +8,8 @@ type UpsertLancamentoPorCobrancaInput = {
   contaConexaoId: number;
   competencia: string; // YYYY-MM
   valorCentavos: number;
+  alunoId?: number | null;
+  matriculaId?: number | null;
   descricao?: string | null;
   origemSistema?: string;
   origemId?: number | null;
@@ -46,6 +48,8 @@ export async function upsertLancamentoPorCobranca(input: UpsertLancamentoPorCobr
     competencia: input.competencia,
     referencia_item: referenciaItem,
     valor_centavos: input.valorCentavos,
+    aluno_id: input.alunoId ?? null,
+    matricula_id: input.matriculaId ?? null,
     descricao: input.descricao ?? null,
     origem_sistema: input.origemSistema ?? "COBRANCA",
     origem_id: input.origemId ?? null,

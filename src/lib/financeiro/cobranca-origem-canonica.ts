@@ -13,6 +13,8 @@ export interface CanonicalOriginInput {
   origemItemTipo?: string | null;
   origemItemId?: number | null;
   contaInternaId?: number | null;
+  alunoNome?: string | null;
+  matriculaId?: number | null;
   origemLabel?: string | null;
   migracaoContaInternaStatus?: string | null;
   legacyOrigemTipo?: string | null;
@@ -31,6 +33,9 @@ export interface CanonicalOriginDisplay {
   origemLabel: string;
   origemAgrupadorTipo: string | null;
   origemItemTipo: string | null;
+  contaInternaId: number | null;
+  alunoNome: string | null;
+  matriculaId: number | null;
   migracaoContaInternaStatus: string | null;
 }
 
@@ -167,6 +172,15 @@ export function buildCanonicalOriginDisplay(input: CanonicalOriginInput): Canoni
       textOrNull(input.origemAgrupadorTipo) ??
       (isContaInterna(input) ? "CONTA_INTERNA" : null);
     const itemType = normalizeItemType(input.origemItemTipo, input);
+    const contaInternaId =
+      typeof input.contaInternaId === "number" && Number.isFinite(input.contaInternaId) && input.contaInternaId > 0
+        ? input.contaInternaId
+        : null;
+    const alunoNome = cleanedHumanLabel(input.alunoNome ?? null);
+    const matriculaId =
+      typeof input.matriculaId === "number" && Number.isFinite(input.matriculaId) && input.matriculaId > 0
+        ? input.matriculaId
+        : null;
     const migracaoContaInternaStatus = textOrNull(input.migracaoContaInternaStatus) ?? "AMBIGUO";
     const badge = migrationBadge(migracaoContaInternaStatus);
     const item = itemLabel(itemType);
@@ -187,6 +201,9 @@ export function buildCanonicalOriginDisplay(input: CanonicalOriginInput): Canoni
         origemLabel: principal,
         origemAgrupadorTipo: agrupadorTipo,
         origemItemTipo: itemType,
+        contaInternaId,
+        alunoNome,
+        matriculaId,
         migracaoContaInternaStatus,
       };
     }
@@ -202,6 +219,9 @@ export function buildCanonicalOriginDisplay(input: CanonicalOriginInput): Canoni
         origemLabel: direct,
         origemAgrupadorTipo: textOrNull(input.origemAgrupadorTipo),
         origemItemTipo: itemType,
+        contaInternaId,
+        alunoNome,
+        matriculaId,
         migracaoContaInternaStatus,
       };
     }
@@ -216,6 +236,9 @@ export function buildCanonicalOriginDisplay(input: CanonicalOriginInput): Canoni
         origemLabel: humanLabel,
         origemAgrupadorTipo: textOrNull(input.origemAgrupadorTipo),
         origemItemTipo: itemType,
+        contaInternaId,
+        alunoNome,
+        matriculaId,
         migracaoContaInternaStatus,
       };
     }
@@ -229,6 +252,9 @@ export function buildCanonicalOriginDisplay(input: CanonicalOriginInput): Canoni
       origemLabel: "Origem em revisao",
       origemAgrupadorTipo: textOrNull(input.origemAgrupadorTipo),
       origemItemTipo: itemType,
+      contaInternaId,
+      alunoNome,
+      matriculaId,
       migracaoContaInternaStatus,
     };
   } catch {
@@ -241,6 +267,15 @@ export function buildCanonicalOriginDisplay(input: CanonicalOriginInput): Canoni
       origemLabel: "Origem em revisao",
       origemAgrupadorTipo: textOrNull(input.origemAgrupadorTipo),
       origemItemTipo: textOrNull(input.origemItemTipo) ?? "OUTRO",
+      contaInternaId:
+        typeof input.contaInternaId === "number" && Number.isFinite(input.contaInternaId) && input.contaInternaId > 0
+          ? input.contaInternaId
+          : null,
+      alunoNome: cleanedHumanLabel(input.alunoNome ?? null),
+      matriculaId:
+        typeof input.matriculaId === "number" && Number.isFinite(input.matriculaId) && input.matriculaId > 0
+          ? input.matriculaId
+          : null,
       migracaoContaInternaStatus: "AMBIGUO",
     };
   }

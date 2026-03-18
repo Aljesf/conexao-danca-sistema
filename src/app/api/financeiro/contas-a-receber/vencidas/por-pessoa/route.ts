@@ -42,6 +42,8 @@ export async function GET(req: NextRequest) {
         origemItemTipo: item.origemItemTipo,
         origemItemId: item.origemItemId,
         contaInternaId: item.contaInternaId,
+        alunoNome: item.alunoNome,
+        matriculaId: item.matriculaId,
         origemLabel: item.origemLabel,
         migracaoContaInternaStatus: item.migracaoContaInternaStatus,
       })),

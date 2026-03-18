@@ -707,23 +707,62 @@ function dateFromPeriodo(periodo: string): string | null {
   return `${periodo}-01`;
 }
 
-async function ensureContaCreditoConexaoAluno(params: { supabase: any; pessoaTitularId: number }) {
-  const { supabase, pessoaTitularId } = params;
+async function ensureContaCreditoConexaoAluno(params: { supabase: any; responsavelFinanceiroId: number }) {
+  const { supabase, responsavelFinanceiroId } = params;
 
-  const { data: contaExistente } = await supabase
+  const { data: contasExistentes, error: errContaExistente } = await supabase
     .from("credito_conexao_contas")
-    .select("id, dia_fechamento, dia_vencimento")
-    .eq("pessoa_titular_id", pessoaTitularId)
+    .select("id, dia_fechamento, dia_vencimento, ativo, pessoa_titular_id, responsavel_financeiro_pessoa_id")
     .eq("tipo_conta", "ALUNO")
-    .eq("ativo", true)
-    .maybeSingle();
+    .or(
+      `responsavel_financeiro_pessoa_id.eq.${responsavelFinanceiroId},pessoa_titular_id.eq.${responsavelFinanceiroId}`,
+    )
+    .order("id", { ascending: false });
 
-  if (contaExistente?.id) return contaExistente;
+  if (errContaExistente) {
+    throw new Error(`falha_buscar_conta_credito_conexao: ${errContaExistente.message}`);
+  }
+
+  const contaExistente =
+    (contasExistentes ?? []).find(
+      (conta) =>
+        asInt((conta as { responsavel_financeiro_pessoa_id?: unknown })?.responsavel_financeiro_pessoa_id) ===
+        responsavelFinanceiroId,
+    ) ?? contasExistentes?.[0];
+
+  if (contaExistente?.id) {
+    const ativa = (contaExistente as { ativo?: unknown }).ativo === true;
+    if (!ativa) {
+      throw new Error("conta_conexao_inativa");
+    }
+    const responsavelAtual =
+      asInt((contaExistente as { responsavel_financeiro_pessoa_id?: unknown })?.responsavel_financeiro_pessoa_id) ??
+      responsavelFinanceiroId;
+
+    const { data: contaAtualizada, error: errAtualizarConta } = await supabase
+      .from("credito_conexao_contas")
+      .update({
+        pessoa_titular_id: responsavelFinanceiroId,
+        responsavel_financeiro_pessoa_id: responsavelAtual,
+      })
+      .eq("id", contaExistente.id)
+      .select("id, dia_fechamento, dia_vencimento")
+      .single();
+
+    if (errAtualizarConta || !contaAtualizada) {
+      throw new Error(
+        `falha_atualizar_conta_credito_conexao: ${errAtualizarConta?.message ?? "erro_desconhecido"}`,
+      );
+    }
+
+    return contaAtualizada;
+  }
 
   const { data: contaNova, error: errNova } = await supabase
     .from("credito_conexao_contas")
     .insert({
-      pessoa_titular_id: pessoaTitularId,
+      pessoa_titular_id: responsavelFinanceiroId,
+      responsavel_financeiro_pessoa_id: responsavelFinanceiroId,
       tipo_conta: "ALUNO",
       descricao_exibicao: "Cartao Conexao ALUNO",
       dia_fechamento: 10,
@@ -1020,6 +1059,8 @@ async function gerarLancamentosCartaoManual(params: {
       contaConexaoId,
       competencia,
       valorCentavos: totalCentavos,
+      alunoId,
+      matriculaId,
       descricao,
       origemSistema: "MATRICULA",
       origemId: matriculaId,
@@ -1243,7 +1284,7 @@ export async function POST(request: NextRequest) {
 
         const conta = await ensureContaCreditoConexaoAluno({
           supabase,
-          pessoaTitularId: matricula.responsavel_financeiro_id,
+          responsavelFinanceiroId: matricula.responsavel_financeiro_id,
         });
 
         debugCartao.conta_conexao_id = conta.id;
@@ -1312,7 +1353,7 @@ export async function POST(request: NextRequest) {
         } else {
           const conta = await ensureContaCreditoConexaoAluno({
             supabase,
-            pessoaTitularId: matricula.responsavel_financeiro_id,
+            responsavelFinanceiroId: matricula.responsavel_financeiro_id,
           });
 
           debugCartao.conta_conexao_id = conta.id;
@@ -1350,6 +1391,8 @@ export async function POST(request: NextRequest) {
               contaConexaoId: Number(conta.id),
               competencia: periodo,
               valorCentavos: totalMensalidade,
+              alunoId,
+              matriculaId: matricula.id,
               descricao,
               origemSistema: "MATRICULA",
               origemId: matricula.id,
@@ -1819,7 +1862,7 @@ export async function POST(request: NextRequest) {
   if (body.modo === "LANCAR_NO_CARTAO") {
     const conta = await ensureContaCreditoConexaoAluno({
       supabase,
-      pessoaTitularId: matricula.responsavel_financeiro_id,
+      responsavelFinanceiroId: matricula.responsavel_financeiro_id,
     });
 
     if (modoManual) {
@@ -1968,6 +2011,8 @@ export async function POST(request: NextRequest) {
         contaConexaoId: Number(conta.id),
         competencia: periodo,
         valorCentavos: totalMensalidade,
+        alunoId,
+        matriculaId: matricula.id,
         descricao: "Mensalidade cheia - matricula",
         origemSistema: "MATRICULA",
         origemId: matricula.id,

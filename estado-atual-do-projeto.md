@@ -1,84 +1,73 @@
 # Modulo atual
 
-Financeiro - estabilizacao de contas a receber apos a migracao canonica de cobrancas para conta interna, com fallback seguro para schema legado e sem ocultar cobrancas ambigüas.
+Financeiro - consolidacao da conta interna por responsavel financeiro, mantendo a camada canonica de cobrancas, o fallback legado resiliente e a visibilidade completa das cobrancas.
 
 ## SQL concluido
 
-- criado o arquivo de conferencia `supabase/sql/diagnosticos/20260318_verificacao_migrations_contas_receber.sql`
-- confirmada no banco da aplicacao a ausencia inicial das colunas canonicas em `public.cobrancas`
-- confirmada no banco da aplicacao a ausencia inicial da tabela `public.auditoria_migracao_conta_interna_cobrancas`
-- aplicadas no banco usado pelo app, sem reset de ambiente, as migrations:
-  - `supabase/migrations/20260318_prepare_migracao_conta_interna_cobrancas.sql`
-  - `supabase/migrations/20260318_create_auditoria_migracao_conta_interna.sql`
-- validado depois da aplicacao que existem:
-  - `origem_agrupador_tipo`
-  - `origem_agrupador_id`
-  - `origem_item_tipo`
-  - `origem_item_id`
-  - `conta_interna_id`
-  - `origem_label`
-  - `migracao_conta_interna_status`
-  - `migracao_conta_interna_observacao`
-- o backfill manual `supabase/sql/scripts/20260318_backfill_migracao_conta_interna_cobrancas.sql` nao foi executado nesta etapa para evitar risco desnecessario
+- mantida a estabilizacao anterior da migracao canonica de `public.cobrancas`
+- criada a migration `supabase/migrations/20260318_consolidar_conta_interna_por_responsavel.sql`
+- a consolidacao foi adaptada para a estrutura real do projeto, usando `public.credito_conexao_contas` como tabela canonica de conta interna
+- a migration garante:
+  - `credito_conexao_contas.responsavel_financeiro_pessoa_id`
+  - `credito_conexao_lancamentos.aluno_id`
+  - `credito_conexao_lancamentos.matricula_id`
+  - indices para responsavel, aluno e matricula
+- a migration estrutural foi aplicada no banco local usado pela aplicacao sem reset de ambiente
+- criada a rotina manual `supabase/sql/scripts/20260318_backfill_conta_responsavel.sql`
+- o backfill manual nao foi executado nesta etapa para evitar atualizacao de dados sem revisao especifica
 
 ## APIs concluidas
 
-- estabilizada a rota principal `GET /api/financeiro/contas-a-receber`
-- a rota principal agora tenta a leitura canonica completa e, se a montagem falhar, responde em modo degradado com fallback legado seguro em vez de retornar 500
-- adicionados logs tecnicos por etapa na rota principal sem expor detalhes sensiveis ao cliente
-- revisado `src/lib/financeiro/cobranca-origem-canonica.ts` para aceitar nulos, shape legado e retornar estrutura minima segura com `Origem em revisao` e status `AMBIGUO` quando necessario
-- revisado `src/lib/financeiro/contas-receber-auditoria.ts` para:
-  - proteger a montagem por item
-  - proteger o detalhe da cobranca
-  - manter registros legados validos
-  - evitar esconder linhas quando a cobranca enriquecida nao estiver completa
-  - oferecer fallback reutilizavel para a rota principal e para leituras por pessoa
-- `GET /api/financeiro/contas-a-receber/vencidas/por-pessoa` e `GET /api/pessoas/[id]/resumo-financeiro` permanecem compatíveis e agora tambem herdaram a protecao do helper resiliente
+- mantida a estabilizacao da rota `GET /api/financeiro/contas-a-receber`
+- `src/lib/financeiro/cobranca-origem-canonica.ts` agora retorna tambem `contaInternaId`, `alunoNome` e `matriculaId` com fallback seguro
+- `src/lib/financeiro/contas-receber-auditoria.ts` passou a:
+  - carregar `aluno_id` e `matricula_id` dos lancamentos da conta interna
+  - resolver nome do aluno e matricula a partir da matricula direta, do lancamento ou da composicao da fatura
+  - propagar esses dados para lista, detalhe e fallback seguro
+- `GET /api/financeiro/contas-a-receber/vencidas/por-pessoa` agora devolve `alunoNome` e `matriculaId`
+- `GET /api/pessoas/[id]/resumo-financeiro` agora devolve `alunoNome` e `matriculaId`
+- a leitura de conta interna por responsavel no resumo financeiro passou a procurar primeiro por `responsavel_financeiro_pessoa_id`, com fallback para `pessoa_titular_id`
+- a criacao de lancamentos da matricula agora grava `aluno_id` e `matricula_id` em `credito_conexao_lancamentos`
+- a criacao/uso automatico da conta interna na matricula passou a reutilizar a conta do responsavel financeiro e preencher `responsavel_financeiro_pessoa_id`
 
 ## Paginas/componentes concluidos
 
-- `src/app/(private)/admin/financeiro/contas-receber/page.tsx` ajustada para usar fallback visual seguro no modal e no fluxo de recebimento
-- `src/components/financeiro/contas-receber/CobrancasTable.tsx` ajustada para nunca assumir `origem_label` presente e sempre renderizar uma origem segura
-- `src/components/financeiro/contas-receber/CobrancaAuditDetail.tsx` ajustada para usar origem principal segura no detalhe
-- `src/components/pessoas/PessoaResumoFinanceiro.tsx` continua exibindo `cobrancas_canonicas` sem esconder cobrancas sem `contaInternaId`
-- `src/app/(private)/financeiro/cobrancas/[id]/page.tsx` continua operando com fallback quando o schema canonico nao estiver completo
-- a UI preserva a visibilidade de cobrancas `AMBIGUO` com badge de revisao e sem remover linhas da tabela
+- `src/components/financeiro/contas-receber/CobrancasTable.tsx` agora prioriza `Conta interna #...` como principal quando existir conta consolidada
+- a tabela exibe subcontexto com aluno e matricula sem esconder cobrancas legadas
+- `src/components/financeiro/contas-receber/CobrancaAuditDetail.tsx` passou a mostrar conta interna, aluno e matricula no detalhe
+- `src/components/pessoas/PessoaResumoFinanceiro.tsx` passou a exibir conta interna, aluno e matricula nas cobrancas canonicas
+- a UI continua segura para itens sem conta interna preenchida, mantendo fallback legado e badge de revisao quando necessario
 
 ## Pendencias
 
-- executar o backfill manual de migracao semantica apenas depois da revisao fina dos dados
-- saneamento manual dos casos `AMBIGUO`
-- gerar evidencias visuais autenticadas da fila, do modal, do resumo financeiro e do detalhe da cobranca
-- consolidar futuramente a desativacao progressiva das labels legadas quando o saneamento semantico estiver concluido
+- revisar e executar manualmente `supabase/sql/scripts/20260318_backfill_conta_responsavel.sql` quando houver janela segura
+- saneamento manual dos casos em que ainda exista conta interna ausente na cobranca, mas a familia ja possua conta consolidada
+- gerar evidencias visuais autenticadas da fila, do modal/lista de titulos, do resumo financeiro e do detalhe da cobranca
+- consolidar o uso de `responsavel_financeiro_pessoa_id` nas demais leituras financeiras que ainda consultarem apenas `pessoa_titular_id`
 
 ## Bloqueios
 
-- `npm run lint -- --quiet` continua falhando por passivo antigo fora do escopo em modulos nao alterados, principalmente frentes de loja, perfis, permissoes e componentes legados
 - nao ha harness autenticado pronto para capturar prints reais das telas privadas nesta etapa
+- o lint global do repositorio continua com passivo antigo fora do escopo em modulos nao alterados
 
 ## Versao do sistema
 
-Conectarte v0.9 - contas a receber estabilizado apos a migracao canonica, com schema compativel e fallback legado resiliente.
+Conectarte v0.9 - contas a receber estabilizado e conta interna em consolidacao por responsavel financeiro, com lancamentos enriquecidos por aluno e matricula.
 
 ## Proximas acoes
 
-- revisar semanticamente as cobrancas marcadas como `AMBIGUO`
-- executar o backfill controlado por blocos
+- executar o backfill manual com revisao de dados
+- preencher `conta_interna_id` nos casos canonicos ainda pendentes de saneamento fino
 - validar visualmente as telas privadas com sessao autenticada
-- depois do saneamento fino, consolidar a conta interna do aluno como contexto pai definitivo
+- consolidar de vez a conta interna do responsavel como contexto pai das cobrancas escolares
 
 ## Validacao
 
 - `npx next lint --file ...` nos arquivos alterados nesta tarefa: ok
 - `npm run build`: ok
-- validacao funcional direta nos helpers principais: ok
-- validacao local HTTP sem sessao:
-  - `/login` respondeu `200`
-  - `/financeiro/contas-receber` respondeu `307` para o fluxo de autenticacao
-  - `/api/financeiro/contas-a-receber` respondeu `401` nao autenticado, sem 500
-- validacao funcional de dados com Supabase admin:
-  - `listarContasReceberAuditoria(...)`: ok
-  - `listarContasReceberAuditoriaFallback(...)`: ok
-  - `listarTitulosVencidosPorPessoa(...)`: ok
-  - `listarCobrancasEmAbertoPorPessoa(...)`: ok
-- `npm run lint -- --quiet`: falhou apenas por passivo antigo fora do escopo
+- validacao funcional do helper `listarContasReceberAuditoria(...)`: ok
+- amostras reais ja retornam `alunoNome` e `matriculaId` no payload canonico
+- ha cobrancas reais retornando `contaInternaId` preenchido no payload canonico
+- consulta SQL de consistencia no banco local:
+  - nenhuma duplicidade atual de conta interna por responsavel encontrada
+  - existem familias reais com 2 ou mais matriculas e apenas 1 conta interna associada

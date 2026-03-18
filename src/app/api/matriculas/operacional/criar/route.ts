@@ -208,11 +208,16 @@ async function ensureContaConexaoAluno(
 ): Promise<number> {
   const { rows: existing } = await client.query(
     `
-    SELECT id, ativo
+    SELECT id, ativo, pessoa_titular_id, responsavel_financeiro_pessoa_id
     FROM public.credito_conexao_contas
-    WHERE pessoa_titular_id = $1
-      AND tipo_conta = 'ALUNO'
-    ORDER BY id DESC
+    WHERE tipo_conta = 'ALUNO'
+      AND (
+        responsavel_financeiro_pessoa_id = $1
+        OR pessoa_titular_id = $1
+      )
+    ORDER BY
+      CASE WHEN responsavel_financeiro_pessoa_id = $1 THEN 0 ELSE 1 END,
+      id DESC
     LIMIT 1
     `,
     [responsavelFinanceiroId],
@@ -225,6 +230,19 @@ async function ensureContaConexaoAluno(
     if (!ativo) {
       throw new Error("conta_conexao_inativa");
     }
+
+    await client.query(
+      `
+      UPDATE public.credito_conexao_contas
+      SET
+        pessoa_titular_id = $1,
+        responsavel_financeiro_pessoa_id = COALESCE(responsavel_financeiro_pessoa_id, $1),
+        updated_at = now()
+      WHERE id = $2
+      `,
+      [responsavelFinanceiroId, id],
+    );
+
     return id;
   }
 
@@ -232,6 +250,7 @@ async function ensureContaConexaoAluno(
     `
     INSERT INTO public.credito_conexao_contas (
       pessoa_titular_id,
+      responsavel_financeiro_pessoa_id,
       tipo_conta,
       descricao_exibicao,
       dia_fechamento,
@@ -241,7 +260,7 @@ async function ensureContaConexaoAluno(
       created_at,
       updated_at
     ) VALUES (
-      $1,'ALUNO',NULL,10,$2,$3,true,now(),now()
+      $1,$1,'ALUNO',NULL,10,$2,$3,true,now(),now()
     )
     RETURNING id
     `,
@@ -891,6 +910,8 @@ export async function POST(req: Request) {
               contaConexaoId,
               competencia: cobranca.competencia,
               valorCentavos: cobranca.valor_centavos,
+              alunoId: pessoaId,
+              matriculaId,
               descricao: cobranca.descricao,
               origemSistema: "MATRICULA",
               origemId: matriculaId,

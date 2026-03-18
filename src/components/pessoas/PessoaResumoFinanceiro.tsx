@@ -70,6 +70,8 @@ type ResumoFinanceiro = {
     origemItemTipo: string | null;
     origemItemId: number | null;
     contaInternaId: number | null;
+    alunoNome: string | null;
+    matriculaId: number | null;
     origemLabel: string;
     migracaoContaInternaStatus: string | null;
   }>;
@@ -332,6 +334,8 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
       origemItemTipo: null,
       origemItemId: null,
       contaInternaId: null,
+      alunoNome: null,
+      matriculaId: item.origem_id,
       origemLabel: item.origem_tipo ? `${item.origem_tipo}${item.origem_id ? ` #${item.origem_id}` : ""}` : "Origem em revisao",
       migracaoContaInternaStatus: null,
     }));
@@ -722,9 +726,13 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                             {c.contaInternaId ? (
                               <div className="text-xs text-slate-500">Conta interna #{c.contaInternaId}</div>
                             ) : null}
+                            {c.alunoNome ? <div className="text-xs text-slate-500">Aluno: {c.alunoNome}</div> : null}
+                            {c.matriculaId ? <div className="text-xs text-slate-500">Matricula #{c.matriculaId}</div> : null}
                           </td>
                           <td className="py-2">
-                            <div className="font-medium text-slate-900">{c.origem_label || c.origemLabel || "Origem em revisao"}</div>
+                            <div className="font-medium text-slate-900">
+                              {c.contaInternaId ? `Conta interna #${c.contaInternaId}` : c.origem_label || c.origemLabel || "Origem em revisao"}
+                            </div>
                             {c.origem_secundaria ? <div className="text-xs text-slate-500">{c.origem_secundaria}</div> : null}
                             {c.origem_badge_label || c.origem_tecnica ? (
                               <div className="mt-1 flex flex-wrap items-center gap-1.5">

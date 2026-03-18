@@ -1464,7 +1464,10 @@ export type Database = {
           limite_autorizado_centavos: number | null
           limite_maximo_centavos: number | null
           pessoa_titular_id: number
+          responsavel_financeiro_pessoa_id: number | null
           tipo_conta: string
+          tipo_liquidacao: string | null
+          tipo_titular: string | null
           updated_at: string
         }
         Insert: {
@@ -1482,7 +1485,10 @@ export type Database = {
           limite_autorizado_centavos?: number | null
           limite_maximo_centavos?: number | null
           pessoa_titular_id: number
+          responsavel_financeiro_pessoa_id?: number | null
           tipo_conta: string
+          tipo_liquidacao?: string | null
+          tipo_titular?: string | null
           updated_at?: string
         }
         Update: {
@@ -1500,7 +1506,10 @@ export type Database = {
           limite_autorizado_centavos?: number | null
           limite_maximo_centavos?: number | null
           pessoa_titular_id?: number
+          responsavel_financeiro_pessoa_id?: number | null
           tipo_conta?: string
+          tipo_liquidacao?: string | null
+          tipo_titular?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1528,6 +1537,13 @@ export type Database = {
           {
             foreignKeyName: "credito_conexao_contas_pessoa_titular_fkey"
             columns: ["pessoa_titular_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credito_conexao_contas_responsavel_financeiro_pessoa_id_fkey"
+            columns: ["responsavel_financeiro_pessoa_id"]
             isOneToOne: false
             referencedRelation: "pessoas"
             referencedColumns: ["id"]
@@ -1639,6 +1655,7 @@ export type Database = {
       }
       credito_conexao_lancamentos: {
         Row: {
+          aluno_id: number | null
           cobranca_id: number | null
           competencia: string | null
           composicao_json: Json | null
@@ -1647,6 +1664,7 @@ export type Database = {
           data_lancamento: string
           descricao: string | null
           id: number
+          matricula_id: number | null
           numero_parcelas: number | null
           origem_id: number | null
           origem_sistema: string
@@ -1656,6 +1674,7 @@ export type Database = {
           valor_centavos: number
         }
         Insert: {
+          aluno_id?: number | null
           cobranca_id?: number | null
           competencia?: string | null
           composicao_json?: Json | null
@@ -1664,6 +1683,7 @@ export type Database = {
           data_lancamento?: string
           descricao?: string | null
           id?: number
+          matricula_id?: number | null
           numero_parcelas?: number | null
           origem_id?: number | null
           origem_sistema: string
@@ -1673,6 +1693,7 @@ export type Database = {
           valor_centavos: number
         }
         Update: {
+          aluno_id?: number | null
           cobranca_id?: number | null
           competencia?: string | null
           composicao_json?: Json | null
@@ -1681,6 +1702,7 @@ export type Database = {
           data_lancamento?: string
           descricao?: string | null
           id?: number
+          matricula_id?: number | null
           numero_parcelas?: number | null
           origem_id?: number | null
           origem_sistema?: string
@@ -1705,10 +1727,24 @@ export type Database = {
             referencedColumns: ["cobranca_id"]
           },
           {
+            foreignKeyName: "credito_conexao_lancamentos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "credito_conexao_lancamentos_conta_fkey"
             columns: ["conta_conexao_id"]
             isOneToOne: false
             referencedRelation: "credito_conexao_contas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credito_conexao_lancamentos_matricula_id_fkey"
+            columns: ["matricula_id"]
+            isOneToOne: false
+            referencedRelation: "matriculas"
             referencedColumns: ["id"]
           },
         ]

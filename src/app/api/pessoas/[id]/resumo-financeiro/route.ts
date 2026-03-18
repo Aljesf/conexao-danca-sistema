@@ -32,6 +32,7 @@ type CobrancaCanceladaRow = {
 type ContaConexaoPessoaRow = {
   id: number;
   pessoa_titular_id: number;
+  responsavel_financeiro_pessoa_id: number | null;
 };
 
 type FaturaResumoRow = {
@@ -107,6 +108,8 @@ type ResumoFinanceiroResponse = {
     origemItemTipo: string | null;
     origemItemId: number | null;
     contaInternaId: number | null;
+    alunoNome: string | null;
+    matriculaId: number | null;
     origemLabel: string;
     migracaoContaInternaStatus: string | null;
   }>;
@@ -233,11 +236,16 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     created_at: cobranca.created_at,
   }));
 
-  const { data: conta } = await supabase
+  const { data: contasRaw } = await supabase
     .from("credito_conexao_contas")
-    .select("id,pessoa_titular_id")
-    .eq("pessoa_titular_id", responsavelId)
-    .maybeSingle<ContaConexaoPessoaRow>();
+    .select("id,pessoa_titular_id,responsavel_financeiro_pessoa_id")
+    .eq("tipo_conta", "ALUNO")
+    .or(`responsavel_financeiro_pessoa_id.eq.${responsavelId},pessoa_titular_id.eq.${responsavelId}`)
+    .order("id", { ascending: false });
+  const conta =
+    ((contasRaw ?? []) as ContaConexaoPessoaRow[]).find(
+      (item) => Number(item.responsavel_financeiro_pessoa_id ?? 0) === responsavelId,
+    ) ?? ((contasRaw ?? []) as ContaConexaoPessoaRow[])[0];
 
   let faturas: ResumoFinanceiroResponse["faturas_credito_conexao"] = [];
   if (conta?.id) {
@@ -289,6 +297,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       origemItemTipo: item.origemItemTipo,
       origemItemId: item.origemItemId,
       contaInternaId: item.contaInternaId,
+      alunoNome: item.alunoNome,
+      matriculaId: item.matriculaId,
       origemLabel: item.origemLabel,
       migracaoContaInternaStatus: item.migracaoContaInternaStatus,
     })),
