@@ -121,6 +121,7 @@ export function ContasReceberFilters(props: Props) {
     onCompetenciaInicioChange,
     onCompetenciaFimChange,
   } = props;
+  const statusOptions = visao === "INCONSISTENCIAS" ? STATUS : STATUS.filter((item) => item !== "CANCELADA");
 
   return (
     <Card className="border-slate-200 bg-white">
@@ -187,7 +188,7 @@ export function ContasReceberFilters(props: Props) {
           </Field>
           <Field label="Status bruto">
             <Select value={status} onChange={(value) => onStatusChange(value as StatusFilter)}>
-              {STATUS.map((item) => (
+              {statusOptions.map((item) => (
                 <option key={item} value={item}>
                   {item === "TODOS" ? "Todos" : item}
                 </option>

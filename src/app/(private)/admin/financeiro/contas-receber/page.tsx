@@ -124,6 +124,7 @@ export default function AdminContasReceberPage() {
   const [vencimentoInicio, setVencimentoInicio] = useState("");
   const [vencimentoFim, setVencimentoFim] = useState("");
   const [page, setPage] = useState(1);
+  const [reloadToken, setReloadToken] = useState(0);
   const [payload, setPayload] = useState<ContasReceberAuditoriaPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +166,12 @@ export default function AdminContasReceberPage() {
       setVencimentoFim("");
     }
   }, [tipoPeriodo]);
+
+  useEffect(() => {
+    if (visao !== "INCONSISTENCIAS" && status === "CANCELADA") {
+      setStatus("TODOS");
+    }
+  }, [status, visao]);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -239,7 +246,7 @@ export default function AdminContasReceberPage() {
 
     void load();
     return () => controller.abort();
-  }, [queryString]);
+  }, [queryString, reloadToken]);
 
   useEffect(() => {
     setPage(1);
@@ -340,6 +347,10 @@ export default function AdminContasReceberPage() {
     } finally {
       setReceberLoading(false);
     }
+  }
+
+  function handleExpurgoConcluido() {
+    setReloadToken((current) => current + 1);
   }
 
   function limparFiltros() {
@@ -477,6 +488,7 @@ export default function AdminContasReceberPage() {
         onPageChange={(nextPage) => setPage(nextPage)}
         onAuditar={abrirAuditoria}
         onReceber={abrirRecebimento}
+        onExpurgoConcluido={handleExpurgoConcluido}
       />
 
       <PerdasCancelamentoCard items={payload?.perdas_cancelamento ?? []} />

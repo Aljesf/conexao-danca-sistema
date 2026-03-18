@@ -8,6 +8,7 @@ import {
   type ContasReceberTipoPeriodo,
   type ContasReceberVisao,
 } from "@/lib/financeiro/contas-receber-view-config";
+import { isMissingExpurgoColumnError, logExpurgoMigrationWarning } from "@/lib/financeiro/expurgo-compat";
 import type { Database, Json } from "@/types/supabase.generated";
 
 export type ContextoPrincipal = "ESCOLA" | "CAFE" | "LOJA" | "OUTRO";
@@ -260,7 +261,13 @@ type FlatRow = {
   bucket_vencimento: string | null;
 };
 
-type CobrancaRow = Database["public"]["Tables"]["cobrancas"]["Row"];
+type CobrancaBaseRow = Database["public"]["Tables"]["cobrancas"]["Row"];
+type CobrancaRow = CobrancaBaseRow & {
+  expurgada?: boolean | null;
+  expurgada_em?: string | null;
+  expurgada_por?: string | null;
+  expurgo_motivo?: string | null;
+};
 type PessoaRow = Database["public"]["Tables"]["pessoas"]["Row"];
 type CentroCustoRow = Database["public"]["Tables"]["centros_custo"]["Row"];
 type FaturaRow = Database["public"]["Tables"]["credito_conexao_faturas"]["Row"];
@@ -333,6 +340,10 @@ function numberOrZero(value: unknown): number {
   return numberOrNull(value) ?? 0;
 }
 
+function booleanOrFalse(value: unknown): boolean {
+  return value === true;
+}
+
 function normalizeDate(value: unknown): string | null {
   const date = textOrNull(value);
   if (!date) return null;
@@ -344,6 +355,13 @@ function pessoaNome(pessoaId: number | null, pessoa: PessoaRow | undefined): str
   if (nome) return nome;
   if (typeof pessoaId === "number" && pessoaId > 0) return `Pessoa #${pessoaId}`;
   return "Pessoa não identificada";
+}
+
+function cobrancaVisivel(cobranca: CobrancaRow | undefined, visao: ContasReceberVisao): boolean {
+  if (!cobranca) return false;
+  if (booleanOrFalse(cobranca.expurgada)) return false;
+  if (visao !== "INCONSISTENCIAS" && upper(cobranca.status) === "CANCELADA") return false;
+  return true;
 }
 
 function chunkNumbers(values: number[], chunkSize = 200): number[][] {
@@ -365,6 +383,42 @@ async function selectMany<T>(
   const chunks = chunkNumbers(uniqueIds, chunkSize);
   const settled = await Promise.all(chunks.map((chunk) => fetcher(chunk)));
   return settled.flat();
+}
+
+async function carregarCobrancasPorIds(
+  supabase: SupabaseClient,
+  ids: number[],
+  scope: string,
+  selectWithExpurgo: string,
+  selectFallback: string,
+): Promise<CobrancaRow[]> {
+  return selectMany<CobrancaRow>(async (chunk) => {
+    const query = () => supabase.from("cobrancas");
+    const primary = await query().select(selectWithExpurgo).in("id", chunk);
+
+    if (!primary.error) {
+      return (primary.data ?? []) as CobrancaRow[];
+    }
+
+    if (!isMissingExpurgoColumnError(primary.error)) {
+      throw new Error(`${scope}: ${primary.error.message}`);
+    }
+
+    logExpurgoMigrationWarning("contas-receber-auditoria", primary.error);
+
+    const fallback = await query().select(selectFallback).in("id", chunk);
+    if (fallback.error) {
+      throw new Error(`${scope}: ${fallback.error.message}`);
+    }
+
+    return ((fallback.data ?? []) as CobrancaRow[]).map((row) => ({
+      ...row,
+      expurgada: false,
+      expurgada_em: null,
+      expurgada_por: null,
+      expurgo_motivo: null,
+    }));
+  }, ids);
 }
 
 function isDateLike(value?: string | null): boolean {
@@ -1524,16 +1578,13 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     )
     .map((row) => row.origem_id as number);
 
-  const cobrancas = await selectMany<CobrancaRow>(async (chunk) => {
-    const { data, error } = await supabase
-      .from("cobrancas")
-      .select(
-        "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes",
-      )
-      .in("id", chunk);
-    if (error) throw new Error(`erro_carregar_cobrancas: ${error.message}`);
-    return (data ?? []) as CobrancaRow[];
-  }, cobrancaIds);
+  const cobrancas = await carregarCobrancasPorIds(
+    supabase,
+    cobrancaIds,
+    "erro_carregar_cobrancas",
+    "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes,expurgada,expurgada_em,expurgada_por,expurgo_motivo",
+    "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes",
+  );
 
   const pessoas = await selectMany<PessoaRow>(async (chunk) => {
     const { data, error } = await supabase.from("pessoas").select("id,nome").in("id", chunk);
@@ -1968,6 +2019,20 @@ async function buildPerdasCancelamento(
     });
   }, matriculaIds);
 
+  const cobrancasAbertas = await carregarCobrancasPorIds(
+    supabase,
+    abertas.map((row) => row.cobranca_id),
+    "erro_carregar_cobrancas_cancelamento",
+    "id,status,expurgada",
+    "id,status",
+  );
+
+  const cobrancasAbertasMap = new Map(cobrancasAbertas.map((row) => [row.id, row]));
+  const abertasVisiveis = abertas.filter((row) => {
+    const cobranca = cobrancasAbertasMap.get(row.cobranca_id);
+    return cobrancaVisivel(cobranca, "VENCIDAS");
+  });
+
   const encerramentoPorMatricula = new Map<number, MatriculaEncerramentoRow>();
   for (const encerramento of encerramentos) {
     const matriculaId = numberOrNull(encerramento.matricula_id);
@@ -1979,7 +2044,7 @@ async function buildPerdasCancelamento(
   }
 
   const abertoPorMatricula = new Map<number, number>();
-  for (const row of abertas) {
+  for (const row of abertasVisiveis) {
     const matriculaId = row.origem_id;
     if (!matriculaId) continue;
     abertoPorMatricula.set(matriculaId, (abertoPorMatricula.get(matriculaId) ?? 0) + row.saldo_aberto_centavos);
@@ -2042,7 +2107,8 @@ export async function listarContasReceberAuditoria(
 
   const baseRows = await fetchFlatRows(supabase, input);
   const maps = await buildMaps(supabase, baseRows);
-  const itensEnriquecidos = baseRows.map((row) => buildItem(row, maps));
+  const linhasVisiveis = baseRows.filter((row) => cobrancaVisivel(maps.cobrancas.get(row.cobranca_id), visao));
+  const itensEnriquecidos = linhasVisiveis.map((row) => buildItem(row, maps));
   const filtradosPorContexto = filtrarPorContexto(itensEnriquecidos, contexto);
   const filtradosPorBusca = filtrarPorBusca(filtradosPorContexto, input.q ?? null);
   const ordenados = sortItemsByOrdenacao(filtradosPorBusca, visao, ordenacao);

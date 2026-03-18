@@ -10,6 +10,7 @@ import {
   normalizeContasReceberTipoPeriodo,
   normalizeContasReceberVisao,
 } from "@/lib/financeiro/contas-receber-view-config";
+import { isMissingExpurgoColumnError, logExpurgoMigrationWarning } from "@/lib/financeiro/expurgo-compat";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 const BUCKETS_VALIDOS = new Set([
@@ -132,6 +133,11 @@ export async function GET(req: NextRequest) {
       ...payload,
     });
   } catch (error: unknown) {
+    if (isMissingExpurgoColumnError(error)) {
+      logExpurgoMigrationWarning("/api/financeiro/contas-a-receber", error);
+    } else {
+      console.error("[/api/financeiro/contas-a-receber] erro ao montar payload:", error);
+    }
     const message = error instanceof Error ? error.message : "erro_listar_contas_receber";
     return NextResponse.json({ ok: false, error: "erro_listar_contas_receber", details: message }, { status: 500 });
   }

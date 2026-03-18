@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateISO } from "@/lib/formatters/date";
@@ -7,6 +8,7 @@ import { formatBRLFromCents } from "@/lib/formatters/money";
 import type { CobrancaListaItem, ContextoPrincipal } from "@/lib/financeiro/contas-receber-auditoria";
 import type { ContasReceberVisao } from "@/lib/financeiro/contas-receber-view-config";
 import { getContextoLabel } from "@/lib/financeiro/contas-receber-view-config";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shadcn/ui";
 
 type Props = {
   items: CobrancaListaItem[];
@@ -19,6 +21,12 @@ type Props = {
   onPageChange: (page: number) => void;
   onAuditar: (item: CobrancaListaItem) => void;
   onReceber: (item: CobrancaListaItem) => void;
+  onExpurgoConcluido: () => void;
+};
+
+type ExpurgoResponse = {
+  ok?: boolean;
+  error?: string;
 };
 
 const CONTEXTO_STYLES: Record<ContextoPrincipal, string> = {
@@ -36,7 +44,9 @@ function referenceLabel(item: CobrancaListaItem) {
 }
 
 function situacaoBadge(item: CobrancaListaItem) {
+  const bruto = item.status_cobranca ?? "";
   const interno = item.status_interno ?? "EM_REVISAO";
+  if (bruto === "CANCELADA") return "bg-slate-200 text-slate-800 ring-slate-300";
   if (interno === "VENCIDA") return "bg-rose-50 text-rose-700 ring-rose-200";
   if (interno === "EM_ABERTO") return "bg-amber-50 text-amber-700 ring-amber-200";
   if (interno === "QUITADA") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
@@ -44,6 +54,7 @@ function situacaoBadge(item: CobrancaListaItem) {
 }
 
 function situacaoSecundaria(item: CobrancaListaItem) {
+  if (item.status_cobranca === "CANCELADA") return "Cancelada e elegivel a expurgo tecnico";
   if (item.tipo_inconsistencia) return item.tipo_inconsistencia;
   if (item.status_interno === "QUITADA") {
     return item.ultima_data_recebimento ? `Recebida em ${formatDateISO(item.ultima_data_recebimento)}` : "Quitada";
@@ -108,14 +119,18 @@ function Row({
   visao,
   onAuditar,
   onReceber,
+  onAbrirExpurgo,
 }: {
   item: CobrancaListaItem;
   visao: ContasReceberVisao;
   onAuditar: (item: CobrancaListaItem) => void;
   onReceber: (item: CobrancaListaItem) => void;
+  onAbrirExpurgo: (item: CobrancaListaItem) => void;
 }) {
   const contextoLabel = getContextoLabel(item.contexto_principal);
-  const showReceber = visao !== "RECEBIDAS" && item.valor_aberto_centavos > 0 && item.status_interno !== "QUITADA";
+  const showReceber =
+    visao !== "RECEBIDAS" && item.valor_aberto_centavos > 0 && item.status_interno !== "QUITADA" && item.status_cobranca !== "CANCELADA";
+  const showExpurgar = item.status_cobranca === "CANCELADA";
 
   if (visao === "RECEBIDAS") {
     return (
@@ -185,9 +200,9 @@ function Row({
         <td className="px-3 py-3 text-slate-700">{formatBRLFromCents(Math.max(item.valor_aberto_centavos, item.valor_centavos))}</td>
         <td className="px-3 py-3 text-slate-700">
           <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${situacaoBadge(item)}`}>
-            {item.status_interno ?? "Em revisao"}
+            {item.status_cobranca ?? item.status_interno ?? "Em revisao"}
           </span>
-          <div className="mt-1 text-xs text-slate-500">{item.status_cobranca ?? "Sem status bruto"}</div>
+          <div className="mt-1 text-xs text-slate-500">{situacaoSecundaria(item)}</div>
         </td>
         <td className="px-3 py-3 text-slate-700">{formatDateISO(item.vencimento)}</td>
         <td className="px-3 py-3">
@@ -195,6 +210,11 @@ function Row({
             <Button type="button" variant="secondary" onClick={() => onAuditar(item)}>
               Auditar
             </Button>
+            {showExpurgar ? (
+              <Button type="button" variant="secondary" onClick={() => onAbrirExpurgo(item)}>
+                Expurgar
+              </Button>
+            ) : null}
           </div>
         </td>
       </tr>
@@ -241,6 +261,11 @@ function Row({
               Receber
             </Button>
           ) : null}
+          {showExpurgar ? (
+            <Button type="button" variant="secondary" onClick={() => onAbrirExpurgo(item)}>
+              Expurgar
+            </Button>
+          ) : null}
         </div>
       </td>
     </tr>
@@ -258,55 +283,147 @@ export function CobrancasTable({
   onPageChange,
   onAuditar,
   onReceber,
+  onExpurgoConcluido,
 }: Props) {
-  return (
-    <Card className="border-slate-200 bg-white">
-      <CardHeader className="border-slate-100">
-        <CardTitle className="text-slate-900">{title}</CardTitle>
-        <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <TableHeader visao={visao} />
-            </thead>
-            <tbody>
-              {items.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-500">
-                    Nenhum registro encontrado para os filtros atuais.
-                  </td>
-                </tr>
-              ) : (
-                items.map((item) => (
-                  <Row
-                    key={item.cobranca_id}
-                    item={item}
-                    visao={visao}
-                    onAuditar={onAuditar}
-                    onReceber={onReceber}
-                  />
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+  const [expurgoOpen, setExpurgoOpen] = useState(false);
+  const [expurgoItem, setExpurgoItem] = useState<CobrancaListaItem | null>(null);
+  const [expurgoMotivo, setExpurgoMotivo] = useState("");
+  const [expurgoLoading, setExpurgoLoading] = useState(false);
+  const [expurgoError, setExpurgoError] = useState<string | null>(null);
 
-        <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            Pagina {page} de {totalPages} · {total} registro(s)
-          </span>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
-              Anterior
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
-              Proxima
-            </Button>
+  function abrirExpurgo(item: CobrancaListaItem) {
+    setExpurgoItem(item);
+    setExpurgoMotivo("");
+    setExpurgoError(null);
+    setExpurgoOpen(true);
+  }
+
+  async function confirmarExpurgo() {
+    if (!expurgoItem) return;
+    const motivo = expurgoMotivo.trim();
+    if (!motivo) {
+      setExpurgoError("Informe o motivo do expurgo.");
+      return;
+    }
+
+    setExpurgoLoading(true);
+    setExpurgoError(null);
+    try {
+      const response = await fetch("/api/financeiro/cobrancas/expurgar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cobranca_id: expurgoItem.cobranca_id,
+          motivo,
+        }),
+      });
+      const json = (await response.json().catch(() => null)) as ExpurgoResponse | null;
+      if (!response.ok || !json?.ok) {
+        throw new Error(json?.error ?? "erro_expurgar_cobranca");
+      }
+      setExpurgoOpen(false);
+      setExpurgoItem(null);
+      setExpurgoMotivo("");
+      onExpurgoConcluido();
+    } catch (error) {
+      setExpurgoError(error instanceof Error ? error.message : "erro_expurgar_cobranca");
+    } finally {
+      setExpurgoLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <Card className="border-slate-200 bg-white">
+        <CardHeader className="border-slate-100">
+          <CardTitle className="text-slate-900">{title}</CardTitle>
+          <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <TableHeader visao={visao} />
+              </thead>
+              <tbody>
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-500">
+                      Nenhum registro encontrado para os filtros atuais.
+                    </td>
+                  </tr>
+                ) : (
+                  items.map((item) => (
+                    <Row
+                      key={item.cobranca_id}
+                      item={item}
+                      visao={visao}
+                      onAuditar={onAuditar}
+                      onReceber={onReceber}
+                      onAbrirExpurgo={abrirExpurgo}
+                    />
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+
+          <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Pagina {page} de {totalPages} · {total} registro(s)
+            </span>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
+                Anterior
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
+                Proxima
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={expurgoOpen} onOpenChange={setExpurgoOpen}>
+        <DialogContent className="max-w-xl p-0">
+          <DialogHeader>
+            <div className="border-b border-slate-100 px-6 py-5">
+              <DialogTitle>Expurgar cobranca cancelada</DialogTitle>
+              <DialogDescription>
+                O expurgo remove a cobranca da leitura financeira principal e exige motivo auditavel.
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+          <div className="space-y-4 p-6">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Cobranca selecionada</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {expurgoItem ? `#${expurgoItem.cobranca_id} · ${expurgoItem.pessoa_nome}` : "--"}
+              </div>
+            </div>
+            <label className="space-y-1 text-sm text-slate-700">
+              <span>Motivo do expurgo</span>
+              <textarea
+                className="min-h-28 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                value={expurgoMotivo}
+                onChange={(event) => setExpurgoMotivo(event.target.value)}
+                placeholder="Explique por que esta cobranca cancelada deve sair da leitura financeira."
+              />
+            </label>
+            {expurgoError ? <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{expurgoError}</div> : null}
+            <div className="flex justify-end gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="secondary" disabled={expurgoLoading}>
+                  Cancelar
+                </Button>
+              </DialogClose>
+              <Button type="button" variant="secondary" onClick={() => void confirmarExpurgo()} disabled={expurgoLoading || !expurgoItem}>
+                {expurgoLoading ? "Expurgando..." : "Confirmar expurgo"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

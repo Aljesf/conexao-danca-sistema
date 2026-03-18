@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { analisarSnapshotGPT } from "@/lib/ia/financeiro/analisarSnapshot";
+import { isMissingExpurgoColumnError, logExpurgoMigrationWarning } from "@/lib/financeiro/expurgo-compat";
 
 export type TendenciaValor = {
   atual_centavos: number;
@@ -107,6 +108,10 @@ export type AnaliseGpt = {
   raw?: any;
 };
 
+type QueryErrorLike = {
+  message?: string | null;
+};
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const isDev = process.env.NODE_ENV !== "production";
@@ -137,6 +142,29 @@ function addDays(base: string, days: number): string {
   const d = new Date(`${base}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+async function executarCobrancasComFallback<T>(
+  scope: string,
+  execute: (withExpurgo: boolean) => Promise<{ data: T[] | null; error: QueryErrorLike | null }>,
+): Promise<T[]> {
+  const primary = await execute(true);
+  if (!primary.error) {
+    return primary.data ?? [];
+  }
+
+  if (!isMissingExpurgoColumnError(primary.error)) {
+    throw new Error(primary.error.message ?? `${scope}_falhou`);
+  }
+
+  logExpurgoMigrationWarning(`dashboardInteligente:${scope}`, primary.error);
+
+  const fallback = await execute(false);
+  if (fallback.error) {
+    throw new Error(fallback.error.message ?? `${scope}_falhou`);
+  }
+
+  return fallback.data ?? [];
 }
 
 function variacao(atual: number, anterior: number): TendenciaValor {
@@ -490,14 +518,22 @@ export async function gerarSnapshot(
   });
 
   // Entradas previstas e saídas comprometidas (30d futuros)
-  const { data: cobrancas, error: errCob } = await supabase
-    .from("cobrancas")
-    .select("valor_centavos, status, vencimento, centro_custo_id")
-    .neq("status", "RECEBIDO")
-    .neq("status", "PAGO")
-    .gte("vencimento", `${hoje}T00:00:00`)
-    .lte("vencimento", `${fimSerieFutura}T23:59:59`);
-  if (errCob) throw errCob;
+  const cobrancas = await executarCobrancasComFallback<Record<string, unknown>>("cobrancas_futuras", (withExpurgo) => {
+    let query = supabase
+      .from("cobrancas")
+      .select("valor_centavos, status, vencimento, centro_custo_id")
+      .neq("status", "RECEBIDO")
+      .neq("status", "PAGO")
+      .neq("status", "CANCELADA")
+      .gte("vencimento", `${hoje}T00:00:00`)
+      .lte("vencimento", `${fimSerieFutura}T23:59:59`);
+
+    if (withExpurgo) {
+      query = query.or("expurgada.is.null,expurgada.eq.false");
+    }
+
+    return query;
+  });
   devLog("cobrancas futuras (entradas previstas)", {
     table: "cobrancas",
     inicio: `${hoje}T00:00:00`,
@@ -521,12 +557,23 @@ export async function gerarSnapshot(
     sample: (contasPagar || []).slice(0, 3),
   });
 
-  const { data: cobrancasAtrasadas, error: errCobAtrasadas } = await supabase
-    .from("cobrancas")
-    .select("valor_centavos, status, vencimento")
-    .lt("vencimento", `${hoje}T00:00:00`)
-    .neq("status", "RECEBIDO");
-  if (errCobAtrasadas) throw errCobAtrasadas;
+  const cobrancasAtrasadas = await executarCobrancasComFallback<Record<string, unknown>>(
+    "cobrancas_atrasadas",
+    (withExpurgo) => {
+      let query = supabase
+        .from("cobrancas")
+        .select("valor_centavos, status, vencimento")
+        .lt("vencimento", `${hoje}T00:00:00`)
+        .neq("status", "RECEBIDO")
+        .neq("status", "CANCELADA");
+
+      if (withExpurgo) {
+        query = query.or("expurgada.is.null,expurgada.eq.false");
+      }
+
+      return query;
+    },
+  );
   devLog("cobrancas atrasadas", {
     table: "cobrancas",
     ate: `${hoje}T00:00:00`,
@@ -534,13 +581,23 @@ export async function gerarSnapshot(
     sample: (cobrancasAtrasadas || []).slice(0, 3),
   });
 
-  const { data: cobrancasRecebidas, error: errCobRecebidas } = await supabase
-    .from("cobrancas")
-    .select("valor_centavos, status, vencimento, data_pagamento, pessoa_id")
-    .eq("status", "RECEBIDO")
-    .gte("data_pagamento", `${inicioJanela}T00:00:00`)
-    .lte("data_pagamento", `${hoje}T23:59:59`);
-  if (errCobRecebidas) throw errCobRecebidas;
+  const cobrancasRecebidas = await executarCobrancasComFallback<Record<string, unknown>>(
+    "cobrancas_recebidas",
+    (withExpurgo) => {
+      let query = supabase
+        .from("cobrancas")
+        .select("valor_centavos, status, vencimento, data_pagamento, pessoa_id")
+        .eq("status", "RECEBIDO")
+        .gte("data_pagamento", `${inicioJanela}T00:00:00`)
+        .lte("data_pagamento", `${hoje}T23:59:59`);
+
+      if (withExpurgo) {
+        query = query.or("expurgada.is.null,expurgada.eq.false");
+      }
+
+      return query;
+    },
+  );
   devLog("cobrancas recebidas (janela 30d)", {
     table: "cobrancas",
     inicio: `${inicioJanela}T00:00:00`,

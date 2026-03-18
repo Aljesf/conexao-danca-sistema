@@ -1,6 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { isMissingExpurgoColumnError, logExpurgoMigrationWarning } from "@/lib/financeiro/expurgo-compat";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -34,32 +35,47 @@ export async function GET(req: NextRequest) {
   const data_fim = searchParams.get("data_fim");
 
   try {
-    let query = supabaseAdmin
-      .from("cobrancas")
-      .select(
+    const buildQuery = (withExpurgo: boolean) => {
+      let query = supabaseAdmin
+        .from("cobrancas")
+        .select(
+          `
+          id,
+          descricao,
+          valor_centavos,
+          vencimento,
+          status,
+          data_pagamento,
+          pessoa_id,
+          centro_custo_id,
+          pessoas:pessoa_id (nome),
+          centros_custo:centro_custo_id (codigo, nome)
         `
-        id,
-        descricao,
-        valor_centavos,
-        vencimento,
-        status,
-        data_pagamento,
-        pessoa_id,
-        centro_custo_id,
-        pessoas:pessoa_id (nome),
-        centros_custo:centro_custo_id (codigo, nome)
-      `
-      )
-      .order("vencimento", { ascending: true })
-      .order("id", { ascending: false });
+        )
+        .neq("status", "CANCELADA");
 
-    if (status && status !== "TODOS") query = query.eq("status", status);
-    if (centro_custo_id) query = query.eq("centro_custo_id", centro_custo_id);
-    if (pessoa_id) query = query.eq("pessoa_id", pessoa_id);
-    if (data_inicio) query = query.gte("vencimento", data_inicio);
-    if (data_fim) query = query.lte("vencimento", data_fim);
+      if (withExpurgo) {
+        query = query.or("expurgada.is.null,expurgada.eq.false");
+      }
 
-    const { data: cobrancas, error } = await query;
+      query = query.order("vencimento", { ascending: true }).order("id", { ascending: false });
+
+      if (status && status !== "TODOS") query = query.eq("status", status);
+      if (centro_custo_id) query = query.eq("centro_custo_id", centro_custo_id);
+      if (pessoa_id) query = query.eq("pessoa_id", pessoa_id);
+      if (data_inicio) query = query.gte("vencimento", data_inicio);
+      if (data_fim) query = query.lte("vencimento", data_fim);
+
+      return query;
+    };
+
+    let { data: cobrancas, error } = await buildQuery(true);
+    if (error && isMissingExpurgoColumnError(error)) {
+      logExpurgoMigrationWarning("/api/financeiro/contas-receber", error);
+      const fallback = await buildQuery(false);
+      cobrancas = fallback.data;
+      error = fallback.error;
+    }
     if (error) {
       console.error("[GET /api/financeiro/contas-receber] Erro ao listar cobrancas:", error);
       return NextResponse.json(
