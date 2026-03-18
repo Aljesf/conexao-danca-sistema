@@ -1653,13 +1653,14 @@ export type Database = {
           },
         ]
       }
-      credito_conexao_lancamentos: {
-        Row: {
-          aluno_id: number | null
-          cobranca_id: number | null
-          competencia: string | null
-          composicao_json: Json | null
-          conta_conexao_id: number
+        credito_conexao_lancamentos: {
+          Row: {
+            aluno_id: number | null
+            centro_custo_id: number | null
+            cobranca_id: number | null
+            competencia: string | null
+            composicao_json: Json | null
+            conta_conexao_id: number
           created_at: string
           data_lancamento: string
           descricao: string | null
@@ -1673,12 +1674,13 @@ export type Database = {
           updated_at: string
           valor_centavos: number
         }
-        Insert: {
-          aluno_id?: number | null
-          cobranca_id?: number | null
-          competencia?: string | null
-          composicao_json?: Json | null
-          conta_conexao_id: number
+          Insert: {
+            aluno_id?: number | null
+            centro_custo_id?: number | null
+            cobranca_id?: number | null
+            competencia?: string | null
+            composicao_json?: Json | null
+            conta_conexao_id: number
           created_at?: string
           data_lancamento?: string
           descricao?: string | null
@@ -1692,12 +1694,13 @@ export type Database = {
           updated_at?: string
           valor_centavos: number
         }
-        Update: {
-          aluno_id?: number | null
-          cobranca_id?: number | null
-          competencia?: string | null
-          composicao_json?: Json | null
-          conta_conexao_id?: number
+          Update: {
+            aluno_id?: number | null
+            centro_custo_id?: number | null
+            cobranca_id?: number | null
+            competencia?: string | null
+            composicao_json?: Json | null
+            conta_conexao_id?: number
           created_at?: string
           data_lancamento?: string
           descricao?: string | null
@@ -1726,18 +1729,25 @@ export type Database = {
             referencedRelation: "vw_governanca_boletos_neofin"
             referencedColumns: ["cobranca_id"]
           },
-          {
-            foreignKeyName: "credito_conexao_lancamentos_aluno_id_fkey"
-            columns: ["aluno_id"]
-            isOneToOne: false
-            referencedRelation: "pessoas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "credito_conexao_lancamentos_conta_fkey"
-            columns: ["conta_conexao_id"]
-            isOneToOne: false
-            referencedRelation: "credito_conexao_contas"
+            {
+              foreignKeyName: "credito_conexao_lancamentos_aluno_id_fkey"
+              columns: ["aluno_id"]
+              isOneToOne: false
+              referencedRelation: "pessoas"
+              referencedColumns: ["id"]
+            },
+            {
+              foreignKeyName: "credito_conexao_lancamentos_centro_custo_id_fkey"
+              columns: ["centro_custo_id"]
+              isOneToOne: false
+              referencedRelation: "centros_custo"
+              referencedColumns: ["id"]
+            },
+            {
+              foreignKeyName: "credito_conexao_lancamentos_conta_fkey"
+              columns: ["conta_conexao_id"]
+              isOneToOne: false
+              referencedRelation: "credito_conexao_contas"
             referencedColumns: ["id"]
           },
           {
@@ -5266,14 +5276,15 @@ export type Database = {
           },
         ]
       }
-      matriculas: {
-        Row: {
-          ano_referencia: number | null
-          concluida_em: string | null
-          created_at: string
-          created_by: string | null
-          data_encerramento: string | null
-          data_inicio_vinculo: string | null
+        matriculas: {
+          Row: {
+            ano_referencia: number | null
+            cancelamento_tipo: string | null
+            concluida_em: string | null
+            created_at: string
+            created_by: string | null
+            data_encerramento: string | null
+            data_inicio_vinculo: string | null
           data_matricula: string
           documento_conjunto_id: number | null
           documento_emitido_id: number | null
@@ -5283,11 +5294,12 @@ export type Database = {
           excecao_autorizada_por: string | null
           excecao_criada_em: string | null
           excecao_primeiro_pagamento: boolean
-          forma_liquidacao_padrao: string | null
-          grupo_financeiro_id: number | null
-          id: number
-          metodo_liquidacao: string
-          motivo_excecao_primeiro_pagamento: string | null
+            forma_liquidacao_padrao: string | null
+            gera_perda_financeira: boolean | null
+            grupo_financeiro_id: number | null
+            id: number
+            metodo_liquidacao: string
+            motivo_excecao_primeiro_pagamento: string | null
           observacoes: string | null
           pessoa_id: number
           plano_id: number | null
@@ -5315,13 +5327,14 @@ export type Database = {
           vencimento_padrao_referencia: number | null
           vinculo_id: number
         }
-        Insert: {
-          ano_referencia?: number | null
-          concluida_em?: string | null
-          created_at?: string
-          created_by?: string | null
-          data_encerramento?: string | null
-          data_inicio_vinculo?: string | null
+          Insert: {
+            ano_referencia?: number | null
+            cancelamento_tipo?: string | null
+            concluida_em?: string | null
+            created_at?: string
+            created_by?: string | null
+            data_encerramento?: string | null
+            data_inicio_vinculo?: string | null
           data_matricula?: string
           documento_conjunto_id?: number | null
           documento_emitido_id?: number | null
@@ -5331,11 +5344,12 @@ export type Database = {
           excecao_autorizada_por?: string | null
           excecao_criada_em?: string | null
           excecao_primeiro_pagamento?: boolean
-          forma_liquidacao_padrao?: string | null
-          grupo_financeiro_id?: number | null
-          id?: number
-          metodo_liquidacao?: string
-          motivo_excecao_primeiro_pagamento?: string | null
+            forma_liquidacao_padrao?: string | null
+            gera_perda_financeira?: boolean | null
+            grupo_financeiro_id?: number | null
+            id?: number
+            metodo_liquidacao?: string
+            motivo_excecao_primeiro_pagamento?: string | null
           observacoes?: string | null
           pessoa_id: number
           plano_id?: number | null
@@ -5363,13 +5377,14 @@ export type Database = {
           vencimento_padrao_referencia?: number | null
           vinculo_id: number
         }
-        Update: {
-          ano_referencia?: number | null
-          concluida_em?: string | null
-          created_at?: string
-          created_by?: string | null
-          data_encerramento?: string | null
-          data_inicio_vinculo?: string | null
+          Update: {
+            ano_referencia?: number | null
+            cancelamento_tipo?: string | null
+            concluida_em?: string | null
+            created_at?: string
+            created_by?: string | null
+            data_encerramento?: string | null
+            data_inicio_vinculo?: string | null
           data_matricula?: string
           documento_conjunto_id?: number | null
           documento_emitido_id?: number | null
@@ -5379,11 +5394,12 @@ export type Database = {
           excecao_autorizada_por?: string | null
           excecao_criada_em?: string | null
           excecao_primeiro_pagamento?: boolean
-          forma_liquidacao_padrao?: string | null
-          grupo_financeiro_id?: number | null
-          id?: number
-          metodo_liquidacao?: string
-          motivo_excecao_primeiro_pagamento?: string | null
+            forma_liquidacao_padrao?: string | null
+            gera_perda_financeira?: boolean | null
+            grupo_financeiro_id?: number | null
+            id?: number
+            metodo_liquidacao?: string
+            motivo_excecao_primeiro_pagamento?: string | null
           observacoes?: string | null
           pessoa_id?: number
           plano_id?: number | null

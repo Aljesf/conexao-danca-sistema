@@ -10,6 +10,7 @@ import {
 } from "@/lib/financeiro/contas-receber-view-config";
 import { buildCanonicalOriginDisplay, type BadgeTone } from "@/lib/financeiro/cobranca-origem-canonica";
 import { isMissingExpurgoColumnError, logExpurgoMigrationWarning } from "@/lib/financeiro/expurgo-compat";
+import { resolveCancelamentoSemantico } from "@/lib/matriculas/cancelamento-real";
 import type { Database, Json } from "@/types/supabase.generated";
 
 export type ContextoPrincipal = "ESCOLA" | "CAFE" | "LOJA" | "OUTRO";
@@ -137,7 +138,14 @@ type CobrancaListaItemBase = {
   status_cobranca: string | null;
   status_interno: string | null;
   centro_custo_id: number | null;
+  centro_custo_codigo: string | null;
   centro_custo_nome: string | null;
+  centro_custo_agrupador_id: number | null;
+  centro_custo_agrupador_codigo: string | null;
+  centro_custo_agrupador_nome: string | null;
+  centro_custo_lancamento_id: number | null;
+  centro_custo_lancamento_codigo: string | null;
+  centro_custo_lancamento_nome: string | null;
   atraso_dias: number;
   origem_tipo: string | null;
   origem_subtipo: string | null;
@@ -189,17 +197,45 @@ export interface DetalheCobrancaAuditoria {
     id: number | null;
     codigo: string | null;
     nome: string | null;
+    agrupador: {
+      id: number | null;
+      codigo: string | null;
+      nome: string | null;
+    };
+    lancamento: {
+      id: number | null;
+      codigo: string | null;
+      nome: string | null;
+    };
   };
   documento_vinculado: DetalheDocumentoVinculado | null;
   trilha_auditavel: TrilhaAuditavelItem[];
   composicao_fatura_conexao: ComposicaoFaturaConexao | null;
 }
 
+export interface PerdaCancelamentoCobrancaItem {
+  cobranca_id: number;
+  vencimento: string | null;
+  valor_centavos: number;
+  saldo_aberto_centavos: number;
+  status_cobranca: string | null;
+}
+
 export interface PerdaCancelamentoItem {
-  periodo: string;
-  quantidade_matriculas_canceladas: number;
+  matricula_id: number;
+  aluno_nome: string;
+  responsavel_nome: string;
+  turma: string | null;
+  data_cancelamento: string | null;
   valor_aberto_centavos: number;
-  valor_potencial_perdido_centavos: number;
+  valor_potencial_centavos: number;
+  status_financeiro: string;
+  conta_interna_id: number | null;
+  cancelamento_tipo: string | null;
+  gera_perda_financeira: boolean;
+  motivo_cancelamento: string | null;
+  cobranca_id_principal: number | null;
+  cobrancas_relacionadas: PerdaCancelamentoCobrancaItem[];
   diagnostico_em_validacao: boolean;
 }
 
@@ -378,6 +414,24 @@ function booleanOrFalse(value: unknown): boolean {
   return value === true;
 }
 
+function isMissingColumnError(error: unknown, columnName: string): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("column") &&
+    message.includes(columnName.toLowerCase()) &&
+    (message.includes("does not exist") || message.includes("nao existe"))
+  );
+}
+
+function isMissingLancamentoCentroCustoError(error: unknown): boolean {
+  return isMissingColumnError(error, "centro_custo_id");
+}
+
+function isMissingCancelamentoSchemaError(error: unknown): boolean {
+  return isMissingColumnError(error, "cancelamento_tipo") || isMissingColumnError(error, "gera_perda_financeira");
+}
+
 function normalizeDate(value: unknown): string | null {
   const date = textOrNull(value);
   if (!date) return null;
@@ -395,6 +449,18 @@ const COBRANCA_SELECT_LEGACY =
 
 const FLAT_SELECT_BASE =
   "cobranca_id,pessoa_id,vencimento,status_cobranca,origem_tipo,origem_id,valor_centavos,valor_recebido_centavos,saldo_aberto_centavos,competencia_ano_mes,dias_atraso,situacao_saas,bucket_vencimento";
+
+const LANCAMENTO_SELECT_CANONICAL =
+  "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,created_at,updated_at,numero_parcelas,competencia,referencia_item,composicao_json,cobranca_id,aluno_id,matricula_id,centro_custo_id";
+
+const LANCAMENTO_SELECT_LEGACY =
+  "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,created_at,updated_at,numero_parcelas,competencia,referencia_item,composicao_json,cobranca_id,aluno_id,matricula_id";
+
+const MATRICULA_PERDAS_SELECT_CANONICAL =
+  "id,pessoa_id,responsavel_financeiro_id,vinculo_id,status,total_mensalidade_centavos,encerramento_em,data_encerramento,cancelamento_tipo,gera_perda_financeira";
+
+const MATRICULA_PERDAS_SELECT_LEGACY =
+  "id,pessoa_id,responsavel_financeiro_id,vinculo_id,status,total_mensalidade_centavos,encerramento_em,data_encerramento";
 
 function pessoaNome(pessoaId: number | null, pessoa: PessoaRow | undefined): string {
   const nome = textOrNull(pessoa?.nome);
@@ -416,7 +482,7 @@ function alunoIdDoLancamento(lancamento: LancamentoRow | undefined): number | nu
 function matriculaIdDoLancamento(lancamento: LancamentoRow | undefined): number | null {
   const matriculaId = numberOrNull(lancamento?.matricula_id);
   if (matriculaId) return matriculaId;
-  if (upper(lancamento?.origem_sistema) === "MATRICULA") {
+  if (upper(lancamento?.origem_sistema).startsWith("MATRICULA")) {
     return numberOrNull(lancamento?.origem_id);
   }
   return null;
@@ -464,6 +530,138 @@ function resolveAlunoContext(params: {
   }
 
   return { alunoNome: null, matriculaId: null };
+}
+
+function centroCustoFromId(
+  centroCustoId: number | null,
+  maps: Pick<DataMaps, "centrosCusto">,
+): { id: number | null; codigo: string | null; nome: string | null } {
+  if (!centroCustoId) {
+    return { id: null, codigo: null, nome: null };
+  }
+  const centro = maps.centrosCusto.get(centroCustoId);
+  return {
+    id: centroCustoId,
+    codigo: textOrNull(centro?.codigo),
+    nome: textOrNull(centro?.nome),
+  };
+}
+
+function centroCustoAgrupador(
+  conta: ContaConexaoRow | undefined,
+  maps: Pick<DataMaps, "centrosCusto">,
+): { id: number | null; codigo: string | null; nome: string | null } {
+  const centroIntermediacaoId = numberOrNull(conta?.centro_custo_intermediacao_id);
+  if (centroIntermediacaoId) {
+    return centroCustoFromId(centroIntermediacaoId, maps);
+  }
+  if (conta?.id) {
+    return {
+      id: null,
+      codigo: "FIN",
+      nome: "Intermediacao Financeira",
+    };
+  }
+  return { id: null, codigo: null, nome: null };
+}
+
+function centroCustoLancamento(
+  lancamentos: LancamentoRow[],
+  maps: Pick<DataMaps, "centrosCusto">,
+): { id: number | null; codigo: string | null; nome: string | null } {
+  const ids = Array.from(
+    new Set(
+      lancamentos
+        .map((lancamento) => numberOrNull(lancamento.centro_custo_id))
+        .filter((id): id is number => typeof id === "number" && id > 0),
+    ),
+  );
+
+  if (ids.length === 0) {
+    return { id: null, codigo: null, nome: null };
+  }
+
+  if (ids.length > 1) {
+    return {
+      id: null,
+      codigo: null,
+      nome: "Composicao mista / revisar",
+    };
+  }
+
+  return centroCustoFromId(ids[0], maps);
+}
+
+async function carregarLancamentosComFallback(
+  supabase: SupabaseClient,
+  mode: "id" | "cobranca_id",
+  values: number[],
+  errorCode: string,
+): Promise<LancamentoRow[]> {
+  return selectMany<LancamentoRow>(async (chunk) => {
+    const queryCanonical = supabase
+      .from("credito_conexao_lancamentos")
+      .select(LANCAMENTO_SELECT_CANONICAL)
+      .in(mode, chunk);
+
+    let data: LancamentoRow[] | null = null;
+    let error: Error | null = null;
+
+    const canonicalResult = await queryCanonical;
+    if (canonicalResult.error && isMissingLancamentoCentroCustoError(canonicalResult.error)) {
+      const legacyResult = await supabase
+        .from("credito_conexao_lancamentos")
+        .select(LANCAMENTO_SELECT_LEGACY)
+        .in(mode, chunk);
+      if (legacyResult.error) {
+        error = new Error(`${errorCode}: ${legacyResult.error.message}`);
+      } else {
+        data = ((legacyResult.data ?? []) as LancamentoRow[]).map((row) => ({
+          ...row,
+          centro_custo_id: null,
+        }));
+      }
+    } else if (canonicalResult.error) {
+      error = new Error(`${errorCode}: ${canonicalResult.error.message}`);
+    } else {
+      data = (canonicalResult.data ?? []) as LancamentoRow[];
+    }
+
+    if (error) throw error;
+    return data ?? [];
+  }, values);
+}
+
+async function carregarMatriculasPerdas(supabase: SupabaseClient): Promise<MatriculaRow[]> {
+  const canonicalResult = await supabase
+    .from("matriculas")
+    .select(MATRICULA_PERDAS_SELECT_CANONICAL)
+    .eq("status", "CANCELADA")
+    .order("encerramento_em", { ascending: false, nullsFirst: false });
+
+  if (canonicalResult.error && isMissingCancelamentoSchemaError(canonicalResult.error)) {
+    const legacyResult = await supabase
+      .from("matriculas")
+      .select(MATRICULA_PERDAS_SELECT_LEGACY)
+      .eq("status", "CANCELADA")
+      .order("encerramento_em", { ascending: false, nullsFirst: false });
+
+    if (legacyResult.error) {
+      throw new Error(`erro_carregar_matriculas_canceladas: ${legacyResult.error.message}`);
+    }
+
+    return ((legacyResult.data ?? []) as MatriculaRow[]).map((row) => ({
+      ...row,
+      cancelamento_tipo: null,
+      gera_perda_financeira: null,
+    }));
+  }
+
+  if (canonicalResult.error) {
+    throw new Error(`erro_carregar_matriculas_canceladas: ${canonicalResult.error.message}`);
+  }
+
+  return (canonicalResult.data ?? []) as MatriculaRow[];
 }
 
 function safeErrorMessage(error: unknown): string {
@@ -968,10 +1166,26 @@ function buildTrilhaAuditavel(
     valor: `${textOrNull(item.status_interno) ?? textOrNull(item.status_cobranca) ?? "Sem status"} | aberto ${item.valor_aberto_centavos / 100}`,
   });
 
-  if (centroCusto) {
+  if (item.centro_custo_agrupador_nome) {
     trilha.push({
-      titulo: "Centro de custo",
-      valor: `${textOrNull(centroCusto.codigo) ?? "--"} - ${textOrNull(centroCusto.nome) ?? "Sem nome"}`,
+      titulo: "Centro do agrupador",
+      valor: `${item.centro_custo_agrupador_codigo ?? "--"} - ${item.centro_custo_agrupador_nome}`,
+    });
+  }
+
+  if (item.centro_custo_lancamento_nome) {
+    trilha.push({
+      titulo: "Centro do lancamento",
+      valor: `${item.centro_custo_lancamento_codigo ?? "--"} - ${item.centro_custo_lancamento_nome}`,
+    });
+  }
+
+  if (centroCusto || item.centro_custo_nome) {
+    trilha.push({
+      titulo: "Centro da cobranca derivada",
+      valor: `${item.centro_custo_codigo ?? textOrNull(centroCusto?.codigo) ?? "--"} - ${
+        item.centro_custo_nome ?? textOrNull(centroCusto?.nome) ?? "Sem nome"
+      }`,
     });
   }
 
@@ -1105,8 +1319,18 @@ function buildDetalhe(item: CobrancaListaItem, maps: DataMaps): DetalheCobrancaA
     origem_label: item.origem_label,
     centro_custo: {
       id: item.centro_custo_id,
-      codigo: textOrNull(centroCusto?.codigo),
-      nome: textOrNull(centroCusto?.nome),
+      codigo: item.centro_custo_codigo ?? textOrNull(centroCusto?.codigo),
+      nome: item.centro_custo_nome ?? textOrNull(centroCusto?.nome),
+      agrupador: {
+        id: item.centro_custo_agrupador_id,
+        codigo: item.centro_custo_agrupador_codigo,
+        nome: item.centro_custo_agrupador_nome,
+      },
+      lancamento: {
+        id: item.centro_custo_lancamento_id,
+        codigo: item.centro_custo_lancamento_codigo,
+        nome: item.centro_custo_lancamento_nome,
+      },
     },
     documento_vinculado: documentoVinculado,
     trilha_auditavel: buildTrilhaAuditavel(
@@ -1179,8 +1403,18 @@ function buildFallbackDetalhe(
     origem_label: item.origem_label,
     centro_custo: {
       id: item.centro_custo_id,
-      codigo: null,
+      codigo: item.centro_custo_codigo,
       nome: item.centro_custo_nome,
+      agrupador: {
+        id: item.centro_custo_agrupador_id,
+        codigo: item.centro_custo_agrupador_codigo,
+        nome: item.centro_custo_agrupador_nome,
+      },
+      lancamento: {
+        id: item.centro_custo_lancamento_id,
+        codigo: item.centro_custo_lancamento_codigo,
+        nome: item.centro_custo_lancamento_nome,
+      },
     },
     documento_vinculado: null,
     trilha_auditavel: [
@@ -1923,7 +2157,7 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     const { data, error } = await supabase
       .from("credito_conexao_contas")
       .select(
-        "id,pessoa_titular_id,responsavel_financeiro_pessoa_id,tipo_conta,descricao_exibicao,ativo,centro_custo_principal_id",
+        "id,pessoa_titular_id,responsavel_financeiro_pessoa_id,tipo_conta,descricao_exibicao,ativo,centro_custo_principal_id,centro_custo_intermediacao_id",
       )
       .in("id", chunk);
     if (error) throw new Error(`erro_carregar_contas_conexao: ${error.message}`);
@@ -1953,27 +2187,19 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     ),
   );
 
-  const lancamentosDasFaturas = await selectMany<LancamentoRow>(async (chunk) => {
-    const { data, error } = await supabase
-      .from("credito_conexao_lancamentos")
-      .select(
-        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,created_at,updated_at,numero_parcelas,competencia,referencia_item,composicao_json,cobranca_id,aluno_id,matricula_id",
-      )
-      .in("id", chunk);
-    if (error) throw new Error(`erro_carregar_lancamentos_fatura: ${error.message}`);
-    return (data ?? []) as LancamentoRow[];
-  }, lancamentoIds);
+  const lancamentosDasFaturas = await carregarLancamentosComFallback(
+    supabase,
+    "id",
+    lancamentoIds,
+    "erro_carregar_lancamentos_fatura",
+  );
 
-  const lancamentosDiretos = await selectMany<LancamentoRow>(async (chunk) => {
-    const { data, error } = await supabase
-      .from("credito_conexao_lancamentos")
-      .select(
-        "id,conta_conexao_id,origem_sistema,origem_id,descricao,valor_centavos,data_lancamento,status,created_at,updated_at,numero_parcelas,competencia,referencia_item,composicao_json,cobranca_id,aluno_id,matricula_id",
-      )
-      .in("cobranca_id", chunk);
-    if (error) throw new Error(`erro_carregar_lancamentos_diretos: ${error.message}`);
-    return (data ?? []) as LancamentoRow[];
-  }, cobrancaIds);
+  const lancamentosDiretos = await carregarLancamentosComFallback(
+    supabase,
+    "cobranca_id",
+    cobrancaIds,
+    "erro_carregar_lancamentos_diretos",
+  );
 
   const recebimentos = await selectMany<RecebimentoRow>(async (chunk) => {
     const { data, error } = await supabase
@@ -2090,6 +2316,23 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     if (error) throw new Error(`erro_carregar_vinculos: ${error.message}`);
     return (data ?? []) as VinculoRow[];
   }, vinculoIds);
+  const contaConexaoExtraIds = Array.from(
+    new Set(
+      [...lancamentosDasFaturas, ...lancamentosDiretos]
+        .map((lancamento) => numberOrNull(lancamento.conta_conexao_id))
+        .filter((id): id is number => typeof id === "number" && id > 0 && !contaConexaoIds.includes(id)),
+    ),
+  );
+  const contasConexaoExtras = await selectMany<ContaConexaoRow>(async (chunk) => {
+    const { data, error } = await supabase
+      .from("credito_conexao_contas")
+      .select(
+        "id,pessoa_titular_id,responsavel_financeiro_pessoa_id,tipo_conta,descricao_exibicao,ativo,centro_custo_principal_id,centro_custo_intermediacao_id",
+      )
+      .in("id", chunk);
+    if (error) throw new Error(`erro_carregar_contas_conexao_extra: ${error.message}`);
+    return (data ?? []) as ContaConexaoRow[];
+  }, contaConexaoExtraIds);
 
   const mapCobrancas = new Map(cobrancas.map((row) => [row.id, row]));
   const pessoaIdsAdicionais = Array.from(
@@ -2109,8 +2352,32 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
     if (error) throw new Error(`erro_carregar_pessoas_adicionais: ${error.message}`);
     return (data ?? []) as PessoaRow[];
   }, pessoaIdsAdicionais);
+  const contasConexaoConsolidadas = [...contasConexao, ...contasConexaoExtras];
+  const centrosCustoExtraIds = Array.from(
+    new Set(
+      [
+        ...contasConexaoConsolidadas
+          .map((conta) => numberOrNull(conta.centro_custo_intermediacao_id))
+          .filter((id): id is number => typeof id === "number" && id > 0),
+        ...contasConexaoConsolidadas
+          .map((conta) => numberOrNull(conta.centro_custo_principal_id))
+          .filter((id): id is number => typeof id === "number" && id > 0),
+        ...[...lancamentosDasFaturas, ...lancamentosDiretos]
+          .map((lancamento) => numberOrNull(lancamento.centro_custo_id))
+          .filter((id): id is number => typeof id === "number" && id > 0),
+      ].filter((id) => !centrosCustoIds.includes(id)),
+    ),
+  );
+  const centrosCustoExtras = await selectMany<CentroCustoRow>(async (chunk) => {
+    const { data, error } = await supabase
+      .from("centros_custo")
+      .select("id,codigo,nome,ativo,contextos_aplicaveis")
+      .in("id", chunk);
+    if (error) throw new Error(`erro_carregar_centros_custo_extra: ${error.message}`);
+    return (data ?? []) as CentroCustoRow[];
+  }, centrosCustoExtraIds);
   const mapPessoas = new Map([...pessoas, ...pessoasAdicionais].map((row) => [row.id, row]));
-  const mapCentros = new Map(centrosCusto.map((row) => [row.id, row]));
+  const mapCentros = new Map([...centrosCusto, ...centrosCustoExtras].map((row) => [row.id, row]));
   const mapFaturasPorId = new Map(faturas.map((row) => [row.id, row]));
   const mapFaturasPorCobranca = new Map(
     faturas
@@ -2118,7 +2385,7 @@ async function buildMaps(supabase: SupabaseClient, baseRows: FlatRow[]): Promise
       .map((row) => [row.cobranca_id as number, row]),
   );
   const mapLancamentos = new Map([...lancamentosDasFaturas, ...lancamentosDiretos].map((row) => [row.id, row]));
-  const mapContasConexao = new Map(contasConexao.map((row) => [row.id, row]));
+  const mapContasConexao = new Map(contasConexaoConsolidadas.map((row) => [row.id, row]));
   const mapCafePorCobranca = new Map<number, CafeVendaRow[]>();
   const mapCafePorId = new Map(cafeVendasPorId.map((row) => [row.id, row]));
   const mapLojaPorCobranca = new Map<number, LojaVendaRow[]>();
@@ -2199,9 +2466,13 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     typeof cobranca?.origem_id === "number"
       ? maps.faturasPorId.get(cobranca.origem_id)
       : undefined);
-  const conta = fatura?.conta_conexao_id ? maps.contasConexao.get(fatura.conta_conexao_id) : undefined;
   const composicao = fatura ? maps.composicaoPorFatura.get(fatura.id) ?? null : null;
   const lancamentosDiretos = maps.lancamentosDiretosPorCobranca.get(baseRow.cobranca_id) ?? [];
+  const lancamentosDaComposicao =
+    composicao?.itens
+      .map((item) => maps.lancamentosPorId.get(item.lancamento_id))
+      .filter((item): item is LancamentoRow => Boolean(item)) ?? [];
+  const lancamentosRelacionados = [...lancamentosDiretos, ...lancamentosDaComposicao];
   const cafeVenda =
     maps.cafeVendasPorCobranca.get(baseRow.cobranca_id)?.[0] ??
     (upper(cobranca?.origem_tipo) === "CAFE" && typeof cobranca?.origem_id === "number"
@@ -2221,6 +2492,11 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
   const recebimentos = [...(maps.recebimentosPorCobranca.get(baseRow.cobranca_id) ?? [])].sort((left, right) =>
     right.data_pagamento.localeCompare(left.data_pagamento),
   );
+  const contaInternaId =
+    numberOrNull(cobranca?.conta_interna_id) ??
+    numberOrNull(fatura?.conta_conexao_id) ??
+    numberOrNull(lancamentosRelacionados[0]?.conta_conexao_id);
+  const conta = contaInternaId ? maps.contasConexao.get(contaInternaId) : undefined;
   const classificacao = classificarCobranca({
     cobranca,
     centroCusto,
@@ -2237,7 +2513,6 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
   const origemAgrupadorId = numberOrNull(cobranca?.origem_agrupador_id);
   const origemItemTipo = textOrNull(cobranca?.origem_item_tipo);
   const origemItemId = numberOrNull(cobranca?.origem_item_id);
-  const contaInternaId = numberOrNull(cobranca?.conta_interna_id) ?? numberOrNull(conta?.id);
   const migracaoContaInternaStatus = textOrNull(cobranca?.migracao_conta_interna_status);
   const migracaoContaInternaObservacao = textOrNull(cobranca?.migracao_conta_interna_observacao);
   const alunoContext = resolveAlunoContext({
@@ -2266,6 +2541,8 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
   const origemItemTipoResolvido = origemItemTipo ?? display.origemItemTipo;
   const migracaoContaInternaStatusResolvido =
     migracaoContaInternaStatus ?? display.migracaoContaInternaStatus ?? "AMBIGUO";
+  const centroCustoAgrupadorInfo = centroCustoAgrupador(conta, maps);
+  const centroCustoLancamentoInfo = centroCustoLancamento(lancamentosRelacionados, maps);
 
   const item: CobrancaListaItem = {
     cobranca_id: baseRow.cobranca_id,
@@ -2286,7 +2563,14 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     status_cobranca: textOrNull(cobranca?.status) ?? baseRow.status_cobranca,
     status_interno: baseRow.situacao_saas,
     centro_custo_id: centroCustoId,
+    centro_custo_codigo: textOrNull(centroCusto?.codigo),
     centro_custo_nome: textOrNull(centroCusto?.nome),
+    centro_custo_agrupador_id: centroCustoAgrupadorInfo.id,
+    centro_custo_agrupador_codigo: centroCustoAgrupadorInfo.codigo,
+    centro_custo_agrupador_nome: centroCustoAgrupadorInfo.nome,
+    centro_custo_lancamento_id: centroCustoLancamentoInfo.id,
+    centro_custo_lancamento_codigo: centroCustoLancamentoInfo.codigo,
+    centro_custo_lancamento_nome: centroCustoLancamentoInfo.nome,
     atraso_dias: baseRow.dias_atraso,
     origem_tipo: textOrNull(cobranca?.origem_tipo) ?? baseRow.origem_tipo,
     origem_subtipo: textOrNull(cobranca?.origem_subtipo),
@@ -2388,7 +2672,14 @@ function buildFallbackItem(
     status_cobranca: textOrNull(cobranca?.status) ?? baseRow.status_cobranca,
     status_interno: baseRow.situacao_saas,
     centro_custo_id: numberOrNull(cobranca?.centro_custo_id),
+    centro_custo_codigo: null,
     centro_custo_nome: null,
+    centro_custo_agrupador_id: null,
+    centro_custo_agrupador_codigo: null,
+    centro_custo_agrupador_nome: null,
+    centro_custo_lancamento_id: null,
+    centro_custo_lancamento_codigo: null,
+    centro_custo_lancamento_nome: null,
     atraso_dias: baseRow.dias_atraso,
     origem_tipo: origemTipo,
     origem_subtipo: textOrNull(cobranca?.origem_subtipo),
@@ -2535,26 +2826,24 @@ export async function listarCobrancasEmAbertoPorPessoa(
   });
 }
 
-async function buildPerdasCancelamento(
+function statusFinanceiroPerda(cobrancas: PerdaCancelamentoCobrancaItem[], valorAbertoCentavos: number): string {
+  if (cobrancas.length === 0) return "Sem saldo aberto";
+  if (valorAbertoCentavos <= 0) return "Sem saldo aberto";
+  if (cobrancas.length === 1) return "1 titulo em aberto";
+  return `${cobrancas.length} titulos em aberto`;
+}
+
+export async function listarPerdasCancelamentoDetalhadas(
   supabase: SupabaseClient,
 ): Promise<PerdaCancelamentoItem[]> {
-  const { data: matriculasEncerradas, error: errorMatriculas } = await supabase
-    .from("matriculas")
-    .select("id,status,total_mensalidade_centavos,encerramento_em")
-    .eq("status", "CANCELADA")
-    .order("encerramento_em", { ascending: false, nullsFirst: false });
-
-  if (errorMatriculas) {
-    throw new Error(`erro_carregar_matriculas_canceladas: ${errorMatriculas.message}`);
-  }
-
-  const matriculaIds = ((matriculasEncerradas ?? []) as MatriculaRow[]).map((row) => row.id);
+  const matriculasEncerradas = await carregarMatriculasPerdas(supabase);
+  const matriculaIds = matriculasEncerradas.map((row) => row.id);
   if (matriculaIds.length === 0) return [];
 
   const encerramentos = await selectMany<MatriculaEncerramentoRow>(async (chunk) => {
     const { data, error } = await supabase
       .from("matriculas_encerramentos")
-      .select("id,matricula_id,tipo,realizado_em,cobrancas_canceladas_valor_centavos")
+      .select("id,matricula_id,tipo,motivo,realizado_em,cobrancas_canceladas_valor_centavos")
       .in("matricula_id", chunk);
     if (error) throw new Error(`erro_carregar_encerramentos_matricula: ${error.message}`);
     return (data ?? []) as MatriculaEncerramentoRow[];
@@ -2604,6 +2893,69 @@ async function buildPerdasCancelamento(
     return cobrancaVisivel(cobranca, "VENCIDAS");
   });
 
+  const turmaAluno = await selectMany<TurmaAlunoRow>(async (chunk) => {
+    const { data, error } = await supabase
+      .from("turma_aluno")
+      .select("turma_aluno_id,turma_id,aluno_pessoa_id,status,matricula_id")
+      .in("matricula_id", chunk);
+    if (error) throw new Error(`erro_carregar_turma_aluno_cancelamento: ${error.message}`);
+    return (data ?? []) as TurmaAlunoRow[];
+  }, matriculaIds);
+
+  const turmaIds = Array.from(
+    new Set(
+      turmaAluno
+        .map((row) => numberOrNull(row.turma_id))
+        .filter((id): id is number => typeof id === "number" && id > 0),
+    ),
+  );
+
+  const turmas = await selectMany<TurmaRow>(async (chunk) => {
+    const { data, error } = await supabase
+      .from("turmas")
+      .select("turma_id,nome,curso,turno,curso_livre_id")
+      .in("turma_id", chunk);
+    if (error) throw new Error(`erro_carregar_turmas_cancelamento: ${error.message}`);
+    return (data ?? []) as TurmaRow[];
+  }, turmaIds);
+
+  const lancamentosPorMatricula = await carregarLancamentosComFallback(
+    supabase,
+    "matricula_id",
+    matriculaIds,
+    "erro_carregar_lancamentos_matricula_cancelamento",
+  );
+  const lancamentosPorOrigem = await carregarLancamentosComFallback(
+    supabase,
+    "origem_id",
+    matriculaIds,
+    "erro_carregar_lancamentos_origem_cancelamento",
+  );
+
+  const lancamentosRelacionados = [...lancamentosPorMatricula, ...lancamentosPorOrigem].filter((lancamento) => {
+    const matriculaIdRelacionada = matriculaIdDoLancamento(lancamento);
+    return matriculaIdRelacionada !== null && matriculaIds.includes(matriculaIdRelacionada);
+  });
+
+  const pessoaIds = Array.from(
+    new Set(
+      [
+        ...matriculasEncerradas
+          .map((matricula) => numberOrNull(matricula.pessoa_id))
+          .filter((id): id is number => typeof id === "number" && id > 0),
+        ...matriculasEncerradas
+          .map((matricula) => numberOrNull(matricula.responsavel_financeiro_id))
+          .filter((id): id is number => typeof id === "number" && id > 0),
+      ],
+    ),
+  );
+
+  const pessoas = await selectMany<PessoaRow>(async (chunk) => {
+    const { data, error } = await supabase.from("pessoas").select("id,nome").in("id", chunk);
+    if (error) throw new Error(`erro_carregar_pessoas_cancelamento: ${error.message}`);
+    return (data ?? []) as PessoaRow[];
+  }, pessoaIds);
+
   const encerramentoPorMatricula = new Map<number, MatriculaEncerramentoRow>();
   for (const encerramento of encerramentos) {
     const matriculaId = numberOrNull(encerramento.matricula_id);
@@ -2614,38 +2966,98 @@ async function buildPerdasCancelamento(
     }
   }
 
-  const abertoPorMatricula = new Map<number, number>();
+  const turmaAlunoPorMatricula = new Map(
+    turmaAluno
+      .filter((row) => typeof row.matricula_id === "number" && row.matricula_id > 0)
+      .map((row) => [row.matricula_id as number, row]),
+  );
+  const turmaPorId = new Map(turmas.map((row) => [row.turma_id, row]));
+  const pessoaPorId = new Map(pessoas.map((row) => [row.id, row]));
+
+  const cobrancasPorMatricula = new Map<number, PerdaCancelamentoCobrancaItem[]>();
   for (const row of abertasVisiveis) {
     const matriculaId = row.origem_id;
     if (!matriculaId) continue;
-    abertoPorMatricula.set(matriculaId, (abertoPorMatricula.get(matriculaId) ?? 0) + row.saldo_aberto_centavos);
+    const atual = cobrancasPorMatricula.get(matriculaId) ?? [];
+    atual.push({
+      cobranca_id: row.cobranca_id,
+      vencimento: row.vencimento,
+      valor_centavos: row.valor_centavos,
+      saldo_aberto_centavos: row.saldo_aberto_centavos,
+      status_cobranca: row.status_cobranca,
+    });
+    cobrancasPorMatricula.set(matriculaId, atual);
   }
 
-  const agregado = new Map<string, PerdaCancelamentoItem>();
-  for (const matricula of (matriculasEncerradas ?? []) as MatriculaRow[]) {
+  const contaInternaPorMatricula = new Map<number, number>();
+  for (const lancamento of lancamentosRelacionados) {
+    const matriculaId = matriculaIdDoLancamento(lancamento);
+    const contaInternaId = numberOrNull(lancamento.conta_conexao_id);
+    if (!matriculaId || !contaInternaId || contaInternaPorMatricula.has(matriculaId)) continue;
+    contaInternaPorMatricula.set(matriculaId, contaInternaId);
+  }
+
+  const items: PerdaCancelamentoItem[] = [];
+  for (const matricula of matriculasEncerradas) {
     const encerramento = encerramentoPorMatricula.get(matricula.id);
-    const periodo =
-      textOrNull(encerramento?.realizado_em)?.slice(0, 7) ??
-      textOrNull(matricula.encerramento_em)?.slice(0, 7) ??
-      "sem-periodo";
-    const atual = agregado.get(periodo) ?? {
-      periodo,
-      quantidade_matriculas_canceladas: 0,
-      valor_aberto_centavos: 0,
-      valor_potencial_perdido_centavos: 0,
-      diagnostico_em_validacao: true,
-    };
+    const motivoCancelamento =
+      textOrNull(encerramento?.motivo) ?? textOrNull(matricula.encerramento_motivo) ?? textOrNull(matricula.observacoes);
+    const cancelamento = resolveCancelamentoSemantico({
+      cancelamentoTipo: textOrNull(matricula.cancelamento_tipo),
+      geraPerdaFinanceira: matricula.gera_perda_financeira,
+      motivo: motivoCancelamento,
+    });
 
-    atual.quantidade_matriculas_canceladas += 1;
-    atual.valor_aberto_centavos += abertoPorMatricula.get(matricula.id) ?? 0;
-    atual.valor_potencial_perdido_centavos +=
-      numberOrZero(encerramento?.cobrancas_canceladas_valor_centavos) ||
-      numberOrZero(matricula.total_mensalidade_centavos);
+    if (cancelamento.cancelamentoTipo !== "DESISTENCIA_REAL" || !cancelamento.geraPerdaFinanceira) {
+      continue;
+    }
 
-    agregado.set(periodo, atual);
+    const cobrancasRelacionadas = [...(cobrancasPorMatricula.get(matricula.id) ?? [])].sort((left, right) => {
+      const byDate = compareNullableDateAsc(left.vencimento, right.vencimento);
+      if (byDate !== 0) return byDate;
+      return right.saldo_aberto_centavos - left.saldo_aberto_centavos;
+    });
+    const valorAbertoCentavos = cobrancasRelacionadas.reduce(
+      (acc, cobranca) => acc + cobranca.saldo_aberto_centavos,
+      0,
+    );
+    const turmaRelacionada = turmaAlunoPorMatricula.get(matricula.id);
+    const turma = turmaRelacionada?.turma_id ? turmaPorId.get(turmaRelacionada.turma_id) : undefined;
+
+    items.push({
+      matricula_id: matricula.id,
+      aluno_nome: pessoaNome(numberOrNull(matricula.pessoa_id), pessoaPorId.get(matricula.pessoa_id)),
+      responsavel_nome: pessoaNome(
+        numberOrNull(matricula.responsavel_financeiro_id),
+        pessoaPorId.get(matricula.responsavel_financeiro_id),
+      ),
+      turma: textOrNull(turma?.nome),
+      data_cancelamento:
+        normalizeDate(encerramento?.realizado_em) ??
+        normalizeDate(matricula.encerramento_em) ??
+        normalizeDate(matricula.data_encerramento),
+      valor_aberto_centavos: valorAbertoCentavos,
+      valor_potencial_centavos:
+        numberOrZero(encerramento?.cobrancas_canceladas_valor_centavos) || numberOrZero(matricula.total_mensalidade_centavos),
+      status_financeiro: statusFinanceiroPerda(cobrancasRelacionadas, valorAbertoCentavos),
+      conta_interna_id: contaInternaPorMatricula.get(matricula.id) ?? null,
+      cancelamento_tipo: cancelamento.cancelamentoTipo,
+      gera_perda_financeira: cancelamento.geraPerdaFinanceira,
+      motivo_cancelamento: motivoCancelamento,
+      cobranca_id_principal: cobrancasRelacionadas[0]?.cobranca_id ?? null,
+      cobrancas_relacionadas: cobrancasRelacionadas,
+      diagnostico_em_validacao: cancelamento.fonte !== "EXPLICITO",
+    });
   }
 
-  return Array.from(agregado.values()).sort((left, right) => right.periodo.localeCompare(left.periodo));
+  return items.sort((left, right) => {
+    const byDate = compareNullableDateAsc(right.data_cancelamento, left.data_cancelamento);
+    if (byDate !== 0) return byDate;
+    if (right.valor_aberto_centavos !== left.valor_aberto_centavos) {
+      return right.valor_aberto_centavos - left.valor_aberto_centavos;
+    }
+    return right.matricula_id - left.matricula_id;
+  });
 }
 
 function paginate<T>(
@@ -2797,8 +3209,8 @@ export async function listarContasReceberAuditoria(
       ? itensEnriquecidos.find((item) => item.cobranca_id === input.detalheCobrancaId) ?? null
       : null;
   const detalhe = detalheItem ? buildDetalheSafe(detalheItem, maps) : null;
-  const perdasCancelamento = await buildPerdasCancelamento(supabase).catch((error: unknown) => {
-    logContasReceberStageError("build_perdas_cancelamento", error);
+  const perdasCancelamento = await listarPerdasCancelamentoDetalhadas(supabase).catch((error: unknown) => {
+    logContasReceberStageError("listar_perdas_cancelamento_detalhadas", error);
     return [] as PerdaCancelamentoItem[];
   });
 

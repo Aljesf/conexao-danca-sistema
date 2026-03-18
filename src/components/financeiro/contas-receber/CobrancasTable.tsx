@@ -103,6 +103,31 @@ function origemTecnica(item: CobrancaListaItem) {
   return technical;
 }
 
+function contextoCentroCustoLinhas(item: CobrancaListaItem) {
+  const linhas: string[] = [];
+
+  if (item.contaInternaId) {
+    linhas.push(`Agrupador: ${item.centro_custo_agrupador_nome ?? "Intermediacao Financeira"}`);
+  }
+
+  const centroLancamento = item.centro_custo_lancamento_nome ?? item.centro_custo_nome;
+  if (centroLancamento) {
+    linhas.push(`Lancamento: ${centroLancamento}`);
+  } else {
+    linhas.push("Lancamento: centro em revisao");
+  }
+
+  if (
+    item.centro_custo_nome &&
+    item.centro_custo_nome !== item.centro_custo_lancamento_nome &&
+    item.centro_custo_nome !== item.centro_custo_agrupador_nome
+  ) {
+    linhas.push(`Cobranca derivada: ${item.centro_custo_nome}`);
+  }
+
+  return linhas;
+}
+
 function OrigemCell({ item }: { item: CobrancaListaItem }) {
   const technical = origemTecnica(item);
   const contextoLinhas = origemContextoLinhas(item);
@@ -126,6 +151,23 @@ function OrigemCell({ item }: { item: CobrancaListaItem }) {
             {technical ? <span className="text-[11px] text-slate-400">{technical}</span> : null}
           </div>
         ) : null}
+      </div>
+    </td>
+  );
+}
+
+function ContextoCell({ item, contextoLabel }: { item: CobrancaListaItem; contextoLabel: string }) {
+  return (
+    <td className="px-3 py-3">
+      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${CONTEXTO_STYLES[item.contexto_principal]}`}>
+        {contextoLabel}
+      </span>
+      <div className="mt-1 space-y-1">
+        {contextoCentroCustoLinhas(item).map((linha) => (
+          <div key={linha} className="text-xs text-slate-500">
+            {linha}
+          </div>
+        ))}
       </div>
     </td>
   );
@@ -207,12 +249,7 @@ function Row({
           )}
           <div className="text-xs text-slate-500">#{item.cobranca_id}</div>
         </td>
-        <td className="px-3 py-3">
-          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${CONTEXTO_STYLES[item.contexto_principal]}`}>
-            {contextoLabel}
-          </span>
-          <div className="mt-1 text-xs text-slate-500">{item.centro_custo_nome ?? "Sem centro definido"}</div>
-        </td>
+        <ContextoCell item={item} contextoLabel={contextoLabel} />
         <OrigemCell item={item} />
         <td className="px-3 py-3 text-slate-700">{formatDateISO(item.ultima_data_recebimento)}</td>
         <td className="px-3 py-3 text-slate-700">
@@ -254,12 +291,7 @@ function Row({
           <div>{item.tipo_inconsistencia ?? "Revisar trilha financeira"}</div>
           <div className="text-xs text-slate-500">Criticidade {item.criticidade_inconsistencia}</div>
         </td>
-        <td className="px-3 py-3">
-          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${CONTEXTO_STYLES[item.contexto_principal]}`}>
-            {contextoLabel}
-          </span>
-          <div className="mt-1 text-xs text-slate-500">{item.centro_custo_nome ?? "Sem centro definido"}</div>
-        </td>
+        <ContextoCell item={item} contextoLabel={contextoLabel} />
         <OrigemCell item={item} />
         <td className="px-3 py-3 text-slate-700">{formatBRLFromCents(Math.max(item.valor_aberto_centavos, item.valor_centavos))}</td>
         <td className="px-3 py-3 text-slate-700">
@@ -297,12 +329,7 @@ function Row({
         )}
         <div className="text-xs text-slate-500">#{item.cobranca_id}</div>
       </td>
-      <td className="px-3 py-3">
-        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${CONTEXTO_STYLES[item.contexto_principal]}`}>
-          {contextoLabel}
-        </span>
-        <div className="mt-1 text-xs text-slate-500">{item.centro_custo_nome ?? "Sem centro definido"}</div>
-      </td>
+      <ContextoCell item={item} contextoLabel={contextoLabel} />
       <OrigemCell item={item} />
       <td className="px-3 py-3 text-slate-700">{formatDateISO(item.vencimento)}</td>
       <td className="px-3 py-3 text-slate-700">

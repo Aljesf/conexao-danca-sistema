@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool, type PoolClient } from "pg";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { resolveCancelamentoSemantico } from "@/lib/matriculas/cancelamento-real";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { EncerramentoPayloadSchema } from "../_encerramento.types";
 import { computeCobrancasParaCancelar, type CobrancaRow } from "../_encerramento.shared";
@@ -60,6 +61,11 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
 
   const userId = auth.userId;
   const motivo = parsed.data.motivo.trim();
+  const cancelamento = resolveCancelamentoSemantico({
+    cancelamentoTipo: parsed.data.cancelamento_tipo,
+    geraPerdaFinanceira: parsed.data.gera_perda_financeira,
+    motivo,
+  });
   const hoje = new Date().toISOString().slice(0, 10);
   const competenciaAtual = hoje.slice(0, 7);
 
@@ -280,16 +286,21 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         status = 'CANCELADA',
         data_encerramento = $2::date,
         encerramento_tipo = 'CANCELADA',
-        encerramento_motivo = $3,
+        cancelamento_tipo = $3,
+        gera_perda_financeira = $4,
+        encerramento_motivo = $5,
         encerramento_em = now(),
-        encerramento_por_user_id = $4,
+        encerramento_por_user_id = $6,
         updated_at = now()
       WHERE id = $1
       `,
-      [matriculaId, hoje, motivo, userId],
+      [matriculaId, hoje, cancelamento.cancelamentoTipo, cancelamento.geraPerdaFinanceira, motivo, userId],
     );
 
     const payload = {
+      cancelamento_tipo: cancelamento.cancelamentoTipo,
+      gera_perda_financeira: cancelamento.geraPerdaFinanceira,
+      classificacao_fonte: cancelamento.fonte,
       cobrancas_canceladas_ids: idsParaCancelar,
       turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
       lancamentos_cartao_cancelados_ids: lancamentosCartaoIds,
@@ -330,6 +341,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         JSON.stringify({
           motivo,
           status_final: "CANCELADA",
+          cancelamento_tipo: cancelamento.cancelamentoTipo,
+          gera_perda_financeira: cancelamento.geraPerdaFinanceira,
           cobrancas_canceladas_qtd: idsParaCancelar.length,
           cobrancas_canceladas_valor_centavos: valorCancelado,
           turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
@@ -346,6 +359,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       ok: true,
       matricula_id: matriculaId,
       status_final: "CANCELADA",
+      cancelamento_tipo: cancelamento.cancelamentoTipo,
+      gera_perda_financeira: cancelamento.geraPerdaFinanceira,
       cobrancas_canceladas_qtd: idsParaCancelar.length,
       cobrancas_canceladas_valor_centavos: valorCancelado,
       turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,

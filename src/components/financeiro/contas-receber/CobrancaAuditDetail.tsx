@@ -31,6 +31,11 @@ function migrationBadgeClass(tone: DetalheCobrancaAuditoria["cobranca"]["origem_
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
+function centroCustoLabel(value: { codigo: string | null; nome: string | null }) {
+  if (!value.nome) return "Sem centro definido";
+  return `${value.codigo ?? "--"} | ${value.nome}`;
+}
+
 export function CobrancaAuditDetail({ detalhe, loading = false, error = null }: Props) {
   if (loading) {
     return <div className="p-6 text-sm text-slate-500">Carregando trilha auditavel...</div>;
@@ -99,10 +104,16 @@ export function CobrancaAuditDetail({ detalhe, loading = false, error = null }: 
 
       <section className="space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Centro de custo</h3>
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
-          {detalhe.centro_custo.nome
-            ? `${detalhe.centro_custo.codigo ?? "--"} | ${detalhe.centro_custo.nome}`
-            : "Sem centro de custo definido"}
+        <div className="grid gap-3 rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 md:grid-cols-3">
+          <Linha label="Agrupador / conta interna" value={centroCustoLabel(detalhe.centro_custo.agrupador)} />
+          <Linha label="Lancamento real" value={centroCustoLabel(detalhe.centro_custo.lancamento)} />
+          <Linha
+            label="Cobranca derivada"
+            value={centroCustoLabel({
+              codigo: detalhe.centro_custo.codigo,
+              nome: detalhe.centro_custo.nome,
+            })}
+          />
         </div>
       </section>
 

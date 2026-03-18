@@ -2,12 +2,16 @@
 import { Pool, type PoolClient } from "pg";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
+import { resolveCancelamentoSemantico } from "@/lib/matriculas/cancelamento-real";
+
 export const runtime = "nodejs";
 
 type EncerrarMatriculaBody = {
   matricula_id: number;
   data_fim?: string; // YYYY-MM-DD
   motivo?: string | null;
+  cancelamento_tipo?: string | null;
+  gera_perda_financeira?: boolean;
   cancelar_cobrancas_futuras?: boolean; // legado
   cancelar_lancamentos_pendentes?: boolean; // cartao
 };
@@ -64,6 +68,11 @@ export async function POST(req: Request) {
   if (dataFim && !okISODate(dataFim)) return NextResponse.json({ error: "data_fim_invalida" }, { status: 400 });
 
   const motivo = typeof body.motivo === "string" ? body.motivo : null;
+  const cancelamento = resolveCancelamentoSemantico({
+    cancelamentoTipo: typeof body.cancelamento_tipo === "string" ? body.cancelamento_tipo : null,
+    geraPerdaFinanceira: typeof body.gera_perda_financeira === "boolean" ? body.gera_perda_financeira : null,
+    motivo,
+  });
 
   const cancelarCobrancasFuturas = body.cancelar_cobrancas_futuras === true;
   const cancelarLancPendentes = body.cancelar_lancamentos_pendentes !== false;
@@ -122,11 +131,13 @@ export async function POST(req: Request) {
       UPDATE public.matriculas
       SET status = 'CANCELADA',
           data_encerramento = $2,
-          observacoes = COALESCE($3, observacoes),
+          cancelamento_tipo = $3,
+          gera_perda_financeira = $4,
+          observacoes = COALESCE($5, observacoes),
           updated_at = now()
       WHERE id = $1
       `,
-      [matriculaId, dataFimEfetiva, motivo],
+      [matriculaId, dataFimEfetiva, cancelamento.cancelamentoTipo, cancelamento.geraPerdaFinanceira, motivo],
     );
 
     if (metodo === "COBRANCAS_LEGADO" && cancelarCobrancasFuturas) {
@@ -161,7 +172,14 @@ export async function POST(req: Request) {
     await client.query("COMMIT");
 
     return NextResponse.json(
-      { ok: true, matricula_id: matriculaId, metodo_liquidacao: metodo, data_fim: dataFimEfetiva },
+      {
+        ok: true,
+        matricula_id: matriculaId,
+        metodo_liquidacao: metodo,
+        data_fim: dataFimEfetiva,
+        cancelamento_tipo: cancelamento.cancelamentoTipo,
+        gera_perda_financeira: cancelamento.geraPerdaFinanceira,
+      },
       { status: 200 },
     );
   } catch (e: unknown) {

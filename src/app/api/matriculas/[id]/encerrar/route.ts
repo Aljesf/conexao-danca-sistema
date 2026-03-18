@@ -147,6 +147,8 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         status = 'CONCLUIDA',
         data_encerramento = $2::date,
         encerramento_tipo = 'CONCLUIDA',
+        cancelamento_tipo = null,
+        gera_perda_financeira = false,
         encerramento_motivo = $3,
         encerramento_em = now(),
         encerramento_por_user_id = $4,

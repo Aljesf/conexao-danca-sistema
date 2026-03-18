@@ -2,11 +2,11 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
+import { PerdasCancelamentoTable } from "@/components/financeiro/PerdasCancelamentoTable";
 import { CobrancaAuditDetail } from "@/components/financeiro/contas-receber/CobrancaAuditDetail";
 import { CobrancasTable } from "@/components/financeiro/contas-receber/CobrancasTable";
 import { ContasReceberFilters } from "@/components/financeiro/contas-receber/ContasReceberFilters";
 import { DevedoresTable } from "@/components/financeiro/contas-receber/DevedoresTable";
-import { PerdasCancelamentoCard } from "@/components/financeiro/contas-receber/PerdasCancelamentoCard";
 import { ResumoRankingTable } from "@/components/financeiro/contas-receber/ResumoRankingTable";
 import { FinancePageShell } from "@/components/financeiro/FinancePageShell";
 import { Button } from "@/components/ui/button";
@@ -509,7 +509,7 @@ export default function AdminContasReceberPage() {
         onExpurgoConcluido={handleExpurgoConcluido}
       />
 
-      <PerdasCancelamentoCard items={payload?.perdas_cancelamento ?? []} />
+      <PerdasCancelamentoTable items={payload?.perdas_cancelamento ?? []} />
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-5xl p-0">
