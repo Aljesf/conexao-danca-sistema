@@ -67,23 +67,40 @@ type DashboardDetalheItem = {
   pessoaId: number;
   nome: string;
   idade: number | null;
+  turmaNome?: string;
+  serieOuNivel?: string | null;
   classificacaoInstitucional: string;
   concessaoTipo: string | null;
+  valorMensalCentavos: number | null;
+};
+
+type DashboardDetalheGrupo = {
+  chave: string;
+  total: number;
+  itens: DashboardDetalheItem[];
 };
 
 type DashboardDetalhesPayload = {
+  modo: "institucional" | "turma";
   titulo: string;
   subtitulo?: string;
   total: number;
+  totalRegistros: number;
+  somaValoresCentavos: number;
   itens: DashboardDetalheItem[];
+  grupos: DashboardDetalheGrupo[];
 };
 
 type AlunosModalState = {
   open: boolean;
   loading: boolean;
+  modo: "institucional" | "turma";
   titulo: string;
   subtitulo?: string;
+  totalRegistros: number;
+  somaValoresCentavos: number | null;
   itens: DashboardDetalheItem[];
+  grupos: DashboardDetalheGrupo[];
   error: string | null;
 };
 
@@ -158,13 +175,20 @@ function DashboardMetricCard({
     <Card className="rounded-[24px] border border-slate-200/75 bg-white/95 shadow-[0_22px_50px_-36px_rgba(15,23,42,0.35)]">
       <CardContent className="p-0">
         {onClick ? (
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             onClick={onClick}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onClick();
+              }
+            }}
             className="block w-full rounded-[24px] transition hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
           >
             {content}
-          </button>
+          </div>
         ) : (
           content
         )}
@@ -176,9 +200,13 @@ function DashboardMetricCard({
 const modalStateInicial: AlunosModalState = {
   open: false,
   loading: false,
+  modo: "institucional",
   titulo: "",
   subtitulo: "",
+  totalRegistros: 0,
+  somaValoresCentavos: null,
   itens: [],
+  grupos: [],
   error: null,
 };
 
@@ -247,9 +275,13 @@ export default function EscolaDashboardPage() {
       setAlunosModal({
         open: true,
         loading: false,
+        modo: payload.modo,
         titulo: payload.titulo,
         subtitulo: payload.subtitulo,
+        totalRegistros: payload.totalRegistros,
+        somaValoresCentavos: payload.somaValoresCentavos,
         itens: payload.itens,
+        grupos: payload.grupos,
         error: null,
       });
     } catch (e) {
@@ -395,40 +427,50 @@ export default function EscolaDashboardPage() {
                 eyebrow="Institucional"
                 title="Pagantes"
                 value={loading ? "..." : resumoInstitucional?.pagantes_total ?? 0}
-                meta="Clique para listar os alunos pagantes da Escola."
-                onClick={() =>
-                  void abrirModalDetalhes("escopo=institucional&tipo=pagantes")
-                }
+                meta="Clique para listar os vinculos ativos pagantes da Escola."
+                onClick={() => void abrirModalDetalhes("escopo=institucional&tipo=pagantes")}
               />
               <DashboardMetricCard
                 eyebrow="Institucional"
                 title="Concessoes"
                 value={loading ? "..." : resumoInstitucional?.concessao_total ?? 0}
-                meta="Clique para listar as concessoes ativas da Escola."
+                meta="Clique para listar os vinculos ativos de concessao da Escola."
                 details={
                   <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-50/85 px-3 py-3 text-sm text-slate-600 ring-1 ring-inset ring-slate-200/70">
-                    <div>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void abrirModalDetalhes("escopo=institucional&tipo=concessoes_integrais");
+                      }}
+                      className="rounded-xl px-2 py-1 text-left transition hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                    >
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                         Integrais
                       </p>
                       <p className="mt-1 text-lg font-semibold text-slate-900">
                         {loading ? "..." : resumoInstitucional?.concessao_integral_total ?? 0}
                       </p>
-                    </div>
-                    <div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void abrirModalDetalhes("escopo=institucional&tipo=concessoes_parciais");
+                      }}
+                      className="rounded-xl px-2 py-1 text-left transition hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                    >
                       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                         Parciais
                       </p>
                       <p className="mt-1 text-lg font-semibold text-slate-900">
                         {loading ? "..." : resumoInstitucional?.concessao_parcial_total ?? 0}
                       </p>
-                    </div>
+                    </button>
                   </div>
                 }
                 accent="sky"
-                onClick={() =>
-                  void abrirModalDetalhes("escopo=institucional&tipo=concessoes")
-                }
+                onClick={() => void abrirModalDetalhes("escopo=institucional&tipo=concessoes")}
               />
               <DashboardMetricCard
                 eyebrow="Financeiro operacional"
@@ -608,6 +650,11 @@ export default function EscolaDashboardPage() {
                       key={turma.turma_id}
                       turma={turma}
                       hrefDetalhe={`/escola/academico/turmas/${turma.turma_id}`}
+                      onClickAlunosAtivos={() =>
+                        void abrirModalDetalhes(
+                          `escopo=turma&turma_id=${turma.turma_id}&tipo=alunos_ativos`,
+                        )
+                      }
                       onClickPagantes={() =>
                         void abrirModalDetalhes(
                           `escopo=turma&turma_id=${turma.turma_id}&tipo=pagantes`,
@@ -648,9 +695,13 @@ export default function EscolaDashboardPage() {
         }
         titulo={alunosModal.titulo}
         subtitulo={alunosModal.subtitulo}
+        modo={alunosModal.modo}
+        totalRegistros={alunosModal.totalRegistros}
+        somaValoresCentavos={alunosModal.somaValoresCentavos}
         loading={alunosModal.loading}
         error={alunosModal.error}
         itens={alunosModal.itens}
+        grupos={alunosModal.grupos}
       />
     </>
   );

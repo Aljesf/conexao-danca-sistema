@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/supabase/api-auth";
 
 type EscopoDetalhe = "institucional" | "turma";
 type TipoDetalhe =
+  | "alunos_ativos"
   | "pagantes"
   | "concessoes"
   | "concessoes_integrais"
@@ -15,16 +16,29 @@ type DashboardAlunoDetalheRow = {
   turma_id: number | string;
   turma_nome: string;
   curso: string | null;
-  classificacao_institucional: "PAGANTE" | "CONCESSAO";
+  nivel_ou_serie: string | null;
+  classificacao_institucional: "ATIVO" | "PAGANTE" | "CONCESSAO";
   concessao_tipo: "INTEGRAL" | "PARCIAL" | null;
+  valor_mensal_estimado_centavos: number | string | null;
+  ordem_alfabetica_nome: string;
+  aluno_ativo: boolean | null;
 };
 
 type DashboardDetalheItem = {
   pessoaId: number;
   nome: string;
   idade: number | null;
-  classificacaoInstitucional: "PAGANTE" | "CONCESSAO";
+  turmaNome?: string;
+  serieOuNivel?: string | null;
+  classificacaoInstitucional: "ATIVO" | "PAGANTE" | "CONCESSAO";
   concessaoTipo: "INTEGRAL" | "PARCIAL" | null;
+  valorMensalCentavos: number | null;
+};
+
+type DashboardDetalheGrupo = {
+  chave: string;
+  total: number;
+  itens: DashboardDetalheItem[];
 };
 
 function badRequest(details: string) {
@@ -44,13 +58,15 @@ function parseEscopo(value: string | null): EscopoDetalhe | null {
 
 function parseTipo(value: string | null): TipoDetalhe | null {
   if (
-    value === "pagantes"
+    value === "alunos_ativos"
+    || value === "pagantes"
     || value === "concessoes"
     || value === "concessoes_integrais"
     || value === "concessoes_parciais"
   ) {
     return value;
   }
+
   return null;
 }
 
@@ -63,37 +79,60 @@ function toNumber(value: number | string | null | undefined): number | null {
   return null;
 }
 
-function buildTitulo(escopo: EscopoDetalhe, tipo: TipoDetalhe, turmaNome: string | null): string {
+function buildTitulo(escopo: EscopoDetalhe, tipo: TipoDetalhe): string {
   const basePorTipo: Record<TipoDetalhe, string> = {
+    alunos_ativos: "Alunos ativos",
     pagantes: "Pagantes",
     concessoes: "Concessoes",
     concessoes_integrais: "Concessoes integrais",
     concessoes_parciais: "Concessoes parciais",
   };
 
-  if (escopo === "turma") {
-    return turmaNome ? `${basePorTipo[tipo]} da turma` : `${basePorTipo[tipo]} da turma`;
-  }
-
-  return `${basePorTipo[tipo]} da Escola`;
+  return escopo === "institucional"
+    ? `${basePorTipo[tipo]} da Escola`
+    : `${basePorTipo[tipo]} da turma`;
 }
 
 function buildSubtitulo(escopo: EscopoDetalhe, turmaNome: string | null): string {
-  if (escopo === "turma") {
-    return turmaNome ?? "Turma selecionada";
+  if (escopo === "institucional") {
+    return "Inclui vinculos ativos por turma. Um mesmo aluno pode aparecer mais de uma vez quando participa de mais de uma turma/modalidade.";
   }
 
-  return "Drill-down operacional do dashboard institucional";
+  return turmaNome
+    ? `${turmaNome}. Listagem operacional agrupada por serie/nivel.`
+    : "Listagem operacional agrupada por serie/nivel.";
 }
 
-function mapRowToItem(row: DashboardAlunoDetalheRow): DashboardDetalheItem {
+function mapRowToItem(row: DashboardAlunoDetalheRow, escopo: EscopoDetalhe): DashboardDetalheItem {
   return {
     pessoaId: toNumber(row.pessoa_id) ?? 0,
     nome: row.aluno_nome,
     idade: toNumber(row.idade_anos),
+    turmaNome: escopo === "institucional" ? row.turma_nome : undefined,
+    serieOuNivel: row.nivel_ou_serie,
     classificacaoInstitucional: row.classificacao_institucional,
     concessaoTipo: row.concessao_tipo,
+    valorMensalCentavos: toNumber(row.valor_mensal_estimado_centavos),
   };
+}
+
+function buildGrupos(items: DashboardDetalheItem[]): DashboardDetalheGrupo[] {
+  const groups = new Map<string, DashboardDetalheItem[]>();
+
+  for (const item of items) {
+    const chave = item.serieOuNivel?.trim() || "Nao informado";
+    const current = groups.get(chave) ?? [];
+    current.push(item);
+    groups.set(chave, current);
+  }
+
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
+    .map(([chave, itens]) => ({
+      chave,
+      total: itens.length,
+      itens: [...itens].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    }));
 }
 
 export async function GET(request: NextRequest) {
@@ -120,8 +159,12 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from("vw_escola_dashboard_alunos_detalhe")
-    .select("pessoa_id, aluno_nome, idade_anos, turma_id, turma_nome, curso, classificacao_institucional, concessao_tipo")
-    .order("aluno_nome", { ascending: true });
+    .select(
+      "pessoa_id, aluno_nome, idade_anos, turma_id, turma_nome, curso, nivel_ou_serie, classificacao_institucional, concessao_tipo, valor_mensal_estimado_centavos, ordem_alfabetica_nome, aluno_ativo",
+    )
+    .order("ordem_alfabetica_nome", { ascending: true })
+    .order("turma_nome", { ascending: true })
+    .order("nivel_ou_serie", { ascending: true });
 
   if (tipo === "pagantes") {
     query = query.eq("classificacao_institucional", "PAGANTE");
@@ -159,9 +202,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const rows = (data ?? []) as DashboardAlunoDetalheRow[];
+  const rowsFiltradas =
+    tipo === "alunos_ativos"
+      ? rows.filter((row) => row.aluno_ativo !== false)
+      : rows;
+
   let turmaNome: string | null = null;
   if (escopo === "turma" && turmaId) {
-    turmaNome = (data?.[0] as DashboardAlunoDetalheRow | undefined)?.turma_nome ?? null;
+    turmaNome = rowsFiltradas[0]?.turma_nome ?? null;
 
     if (!turmaNome) {
       const { data: turmaData, error: turmaError } = await supabase
@@ -184,14 +233,24 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const itens = ((data ?? []) as DashboardAlunoDetalheRow[]).map(mapRowToItem);
+  const itens = rowsFiltradas.map((row) => mapRowToItem(row, escopo));
+  const totalRegistros = itens.length;
+  const somaValoresCentavos = itens.reduce(
+    (acc, item) => acc + (item.valorMensalCentavos ?? 0),
+    0,
+  );
+  const grupos = escopo === "turma" ? buildGrupos(itens) : [];
 
   return NextResponse.json(
     {
-      titulo: buildTitulo(escopo, tipo, turmaNome),
+      modo: escopo,
+      titulo: buildTitulo(escopo, tipo),
       subtitulo: buildSubtitulo(escopo, turmaNome),
-      total: itens.length,
+      total: totalRegistros,
+      totalRegistros,
+      somaValoresCentavos,
       itens,
+      grupos,
     },
     { status: 200 },
   );

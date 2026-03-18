@@ -48,6 +48,7 @@ export type DashboardTurmaComposicao = {
 type EscolaTurmaComposicaoCardProps = {
   turma: DashboardTurmaComposicao;
   hrefDetalhe: string;
+  onClickAlunosAtivos?: () => void;
   onClickPagantes?: () => void;
   onClickConcessoes?: () => void;
   onClickConcessoesIntegrais?: () => void;
@@ -274,20 +275,34 @@ function formatCurrency(value: number | null): string {
   return moedaFormatter.format(value / 100);
 }
 
-function MetaStat({
+function MetricStat({
   label,
   value,
+  onClick,
 }: {
   label: string;
   value: string | number;
+  onClick?: () => void;
 }) {
-  return (
+  const content = (
     <div className="rounded-2xl bg-slate-50/90 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
         {label}
       </p>
       <p className="mt-1.5 text-xl font-semibold text-slate-900">{value}</p>
     </div>
+  );
+
+  if (!onClick) return content;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-2xl text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+    >
+      {content}
+    </button>
   );
 }
 
@@ -306,7 +321,7 @@ function SoftPanel({
   );
 }
 
-function ActionBadge({
+function ClickablePill({
   label,
   value,
   toneClassName,
@@ -331,16 +346,68 @@ function ActionBadge({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center rounded-full px-3 py-1.5 font-medium ring-1 ring-inset transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${toneClassName} cursor-pointer`}
+      className={`inline-flex items-center rounded-full px-3 py-1.5 font-medium ring-1 ring-inset transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${toneClassName}`}
     >
       {label}: {value}
     </button>
   );
 }
 
+function ConcessoesSummary({
+  total,
+  integrais,
+  parciais,
+  onClickTotal,
+  onClickIntegrais,
+  onClickParciais,
+}: {
+  total: number;
+  integrais: number;
+  parciais: number;
+  onClickTotal?: () => void;
+  onClickIntegrais?: () => void;
+  onClickParciais?: () => void;
+}) {
+  return (
+    <div className="rounded-2xl bg-sky-50/80 px-4 py-3 text-sm ring-1 ring-inset ring-sky-200/75">
+      {onClickTotal ? (
+        <button
+          type="button"
+          onClick={onClickTotal}
+          className="flex w-full items-center justify-between text-left transition hover:text-sky-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+        >
+          <span className="font-medium text-sky-700">Concessoes</span>
+          <span className="text-lg font-semibold text-sky-900">{total}</span>
+        </button>
+      ) : (
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-sky-700">Concessoes</span>
+          <span className="text-lg font-semibold text-sky-900">{total}</span>
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <ClickablePill
+          label="Integrais"
+          value={integrais}
+          toneClassName="bg-emerald-50 text-emerald-700 ring-emerald-200/80"
+          onClick={onClickIntegrais}
+        />
+        <ClickablePill
+          label="Parciais"
+          value={parciais}
+          toneClassName="bg-amber-50 text-amber-700 ring-amber-200/80"
+          onClick={onClickParciais}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function EscolaTurmaComposicaoCard({
   turma,
   hrefDetalhe,
+  onClickAlunosAtivos,
   onClickPagantes,
   onClickConcessoes,
   onClickConcessoesIntegrais,
@@ -353,20 +420,15 @@ export function EscolaTurmaComposicaoCard({
   );
 
   const distribuicaoNiveis = parseDistribuicao(turma.distribuicao_niveis_json);
-  const distribuicaoVinculos = parseDistribuicao(turma.distribuicao_vinculos_json, {
-    pagantes: "Pagantes",
-    concessao: "Concessao total",
-    concessao_integral: "Concessao integral",
-    concessao_parcial: "Concessao parcial",
-    concessao_generica: "Concessao sem detalhe",
-    outros_vinculos: "Outros vinculos",
-  });
 
   return (
     <Card className="overflow-hidden rounded-[28px] border border-slate-200/75 bg-white/95 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.35)]">
       <div className="border-b border-slate-200/70 px-5 py-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Leitura operacional da turma
+            </p>
             <h3 className="text-lg font-semibold tracking-tight text-slate-950">{turma.nome}</h3>
             <p className="text-sm text-slate-500">{formatHeaderMeta(turma)}</p>
             <p className="text-sm text-slate-600">
@@ -404,93 +466,70 @@ export function EscolaTurmaComposicaoCard({
 
       <CardContent className="space-y-5 px-5 py-5">
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <MetaStat label="Alunos ativos" value={turma.alunos_ativos_total} />
-          <MetaStat label="Capacidade" value={formatCapacity(turma.capacidade)} />
-          <MetaStat label="Ocupacao" value={formatOcupacao(turma.ocupacao_percentual)} />
-          <MetaStat label="Vagas disponiveis" value={formatVagas(turma.vagas_disponiveis)} />
+          <MetricStat
+            label="Alunos ativos"
+            value={turma.alunos_ativos_total}
+            onClick={onClickAlunosAtivos}
+          />
+          <MetricStat label="Capacidade" value={formatCapacity(turma.capacidade)} />
+          <MetricStat label="Ocupacao" value={formatOcupacao(turma.ocupacao_percentual)} />
+          <MetricStat label="Vagas disponiveis" value={formatVagas(turma.vagas_disponiveis)} />
         </div>
 
-        <div className="flex flex-wrap gap-2 text-sm">
-          <ActionBadge
-            label="Pagantes"
-            value={turma.pagantes_total}
-            toneClassName="bg-slate-100 text-slate-700 ring-slate-200/80"
-            onClick={onClickPagantes}
+        <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
+          <div className="flex flex-wrap gap-2 text-sm">
+            <ClickablePill
+              label="Pagantes"
+              value={turma.pagantes_total}
+              toneClassName="bg-slate-100 text-slate-700 ring-slate-200/80"
+              onClick={onClickPagantes}
+            />
+            {turma.outros_vinculos_total > 0 ? (
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 ring-1 ring-inset ring-slate-200/80">
+                Outros vinculos: {turma.outros_vinculos_total}
+              </span>
+            ) : null}
+          </div>
+
+          <ConcessoesSummary
+            total={turma.concessao_total}
+            integrais={turma.concessao_integral_total}
+            parciais={turma.concessao_parcial_total}
+            onClickTotal={onClickConcessoes}
+            onClickIntegrais={onClickConcessoesIntegrais}
+            onClickParciais={onClickConcessoesParciais}
           />
-          <ActionBadge
-            label="Concessao total"
-            value={turma.concessao_total}
-            toneClassName="bg-sky-50 text-sky-700 ring-sky-200/80"
-            onClick={onClickConcessoes}
-          />
-          <ActionBadge
-            label="Concessao integral"
-            value={turma.concessao_integral_total}
-            toneClassName="bg-emerald-50 text-emerald-700 ring-emerald-200/80"
-            onClick={onClickConcessoesIntegrais}
-          />
-          <ActionBadge
-            label="Concessao parcial"
-            value={turma.concessao_parcial_total}
-            toneClassName="bg-amber-50 text-amber-700 ring-amber-200/80"
-            onClick={onClickConcessoesParciais}
-          />
-          {turma.outros_vinculos_total > 0 ? (
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 ring-1 ring-inset ring-slate-200/80">
-              Outros vinculos: {turma.outros_vinculos_total}
-            </span>
-          ) : null}
         </div>
 
         <div className="grid gap-3 xl:grid-cols-3">
-          <MetaStat
+          <MetricStat
             label="Receita mensal estimada"
             value={formatCurrency(turma.receita_mensal_estimada_centavos)}
           />
-          <MetaStat
+          <MetricStat
             label="Pagantes sustentam"
             value={formatCurrency(turma.receita_pagante_estimada_centavos)}
           />
-          <MetaStat
+          <MetricStat
             label="Absorcao institucional"
             value={formatCurrency(turma.receita_concessao_absorvida_centavos)}
           />
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-2">
-          <SoftPanel title="Composicao por nivel">
-            {distribuicaoNiveis.length > 0 ? (
-              <ul className="space-y-2.5 text-sm text-slate-700">
-                {distribuicaoNiveis.map((item) => (
-                  <li key={`nivel-${item.key}`} className="flex items-center justify-between gap-3">
-                    <span>{item.label}</span>
-                    <span className="font-semibold text-slate-900">{item.total}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-500">Sem distribuicao por nivel.</p>
-            )}
-          </SoftPanel>
-
-          <SoftPanel title="Composicao institucional">
-            {distribuicaoVinculos.length > 0 ? (
-              <ul className="space-y-2.5 text-sm text-slate-700">
-                {distribuicaoVinculos.map((item) => (
-                  <li
-                    key={`vinculo-${item.key}`}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <span>{item.label}</span>
-                    <span className="font-semibold text-slate-900">{item.total}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-slate-500">Sem distribuicao institucional.</p>
-            )}
-          </SoftPanel>
-        </div>
+        <SoftPanel title="Composicao por nivel">
+          {distribuicaoNiveis.length > 0 ? (
+            <ul className="space-y-2.5 text-sm text-slate-700">
+              {distribuicaoNiveis.map((item) => (
+                <li key={`nivel-${item.key}`} className="flex items-center justify-between gap-3">
+                  <span>{item.label}</span>
+                  <span className="font-semibold text-slate-900">{item.total}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">Sem distribuicao por nivel.</p>
+          )}
+        </SoftPanel>
       </CardContent>
 
       <CardFooter className="flex flex-col items-start justify-between gap-3 border-t border-slate-200/70 bg-slate-50/70 px-5 py-4 text-xs text-slate-500 sm:flex-row sm:items-center">
