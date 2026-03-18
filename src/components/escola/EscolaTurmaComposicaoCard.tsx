@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 
@@ -24,6 +25,7 @@ export type DashboardTurmaComposicao = {
   ano_referencia: number | null;
   status: string | null;
   curso: string | null;
+  curso_slug_ou_chave_filtro: string | null;
   nivel: string | null;
   turno: string | null;
   capacidade: number | null;
@@ -36,6 +38,9 @@ export type DashboardTurmaComposicao = {
   concessao_integral_total: number;
   concessao_parcial_total: number;
   outros_vinculos_total: number;
+  receita_mensal_estimada_centavos: number | null;
+  receita_pagante_estimada_centavos: number | null;
+  receita_concessao_absorvida_centavos: number | null;
   distribuicao_niveis_json: DashboardJsonValue | null;
   distribuicao_vinculos_json: DashboardJsonValue | null;
 };
@@ -44,6 +49,11 @@ type EscolaTurmaComposicaoCardProps = {
   turma: DashboardTurmaComposicao;
   hrefDetalhe: string;
 };
+
+const moedaFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 
 function isJsonObject(value: DashboardJsonValue | null | undefined): value is DashboardJsonObject {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -124,7 +134,11 @@ export function normalizarJsonArrayDeDistribuicao(
         const item = parseDistribuicaoItem(entry, labelMap);
         return item ? [item] : [];
       })
-      .filter((item) => item.total > 0);
+      .filter((item) => item.total > 0)
+      .sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total;
+        return a.label.localeCompare(b.label, "pt-BR");
+      });
   }
 
   if (isJsonObject(value)) {
@@ -163,7 +177,7 @@ export function getOcupacaoTone(ocupacaoPercentual: number | null): {
   if (typeof ocupacaoPercentual !== "number") {
     return {
       label: null,
-      className: "border-slate-200 bg-slate-50 text-slate-600",
+      className: "border-slate-200/70 bg-slate-100/80 text-slate-600",
     };
   }
 
@@ -203,7 +217,7 @@ export function getDependenciaInstitucionalTone(
 
   return {
     label: null,
-    className: "border-slate-200 bg-slate-50 text-slate-600",
+    className: "border-slate-200/70 bg-slate-100/80 text-slate-600",
   };
 }
 
@@ -222,7 +236,7 @@ function getStatusBadgeClass(status: string | null): string {
     return "border-slate-200 bg-slate-100 text-slate-600";
   }
 
-  return "border-slate-200 bg-white text-slate-700";
+  return "border-slate-200/70 bg-white text-slate-700";
 }
 
 function formatHeaderMeta(turma: DashboardTurmaComposicao): string {
@@ -236,9 +250,56 @@ function formatHeaderMeta(turma: DashboardTurmaComposicao): string {
   return partes.join(" / ") || "Sem classificacao operacional";
 }
 
-function formatKpiValue(value: number | null): string {
-  if (typeof value !== "number") return "-";
+function formatCapacity(value: number | null): string {
+  if (typeof value !== "number") return "Nao informada";
   return String(value);
+}
+
+function formatOcupacao(value: number | null): string {
+  if (typeof value !== "number") return "Nao disponivel";
+  return `${value}%`;
+}
+
+function formatVagas(value: number | null): string {
+  if (typeof value !== "number") return "Nao informadas";
+  return String(value);
+}
+
+function formatCurrency(value: number | null): string {
+  if (typeof value !== "number") return "Nao disponivel";
+  return moedaFormatter.format(value / 100);
+}
+
+function MetaStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <div className="rounded-2xl bg-slate-50/90 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1.5 text-xl font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function SoftPanel({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl bg-slate-50/85 px-4 py-4 ring-1 ring-inset ring-slate-200/65">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{title}</p>
+      <div className="mt-3">{children}</div>
+    </div>
+  );
 }
 
 export function EscolaTurmaComposicaoCard({
@@ -262,11 +323,11 @@ export function EscolaTurmaComposicaoCard({
   });
 
   return (
-    <Card className="overflow-hidden border-slate-200 bg-white/95 shadow-sm">
-      <div className="border-b border-slate-100 px-4 py-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold text-slate-900">{turma.nome}</h3>
+    <Card className="overflow-hidden rounded-[28px] border border-slate-200/75 bg-white/95 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.35)]">
+      <div className="border-b border-slate-200/70 px-5 py-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-semibold tracking-tight text-slate-950">{turma.nome}</h3>
             <p className="text-sm text-slate-500">{formatHeaderMeta(turma)}</p>
             <p className="text-sm text-slate-600">
               Professor: {turma.professor_nome?.trim() ? turma.professor_nome : "Nao definido"}
@@ -301,74 +362,53 @@ export function EscolaTurmaComposicaoCard({
         </div>
       </div>
 
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Alunos ativos
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {turma.alunos_ativos_total}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Capacidade
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {formatKpiValue(turma.capacidade)}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Ocupacao %
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {typeof turma.ocupacao_percentual === "number"
-                ? `${turma.ocupacao_percentual}%`
-                : "-"}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Vagas disponiveis
-            </p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {formatKpiValue(turma.vagas_disponiveis)}
-            </p>
-          </div>
+      <CardContent className="space-y-5 px-5 py-5">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <MetaStat label="Alunos ativos" value={turma.alunos_ativos_total} />
+          <MetaStat label="Capacidade" value={formatCapacity(turma.capacidade)} />
+          <MetaStat label="Ocupacao" value={formatOcupacao(turma.ocupacao_percentual)} />
+          <MetaStat label="Vagas disponiveis" value={formatVagas(turma.vagas_disponiveis)} />
         </div>
 
         <div className="flex flex-wrap gap-2 text-sm">
-          <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 font-medium text-slate-700">
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 ring-1 ring-inset ring-slate-200/80">
             Pagantes: {turma.pagantes_total}
           </span>
-          <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 font-medium text-sky-700">
+          <span className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1.5 font-medium text-sky-700 ring-1 ring-inset ring-sky-200/80">
             Concessao total: {turma.concessao_total}
           </span>
-          <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-medium text-emerald-700">
+          <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1.5 font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200/80">
             Concessao integral: {turma.concessao_integral_total}
           </span>
-          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-700">
+          <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1.5 font-medium text-amber-700 ring-1 ring-inset ring-amber-200/80">
             Concessao parcial: {turma.concessao_parcial_total}
           </span>
           {turma.outros_vinculos_total > 0 ? (
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-3 py-1 font-medium text-slate-700">
+            <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 ring-1 ring-inset ring-slate-200/80">
               Outros vinculos: {turma.outros_vinculos_total}
             </span>
           ) : null}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Composicao por nivel
-            </p>
+        <div className="grid gap-3 xl:grid-cols-3">
+          <MetaStat
+            label="Receita mensal estimada"
+            value={formatCurrency(turma.receita_mensal_estimada_centavos)}
+          />
+          <MetaStat
+            label="Pagantes sustentam"
+            value={formatCurrency(turma.receita_pagante_estimada_centavos)}
+          />
+          <MetaStat
+            label="Absorcao institucional"
+            value={formatCurrency(turma.receita_concessao_absorvida_centavos)}
+          />
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <SoftPanel title="Composicao por nivel">
             {distribuicaoNiveis.length > 0 ? (
-              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+              <ul className="space-y-2.5 text-sm text-slate-700">
                 {distribuicaoNiveis.map((item) => (
                   <li key={`nivel-${item.key}`} className="flex items-center justify-between gap-3">
                     <span>{item.label}</span>
@@ -377,16 +417,13 @@ export function EscolaTurmaComposicaoCard({
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm text-slate-500">Sem distribuicao por nivel.</p>
+              <p className="text-sm text-slate-500">Sem distribuicao por nivel.</p>
             )}
-          </div>
+          </SoftPanel>
 
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Composicao institucional
-            </p>
+          <SoftPanel title="Composicao institucional">
             {distribuicaoVinculos.length > 0 ? (
-              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+              <ul className="space-y-2.5 text-sm text-slate-700">
                 {distribuicaoVinculos.map((item) => (
                   <li
                     key={`vinculo-${item.key}`}
@@ -398,14 +435,14 @@ export function EscolaTurmaComposicaoCard({
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-sm text-slate-500">Sem distribuicao institucional.</p>
+              <p className="text-sm text-slate-500">Sem distribuicao institucional.</p>
             )}
-          </div>
+          </SoftPanel>
         </div>
       </CardContent>
 
-      <CardFooter className="justify-between border-slate-100 bg-slate-50/70">
-        <span className="text-xs text-slate-500">
+      <CardFooter className="flex flex-col items-start justify-between gap-3 border-t border-slate-200/70 bg-slate-50/70 px-5 py-4 text-xs text-slate-500 sm:flex-row sm:items-center">
+        <span>
           Tipo: {turma.tipo_turma ?? "REGULAR"} | Ano ref.: {turma.ano_referencia ?? "-"}
         </span>
         <Link

@@ -23,6 +23,7 @@ type DashboardTurmaComposicaoRow = {
   ano_referencia: number | null;
   status: string | null;
   curso: string | null;
+  curso_slug_ou_chave_filtro: string | null;
   nivel: string | null;
   turno: string | null;
   capacidade: number | null;
@@ -35,8 +36,19 @@ type DashboardTurmaComposicaoRow = {
   concessao_integral_total: number;
   concessao_parcial_total: number;
   outros_vinculos_total: number;
+  receita_mensal_estimada_centavos: number;
+  receita_pagante_estimada_centavos: number;
+  receita_concessao_absorvida_centavos: number;
   distribuicao_niveis_json: DashboardJsonValue | null;
   distribuicao_vinculos_json: DashboardJsonValue | null;
+};
+
+type DashboardResumoInstitucional = {
+  pagantes_total: number;
+  concessao_total: number;
+  concessao_integral_total: number;
+  concessao_parcial_total: number;
+  receita_mensal_estimada_centavos: number;
 };
 
 type DashboardSerieRow = {
@@ -58,11 +70,42 @@ type DashboardTrendsRow = {
   alunos_saldo_prev30d: number;
 };
 
+function toNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function slugifyCurso(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
 
   const { supabase } = auth;
+  const cursoParam = request.nextUrl.searchParams.get("curso")?.trim() ?? "";
+  const cursoFilter = cursoParam.length > 0 ? cursoParam : null;
+  const cursoFilterSlug = cursoFilter ? slugifyCurso(cursoFilter) : null;
 
   const { data: kpisData, error: kpisError } = await supabase
     .from("vw_escola_dashboard_kpis")
@@ -72,6 +115,21 @@ export async function GET(request: NextRequest) {
   if (kpisError) {
     return NextResponse.json(
       { error: "falha_kpis", details: kpisError.message },
+      { status: 500 },
+    );
+  }
+
+  const { data: resumoInstitucionalData, error: resumoInstitucionalError } = await supabase
+    .from("vw_escola_dashboard_resumo_institucional")
+    .select("*")
+    .single();
+
+  if (resumoInstitucionalError) {
+    return NextResponse.json(
+      {
+        error: "falha_resumo_institucional",
+        details: resumoInstitucionalError.message,
+      },
       { status: 500 },
     );
   }
@@ -92,6 +150,42 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  const turmasComposicao = ((turmasComposicaoData ?? []) as DashboardTurmaComposicaoRow[]).filter(
+    (turma) => {
+      if (!cursoFilter || !cursoFilterSlug) return true;
+
+      const cursoRaw = turma.curso?.trim().toLowerCase() ?? "";
+      const cursoSlug = turma.curso_slug_ou_chave_filtro?.trim().toLowerCase() ?? "";
+      return cursoRaw === cursoFilter.toLowerCase() || cursoSlug === cursoFilterSlug;
+    },
+  ).map((turma) => ({
+    ...turma,
+    turma_id: toNumber(turma.turma_id),
+    ano_referencia: toNullableNumber(turma.ano_referencia),
+    capacidade: toNullableNumber(turma.capacidade),
+    alunos_ativos_total: toNumber(turma.alunos_ativos_total),
+    vagas_disponiveis: toNullableNumber(turma.vagas_disponiveis),
+    ocupacao_percentual: toNullableNumber(turma.ocupacao_percentual),
+    pagantes_total: toNumber(turma.pagantes_total),
+    concessao_total: toNumber(turma.concessao_total),
+    concessao_integral_total: toNumber(turma.concessao_integral_total),
+    concessao_parcial_total: toNumber(turma.concessao_parcial_total),
+    outros_vinculos_total: toNumber(turma.outros_vinculos_total),
+    receita_mensal_estimada_centavos: toNumber(turma.receita_mensal_estimada_centavos),
+    receita_pagante_estimada_centavos: toNumber(turma.receita_pagante_estimada_centavos),
+    receita_concessao_absorvida_centavos: toNumber(
+      turma.receita_concessao_absorvida_centavos,
+    ),
+  }));
+
+  const cursosDisponiveis = Array.from(
+    new Set(
+      turmasComposicao
+        .map((turma) => turma.curso?.trim())
+        .filter((curso): curso is string => Boolean(curso)),
+    ),
+  ).sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   const { data: serieData, error: serieError } = await supabase
     .from("vw_escola_dashboard_series_7d")
@@ -117,12 +211,26 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const resumoInstitucional = resumoInstitucionalData
+    ? {
+        pagantes_total: toNumber(resumoInstitucionalData.pagantes_total),
+        concessao_total: toNumber(resumoInstitucionalData.concessao_total),
+        concessao_integral_total: toNumber(resumoInstitucionalData.concessao_integral_total),
+        concessao_parcial_total: toNumber(resumoInstitucionalData.concessao_parcial_total),
+        receita_mensal_estimada_centavos: toNumber(
+          resumoInstitucionalData.receita_mensal_estimada_centavos,
+        ),
+      }
+    : null;
+
   return NextResponse.json(
     {
       kpis: kpisData as DashboardKpisRow,
       series7d: (serieData ?? []) as DashboardSerieRow[],
       trends30d: trendsData as DashboardTrendsRow,
-      turmasComposicao: (turmasComposicaoData ?? []) as DashboardTurmaComposicaoRow[],
+      resumoInstitucional: resumoInstitucional as DashboardResumoInstitucional,
+      turmasComposicao,
+      cursosDisponiveis,
     },
     { status: 200 },
   );
