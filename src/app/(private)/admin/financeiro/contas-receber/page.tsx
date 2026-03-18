@@ -586,7 +586,14 @@ export default function AdminContasReceberPage() {
             <DialogDescription>{receberItem?.pessoa_nome ?? "Cobranca selecionada"}</DialogDescription>
           </div>
           <div className="space-y-4 p-6">
-            <LinhaFormulario label="Cobranca" value={receberItem ? `#${receberItem.cobranca_id} · ${receberItem.origem_label}` : "--"} />
+            <LinhaFormulario
+              label="Cobranca"
+              value={
+                receberItem
+                  ? `#${receberItem.cobranca_id} · ${receberItem.origem_label || receberItem.origemLabel || receberItem.origem_tecnica || "Origem em revisao"}`
+                  : "--"
+              }
+            />
             <LinhaFormulario label="Saldo aberto" value={formatBRLFromCents(receberItem?.valor_aberto_centavos ?? 0)} />
             <label className="space-y-1 text-sm text-slate-700">
               <span>Data do pagamento</span>

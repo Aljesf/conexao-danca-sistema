@@ -28,6 +28,10 @@ export interface CanonicalOriginDisplay {
   technical: string | null;
   badgeLabel: string | null;
   badgeTone: BadgeTone;
+  origemLabel: string;
+  origemAgrupadorTipo: string | null;
+  origemItemTipo: string | null;
+  migracaoContaInternaStatus: string | null;
 }
 
 function textOrNull(value: unknown): string | null {
@@ -158,51 +162,86 @@ function directPrincipal(input: CanonicalOriginInput, itemType: string): string 
 }
 
 export function buildCanonicalOriginDisplay(input: CanonicalOriginInput): CanonicalOriginDisplay {
-  const badge = migrationBadge(input.migracaoContaInternaStatus);
-  const itemType = normalizeItemType(input.origemItemTipo, input);
-  const item = itemLabel(itemType);
-  const technical = buildTechnicalLabel(input.legacyOrigemTipo ?? null, input.legacyOrigemId ?? null);
-  const humanLabel =
-    cleanedHumanLabel(input.origemLabel ?? null) ??
-    cleanedHumanLabel(input.legacyLabel ?? null) ??
-    cleanedHumanLabel(input.legacyDescricao ?? null);
+  try {
+    const agrupadorTipo =
+      textOrNull(input.origemAgrupadorTipo) ??
+      (isContaInterna(input) ? "CONTA_INTERNA" : null);
+    const itemType = normalizeItemType(input.origemItemTipo, input);
+    const migracaoContaInternaStatus = textOrNull(input.migracaoContaInternaStatus) ?? "AMBIGUO";
+    const badge = migrationBadge(migracaoContaInternaStatus);
+    const item = itemLabel(itemType);
+    const technical = buildTechnicalLabel(input.legacyOrigemTipo ?? null, input.legacyOrigemId ?? null);
+    const humanLabel =
+      cleanedHumanLabel(input.origemLabel ?? null) ??
+      cleanedHumanLabel(input.legacyLabel ?? null) ??
+      cleanedHumanLabel(input.legacyDescricao ?? null);
 
-  if (isContaInterna(input)) {
+    if (isContaInterna(input)) {
+      const principal = contaInternaLabel(input);
+      return {
+        principal,
+        secondary: item ? `Lancamento: ${item}` : humanLabel,
+        technical,
+        badgeLabel: badge.badgeLabel,
+        badgeTone: badge.badgeTone,
+        origemLabel: principal,
+        origemAgrupadorTipo: agrupadorTipo,
+        origemItemTipo: itemType,
+        migracaoContaInternaStatus,
+      };
+    }
+
+    const direct = directPrincipal(input, itemType);
+    if (direct) {
+      return {
+        principal: direct,
+        secondary: humanLabel && humanLabel !== direct ? humanLabel : null,
+        technical,
+        badgeLabel: badge.badgeLabel,
+        badgeTone: badge.badgeTone,
+        origemLabel: direct,
+        origemAgrupadorTipo: textOrNull(input.origemAgrupadorTipo),
+        origemItemTipo: itemType,
+        migracaoContaInternaStatus,
+      };
+    }
+
+    if (humanLabel) {
+      return {
+        principal: humanLabel,
+        secondary: item && !humanLabel.toLowerCase().includes(item.toLowerCase()) ? `Lancamento: ${item}` : null,
+        technical,
+        badgeLabel: badge.badgeLabel,
+        badgeTone: badge.badgeTone,
+        origemLabel: humanLabel,
+        origemAgrupadorTipo: textOrNull(input.origemAgrupadorTipo),
+        origemItemTipo: itemType,
+        migracaoContaInternaStatus,
+      };
+    }
+
     return {
-      principal: contaInternaLabel(input),
-      secondary: item ? `Lancamento: ${item}` : humanLabel,
+      principal: "Origem em revisao",
+      secondary: item ? `Lancamento: ${item}` : null,
       technical,
-      badgeLabel: badge.badgeLabel,
-      badgeTone: badge.badgeTone,
+      badgeLabel: badge.badgeLabel ?? "Em revisao",
+      badgeTone: badge.badgeLabel ? badge.badgeTone : "warning",
+      origemLabel: "Origem em revisao",
+      origemAgrupadorTipo: textOrNull(input.origemAgrupadorTipo),
+      origemItemTipo: itemType,
+      migracaoContaInternaStatus,
+    };
+  } catch {
+    return {
+      principal: "Origem em revisao",
+      secondary: null,
+      technical: buildTechnicalLabel(input.legacyOrigemTipo ?? null, input.legacyOrigemId ?? null),
+      badgeLabel: "Em revisao",
+      badgeTone: "warning",
+      origemLabel: "Origem em revisao",
+      origemAgrupadorTipo: textOrNull(input.origemAgrupadorTipo),
+      origemItemTipo: textOrNull(input.origemItemTipo) ?? "OUTRO",
+      migracaoContaInternaStatus: "AMBIGUO",
     };
   }
-
-  const direct = directPrincipal(input, itemType);
-  if (direct) {
-    return {
-      principal: direct,
-      secondary: humanLabel && humanLabel !== direct ? humanLabel : null,
-      technical,
-      badgeLabel: badge.badgeLabel,
-      badgeTone: badge.badgeTone,
-    };
-  }
-
-  if (humanLabel) {
-    return {
-      principal: humanLabel,
-      secondary: item && !humanLabel.toLowerCase().includes(item.toLowerCase()) ? `Lancamento: ${item}` : null,
-      technical,
-      badgeLabel: badge.badgeLabel,
-      badgeTone: badge.badgeTone,
-    };
-  }
-
-  return {
-    principal: "Origem em revisao",
-    secondary: item ? `Lancamento: ${item}` : null,
-    technical,
-    badgeLabel: badge.badgeLabel ?? "Em revisao",
-    badgeTone: badge.badgeLabel ? badge.badgeTone : "warning",
-  };
 }

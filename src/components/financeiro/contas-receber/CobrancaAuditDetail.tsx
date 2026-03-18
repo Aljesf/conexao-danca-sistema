@@ -44,12 +44,14 @@ export function CobrancaAuditDetail({ detalhe, loading = false, error = null }: 
     return <div className="p-6 text-sm text-slate-500">Selecione uma cobranca para inspecionar.</div>;
   }
 
+  const origemPrincipal = detalhe.origem_label || detalhe.cobranca.origemLabel || detalhe.cobranca.origem_tecnica || "Origem em revisao";
+
   return (
     <div className="space-y-6 p-6">
       <section className="grid gap-3 md:grid-cols-2">
         <Linha label="Pessoa devedora" value={detalhe.pessoa.nome} />
         <Linha label="Contexto principal" value={detalhe.contexto_principal} />
-        <Linha label="Origem principal" value={detalhe.origem_label} />
+        <Linha label="Origem principal" value={origemPrincipal} />
         <Linha label="Origem secundaria" value={detalhe.cobranca.origem_secundaria ?? "Sem complemento semantico"} />
         <Linha
           label="Situacao financeira"

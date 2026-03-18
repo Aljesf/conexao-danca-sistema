@@ -73,6 +73,10 @@ function origemBruta(item: CobrancaListaItem) {
   return complemento ? `${base} ${complemento}` : base;
 }
 
+function origemPrincipal(item: CobrancaListaItem) {
+  return item.origem_label || item.origemLabel || item.origem_tecnica || origemBruta(item) || "Origem em revisao";
+}
+
 function origemBadgeClass(tone: CobrancaListaItem["origem_badge_tone"]) {
   if (tone === "success") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
   if (tone === "warning") return "bg-amber-50 text-amber-700 ring-amber-200";
@@ -92,7 +96,7 @@ function OrigemCell({ item }: { item: CobrancaListaItem }) {
   return (
     <td className="px-3 py-3">
       <div className="space-y-1">
-        <div className="font-medium text-slate-800">{item.origem_label}</div>
+        <div className="font-medium text-slate-800">{origemPrincipal(item)}</div>
         {item.origem_secundaria ? <div className="text-xs text-slate-500">{item.origem_secundaria}</div> : null}
         {item.origem_badge_label || technical ? (
           <div className="flex flex-wrap items-center gap-1.5">

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import {
   listarContasReceberAuditoria,
+  listarContasReceberAuditoriaFallback,
   validarContasReceberInput,
   type ContasReceberAuditoriaInput,
 } from "@/lib/financeiro/contas-receber-auditoria";
@@ -45,6 +46,33 @@ function parsePositiveInt(value: string | null, fallback: number, min = 1, max =
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(Math.max(Math.trunc(parsed), min), max);
+}
+
+function summarizeError(error: unknown): { message: string; stack: string | null } {
+  if (!(error instanceof Error)) {
+    return { message: "erro_desconhecido", stack: null };
+  }
+
+  return {
+    message: error.message,
+    stack: error.stack
+      ? error.stack
+          .split("\n")
+          .slice(0, 4)
+          .map((line) => line.trim())
+          .join(" | ")
+      : null,
+  };
+}
+
+function logRouteError(stage: string, error: unknown) {
+  const summary = summarizeError(error);
+  console.error("[/api/financeiro/contas-a-receber]", {
+    route: "/api/financeiro/contas-a-receber",
+    stage,
+    message: summary.message,
+    stack: summary.stack,
+  });
 }
 
 export async function GET(req: NextRequest) {
@@ -135,10 +163,22 @@ export async function GET(req: NextRequest) {
   } catch (error: unknown) {
     if (isMissingExpurgoColumnError(error)) {
       logExpurgoMigrationWarning("/api/financeiro/contas-a-receber", error);
-    } else {
-      console.error("[/api/financeiro/contas-a-receber] erro ao montar payload:", error);
     }
-    const message = error instanceof Error ? error.message : "erro_listar_contas_receber";
-    return NextResponse.json({ ok: false, error: "erro_listar_contas_receber", details: message }, { status: 500 });
+    logRouteError("payload_principal", error);
+
+    try {
+      const supabase = getSupabaseAdmin();
+      const payload = await listarContasReceberAuditoriaFallback(supabase, input);
+
+      return NextResponse.json({
+        ok: true,
+        degraded: true,
+        warning: "contas_receber_em_fallback_legacy",
+        ...payload,
+      });
+    } catch (fallbackError: unknown) {
+      logRouteError("payload_fallback", fallbackError);
+      return NextResponse.json({ ok: false, error: "erro_listar_contas_receber" }, { status: 500 });
+    }
   }
 }

@@ -401,8 +401,40 @@ function pessoaNome(pessoaId: number | null, pessoa: PessoaRow | undefined): str
   return "Pessoa não identificada";
 }
 
-function cobrancaVisivel(cobranca: CobrancaRow | undefined, visao: ContasReceberVisao): boolean {
-  if (!cobranca) return false;
+function safeErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "erro_desconhecido";
+}
+
+function logContasReceberStageError(
+  stage: string,
+  error: unknown,
+  metadata: Record<string, unknown> = {},
+) {
+  const stack =
+    error instanceof Error && error.stack
+      ? error.stack
+          .split("\n")
+          .slice(0, 4)
+          .map((line) => line.trim())
+          .join(" | ")
+      : null;
+
+  console.error("[contas-receber-auditoria]", {
+    stage,
+    message: safeErrorMessage(error),
+    stack,
+    ...metadata,
+  });
+}
+
+function cobrancaVisivel(
+  cobranca: CobrancaRow | undefined,
+  visao: ContasReceberVisao,
+  baseRow?: FlatRow,
+): boolean {
+  if (!cobranca) {
+    return visao === "INCONSISTENCIAS" || upper(baseRow?.status_cobranca) !== "CANCELADA";
+  }
   if (booleanOrFalse(cobranca.expurgada)) return false;
   if (visao !== "INCONSISTENCIAS" && upper(cobranca.status) === "CANCELADA") return false;
   return true;
@@ -1024,6 +1056,84 @@ function buildDetalhe(item: CobrancaListaItem, maps: DataMaps): DetalheCobrancaA
     ),
     composicao_fatura_conexao: composicao,
   };
+}
+
+function buildFallbackDetalhe(
+  item: CobrancaListaItem,
+  maps: Pick<DataMaps, "cobrancas">,
+  error?: unknown,
+): DetalheCobrancaAuditoria {
+  const cobranca = maps.cobrancas.get(item.cobranca_id);
+
+  return {
+    pessoa: {
+      id: item.pessoa_id,
+      nome: item.pessoa_nome,
+    },
+    cobranca: {
+      id: item.cobranca_id,
+      descricao: textOrNull(cobranca?.descricao),
+      valor_centavos: item.valor_centavos,
+      valor_aberto_centavos: item.valor_aberto_centavos,
+      valor_recebido_centavos: item.valor_recebido_centavos,
+      vencimento: item.vencimento,
+      competencia_ano_mes: item.competencia_ano_mes,
+      status_cobranca: item.status_cobranca,
+      status_interno: item.status_interno,
+      origem_tipo: item.origem_tipo,
+      origem_subtipo: item.origem_subtipo,
+      origem_id: item.origem_id,
+      created_at: textOrNull(cobranca?.created_at),
+      updated_at: textOrNull(cobranca?.updated_at),
+      origem_agrupador_tipo: item.origem_agrupador_tipo,
+      origem_agrupador_id: item.origem_agrupador_id,
+      origem_item_tipo: item.origem_item_tipo,
+      origem_item_id: item.origem_item_id,
+      conta_interna_id: item.conta_interna_id,
+      migracao_conta_interna_status: item.migracao_conta_interna_status,
+      migracao_conta_interna_observacao:
+        item.migracao_conta_interna_observacao ?? (error ? "Detalhe retornado em fallback legado seguro." : null),
+      origem_secundaria: item.origem_secundaria,
+      origem_tecnica: item.origem_tecnica,
+      origem_badge_label: item.origem_badge_label,
+      origem_badge_tone: item.origem_badge_tone,
+      origemAgrupadorTipo: item.origemAgrupadorTipo,
+      origemAgrupadorId: item.origemAgrupadorId,
+      origemItemTipo: item.origemItemTipo,
+      origemItemId: item.origemItemId,
+      contaInternaId: item.contaInternaId,
+      origemLabel: item.origemLabel,
+      migracaoContaInternaStatus: item.migracaoContaInternaStatus,
+    },
+    contexto_principal: item.contexto_principal,
+    origem_detalhada: item.origem_detalhada,
+    origem_label: item.origem_label,
+    centro_custo: {
+      id: item.centro_custo_id,
+      codigo: null,
+      nome: item.centro_custo_nome,
+    },
+    documento_vinculado: null,
+    trilha_auditavel: [
+      { titulo: "Origem principal", valor: item.origem_label },
+      { titulo: "Origem tecnica", valor: item.origem_tecnica ?? "Sem origem tecnica" },
+      { titulo: "Status migracao", valor: item.migracaoContaInternaStatus ?? "AMBIGUO" },
+      {
+        titulo: "Observacao",
+        valor: error ? `Detalhe parcial por fallback: ${safeErrorMessage(error)}` : "Detalhe legado seguro.",
+      },
+    ],
+    composicao_fatura_conexao: null,
+  };
+}
+
+function buildDetalheSafe(item: CobrancaListaItem, maps: DataMaps): DetalheCobrancaAuditoria {
+  try {
+    return buildDetalhe(item, maps);
+  } catch (error) {
+    logContasReceberStageError("build_detalhe", error, { cobrancaId: item.cobranca_id });
+    return buildFallbackDetalhe(item, maps, error);
+  }
 }
 
 function devedorFromItems(items: CobrancaListaItem[]): DevedorAuditoriaItem[] {
@@ -2044,6 +2154,10 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     legacyDescricao: textOrNull(cobranca?.descricao),
     legacyLabel: classificacao.origemLabel,
   });
+  const origemAgrupadorTipoResolvido = origemAgrupadorTipo ?? display.origemAgrupadorTipo;
+  const origemItemTipoResolvido = origemItemTipo ?? display.origemItemTipo;
+  const migracaoContaInternaStatusResolvido =
+    migracaoContaInternaStatus ?? display.migracaoContaInternaStatus ?? "AMBIGUO";
 
   const item: CobrancaListaItem = {
     cobranca_id: baseRow.cobranca_id,
@@ -2051,7 +2165,7 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     pessoa_nome: pessoaNome(baseRow.pessoa_id, pessoa),
     contexto_principal: classificacao.contextoPrincipal,
     origem_detalhada: classificacao.origemDetalhada,
-    origem_label: display.principal,
+    origem_label: display.origemLabel,
     vencimento: baseRow.vencimento,
     competencia_ano_mes:
       textOrNull(cobranca?.competencia_ano_mes) ??
@@ -2073,24 +2187,24 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     quantidade_recebimentos: recebimentos.length,
     tipo_inconsistencia: null,
     criticidade_inconsistencia: 0,
-    origem_agrupador_tipo: origemAgrupadorTipo,
+    origem_agrupador_tipo: origemAgrupadorTipoResolvido,
     origem_agrupador_id: origemAgrupadorId,
-    origem_item_tipo: origemItemTipo,
+    origem_item_tipo: origemItemTipoResolvido,
     origem_item_id: origemItemId,
     conta_interna_id: contaInternaId,
-    migracao_conta_interna_status: migracaoContaInternaStatus,
+    migracao_conta_interna_status: migracaoContaInternaStatusResolvido,
     migracao_conta_interna_observacao: migracaoContaInternaObservacao,
     origem_secundaria: display.secondary,
     origem_tecnica: display.technical,
     origem_badge_label: display.badgeLabel,
     origem_badge_tone: display.badgeTone,
-    origemAgrupadorTipo: origemAgrupadorTipo,
+    origemAgrupadorTipo: origemAgrupadorTipoResolvido,
     origemAgrupadorId: origemAgrupadorId,
-    origemItemTipo: origemItemTipo,
+    origemItemTipo: origemItemTipoResolvido,
     origemItemId: origemItemId,
     contaInternaId,
-    origemLabel: display.principal,
-    migracaoContaInternaStatus,
+    origemLabel: display.origemLabel,
+    migracaoContaInternaStatus: migracaoContaInternaStatusResolvido,
   };
 
   const inconsistencia = buildInconsistenciaMeta(item);
@@ -2100,10 +2214,117 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
   return item;
 }
 
+function contextoPrincipalLegado(origemTipo: string | null): ContextoPrincipal {
+  const normalized = upper(origemTipo);
+  if (normalized === "CAFE") return "CAFE";
+  if (normalized === "LOJA" || normalized === "LOJA_VENDA") return "LOJA";
+  if (
+    normalized.startsWith("MATRICULA") ||
+    normalized.includes("FATURA") ||
+    normalized === "SERVICO_ESCOLA"
+  ) {
+    return "ESCOLA";
+  }
+  return "OUTRO";
+}
+
+function origemDetalhadaLegada(origemTipo: string | null): OrigemDetalhada {
+  const normalized = upper(origemTipo);
+  if (normalized.startsWith("MATRICULA")) return "MATRICULA";
+  if (normalized.includes("FATURA")) return "CONTA_INTERNA_ALUNO";
+  if (normalized === "CAFE") return "CONSUMO_CAFE";
+  if (normalized === "LOJA" || normalized === "LOJA_VENDA") return "VENDA_LOJA";
+  return "ORIGEM_NAO_RESOLVIDA";
+}
+
+function buildFallbackItem(
+  baseRow: FlatRow,
+  maps: Pick<DataMaps, "cobrancas" | "pessoas">,
+  error?: unknown,
+): CobrancaListaItem {
+  const cobranca = maps.cobrancas.get(baseRow.cobranca_id);
+  const pessoa = baseRow.pessoa_id ? maps.pessoas.get(baseRow.pessoa_id) : undefined;
+  const origemTipo = textOrNull(cobranca?.origem_tipo) ?? baseRow.origem_tipo;
+  const origemId = numberOrNull(cobranca?.origem_id) ?? baseRow.origem_id;
+  const display = buildCanonicalOriginDisplay({
+    origemAgrupadorTipo: textOrNull(cobranca?.origem_agrupador_tipo),
+    origemAgrupadorId: numberOrNull(cobranca?.origem_agrupador_id),
+    origemItemTipo: textOrNull(cobranca?.origem_item_tipo),
+    origemItemId: numberOrNull(cobranca?.origem_item_id),
+    contaInternaId: numberOrNull(cobranca?.conta_interna_id),
+    origemLabel: textOrNull(cobranca?.origem_label),
+    migracaoContaInternaStatus: textOrNull(cobranca?.migracao_conta_interna_status) ?? "AMBIGUO",
+    legacyOrigemTipo: origemTipo,
+    legacyOrigemSubtipo: textOrNull(cobranca?.origem_subtipo),
+    legacyOrigemId: origemId,
+    legacyDescricao: textOrNull(cobranca?.descricao),
+  });
+
+  const item: CobrancaListaItem = {
+    cobranca_id: baseRow.cobranca_id,
+    pessoa_id: baseRow.pessoa_id,
+    pessoa_nome: pessoaNome(baseRow.pessoa_id, pessoa),
+    contexto_principal: contextoPrincipalLegado(origemTipo),
+    origem_detalhada: origemDetalhadaLegada(origemTipo),
+    origem_label: display.origemLabel,
+    vencimento: baseRow.vencimento,
+    competencia_ano_mes: textOrNull(cobranca?.competencia_ano_mes) ?? baseRow.competencia_ano_mes,
+    bucket: baseRow.bucket_vencimento,
+    valor_centavos: numberOrZero(cobranca?.valor_centavos || baseRow.valor_centavos),
+    valor_aberto_centavos: baseRow.saldo_aberto_centavos,
+    valor_recebido_centavos: baseRow.valor_recebido_centavos,
+    status_cobranca: textOrNull(cobranca?.status) ?? baseRow.status_cobranca,
+    status_interno: baseRow.situacao_saas,
+    centro_custo_id: numberOrNull(cobranca?.centro_custo_id),
+    centro_custo_nome: null,
+    atraso_dias: baseRow.dias_atraso,
+    origem_tipo: origemTipo,
+    origem_subtipo: textOrNull(cobranca?.origem_subtipo),
+    origem_id: origemId,
+    ultima_data_recebimento: null,
+    quantidade_recebimentos: 0,
+    tipo_inconsistencia: error ? `Enriquecimento parcial: ${safeErrorMessage(error)}` : null,
+    criticidade_inconsistencia: error ? 50 + baseRow.dias_atraso : 0,
+    origem_agrupador_tipo: textOrNull(cobranca?.origem_agrupador_tipo) ?? display.origemAgrupadorTipo,
+    origem_agrupador_id: numberOrNull(cobranca?.origem_agrupador_id),
+    origem_item_tipo: textOrNull(cobranca?.origem_item_tipo) ?? display.origemItemTipo,
+    origem_item_id: numberOrNull(cobranca?.origem_item_id),
+    conta_interna_id: numberOrNull(cobranca?.conta_interna_id),
+    migracao_conta_interna_status:
+      textOrNull(cobranca?.migracao_conta_interna_status) ?? display.migracaoContaInternaStatus ?? "AMBIGUO",
+    migracao_conta_interna_observacao:
+      textOrNull(cobranca?.migracao_conta_interna_observacao) ??
+      (error ? "Item retornado em fallback legado seguro." : null),
+    origem_secundaria: display.secondary,
+    origem_tecnica: display.technical,
+    origem_badge_label: display.badgeLabel,
+    origem_badge_tone: display.badgeTone,
+    origemAgrupadorTipo: textOrNull(cobranca?.origem_agrupador_tipo) ?? display.origemAgrupadorTipo,
+    origemAgrupadorId: numberOrNull(cobranca?.origem_agrupador_id),
+    origemItemTipo: textOrNull(cobranca?.origem_item_tipo) ?? display.origemItemTipo,
+    origemItemId: numberOrNull(cobranca?.origem_item_id),
+    contaInternaId: numberOrNull(cobranca?.conta_interna_id),
+    origemLabel: display.origemLabel,
+    migracaoContaInternaStatus:
+      textOrNull(cobranca?.migracao_conta_interna_status) ?? display.migracaoContaInternaStatus ?? "AMBIGUO",
+  };
+
+  return item;
+}
+
+function buildItemSafe(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
+  try {
+    return buildItem(baseRow, maps);
+  } catch (error) {
+    logContasReceberStageError("build_item", error, { cobrancaId: baseRow.cobranca_id });
+    return buildFallbackItem(baseRow, maps, error);
+  }
+}
+
 function buildVisibleItems(baseRows: FlatRow[], maps: DataMaps, visao: ContasReceberVisao): CobrancaListaItem[] {
   return baseRows
-    .filter((row) => cobrancaVisivel(maps.cobrancas.get(row.cobranca_id), visao))
-    .map((row) => buildItem(row, maps));
+    .filter((row) => cobrancaVisivel(maps.cobrancas.get(row.cobranca_id), visao, row))
+    .map((row) => buildItemSafe(row, maps));
 }
 
 async function fetchFlatRowsByPessoa(
@@ -2154,8 +2375,19 @@ export async function listarTitulosVencidosPorPessoa(
   pessoaId: number,
 ): Promise<CobrancaListaItem[]> {
   const baseRows = await fetchFlatRowsByPessoa(supabase, pessoaId, true);
-  const maps = await buildMaps(supabase, baseRows);
-  const items = buildVisibleItems(baseRows, maps, "VENCIDAS");
+  let items: CobrancaListaItem[];
+
+  try {
+    const maps = await buildMaps(supabase, baseRows);
+    items = buildVisibleItems(baseRows, maps, "VENCIDAS");
+  } catch (error) {
+    logContasReceberStageError("listar_titulos_vencidos_por_pessoa", error, { pessoaId });
+    const maps = await buildFallbackMaps(supabase, baseRows);
+    items = baseRows
+      .filter((row) => upper(row.status_cobranca) !== "CANCELADA")
+      .map((row) => buildFallbackItem(row, maps, error));
+  }
+
   return items.sort((left, right) => {
     const byDate = compareNullableDateAsc(left.vencimento, right.vencimento);
     if (byDate !== 0) return byDate;
@@ -2169,8 +2401,19 @@ export async function listarCobrancasEmAbertoPorPessoa(
   pessoaId: number,
 ): Promise<CobrancaListaItem[]> {
   const baseRows = await fetchFlatRowsByPessoa(supabase, pessoaId, false);
-  const maps = await buildMaps(supabase, baseRows);
-  const items = buildVisibleItems(baseRows, maps, "VENCIDAS");
+  let items: CobrancaListaItem[];
+
+  try {
+    const maps = await buildMaps(supabase, baseRows);
+    items = buildVisibleItems(baseRows, maps, "VENCIDAS");
+  } catch (error) {
+    logContasReceberStageError("listar_cobrancas_em_aberto_por_pessoa", error, { pessoaId });
+    const maps = await buildFallbackMaps(supabase, baseRows);
+    items = baseRows
+      .filter((row) => upper(row.status_cobranca) !== "CANCELADA")
+      .map((row) => buildFallbackItem(row, maps, error));
+  }
+
   return items.sort((left, right) => {
     const byDate = compareNullableDateAsc(left.vencimento, right.vencimento);
     if (byDate !== 0) return byDate;
@@ -2308,6 +2551,114 @@ function paginate<T>(
   };
 }
 
+async function buildFallbackMaps(
+  supabase: SupabaseClient,
+  baseRows: FlatRow[],
+): Promise<Pick<DataMaps, "cobrancas" | "pessoas">> {
+  const cobrancaIds = Array.from(new Set(baseRows.map((row) => row.cobranca_id)));
+  const pessoaIds = Array.from(new Set(baseRows.map((row) => row.pessoa_id).filter((id): id is number => !!id)));
+
+  const cobrancas = await selectMany<CobrancaRow>(async (chunk) => {
+    const { data, error } = await supabase.from("cobrancas").select(COBRANCA_SELECT_LEGACY).in("id", chunk);
+    if (error) {
+      throw new Error(`erro_carregar_cobrancas_fallback: ${error.message}`);
+    }
+    return ((data ?? []) as CobrancaBaseRow[]).map((row) => ({
+      ...row,
+      origem_agrupador_tipo: null,
+      origem_agrupador_id: null,
+      origem_item_tipo: null,
+      origem_item_id: null,
+      conta_interna_id: null,
+      origem_label: null,
+      migracao_conta_interna_status: null,
+      migracao_conta_interna_observacao: null,
+      expurgada: false,
+      expurgada_em: null,
+      expurgada_por: null,
+      expurgo_motivo: null,
+    }));
+  }, cobrancaIds);
+
+  const pessoas = await selectMany<PessoaRow>(async (chunk) => {
+    const { data, error } = await supabase.from("pessoas").select("id,nome").in("id", chunk);
+    if (error) {
+      throw new Error(`erro_carregar_pessoas_fallback: ${error.message}`);
+    }
+    return (data ?? []) as PessoaRow[];
+  }, pessoaIds);
+
+  return {
+    cobrancas: new Map(cobrancas.map((row) => [row.id, row])),
+    pessoas: new Map(pessoas.map((row) => [row.id, row])),
+  };
+}
+
+export async function listarContasReceberAuditoriaFallback(
+  supabase: SupabaseClient,
+  input: ContasReceberAuditoriaInput,
+): Promise<ContasReceberAuditoriaPayload> {
+  const visao = normalizeContasReceberVisao(input.visao);
+  const tipoPeriodo = normalizeContasReceberTipoPeriodo(input.tipoPeriodo);
+  const ordenacao = normalizeContasReceberOrdenacao(input.ordenacao, visao);
+  const contexto = normalizeContextoFilter(input.contexto);
+  const page = Math.max(input.page ?? 1, 1);
+  const pageSize = Math.min(Math.max(input.pageSize ?? 50, 1), 200);
+
+  const baseRows = await fetchFlatRows(supabase, input);
+  const maps = await buildFallbackMaps(supabase, baseRows);
+
+  const itensBase = baseRows
+    .filter((row) => upper(row.status_cobranca) !== "CANCELADA" || visao === "INCONSISTENCIAS")
+    .map((row) => buildFallbackItem(row, maps));
+  const filtradosPorContexto = filtrarPorContexto(itensBase, contexto);
+  const filtradosPorBusca = filtrarPorBusca(filtradosPorContexto, input.q ?? null);
+  const ordenados = sortItemsByOrdenacao(filtradosPorBusca, visao, ordenacao);
+  const devedoresBase = devedorFromItems(ordenados);
+  const paginacao = paginate(ordenados, page, pageSize);
+  const detalheItem =
+    typeof input.detalheCobrancaId === "number"
+      ? itensBase.find((item) => item.cobranca_id === input.detalheCobrancaId) ?? null
+      : null;
+  const detalhe = detalheItem ? buildFallbackDetalhe(detalheItem, maps) : null;
+
+  return {
+    resumo: construirResumo(ordenados),
+    top_devedores: devedoresBase.slice(0, 10),
+    devedores_lista: devedoresBase,
+    metricas_visao: construirMetricasVisao(ordenados, devedoresBase, visao),
+    contextos_visao: construirContextosVisao(ordenados, visao),
+    ranking_principal: construirRankingPrincipal(ordenados, visao),
+    cobrancas_lista: paginacao.rows,
+    detalhe_cobranca: detalhe,
+    composicao_fatura_conexao: null,
+    perdas_cancelamento: [],
+    paginacao: {
+      page: paginacao.pageAjustada,
+      page_size: pageSize,
+      total: paginacao.total,
+      total_paginas: paginacao.totalPaginas,
+    },
+    filtros_aplicados: {
+      visao,
+      tipo_periodo: tipoPeriodo,
+      ordenacao,
+      q: textOrNull(input.q) ?? "",
+      contexto,
+      situacao: textOrNull(input.situacao),
+      status: textOrNull(input.status),
+      bucket: textOrNull(input.bucket),
+      competencia: textOrNull(input.competencia),
+      competencia_inicio: textOrNull(input.competenciaInicio),
+      competencia_fim: textOrNull(input.competenciaFim),
+      ano: textOrNull(input.ano),
+      mes: textOrNull(input.mes),
+      vencimento_inicio: isDateLike(input.vencimentoInicio ?? null) ? input.vencimentoInicio ?? null : null,
+      vencimento_fim: isDateLike(input.vencimentoFim ?? null) ? input.vencimentoFim ?? null : null,
+    },
+  };
+}
+
 export async function listarContasReceberAuditoria(
   supabase: SupabaseClient,
   input: ContasReceberAuditoriaInput,
@@ -2331,7 +2682,11 @@ export async function listarContasReceberAuditoria(
     typeof input.detalheCobrancaId === "number"
       ? itensEnriquecidos.find((item) => item.cobranca_id === input.detalheCobrancaId) ?? null
       : null;
-  const detalhe = detalheItem ? buildDetalhe(detalheItem, maps) : null;
+  const detalhe = detalheItem ? buildDetalheSafe(detalheItem, maps) : null;
+  const perdasCancelamento = await buildPerdasCancelamento(supabase).catch((error: unknown) => {
+    logContasReceberStageError("build_perdas_cancelamento", error);
+    return [] as PerdaCancelamentoItem[];
+  });
 
   return {
     resumo: construirResumo(ordenados),
@@ -2343,7 +2698,7 @@ export async function listarContasReceberAuditoria(
     cobrancas_lista: paginacao.rows,
     detalhe_cobranca: detalhe,
     composicao_fatura_conexao: detalhe?.composicao_fatura_conexao ?? null,
-    perdas_cancelamento: await buildPerdasCancelamento(supabase),
+    perdas_cancelamento: perdasCancelamento,
     paginacao: {
       page: paginacao.pageAjustada,
       page_size: pageSize,
