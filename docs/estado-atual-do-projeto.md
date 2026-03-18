@@ -1,6 +1,6 @@
 # Modulo atual
 
-Dashboard Escola - refinamento de composicao de turmas
+Dashboard Escola - drill-down operacional por alunos
 
 # SQL concluido
 
@@ -18,6 +18,8 @@ Dashboard Escola - refinamento de composicao de turmas
   - `resumoInstitucional`
   - `turmasComposicao`
   - `cursosDisponiveis`
+- Nova rota de drill-down:
+  - `/api/escola/dashboard/detalhes`
 
 # Paginas / componentes concluidos
 
@@ -30,12 +32,16 @@ Dashboard Escola - refinamento de composicao de turmas
 - Filtro por curso na secao "Saude das Turmas"
 - Receita mensal estimada por turma
 - Receita mensal estimada agregada da Escola
+- Card institucional de concessoes consolidado
+- Modal de listagem operacional por pagantes e concessoes
+- Dashboard Escola com drill-down operacional por alunos
 
 # Pendencias
 
 - Validar classificacao real de concessao no banco
 - Validar regra oficial da receita estimada
 - Definir futuramente indicador de sustentabilidade da turma
+- Futuramente permitir clique tambem em receita e demais grupos
 
 # Proximas acoes
 

@@ -48,6 +48,10 @@ export type DashboardTurmaComposicao = {
 type EscolaTurmaComposicaoCardProps = {
   turma: DashboardTurmaComposicao;
   hrefDetalhe: string;
+  onClickPagantes?: () => void;
+  onClickConcessoes?: () => void;
+  onClickConcessoesIntegrais?: () => void;
+  onClickConcessoesParciais?: () => void;
 };
 
 const moedaFormatter = new Intl.NumberFormat("pt-BR", {
@@ -302,9 +306,45 @@ function SoftPanel({
   );
 }
 
+function ActionBadge({
+  label,
+  value,
+  toneClassName,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  toneClassName: string;
+  onClick?: () => void;
+}) {
+  if (!onClick) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-full px-3 py-1.5 font-medium ring-1 ring-inset ${toneClassName}`}
+      >
+        {label}: {value}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center rounded-full px-3 py-1.5 font-medium ring-1 ring-inset transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${toneClassName} cursor-pointer`}
+    >
+      {label}: {value}
+    </button>
+  );
+}
+
 export function EscolaTurmaComposicaoCard({
   turma,
   hrefDetalhe,
+  onClickPagantes,
+  onClickConcessoes,
+  onClickConcessoesIntegrais,
+  onClickConcessoesParciais,
 }: EscolaTurmaComposicaoCardProps) {
   const ocupacaoTone = getOcupacaoTone(turma.ocupacao_percentual);
   const dependenciaTone = getDependenciaInstitucionalTone(
@@ -371,18 +411,30 @@ export function EscolaTurmaComposicaoCard({
         </div>
 
         <div className="flex flex-wrap gap-2 text-sm">
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 ring-1 ring-inset ring-slate-200/80">
-            Pagantes: {turma.pagantes_total}
-          </span>
-          <span className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1.5 font-medium text-sky-700 ring-1 ring-inset ring-sky-200/80">
-            Concessao total: {turma.concessao_total}
-          </span>
-          <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1.5 font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200/80">
-            Concessao integral: {turma.concessao_integral_total}
-          </span>
-          <span className="inline-flex items-center rounded-full bg-amber-50 px-3 py-1.5 font-medium text-amber-700 ring-1 ring-inset ring-amber-200/80">
-            Concessao parcial: {turma.concessao_parcial_total}
-          </span>
+          <ActionBadge
+            label="Pagantes"
+            value={turma.pagantes_total}
+            toneClassName="bg-slate-100 text-slate-700 ring-slate-200/80"
+            onClick={onClickPagantes}
+          />
+          <ActionBadge
+            label="Concessao total"
+            value={turma.concessao_total}
+            toneClassName="bg-sky-50 text-sky-700 ring-sky-200/80"
+            onClick={onClickConcessoes}
+          />
+          <ActionBadge
+            label="Concessao integral"
+            value={turma.concessao_integral_total}
+            toneClassName="bg-emerald-50 text-emerald-700 ring-emerald-200/80"
+            onClick={onClickConcessoesIntegrais}
+          />
+          <ActionBadge
+            label="Concessao parcial"
+            value={turma.concessao_parcial_total}
+            toneClassName="bg-amber-50 text-amber-700 ring-amber-200/80"
+            onClick={onClickConcessoesParciais}
+          />
           {turma.outros_vinculos_total > 0 ? (
             <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-700 ring-1 ring-inset ring-slate-200/80">
               Outros vinculos: {turma.outros_vinculos_total}
