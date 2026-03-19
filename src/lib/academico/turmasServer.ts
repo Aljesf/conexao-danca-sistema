@@ -1,4 +1,5 @@
 import { getSupabaseServer } from "@/lib/supabaseServer";
+import { resolverHorarioTurma } from "@/lib/turmas";
 import type { Turma, TurmaHorario, TipoTurma, StatusTurma } from "@/types/turmas";
 
 export type AtualizarTurmaInput = {
@@ -39,6 +40,8 @@ export async function listarTurmas(params?: {
         data_inicio,
         data_fim,
         dias_semana,
+        hora_inicio,
+        hora_fim,
         espaco_id,
         espaco:espacos ( id, nome, tipo, capacidade, local_id, local:locais ( id, nome, tipo ) ),
         carga_horaria_prevista,
@@ -79,7 +82,7 @@ export async function listarTurmas(params?: {
 
   const { data: horarios, error: horariosError } = await supabase
     .from("turmas_horarios")
-    .select("turma_id")
+    .select("turma_id,inicio,fim")
     .in("turma_id", turmaIds);
 
   if (horariosError) {
@@ -87,12 +90,34 @@ export async function listarTurmas(params?: {
     return turmas;
   }
 
-  const turmasComHorario = new Set((horarios ?? []).map((h) => Number(h.turma_id)));
+  const horariosPorTurma = new Map<number, Array<{ inicio: string | null; fim: string | null }>>();
+  for (const horario of horarios ?? []) {
+    const turmaId = Number(horario.turma_id);
+    if (!Number.isInteger(turmaId) || turmaId <= 0) continue;
 
-  return turmas.map((t) => ({
-    ...t,
-    tem_horario: turmasComHorario.has(Number(t.turma_id)),
-  }));
+    const lista = horariosPorTurma.get(turmaId) ?? [];
+    lista.push({
+      inicio: typeof horario.inicio === "string" ? horario.inicio : null,
+      fim: typeof horario.fim === "string" ? horario.fim : null,
+    });
+    horariosPorTurma.set(turmaId, lista);
+  }
+
+  return turmas.map((t) => {
+    const horarioResolvido = resolverHorarioTurma({
+      turma: {
+        hora_inicio: t.hora_inicio,
+        hora_fim: t.hora_fim,
+      },
+      horarios: horariosPorTurma.get(Number(t.turma_id)) ?? [],
+    });
+
+    return {
+      ...t,
+      ...horarioResolvido,
+      tem_horario: Boolean(horarioResolvido.hora_inicio && horarioResolvido.hora_fim),
+    };
+  });
 }
 
 export async function listarTurma(id: number) {

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatarHorario } from "@/lib/turmas";
 
 type DiarioStatus = "PENDENTE" | "PRONTO" | "ERRO";
 type PresencaBaseStatus = "PRESENTE" | "FALTA";
@@ -271,6 +273,7 @@ async function fetchJson<T>(
 }
 
 export default function DiarioDeClassePage() {
+  const router = useRouter();
   const [aba, setAba] = useState<
     "frequencia" | "plano" | "conteudo" | "observacoes" | "avaliacoes"
   >("frequencia");
@@ -1098,10 +1101,7 @@ export default function DiarioDeClassePage() {
           <div className="grid gap-3 md:grid-cols-2">
             {turmas.map((t) => {
               const diasLabel = Array.isArray(t.dias_semana) ? t.dias_semana.join(", ") : "--";
-              const horaInicio = normalizeHora(t.hora_inicio);
-              const horaFim = normalizeHora(t.hora_fim);
-              const horario =
-                horaInicio && horaFim ? `${horaInicio} - ${horaFim}` : horaInicio ?? horaFim ?? "--";
+              const horario = formatarHorario(t);
               return (
                 <div key={t.turma_id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="text-sm font-semibold text-slate-900">
@@ -1109,15 +1109,26 @@ export default function DiarioDeClassePage() {
                   </div>
                   <div className="mt-1 text-xs text-slate-500">Dias: {diasLabel}</div>
                   <div className="text-xs text-slate-500">Horario: {horario}</div>
-                  <button
-                    type="button"
-                    className="mt-3 inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={() => {
-                      setTurmaId(t.turma_id);
-                    }}
-                  >
-                    Abrir chamada
-                  </button>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      onClick={() => {
+                        setTurmaId(t.turma_id);
+                      }}
+                    >
+                      Abrir chamada
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex rounded-full border border-sky-200 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50"
+                      onClick={() => {
+                        router.push(`/escola/academico/turmas/${t.turma_id}`);
+                      }}
+                    >
+                      Configurar turma
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1706,9 +1717,7 @@ function TurmaPanel(props: {
 }) {
   const dias = props.turma?.dias_semana;
   const diasLabel = Array.isArray(dias) && dias.length > 0 ? dias.join(", ") : "--";
-  const horaInicio = normalizeHora(props.turma?.hora_inicio);
-  const horaFim = normalizeHora(props.turma?.hora_fim);
-  const horario = horaInicio && horaFim ? `${horaInicio} - ${horaFim}` : horaInicio ?? horaFim ?? "--";
+  const horario = formatarHorario(props.turma);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

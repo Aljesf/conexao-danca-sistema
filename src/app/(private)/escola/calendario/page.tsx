@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { SectionCard, StatCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
+import { formatarHorario, resolverHorarioTurma } from "@/lib/turmas";
 
 type FeedItemKind = "PERIODO_LETIVO" | "FAIXA_LETIVA" | "INSTITUCIONAL" | "EVENTO_INTERNO";
 
@@ -22,6 +23,25 @@ type FeedItem = {
 };
 
 type BirthdayItem = { id: number; nome: string; nascimento: string | null; foto_url: string | null };
+
+type GradeTurma = {
+  turma_id: number;
+  nome: string;
+  curso: string | null;
+  nivel: string | null;
+  turno: string | null;
+  ano_referencia: number | null;
+  periodo_letivo_id: number | null;
+  status: string | null;
+};
+
+type GradeHorario = {
+  id: number;
+  turma_id: number;
+  day_of_week: number;
+  inicio: string;
+  fim: string;
+};
 
 const WEEK_LABELS = ["D", "S", "T", "Q", "Q", "S", "S"];
 
@@ -81,8 +101,11 @@ export default function EscolaCalendarioDashboard() {
   const [selectedDay, setSelectedDay] = useState<Date>(() => new Date());
   const [items, setItems] = useState<FeedItem[]>([]);
   const [birthdays, setBirthdays] = useState<BirthdayItem[]>([]);
+  const [gradeTurmas, setGradeTurmas] = useState<GradeTurma[]>([]);
+  const [gradeHorarios, setGradeHorarios] = useState<GradeHorario[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [gradeErr, setGradeErr] = useState<string | null>(null);
 
   const range = useMemo(() => {
     const start = isoDate(firstDayOfMonth(cursor));
@@ -134,6 +157,30 @@ export default function EscolaCalendarioDashboard() {
     };
   }, [selectedISO]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadGrade() {
+      try {
+        setGradeErr(null);
+        const res = await fetch("/api/calendario/grade");
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error ?? "Falha ao carregar grade do calendario");
+        if (!active) return;
+        setGradeTurmas(Array.isArray(json.turmas) ? json.turmas : []);
+        setGradeHorarios(Array.isArray(json.horarios) ? json.horarios : []);
+      } catch (e) {
+        if (!active) return;
+        setGradeErr(e instanceof Error ? e.message : "Erro inesperado");
+        setGradeTurmas([]);
+        setGradeHorarios([]);
+      }
+    }
+    void loadGrade();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const daysInMonth = useMemo(() => {
     const start = firstDayOfMonth(cursor);
     const end = lastDayOfMonth(cursor);
@@ -158,6 +205,34 @@ export default function EscolaCalendarioDashboard() {
   }, [items]);
 
   const itemsForSelectedDay = useMemo(() => itemsByDay.get(selectedISO) ?? [], [itemsByDay, selectedISO]);
+
+  const gradeDoDia = useMemo(() => {
+    const dayOfWeek = selectedDay.getDay();
+    const horariosDoDia = gradeHorarios.filter((horario) => horario.day_of_week === dayOfWeek);
+    const horariosPorTurma = new Map<number, GradeHorario[]>();
+
+    for (const horario of horariosDoDia) {
+      const lista = horariosPorTurma.get(horario.turma_id) ?? [];
+      lista.push(horario);
+      horariosPorTurma.set(horario.turma_id, lista);
+    }
+
+    return gradeTurmas
+      .map((turma) => {
+        const horarios = horariosPorTurma.get(turma.turma_id) ?? [];
+        const faixa = resolverHorarioTurma({ horarios });
+        return {
+          ...turma,
+          ...faixa,
+        };
+      })
+      .filter((turma) => Boolean(turma.hora_inicio && turma.hora_fim))
+      .sort((a, b) => {
+        const horaA = a.hora_inicio ?? "";
+        const horaB = b.hora_inicio ?? "";
+        return horaA.localeCompare(horaB) || a.nome.localeCompare(b.nome);
+      });
+  }, [gradeHorarios, gradeTurmas, selectedDay]);
 
   const monthCounts = useMemo(() => groupCounts(items), [items]);
 
@@ -393,10 +468,31 @@ export default function EscolaCalendarioDashboard() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Grade do dia" subtitle="Proxima iteracao">
-            <p className="text-sm text-slate-600">
-              Vamos integrar a grade do dia a partir da Grade de horarios (REGULAR).
-            </p>
+          <SectionCard
+            title="Grade do dia"
+            subtitle="Turmas agendadas"
+            actions={<span className="text-xs text-slate-400">{gradeDoDia.length}</span>}
+          >
+            {gradeErr ? (
+              <p className="text-sm text-rose-700">{gradeErr}</p>
+            ) : gradeDoDia.length === 0 ? (
+              <p className="text-sm text-slate-600">Nenhuma turma agendada para este dia.</p>
+            ) : (
+              <div className="space-y-2">
+                {gradeDoDia.map((turma) => (
+                  <div
+                    key={`grade-${turma.turma_id}`}
+                    className="rounded-2xl border border-slate-200/80 bg-white px-3 py-2 shadow-sm"
+                  >
+                    <div className="text-sm font-semibold text-slate-900">{turma.nome}</div>
+                    <p className="text-xs text-slate-500">{formatarHorario(turma)}</p>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {[turma.curso, turma.nivel, turma.turno].filter(Boolean).join(" / ") || "Turma"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </SectionCard>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getColaboradorIdForUser, getUserOrThrow, isAdminUser } from "../_lib/auth";
+import { resolverHorarioTurma } from "@/lib/turmas";
 
 type TurmaRow = {
   turma_id: number;
@@ -14,6 +15,7 @@ type TurmaRow = {
   dias_semana?: string[] | null;
   hora_inicio?: string | null;
   hora_fim?: string | null;
+  horarios?: Array<{ inicio?: string | null; fim?: string | null }> | null;
 };
 
 type TurmaLinkRow = { turma: TurmaRow | null };
@@ -45,6 +47,22 @@ function turmaTemAulaNoDia(dias: unknown, keys: { br3: string; en3: string; brFu
   if (norm.includes(keys.en3)) return true;
   if (norm.includes(normalizeWeekday(keys.brFull))) return true;
   return false;
+}
+
+function hydrateHorarioTurma<T extends TurmaRow>(turma: T): T {
+  const horarioResolvido = resolverHorarioTurma({
+    turma: {
+      hora_inicio: turma.hora_inicio ?? null,
+      hora_fim: turma.hora_fim ?? null,
+    },
+    horarios: turma.horarios ?? [],
+  });
+
+  return {
+    ...turma,
+    hora_inicio: horarioResolvido.hora_inicio,
+    hora_fim: horarioResolvido.hora_fim,
+  };
 }
 
 /**
@@ -92,7 +110,9 @@ export async function GET(request: NextRequest) {
 
     let q = supabase
       .from("turmas")
-      .select("turma_id,nome,curso,nivel,turno,ano_referencia,status,periodo_letivo_id,dias_semana,hora_inicio,hora_fim")
+      .select(
+        "turma_id,nome,curso,nivel,turno,ano_referencia,status,periodo_letivo_id,dias_semana,hora_inicio,hora_fim,horarios:turmas_horarios(inicio,fim)"
+      )
       .order("turma_id", { ascending: true });
 
     if (turmaIds) q = q.in("turma_id", turmaIds);
@@ -106,7 +126,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let turmas = data ?? [];
+    let turmas = (data ?? []).map((turma) => hydrateHorarioTurma(turma as TurmaRow));
     if (date.success && date.data) {
       const keys = weekdayKeysFromISO(date.data);
       turmas = turmas.filter((t) => turmaTemAulaNoDia(t.dias_semana, keys));
@@ -130,7 +150,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase
     .from("turma_professores")
     .select(
-      "turma:turmas(turma_id,nome,curso,nivel,turno,ano_referencia,status,periodo_letivo_id,dias_semana,hora_inicio,hora_fim)"
+      "turma:turmas(turma_id,nome,curso,nivel,turno,ano_referencia,status,periodo_letivo_id,dias_semana,hora_inicio,hora_fim,horarios:turmas_horarios(inicio,fim))"
     )
     .eq("colaborador_id", colaboradorId)
     .eq("ativo", true)
@@ -145,7 +165,8 @@ export async function GET(request: NextRequest) {
 
   const turmas = (data as unknown as TurmaLinkRow[] | null)
     ?.map((row) => row.turma)
-    .filter((row): row is TurmaRow => Boolean(row)) ?? [];
+    .filter((row): row is TurmaRow => Boolean(row))
+    .map((row) => hydrateHorarioTurma(row)) ?? [];
 
   let turmasFiltradas = turmas;
   if (date.success && date.data) {

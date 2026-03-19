@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
+import { resolverHorarioTurma } from "@/lib/turmas";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -316,6 +317,8 @@ export async function GET(request: NextRequest) {
       espaco_id,
       espaco:espacos ( id, nome, tipo, capacidade, local_id, local:locais ( id, nome, tipo ) ),
       dias_semana,
+      hora_inicio,
+      hora_fim,
       horarios:turmas_horarios ( day_of_week, inicio, fim ),
       updated_at
     `)
@@ -328,10 +331,20 @@ export async function GET(request: NextRequest) {
 
   const rows = (data ?? []).map((row) => {
     const horarios = Array.isArray(row.horarios) ? row.horarios : [];
+    const horarioResolvido = resolverHorarioTurma({
+      turma: {
+        hora_inicio: row.hora_inicio ?? null,
+        hora_fim: row.hora_fim ?? null,
+      },
+      horarios,
+    });
+
     return {
       ...row,
       id: Number(row.turma_id),
-      tem_horario: horarios.length > 0,
+      hora_inicio: horarioResolvido.hora_inicio,
+      hora_fim: horarioResolvido.hora_fim,
+      tem_horario: Boolean(horarioResolvido.hora_inicio && horarioResolvido.hora_fim),
     };
   });
 

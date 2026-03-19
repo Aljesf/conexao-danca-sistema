@@ -1,5 +1,6 @@
 ﻿import Link from "next/link";
 import { listarTurmas } from "@/lib/academico/turmasServer";
+import { formatarHorario } from "@/lib/turmas";
 import type { Turma } from "@/types/turmas";
 
 export const dynamic = "force-dynamic";
@@ -47,10 +48,7 @@ export default async function TurmasPage() {
                   const diasTexto = Array.isArray(turma.dias_semana)
                     ? turma.dias_semana.join(", ")
                     : turma.dias_semana ?? "";
-                  const temHorario =
-                    typeof turma.tem_horario === "boolean"
-                      ? turma.tem_horario
-                      : Boolean(turma.hora_inicio && turma.hora_fim);
+                  const horarioTexto = formatarHorario(turma);
                   const localNome = turma.espaco?.local?.nome ?? "-";
                   const espacoNome =
                     turma.espaco?.nome ?? (turma.espaco_id ? `Espaco #${turma.espaco_id}` : "-");
@@ -76,7 +74,7 @@ export default async function TurmasPage() {
                       <td className="px-3 py-2">
                         <div className="flex flex-col text-xs text-slate-600">
                           <span>{diasTexto || "-"}</span>
-                          <span>{temHorario ? "Horario definido" : "Horario nao definido"}</span>
+                          <span>{horarioTexto}</span>
                         </div>
                       </td>
                       <td className="px-3 py-2 text-xs">{turma.tipo_turma}</td>
