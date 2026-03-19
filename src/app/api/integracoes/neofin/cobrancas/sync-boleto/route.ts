@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
-import { getNeofinBilling, upsertNeofinBilling, type NeofinResult } from "@/lib/neofinClient";
+import { getNeofinBilling, upsertNeofinBilling } from "@/lib/neofinClient";
+import { extractNeofinBillingDetails } from "@/lib/neofinBilling";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,88 +37,12 @@ type Cobranca = {
   pessoa?: Pessoa | null;
 };
 
-type NeofinBillingInfo = {
-  chargeId: string | null;
-  paymentLink: string | null;
-  digitableLine: string | null;
-};
-
-function firstNonEmptyString(...values: Array<unknown>): string | null {
-  for (const value of values) {
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-  return null;
-}
-
-function extractBillingInfo(body: NeofinResult["body"], fallbackId?: string): NeofinBillingInfo {
-  const candidates: any[] = [];
-
-  if (Array.isArray(body)) {
-    candidates.push(...body);
-  }
-
-  if (body && typeof body === "object") {
-    if (Array.isArray((body as any).billings)) {
-      candidates.push(...(body as any).billings);
-    }
-    if (Array.isArray((body as any).data)) {
-      candidates.push(...(body as any).data);
-    }
-    if (Array.isArray((body as any).data?.billings)) {
-      candidates.push(...(body as any).data.billings);
-    }
-  }
-
-  const billing = candidates.find((b) => b && typeof b === "object") ?? (body && typeof body === "object" ? body : null);
-
-  const chargeId =
-    firstNonEmptyString(
-      billing?.id,
-      billing?.billing_id,
-      billing?.charge_id,
-      billing?.integration_identifier,
-      billing?.integrationIdentifier,
-      (body as any)?.billing_id,
-      (body as any)?.charge_id,
-      (body as any)?.integration_identifier,
-      fallbackId
-    ) ?? null;
-
-  const paymentLink =
-    firstNonEmptyString(
-      billing?.payment_link,
-      billing?.payment_url,
-      billing?.link_pagamento,
-      billing?.url,
-      billing?.link,
-      billing?.billet_url,
-      billing?.boleto_url,
-      (body as any)?.payment_link,
-      (body as any)?.payment_url
-    ) ?? null;
-
-  const digitableLine =
-    firstNonEmptyString(
-      billing?.digitable_line,
-      billing?.linha_digitavel,
-      billing?.digitableLine,
-      billing?.boleto_linha_digitavel,
-      billing?.boleto_digitable_line,
-      billing?.barcode,
-      billing?.bar_code,
-      (body as any)?.digitable_line,
-      (body as any)?.linha_digitavel
-    ) ?? null;
-
-  return { chargeId, paymentLink, digitableLine };
-}
-
 function resolveLookupIdentifier(cobranca: Cobranca): string | null {
-  const extracted = extractBillingInfo(cobranca.neofin_payload, cobranca.neofin_charge_id ?? undefined);
-  return extracted.chargeId ?? cobranca.neofin_charge_id ?? null;
+  const extracted = extractNeofinBillingDetails(cobranca.neofin_payload, {
+    identifier: cobranca.neofin_charge_id ?? undefined,
+    integrationIdentifier: cobranca.neofin_charge_id ?? undefined,
+  });
+  return extracted.billingId ?? cobranca.neofin_charge_id ?? null;
 }
 
 export async function POST(request: NextRequest) {
@@ -168,90 +93,98 @@ export async function POST(request: NextRequest) {
       .eq("id", cobrancaId)
       .single<Cobranca>();
 
-  if (cobrancaError || !cobranca) {
-    console.error("[Neofin sync boleto] cobranca_nao_encontrada:", cobrancaError);
-    return NextResponse.json({ ok: false, error: "Cobranca nao encontrada." }, { status: 404 });
-  }
-
-  if (cobranca.status === "CANCELADA") {
-    return NextResponse.json(
-      { ok: false, error: "Cobranca cancelada nao permite sync de boleto." },
-      { status: 400 }
-    );
+    if (cobrancaError || !cobranca) {
+      console.error("[Neofin sync boleto] cobranca_nao_encontrada:", cobrancaError);
+      return NextResponse.json({ ok: false, error: "Cobranca nao encontrada." }, { status: 404 });
     }
 
-  let identifier = resolveLookupIdentifier(cobranca);
-  // Se nÃ£o existir charge, tenta criar
-  if (!identifier) {
-    const cpf = (cobranca.pessoa?.cpf || "").replace(/\D/g, "");
-    if (!cpf) {
+    if (cobranca.status === "CANCELADA") {
       return NextResponse.json(
-        { ok: false, error: "cpf_invalido_para_criar_boleto" },
+        { ok: false, error: "Cobranca cancelada nao permite sync de boleto." },
         { status: 400 }
       );
     }
 
-    const integrationIdentifier = `cobranca-${cobranca.id}`;
-    const neofinCreate = await upsertNeofinBilling({
-      integrationIdentifier,
-      amountCentavos: cobranca.valor_centavos,
-      dueDate: cobranca.vencimento,
-      description: cobranca.descricao,
-      customer: {
-        nome: cobranca.pessoa?.nome ?? `Pessoa #${cobranca.pessoa_id}`,
-        cpf,
-        email: cobranca.pessoa?.email ?? undefined,
-        telefone: cobranca.pessoa?.telefone ?? undefined,
-      },
-    });
+    let identifier = resolveLookupIdentifier(cobranca);
+    if (!identifier) {
+      const cpf = (cobranca.pessoa?.cpf || "").replace(/\D/g, "");
+      if (!cpf) {
+        return NextResponse.json(
+          { ok: false, error: "cpf_invalido_para_criar_boleto" },
+          { status: 400 }
+        );
+      }
 
-    if (!neofinCreate.ok) {
-      console.error("[Neofin sync boleto] falha ao criar charge:", neofinCreate);
+      const integrationIdentifier = `cobranca-${cobranca.id}`;
+      const neofinCreate = await upsertNeofinBilling({
+        integrationIdentifier,
+        amountCentavos: cobranca.valor_centavos,
+        dueDate: cobranca.vencimento,
+        description: cobranca.descricao,
+        billingType: "boleto",
+        customer: {
+          nome: cobranca.pessoa?.nome ?? `Pessoa #${cobranca.pessoa_id}`,
+          cpf,
+          email: cobranca.pessoa?.email ?? undefined,
+          telefone: cobranca.pessoa?.telefone ?? undefined,
+        },
+      });
+
+      if (!neofinCreate.ok) {
+        console.error("[Neofin sync boleto] falha ao criar charge:", neofinCreate);
+        return NextResponse.json(
+          { ok: false, error: "erro_criar_neofin_boleto", neofin: neofinCreate },
+          { status: 502 }
+        );
+      }
+
+      const infoCriacao = extractNeofinBillingDetails(neofinCreate.body, {
+        identifier: integrationIdentifier,
+        integrationIdentifier,
+      });
+      identifier = infoCriacao.billingId ?? integrationIdentifier;
+
+      await supabase
+        .from("cobrancas")
+        .update({
+          neofin_charge_id: identifier,
+          link_pagamento: infoCriacao.paymentLink ?? cobranca.link_pagamento ?? null,
+          linha_digitavel:
+            infoCriacao.digitableLine ?? infoCriacao.barcode ?? cobranca.linha_digitavel ?? null,
+          neofin_payload: neofinCreate.body ?? cobranca.neofin_payload ?? null,
+        })
+        .eq("id", cobranca.id);
+    }
+
+    if (!identifier) {
       return NextResponse.json(
-        { ok: false, error: "erro_criar_neofin_boleto", neofin: neofinCreate },
-        { status: 502 }
+        { ok: false, error: "identificador_neofin_ausente" },
+        { status: 400 }
       );
     }
 
-    const infoCriacao = extractBillingInfo(neofinCreate.body, integrationIdentifier);
-    identifier = infoCriacao.chargeId ?? integrationIdentifier;
-
-    // Atualiza cobranca com dados iniciais
-    await supabase
-      .from("cobrancas")
-      .update({
-        neofin_charge_id: identifier,
-        link_pagamento: infoCriacao.paymentLink ?? cobranca.link_pagamento ?? null,
-        linha_digitavel: infoCriacao.digitableLine ?? cobranca.linha_digitavel ?? null,
-        neofin_payload: neofinCreate.body ?? cobranca.neofin_payload ?? null,
-      })
-      .eq("id", cobranca.id);
-  }
-
-  if (!identifier) {
-    return NextResponse.json(
-      { ok: false, error: "identificador_neofin_ausente" },
-      { status: 400 }
-    );
-  }
-  const neofinResult = await getNeofinBilling({ identifier });
+    const neofinResult = await getNeofinBilling({ identifier });
 
     if (!neofinResult.ok) {
-      console.error("[Neofin sync boleto] erro ao consultar cobranÃ§a:", neofinResult);
+      console.error("[Neofin sync boleto] erro ao consultar cobranca:", neofinResult);
       return NextResponse.json(
         { ok: false, error: "erro_consultar_neofin", neofin: neofinResult },
         { status: neofinResult.status === 404 ? 404 : 502 }
       );
     }
 
-    const billingInfo = extractBillingInfo(neofinResult.body, identifier);
+    const billingInfo = extractNeofinBillingDetails(neofinResult.body, {
+      identifier,
+      integrationIdentifier: cobranca.neofin_charge_id ?? identifier,
+    });
 
     const { data: cobrancaAtualizada, error: updateError } = await supabase
       .from("cobrancas")
       .update({
-        neofin_charge_id: billingInfo.chargeId ?? cobranca.neofin_charge_id,
+        neofin_charge_id: billingInfo.billingId ?? cobranca.neofin_charge_id ?? identifier,
         link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
-        linha_digitavel: billingInfo.digitableLine ?? cobranca.linha_digitavel ?? null,
+        linha_digitavel:
+          billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
         neofin_payload: neofinResult.body ?? cobranca.neofin_payload ?? null,
       })
       .eq("id", cobranca.id)

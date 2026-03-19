@@ -1,6 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
-import { upsertNeofinBilling, type NeofinResult } from "@/lib/neofinClient";
+import { upsertNeofinBilling } from "@/lib/neofinClient";
+import { extractNeofinBillingDetails } from "@/lib/neofinBilling";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,89 +40,10 @@ type Cobranca = {
   pessoa?: Pessoa | null;
 };
 
-type NeofinBillingInfo = {
-  chargeId: string | null;
-  paymentLink: string | null;
-  digitableLine: string | null;
-};
-
 function sanitizeCpf(rawCpf?: string | null): string | null {
   if (!rawCpf) return null;
   const onlyDigits = rawCpf.replace(/\D/g, "");
   return onlyDigits.length === 11 ? onlyDigits : null;
-}
-
-function firstNonEmptyString(...values: Array<unknown>): string | null {
-  for (const value of values) {
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-  return null;
-}
-
-function extractBillingInfo(body: NeofinResult["body"], fallbackId?: string): NeofinBillingInfo {
-  const candidates: any[] = [];
-
-  if (Array.isArray(body)) {
-    candidates.push(...body);
-  }
-
-  if (body && typeof body === "object") {
-    if (Array.isArray((body as any).billings)) {
-      candidates.push(...(body as any).billings);
-    }
-    if (Array.isArray((body as any).data)) {
-      candidates.push(...(body as any).data);
-    }
-    if (Array.isArray((body as any).data?.billings)) {
-      candidates.push(...(body as any).data.billings);
-    }
-  }
-
-  const billing = candidates.find((b) => b && typeof b === "object") ?? (body && typeof body === "object" ? body : null);
-
-  const chargeId =
-    firstNonEmptyString(
-      billing?.id,
-      billing?.billing_id,
-      billing?.charge_id,
-      billing?.integration_identifier,
-      billing?.integrationIdentifier,
-      (body as any)?.billing_id,
-      (body as any)?.charge_id,
-      (body as any)?.integration_identifier,
-      fallbackId
-    ) ?? null;
-
-  const paymentLink =
-    firstNonEmptyString(
-      billing?.payment_link,
-      billing?.payment_url,
-      billing?.link_pagamento,
-      billing?.url,
-      billing?.link,
-      billing?.billet_url,
-      billing?.boleto_url,
-      (body as any)?.payment_link,
-      (body as any)?.payment_url
-    ) ?? null;
-
-  const digitableLine =
-    firstNonEmptyString(
-      billing?.digitable_line,
-      billing?.linha_digitavel,
-      billing?.digitableLine,
-      billing?.boleto_linha_digitavel,
-      billing?.boleto_digitable_line,
-      billing?.barcode,
-      billing?.bar_code,
-      (body as any)?.digitable_line,
-      (body as any)?.linha_digitavel
-    ) ?? null;
-
-  return { chargeId, paymentLink, digitableLine };
 }
 
 export async function POST(request: NextRequest) {
@@ -226,6 +148,7 @@ export async function POST(request: NextRequest) {
       amountCentavos: cobranca.valor_centavos,
       dueDate: cobranca.vencimento,
       description: cobranca.descricao,
+      billingType: "boleto",
       customer: {
         nome: pessoa.nome,
         cpf: cpfLimpo,
@@ -248,14 +171,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const billingInfo = extractBillingInfo(neofinResult.body, integrationIdentifier);
+    const billingInfo = extractNeofinBillingDetails(neofinResult.body, {
+      identifier: integrationIdentifier,
+      integrationIdentifier,
+    });
 
     const { data: cobrancaAtualizada, error: updateError } = await supabase
       .from("cobrancas")
       .update({
-        neofin_charge_id: billingInfo.chargeId ?? integrationIdentifier,
+        neofin_charge_id: billingInfo.billingId ?? integrationIdentifier,
         link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
-        linha_digitavel: billingInfo.digitableLine ?? cobranca.linha_digitavel ?? null,
+        linha_digitavel: billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
         neofin_payload: neofinResult.body ?? cobranca.neofin_payload ?? null,
         status: cobranca.status === "ERRO_INTEGRACAO" ? "PENDENTE" : cobranca.status,
       })

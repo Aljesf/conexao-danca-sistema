@@ -1,7 +1,10 @@
-// src/lib/neofinClient.ts
+import {
+  extractNeofinBillingDetails,
+  findMatchingNeofinBillingCandidate,
+  looksLikeNeofinBillingNumber,
+} from "@/lib/neofinBilling";
 
-const NEOFIN_BASE_URL =
-  process.env.NEOFIN_BASE_URL ?? "https://api.sandbox.neofin.services";
+const NEOFIN_BASE_URL = process.env.NEOFIN_BASE_URL ?? "https://api.sandbox.neofin.services";
 
 const NEOFIN_API_KEY = process.env.NEOFIN_API_KEY;
 const NEOFIN_SECRET_KEY = process.env.NEOFIN_SECRET_KEY;
@@ -9,15 +12,16 @@ const NEOFIN_SECRET_KEY = process.env.NEOFIN_SECRET_KEY;
 export type NeofinResult = {
   ok: boolean;
   status: number;
-  body: any | null;
+  body: unknown | null;
   message?: string | null;
 };
 
 type UpsertNeofinBillingInput = {
   integrationIdentifier: string;
   amountCentavos: number;
-  dueDate: string; // "YYYY-MM-DD"
+  dueDate: string;
   description: string;
+  billingType?: string;
   customer: {
     nome: string;
     cpf: string;
@@ -26,65 +30,198 @@ type UpsertNeofinBillingInput = {
   };
 };
 
-/**
- * Função única usada para criar/atualizar cobrança na Neofin.
- * É com **esse nome** que os endpoints importam:
- *   import { upsertNeofinBilling } from "@/lib/neofinClient";
- */
-export async function upsertNeofinBilling(
-  input: UpsertNeofinBillingInput
+type GetNeofinBillingInput = {
+  identifier: string;
+};
+
+function missingCredentialsResult(): NeofinResult {
+  console.error("[Neofin] NEOFIN_API_KEY ou NEOFIN_SECRET_KEY nao configuradas no servidor.");
+  return {
+    ok: false,
+    status: 500,
+    body: null,
+    message: "Credenciais da Neofin nao configuradas no servidor.",
+  };
+}
+
+function getNeofinHeaders(contentType = false): Record<string, string> {
+  const headers: Record<string, string> = {
+    "api-key": NEOFIN_API_KEY ?? "",
+    "secret-key": NEOFIN_SECRET_KEY ?? "",
+  };
+
+  if (contentType) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  return headers;
+}
+
+async function readJsonResponse(response: Response): Promise<unknown | null> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function requestNeofin(
+  url: string,
+  init: RequestInit,
+  logLabel: string,
 ): Promise<NeofinResult> {
-  if (!NEOFIN_API_KEY || !NEOFIN_SECRET_KEY) {
-    console.error(
-      "[Neofin] NEOFIN_API_KEY ou NEOFIN_SECRET_KEY não configuradas no .env"
-    );
+  try {
+    const response = await fetch(url, init);
+    const body = await readJsonResponse(response);
+
+    if (!response.ok) {
+      console.error(`[Neofin] ${logLabel}:`, response.status, JSON.stringify(body));
+      return {
+        ok: false,
+        status: response.status,
+        body,
+        message:
+          (body &&
+          typeof body === "object" &&
+          "message" in (body as Record<string, unknown>) &&
+          typeof (body as Record<string, unknown>).message === "string")
+            ? String((body as Record<string, unknown>).message)
+            : null,
+      };
+    }
+
+    return {
+      ok: true,
+      status: response.status,
+      body,
+      message:
+        (body &&
+        typeof body === "object" &&
+        "message" in (body as Record<string, unknown>) &&
+        typeof (body as Record<string, unknown>).message === "string")
+          ? String((body as Record<string, unknown>).message)
+          : null,
+    };
+  } catch (error) {
+    console.error(`[Neofin] ${logLabel} - erro de rede:`, error);
     return {
       ok: false,
       status: 500,
       body: null,
-      message: "Credenciais da Neofin não configuradas no servidor.",
+      message: error instanceof Error ? error.message : "Falha de rede ao chamar a Neofin.",
+    };
+  }
+}
+
+export async function listNeofinBillings(
+  params: { integrationIdentifier?: string | null } = {},
+): Promise<NeofinResult> {
+  if (!NEOFIN_API_KEY || !NEOFIN_SECRET_KEY) {
+    return missingCredentialsResult();
+  }
+
+  const url = new URL(`${NEOFIN_BASE_URL}/billing/`);
+  if (params.integrationIdentifier) {
+    url.searchParams.set("integration_identifier", params.integrationIdentifier);
+  }
+
+  return requestNeofin(
+    url.toString(),
+    { headers: getNeofinHeaders(false) },
+    "erro_ao_listar_billings",
+  );
+}
+
+export async function findRecentNeofinBillingByIntegrationIdentifier(
+  integrationIdentifier: string,
+): Promise<NeofinResult> {
+  const normalized = integrationIdentifier.trim();
+  if (!normalized) {
+    return {
+      ok: false,
+      status: 400,
+      body: null,
+      message: "Identificador de integracao vazio para busca na Neofin.",
     };
   }
 
-  const { integrationIdentifier, amountCentavos, dueDate, description, customer } =
-    input;
+  const attempts = [
+    await listNeofinBillings({ integrationIdentifier: normalized }),
+    await listNeofinBillings(),
+  ];
 
+  for (const attempt of attempts) {
+    if (!attempt.ok) continue;
+    const match = findMatchingNeofinBillingCandidate(attempt.body, {
+      identifier: normalized,
+      integrationIdentifier: normalized,
+    });
+
+    if (match) {
+      const details = extractNeofinBillingDetails(match, {
+        identifier: normalized,
+        integrationIdentifier: normalized,
+      });
+      const exactIntegration = details.integrationIdentifier === normalized;
+      const exactId = details.billingId === normalized;
+
+      if (exactIntegration || exactId) {
+        return {
+          ok: true,
+          status: 200,
+          body: match,
+          message: "Billing localizado por integration_identifier.",
+        };
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    status: 404,
+    body: null,
+    message: "Billing nao encontrado na Neofin para o integration_identifier informado.",
+  };
+}
+
+export async function upsertNeofinBilling(
+  input: UpsertNeofinBillingInput,
+): Promise<NeofinResult> {
+  if (!NEOFIN_API_KEY || !NEOFIN_SECRET_KEY) {
+    return missingCredentialsResult();
+  }
+
+  const dueDateTimestamp = Math.floor(new Date(input.dueDate).getTime() / 1000);
   const url = `${NEOFIN_BASE_URL}/billing/`;
-
-  // Convertendo a data de vencimento para timestamp em segundos (como o swagger sugere)
-  const dueDateTimestamp = Math.floor(new Date(dueDate).getTime() / 1000);
 
   const payload = {
     billings: [
       {
-        customer_document: customer.cpf,
-        customer_name: customer.nome,
-        customer_mail: customer.email ?? "",
-        customer_phone: customer.telefone ?? "",
-
-        // Endereço básico (pode ser refinado depois)
-        address_city: "Salinópolis",
+        customer_document: input.customer.cpf,
+        customer_name: input.customer.nome,
+        customer_mail: input.customer.email ?? "",
+        customer_phone: input.customer.telefone ?? "",
+        address_city: "Salinopolis",
         address_complement: "",
         address_neighborhood: "Centro",
         address_number: "S/N",
         address_state: "PA",
-        address_street: "Não informado",
+        address_street: "Nao informado",
         address_zip_code: "00000000",
-
-        amount: amountCentavos,
+        amount: input.amountCentavos,
         due_date: dueDateTimestamp,
         original_due_date: dueDateTimestamp,
         discount_before_payment: 0,
         discount_before_payment_due_date: 0,
-        description,
+        description: input.description,
         fees: 0,
         fine: 0,
         installment_type: "custom",
         installments: 1,
         nfe_number: "",
         recipients: [],
-        type: "generic",
-        integration_identifier: integrationIdentifier,
+        type: input.billingType ?? "generic",
+        integration_identifier: input.integrationIdentifier,
         boleto_base64: "",
         code: "",
         hash: "",
@@ -97,78 +234,22 @@ export async function upsertNeofinBilling(
     ],
   };
 
-  try {
-    const res = await fetch(url, {
+  return requestNeofin(
+    url,
+    {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "api-key": NEOFIN_API_KEY,
-        "secret-key": NEOFIN_SECRET_KEY,
-      },
+      headers: getNeofinHeaders(true),
       body: JSON.stringify(payload),
-    });
-
-    let body: any = null;
-    try {
-      body = await res.json();
-    } catch {
-      body = null;
-    }
-
-    if (!res.ok) {
-      console.error(
-        "[Neofin] Erro ao enfileirar cobrança:",
-        res.status,
-        JSON.stringify(body)
-      );
-      return {
-        ok: false,
-        status: res.status,
-        body,
-        message: body?.message ?? "Erro ao enviar cobrança para a Neofin.",
-      };
-    }
-
-    return {
-      ok: true,
-      status: res.status,
-      body,
-      message: body?.message ?? "Billings successfully queued.",
-    };
-  } catch (err: any) {
-    console.error("[Neofin] Erro de rede:", err);
-    return {
-      ok: false,
-      status: 500,
-      body: null,
-      message: err?.message ?? "Falha de rede ao chamar a Neofin.",
-    };
-  }
+    },
+    "erro_ao_enfileirar_cobranca",
+  );
 }
 
-type GetNeofinBillingInput = {
-  identifier: string;
-};
-
-/**
- * Consulta detalhes de um billing/charge na Neofin usando o identificador fornecido.
- * Tenta primeiro como path param (`/billing/{id}`) e, em caso de 404, tenta como query
- * string (`/billing?integration_identifier={id}`) para dar suporte a identificadores
- * de integraÇõÇœo customizados.
- */
 export async function getNeofinBilling(
-  input: GetNeofinBillingInput
+  input: GetNeofinBillingInput,
 ): Promise<NeofinResult> {
   if (!NEOFIN_API_KEY || !NEOFIN_SECRET_KEY) {
-    console.error(
-      "[Neofin] NEOFIN_API_KEY ou NEOFIN_SECRET_KEY nÇœo configuradas no .env"
-    );
-    return {
-      ok: false,
-      status: 500,
-      body: null,
-      message: "Credenciais da Neofin nÇœo configuradas no servidor.",
-    };
+    return missingCredentialsResult();
   }
 
   const identifier = input.identifier.trim();
@@ -181,116 +262,69 @@ export async function getNeofinBilling(
     };
   }
 
-  const headers = {
-    "api-key": NEOFIN_API_KEY,
-    "secret-key": NEOFIN_SECRET_KEY,
-  };
+  const primaryUrl = `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(identifier)}`;
+  const primary = await requestNeofin(
+    primaryUrl,
+    { headers: getNeofinHeaders(false) },
+    "erro_ao_consultar_cobranca",
+  );
 
-  const primaryUrl = `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(
-    identifier
-  )}`;
-  const fallbackUrl = `${NEOFIN_BASE_URL}/billing/?integration_identifier=${encodeURIComponent(
-    identifier
-  )}`;
-
-  const tryFetch = async (url: string) => {
-    const res = await fetch(url, { headers });
-    let body: any = null;
-    try {
-      body = await res.json();
-    } catch {
-      body = null;
-    }
-    return { res, body };
-  };
-
-  try {
-    let { res, body } = await tryFetch(primaryUrl);
-
-    if (res.status === 404) {
-      ({ res, body } = await tryFetch(fallbackUrl));
-    }
-
-    if (!res.ok) {
-      console.error(
-        "[Neofin] Erro ao consultar cobranÇõa:",
-        res.status,
-        JSON.stringify(body)
-      );
-      return {
-        ok: false,
-        status: res.status,
-        body,
-        message: body?.message ?? "Erro ao consultar cobranÇõa na Neofin.",
-      };
-    }
-
-    return {
-      ok: true,
-      status: res.status,
-      body,
-      message: body?.message ?? null,
-    };
-  } catch (err: any) {
-    console.error("[Neofin] Erro de rede ao consultar cobranÇõa:", err);
-    return {
-      ok: false,
-      status: 500,
-      body: null,
-      message: err?.message ?? "Falha de rede ao chamar a Neofin.",
-    };
+  if (primary.ok) {
+    return primary;
   }
+
+  if (primary.status !== 404) {
+    return primary;
+  }
+
+  if (looksLikeNeofinBillingNumber(identifier)) {
+    return primary;
+  }
+
+  const recent = await findRecentNeofinBillingByIntegrationIdentifier(identifier);
+  if (!recent.ok) {
+    return recent;
+  }
+
+  const details = extractNeofinBillingDetails(recent.body, {
+    identifier,
+    integrationIdentifier: identifier,
+  });
+
+  if (details.billingId && details.billingId !== identifier && looksLikeNeofinBillingNumber(details.billingId)) {
+    const resolved = await requestNeofin(
+      `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(details.billingId)}`,
+      { headers: getNeofinHeaders(false) },
+      "erro_ao_consultar_cobranca_resolvida",
+    );
+
+    if (resolved.ok) {
+      return resolved;
+    }
+  }
+
+  return recent;
 }
 
-function firstNonEmptyString(...values: Array<unknown>): string | null {
-  for (const value of values) {
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-  return null;
-}
-
-function extractBillingId(candidate: any, fallback?: string | null): string | null {
-  if (!candidate) return fallback ?? null;
-
-  if (Array.isArray(candidate)) {
-    const first = candidate.find((c) => c && typeof c === "object");
-    if (first) return extractBillingId(first, fallback);
-  }
-
-  const id =
-    firstNonEmptyString(
-      (candidate as any)?.id,
-      (candidate as any)?.billing_id,
-      (candidate as any)?.charge_id,
-      (candidate as any)?.integration_identifier,
-      (candidate as any)?.integrationIdentifier
-    ) ?? null;
-
-  return id ?? (fallback ?? null);
+function extractBillingId(candidate: unknown, fallback?: string | null): string | null {
+  const details = extractNeofinBillingDetails(candidate, { identifier: fallback ?? null });
+  return details.billingId ?? fallback ?? null;
 }
 
 type MarkPaidArgs = {
   integrationIdentifier: string;
-  paidAt: string; // YYYY-MM-DD ou ISO
+  paidAt: string;
   paidAmountCentavos?: number;
   paymentMethod?: string;
   note?: string;
 };
 
 export async function markNeofinBillingAsPaid(
-  args: MarkPaidArgs
-): Promise<{ ok: true; data: any } | { ok: false; error: string; details?: any }> {
+  args: MarkPaidArgs,
+): Promise<{ ok: true; data: unknown } | { ok: false; error: string; details?: unknown }> {
   if (!NEOFIN_API_KEY || !NEOFIN_SECRET_KEY) {
-    console.error(
-      "[Neofin] NEOFIN_API_KEY ou NEOFIN_SECRET_KEY nÇœo configuradas no .env"
-    );
-    return {
-      ok: false,
-      error: "credenciais_neofin_ausentes",
-    };
+    console.error("[Neofin] NEOFIN_API_KEY ou NEOFIN_SECRET_KEY nao configuradas no servidor.");
+    return { ok: false, error: "credenciais_neofin_ausentes" };
   }
 
   const paidDate = new Date(args.paidAt);
@@ -298,12 +332,8 @@ export async function markNeofinBillingAsPaid(
     return { ok: false, error: "data_pagamento_invalida" };
   }
 
-  const paidAtIso =
-    typeof args.paidAt === "string" && args.paidAt.includes("T")
-      ? args.paidAt
-      : `${args.paidAt}T00:00:00`;
+  const paidAtIso = args.paidAt.includes("T") ? args.paidAt : `${args.paidAt}T00:00:00`;
 
-  // Resolver o ID real da cobranÇõa na Neofin (caso diferente do integrationIdentifier)
   let targetId = args.integrationIdentifier;
   try {
     const lookup = await getNeofinBilling({ identifier: args.integrationIdentifier });
@@ -313,15 +343,9 @@ export async function markNeofinBillingAsPaid(
         targetId = resolved;
       }
     }
-  } catch (lookupErr) {
-    console.warn("[Neofin] Falha ao resolver billing antes de marcar pago:", lookupErr);
+  } catch (lookupError) {
+    console.warn("[Neofin] Falha ao resolver billing antes de marcar pago:", lookupError);
   }
-
-  const headers = {
-    "Content-Type": "application/json",
-    "api-key": NEOFIN_API_KEY,
-    "secret-key": NEOFIN_SECRET_KEY,
-  };
 
   const payload = {
     status: "paid",
@@ -332,47 +356,46 @@ export async function markNeofinBillingAsPaid(
     integration_identifier: args.integrationIdentifier,
   };
 
-  const attempt = async (url: string, method: "PATCH" | "POST") => {
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: JSON.stringify(payload),
-    });
-    let body: any = null;
-    try {
-      body = await res.json();
-    } catch {
-      body = null;
-    }
-    return { res, body };
-  };
-
   const patchUrl = `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(targetId)}`;
-  const postUrl = `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(targetId)}/paid`;
+  const patch = await requestNeofin(
+    patchUrl,
+    {
+      method: "PATCH",
+      headers: getNeofinHeaders(true),
+      body: JSON.stringify(payload),
+    },
+    "erro_ao_marcar_cobranca_como_paga",
+  );
 
-  try {
-    let { res, body } = await attempt(patchUrl, "PATCH");
-
-    if (!res.ok && res.status === 404) {
-      ({ res, body } = await attempt(postUrl, "POST"));
-    }
-
-    if (!res.ok) {
-      console.error(
-        "[Neofin] Erro ao marcar cobranÇõa como paga:",
-        res.status,
-        JSON.stringify(body)
-      );
-      return {
-        ok: false,
-        error: body?.message ?? "erro_marcar_pago_neofin",
-        details: { status: res.status, body },
-      };
-    }
-
-    return { ok: true, data: body ?? null };
-  } catch (err: any) {
-    console.error("[Neofin] Erro de rede ao marcar pago:", err);
-    return { ok: false, error: "falha_rede_neofin", details: err?.message ?? String(err) };
+  if (patch.ok) {
+    return { ok: true, data: patch.body ?? null };
   }
+
+  if (patch.status !== 404) {
+    return {
+      ok: false,
+      error: patch.message ?? "erro_marcar_pago_neofin",
+      details: { status: patch.status, body: patch.body },
+    };
+  }
+
+  const post = await requestNeofin(
+    `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(targetId)}/paid`,
+    {
+      method: "POST",
+      headers: getNeofinHeaders(true),
+      body: JSON.stringify(payload),
+    },
+    "erro_ao_marcar_cobranca_como_paga_post",
+  );
+
+  if (post.ok) {
+    return { ok: true, data: post.body ?? null };
+  }
+
+  return {
+    ok: false,
+    error: post.message ?? "erro_marcar_pago_neofin",
+    details: { status: post.status, body: post.body },
+  };
 }

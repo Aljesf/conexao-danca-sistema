@@ -15,6 +15,7 @@ type FaturaRow = {
   status: string | null;
   valor_total_centavos: number | null;
   cobranca_id: number | null;
+  neofin_invoice_id?: string | null;
 };
 
 type ContaRow = {
@@ -56,6 +57,39 @@ type FaturaDetalheData = {
   pessoa: PessoaRow | null;
   pivot: Array<{ lancamento_id: number; created_at: string | null }>;
   lancamentos: LancamentoRow[];
+  cobranca_vinculada?: {
+    id: number;
+    descricao: string | null;
+    origem_tipo: string | null;
+    origem_subtipo: string | null;
+    neofin_charge_id: string | null;
+  } | null;
+  cobranca_canonica?: {
+    id: number;
+    descricao: string | null;
+    origem_tipo: string | null;
+    origem_subtipo: string | null;
+    neofin_charge_id: string | null;
+  } | null;
+  pagamento_exibivel?: {
+    cobranca_vinculada_id: number | null;
+    cobranca_canonica_id: number | null;
+    cobranca_exibida_id: number | null;
+    usa_cobranca_canonica: boolean;
+    invoice_valida: boolean;
+    segunda_via_disponivel: boolean;
+    tipo_exibido: string;
+    tipo_remoto: string | null;
+    status_sincronizado: string | null;
+    neofin_charge_id: string | null;
+    invoice_id: string | null;
+    integration_identifier: string | null;
+    link_pagamento: string | null;
+    linha_digitavel: string | null;
+    codigo_barras: string | null;
+    qr_code_pix: string | null;
+    pix_copia_e_cola: string | null;
+  } | null;
 };
 
 type FaturaDetalheResponse = {
@@ -72,6 +106,7 @@ type ApiActionResponse = {
   message?: string;
   cobranca_id?: number | null;
   neofin_charge_id?: string | null;
+  neofin_invoice_id?: string | null;
   status_fatura?: string | null;
   vencimento_iso?: string | null;
 };
@@ -79,6 +114,7 @@ type ApiActionResponse = {
 type UltimaCobrancaState = {
   cobranca_id: number | null;
   neofin_charge_id: string | null;
+  neofin_invoice_id: string | null;
   vencimento_iso: string | null;
   status_fatura: string | null;
 } | null;
@@ -233,6 +269,7 @@ export default function FaturaDetalhePage() {
         setUltimaCobranca({
           cobranca_id: json.data.fatura.cobranca_id,
           neofin_charge_id: null,
+          neofin_invoice_id: json.data.fatura.neofin_invoice_id ?? null,
           vencimento_iso: json.data.fatura.data_vencimento ?? null,
           status_fatura: json.data.fatura.status ?? null,
         });
@@ -251,7 +288,9 @@ export default function FaturaDetalhePage() {
 
   const fatura = data?.fatura ?? null;
   const lancamentos = data?.lancamentos ?? EMPTY_LANCAMENTOS;
+  const pagamentoExibivel = data?.pagamento_exibivel ?? null;
   const podeFecharEGerar = fatura?.status === "ABERTA";
+  const invoiceValida = pagamentoExibivel?.invoice_valida === true;
 
   const somaLancamentos = useMemo(
     () => lancamentos.reduce((acc, l) => acc + (typeof l.valor_centavos === "number" ? l.valor_centavos : 0), 0),
@@ -259,15 +298,35 @@ export default function FaturaDetalhePage() {
   );
 
   const cobrancaResumo = useMemo(() => {
-    const cobrancaId = ultimaCobranca?.cobranca_id ?? fatura?.cobranca_id ?? null;
+    const cobrancaId =
+      pagamentoExibivel?.cobranca_exibida_id
+      ?? ultimaCobranca?.cobranca_id
+      ?? fatura?.cobranca_id
+      ?? null;
     if (!cobrancaId) return null;
     return {
       cobrancaId,
-      neofinChargeId: ultimaCobranca?.neofin_charge_id ?? null,
+      neofinChargeId:
+        pagamentoExibivel?.neofin_charge_id
+        ?? ultimaCobranca?.neofin_charge_id
+        ?? null,
+      neofinInvoiceId:
+        pagamentoExibivel?.invoice_id
+        ?? ultimaCobranca?.neofin_invoice_id
+        ?? fatura?.neofin_invoice_id
+        ?? null,
+      tipoExibido: pagamentoExibivel?.tipo_exibido ?? null,
+      linkPagamento: pagamentoExibivel?.link_pagamento ?? null,
+      linhaDigitavel: pagamentoExibivel?.linha_digitavel ?? null,
+      pixCopiaECola: pagamentoExibivel?.pix_copia_e_cola ?? null,
+      statusSincronizado: pagamentoExibivel?.status_sincronizado ?? null,
+      usaCobrancaCanonica: pagamentoExibivel?.usa_cobranca_canonica === true,
+      cobrancaCanonicaId: pagamentoExibivel?.cobranca_canonica_id ?? null,
+      cobrancaVinculadaId: pagamentoExibivel?.cobranca_vinculada_id ?? null,
       vencimentoIso: ultimaCobranca?.vencimento_iso ?? fatura?.data_vencimento ?? null,
       statusFatura: ultimaCobranca?.status_fatura ?? fatura?.status ?? null,
     };
-  }, [fatura, ultimaCobranca]);
+  }, [fatura, pagamentoExibivel, ultimaCobranca]);
 
   function abrirModalFechar() {
     setVencimentoFechar(getDefaultVencimentoIso(fatura?.data_vencimento));
@@ -343,6 +402,7 @@ export default function FaturaDetalhePage() {
       setUltimaCobranca({
         cobranca_id: json.cobranca_id ?? null,
         neofin_charge_id: json.neofin_charge_id ?? null,
+        neofin_invoice_id: json.neofin_invoice_id ?? null,
         vencimento_iso: json.vencimento_iso ?? null,
         status_fatura: json.status_fatura ?? null,
       });
@@ -431,6 +491,7 @@ export default function FaturaDetalhePage() {
       setUltimaCobranca({
         cobranca_id: json.cobranca_id ?? null,
         neofin_charge_id: json.neofin_charge_id ?? null,
+        neofin_invoice_id: json.neofin_invoice_id ?? null,
         vencimento_iso: json.vencimento_iso ?? null,
         status_fatura: json.status_fatura ?? null,
       });
@@ -467,14 +528,23 @@ export default function FaturaDetalhePage() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Fatura do Cartao Conexao</CardTitle>
             <div className="flex flex-wrap gap-2">
-              {podeFecharEGerar ? (
+              {podeFecharEGerar && !invoiceValida ? (
                 <Button onClick={abrirModalFechar} disabled={fechandoFatura || gerandoCobranca}>
                   Fechar fatura e gerar cobranca
                 </Button>
               ) : null}
-              <Button variant="secondary" onClick={abrirModalGerar} disabled={fechandoFatura || gerandoCobranca}>
-                Gerar cobranca agora
-              </Button>
+              {!invoiceValida ? (
+                <Button variant="secondary" onClick={abrirModalGerar} disabled={fechandoFatura || gerandoCobranca}>
+                  Gerar cobranca agora
+                </Button>
+              ) : null}
+              {invoiceValida && cobrancaResumo?.linkPagamento ? (
+                <Button variant="secondary" asChild>
+                  <a href={cobrancaResumo.linkPagamento} target="_blank" rel="noreferrer">
+                    Abrir segunda via
+                  </a>
+                </Button>
+              ) : null}
               <Button variant="secondary" onClick={() => router.back()}>
                 Voltar
               </Button>
@@ -516,6 +586,9 @@ export default function FaturaDetalhePage() {
                     <div>
                       <span className="font-medium">Status:</span> {fatura.status ?? "-"}
                     </div>
+                    <div>
+                      <span className="font-medium">Invoice NeoFin:</span> {cobrancaResumo?.neofinInvoiceId ?? "-"}
+                    </div>
                   </div>
 
                   <div className="space-y-1 text-sm">
@@ -527,6 +600,9 @@ export default function FaturaDetalhePage() {
                       <span className="font-medium">Soma dos lancamentos vinculados:</span>{" "}
                       {brlFromCentavos(somaLancamentos)}
                     </div>
+                    <div>
+                      <span className="font-medium">Tipo exibido:</span> {cobrancaResumo?.tipoExibido ?? "-"}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       Se os valores divergirem, revise os itens vinculados a fatura ou o recalculo.
                     </div>
@@ -535,7 +611,7 @@ export default function FaturaDetalhePage() {
 
                 {cobrancaResumo ? (
                   <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm">
-                    <div className="font-medium text-emerald-900">Cobranca gerada</div>
+                    <div className="font-medium text-emerald-900">Pagamento canonico da fatura</div>
                     <div className="mt-1 text-emerald-900">
                       <span className="font-medium">ID:</span> #{cobrancaResumo.cobrancaId}
                       {" | "}
@@ -546,6 +622,43 @@ export default function FaturaDetalhePage() {
                     <div className="mt-1 text-emerald-900">
                       <span className="font-medium">NeoFin:</span> {cobrancaResumo.neofinChargeId ?? "pendente"}
                     </div>
+                    <div className="mt-1 text-emerald-900">
+                      <span className="font-medium">Tipo:</span> {cobrancaResumo.tipoExibido ?? "-"}
+                      {" | "}
+                      <span className="font-medium">Status sincronizado:</span> {cobrancaResumo.statusSincronizado ?? "-"}
+                    </div>
+                    {cobrancaResumo.neofinInvoiceId ? (
+                      <div className="mt-1 text-emerald-900">
+                        <span className="font-medium">Invoice:</span> {cobrancaResumo.neofinInvoiceId}
+                      </div>
+                    ) : null}
+                    {cobrancaResumo.usaCobrancaCanonica && cobrancaResumo.cobrancaVinculadaId && cobrancaResumo.cobrancaVinculadaId !== cobrancaResumo.cobrancaCanonicaId ? (
+                      <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        A fatura ainda aponta para a cobranca #{cobrancaResumo.cobrancaVinculadaId}, mas a tela passou a priorizar a cobranca canonica #{cobrancaResumo.cobrancaCanonicaId}.
+                      </div>
+                    ) : null}
+                    {cobrancaResumo.linkPagamento ? (
+                      <div className="mt-2">
+                        <a
+                          href={cobrancaResumo.linkPagamento}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm font-medium text-emerald-900 underline underline-offset-4"
+                        >
+                          Abrir segunda via
+                        </a>
+                      </div>
+                    ) : null}
+                    {cobrancaResumo.linhaDigitavel ? (
+                      <div className="mt-2 rounded-md border border-emerald-200 bg-white p-2 text-xs text-emerald-950">
+                        <span className="font-medium">Linha digitavel:</span> {cobrancaResumo.linhaDigitavel}
+                      </div>
+                    ) : null}
+                    {cobrancaResumo.pixCopiaECola ? (
+                      <div className="mt-2 rounded-md border border-emerald-200 bg-white p-2 text-xs text-emerald-950">
+                        <span className="font-medium">Pix copia e cola:</span> {cobrancaResumo.pixCopiaECola}
+                      </div>
+                    ) : null}
                     <div className="mt-2">
                       <Link
                         href={`/admin/governanca/cobrancas/${cobrancaResumo.cobrancaId}`}
@@ -554,6 +667,11 @@ export default function FaturaDetalhePage() {
                         Abrir detalhe da cobranca
                       </Link>
                     </div>
+                  </div>
+                ) : null}
+                {invoiceValida ? (
+                  <div className="text-xs text-muted-foreground">
+                    A cobranca canonica da fatura ja possui invoice valida. A acao manual de gerar novamente fica bloqueada para evitar duplicidade externa.
                   </div>
                 ) : null}
               </div>

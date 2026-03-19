@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { getNeofinBilling } from "@/lib/neofinClient";
+import { extractNeofinBillingDetails } from "@/lib/neofinBilling";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -12,107 +13,6 @@ type CobrancaSyncRow = {
   link_pagamento: string | null;
   linha_digitavel: string | null;
 };
-
-function firstNonEmptyString(...values: Array<unknown>): string | null {
-  for (const value of values) {
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-  return null;
-}
-
-function extractBillingInfo(body: unknown, fallbackId?: string) {
-  const maybeObj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
-  const candidates: Array<Record<string, unknown>> = [];
-
-  if (Array.isArray(body)) {
-    for (const item of body) {
-      if (item && typeof item === "object") candidates.push(item as Record<string, unknown>);
-    }
-  }
-
-  const billings = maybeObj?.billings;
-  if (Array.isArray(billings)) {
-    for (const item of billings) {
-      if (item && typeof item === "object") candidates.push(item as Record<string, unknown>);
-    }
-  }
-
-  const data = maybeObj?.data;
-  if (Array.isArray(data)) {
-    for (const item of data) {
-      if (item && typeof item === "object") candidates.push(item as Record<string, unknown>);
-    }
-  }
-
-  const billing = candidates[0] ?? maybeObj ?? null;
-
-  const chargeId =
-    firstNonEmptyString(
-      billing?.id,
-      billing?.billing_id,
-      billing?.charge_id,
-      billing?.integration_identifier,
-      billing?.integrationIdentifier,
-      maybeObj?.billing_id,
-      maybeObj?.charge_id,
-      maybeObj?.integration_identifier,
-      fallbackId,
-    ) ?? null;
-
-  const paymentLink =
-    firstNonEmptyString(
-      billing?.payment_link,
-      billing?.payment_url,
-      billing?.link_pagamento,
-      billing?.url,
-      billing?.link,
-      billing?.billet_url,
-      billing?.boleto_url,
-      maybeObj?.payment_link,
-      maybeObj?.payment_url,
-    ) ?? null;
-
-  const digitableLine =
-    firstNonEmptyString(
-      billing?.digitable_line,
-      billing?.linha_digitavel,
-      billing?.digitableLine,
-      billing?.boleto_linha_digitavel,
-      billing?.boleto_digitable_line,
-      billing?.barcode,
-      billing?.bar_code,
-      maybeObj?.digitable_line,
-      maybeObj?.linha_digitavel,
-    ) ?? null;
-
-  return { chargeId, paymentLink, digitableLine };
-}
-
-function readRemoteStatus(remoteBody: unknown): string | null {
-  const maybeObj = remoteBody && typeof remoteBody === "object" ? (remoteBody as Record<string, unknown>) : null;
-  const billings = Array.isArray(maybeObj?.billings)
-    ? (maybeObj?.billings as unknown[])
-    : Array.isArray(maybeObj?.data)
-      ? (maybeObj?.data as unknown[])
-      : [];
-  const firstBilling =
-    billings.find((item) => item && typeof item === "object") ?? (maybeObj && typeof maybeObj === "object" ? maybeObj : null);
-
-  const candidate =
-    firstNonEmptyString(
-      (firstBilling as any)?.status,
-      (firstBilling as any)?.billing_status,
-      (firstBilling as any)?.charge_status,
-      maybeObj?.status,
-      maybeObj?.billing_status,
-      maybeObj?.charge_status,
-    ) ?? null;
-
-  return candidate ? candidate.toUpperCase() : null;
-}
 
 function mapStatusInterno(remoteStatus: string | null, currentStatus: string): string {
   if (!remoteStatus) return currentStatus;
@@ -169,8 +69,11 @@ async function syncCobranca(req: NextRequest, ctx: RouteContext) {
     );
   }
 
-  const billingInfo = extractBillingInfo(remote.body, cobranca.neofin_charge_id);
-  const remoteStatus = readRemoteStatus(remote.body);
+  const billingInfo = extractNeofinBillingDetails(remote.body, {
+    identifier: cobranca.neofin_charge_id,
+    integrationIdentifier: cobranca.neofin_charge_id,
+  });
+  const remoteStatus = billingInfo.remoteStatus?.toUpperCase() ?? null;
   const nextStatus = mapStatusInterno(remoteStatus, cobranca.status);
 
   const { data: updated, error: updateErr } = await supabase
@@ -178,8 +81,9 @@ async function syncCobranca(req: NextRequest, ctx: RouteContext) {
     .update({
       status: nextStatus,
       neofin_payload: remote.body ?? null,
+      neofin_charge_id: billingInfo.billingId ?? cobranca.neofin_charge_id,
       link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
-      linha_digitavel: billingInfo.digitableLine ?? cobranca.linha_digitavel ?? null,
+      linha_digitavel: billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", cobranca.id)
@@ -203,4 +107,3 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
 export async function GET(req: NextRequest, ctx: RouteContext) {
   return syncCobranca(req, ctx);
 }
-

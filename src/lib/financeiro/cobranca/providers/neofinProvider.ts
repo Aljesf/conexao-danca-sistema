@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
-import { upsertNeofinBilling } from "@/lib/neofinClient";
+import { getNeofinBilling, upsertNeofinBilling } from "@/lib/neofinClient";
 import type { ICobrancaProvider, CriarCobrancaInput, CriarCobrancaOutput } from "./types";
+import { extractNeofinBillingDetails, firstNonEmptyString } from "@/lib/neofinBilling";
 
 type PessoaNeofin = {
   id: number;
@@ -14,84 +15,6 @@ function sanitizeCpf(rawCpf?: string | null): string | null {
   if (!rawCpf) return null;
   const digits = rawCpf.replace(/\D/g, "");
   return digits.length === 11 ? digits : null;
-}
-
-function firstNonEmptyString(...values: Array<unknown>): string | null {
-  for (const value of values) {
-    if (typeof value === "string") {
-      const trimmed = value.trim();
-      if (trimmed) return trimmed;
-    }
-  }
-  return null;
-}
-
-function extractBillingInfo(body: unknown, fallbackId?: string) {
-  const maybeObj = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
-  const candidates: Array<Record<string, unknown>> = [];
-
-  if (Array.isArray(body)) {
-    for (const item of body) {
-      if (item && typeof item === "object") candidates.push(item as Record<string, unknown>);
-    }
-  }
-
-  const billings = maybeObj?.billings;
-  if (Array.isArray(billings)) {
-    for (const item of billings) {
-      if (item && typeof item === "object") candidates.push(item as Record<string, unknown>);
-    }
-  }
-
-  const data = maybeObj?.data;
-  if (Array.isArray(data)) {
-    for (const item of data) {
-      if (item && typeof item === "object") candidates.push(item as Record<string, unknown>);
-    }
-  }
-
-  const billing = candidates[0] ?? maybeObj ?? null;
-
-  const chargeId =
-    firstNonEmptyString(
-      billing?.id,
-      billing?.billing_id,
-      billing?.charge_id,
-      billing?.integration_identifier,
-      billing?.integrationIdentifier,
-      maybeObj?.billing_id,
-      maybeObj?.charge_id,
-      maybeObj?.integration_identifier,
-      fallbackId,
-    ) ?? null;
-
-  const paymentLink =
-    firstNonEmptyString(
-      billing?.payment_link,
-      billing?.payment_url,
-      billing?.link_pagamento,
-      billing?.url,
-      billing?.link,
-      billing?.billet_url,
-      billing?.boleto_url,
-      maybeObj?.payment_link,
-      maybeObj?.payment_url,
-    ) ?? null;
-
-  const digitableLine =
-    firstNonEmptyString(
-      billing?.digitable_line,
-      billing?.linha_digitavel,
-      billing?.digitableLine,
-      billing?.boleto_linha_digitavel,
-      billing?.boleto_digitable_line,
-      billing?.barcode,
-      billing?.bar_code,
-      maybeObj?.digitable_line,
-      maybeObj?.linha_digitavel,
-    ) ?? null;
-
-  return { chargeId, paymentLink, digitableLine };
 }
 
 export class NeofinProvider implements ICobrancaProvider {
@@ -121,6 +44,7 @@ export class NeofinProvider implements ICobrancaProvider {
       amountCentavos: input.valorCentavos,
       dueDate: input.vencimentoISO,
       description: input.descricao,
+      billingType: "boleto",
       customer: {
         nome: pessoa.nome,
         cpf: cpfLimpo,
@@ -133,18 +57,24 @@ export class NeofinProvider implements ICobrancaProvider {
       throw new Error(neofinResult.message ?? "erro_neofin_criar_cobranca");
     }
 
-    const info = extractBillingInfo(neofinResult.body, integrationIdentifier);
-    const providerCobrancaId = info.chargeId ?? integrationIdentifier;
+    const neofinLookup = await getNeofinBilling({ identifier: integrationIdentifier });
+    const resolvedBody = neofinLookup.ok ? neofinLookup.body : neofinResult.body;
+    const billing = extractNeofinBillingDetails(resolvedBody, {
+      identifier: integrationIdentifier,
+      integrationIdentifier,
+    });
+    const providerCobrancaId =
+      firstNonEmptyString(billing.billingId, billing.integrationIdentifier, integrationIdentifier) ?? integrationIdentifier;
 
     return {
       provider: this.code,
       providerCobrancaId,
       status: "EMITIDA",
-      linkPagamento: info.paymentLink ?? null,
-      linhaDigitavel: info.digitableLine ?? null,
+      linkPagamento: billing.paymentLink ?? null,
+      linhaDigitavel: billing.digitableLine ?? billing.barcode ?? null,
       payload:
-        neofinResult.body && typeof neofinResult.body === "object"
-          ? (neofinResult.body as Record<string, unknown>)
+        resolvedBody && typeof resolvedBody === "object"
+          ? (resolvedBody as Record<string, unknown>)
           : null,
     };
   }

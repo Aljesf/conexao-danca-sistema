@@ -2,14 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { calcularDataVencimento } from "@/lib/financeiro/creditoConexao/vencimento";
-import { getCobrancaProvider } from "@/lib/financeiro/cobranca/providers";
 import type { CobrancaProviderCode } from "@/lib/financeiro/cobranca/providers/types";
-import { buildDescricaoCobranca } from "@/lib/financeiro/cobranca/descricao";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  DuplicidadeCobrancaCanonicaError,
-  getOrCreateCobrancaCanonicaFatura,
-} from "@/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura";
+import { processarCobrancaCanonicaFatura } from "@/lib/credito-conexao/processarCobrancaCanonicaFatura";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -45,11 +40,6 @@ type ConfigCobrancaRow = {
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function isStatusCheckError(errorMessage: string | null | undefined): boolean {
-  const msg = (errorMessage ?? "").toLowerCase();
-  return msg.includes("credito_conexao_faturas_status_chk") || msg.includes("check constraint");
-}
-
 function localTodayIso(): string {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
@@ -83,71 +73,6 @@ function selecionarDiaPermitido(preferido: number, permitidos: number[] | null |
   if (diasValidos.includes(preferido)) return preferido;
   if (diasValidos.includes(12)) return 12;
   return diasValidos[0];
-}
-
-async function calcularTotalEItens(supabase: any, faturaId: number, fallbackValorTotal: number) {
-  const { data: vinculos, error: vincErr } = await supabase
-    .from("credito_conexao_fatura_lancamentos")
-    .select("lancamento:credito_conexao_lancamentos(valor_centavos,descricao)")
-    .eq("fatura_id", faturaId);
-
-  if (vincErr) throw new Error(vincErr.message);
-
-  const itensDescricao: string[] = [];
-  const totalVinculos = (vinculos ?? []).reduce((acc: number, row: any) => {
-    const valor = Number(row?.lancamento?.valor_centavos ?? 0);
-    const descricao = String(row?.lancamento?.descricao ?? "").trim();
-    if (descricao) itensDescricao.push(descricao);
-    return acc + (Number.isFinite(valor) ? valor : 0);
-  }, 0);
-
-  const valorFallback = Number(fallbackValorTotal);
-  const total = totalVinculos > 0 ? Math.trunc(totalVinculos) : Math.max(Math.trunc(valorFallback || 0), 0);
-
-  return {
-    totalCentavos: total,
-    itensDescricao,
-  };
-}
-
-async function updateFaturaComStatusCompativel(
-  supabase: any,
-  faturaId: number,
-  payload: {
-    cobranca_id: number;
-    data_fechamento: string;
-    data_vencimento: string;
-    valor_total_centavos: number;
-    updated_at: string;
-  },
-  statusDesejado: "FECHADA" | "ABERTA" | "PAGA",
-): Promise<{ ok: true; statusAplicado: string } | { ok: false; error: string }> {
-  const { data, error } = await supabase
-    .from("credito_conexao_faturas")
-    .update({ ...payload, status: statusDesejado })
-    .eq("id", faturaId)
-    .select("status")
-    .single();
-
-  if (!error) {
-    return { ok: true, statusAplicado: data?.status ?? statusDesejado };
-  }
-
-  if (statusDesejado === "FECHADA" && isStatusCheckError(error.message)) {
-    const { data: fallbackData, error: fallbackError } = await supabase
-      .from("credito_conexao_faturas")
-      .update({ ...payload, status: "ABERTA" })
-      .eq("id", faturaId)
-      .select("status")
-      .single();
-
-    if (!fallbackError) {
-      return { ok: true, statusAplicado: fallbackData?.status ?? "ABERTA" };
-    }
-    return { ok: false, error: fallbackError.message };
-  }
-
-  return { ok: false, error: error.message };
 }
 
 export async function POST(request: NextRequest, ctx: RouteContext) {
@@ -346,169 +271,29 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
     }
   }
 
-  let totalEItens: { totalCentavos: number; itensDescricao: string[] };
-  try {
-    totalEItens = await calcularTotalEItens(supabaseAdmin, fatura.id, fatura.valor_total_centavos);
-  } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: "erro_buscar_lancamentos_fatura", detail: err instanceof Error ? err.message : null },
-      { status: 500 },
-    );
-  }
-
-  if (totalEItens.totalCentavos <= 0) {
-    return NextResponse.json({ ok: false, error: "fatura_sem_valor_para_cobranca" }, { status: 400 });
-  }
-
-  const descricao = buildDescricaoCobranca({
-    contexto: "FATURA_CREDITO_CONEXAO",
-    faturaId: fatura.id,
-    periodo: competencia,
-    itensDescricao: totalEItens.itensDescricao,
+  const providerCode = (cfgGlobal?.provider_ativo ?? "NEOFIN") as CobrancaProviderCode;
+  const resultado = await processarCobrancaCanonicaFatura({
+    supabase: supabaseAdmin,
+    fatura: {
+      id: fatura.id,
+      status: fatura.status,
+      valor_total_centavos: fatura.valor_total_centavos,
+    },
+    conta: {
+      pessoa_titular_id: conta.pessoa_titular_id,
+    },
+    competencia,
+    vencimentoEfetivo,
+    providerCode,
+    force,
   });
 
-  const providerCode = (cfgGlobal?.provider_ativo ?? "NEOFIN") as CobrancaProviderCode;
-  let cobrancaAtual;
-  try {
-    const resultadoCobranca = await getOrCreateCobrancaCanonicaFatura({
-      supabase: supabaseAdmin,
-      faturaId: fatura.id,
-      pessoaId: Number(conta.pessoa_titular_id),
-      descricao,
-      valorCentavos: totalEItens.totalCentavos,
-      vencimentoIso: vencimentoEfetivo,
-    });
-    cobrancaAtual = resultadoCobranca.cobranca;
-  } catch (err) {
-    if (err instanceof DuplicidadeCobrancaCanonicaError) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "duplicidade_cobranca_canonica",
-          detail: err.message,
-          cobranca_ids: err.cobrancaIds,
-          fatura_id: err.faturaId,
-        },
-        { status: 409 },
-      );
-    }
-    return NextResponse.json(
-      { ok: false, error: "erro_upsert_cobranca", detail: err instanceof Error ? err.message : null },
-      { status: 500 },
-    );
-  }
-
-  if (cobrancaAtual.neofin_charge_id && !force) {
-    const statusFatura = await updateFaturaComStatusCompativel(
-      supabaseAdmin,
-      fatura.id,
-      {
-        cobranca_id: cobrancaAtual.id,
-        data_fechamento: localTodayIso(),
-        data_vencimento: vencimentoEfetivo,
-        valor_total_centavos: totalEItens.totalCentavos,
-        updated_at: new Date().toISOString(),
-      },
-      fatura.status === "PAGA" ? "PAGA" : "FECHADA",
-    );
-
-    if (!statusFatura.ok) {
-      return NextResponse.json(
-        { ok: false, error: "erro_atualizar_fatura", detail: statusFatura.error },
-        { status: 500 },
-      );
-    }
-
-    await supabaseAdmin
-      .from("cobrancas")
-      .update({
-        descricao,
-        valor_centavos: totalEItens.totalCentavos,
-        vencimento: vencimentoEfetivo,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", cobrancaAtual.id);
-
-    return NextResponse.json({
-      ok: true,
-      fatura_id: fatura.id,
-      status_fatura: statusFatura.statusAplicado,
-      cobranca_id: cobrancaAtual.id,
-      neofin_charge_id: cobrancaAtual.neofin_charge_id,
-      vencimento_iso: vencimentoEfetivo,
-      message: "Cobranca ja existe",
-    });
-  }
-
-  const cobrancaId = cobrancaAtual.id;
-
-  let neofinChargeId: string | null = null;
-  try {
-    const provider = getCobrancaProvider(providerCode);
-    const out = await provider.criarCobranca({
-      pessoaId: Number(conta.pessoa_titular_id),
-      descricao,
-      valorCentavos: totalEItens.totalCentavos,
-      vencimentoISO: vencimentoEfetivo,
-      referenciaInterna: { tipo: "FATURA_CREDITO_CONEXAO", id: fatura.id },
-    });
-    neofinChargeId = out.providerCobrancaId;
-
-    const { error: updProviderErr } = await supabaseAdmin
-      .from("cobrancas")
-      .update({
-        neofin_charge_id: out.providerCobrancaId,
-        neofin_payload: out.payload ?? null,
-        link_pagamento: out.linkPagamento ?? null,
-        linha_digitavel: out.linhaDigitavel ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", cobrancaId);
-
-    if (updProviderErr) {
-      return NextResponse.json(
-        { ok: false, error: "erro_salvar_cobranca_provider", detail: updProviderErr.message },
-        { status: 500 },
-      );
-    }
-  } catch (err) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "erro_criar_cobranca_provider",
-        detail: err instanceof Error ? err.message : "erro_provider_desconhecido",
-      },
-      { status: 502 },
-    );
-  }
-
-  const statusFatura = await updateFaturaComStatusCompativel(
-    supabaseAdmin,
-    fatura.id,
-    {
-      cobranca_id: cobrancaId,
-      data_fechamento: localTodayIso(),
-      data_vencimento: vencimentoEfetivo,
-      valor_total_centavos: totalEItens.totalCentavos,
-      updated_at: new Date().toISOString(),
-    },
-    fatura.status === "PAGA" ? "PAGA" : "FECHADA",
-  );
-
-  if (!statusFatura.ok) {
-    return NextResponse.json(
-      { ok: false, error: "erro_atualizar_fatura", detail: statusFatura.error },
-      { status: 500 },
-    );
+  if (!resultado.ok) {
+    return NextResponse.json(resultado.body, { status: resultado.status });
   }
 
   return NextResponse.json({
     ok: true,
-    fatura_id: fatura.id,
-    status_fatura: statusFatura.statusAplicado,
-    cobranca_id: cobrancaId,
-    neofin_charge_id: neofinChargeId,
-    vencimento_iso: vencimentoEfetivo,
-    message: "Cobranca gerada com sucesso",
+    ...resultado.data,
   });
 }

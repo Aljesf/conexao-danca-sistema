@@ -10,7 +10,13 @@ export type CobrancaCanonicaFatura = {
   neofin_charge_id: string | null;
   status: string | null;
   origem_tipo: string | null;
+  origem_subtipo: string | null;
   origem_id: number | null;
+  metodo_pagamento: string | null;
+  descricao: string | null;
+  link_pagamento: string | null;
+  linha_digitavel: string | null;
+  neofin_payload: Record<string, unknown> | null;
 };
 
 type GetOrCreateCobrancaCanonicaFaturaInput = {
@@ -52,7 +58,7 @@ async function buscarCobrancasAtivas(
 ): Promise<CobrancaCanonicaFatura[]> {
   const { data, error } = await supabase
     .from("cobrancas")
-    .select("id, neofin_charge_id, status, origem_tipo, origem_id")
+    .select("id, neofin_charge_id, status, origem_tipo, origem_subtipo, origem_id, metodo_pagamento, descricao, link_pagamento, linha_digitavel, neofin_payload")
     .eq("origem_tipo", origemTipo)
     .eq("origem_id", faturaId)
     .neq("status", "CANCELADA")
@@ -77,7 +83,32 @@ async function buscarCobrancasAtivas(
         typeof (row as { origem_tipo?: unknown }).origem_tipo === "string"
           ? String((row as { origem_tipo?: unknown }).origem_tipo)
           : null,
+      origem_subtipo:
+        typeof (row as { origem_subtipo?: unknown }).origem_subtipo === "string"
+          ? String((row as { origem_subtipo?: unknown }).origem_subtipo)
+          : null,
       origem_id: toPositiveNumber((row as { origem_id?: unknown }).origem_id),
+      metodo_pagamento:
+        typeof (row as { metodo_pagamento?: unknown }).metodo_pagamento === "string"
+          ? String((row as { metodo_pagamento?: unknown }).metodo_pagamento)
+          : null,
+      descricao:
+        typeof (row as { descricao?: unknown }).descricao === "string"
+          ? String((row as { descricao?: unknown }).descricao)
+          : null,
+      link_pagamento:
+        typeof (row as { link_pagamento?: unknown }).link_pagamento === "string"
+          ? String((row as { link_pagamento?: unknown }).link_pagamento)
+          : null,
+      linha_digitavel:
+        typeof (row as { linha_digitavel?: unknown }).linha_digitavel === "string"
+          ? String((row as { linha_digitavel?: unknown }).linha_digitavel)
+          : null,
+      neofin_payload:
+        (row as { neofin_payload?: unknown }).neofin_payload &&
+        typeof (row as { neofin_payload?: unknown }).neofin_payload === "object"
+          ? ((row as { neofin_payload?: unknown }).neofin_payload as Record<string, unknown>)
+          : null,
     }))
     .filter((row) => row.id > 0);
 }
@@ -97,12 +128,13 @@ async function atualizarCobranca(
       vencimento: input.vencimentoIso,
       status: "PENDENTE",
       metodo_pagamento: "BOLETO",
+      origem_subtipo: "CARTAO_CONEXAO",
       origem_tipo: ORIGEM_TIPO_CANONICA,
       origem_id: input.faturaId,
       updated_at: new Date().toISOString(),
     })
     .eq("id", cobrancaId)
-    .select("id, neofin_charge_id, status, origem_tipo, origem_id")
+    .select("id, neofin_charge_id, status, origem_tipo, origem_subtipo, origem_id, metodo_pagamento, descricao, link_pagamento, linha_digitavel, neofin_payload")
     .single();
 
   if (error || !data) {
@@ -114,7 +146,16 @@ async function atualizarCobranca(
     neofin_charge_id: typeof data.neofin_charge_id === "string" ? data.neofin_charge_id : null,
     status: typeof data.status === "string" ? data.status : null,
     origem_tipo: typeof data.origem_tipo === "string" ? data.origem_tipo : null,
+    origem_subtipo: typeof data.origem_subtipo === "string" ? data.origem_subtipo : null,
     origem_id: toPositiveNumber(data.origem_id),
+    metodo_pagamento: typeof data.metodo_pagamento === "string" ? data.metodo_pagamento : null,
+    descricao: typeof data.descricao === "string" ? data.descricao : null,
+    link_pagamento: typeof data.link_pagamento === "string" ? data.link_pagamento : null,
+    linha_digitavel: typeof data.linha_digitavel === "string" ? data.linha_digitavel : null,
+    neofin_payload:
+      data.neofin_payload && typeof data.neofin_payload === "object"
+        ? (data.neofin_payload as Record<string, unknown>)
+        : null,
   };
 }
 
@@ -165,11 +206,12 @@ export async function getOrCreateCobrancaCanonicaFatura(
       vencimento: input.vencimentoIso,
       status: "PENDENTE",
       metodo_pagamento: "BOLETO",
+      origem_subtipo: "CARTAO_CONEXAO",
       origem_tipo: ORIGEM_TIPO_CANONICA,
       origem_id: input.faturaId,
       updated_at: new Date().toISOString(),
     })
-    .select("id, neofin_charge_id, status, origem_tipo, origem_id")
+    .select("id, neofin_charge_id, status, origem_tipo, origem_subtipo, origem_id, metodo_pagamento, descricao, link_pagamento, linha_digitavel, neofin_payload")
     .single();
 
   if (error || !data) {
@@ -182,7 +224,16 @@ export async function getOrCreateCobrancaCanonicaFatura(
       neofin_charge_id: typeof data.neofin_charge_id === "string" ? data.neofin_charge_id : null,
       status: typeof data.status === "string" ? data.status : null,
       origem_tipo: typeof data.origem_tipo === "string" ? data.origem_tipo : null,
+      origem_subtipo: typeof data.origem_subtipo === "string" ? data.origem_subtipo : null,
       origem_id: toPositiveNumber(data.origem_id),
+      metodo_pagamento: typeof data.metodo_pagamento === "string" ? data.metodo_pagamento : null,
+      descricao: typeof data.descricao === "string" ? data.descricao : null,
+      link_pagamento: typeof data.link_pagamento === "string" ? data.link_pagamento : null,
+      linha_digitavel: typeof data.linha_digitavel === "string" ? data.linha_digitavel : null,
+      neofin_payload:
+        data.neofin_payload && typeof data.neofin_payload === "object"
+          ? (data.neofin_payload as Record<string, unknown>)
+          : null,
     },
     created: true,
     reusedLegacy: false,
