@@ -2,12 +2,19 @@ import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import {
+  classificarStatusOperacionalCobranca,
   formatarCompetenciaLabel,
+  inferirNeofinStatusCobranca,
   montarCobrancaOperacionalBase,
+  montarNeofinLabel,
+  montarPessoaLabel,
   type CobrancaOperacionalViewBase,
+  type NeofinSituacaoOperacional,
+  type StatusOperacionalCobranca,
 } from "@/lib/financeiro/creditoConexao/cobrancas";
 import {
   addCompetenciaMonths,
+  compareCompetenciaAsc,
   montarDashboardFinanceiroComposicaoItem,
   montarDashboardFinanceiroMensalPayload,
   type DashboardFinanceiroMensalResponse,
@@ -22,6 +29,66 @@ type DashboardOperacionalRow = CobrancaOperacionalViewBase & {
   descricao: string | null;
   created_at: string | null;
   updated_at: string | null;
+};
+
+type CobrancaMetaRow = {
+  id: number;
+  status: string | null;
+  cancelada_em: string | null;
+  cancelamento_motivo: string | null;
+  cancelada_motivo: string | null;
+  expurgada: boolean | null;
+  expurgo_motivo: string | null;
+};
+
+type CobrancaAvulsaMetaRow = {
+  id: number;
+  status: string | null;
+  pago_em: string | null;
+};
+
+type ContaConexaoDashboardRow = {
+  id: number;
+  pessoa_titular_id: number | null;
+  responsavel_financeiro_pessoa_id: number | null;
+  tipo_conta: string | null;
+  descricao_exibicao: string | null;
+  ativo: boolean | null;
+};
+
+type PessoaRow = {
+  id: number;
+  nome: string | null;
+};
+
+type LancamentoDashboardRow = {
+  id: number;
+  conta_conexao_id: number;
+  competencia: string | null;
+  data_lancamento: string | null;
+  descricao: string | null;
+  valor_centavos: number | null;
+  status: string | null;
+  origem_sistema: string | null;
+  origem_id: number | null;
+  referencia_item: string | null;
+  cobranca_id: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type LancamentoFaturaPivotRow = {
+  lancamento_id: number;
+  fatura_id: number;
+};
+
+type FaturaDashboardRow = {
+  id: number;
+  conta_conexao_id: number;
+  periodo_referencia: string | null;
+  data_vencimento: string | null;
+  status: string | null;
+  neofin_invoice_id: string | null;
 };
 
 function toInt(value: string | null, fallback: number): number {
@@ -39,6 +106,37 @@ function competenciaAtual(): string {
   return local.toISOString().slice(0, 7);
 }
 
+function competenciaFimAno(competencia: string): string {
+  return `${competencia.slice(0, 4)}-12`;
+}
+
+function countCompetenciasInclusive(inicio: string, fim: string): number {
+  return compareCompetenciaAsc(fim, inicio) >= 0 ? compareCompetenciaAsc(fim, inicio) + 1 : 0;
+}
+
+function textOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function upper(value: unknown): string {
+  return textOrNull(typeof value === "string" ? value : null)
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase() ?? "";
+}
+
+function calcularDiasAtraso(vencimento: string | null): number {
+  const due = textOrNull(vencimento);
+  if (!due || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return 0;
+  const today = new Date();
+  const todayIso = new Date(today.getTime() - today.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  if (due >= todayIso) return 0;
+  const diffMs = new Date(`${todayIso}T00:00:00`).getTime() - new Date(`${due}T00:00:00`).getTime();
+  return Math.max(Math.floor(diffMs / 86_400_000), 0);
+}
+
 function criarDestaques(
   competencia: string,
   cards: DashboardFinanceiroMensalResponse["cards"],
@@ -51,8 +149,8 @@ function criarDestaques(
       {
         tipo: "INFO",
         titulo: `Sem carteira prevista em ${competenciaLabel}`,
-        descricao: "Nao ha cobrancas operacionais previstas para a competencia selecionada.",
-        acao_sugerida: "Revisar a geracao de mensalidades, avulsas e vinculos do periodo.",
+        descricao: "Nao ha lancamentos elegiveis para a competencia selecionada.",
+        acao_sugerida: "Revisar geracao de mensalidades, cartao conexao e cancelamentos operacionais.",
       },
     ];
   }
@@ -62,16 +160,16 @@ function criarDestaques(
       tipo: "ALERTA",
       titulo: "Inadimplencia mensal acima do limite operacional",
       descricao: `A competencia ${competenciaLabel} concentra ${cards.inadimplencia_mes_percentual.toFixed(1)}% do previsto em atraso.`,
-      acao_sugerida: "Priorizar a carteira vencida e conferir cobrancas sem vinculo NeoFin.",
+      acao_sugerida: "Priorizar vencidos elegiveis e conferir a carteira sem vinculo NeoFin.",
     });
   }
 
   if (cards.neofin_mes_centavos > 0) {
     destaques.push({
       tipo: "INFO",
-      titulo: "Carteira em cobranca NeoFin ativa no mes",
+      titulo: "Carteira NeoFin ativa no mes",
       descricao: `Ha ${formatBRLFromCents(cards.neofin_mes_centavos)} ainda em cobranca NeoFin nesta competencia.`,
-      acao_sugerida: "Acompanhar a conversao dos titulos vinculados e o retorno operacional do provedor.",
+      acao_sugerida: "Acompanhar retorno operacional antes de reconhecer qualquer recebido.",
     });
   }
 
@@ -79,8 +177,8 @@ function criarDestaques(
     destaques.push({
       tipo: "ALERTA",
       titulo: "Cobertura de recebimento abaixo da meta",
-      descricao: "O volume recebido ainda esta abaixo de 70% do previsto para o mes.",
-      acao_sugerida: "Atuar em vencidos, a vencer e cobrancas avulsas sem vinculo ainda no mesmo ciclo.",
+      descricao: "O volume recebido ainda esta abaixo de 70% do previsto elegivel para o mes.",
+      acao_sugerida: "Atuar em itens vencidos, a vencer e sem vinculacao NeoFin no mesmo ciclo.",
     });
   }
 
@@ -88,8 +186,8 @@ function criarDestaques(
     destaques.push({
       tipo: "INFO",
       titulo: "Leitura mensal sob controle",
-      descricao: "Previsto, pago, pendente e NeoFin estao em faixa operacional sem alerta critico nesta competencia.",
-      acao_sugerida: "Manter a rotina de cobranca e revisar a carteira NeoFin diariamente.",
+      descricao: "Previsto, recebido, pendente e NeoFin estao em faixa operacional sem alerta critico nesta competencia.",
+      acao_sugerida: "Manter a rotina de cobranca e validar os lancamentos futuros ja gerados.",
     });
   }
 
@@ -102,20 +200,28 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin();
   const url = new URL(req.url);
-  const competencia = (url.searchParams.get("competencia") ?? "").trim();
-  const limite = Math.min(Math.max(toInt(url.searchParams.get("limite"), 6), 1), 12);
+  const competenciaParam = (url.searchParams.get("competencia") ?? "").trim();
   const tipoConta = (url.searchParams.get("tipo_conta") ?? "ALUNO").trim().toUpperCase();
   const competenciaBase = competenciaAtual();
-  const competenciaSelecionada = isCompetencia(competencia) ? competencia : competenciaBase;
-  const competenciaInicio = addCompetenciaMonths(competenciaSelecionada, -(limite - 1));
+  const competenciaSelecionada = isCompetencia(competenciaParam) ? competenciaParam : competenciaBase;
 
-  if (competencia && !isCompetencia(competencia)) {
+  if (competenciaParam && !isCompetencia(competenciaParam)) {
     return NextResponse.json({ ok: false, error: "competencia_invalida" }, { status: 400 });
   }
-
-  if (tipoConta !== "ALUNO" && tipoConta !== "COLABORADOR" && tipoConta !== "TODOS") {
+  if (!["ALUNO", "COLABORADOR", "TODOS"].includes(tipoConta)) {
     return NextResponse.json({ ok: false, error: "tipo_conta_invalido" }, { status: 400 });
   }
+
+  const limiteAno = countCompetenciasInclusive(competenciaSelecionada, competenciaFimAno(competenciaSelecionada));
+  const limiteSolicitado = Math.min(Math.max(toInt(url.searchParams.get("limite"), limiteAno), 1), 24);
+  const competenciaInicio = competenciaSelecionada;
+  const competenciaFimMinimo = competenciaFimAno(competenciaSelecionada);
+  const competenciaFimPorLimite = addCompetenciaMonths(competenciaSelecionada, limiteSolicitado - 1);
+  const competenciaFim =
+    compareCompetenciaAsc(competenciaFimPorLimite, competenciaFimMinimo) < 0
+      ? competenciaFimMinimo
+      : competenciaFimPorLimite;
+  const limite = countCompetenciasInclusive(competenciaInicio, competenciaFim);
 
   let query = supabase
     .from("vw_financeiro_cobrancas_operacionais")
@@ -160,47 +266,323 @@ export async function GET(req: NextRequest) {
         "updated_at",
       ].join(","),
     )
-    .order("competencia_ano_mes", { ascending: false, nullsFirst: false })
-    .order("data_vencimento", { ascending: false, nullsFirst: false });
+    .gte("competencia_ano_mes", competenciaInicio)
+    .lte("competencia_ano_mes", competenciaFim)
+    .order("competencia_ano_mes", { ascending: true, nullsFirst: false })
+    .order("data_vencimento", { ascending: true, nullsFirst: false });
 
   if (tipoConta !== "TODOS") {
     query = query.eq("tipo_conta", tipoConta);
   }
 
-  query = query.gte("competencia_ano_mes", competenciaInicio);
-  query = query.lte("competencia_ano_mes", competenciaSelecionada);
+  const contasQuery = supabase
+    .from("credito_conexao_contas")
+    .select("id,pessoa_titular_id,responsavel_financeiro_pessoa_id,tipo_conta,descricao_exibicao,ativo")
+    .eq("ativo", true);
 
-  const { data, error } = await query;
-
-  if (error) {
+  const { data: operacionalData, error: operacionalError } = await query;
+  if (operacionalError) {
     return NextResponse.json(
-      { ok: false, error: "erro_buscar_dashboard_mensal", detail: error.message },
+      { ok: false, error: "erro_buscar_dashboard_mensal", detail: operacionalError.message },
       { status: 500 },
     );
   }
 
+  const { data: contasRaw, error: contasError } = tipoConta === "TODOS"
+    ? await contasQuery
+    : await contasQuery.eq("tipo_conta", tipoConta);
+
+  if (contasError) {
+    return NextResponse.json(
+      { ok: false, error: "erro_buscar_contas_dashboard_mensal", detail: contasError.message },
+      { status: 500 },
+    );
+  }
+
+  const operacionalRows = (operacionalData ?? []) as DashboardOperacionalRow[];
+  const contas = ((contasRaw ?? []) as ContaConexaoDashboardRow[]).filter((item) => item.ativo !== false);
   const today = new Date();
-  const itens = ((data ?? []) as unknown[]).map((raw) => {
-    const row = raw as DashboardOperacionalRow;
+
+  const cobrancaIds = Array.from(
+    new Set(
+      operacionalRows
+        .filter((row) => upper(String(row.cobranca_fonte ?? "")) !== "COBRANCA_AVULSA")
+        .map((row) => Number(row.cobranca_id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  );
+  const avulsaIds = Array.from(
+    new Set(
+      operacionalRows
+        .filter((row) => upper(String(row.cobranca_fonte ?? "")) === "COBRANCA_AVULSA")
+        .map((row) => Number(row.cobranca_id))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  );
+  const pessoaIds = Array.from(
+    new Set(
+      contas
+        .flatMap((row) => [row.responsavel_financeiro_pessoa_id, row.pessoa_titular_id])
+        .filter((id): id is number => typeof id === "number" && Number.isFinite(id) && id > 0),
+    ),
+  );
+
+  const [cobrancasMetaResult, avulsasMetaResult, pessoasResult] = await Promise.all([
+    cobrancaIds.length > 0
+      ? supabase
+        .from("cobrancas")
+        .select("id,status,cancelada_em,cancelamento_motivo,cancelada_motivo,expurgada,expurgo_motivo")
+        .in("id", cobrancaIds)
+      : Promise.resolve({ data: [] as CobrancaMetaRow[], error: null }),
+    avulsaIds.length > 0
+      ? supabase.from("financeiro_cobrancas_avulsas").select("id,status,pago_em").in("id", avulsaIds)
+      : Promise.resolve({ data: [] as CobrancaAvulsaMetaRow[], error: null }),
+    pessoaIds.length > 0
+      ? supabase.from("pessoas").select("id,nome").in("id", pessoaIds)
+      : Promise.resolve({ data: [] as PessoaRow[], error: null }),
+  ]);
+
+  if (cobrancasMetaResult.error || avulsasMetaResult.error || pessoasResult.error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "erro_buscar_metadata_dashboard_mensal",
+        detail:
+          cobrancasMetaResult.error?.message
+          ?? avulsasMetaResult.error?.message
+          ?? pessoasResult.error?.message
+          ?? "erro_desconhecido",
+      },
+      { status: 500 },
+    );
+  }
+
+  const cobrancasMetaById = new Map<number, CobrancaMetaRow>(
+    ((cobrancasMetaResult.data ?? []) as CobrancaMetaRow[]).map((row) => [Number(row.id), row]),
+  );
+  const avulsasMetaById = new Map<number, CobrancaAvulsaMetaRow>(
+    ((avulsasMetaResult.data ?? []) as CobrancaAvulsaMetaRow[]).map((row) => [Number(row.id), row]),
+  );
+  const pessoasById = new Map<number, string>(
+    ((pessoasResult.data ?? []) as PessoaRow[])
+      .filter((row) => Number.isFinite(Number(row.id)))
+      .map((row) => [Number(row.id), textOrNull(row.nome) ?? `Pessoa #${row.id}`]),
+  );
+  const contasById = new Map<number, ContaConexaoDashboardRow>(contas.map((row) => [Number(row.id), row]));
+
+  const contaIds = contas.map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
+  const { data: lancamentosRaw, error: lancamentosError } = contaIds.length > 0
+    ? await supabase
+      .from("credito_conexao_lancamentos")
+      .select("id,conta_conexao_id,competencia,data_lancamento,descricao,valor_centavos,status,origem_sistema,origem_id,referencia_item,cobranca_id,created_at,updated_at")
+      .in("conta_conexao_id", contaIds)
+      .gte("competencia", competenciaInicio)
+      .lte("competencia", competenciaFim)
+      .in("status", ["PENDENTE_FATURA", "FATURADO"])
+      .order("competencia", { ascending: true })
+      .order("id", { ascending: true })
+    : { data: [], error: null };
+
+  if (lancamentosError) {
+    return NextResponse.json(
+      { ok: false, error: "erro_buscar_lancamentos_dashboard_mensal", detail: lancamentosError.message },
+      { status: 500 },
+    );
+  }
+
+  const lancamentos = ((lancamentosRaw ?? []) as LancamentoDashboardRow[]).filter((row) => !row.cobranca_id);
+  const lancamentoIds = lancamentos.map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
+  const { data: pivotsRaw, error: pivotsError } = lancamentoIds.length > 0
+    ? await supabase
+      .from("credito_conexao_fatura_lancamentos")
+      .select("lancamento_id,fatura_id")
+      .in("lancamento_id", lancamentoIds)
+    : { data: [], error: null };
+
+  if (pivotsError) {
+    return NextResponse.json(
+      { ok: false, error: "erro_buscar_vinculos_fatura_dashboard_mensal", detail: pivotsError.message },
+      { status: 500 },
+    );
+  }
+
+  const pivots = (pivotsRaw ?? []) as LancamentoFaturaPivotRow[];
+  const faturaIds = Array.from(
+    new Set(pivots.map((row) => Number(row.fatura_id)).filter((id) => Number.isFinite(id) && id > 0)),
+  );
+  const { data: faturasRaw, error: faturasError } = faturaIds.length > 0
+    ? await supabase
+      .from("credito_conexao_faturas")
+      .select("id,conta_conexao_id,periodo_referencia,data_vencimento,status,neofin_invoice_id")
+      .in("id", faturaIds)
+    : { data: [], error: null };
+
+  if (faturasError) {
+    return NextResponse.json(
+      { ok: false, error: "erro_buscar_faturas_dashboard_mensal", detail: faturasError.message },
+      { status: 500 },
+    );
+  }
+
+  const faturaIdByLancamentoId = new Map<number, number>();
+  for (const pivot of pivots) {
+    faturaIdByLancamentoId.set(Number(pivot.lancamento_id), Number(pivot.fatura_id));
+  }
+  const faturasById = new Map<number, FaturaDashboardRow>(
+    ((faturasRaw ?? []) as FaturaDashboardRow[]).map((row) => [Number(row.id), row]),
+  );
+
+  const itensOperacionais = operacionalRows.map((row) => {
     const item = montarCobrancaOperacionalBase(row, today);
     item.cobranca_url = item.cobranca_fonte === "COBRANCA_AVULSA"
       ? `/administracao/financeiro/cobrancas-avulsas/${item.cobranca_id}`
       : `/admin/governanca/cobrancas/${item.cobranca_id}`;
+
+    const isAvulsa = upper(String(item.cobranca_fonte)) === "COBRANCA_AVULSA";
+    const metaCobranca = !isAvulsa ? cobrancasMetaById.get(Number(item.cobranca_id)) ?? null : null;
+    const metaAvulsa = isAvulsa ? avulsasMetaById.get(Number(item.cobranca_id)) ?? null : null;
+    const statusOriginal = textOrNull(isAvulsa ? metaAvulsa?.status : metaCobranca?.status) ?? item.status_bruto ?? item.status_cobranca;
+
     return montarDashboardFinanceiroComposicaoItem({
-      ...item,
+      competencia: item.competencia_ano_mes,
+      cobranca_id: item.cobranca_id,
+      lancamento_id: null,
+      cobranca_key: item.cobranca_key,
+      cobranca_fonte: item.cobranca_fonte,
+      pessoa_id: item.pessoa_id,
+      pessoa_nome: item.pessoa_nome,
+      pessoa_label: item.pessoa_label,
       conta_conexao_id: row.conta_conexao_id,
+      conta_interna_id: row.conta_conexao_id,
+      tipo_conta: item.tipo_conta,
+      tipo_conta_label: item.tipo_conta_label,
+      origem_tipo: row.origem_tipo,
+      origem_subtipo: row.origem_subtipo,
       origem_id: row.origem_id,
-      descricao: row.descricao,
+      origem_lancamento: null,
+      origem_fatura: row.fatura_status,
+      descricao: row.descricao ?? item.origem_referencia_label,
+      referencia: item.origem_referencia_label,
+      status_operacional: item.status_operacional,
+      status_bruto: item.status_bruto,
+      status_original: statusOriginal,
+      valor_nominal_centavos: item.valor_centavos,
+      valor_recebido_confirmado_centavos: item.valor_pago_centavos,
+      valor_pendente_base_centavos: item.saldo_aberto_centavos,
+      data_vencimento: item.data_vencimento,
+      data_pagamento: isAvulsa ? textOrNull(metaAvulsa?.pago_em) ?? item.data_pagamento : item.data_pagamento,
+      neofin_status: item.neofin_status,
+      neofin_label: item.neofin_label,
+      neofin_situacao_operacional: item.neofin_situacao_operacional,
+      fatura_id: item.fatura_id,
+      fatura_competencia: item.fatura_competencia,
+      fatura_status: item.fatura_status,
+      cobranca_url: item.cobranca_url,
+      fatura_url: item.fatura_url,
+      dias_em_atraso: item.dias_em_atraso,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      cancelado: isAvulsa
+        ? upper(statusOriginal) === "CANCELADO"
+        : upper(statusOriginal) === "CANCELADA" || Boolean(textOrNull(metaCobranca?.cancelada_em)),
+      expurgado: !isAvulsa && Boolean(metaCobranca?.expurgada),
+      motivo_cancelamento: !isAvulsa
+        ? textOrNull(metaCobranca?.cancelamento_motivo) ?? textOrNull(metaCobranca?.cancelada_motivo)
+        : null,
+      motivo_expurgo: !isAvulsa ? textOrNull(metaCobranca?.expurgo_motivo) : null,
+      gerado_antecipadamente:
+        compareCompetenciaAsc(item.competencia_ano_mes, competenciaBase) > 0 &&
+        (upper(row.origem_tipo).startsWith("MATRICULA") || upper(row.origem_subtipo) === "CARTAO_CONEXAO" || upper(String(row.tipo_cobranca)) === "MENSALIDADE"),
     });
   });
 
+  const itensLancamentosFuturos = lancamentos
+    .filter((row) => {
+      const competenciaLanc = textOrNull(row.competencia);
+      if (!isCompetencia(competenciaLanc)) return false;
+      const faturaId = faturaIdByLancamentoId.get(Number(row.id)) ?? null;
+      const fatura = faturaId ? faturasById.get(faturaId) ?? null : null;
+      return !["PAGA", "CANCELADA"].includes(upper(fatura?.status));
+    })
+    .map((row) => {
+      const competenciaLanc = textOrNull(row.competencia) ?? competenciaInicio;
+      const conta = contasById.get(Number(row.conta_conexao_id));
+      const faturaId = faturaIdByLancamentoId.get(Number(row.id)) ?? null;
+      const fatura = faturaId ? faturasById.get(faturaId) ?? null : null;
+      const valorNominal = Number(row.valor_centavos ?? 0);
+      const dataVencimento = textOrNull(fatura?.data_vencimento);
+      const statusOperacional = classificarStatusOperacionalCobranca({
+        status_cobranca: textOrNull(row.status),
+        data_vencimento: dataVencimento,
+        valor_centavos: valorNominal,
+        valor_pago_centavos: 0,
+        saldo_aberto_centavos: valorNominal,
+      });
+      const pessoaId = conta?.responsavel_financeiro_pessoa_id ?? conta?.pessoa_titular_id ?? null;
+      const pessoaNome = pessoaId
+        ? pessoasById.get(pessoaId) ?? `Pessoa #${pessoaId}`
+        : textOrNull(conta?.descricao_exibicao) ?? "Pessoa nao identificada";
+      const pessoaLabel = montarPessoaLabel(pessoaNome, pessoaId);
+      const neofinSituacao: NeofinSituacaoOperacional =
+        textOrNull(fatura?.neofin_invoice_id)
+          ? "VINCULADA"
+          : ["FECHADA", "EM_ATRASO"].includes(upper(fatura?.status))
+            ? "FALHA_INTEGRACAO"
+            : "NAO_VINCULADA";
+      const neofinStatus = inferirNeofinStatusCobranca(
+        textOrNull(fatura?.neofin_invoice_id),
+        statusOperacional,
+        neofinSituacao,
+      );
+      return montarDashboardFinanceiroComposicaoItem({
+        competencia: competenciaLanc,
+        cobranca_id: null,
+        lancamento_id: Number(row.id),
+        cobranca_key: `LANCAMENTO:${row.id}`,
+        cobranca_fonte: "LANCAMENTO",
+        pessoa_id: pessoaId,
+        pessoa_nome: pessoaNome,
+        pessoa_label: pessoaLabel,
+        conta_conexao_id: conta?.id ?? Number(row.conta_conexao_id),
+        conta_interna_id: conta?.id ?? Number(row.conta_conexao_id),
+        tipo_conta: textOrNull(conta?.tipo_conta),
+        tipo_conta_label: null,
+        origem_tipo: upper(row.origem_sistema).startsWith("MATRICULA") ? "MATRICULA" : textOrNull(row.origem_sistema),
+        origem_subtipo: upper(row.origem_sistema).startsWith("MATRICULA") ? "CARTAO_CONEXAO" : null,
+        origem_id: Number(row.origem_id ?? 0) || null,
+        origem_lancamento: textOrNull(row.origem_sistema),
+        origem_fatura: textOrNull(fatura?.status),
+        descricao: textOrNull(row.descricao) ?? "Lancamento futuro da Conta Interna Aluno",
+        referencia: textOrNull(row.referencia_item) ?? `lancamento:${row.id}`,
+        status_operacional: statusOperacional as StatusOperacionalCobranca,
+        status_bruto: textOrNull(row.status),
+        status_original: textOrNull(row.status),
+        valor_nominal_centavos: valorNominal,
+        valor_recebido_confirmado_centavos: 0,
+        valor_pendente_base_centavos: valorNominal,
+        data_vencimento: dataVencimento,
+        data_pagamento: null,
+        neofin_status: neofinStatus,
+        neofin_label: montarNeofinLabel(neofinStatus),
+        neofin_situacao_operacional: neofinSituacao,
+        fatura_id: fatura?.id ?? null,
+        fatura_competencia: textOrNull(fatura?.periodo_referencia) ?? competenciaLanc,
+        fatura_status: textOrNull(fatura?.status),
+        fatura_url: fatura?.id ? `/admin/financeiro/credito-conexao/faturas/${fatura.id}` : null,
+        dias_em_atraso: calcularDiasAtraso(dataVencimento),
+        created_at: textOrNull(row.created_at),
+        updated_at: textOrNull(row.updated_at),
+        cancelado: upper(row.status) === "CANCELADO",
+        inativo: conta?.ativo === false,
+        gerado_antecipadamente: compareCompetenciaAsc(competenciaLanc, competenciaBase) > 0,
+      });
+    });
+
   const payloadBase = montarDashboardFinanceiroMensalPayload({
-    items: itens,
+    items: [...itensOperacionais, ...itensLancamentosFuturos],
     competenciaSelecionada,
     competenciaInicio,
-    competenciaFim: competenciaSelecionada,
+    competenciaFim,
     limite,
     tipoConta,
     competenciaAtualReal: competenciaBase,

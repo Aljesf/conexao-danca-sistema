@@ -58,6 +58,7 @@ function detalheCardParaModal(detalhe: DashboardFinanceiroCardDetalhe): Financei
     percentual: detalhe.percentual,
     composicao: detalhe.composicao,
     observacao_resumo: detalhe.observacao_resumo,
+    resumo_exclusoes: detalhe.resumo_exclusoes,
     natureza:
       detalhe.indicador === "recebido_no_mes"
         ? "pago"
@@ -104,6 +105,7 @@ function detalheCompetenciaParaModal(
     percentual: null,
     composicao,
     observacao_resumo: competencia.observacao_resumo,
+    resumo_exclusoes: competencia.resumo_exclusoes,
     natureza,
   };
 }
@@ -171,13 +173,13 @@ export function FinanceiroMensalSection({ mensal, loading, error }: FinanceiroMe
       indicador: "recebido_no_mes" as const,
       titulo: "Recebido no mes",
       valor: formatBRLFromCents(mensal?.cards.pago_mes_centavos ?? null),
-      subtexto: "Somente recebimentos com confirmacao financeira entram aqui.",
+      subtexto: "Somente recebimentos financeiros confirmados e elegiveis entram aqui.",
     },
     {
       indicador: "pendente_do_mes" as const,
       titulo: "Pendente do mes",
       valor: formatBRLFromCents(mensal?.cards.pendente_mes_centavos ?? null),
-      subtexto: "Saldo aberto do recorte operacional da competencia.",
+      subtexto: "Saldo aberto elegivel do recorte operacional da competencia.",
     },
     {
       indicador: "em_cobranca_neofin" as const,
@@ -202,13 +204,16 @@ export function FinanceiroMensalSection({ mensal, loading, error }: FinanceiroMe
           <div>
             <h2 className="text-lg font-semibold text-slate-800">Saude mensal do financeiro</h2>
             <p className="text-sm text-slate-600">
-              Leitura rapida da competencia {mensal?.cards_detalhe.previsto_para_receber.competencia_label ?? "--"} com foco em cobranca, conversao e vinculo operacional.
+              Leitura rapida da competencia {mensal?.cards_detalhe.previsto_para_receber.competencia_label ?? "--"} com foco em auditoria operacional, lancamentos ativos e carteira elegivel.
             </p>
             <p className="mt-1 text-xs text-slate-500">
               Serie canonica do painel:{" "}
               {mensal?.faixa_competencias
                 ? `${formatarCompetenciaLabel(mensal.faixa_competencias.inicio)} ate ${formatarCompetenciaLabel(mensal.faixa_competencias.fim)}`
                 : "--"}.
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Previsao baseada em lancamentos ativos ja gerados na Conta Interna Aluno. Itens cancelados/expurgados nao compoem os totais principais.
             </p>
           </div>
           <Link
@@ -241,9 +246,9 @@ export function FinanceiroMensalSection({ mensal, loading, error }: FinanceiroMe
         <div className="mt-4 grid gap-4 xl:grid-cols-[1.3fr_0.7fr]">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div>
-              <h3 className="text-base font-semibold text-slate-800">Competencias recentes</h3>
+              <h3 className="text-base font-semibold text-slate-800">Competencias do ano</h3>
               <p className="text-sm text-slate-600">
-                Compare previsto, pago, pendente, vencido e NeoFin para decidir a prioridade do mes na Conta Interna Aluno.
+                Compare previsto, pago, pendente, vencido e NeoFin em meses continuos, inclusive os futuros ja gerados pela matricula/cartao conexao.
               </p>
             </div>
 
@@ -302,7 +307,7 @@ export function FinanceiroMensalSection({ mensal, loading, error }: FinanceiroMe
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-sm">
             <h3 className="text-base font-semibold text-slate-800">Leitura rapida do mes</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Priorize a carteira vencida, acompanhe NeoFin e ajuste cobrancas sem vinculo antes de abrir novo ciclo.
+              Priorize a carteira vencida elegivel, acompanhe NeoFin e valide os lancamentos futuros ja gerados antes de abrir novo ciclo.
             </p>
 
             <div className="mt-4 space-y-3">

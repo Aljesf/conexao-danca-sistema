@@ -2,12 +2,13 @@
 Dashboard Financeiro - Conta Interna Aluno
 
 ## SQL concluido
-- validacao da base existente em `supabase/migrations/20260306_01_financeiro_cobrancas_dashboard_refactor.sql`
-- confirmacao de uso da view `public.vw_financeiro_cobrancas_operacionais` como base canonica do dashboard mensal
-- confirmacao de competencia canonica em `YYYY-MM`
-- confirmacao das origens de previsto, recebido, pendente, vencido e NeoFin na view operacional
-- confirmacao de vinculo com pessoa, conta interna (`conta_conexao_id`) e fatura/NeoFin
-- nenhuma migration nova foi criada neste ciclo
+- validacao da semantica real de status e cancelamento nas tabelas operacionais ja existentes
+- `supabase/migrations/20260306_01_financeiro_cobrancas_dashboard_refactor.sql`: view `public.vw_financeiro_cobrancas_operacionais` segue como base principal do dashboard
+- `supabase/migrations/add_expurgo_cobrancas.sql`: confirmados os campos de expurgo logico em `cobrancas` (`expurgada`, `expurgada_em`, `expurgada_por`, `expurgo_motivo`)
+- `supabase/migrations/20260113_180101_financeiro_cobrancas_avulsas.sql`: confirmados os status canonicos de `financeiro_cobrancas_avulsas` (`PENDENTE`, `PAGO`, `CANCELADO`, `VENCIDO`)
+- `supabase/migrations/20251210_credito_conexao.sql`: confirmados os status de `credito_conexao_lancamentos` (`PENDENTE_FATURA`, `FATURADO`, `CANCELADO`)
+- `supabase/migrations/20260216190000_financeiro_config_fechamento_faturas.sql`: confirmados os status de `credito_conexao_faturas` (`ABERTA`, `FECHADA`, `PAGA`, `EM_ATRASO`, `CANCELADA`)
+- nenhuma migration nova foi criada neste ciclo; a correcao ficou concentrada na API e na normalizacao do payload
 
 ## APIs concluidas
 - `src/app/api/financeiro/dashboard/mensal/route.ts`
@@ -19,32 +20,31 @@ Dashboard Financeiro - Conta Interna Aluno
 - `src/components/financeiro/dashboard/FinanceiroMensalDetalheModal.tsx`
 
 ## O que foi consolidado neste chat
-- serie canonica mensal no backend para impedir sumico de competencias intermediarias
-- meses ausentes mantidos no payload com zero e observacao de ausencia
-- cards do topo com drill-down auditavel no mesmo endpoint
-- detalhamento por competencia com composicoes separadas para previsto, pago, pendente, vencido e NeoFin
-- composicao operacional por item com cobranca, pessoa, conta interna, origem, status, valores e datas
-- modal auditavel com subtotal, quantidade, filtros por competencia/status/origem/NeoFin/pessoa e tabela detalhada
-- cards KPI clicaveis
-- celulas monetarias da tabela clicaveis
-- CTA discreto na leitura rapida do mes para abrir composicoes
-- reaproveitamento da rota atual do dashboard mensal sem endpoint adicional
+- normalizacao central de carteira com `status_original`, `status_normalizado`, flags de elegibilidade e motivo de exclusao por item
+- exclusao de itens `cancelado`, `cancelada`, `expurgado` e equivalentes inativos dos totais principais de previsto, pendente, vencido, NeoFin e inadimplencia
+- preservacao de auditoria no payload detalhado com `excluido_do_total` e `motivo_exclusao`
+- recebido principal limitado a recebimentos financeiros confirmados e elegiveis; combinacoes textuais ambiguas deixaram de contaminar o agregado
+- previsao anual baseada tambem em `credito_conexao_lancamentos` ativos ja gerados pela matricula/cartao conexao, mesmo sem fatura fechada
+- separacao semantica entre lancamento financeiro gerado, fatura, carteira NeoFin e pagamento confirmado
+- serie de competencias mantida continua ate dezembro do ano visualizado, com meses futuros e meses zerados preservados no payload
+- cards e modais alinhados com a mesma regra de apuracao, sem reintroduzir cancelados na composicao principal
+- textos operacionais discretos na UI explicando uso de lancamentos ativos futuros e exclusao de cancelados/expurgados
 
 ## Pendencias
 - validacao visual autenticada com prints reais do dashboard e dos modais em ambiente com sessao valida
-- avaliacao de performance com massa real maior para decidir se algum detalhamento deve migrar para endpoint complementar
-- eventual seletor explicito de intervalo/competencia na UI, caso o produto queira navegar outros recortes sem depender do mes atual
+- conferencia final com massa real de dados para medir impacto de desempenho do detalhamento enriquecido
+- avaliacao futura de uma secao opcional de auditoria para exibir itens excluidos fora da soma principal
 
 ## Bloqueios
-- `npm run lint` nao passa no repositorio por erros preexistentes fora do escopo deste modulo
-- tentativa de captura de prints locais bloqueada por autenticacao da area privada; acesso a `http://127.0.0.1:3001/admin/financeiro` redirecionou com `307` para `/login`
+- `npm run lint` continua falhando no repositorio por erros preexistentes fora do escopo deste modulo
+- captura local de prints depende de sessao autenticada; sem login valido a rota privada redireciona para `/login`
 
 ## Versao do sistema
 Sistema Conexao Danca - Dashboard Financeiro
-Versao logica: v1.1 dashboard mensal auditavel da Conta Interna Aluno
+Versao logica: v1.2 dashboard mensal auditavel com exclusao canonica de cancelados e previsao por lancamentos gerados
 
 ## Proximas acoes
-1. validar os modais com sessao autenticada e gerar os prints finais do fluxo
-2. revisar o comportamento com dados reais de meses zerados e competencias futuras
-3. decidir se o dashboard deve ganhar seletor de faixa mensal no proprio bloco
-4. atacar a fila de erros globais de lint para voltar a ter validacao completa do repositorio
+1. validar em ambiente autenticado os casos reais de cancelado fora do total e de lancamento futuro aparecendo ate dezembro
+2. gerar os prints finais do dashboard, do modal de previsto e de uma competencia futura com composicao rastreavel
+3. considerar uma visao secundaria de itens excluidos para auditoria historica sem contaminar os cards principais
+4. atacar a fila de erros globais de lint para recuperar validacao completa do repositorio

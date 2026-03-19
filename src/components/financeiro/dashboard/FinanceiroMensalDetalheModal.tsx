@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDateISO } from "@/lib/formatters/date";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatarCompetenciaLabel } from "@/lib/financeiro/creditoConexao/cobrancas";
-import type { DashboardFinanceiroComposicaoItem } from "@/lib/financeiro/dashboardMensalContaInterna";
+import type {
+  DashboardFinanceiroComposicaoItem,
+  DashboardFinanceiroResumoExclusoes,
+} from "@/lib/financeiro/dashboardMensalContaInterna";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shadcn/ui";
 
 export type FinanceiroMensalModalPayload = {
@@ -15,6 +18,7 @@ export type FinanceiroMensalModalPayload = {
   percentual: number | null;
   composicao: DashboardFinanceiroComposicaoItem[];
   observacao_resumo: string | null;
+  resumo_exclusoes: DashboardFinanceiroResumoExclusoes;
   natureza: "previsto" | "pago" | "pendente" | "vencido" | "neofin" | "inadimplencia";
 };
 
@@ -153,6 +157,7 @@ export function FinanceiroMensalDetalheModal({
   const itensSemNeofin = itensFiltrados.filter((item) => item.neofin_situacao_operacional !== "VINCULADA").length;
   const itensVencidos = itensFiltrados.filter((item) => item.valor_vencido_centavos > 0).length;
   const itensFuturos = itensFiltrados.filter((item) => item.competencia > competenciaAtual).length;
+  const itensGeradosAntecipadamente = itensFiltrados.filter((item) => item.gerado_antecipadamente).length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -209,6 +214,16 @@ export function FinanceiroMensalDetalheModal({
           {itensFuturos > 0 ? (
             <p className="mt-3 text-xs text-slate-500">
               {itensFuturos} {itensFuturos === 1 ? "item pertence" : "itens pertencem"} a competencias futuras.
+            </p>
+          ) : null}
+          {itensGeradosAntecipadamente > 0 ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Previsao baseada em lancamentos ativos ja gerados na Conta Interna Aluno.
+            </p>
+          ) : null}
+          {(payload?.resumo_exclusoes.total_itens_excluidos ?? 0) > 0 ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Itens cancelados/expurgados foram excluidos desta composicao principal.
             </p>
           ) : null}
         </div>
@@ -337,6 +352,7 @@ export function FinanceiroMensalDetalheModal({
                         <div>{item.origem_label}</div>
                         <div className="text-xs text-slate-500">
                           {item.conta_conexao_id ? `Conta #${item.conta_conexao_id}` : "Sem conta interna"}
+                          {item.origem_lancamento ? ` | ${item.origem_lancamento}` : ""}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-slate-600">{item.competencia_label}</td>
@@ -346,7 +362,10 @@ export function FinanceiroMensalDetalheModal({
                       </td>
                       <td className="px-3 py-3 text-slate-600">
                         <div>{item.status_label}</div>
-                        <div className="text-xs text-slate-500">{item.status_bruto ?? "--"}</div>
+                        <div className="text-xs text-slate-500">
+                          {item.status_normalizado}
+                          {item.status_original ? ` | ${item.status_original}` : item.status_bruto ? ` | ${item.status_bruto}` : ""}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-slate-600">
                         <div>{item.neofin_label}</div>
