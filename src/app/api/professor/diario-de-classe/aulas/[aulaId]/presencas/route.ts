@@ -76,6 +76,7 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ aulaId:
       supabase,
       aulaId: aulaId.data,
       itens: body.data.itens,
+      removerAlunoPessoaIds: body.data.removerAlunoPessoaIds,
       registradoPorAuthUserId: user.id,
       registradoPorColaboradorId: colaboradorId,
     });

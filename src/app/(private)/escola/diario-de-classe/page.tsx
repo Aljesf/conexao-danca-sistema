@@ -107,7 +107,7 @@ type ItemPresenca = {
 type LinhaChamada = {
   aluno_pessoa_id: number;
   nome: string;
-  base_status: PresencaBaseStatus;
+  base_status: PresencaBaseStatus | null;
   atraso_ativo: boolean;
   minutos_atraso: number | null;
   justificativa_ativa: boolean;
@@ -146,7 +146,24 @@ function defaultObservadoEm(dataAula: string, horaInicio?: string | null): strin
   return `${dataAula}T${toHHmm(new Date())}`;
 }
 
-function mapPresencaToLinha(aluno: Aluno, presenca?: PresencaDb): LinhaChamada {
+function createLinhaPendente(aluno: Pick<Aluno, "aluno_pessoa_id" | "nome">): LinhaChamada {
+  const nome = (aluno.nome ?? "").trim() || `Aluno ${aluno.aluno_pessoa_id}`;
+
+  return {
+    aluno_pessoa_id: aluno.aluno_pessoa_id,
+    nome,
+    base_status: null,
+    atraso_ativo: false,
+    minutos_atraso: null,
+    justificativa_ativa: false,
+    justificativa_texto: "",
+  };
+}
+
+function mapPresencaToLinha(
+  aluno: Pick<Aluno, "aluno_pessoa_id" | "nome">,
+  presenca?: PresencaDb
+): LinhaChamada {
   const nome = (aluno.nome ?? "").trim() || `Aluno ${aluno.aluno_pessoa_id}`;
 
   if (presenca?.status === "ATRASO") {
@@ -185,15 +202,15 @@ function mapPresencaToLinha(aluno: Aluno, presenca?: PresencaDb): LinhaChamada {
     };
   }
 
-  return {
-    aluno_pessoa_id: aluno.aluno_pessoa_id,
-    nome,
-    base_status: "PRESENTE",
-    atraso_ativo: false,
-    minutos_atraso: null,
-    justificativa_ativa: false,
-    justificativa_texto: "",
-  };
+  return createLinhaPendente(aluno);
+}
+
+function countLinhasMarcadas(linhas: LinhaChamada[]): number {
+  return linhas.filter((linha) => linha.base_status !== null).length;
+}
+
+function hasLinhasPendentes(linhas: LinhaChamada[]): boolean {
+  return linhas.some((linha) => linha.base_status === null);
 }
 
 function serializeLinhas(linhas: LinhaChamada[]): string {
@@ -279,7 +296,6 @@ export default function DiarioDeClassePage() {
 
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [alunosHistorico, setAlunosHistorico] = useState<Aluno[]>([]);
-  const [presencasRegistradas, setPresencasRegistradas] = useState(0);
   const [linhas, setLinhas] = useState<LinhaChamada[]>([]);
 
   const [salvando, setSalvando] = useState<boolean>(false);
@@ -395,7 +411,6 @@ export default function DiarioDeClassePage() {
       setLinhas([]);
       setAlunos([]);
       setAlunosHistorico([]);
-      setPresencasRegistradas(0);
       baselineRef.current = null;
 
       if (!turmaId) return;
@@ -467,8 +482,6 @@ export default function DiarioDeClassePage() {
         : [];
       const mapPres = new Map<number, PresencaDb>();
       for (const p of presencas) mapPres.set(p.aluno_pessoa_id, p);
-      const presencasAtivos = listaAlunos.filter((a) => mapPres.has(a.aluno_pessoa_id)).length;
-      setPresencasRegistradas(presencasAtivos);
 
       const linhasMontadas = listaAlunos.map((a) =>
         mapPresencaToLinha(a, mapPres.get(a.aluno_pessoa_id))
@@ -509,6 +522,8 @@ export default function DiarioDeClassePage() {
           return {
             ...l,
             base_status: "PRESENTE",
+            atraso_ativo: false,
+            minutos_atraso: null,
             justificativa_ativa: false,
             justificativa_texto: "",
           };
@@ -582,14 +597,7 @@ export default function DiarioDeClassePage() {
     setLinhas((prev) =>
       prev.map((l) =>
         l.aluno_pessoa_id === alunoId
-          ? {
-              ...l,
-              base_status: "PRESENTE",
-              atraso_ativo: false,
-              minutos_atraso: null,
-              justificativa_ativa: false,
-              justificativa_texto: "",
-            }
+          ? createLinhaPendente({ aluno_pessoa_id: l.aluno_pessoa_id, nome: l.nome })
           : l
       )
     );
@@ -687,40 +695,51 @@ export default function DiarioDeClassePage() {
     setStatus("PENDENTE");
 
     try {
-      const itens: ItemPresenca[] = linhas.map((l) => {
-        if (l.base_status === "FALTA") {
-          if (l.justificativa_ativa) {
+      const itens: ItemPresenca[] = linhas
+        .filter((l) => l.base_status !== null)
+        .map((l) => {
+          if (l.base_status === "FALTA") {
+            if (l.justificativa_ativa) {
+              return {
+                alunoPessoaId: l.aluno_pessoa_id,
+                status: "JUSTIFICADA",
+                observacao: l.justificativa_texto.trim(),
+              };
+            }
             return {
               alunoPessoaId: l.aluno_pessoa_id,
-              status: "JUSTIFICADA",
-              observacao: l.justificativa_texto.trim(),
+              status: "FALTA",
             };
           }
+
+          if (l.atraso_ativo) {
+            return {
+              alunoPessoaId: l.aluno_pessoa_id,
+              status: "ATRASO",
+              minutosAtraso: l.minutos_atraso ?? 1,
+            };
+          }
+
           return {
             alunoPessoaId: l.aluno_pessoa_id,
-            status: "FALTA",
+            status: "PRESENTE",
           };
-        }
+        });
+      const removerAlunoPessoaIds = linhas
+        .filter((l) => l.base_status === null)
+        .map((l) => l.aluno_pessoa_id);
 
-        if (l.atraso_ativo) {
-          return {
-            alunoPessoaId: l.aluno_pessoa_id,
-            status: "ATRASO",
-            minutosAtraso: l.minutos_atraso ?? 1,
-          };
-        }
-
-        return {
-          alunoPessoaId: l.aluno_pessoa_id,
-          status: "PRESENTE",
-        };
-      });
+      if (itens.length === 0 && removerAlunoPessoaIds.length === 0) {
+        setStatus("ERRO");
+        setErroMsg("Nao ha alteracoes de frequencia para salvar.");
+        return;
+      }
 
       const r = await fetchJson<{ ok: boolean; presencas: PresencaDb[] }>(
         `/api/professor/diario-de-classe/aulas/${aula.id}/presencas`,
         {
           method: "PUT",
-          body: JSON.stringify({ itens }),
+          body: JSON.stringify({ itens, removerAlunoPessoaIds }),
         }
       );
 
@@ -736,14 +755,14 @@ export default function DiarioDeClassePage() {
 
       const reconciliado = linhas.map((l) => {
         const p = mapPres.get(l.aluno_pessoa_id);
-        return p ? mapPresencaToLinha({ aluno_pessoa_id: l.aluno_pessoa_id, nome: l.nome }, p) : l;
+        return p
+          ? mapPresencaToLinha({ aluno_pessoa_id: l.aluno_pessoa_id, nome: l.nome }, p)
+          : createLinhaPendente({ aluno_pessoa_id: l.aluno_pessoa_id, nome: l.nome });
       });
 
       setLinhas(reconciliado);
       baselineRef.current = serializeLinhas(reconciliado);
       setSalvoOk(true);
-      const presencasAtivos = alunos.filter((a) => mapPres.has(a.aluno_pessoa_id)).length;
-      setPresencasRegistradas(presencasAtivos);
       setStatus("PRONTO");
     } catch (e: unknown) {
       setStatus("ERRO");
@@ -756,6 +775,10 @@ export default function DiarioDeClassePage() {
   async function fecharChamada() {
     if (!aula) return;
     if (fechando) return;
+    if (hasLinhasPendentes(linhas)) {
+      setFecharErro("Marque todos os alunos antes de fechar a chamada.");
+      return;
+    }
     if (dirty) {
       setFecharErro("Salve as alteracoes antes de fechar a chamada.");
       return;
@@ -889,7 +912,17 @@ export default function DiarioDeClassePage() {
         : "border-amber-200 bg-amber-50 text-amber-800";
   const aulaNumeroLabel = typeof aula?.aula_numero === "number" ? `#${aula.aula_numero}` : "--";
   const dataSemana = weekdayLabelFromISO(dataAula);
-  const pendentesCount = Math.max(0, alunos.length - presencasRegistradas);
+  const presencasMarcadas = countLinhasMarcadas(linhas);
+  const possuiPendencias = hasLinhasPendentes(linhas);
+  const pendentesCount = Math.max(0, alunos.length - presencasMarcadas);
+  const podeFecharChamada =
+    Boolean(aula) &&
+    Boolean(turmaId) &&
+    alunos.length > 0 &&
+    !fechando &&
+    !aulaFechada &&
+    !dirty &&
+    !possuiPendencias;
   const blocosOrdenados = useMemo(() => {
     const blocos = plano?.plano_aula_blocos ?? [];
     return [...blocos].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
@@ -979,7 +1012,7 @@ export default function DiarioDeClassePage() {
             turmaId={turmaId}
             alunosTotal={alunos.length}
             historicoTotal={alunosHistorico.length}
-            presencasRegistradas={presencasRegistradas}
+            presencasRegistradas={presencasMarcadas}
             pendentesCount={pendentesCount}
             aulaFechada={aulaFechada}
           />
@@ -1161,10 +1194,12 @@ export default function DiarioDeClassePage() {
                                     "rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase",
                                     l.base_status === "PRESENTE"
                                       ? "bg-emerald-600 text-white"
-                                      : "bg-rose-600 text-white",
+                                      : l.base_status === "FALTA"
+                                        ? "bg-rose-600 text-white"
+                                        : "bg-amber-500 text-white",
                                   ].join(" ")}
                                 >
-                                  {l.base_status}
+                                  {l.base_status ?? "PENDENTE"}
                                 </span>
                               </div>
                             </div>
@@ -1278,6 +1313,8 @@ export default function DiarioDeClassePage() {
                   <div className="text-xs text-muted-foreground">
                     {dirty
                       ? "Alteracoes pendentes."
+                      : possuiPendencias
+                        ? "Marque todos os alunos para liberar o fechamento."
                       : salvoOk
                         ? "Presencas salvas. Falta fechar a chamada."
                         : "Sem alteracoes."}
@@ -1287,7 +1324,7 @@ export default function DiarioDeClassePage() {
                     <button
                       type="button"
                       className="rounded-full border px-5 py-2 text-sm font-medium disabled:opacity-50"
-                      disabled={!aula || !turmaId || alunos.length === 0 || fechando || aulaFechada || dirty}
+                      disabled={!podeFecharChamada}
                       onClick={() => void fecharChamada()}
                     >
                       {fechando ? "Fechando..." : aulaFechada ? "Chamada fechada" : "Fechar chamada"}
@@ -1679,7 +1716,8 @@ function TurmaPanel(props: {
       <div className="mt-1 text-lg font-semibold text-slate-900">
         {props.turma?.nome ?? props.turma?.titulo ?? (props.turmaId ? `Turma ${props.turmaId}` : "-")}
       </div>
-      <div className="mt-2 text-xs text-slate-500">Dias: {diasLabel} - Horario: {horario}</div>
+      <div className="mt-2 text-xs text-slate-500">Dias: {diasLabel}</div>
+      <div className="text-xs text-slate-500">Horario: {horario}</div>
       <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
         <span>Total alunos: {props.alunosTotal}</span>
         <span>Historico: {props.historicoTotal}</span>

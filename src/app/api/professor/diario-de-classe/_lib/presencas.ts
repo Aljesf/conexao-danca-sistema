@@ -10,9 +10,22 @@ export const zItemFrequencia = z.object({
   observacao: z.string().max(500).optional(),
 });
 
-export const zBodyFrequencia = z.object({
-  itens: z.array(zItemFrequencia).min(1).max(200),
-});
+export const zBodyFrequencia = z
+  .object({
+    itens: z.array(zItemFrequencia).max(200).default([]),
+    removerAlunoPessoaIds: z.array(z.coerce.number().int().positive()).max(200).default([]),
+  })
+  .superRefine((body, ctx) => {
+    if (body.itens.length > 0 || body.removerAlunoPessoaIds.length > 0) {
+      return;
+    }
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Envie ao menos uma presenca para salvar ou remover.",
+      path: ["itens"],
+    });
+  });
 
 export async function getAulaOrFail(params: { supabase: Supa; aulaId: number }) {
   const { data, error } = await params.supabase
@@ -29,6 +42,7 @@ export async function salvarPresencasDaAula(params: {
   supabase: Supa;
   aulaId: number;
   itens: Array<z.infer<typeof zItemFrequencia>>;
+  removerAlunoPessoaIds?: number[];
   registradoPorAuthUserId: string;
   registradoPorColaboradorId: number | null;
 }) {
@@ -46,12 +60,31 @@ export async function salvarPresencasDaAula(params: {
     registrado_em: registradoEm,
   }));
 
-  const { error: upsertErr } = await params.supabase
-    .from("turma_aula_presencas")
-    .upsert(rows, { onConflict: "aula_id,aluno_pessoa_id" });
+  const idsMantidos = new Set(rows.map((row) => row.aluno_pessoa_id));
+  const removerAlunoPessoaIds = [...new Set(params.removerAlunoPessoaIds ?? [])].filter(
+    (id) => !idsMantidos.has(id)
+  );
 
-  if (upsertErr) {
-    throw new Error(upsertErr.message);
+  if (removerAlunoPessoaIds.length > 0) {
+    const { error: deleteErr } = await params.supabase
+      .from("turma_aula_presencas")
+      .delete()
+      .eq("aula_id", params.aulaId)
+      .in("aluno_pessoa_id", removerAlunoPessoaIds);
+
+    if (deleteErr) {
+      throw new Error(deleteErr.message);
+    }
+  }
+
+  if (rows.length > 0) {
+    const { error: upsertErr } = await params.supabase
+      .from("turma_aula_presencas")
+      .upsert(rows, { onConflict: "aula_id,aluno_pessoa_id" });
+
+    if (upsertErr) {
+      throw new Error(upsertErr.message);
+    }
   }
 
   const { data, error } = await params.supabase

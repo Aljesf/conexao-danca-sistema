@@ -1,12 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { canAccessTurma, getColaboradorIdForUser, getUserOrThrow } from "../diario-de-classe/_lib/auth";
-import { getAulaOrFail, salvarPresencasDaAula, zBodyFrequencia } from "../diario-de-classe/_lib/presencas";
+import {
+  getAulaOrFail,
+  salvarPresencasDaAula,
+  zItemFrequencia,
+} from "../diario-de-classe/_lib/presencas";
 
-const zBody = z.object({
-  aulaId: z.coerce.number().int().positive(),
-  itens: zBodyFrequencia.shape.itens,
-});
+const zBody = z
+  .object({
+    aulaId: z.coerce.number().int().positive(),
+    itens: z.array(zItemFrequencia).max(200).default([]),
+    removerAlunoPessoaIds: z.array(z.coerce.number().int().positive()).max(200).default([]),
+  })
+  .superRefine((body, ctx) => {
+    if (body.itens.length > 0 || body.removerAlunoPessoaIds.length > 0) {
+      return;
+    }
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Envie ao menos uma presenca para salvar ou remover.",
+      path: ["itens"],
+    });
+  });
 
 export async function POST(request: NextRequest) {
   const auth = await getUserOrThrow(request);
@@ -45,6 +62,7 @@ export async function POST(request: NextRequest) {
       supabase,
       aulaId: body.data.aulaId,
       itens: body.data.itens,
+      removerAlunoPessoaIds: body.data.removerAlunoPessoaIds,
       registradoPorAuthUserId: user.id,
       registradoPorColaboradorId: colaboradorId,
     });
