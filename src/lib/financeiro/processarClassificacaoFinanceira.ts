@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getCentroCustoCafeId,
+  getCentroCustoEscolaId,
+  getCentroCustoIntermediacaoId,
+} from "@/lib/financeiro/centrosCusto";
 
 type CobrancaBase = {
   id: number;
@@ -12,25 +17,6 @@ type CobrancaBase = {
 type ResultadoClassificacao =
   | { ok: true; movimentosCriados: number; detalhes?: any }
   | { ok: false; error: string; details?: any };
-
-async function getCentroCustoIdPorCodigo(
-  supabase: SupabaseClient,
-  codigo: string
-): Promise<number | null> {
-  const { data, error } = await supabase
-    .from("centros_custo")
-    .select("id")
-    .eq("codigo", codigo)
-    .eq("ativo", true)
-    .maybeSingle();
-
-  if (error) {
-    console.error(`[processarClassificacaoFinanceira] erro ao buscar centro ${codigo}:`, error);
-    return null;
-  }
-
-  return (data as any)?.id ?? null;
-}
 
 async function limparRateiosAnteriores(
   supabase: SupabaseClient,
@@ -241,7 +227,7 @@ export async function processarClassificacaoFinanceira(
       return { ok: false, error: "erro_buscar_regra_parcelamento", details: regraError };
     }
 
-    const centroFin = await getCentroCustoIdPorCodigo(supabase, "FIN");
+    const centroFin = await getCentroCustoIntermediacaoId(supabase);
 
     let movimentosCriados = 0;
     let taxaAplicada = 0;
@@ -305,8 +291,8 @@ export async function processarClassificacaoFinanceira(
       return { ok: false, error: "erro_buscar_itens_venda", details: itensError };
     }
 
-    const centroEsc = await getCentroCustoIdPorCodigo(supabase, "ESC");
-    const centroCafe = await getCentroCustoIdPorCodigo(supabase, "CAF");
+    const centroEsc = await getCentroCustoEscolaId(supabase);
+    const centroCafe = await getCentroCustoCafeId(supabase);
 
     const agregados = new Map<number, number>();
     let rateioLojaAplicado = false;
@@ -377,7 +363,7 @@ export async function processarClassificacaoFinanceira(
 
   // Caso ESCOLA ou CAFE: usa centros dedicados (código ESC / CAF)
   if (origemTipo === "ESCOLA") {
-    const centroEsc = await getCentroCustoIdPorCodigo(supabase, "ESC");
+    const centroEsc = await getCentroCustoEscolaId(supabase);
     if (!centroEsc) return { ok: false, error: "centro_esc_nao_configurado" };
 
     const { error } = await supabase.from("movimento_financeiro").insert({
@@ -396,7 +382,7 @@ export async function processarClassificacaoFinanceira(
   }
 
   if (origemTipo === "CAFE") {
-    const centroCafe = await getCentroCustoIdPorCodigo(supabase, "CAF");
+    const centroCafe = await getCentroCustoCafeId(supabase);
     if (!centroCafe) return { ok: false, error: "centro_caf_nao_configurado" };
 
     const { error } = await supabase.from("movimento_financeiro").insert({

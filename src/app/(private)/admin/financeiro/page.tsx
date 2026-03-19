@@ -3,10 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
+import { FinanceiroCentroCustoDetalheModal } from "@/components/financeiro/dashboard/FinanceiroCentroCustoDetalheModal";
 import { FinanceiroMensalSection } from "@/components/financeiro/dashboard/FinanceiroMensalSection";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import { formatDateTimeISO } from "@/lib/formatters/date";
 import type { DashboardFinanceiroMensalResponse } from "@/lib/financeiro/dashboardMensalContaInterna";
+import type {
+  DashboardCentroCustoDetalhe,
+  DashboardCentroCustoDiagnostico,
+  DashboardCentroCustoResumo,
+} from "@/lib/financeiro/dashboardCentroCusto";
 import { HELP_DASHBOARD_INTELIGENTE } from "@/lib/financeiro/helpDashboardInteligente";
 
 type TendenciaValor = {
@@ -21,16 +27,6 @@ type TendenciaResumo = {
   entradas: TendenciaValor;
   saidas: TendenciaValor;
   resultado: TendenciaValor;
-};
-
-type ResumoCentro = {
-  centro_custo_id: number;
-  centro_custo_codigo: string | null;
-  centro_custo_nome: string | null;
-  receitas_30d_centavos: number;
-  despesas_30d_centavos: number;
-  resultado_30d_centavos: number;
-  tendencia_resultado: TendenciaValor;
 };
 
 type SerieFluxoItem = {
@@ -105,6 +101,17 @@ type DashboardResponse = {
 
 type DashboardMensalResponse = DashboardFinanceiroMensalResponse & {
   ok: boolean;
+  error?: string;
+};
+
+type DashboardCentroCustoResponse = {
+  ok: boolean;
+  data_base: string;
+  periodo_atual: { inicio: string; fim: string };
+  periodo_anterior: { inicio: string; fim: string };
+  resumo_por_centro: DashboardCentroCustoResumo[];
+  diagnostico: DashboardCentroCustoDiagnostico;
+  detalhe_centro: DashboardCentroCustoDetalhe | null;
   error?: string;
 };
 
@@ -198,6 +205,12 @@ export default function FinanceiroDashboardPage() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [analise, setAnalise] = useState<Analise | null>(null);
   const [mensal, setMensal] = useState<DashboardFinanceiroMensalResponse | null>(null);
+  const [centrosResumo, setCentrosResumo] = useState<DashboardCentroCustoResumo[]>([]);
+  const [centrosDiagnostico, setCentrosDiagnostico] = useState<DashboardCentroCustoDiagnostico | null>(null);
+  const [centroDetalhe, setCentroDetalhe] = useState<DashboardCentroCustoDetalhe | null>(null);
+  const [centroDetalheLoading, setCentroDetalheLoading] = useState(false);
+  const [centroDetalheError, setCentroDetalheError] = useState<string | null>(null);
+  const [centroModalOpen, setCentroModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [reanalisando, setReanalisando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +228,7 @@ export default function FinanceiroDashboardPage() {
     setError(null);
     setMensalError(null);
     try {
-      const [inteligenteResult, mensalResult] = await Promise.allSettled([
+      const [inteligenteResult, mensalResult, centrosResult] = await Promise.allSettled([
         fetch("/api/financeiro/dashboard-inteligente", { cache: "no-store" }).then(async (res) => {
           const json = (await res.json()) as DashboardResponse;
           if (!res.ok || !json?.ok) throw new Error(json?.error || "erro_dashboard");
@@ -224,6 +237,11 @@ export default function FinanceiroDashboardPage() {
         fetch("/api/financeiro/dashboard/mensal", { cache: "no-store" }).then(async (res) => {
           const json = (await res.json()) as DashboardMensalResponse;
           if (!res.ok || !json?.ok) throw new Error(json?.error || "erro_dashboard_mensal");
+          return json;
+        }),
+        fetch("/api/financeiro/dashboard-inteligente/centros-custo", { cache: "no-store" }).then(async (res) => {
+          const json = (await res.json()) as DashboardCentroCustoResponse;
+          if (!res.ok || !json?.ok) throw new Error(json?.error || "erro_dashboard_centros");
           return json;
         }),
       ]);
@@ -247,6 +265,14 @@ export default function FinanceiroDashboardPage() {
       } else {
         setMensal(null);
         setMensalError(mensagemErroMensal());
+      }
+
+      if (centrosResult.status === "fulfilled") {
+        setCentrosResumo(centrosResult.value.resumo_por_centro ?? []);
+        setCentrosDiagnostico(centrosResult.value.diagnostico ?? null);
+      } else {
+        setCentrosResumo(json.snapshot.resumo_por_centro ?? []);
+        setCentrosDiagnostico(null);
       }
     } catch {
       setError(mensagemErroDashboard());
@@ -288,10 +314,45 @@ export default function FinanceiroDashboardPage() {
         setMensal(null);
         setMensalError(mensagemErroMensal());
       }
+      try {
+        const centrosRes = await fetch("/api/financeiro/dashboard-inteligente/centros-custo", { cache: "no-store" });
+        const centrosJson = (await centrosRes.json()) as DashboardCentroCustoResponse;
+        if (!centrosRes.ok || !centrosJson?.ok) {
+          throw new Error(centrosJson?.error || "erro_recarregar_dashboard_centros");
+        }
+        setCentrosResumo(centrosJson.resumo_por_centro ?? []);
+        setCentrosDiagnostico(centrosJson.diagnostico ?? null);
+      } catch {
+        setCentrosResumo(json.snapshot.resumo_por_centro ?? []);
+        setCentrosDiagnostico(null);
+      }
     } catch {
       setError(mensagemErroDashboard());
     } finally {
       setReanalisando(false);
+    }
+  }
+
+  async function abrirCentroDetalhe(centroCustoId: number) {
+    setCentroModalOpen(true);
+    setCentroDetalheLoading(true);
+    setCentroDetalheError(null);
+
+    try {
+      const res = await fetch(
+        `/api/financeiro/dashboard-inteligente/centros-custo?centro_custo_id=${centroCustoId}`,
+        { cache: "no-store" },
+      );
+      const json = (await res.json()) as DashboardCentroCustoResponse;
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "erro_detalhe_centro");
+      }
+      setCentroDetalhe(json.detalhe_centro);
+    } catch {
+      setCentroDetalhe(null);
+      setCentroDetalheError("Nao foi possivel carregar o detalhamento deste centro de custo.");
+    } finally {
+      setCentroDetalheLoading(false);
     }
   }
 
@@ -312,7 +373,7 @@ export default function FinanceiroDashboardPage() {
   }, [analise, snapshot]);
 
   const serieChart = useMemo(() => snapshot?.serie_fluxo_caixa ?? [], [snapshot]);
-  const blocoCentros = useMemo(() => snapshot?.resumo_por_centro ?? [], [snapshot]);
+  const blocoCentros = useMemo(() => centrosResumo ?? [], [centrosResumo]);
   const tendencia = snapshot?.tendencia;
 
   const cardsSaude = [
@@ -542,21 +603,36 @@ export default function FinanceiroDashboardPage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-800">Resultado por centro de custo</h2>
-              <p className="text-sm text-slate-600">Comparacao dos ultimos 30d vs janela anterior.</p>
+              <p className="text-sm text-slate-600">
+                Caixa confirmado dos ultimos 30d por centro, comparado com a janela anterior equivalente.
+              </p>
             </div>
           </div>
+          {centrosDiagnostico?.receitas_sem_centro_resolvido_centavos ? (
+            <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {formatBRLFromCents(centrosDiagnostico.receitas_sem_centro_resolvido_centavos)} em recebimentos confirmados ainda
+              estao sem centro de custo resolvido e ficaram fora do card principal.
+            </div>
+          ) : null}
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {blocoCentros.length === 0 ? (
               <p className="text-sm text-slate-600">Nenhum centro de custo encontrado.</p>
             ) : null}
             {blocoCentros.map((c) => (
-              <div key={c.centro_custo_id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <button
+                key={c.centro_custo_id}
+                type="button"
+                className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300"
+                onClick={() => void abrirCentroDetalhe(c.centro_custo_id)}
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-800">
                       {c.centro_custo_nome || c.centro_custo_codigo || `Centro ${c.centro_custo_id}`}
                     </h3>
-                    <p className="text-xs text-slate-500">30 dias</p>
+                    <p className="text-xs text-slate-500">
+                      30 dias | {c.quantidade_receitas ?? 0} receitas | {c.quantidade_despesas ?? 0} despesas
+                    </p>
                   </div>
                   <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700">
                     {tendenciaIcon(c.tendencia_resultado.direcao)}
@@ -582,7 +658,8 @@ export default function FinanceiroDashboardPage() {
                     <span>{variacaoTexto(c.tendencia_resultado)}</span>
                   </div>
                 </div>
-              </div>
+                <p className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-500">Clique para ver composicao</p>
+              </button>
             ))}
           </div>
         </div>
@@ -634,6 +711,20 @@ export default function FinanceiroDashboardPage() {
           </div>
         </div>
       ) : null}
+
+      <FinanceiroCentroCustoDetalheModal
+        open={centroModalOpen}
+        detalhe={centroDetalhe}
+        loading={centroDetalheLoading}
+        error={centroDetalheError}
+        onOpenChange={(open) => {
+          setCentroModalOpen(open);
+          if (!open) {
+            setCentroDetalhe(null);
+            setCentroDetalheError(null);
+          }
+        }}
+      />
     </div>
   );
 }

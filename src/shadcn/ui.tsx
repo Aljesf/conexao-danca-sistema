@@ -65,9 +65,13 @@ export function DialogTrigger({ asChild, children }: DialogTriggerProps) {
 type DialogContentProps = {
   children: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
 };
 
-export function DialogContent({ children, className }: DialogContentProps) {
+export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(function DialogContent(
+  { children, className, style },
+  ref,
+) {
   const { open, setOpen } = useDialogContext();
   const [mounted, setMounted] = useState(false);
 
@@ -79,8 +83,10 @@ export function DialogContent({ children, className }: DialogContentProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
       <div
+        ref={ref}
         role="dialog"
         aria-modal="true"
+        style={style}
         className={cn(
           "relative z-10 w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl",
           className,
@@ -92,7 +98,9 @@ export function DialogContent({ children, className }: DialogContentProps) {
     </div>,
     document.body,
   );
-}
+});
+
+DialogContent.displayName = "DialogContent";
 
 export function DialogHeader({ children }: { children: React.ReactNode }) {
   return <div className="space-y-1 pb-4">{children}</div>;

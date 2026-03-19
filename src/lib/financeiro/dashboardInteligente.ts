@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { analisarSnapshotGPT } from "@/lib/ia/financeiro/analisarSnapshot";
+import { calcularDashboardCentroCusto } from "@/lib/financeiro/dashboardCentroCusto";
 import { isMissingExpurgoColumnError, logExpurgoMigrationWarning } from "@/lib/financeiro/expurgo-compat";
 
 export type TendenciaValor = {
@@ -228,10 +229,6 @@ function filtrarPorJanela(
   });
 }
 
-function filtrarPorCentro(movs: any[], centroId: number): any[] {
-  return movs.filter((m) => Number(m?.centro_custo_id) === centroId);
-}
-
 function diffDias(dataBase: string, dataComparacao: string): number {
   const base = new Date(`${dataBase}T00:00:00Z`);
   const comp = new Date(`${dataComparacao}T00:00:00Z`);
@@ -449,26 +446,6 @@ function calcularRecorrenciaReceita(
   };
 }
 
-async function carregarCentrosAtivos(
-  supabase: SupabaseClient
-): Promise<Array<{ id: number; codigo: string | null; nome: string | null }>> {
-  const { data, error } = await supabase
-    .from("centros_custo")
-    .select("id, codigo, nome, ativo")
-    .eq("ativo", true);
-
-  if (error) {
-    console.error("[dashboardInteligente] Erro ao buscar centros_custo:", error);
-    return [];
-  }
-
-  return (data || []).map((c: any) => ({
-    id: Number(c.id),
-    codigo: c.codigo ?? null,
-    nome: c.nome ?? null,
-  }));
-}
-
 export async function gerarSnapshot(
   supabase: SupabaseClient,
   opts?: { dataBase?: string }
@@ -645,34 +622,8 @@ export async function gerarSnapshot(
     somaAnterior.entradas - somaAnterior.saidas
   );
 
-  // Resumo por centro
-  const centros = await carregarCentrosAtivos(supabase);
-  const resumo_por_centro: ResumoCentro[] = centros.map((c) => {
-    const movCentroAtual = filtrarPorJanela(
-      filtrarPorCentro(movimentos || [], c.id),
-      inicioJanela,
-      hoje
-    );
-    const movCentroAnterior = filtrarPorJanela(
-      filtrarPorCentro(movimentos || [], c.id),
-      inicioJanelaAnterior,
-      fimJanelaAnterior
-    );
-    const somaAtualCentro = somaMovimentos(movCentroAtual);
-    const somaAnteriorCentro = somaMovimentos(movCentroAnterior);
-    const resultadoAtual = somaAtualCentro.entradas - somaAtualCentro.saidas;
-    const resultadoAnterior = somaAnteriorCentro.entradas - somaAnteriorCentro.saidas;
-
-    return {
-      centro_custo_id: c.id,
-      centro_custo_codigo: c.codigo ?? null,
-      centro_custo_nome: c.nome ?? null,
-      receitas_30d_centavos: somaAtualCentro.entradas,
-      despesas_30d_centavos: somaAtualCentro.saidas,
-      resultado_30d_centavos: resultadoAtual,
-      tendencia_resultado: variacao(resultadoAtual, resultadoAnterior),
-    };
-  });
+  const centroCustoDashboard = await calcularDashboardCentroCusto(supabase, { dataBase: hoje });
+  const resumo_por_centro: ResumoCentro[] = centroCustoDashboard.resumo_por_centro;
 
   // Serie de fluxo de caixa (historico + projecao)
   const mapHistorico = new Map<string, { entradas: number; saidas: number }>();
