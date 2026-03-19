@@ -70,9 +70,34 @@ export function CobrancaAuditDetail({ detalhe, loading = false, error = null }: 
           value={`${detalhe.cobranca.status_interno ?? "--"} | ${detalhe.cobranca.status_cobranca ?? "--"}`}
         />
         <Linha label="Vencimento" value={formatDateISO(detalhe.cobranca.vencimento)} />
+        <Linha label="Vencimento original" value={formatDateISO(detalhe.cobranca.vencimentoOriginal)} />
+        <Linha
+          label="Ultimo ajuste"
+          value={
+            detalhe.cobranca.vencimentoAjustadoEm
+              ? `${formatDateTimeISO(detalhe.cobranca.vencimentoAjustadoEm)}${detalhe.cobranca.vencimentoAjusteMotivo ? ` | ${detalhe.cobranca.vencimentoAjusteMotivo}` : ""}`
+              : "Sem ajuste manual"
+          }
+        />
         <Linha label="Competencia" value={detalhe.cobranca.competencia_ano_mes ?? "Sem competencia"} />
         <Linha label="Valor total" value={formatBRLFromCents(detalhe.cobranca.valor_centavos)} />
         <Linha label="Saldo aberto" value={formatBRLFromCents(detalhe.cobranca.valor_aberto_centavos)} />
+        <Linha
+          label="Cancelamento"
+          value={
+            detalhe.cobranca.canceladaEm || detalhe.cobranca.cancelamentoTipo || detalhe.cobranca.cancelamentoMotivo
+              ? `${formatDateTimeISO(detalhe.cobranca.canceladaEm)}${detalhe.cobranca.cancelamentoTipo ? ` | ${detalhe.cobranca.cancelamentoTipo}` : ""}${detalhe.cobranca.cancelamentoMotivo ? ` | ${detalhe.cobranca.cancelamentoMotivo}` : ""}`
+              : "Titulo ativo"
+          }
+        />
+        <Linha
+          label="Matricula relacionada"
+          value={
+            detalhe.cobranca.matriculaId
+              ? `#${detalhe.cobranca.matriculaId}${detalhe.cobranca.matriculaStatus ? ` | ${detalhe.cobranca.matriculaStatus}` : ""}${detalhe.cobranca.matriculaCancelamentoTipo ? ` | ${detalhe.cobranca.matriculaCancelamentoTipo}` : ""}`
+              : "Nao identificada"
+          }
+        />
       </section>
 
       {detalhe.cobranca.origem_badge_label || detalhe.cobranca.migracao_conta_interna_observacao ? (
@@ -147,11 +172,11 @@ export function CobrancaAuditDetail({ detalhe, loading = false, error = null }: 
             value={detalhe.cobranca.contaInternaId ? `#${detalhe.cobranca.contaInternaId}` : "Nao associada"}
           />
           <Linha label="Aluno" value={detalhe.cobranca.alunoNome ?? "Nao identificado"} />
-          <Linha
-            label="Matricula"
-            value={detalhe.cobranca.matriculaId ? `#${detalhe.cobranca.matriculaId}` : "Nao identificada"}
-          />
+          <Linha label="Matricula" value={detalhe.cobranca.matriculaId ? `#${detalhe.cobranca.matriculaId}` : "Nao identificada"} />
+          <Linha label="Status da matricula" value={detalhe.cobranca.matriculaStatus ?? "Sem status"} />
+          <Linha label="Cancelamento da matricula" value={detalhe.cobranca.matriculaCancelamentoTipo ?? "Sem classificacao"} />
           <Linha label="Status migracao" value={detalhe.cobranca.migracaoContaInternaStatus ?? "Sem status"} />
+          <Linha label="Cancelada por" value={detalhe.cobranca.canceladaPor ?? "Sem usuario"} />
           <Linha label="Criada em" value={formatDateTimeISO(detalhe.cobranca.created_at)} />
           <Linha label="Atualizada em" value={formatDateTimeISO(detalhe.cobranca.updated_at)} />
         </div>

@@ -112,6 +112,16 @@ type ResumoFinanceiroResponse = {
     matriculaId: number | null;
     origemLabel: string;
     migracaoContaInternaStatus: string | null;
+    vencimentoOriginal: string | null;
+    vencimentoAjustadoEm: string | null;
+    vencimentoAjustadoPor: string | null;
+    vencimentoAjusteMotivo: string | null;
+    canceladaEm: string | null;
+    canceladaPor: string | null;
+    cancelamentoMotivo: string | null;
+    cancelamentoTipo: string | null;
+    matriculaStatus: string | null;
+    matriculaCancelamentoTipo: string | null;
   }>;
   faturas_credito_conexao: Array<{
     id: number;
@@ -301,6 +311,16 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       matriculaId: item.matriculaId,
       origemLabel: item.origemLabel,
       migracaoContaInternaStatus: item.migracaoContaInternaStatus,
+      vencimentoOriginal: item.vencimentoOriginal,
+      vencimentoAjustadoEm: item.vencimentoAjustadoEm,
+      vencimentoAjustadoPor: item.vencimentoAjustadoPor,
+      vencimentoAjusteMotivo: item.vencimentoAjusteMotivo,
+      canceladaEm: item.canceladaEm,
+      canceladaPor: item.canceladaPor,
+      cancelamentoMotivo: item.cancelamentoMotivo,
+      cancelamentoTipo: item.cancelamentoTipo,
+      matriculaStatus: item.matriculaStatus,
+      matriculaCancelamentoTipo: item.matriculaCancelamentoTipo,
     })),
     faturas_credito_conexao: faturas,
     agregados: {

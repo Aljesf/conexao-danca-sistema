@@ -122,6 +122,27 @@ export interface CanonicalOriginPayloadFields {
   migracaoContaInternaStatus: string | null;
 }
 
+export interface CobrancaAjusteCancelamentoPayloadFields {
+  vencimento_original: string | null;
+  vencimento_ajustado_em: string | null;
+  vencimento_ajustado_por: string | null;
+  vencimento_ajuste_motivo: string | null;
+  cancelada_em: string | null;
+  cancelada_por: string | null;
+  cancelamento_motivo: string | null;
+  cancelamento_tipo: string | null;
+  vencimentoOriginal: string | null;
+  vencimentoAjustadoEm: string | null;
+  vencimentoAjustadoPor: string | null;
+  vencimentoAjusteMotivo: string | null;
+  canceladaEm: string | null;
+  canceladaPor: string | null;
+  cancelamentoMotivo: string | null;
+  cancelamentoTipo: string | null;
+  matriculaStatus: string | null;
+  matriculaCancelamentoTipo: string | null;
+}
+
 type CobrancaListaItemBase = {
   cobranca_id: number;
   pessoa_id: number | null;
@@ -156,7 +177,9 @@ type CobrancaListaItemBase = {
   criticidade_inconsistencia: number;
 };
 
-export type CobrancaListaItem = CobrancaListaItemBase & CanonicalOriginPayloadFields;
+export type CobrancaListaItem = CobrancaListaItemBase &
+  CanonicalOriginPayloadFields &
+  CobrancaAjusteCancelamentoPayloadFields;
 
 export interface DetalheDocumentoVinculado {
   tipo: string;
@@ -189,7 +212,8 @@ export interface DetalheCobrancaAuditoria {
     origem_id: number | null;
     created_at: string | null;
     updated_at: string | null;
-  } & CanonicalOriginPayloadFields;
+  } & CanonicalOriginPayloadFields &
+    CobrancaAjusteCancelamentoPayloadFields;
   contexto_principal: ContextoPrincipal;
   origem_detalhada: OrigemDetalhada;
   origem_label: string;
@@ -219,6 +243,10 @@ export interface PerdaCancelamentoCobrancaItem {
   valor_centavos: number;
   saldo_aberto_centavos: number;
   status_cobranca: string | null;
+  cancelada_em: string | null;
+  cancelamento_tipo: string | null;
+  cancelamento_motivo: string | null;
+  origem_evento: "ABERTA" | "CANCELADA";
 }
 
 export interface PerdaCancelamentoItem {
@@ -237,6 +265,13 @@ export interface PerdaCancelamentoItem {
   cobranca_id_principal: number | null;
   cobrancas_relacionadas: PerdaCancelamentoCobrancaItem[];
   diagnostico_em_validacao: boolean;
+  motivoEntradaPerda: string;
+  origemSemanticaPerda: string;
+  cancelamentoReconhecidoPor: string;
+  possuiCobrancaCancelada: boolean;
+  possuiSaldoAberto: boolean;
+  possuiValorPotencial: boolean;
+  causaExclusaoAnterior: string | null;
 }
 
 export interface ContasReceberAuditoriaPayload {
@@ -333,6 +368,15 @@ type CobrancaRow = CobrancaBaseRow & {
   origem_label?: string | null;
   migracao_conta_interna_status?: string | null;
   migracao_conta_interna_observacao?: string | null;
+  vencimento_original?: string | null;
+  vencimento_ajustado_em?: string | null;
+  vencimento_ajustado_por?: string | null;
+  vencimento_ajuste_motivo?: string | null;
+  cancelada_por?: string | null;
+  cancelamento_motivo?: string | null;
+  cancelamento_tipo?: string | null;
+  cancelada_motivo?: string | null;
+  cancelada_por_user_id?: string | null;
   expurgada?: boolean | null;
   expurgada_em?: string | null;
   expurgada_por?: string | null;
@@ -438,8 +482,16 @@ function normalizeDate(value: unknown): string | null {
   return date.length >= 10 ? date.slice(0, 10) : date;
 }
 
+function resolveCanceladaPor(cobranca: CobrancaRow | undefined): string | null {
+  return textOrNull(cobranca?.cancelada_por) ?? textOrNull(cobranca?.cancelada_por_user_id);
+}
+
+function resolveCancelamentoMotivo(cobranca: CobrancaRow | undefined): string | null {
+  return textOrNull(cobranca?.cancelamento_motivo) ?? textOrNull(cobranca?.cancelada_motivo);
+}
+
 const COBRANCA_SELECT_CANONICAL =
-  "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes,origem_agrupador_tipo,origem_agrupador_id,origem_item_tipo,origem_item_id,conta_interna_id,origem_label,migracao_conta_interna_status,migracao_conta_interna_observacao";
+  "id,pessoa_id,descricao,valor_centavos,vencimento,status,created_at,updated_at,centro_custo_id,origem_tipo,origem_subtipo,origem_id,competencia_ano_mes,origem_agrupador_tipo,origem_agrupador_id,origem_item_tipo,origem_item_id,conta_interna_id,origem_label,migracao_conta_interna_status,migracao_conta_interna_observacao,vencimento_original,vencimento_ajustado_em,vencimento_ajustado_por,vencimento_ajuste_motivo,cancelada_em,cancelada_por,cancelada_por_user_id,cancelamento_motivo,cancelada_motivo,cancelamento_tipo";
 
 const COBRANCA_SELECT_CANONICAL_WITH_EXPURGO =
   `${COBRANCA_SELECT_CANONICAL},expurgada,expurgada_em,expurgada_por,expurgo_motivo`;
@@ -664,6 +716,51 @@ async function carregarMatriculasPerdas(supabase: SupabaseClient): Promise<Matri
   return (canonicalResult.data ?? []) as MatriculaRow[];
 }
 
+async function carregarCobrancasCanceladasPerdas(
+  supabase: SupabaseClient,
+  matriculaIds: number[],
+): Promise<CobrancaRow[]> {
+  return selectMany<CobrancaRow>(async (chunk) => {
+    const canonicalResult = await supabase
+      .from("cobrancas")
+      .select(COBRANCA_SELECT_CANONICAL_WITH_EXPURGO)
+      .eq("origem_tipo", "MATRICULA")
+      .eq("status", "CANCELADA")
+      .in("origem_id", chunk);
+
+    if (canonicalResult.error && isMissingCanonicalSchemaError(canonicalResult.error)) {
+      const legacyResult = await supabase
+        .from("cobrancas")
+        .select("id,origem_id,vencimento,valor_centavos,status,cancelada_em,cancelada_motivo")
+        .eq("origem_tipo", "MATRICULA")
+        .eq("status", "CANCELADA")
+        .in("origem_id", chunk);
+
+      if (legacyResult.error) {
+        throw new Error(`erro_carregar_cobrancas_canceladas_perdas: ${legacyResult.error.message}`);
+      }
+
+      return ((legacyResult.data ?? []) as CobrancaRow[]).map((row) => ({
+        ...row,
+        cancelamento_tipo: null,
+        cancelamento_motivo: null,
+        cancelada_por: null,
+        cancelada_por_user_id: null,
+        expurgada: false,
+        expurgada_em: null,
+        expurgada_por: null,
+        expurgo_motivo: null,
+      }));
+    }
+
+    if (canonicalResult.error) {
+      throw new Error(`erro_carregar_cobrancas_canceladas_perdas: ${canonicalResult.error.message}`);
+    }
+
+    return (canonicalResult.data ?? []) as CobrancaRow[];
+  }, matriculaIds);
+}
+
 function safeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "erro_desconhecido";
 }
@@ -760,6 +857,15 @@ async function carregarCobrancasPorIds(
       origem_label: null,
       migracao_conta_interna_status: null,
       migracao_conta_interna_observacao: null,
+      vencimento_original: null,
+      vencimento_ajustado_em: null,
+      vencimento_ajustado_por: null,
+      vencimento_ajuste_motivo: null,
+      cancelada_por: null,
+      cancelamento_motivo: null,
+      cancelamento_tipo: null,
+      cancelada_motivo: null,
+      cancelada_por_user_id: null,
       expurgada: false,
       expurgada_em: null,
       expurgada_por: null,
@@ -1140,6 +1246,13 @@ function buildTrilhaAuditavel(
   lancamentos: LancamentoRow[],
 ): TrilhaAuditavelItem[] {
   const trilha: TrilhaAuditavelItem[] = [];
+  const vencimentoOriginal = normalizeDate(cobranca?.vencimento_original);
+  const vencimentoAjustadoEm = textOrNull(cobranca?.vencimento_ajustado_em);
+  const vencimentoAjusteMotivo = textOrNull(cobranca?.vencimento_ajuste_motivo);
+  const canceladaEm = textOrNull(cobranca?.cancelada_em);
+  const canceladaPor = resolveCanceladaPor(cobranca);
+  const cancelamentoMotivo = resolveCancelamentoMotivo(cobranca);
+  const cancelamentoTipo = textOrNull(cobranca?.cancelamento_tipo);
 
   trilha.push({ titulo: "Pessoa devedora", valor: item.pessoa_nome });
   trilha.push({ titulo: "Contexto principal", valor: item.contexto_principal });
@@ -1165,6 +1278,28 @@ function buildTrilhaAuditavel(
     titulo: "Situação financeira",
     valor: `${textOrNull(item.status_interno) ?? textOrNull(item.status_cobranca) ?? "Sem status"} | aberto ${item.valor_aberto_centavos / 100}`,
   });
+
+  if (vencimentoOriginal) {
+    trilha.push({ titulo: "Vencimento original", valor: vencimentoOriginal });
+  }
+
+  if (item.vencimento) {
+    trilha.push({ titulo: "Vencimento atual", valor: item.vencimento });
+  }
+
+  if (vencimentoAjustadoEm || vencimentoAjusteMotivo) {
+    trilha.push({
+      titulo: "Ultimo ajuste de vencimento",
+      valor: `${vencimentoAjustadoEm ?? "Sem data"}${vencimentoAjusteMotivo ? ` | ${vencimentoAjusteMotivo}` : ""}`,
+    });
+  }
+
+  if (canceladaEm || cancelamentoTipo || cancelamentoMotivo) {
+    trilha.push({
+      titulo: "Cancelamento da cobranca",
+      valor: `${canceladaEm ?? "Sem data"}${cancelamentoTipo ? ` | ${cancelamentoTipo}` : ""}${cancelamentoMotivo ? ` | ${cancelamentoMotivo}` : ""}${canceladaPor ? ` | por ${canceladaPor}` : ""}`,
+    });
+  }
 
   if (item.centro_custo_agrupador_nome) {
     trilha.push({
@@ -1194,6 +1329,12 @@ function buildTrilhaAuditavel(
       titulo: "Aluno / matrícula",
       valor: `Matrícula #${matricula.id} | responsável financeiro #${matricula.responsavel_financeiro_id ?? "--"}`,
     });
+    if (textOrNull(matricula.status) || textOrNull(matricula.cancelamento_tipo)) {
+      trilha.push({
+        titulo: "Status da matrícula",
+        valor: `${textOrNull(matricula.status) ?? "Sem status"}${textOrNull(matricula.cancelamento_tipo) ? ` | ${textOrNull(matricula.cancelamento_tipo)}` : ""}`,
+      });
+    }
     if (turma) {
       trilha.push({
         titulo: "Turma / vínculo",
@@ -1293,6 +1434,24 @@ function buildDetalhe(item: CobrancaListaItem, maps: DataMaps): DetalheCobrancaA
       origem_id: item.origem_id,
       created_at: textOrNull(cobranca?.created_at),
       updated_at: textOrNull(cobranca?.updated_at),
+      vencimento_original: normalizeDate(cobranca?.vencimento_original),
+      vencimento_ajustado_em: textOrNull(cobranca?.vencimento_ajustado_em),
+      vencimento_ajustado_por: textOrNull(cobranca?.vencimento_ajustado_por),
+      vencimento_ajuste_motivo: textOrNull(cobranca?.vencimento_ajuste_motivo),
+      cancelada_em: textOrNull(cobranca?.cancelada_em),
+      cancelada_por: resolveCanceladaPor(cobranca),
+      cancelamento_motivo: resolveCancelamentoMotivo(cobranca),
+      cancelamento_tipo: textOrNull(cobranca?.cancelamento_tipo),
+      vencimentoOriginal: normalizeDate(cobranca?.vencimento_original),
+      vencimentoAjustadoEm: textOrNull(cobranca?.vencimento_ajustado_em),
+      vencimentoAjustadoPor: textOrNull(cobranca?.vencimento_ajustado_por),
+      vencimentoAjusteMotivo: textOrNull(cobranca?.vencimento_ajuste_motivo),
+      canceladaEm: textOrNull(cobranca?.cancelada_em),
+      canceladaPor: resolveCanceladaPor(cobranca),
+      cancelamentoMotivo: resolveCancelamentoMotivo(cobranca),
+      cancelamentoTipo: textOrNull(cobranca?.cancelamento_tipo),
+      matriculaStatus: textOrNull(matricula?.status),
+      matriculaCancelamentoTipo: textOrNull(matricula?.cancelamento_tipo),
       origem_agrupador_tipo: item.origem_agrupador_tipo,
       origem_agrupador_id: item.origem_agrupador_id,
       origem_item_tipo: item.origem_item_tipo,
@@ -1376,6 +1535,24 @@ function buildFallbackDetalhe(
       origem_id: item.origem_id,
       created_at: textOrNull(cobranca?.created_at),
       updated_at: textOrNull(cobranca?.updated_at),
+      vencimento_original: normalizeDate(cobranca?.vencimento_original),
+      vencimento_ajustado_em: textOrNull(cobranca?.vencimento_ajustado_em),
+      vencimento_ajustado_por: textOrNull(cobranca?.vencimento_ajustado_por),
+      vencimento_ajuste_motivo: textOrNull(cobranca?.vencimento_ajuste_motivo),
+      cancelada_em: textOrNull(cobranca?.cancelada_em),
+      cancelada_por: resolveCanceladaPor(cobranca),
+      cancelamento_motivo: resolveCancelamentoMotivo(cobranca),
+      cancelamento_tipo: textOrNull(cobranca?.cancelamento_tipo),
+      vencimentoOriginal: normalizeDate(cobranca?.vencimento_original),
+      vencimentoAjustadoEm: textOrNull(cobranca?.vencimento_ajustado_em),
+      vencimentoAjustadoPor: textOrNull(cobranca?.vencimento_ajustado_por),
+      vencimentoAjusteMotivo: textOrNull(cobranca?.vencimento_ajuste_motivo),
+      canceladaEm: textOrNull(cobranca?.cancelada_em),
+      canceladaPor: resolveCanceladaPor(cobranca),
+      cancelamentoMotivo: resolveCancelamentoMotivo(cobranca),
+      cancelamentoTipo: textOrNull(cobranca?.cancelamento_tipo),
+      matriculaStatus: null,
+      matriculaCancelamentoTipo: null,
       origem_agrupador_tipo: item.origem_agrupador_tipo,
       origem_agrupador_id: item.origem_agrupador_id,
       origem_item_tipo: item.origem_item_tipo,
@@ -1421,6 +1598,18 @@ function buildFallbackDetalhe(
       { titulo: "Origem principal", valor: item.origem_label },
       { titulo: "Origem tecnica", valor: item.origem_tecnica ?? "Sem origem tecnica" },
       { titulo: "Status migracao", valor: item.migracaoContaInternaStatus ?? "AMBIGUO" },
+      { titulo: "Vencimento atual", valor: item.vencimento ?? "Sem vencimento" },
+      {
+        titulo: "Vencimento original",
+        valor: item.vencimentoOriginal ?? "Sem historico de ajuste",
+      },
+      {
+        titulo: "Cancelamento",
+        valor:
+          item.cancelamentoTipo || item.cancelamentoMotivo || item.canceladaEm
+            ? `${item.canceladaEm ?? "Sem data"}${item.cancelamentoTipo ? ` | ${item.cancelamentoTipo}` : ""}${item.cancelamentoMotivo ? ` | ${item.cancelamentoMotivo}` : ""}`
+            : "Cobranca ativa",
+      },
       {
         titulo: "Observacao",
         valor: error ? `Detalhe parcial por fallback: ${safeErrorMessage(error)}` : "Detalhe legado seguro.",
@@ -2579,6 +2768,24 @@ function buildItem(baseRow: FlatRow, maps: DataMaps): CobrancaListaItem {
     quantidade_recebimentos: recebimentos.length,
     tipo_inconsistencia: null,
     criticidade_inconsistencia: 0,
+    vencimento_original: normalizeDate(cobranca?.vencimento_original),
+    vencimento_ajustado_em: textOrNull(cobranca?.vencimento_ajustado_em),
+    vencimento_ajustado_por: textOrNull(cobranca?.vencimento_ajustado_por),
+    vencimento_ajuste_motivo: textOrNull(cobranca?.vencimento_ajuste_motivo),
+    cancelada_em: textOrNull(cobranca?.cancelada_em),
+    cancelada_por: resolveCanceladaPor(cobranca),
+    cancelamento_motivo: resolveCancelamentoMotivo(cobranca),
+    cancelamento_tipo: textOrNull(cobranca?.cancelamento_tipo),
+    vencimentoOriginal: normalizeDate(cobranca?.vencimento_original),
+    vencimentoAjustadoEm: textOrNull(cobranca?.vencimento_ajustado_em),
+    vencimentoAjustadoPor: textOrNull(cobranca?.vencimento_ajustado_por),
+    vencimentoAjusteMotivo: textOrNull(cobranca?.vencimento_ajuste_motivo),
+    canceladaEm: textOrNull(cobranca?.cancelada_em),
+    canceladaPor: resolveCanceladaPor(cobranca),
+    cancelamentoMotivo: resolveCancelamentoMotivo(cobranca),
+    cancelamentoTipo: textOrNull(cobranca?.cancelamento_tipo),
+    matriculaStatus: textOrNull(matricula?.status),
+    matriculaCancelamentoTipo: textOrNull(matricula?.cancelamento_tipo),
     origem_agrupador_tipo: origemAgrupadorTipoResolvido,
     origem_agrupador_id: origemAgrupadorId,
     origem_item_tipo: origemItemTipoResolvido,
@@ -2688,6 +2895,24 @@ function buildFallbackItem(
     quantidade_recebimentos: 0,
     tipo_inconsistencia: error ? `Enriquecimento parcial: ${safeErrorMessage(error)}` : null,
     criticidade_inconsistencia: error ? 50 + baseRow.dias_atraso : 0,
+    vencimento_original: normalizeDate(cobranca?.vencimento_original),
+    vencimento_ajustado_em: textOrNull(cobranca?.vencimento_ajustado_em),
+    vencimento_ajustado_por: textOrNull(cobranca?.vencimento_ajustado_por),
+    vencimento_ajuste_motivo: textOrNull(cobranca?.vencimento_ajuste_motivo),
+    cancelada_em: textOrNull(cobranca?.cancelada_em),
+    cancelada_por: resolveCanceladaPor(cobranca),
+    cancelamento_motivo: resolveCancelamentoMotivo(cobranca),
+    cancelamento_tipo: textOrNull(cobranca?.cancelamento_tipo),
+    vencimentoOriginal: normalizeDate(cobranca?.vencimento_original),
+    vencimentoAjustadoEm: textOrNull(cobranca?.vencimento_ajustado_em),
+    vencimentoAjustadoPor: textOrNull(cobranca?.vencimento_ajustado_por),
+    vencimentoAjusteMotivo: textOrNull(cobranca?.vencimento_ajuste_motivo),
+    canceladaEm: textOrNull(cobranca?.cancelada_em),
+    canceladaPor: resolveCanceladaPor(cobranca),
+    cancelamentoMotivo: resolveCancelamentoMotivo(cobranca),
+    cancelamentoTipo: textOrNull(cobranca?.cancelamento_tipo),
+    matriculaStatus: null,
+    matriculaCancelamentoTipo: null,
     origem_agrupador_tipo: textOrNull(cobranca?.origem_agrupador_tipo) ?? display.origemAgrupadorTipo,
     origem_agrupador_id: numberOrNull(cobranca?.origem_agrupador_id),
     origem_item_tipo: textOrNull(cobranca?.origem_item_tipo) ?? display.origemItemTipo,
@@ -2826,11 +3051,149 @@ export async function listarCobrancasEmAbertoPorPessoa(
   });
 }
 
-function statusFinanceiroPerda(cobrancas: PerdaCancelamentoCobrancaItem[], valorAbertoCentavos: number): string {
-  if (cobrancas.length === 0) return "Sem saldo aberto";
-  if (valorAbertoCentavos <= 0) return "Sem saldo aberto";
-  if (cobrancas.length === 1) return "1 titulo em aberto";
-  return `${cobrancas.length} titulos em aberto`;
+type PerdaElegibilidade = {
+  elegivel: boolean;
+  motivoEntradaPerda: string;
+  origemSemanticaPerda: string;
+  cancelamentoReconhecidoPor: string;
+  diagnosticoEmValidacao: boolean;
+  cancelamentoTipo: string | null;
+  geraPerdaFinanceira: boolean;
+  causaExclusaoAnterior: string | null;
+};
+
+const CANCELAMENTO_TIPOS_SEM_PERDA = new Set([
+  "AJUSTE_SISTEMA",
+  "DUPLICIDADE",
+  "TRANSFERENCIA",
+  "TROCA_TURMA",
+]);
+
+function normalizePerdaTexto(value: string | null | undefined): string {
+  const text = textOrNull(value);
+  if (!text) return "";
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
+function motivoLegadoParecePerdaReal(value: string | null | undefined): boolean {
+  const normalized = normalizePerdaTexto(value);
+  return (
+    normalized.includes("DESIST") ||
+    normalized.includes("ABANDON") ||
+    normalized.includes("EVAS") ||
+    normalized.includes("SEM INTERESSE") ||
+    normalized.includes("DISTANCIA") ||
+    normalized.includes("NAO QUER MAIS") ||
+    normalized.includes("PAROU")
+  );
+}
+
+function cobrancaCanceladaPorMatricula(cobranca: PerdaCancelamentoCobrancaItem): boolean {
+  if (upper(cobranca.cancelamento_tipo) === "CANCELAMENTO_POR_MATRICULA_CANCELADA") {
+    return true;
+  }
+
+  const normalized = normalizePerdaTexto(cobranca.cancelamento_motivo);
+  return normalized.includes("MATRICULA CANCELADA") || normalized.includes("TITULO RESIDUAL");
+}
+
+function resolvePerdaElegibilidade(params: {
+  matriculaCancelamento: ReturnType<typeof resolveCancelamentoSemantico>;
+  motivoMatricula: string | null;
+  cobrancasCanceladas: PerdaCancelamentoCobrancaItem[];
+}): PerdaElegibilidade {
+  const { matriculaCancelamento, motivoMatricula, cobrancasCanceladas } = params;
+
+  if (
+    matriculaCancelamento.cancelamentoTipo === "DESISTENCIA_REAL" &&
+    matriculaCancelamento.geraPerdaFinanceira
+  ) {
+    return {
+      elegivel: true,
+      motivoEntradaPerda: "Entrou por matricula cancelada com desistencia real",
+      origemSemanticaPerda: "MATRICULA_DESISTENCIA_REAL",
+      cancelamentoReconhecidoPor:
+        matriculaCancelamento.fonte === "EXPLICITO" ? "MATRICULA_CANCELAMENTO_TIPO" : "MATRICULA_MOTIVO_LEGADO",
+      diagnosticoEmValidacao: matriculaCancelamento.fonte !== "EXPLICITO",
+      cancelamentoTipo: matriculaCancelamento.cancelamentoTipo,
+      geraPerdaFinanceira: matriculaCancelamento.geraPerdaFinanceira,
+      causaExclusaoAnterior: "Filtro antigo exigia cancelamento_tipo = DESISTENCIA_REAL e gera_perda_financeira = true.",
+    };
+  }
+
+  if (CANCELAMENTO_TIPOS_SEM_PERDA.has(matriculaCancelamento.cancelamentoTipo)) {
+    return {
+      elegivel: false,
+      motivoEntradaPerda: "",
+      origemSemanticaPerda: "NAO_ELEGIVEL",
+      cancelamentoReconhecidoPor: "MATRICULA_EXCLUIDA",
+      diagnosticoEmValidacao: false,
+      cancelamentoTipo: matriculaCancelamento.cancelamentoTipo,
+      geraPerdaFinanceira: false,
+      causaExclusaoAnterior: `Cancelamento classificado como ${matriculaCancelamento.cancelamentoTipo}.`,
+    };
+  }
+
+  if (motivoLegadoParecePerdaReal(motivoMatricula)) {
+    return {
+      elegivel: true,
+      motivoEntradaPerda: "Entrou por motivo legado compativel com evasao",
+      origemSemanticaPerda: "MOTIVO_LEGADO_EVASAO",
+      cancelamentoReconhecidoPor: "MATRICULA_MOTIVO_LEGADO",
+      diagnosticoEmValidacao: true,
+      cancelamentoTipo: "DESISTENCIA_REAL",
+      geraPerdaFinanceira: true,
+      causaExclusaoAnterior: "Filtro antigo dependia de campos canonicos preenchidos na matricula.",
+    };
+  }
+
+  const cobrancaManual = cobrancasCanceladas.find(cobrancaCanceladaPorMatricula);
+  if (cobrancaManual) {
+    return {
+      elegivel: true,
+      motivoEntradaPerda: "Entrou por cobranca cancelada vinculada a matricula cancelada",
+      origemSemanticaPerda: "COBRANCA_CANCELADA_MANUAL",
+      cancelamentoReconhecidoPor: upper(cobrancaManual.cancelamento_tipo)
+        ? "COBRANCA_CANCELAMENTO_TIPO"
+        : "COBRANCA_MOTIVO_LEGADO",
+      diagnosticoEmValidacao: true,
+      cancelamentoTipo: "DESISTENCIA_REAL",
+      geraPerdaFinanceira: true,
+      causaExclusaoAnterior: "Filtro antigo ignorava cobrancas canceladas manualmente no financeiro.",
+    };
+  }
+
+  return {
+    elegivel: false,
+    motivoEntradaPerda: "",
+    origemSemanticaPerda: "NAO_ELEGIVEL",
+    cancelamentoReconhecidoPor: "NAO_RECONHECIDO",
+    diagnosticoEmValidacao: true,
+    cancelamentoTipo: matriculaCancelamento.cancelamentoTipo,
+    geraPerdaFinanceira: false,
+    causaExclusaoAnterior: "Cancelamento sem semantica suficiente de perda real.",
+  };
+}
+
+function statusFinanceiroPerda(
+  cobrancasAbertas: PerdaCancelamentoCobrancaItem[],
+  cobrancasCanceladas: PerdaCancelamentoCobrancaItem[],
+  valorAbertoCentavos: number,
+  valorPotencialCentavos: number,
+): string {
+  if (valorAbertoCentavos > 0) {
+    if (cobrancasAbertas.length === 1) return "1 titulo em aberto";
+    return `${cobrancasAbertas.length} titulos em aberto`;
+  }
+  if (cobrancasCanceladas.length > 0 && valorPotencialCentavos > 0) {
+    if (cobrancasCanceladas.length === 1) return "1 titulo cancelado com perda potencial";
+    return `${cobrancasCanceladas.length} titulos cancelados com perda potencial`;
+  }
+  if (valorPotencialCentavos > 0) return "Perda potencial sem saldo aberto";
+  return "Sem saldo aberto";
 }
 
 export async function listarPerdasCancelamentoDetalhadas(
@@ -2892,6 +3255,7 @@ export async function listarPerdasCancelamentoDetalhadas(
     const cobranca = cobrancasAbertasMap.get(row.cobranca_id);
     return cobrancaVisivel(cobranca, "VENCIDAS");
   });
+  const cobrancasCanceladas = await carregarCobrancasCanceladasPerdas(supabase, matriculaIds);
 
   const turmaAluno = await selectMany<TurmaAlunoRow>(async (chunk) => {
     const { data, error } = await supabase
@@ -2985,8 +3349,32 @@ export async function listarPerdasCancelamentoDetalhadas(
       valor_centavos: row.valor_centavos,
       saldo_aberto_centavos: row.saldo_aberto_centavos,
       status_cobranca: row.status_cobranca,
+      cancelada_em: null,
+      cancelamento_tipo: null,
+      cancelamento_motivo: null,
+      origem_evento: "ABERTA",
     });
     cobrancasPorMatricula.set(matriculaId, atual);
+  }
+
+  const cobrancasCanceladasPorMatricula = new Map<number, PerdaCancelamentoCobrancaItem[]>();
+  for (const cobranca of cobrancasCanceladas) {
+    if (booleanOrFalse(cobranca.expurgada)) continue;
+    const matriculaId = numberOrNull(cobranca.origem_id);
+    if (!matriculaId) continue;
+    const atual = cobrancasCanceladasPorMatricula.get(matriculaId) ?? [];
+    atual.push({
+      cobranca_id: cobranca.id,
+      vencimento: normalizeDate(cobranca.vencimento),
+      valor_centavos: numberOrZero(cobranca.valor_centavos),
+      saldo_aberto_centavos: 0,
+      status_cobranca: textOrNull(cobranca.status),
+      cancelada_em: normalizeDate(cobranca.cancelada_em),
+      cancelamento_tipo: textOrNull(cobranca.cancelamento_tipo),
+      cancelamento_motivo: resolveCancelamentoMotivo(cobranca),
+      origem_evento: "CANCELADA",
+    });
+    cobrancasCanceladasPorMatricula.set(matriculaId, atual);
   }
 
   const contaInternaPorMatricula = new Map<number, number>();
@@ -3002,27 +3390,47 @@ export async function listarPerdasCancelamentoDetalhadas(
     const encerramento = encerramentoPorMatricula.get(matricula.id);
     const motivoCancelamento =
       textOrNull(encerramento?.motivo) ?? textOrNull(matricula.encerramento_motivo) ?? textOrNull(matricula.observacoes);
-    const cancelamento = resolveCancelamentoSemantico({
+    const cancelamentoMatricula = resolveCancelamentoSemantico({
       cancelamentoTipo: textOrNull(matricula.cancelamento_tipo),
       geraPerdaFinanceira: matricula.gera_perda_financeira,
       motivo: motivoCancelamento,
     });
-
-    if (cancelamento.cancelamentoTipo !== "DESISTENCIA_REAL" || !cancelamento.geraPerdaFinanceira) {
-      continue;
-    }
-
-    const cobrancasRelacionadas = [...(cobrancasPorMatricula.get(matricula.id) ?? [])].sort((left, right) => {
+    const cobrancasAbertasRelacionadas = [...(cobrancasPorMatricula.get(matricula.id) ?? [])].sort((left, right) => {
       const byDate = compareNullableDateAsc(left.vencimento, right.vencimento);
       if (byDate !== 0) return byDate;
       return right.saldo_aberto_centavos - left.saldo_aberto_centavos;
     });
-    const valorAbertoCentavos = cobrancasRelacionadas.reduce(
+    const cobrancasCanceladasRelacionadas = [...(cobrancasCanceladasPorMatricula.get(matricula.id) ?? [])].sort(
+      (left, right) => {
+        const byCancelDate = compareNullableDateAsc(right.cancelada_em, left.cancelada_em);
+        if (byCancelDate !== 0) return byCancelDate;
+        const byDueDate = compareNullableDateAsc(left.vencimento, right.vencimento);
+        if (byDueDate !== 0) return byDueDate;
+        return right.valor_centavos - left.valor_centavos;
+      },
+    );
+    const perdaElegibilidade = resolvePerdaElegibilidade({
+      matriculaCancelamento: cancelamentoMatricula,
+      motivoMatricula: motivoCancelamento,
+      cobrancasCanceladas: cobrancasCanceladasRelacionadas,
+    });
+
+    if (!perdaElegibilidade.elegivel) {
+      continue;
+    }
+    const cobrancasRelacionadas = [...cobrancasAbertasRelacionadas, ...cobrancasCanceladasRelacionadas];
+    const valorAbertoCentavos = cobrancasAbertasRelacionadas.reduce(
       (acc, cobranca) => acc + cobranca.saldo_aberto_centavos,
       0,
     );
+    const valorPotencialCentavos =
+      numberOrZero(encerramento?.cobrancas_canceladas_valor_centavos) ||
+      numberOrZero(matricula.total_mensalidade_centavos) ||
+      cobrancasCanceladasRelacionadas.reduce((acc, cobranca) => acc + cobranca.valor_centavos, 0);
     const turmaRelacionada = turmaAlunoPorMatricula.get(matricula.id);
     const turma = turmaRelacionada?.turma_id ? turmaPorId.get(turmaRelacionada.turma_id) : undefined;
+    const cobrancaPrincipal =
+      cobrancasAbertasRelacionadas[0]?.cobranca_id ?? cobrancasCanceladasRelacionadas[0]?.cobranca_id ?? null;
 
     items.push({
       matricula_id: matricula.id,
@@ -3037,16 +3445,27 @@ export async function listarPerdasCancelamentoDetalhadas(
         normalizeDate(matricula.encerramento_em) ??
         normalizeDate(matricula.data_encerramento),
       valor_aberto_centavos: valorAbertoCentavos,
-      valor_potencial_centavos:
-        numberOrZero(encerramento?.cobrancas_canceladas_valor_centavos) || numberOrZero(matricula.total_mensalidade_centavos),
-      status_financeiro: statusFinanceiroPerda(cobrancasRelacionadas, valorAbertoCentavos),
+      valor_potencial_centavos: valorPotencialCentavos,
+      status_financeiro: statusFinanceiroPerda(
+        cobrancasAbertasRelacionadas,
+        cobrancasCanceladasRelacionadas,
+        valorAbertoCentavos,
+        valorPotencialCentavos,
+      ),
       conta_interna_id: contaInternaPorMatricula.get(matricula.id) ?? null,
-      cancelamento_tipo: cancelamento.cancelamentoTipo,
-      gera_perda_financeira: cancelamento.geraPerdaFinanceira,
+      cancelamento_tipo: perdaElegibilidade.cancelamentoTipo,
+      gera_perda_financeira: perdaElegibilidade.geraPerdaFinanceira,
       motivo_cancelamento: motivoCancelamento,
-      cobranca_id_principal: cobrancasRelacionadas[0]?.cobranca_id ?? null,
+      cobranca_id_principal: cobrancaPrincipal,
       cobrancas_relacionadas: cobrancasRelacionadas,
-      diagnostico_em_validacao: cancelamento.fonte !== "EXPLICITO",
+      diagnostico_em_validacao: perdaElegibilidade.diagnosticoEmValidacao,
+      motivoEntradaPerda: perdaElegibilidade.motivoEntradaPerda,
+      origemSemanticaPerda: perdaElegibilidade.origemSemanticaPerda,
+      cancelamentoReconhecidoPor: perdaElegibilidade.cancelamentoReconhecidoPor,
+      possuiCobrancaCancelada: cobrancasCanceladasRelacionadas.length > 0,
+      possuiSaldoAberto: valorAbertoCentavos > 0,
+      possuiValorPotencial: valorPotencialCentavos > 0,
+      causaExclusaoAnterior: perdaElegibilidade.causaExclusaoAnterior,
     });
   }
 

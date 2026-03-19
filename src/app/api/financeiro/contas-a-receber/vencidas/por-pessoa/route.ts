@@ -46,6 +46,16 @@ export async function GET(req: NextRequest) {
         matriculaId: item.matriculaId,
         origemLabel: item.origemLabel,
         migracaoContaInternaStatus: item.migracaoContaInternaStatus,
+        vencimentoOriginal: item.vencimentoOriginal,
+        vencimentoAjustadoEm: item.vencimentoAjustadoEm,
+        vencimentoAjustadoPor: item.vencimentoAjustadoPor,
+        vencimentoAjusteMotivo: item.vencimentoAjusteMotivo,
+        canceladaEm: item.canceladaEm,
+        canceladaPor: item.canceladaPor,
+        cancelamentoMotivo: item.cancelamentoMotivo,
+        cancelamentoTipo: item.cancelamentoTipo,
+        matriculaStatus: item.matriculaStatus,
+        matriculaCancelamentoTipo: item.matriculaCancelamentoTipo,
       })),
     });
   } catch (error: unknown) {

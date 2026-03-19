@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { FinanceHelpCard } from "@/components/FinanceHelpCard";
+import { CobrancaOperacionalActions } from "@/components/financeiro/cobrancas/CobrancaOperacionalActions";
 import { PerdasCancelamentoTable } from "@/components/financeiro/PerdasCancelamentoTable";
 import { CobrancaAuditDetail } from "@/components/financeiro/contas-receber/CobrancaAuditDetail";
 import { CobrancasTable } from "@/components/financeiro/contas-receber/CobrancasTable";
@@ -68,6 +69,16 @@ type TituloVencido = {
   contaInternaId: number | null;
   origemLabel: string;
   migracaoContaInternaStatus: string | null;
+  vencimentoOriginal: string | null;
+  vencimentoAjustadoEm: string | null;
+  vencimentoAjustadoPor: string | null;
+  vencimentoAjusteMotivo: string | null;
+  canceladaEm: string | null;
+  canceladaPor: string | null;
+  cancelamentoMotivo: string | null;
+  cancelamentoTipo: string | null;
+  matriculaStatus: string | null;
+  matriculaCancelamentoTipo: string | null;
 };
 
 type TitulosResponse = {
@@ -308,7 +319,7 @@ export default function AdminContasReceberPage() {
     }
   }
 
-  async function abrirAuditoria(item: CobrancaListaItem) {
+  async function abrirAuditoria(item: Pick<CobrancaListaItem, "cobranca_id">) {
     setDetailOpen(true);
     setDetailLoading(true);
     setDetailError(null);
@@ -369,6 +380,13 @@ export default function AdminContasReceberPage() {
 
   function handleExpurgoConcluido() {
     setReloadToken((current) => current + 1);
+  }
+
+  async function handleCobrancaOperacionalConcluida() {
+    setReloadToken((current) => current + 1);
+    if (titulosPessoa) {
+      await abrirTitulos(titulosPessoa);
+    }
   }
 
   function limparFiltros() {
@@ -520,6 +538,25 @@ export default function AdminContasReceberPage() {
             </div>
           </DialogHeader>
           <CobrancaAuditDetail detalhe={detailData} loading={detailLoading} error={detailError} />
+          {detailData ? (
+            <div className="border-t border-slate-100 px-6 py-5">
+              <CobrancaOperacionalActions
+                cobrancaId={detailData.cobranca.id}
+                descricao={detailData.cobranca.descricao}
+                origemLabel={detailData.origem_label}
+                status={detailData.cobranca.status_cobranca}
+                vencimento={detailData.cobranca.vencimento}
+                vencimentoOriginal={detailData.cobranca.vencimentoOriginal}
+                vencimentoAjustadoEm={detailData.cobranca.vencimentoAjustadoEm}
+                vencimentoAjusteMotivo={detailData.cobranca.vencimentoAjusteMotivo}
+                canceladaEm={detailData.cobranca.canceladaEm}
+                cancelamentoTipo={detailData.cobranca.cancelamentoTipo}
+                matriculaStatus={detailData.cobranca.matriculaStatus}
+                matriculaCancelamentoTipo={detailData.cobranca.matriculaCancelamentoTipo}
+                onSuccess={handleCobrancaOperacionalConcluida}
+              />
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -545,14 +582,27 @@ export default function AdminContasReceberPage() {
                     <th className="px-3 py-3 font-medium">Atraso</th>
                     <th className="px-3 py-3 font-medium">Origem</th>
                     <th className="px-3 py-3 font-medium">Saldo</th>
+                    <th className="px-3 py-3 font-medium text-right">Acoes</th>
                   </tr>
                 </thead>
                 <tbody>
                   {titulos.map((item) => (
                     <tr key={item.cobranca_id} className="border-b border-slate-100 last:border-b-0">
                       <td className="px-3 py-3 text-slate-700">#{item.cobranca_id}</td>
-                      <td className="px-3 py-3 text-slate-700">{formatDateISO(item.vencimento)}</td>
-                      <td className="px-3 py-3 text-slate-700">{item.dias_atraso} dias</td>
+                      <td className="px-3 py-3 text-slate-700">
+                        <div>{formatDateISO(item.vencimento)}</div>
+                        {item.vencimentoOriginal ? (
+                          <div className="text-xs text-slate-500">Original: {formatDateISO(item.vencimentoOriginal)}</div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-3 text-slate-700">
+                        <div>{item.dias_atraso} dias</div>
+                        {item.matriculaStatus === "CANCELADA" ? (
+                          <div className="text-xs text-amber-700">
+                            Matricula cancelada{item.matriculaCancelamentoTipo ? ` · ${item.matriculaCancelamentoTipo}` : ""}
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-3">
                         <div className="space-y-1">
                           <div className="font-medium text-slate-900">{item.origem_label ?? item.origemLabel ?? "Origem em revisao"}</div>
@@ -570,6 +620,29 @@ export default function AdminContasReceberPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 text-slate-700">{formatBRLFromCents(item.saldo_aberto_centavos)}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <CobrancaOperacionalActions
+                            cobrancaId={item.cobranca_id}
+                            descricao={item.origem_label}
+                            origemLabel={item.origemLabel}
+                            status={item.status_cobranca}
+                            vencimento={item.vencimento}
+                            vencimentoOriginal={item.vencimentoOriginal}
+                            vencimentoAjustadoEm={item.vencimentoAjustadoEm}
+                            vencimentoAjusteMotivo={item.vencimentoAjusteMotivo}
+                            canceladaEm={item.canceladaEm}
+                            cancelamentoTipo={item.cancelamentoTipo}
+                            matriculaStatus={item.matriculaStatus}
+                            matriculaCancelamentoTipo={item.matriculaCancelamentoTipo}
+                            compact
+                            onSuccess={handleCobrancaOperacionalConcluida}
+                          />
+                          <Button type="button" variant="secondary" onClick={() => void abrirAuditoria(item)}>
+                            Auditar
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

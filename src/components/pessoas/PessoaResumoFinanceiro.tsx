@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { CobrancaOperacionalActions } from "@/components/financeiro/cobrancas/CobrancaOperacionalActions";
 import { RecibosContaConexao } from "@/components/documentos/RecibosContaConexao";
 import { ReciboModal, type ReciboModalParams } from "@/components/documentos/ReciboModal";
 import { EXPURGO_TIPO_LABELS, type ExpurgoTipo } from "@/lib/financeiro/expurgo-types";
@@ -74,6 +75,16 @@ type ResumoFinanceiro = {
     matriculaId: number | null;
     origemLabel: string;
     migracaoContaInternaStatus: string | null;
+    vencimentoOriginal: string | null;
+    vencimentoAjustadoEm: string | null;
+    vencimentoAjustadoPor: string | null;
+    vencimentoAjusteMotivo: string | null;
+    canceladaEm: string | null;
+    canceladaPor: string | null;
+    cancelamentoMotivo: string | null;
+    cancelamentoTipo: string | null;
+    matriculaStatus: string | null;
+    matriculaCancelamentoTipo: string | null;
   }>;
   faturas_credito_conexao: Array<{
     id: number;
@@ -338,6 +349,16 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
       matriculaId: item.origem_id,
       origemLabel: item.origem_tipo ? `${item.origem_tipo}${item.origem_id ? ` #${item.origem_id}` : ""}` : "Origem em revisao",
       migracaoContaInternaStatus: null,
+      vencimentoOriginal: null,
+      vencimentoAjustadoEm: null,
+      vencimentoAjustadoPor: null,
+      vencimentoAjusteMotivo: null,
+      canceladaEm: null,
+      canceladaPor: null,
+      cancelamentoMotivo: null,
+      cancelamentoTipo: null,
+      matriculaStatus: null,
+      matriculaCancelamentoTipo: null,
     }));
   }, [data]);
 
@@ -714,6 +735,9 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                             {Number(c.dias_atraso || 0) > 0 ? (
                               <div className="text-xs text-rose-600">{c.dias_atraso} dia(s) em atraso</div>
                             ) : null}
+                            {c.vencimentoOriginal ? (
+                              <div className="text-xs text-slate-500">Original: {c.vencimentoOriginal}</div>
+                            ) : null}
                           </td>
                           <td className="py-2 text-right">
                             {formatBRLFromCentavos(Number(c.saldo_aberto_centavos || 0))}
@@ -728,6 +752,11 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                             ) : null}
                             {c.alunoNome ? <div className="text-xs text-slate-500">Aluno: {c.alunoNome}</div> : null}
                             {c.matriculaId ? <div className="text-xs text-slate-500">Matricula #{c.matriculaId}</div> : null}
+                            {c.matriculaStatus === "CANCELADA" ? (
+                              <div className="text-xs text-amber-700">
+                                Matricula cancelada{c.matriculaCancelamentoTipo ? ` · ${c.matriculaCancelamentoTipo}` : ""}
+                              </div>
+                            ) : null}
                           </td>
                           <td className="py-2">
                             <div className="font-medium text-slate-900">
@@ -746,7 +775,23 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                             ) : null}
                           </td>
                           <td className="py-2 text-right">
-                            <div className="flex justify-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <CobrancaOperacionalActions
+                                cobrancaId={c.cobranca_id}
+                                descricao={c.origem_label}
+                                origemLabel={c.origemLabel}
+                                status={c.status_cobranca}
+                                vencimento={c.vencimento}
+                                vencimentoOriginal={c.vencimentoOriginal}
+                                vencimentoAjustadoEm={c.vencimentoAjustadoEm}
+                                vencimentoAjusteMotivo={c.vencimentoAjusteMotivo}
+                                canceladaEm={c.canceladaEm}
+                                cancelamentoTipo={c.cancelamentoTipo}
+                                matriculaStatus={c.matriculaStatus}
+                                matriculaCancelamentoTipo={c.matriculaCancelamentoTipo}
+                                compact
+                                onSuccess={loadResumo}
+                              />
                               <Link
                                 className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                                 href={`/financeiro/cobrancas/${c.cobranca_id}`}

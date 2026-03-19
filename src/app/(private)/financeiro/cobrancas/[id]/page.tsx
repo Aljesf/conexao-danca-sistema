@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CobrancaOperacionalActions } from "@/components/financeiro/cobrancas/CobrancaOperacionalActions";
 import { buildCanonicalOriginDisplay } from "@/lib/financeiro/cobranca-origem-canonica";
+import { formatDateISO, formatDateTimeISO } from "@/lib/formatters/date";
+import { getCobrancasPgPool, loadCobrancaHistorico, type CobrancaHistoricoEvento } from "@/lib/financeiro/cobrancas-operacionais";
 import { createClient } from "@/lib/supabase/server";
 import { MatriculaAuditoriaAcoes } from "./_components/MatriculaAuditoriaAcoes";
 
@@ -20,6 +23,16 @@ type CobrancaDetalhe = {
   vencimento: string | null;
   created_at: string | null;
   updated_at: string | null;
+  vencimento_original: string | null;
+  vencimento_ajustado_em: string | null;
+  vencimento_ajustado_por: string | null;
+  vencimento_ajuste_motivo: string | null;
+  cancelada_em: string | null;
+  cancelada_por: string | null;
+  cancelada_por_user_id: string | null;
+  cancelamento_motivo: string | null;
+  cancelada_motivo: string | null;
+  cancelamento_tipo: string | null;
   origem_agrupador_tipo: string | null;
   origem_agrupador_id: number | null;
   origem_item_tipo: string | null;
@@ -42,6 +55,7 @@ type MatriculaDetalhe = {
   vinculo_id: number | null;
   ano_referencia: number | null;
   status: string | null;
+  cancelamento_tipo: string | null;
   data_matricula: string | null;
 };
 
@@ -59,12 +73,13 @@ type MatriculaResumoUi = {
   turmas: TurmaResumo[];
   ano_referencia: number | null;
   status: string | null;
+  cancelamento_tipo: string | null;
   data_matricula: string | null;
   fallbackMessage: string | null;
 };
 
 const COBRANCA_SELECT_CANONICAL =
-  "id,pessoa_id,descricao,origem_tipo,origem_subtipo,origem_id,status,valor_centavos,vencimento,created_at,updated_at,origem_agrupador_tipo,origem_agrupador_id,origem_item_tipo,origem_item_id,conta_interna_id,origem_label,migracao_conta_interna_status,migracao_conta_interna_observacao";
+  "id,pessoa_id,descricao,origem_tipo,origem_subtipo,origem_id,status,valor_centavos,vencimento,created_at,updated_at,vencimento_original,vencimento_ajustado_em,vencimento_ajustado_por,vencimento_ajuste_motivo,cancelada_em,cancelada_por,cancelada_por_user_id,cancelamento_motivo,cancelada_motivo,cancelamento_tipo,origem_agrupador_tipo,origem_agrupador_id,origem_item_tipo,origem_item_id,conta_interna_id,origem_label,migracao_conta_interna_status,migracao_conta_interna_observacao";
 
 const COBRANCA_SELECT_LEGACY =
   "id,pessoa_id,descricao,origem_tipo,origem_subtipo,origem_id,status,valor_centavos,vencimento,created_at,updated_at";
@@ -84,6 +99,20 @@ function brlFromCentavos(value: number | null | undefined): string {
     style: "currency",
     currency: "BRL",
   });
+}
+
+function textOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function resolveCanceladaPor(cobranca: CobrancaDetalhe): string | null {
+  return textOrNull(cobranca.cancelada_por) ?? textOrNull(cobranca.cancelada_por_user_id);
+}
+
+function resolveCancelamentoMotivo(cobranca: CobrancaDetalhe): string | null {
+  return textOrNull(cobranca.cancelamento_motivo) ?? textOrNull(cobranca.cancelada_motivo);
 }
 
 async function carregarCobrancaDetalhe(supabase: Awaited<ReturnType<typeof createClient>>, cobrancaId: number) {
@@ -129,6 +158,16 @@ async function carregarCobrancaDetalhe(supabase: Awaited<ReturnType<typeof creat
   return {
     data: {
       ...fallback.data,
+      vencimento_original: null,
+      vencimento_ajustado_em: null,
+      vencimento_ajustado_por: null,
+      vencimento_ajuste_motivo: null,
+      cancelada_em: null,
+      cancelada_por: null,
+      cancelada_por_user_id: null,
+      cancelamento_motivo: null,
+      cancelada_motivo: null,
+      cancelamento_tipo: null,
       origem_agrupador_tipo: null,
       origem_agrupador_id: null,
       origem_item_tipo: null,
@@ -164,6 +203,22 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
 
   if (!cobranca) return notFound();
 
+  let historicoEventos: CobrancaHistoricoEvento[] = [];
+  try {
+    const pool = getCobrancasPgPool();
+    const client = await pool.connect();
+    try {
+      historicoEventos = await loadCobrancaHistorico(client, idNum);
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error("[/financeiro/cobrancas/[id]] historico_eventos", {
+      cobrancaId: idNum,
+      message: error instanceof Error ? error.message : "erro_desconhecido",
+    });
+  }
+
   const pessoaId = Number(cobranca.pessoa_id ?? 0);
   const { data: pessoaDevedora } =
     pessoaId > 0
@@ -193,7 +248,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
   if (origemMatriculaId > 0) {
     const { data: matricula, error: matriculaErr } = await supabase
       .from("matriculas")
-      .select("id,pessoa_id,responsavel_financeiro_id,vinculo_id,ano_referencia,status,data_matricula")
+      .select("id,pessoa_id,responsavel_financeiro_id,vinculo_id,ano_referencia,status,cancelamento_tipo,data_matricula")
       .eq("id", origemMatriculaId)
       .maybeSingle<MatriculaDetalhe>();
 
@@ -205,6 +260,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
         turmas: [],
         ano_referencia: null,
         status: null,
+        cancelamento_tipo: null,
         data_matricula: null,
         fallbackMessage: "Matricula: dados indisponiveis (schema nao mapeado para leitura atual).",
       };
@@ -216,6 +272,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
         turmas: [],
         ano_referencia: null,
         status: null,
+        cancelamento_tipo: null,
         data_matricula: null,
         fallbackMessage: "Matricula nao encontrada para esta origem.",
       };
@@ -330,6 +387,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
         turmas,
         ano_referencia: Number(matricula.ano_referencia ?? 0) || null,
         status: matricula.status ?? null,
+        cancelamento_tipo: matricula.cancelamento_tipo ?? null,
         data_matricula: matricula.data_matricula ?? null,
         fallbackMessage: turmas.length === 0 ? "Matricula sem turmas/cursos vinculados no momento." : null,
       };
@@ -339,6 +397,8 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
   const pessoaLabel = pessoaDevedora?.nome
     ? `${pessoaDevedora.nome} (#${pessoaDevedora.id})`
     : `Pessoa #${cobranca.pessoa_id ?? "-"}`;
+  const canceladaPor = resolveCanceladaPor(cobranca);
+  const cancelamentoMotivo = resolveCancelamentoMotivo(cobranca);
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-6">
@@ -382,7 +442,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
                 <span className="font-medium">Status:</span> {cobranca.status ?? "-"}
               </div>
               <div>
-                <span className="font-medium">Vencimento:</span> {cobranca.vencimento ?? "-"}
+                <span className="font-medium">Vencimento:</span> {formatDateISO(cobranca.vencimento)}
               </div>
               <div>
                 <span className="font-medium">Valor:</span>{" "}
@@ -391,6 +451,22 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
               <div>
                 <span className="font-medium">Conta interna:</span>{" "}
                 {cobranca.conta_interna_id ? `#${cobranca.conta_interna_id}` : "Nao associada"}
+              </div>
+              <div>
+                <span className="font-medium">Vencimento original:</span>{" "}
+                {formatDateISO(cobranca.vencimento_original)}
+              </div>
+              <div>
+                <span className="font-medium">Ultimo ajuste:</span>{" "}
+                {cobranca.vencimento_ajustado_em
+                  ? `${formatDateTimeISO(cobranca.vencimento_ajustado_em)}${cobranca.vencimento_ajuste_motivo ? ` | ${cobranca.vencimento_ajuste_motivo}` : ""}`
+                  : "Sem ajuste manual"}
+              </div>
+              <div className="md:col-span-2">
+                <span className="font-medium">Cancelamento:</span>{" "}
+                {cobranca.cancelada_em || cobranca.cancelamento_tipo || cancelamentoMotivo
+                  ? `${formatDateTimeISO(cobranca.cancelada_em)}${cobranca.cancelamento_tipo ? ` | ${cobranca.cancelamento_tipo}` : ""}${cancelamentoMotivo ? ` | ${cancelamentoMotivo}` : ""}${canceladaPor ? ` | por ${canceladaPor}` : ""}`
+                  : "Titulo ativo"}
               </div>
             </div>
           </div>
@@ -454,6 +530,7 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
                 {matriculaResumo.status ? (
                   <div>
                     <span className="font-medium">Status da matricula:</span> {matriculaResumo.status}
+                    {matriculaResumo.cancelamento_tipo ? ` | ${matriculaResumo.cancelamento_tipo}` : ""}
                   </div>
                 ) : null}
                 <div className="flex flex-wrap gap-3 text-xs">
@@ -493,9 +570,77 @@ export default async function CobrancaDetalhePage({ params }: PageProps) {
                   <span className="font-medium">Observacao da migracao:</span> {cobranca.migracao_conta_interna_observacao}
                 </div>
               ) : null}
+              {matriculaResumo?.status === "CANCELADA" ? (
+                <div className="md:col-span-2">
+                  <span className="font-medium">Contexto da matricula:</span> Matricula cancelada. Avalie cancelamento manual do titulo quando aplicavel.
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3">
+          <div>
+            <div className="text-sm font-semibold text-slate-900">Acoes operacionais da cobranca</div>
+            <div className="text-xs text-slate-500">
+              Alteracao manual de vencimento e cancelamento logico com historico auditavel.
+            </div>
+          </div>
+          <CobrancaOperacionalActions
+            cobrancaId={cobranca.id}
+            descricao={cobranca.descricao}
+            origemLabel={origemDisplay.principal}
+            status={cobranca.status}
+            vencimento={cobranca.vencimento}
+            vencimentoOriginal={cobranca.vencimento_original}
+            vencimentoAjustadoEm={cobranca.vencimento_ajustado_em}
+            vencimentoAjusteMotivo={cobranca.vencimento_ajuste_motivo}
+            canceladaEm={cobranca.cancelada_em}
+            cancelamentoTipo={cobranca.cancelamento_tipo}
+            matriculaStatus={matriculaResumo?.status ?? null}
+            matriculaCancelamentoTipo={matriculaResumo?.cancelamento_tipo ?? null}
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-white p-5 shadow-sm">
+        <div className="text-sm font-semibold text-slate-900">Historico de eventos da cobranca</div>
+        <div className="mt-1 text-xs text-slate-500">
+          Trilha de ajuste de vencimento, cancelamento e payloads antes/depois quando disponiveis.
+        </div>
+        {historicoEventos.length === 0 ? (
+          <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+            Nenhum evento registrado para esta cobranca ainda.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {historicoEventos.map((evento) => (
+              <div key={evento.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-medium text-slate-900">{evento.tipo_evento}</div>
+                  <div className="text-xs text-slate-500">{formatDateTimeISO(evento.created_at)}</div>
+                </div>
+                {evento.observacao ? <div className="mt-2 text-slate-700">{evento.observacao}</div> : null}
+                <div className="mt-2 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500">Anterior</div>
+                    <pre className="mt-1 overflow-auto rounded-md bg-white p-3 text-[11px] text-slate-700">
+                      {JSON.stringify(evento.payload_anterior, null, 2)}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500">Novo</div>
+                    <pre className="mt-1 overflow-auto rounded-md bg-white p-3 text-[11px] text-slate-700">
+                      {JSON.stringify(evento.payload_novo, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {matriculaResumo?.id ? <MatriculaAuditoriaAcoes matriculaId={matriculaResumo.id} /> : null}
