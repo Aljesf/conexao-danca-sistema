@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getColaboradorIdForUser, getUserOrThrow, isAdminUser } from "../_lib/auth";
-import { resolverHorarioTurma } from "@/lib/turmas";
+import { anexarResumoAlunosTurmas, carregarResumoAlunosTurmas } from "@/lib/academico/turmasResumoServer";
+import { resolverHorarioTurma, type ResumoAlunosTurma } from "@/lib/turmas";
 
 type TurmaRow = {
   turma_id: number;
@@ -12,10 +13,12 @@ type TurmaRow = {
   ano_referencia: number | null;
   status: string | null;
   periodo_letivo_id: number | null;
+  capacidade?: number | null;
   dias_semana?: string[] | null;
   hora_inicio?: string | null;
   hora_fim?: string | null;
   horarios?: Array<{ inicio?: string | null; fim?: string | null }> | null;
+  resumo_alunos?: ResumoAlunosTurma | null;
 };
 
 type TurmaLinkRow = { turma: TurmaRow | null };
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
     let q = supabase
       .from("turmas")
       .select(
-        "turma_id,nome,curso,nivel,turno,ano_referencia,status,periodo_letivo_id,dias_semana,hora_inicio,hora_fim,horarios:turmas_horarios(inicio,fim)"
+        "turma_id,nome,curso,nivel,turno,ano_referencia,status,periodo_letivo_id,capacidade,dias_semana,hora_inicio,hora_fim,horarios:turmas_horarios(inicio,fim)"
       )
       .order("turma_id", { ascending: true });
 
@@ -132,7 +135,17 @@ export async function GET(request: NextRequest) {
       turmas = turmas.filter((t) => turmaTemAulaNoDia(t.dias_semana, keys));
     }
 
-    return NextResponse.json({ ok: true, turmas });
+    try {
+      const resumoByTurmaId = await carregarResumoAlunosTurmas(
+        supabase,
+        turmas.map((turma) => turma.turma_id),
+      );
+      return NextResponse.json({ ok: true, turmas: anexarResumoAlunosTurmas(turmas, resumoByTurmaId) });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "ERRO_RESUMO_TURMAS";
+      return NextResponse.json({ ok: false, code: "ERRO_RESUMO_TURMAS", message }, { status: 500 });
+    }
   }
 
   let colaboradorId: number | null = null;
@@ -150,7 +163,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase
     .from("turma_professores")
     .select(
-      "turma:turmas(turma_id,nome,curso,nivel,turno,ano_referencia,status,periodo_letivo_id,dias_semana,hora_inicio,hora_fim,horarios:turmas_horarios(inicio,fim))"
+      "turma:turmas(turma_id,nome,curso,nivel,turno,ano_referencia,status,periodo_letivo_id,capacidade,dias_semana,hora_inicio,hora_fim,horarios:turmas_horarios(inicio,fim))"
     )
     .eq("colaborador_id", colaboradorId)
     .eq("ativo", true)
@@ -174,5 +187,18 @@ export async function GET(request: NextRequest) {
     turmasFiltradas = turmas.filter((t) => turmaTemAulaNoDia(t.dias_semana, keys));
   }
 
-  return NextResponse.json({ ok: true, turmas: turmasFiltradas });
+  try {
+    const resumoByTurmaId = await carregarResumoAlunosTurmas(
+      supabase,
+      turmasFiltradas.map((turma) => turma.turma_id),
+    );
+    return NextResponse.json({
+      ok: true,
+      turmas: anexarResumoAlunosTurmas(turmasFiltradas, resumoByTurmaId),
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "ERRO_RESUMO_TURMAS";
+    return NextResponse.json({ ok: false, code: "ERRO_RESUMO_TURMAS", message }, { status: 500 });
+  }
 }

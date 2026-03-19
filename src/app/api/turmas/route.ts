@@ -8,6 +8,7 @@ import {
 import { getProfessorOperationalAccess } from "@/app/api/professor/_lib/operacional";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
+import { anexarResumoAlunosTurmas, carregarResumoAlunosTurmas } from "@/lib/academico/turmasResumoServer";
 import { resolverHorarioTurma } from "@/lib/turmas";
 
 export const runtime = "nodejs";
@@ -395,7 +396,18 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return NextResponse.json({ data: rows });
+  try {
+    const resumoByTurmaId = await carregarResumoAlunosTurmas(
+      supabase,
+      rows.map((row) => Number(row.turma_id)),
+    );
+
+    return NextResponse.json({ data: anexarResumoAlunosTurmas(rows, resumoByTurmaId) });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Erro ao carregar resumo operacional das turmas.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {

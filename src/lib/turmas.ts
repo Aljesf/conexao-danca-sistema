@@ -55,3 +55,46 @@ export function formatarHorario(turma: TurmaHorarioBase | null | undefined): str
 
   return `${horaInicio} - ${horaFim}`;
 }
+
+export type ResumoAlunosTurma = {
+  total_alunos: number;
+  pagantes: number;
+  concessao_total: number;
+  concessao_integral: number;
+  concessao_parcial: number;
+  capacidade: number | null;
+  vagas_disponiveis: number | null;
+};
+
+export function getResumoAlunosTurma(
+  resumo?: Partial<ResumoAlunosTurma> | null,
+): ResumoAlunosTurma {
+  const total_alunos = Number(resumo?.total_alunos ?? 0);
+  const pagantes = Number(resumo?.pagantes ?? 0);
+  const concessao_integral = Number(resumo?.concessao_integral ?? 0);
+  const concessao_parcial = Number(resumo?.concessao_parcial ?? 0);
+  const concessao_total =
+    resumo?.concessao_total != null
+      ? Number(resumo.concessao_total)
+      : concessao_integral + concessao_parcial;
+
+  const capacidade =
+    resumo?.capacidade == null ? null : Number(resumo.capacidade);
+
+  const vagas_disponiveis =
+    resumo?.vagas_disponiveis == null
+      ? capacidade == null
+        ? null
+        : Math.max(capacidade - total_alunos, 0)
+      : Number(resumo.vagas_disponiveis);
+
+  return {
+    total_alunos,
+    pagantes,
+    concessao_total,
+    concessao_integral,
+    concessao_parcial,
+    capacidade,
+    vagas_disponiveis,
+  };
+}

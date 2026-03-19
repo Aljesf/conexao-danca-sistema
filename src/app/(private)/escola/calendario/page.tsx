@@ -1,8 +1,9 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { TurmaResumoOperacional } from "@/components/turmas/TurmaResumoOperacional";
 import { SectionCard, StatCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
-import { formatarHorario, resolverHorarioTurma } from "@/lib/turmas";
+import { formatarHorario, resolverHorarioTurma, type ResumoAlunosTurma } from "@/lib/turmas";
 
 type FeedItemKind = "PERIODO_LETIVO" | "FAIXA_LETIVA" | "INSTITUCIONAL" | "EVENTO_INTERNO";
 
@@ -33,6 +34,8 @@ type GradeTurma = {
   ano_referencia: number | null;
   periodo_letivo_id: number | null;
   status: string | null;
+  capacidade?: number | null;
+  resumo_alunos?: Partial<ResumoAlunosTurma> | null;
 };
 
 type GradeHorario = {
@@ -242,6 +245,33 @@ export default function EscolaCalendarioDashboard() {
         return horaA.localeCompare(horaB) || a.nome.localeCompare(b.nome);
       }),
     [gradeDoDia]
+  );
+
+  const resumoGradeDoDia = useMemo(
+    () =>
+      turmasOrdenadas.reduce(
+        (acc, turma) => {
+          const resumo = turma.resumo_alunos ?? {};
+
+          acc.totalTurmas += 1;
+          acc.totalAlunos += Number(resumo.total_alunos ?? 0);
+          acc.pagantes += Number(resumo.pagantes ?? 0);
+          acc.concessoes += Number(resumo.concessao_total ?? 0);
+          acc.concessoesIntegrais += Number(resumo.concessao_integral ?? 0);
+          acc.concessoesParciais += Number(resumo.concessao_parcial ?? 0);
+
+          return acc;
+        },
+        {
+          totalTurmas: 0,
+          totalAlunos: 0,
+          pagantes: 0,
+          concessoes: 0,
+          concessoesIntegrais: 0,
+          concessoesParciais: 0,
+        }
+      ),
+    [turmasOrdenadas]
   );
 
   const monthCounts = useMemo(() => groupCounts(items), [items]);
@@ -490,19 +520,74 @@ export default function EscolaCalendarioDashboard() {
         ) : turmasOrdenadas.length === 0 ? (
           <p className="text-sm text-slate-600">Nenhuma turma agendada para este dia.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {turmasOrdenadas.map((turma) => (
-              <div
-                key={`grade-${turma.turma_id}`}
-                className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:shadow-md"
-              >
-                <div className="text-sm font-semibold text-slate-900">{formatarHorario(turma)}</div>
-                <div className="mt-1 text-base font-medium text-slate-900">{turma.nome}</div>
-                <div className="mt-1 text-xs text-slate-500">
-                  {[turma.curso, turma.nivel, turma.turno].filter(Boolean).join(" / ") || "Turma"}
+          <div>
+            <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[180px_minmax(0,1fr)]">
+                <div className="flex min-h-[96px] items-center justify-center rounded-full border border-slate-200 bg-white text-center shadow-sm">
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-slate-500">
+                      Pagantes no dia
+                    </div>
+                    <div className="mt-1 text-3xl font-semibold text-slate-900">
+                      {resumoGradeDoDia.pagantes}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-base font-semibold text-sky-900">
+                        Concessoes do dia
+                      </div>
+                      <div className="text-sm text-slate-500">
+                        Alunos previstos nas turmas agendadas hoje
+                      </div>
+                    </div>
+
+                    <div className="text-3xl font-semibold text-sky-900">
+                      {resumoGradeDoDia.concessoes}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
+                      Integrais: {resumoGradeDoDia.concessoesIntegrais}
+                    </span>
+
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-700">
+                      Parciais: {resumoGradeDoDia.concessoesParciais}
+                    </span>
+
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700">
+                      Turmas: {resumoGradeDoDia.totalTurmas}
+                    </span>
+
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700">
+                      Total de alunos: {resumoGradeDoDia.totalAlunos}
+                    </span>
+                  </div>
                 </div>
               </div>
-            ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              {turmasOrdenadas.map((turma) => (
+                <div
+                  key={`grade-${turma.turma_id}`}
+                  className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:shadow-md"
+                >
+                  <div className="text-sm font-semibold text-slate-900">{formatarHorario(turma)}</div>
+                  <div className="mt-1 text-base font-medium text-slate-900">{turma.nome}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {[turma.curso, turma.nivel, turma.turno].filter(Boolean).join(" / ") || "Turma"}
+                  </div>
+                  <div className="mt-3">
+                    <TurmaResumoOperacional resumo={turma.resumo_alunos} />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </SectionCard>

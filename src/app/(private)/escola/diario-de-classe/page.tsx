@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import DiarioModal from "@/components/DiarioModal";
-import { formatarHorario } from "@/lib/turmas";
+import { TurmaResumoOperacional } from "@/components/turmas/TurmaResumoOperacional";
+import { formatarHorario, type ResumoAlunosTurma } from "@/lib/turmas";
 
 type DiarioStatus = "PENDENTE" | "PRONTO" | "ERRO";
 type PresencaBaseStatus = "PRESENTE" | "FALTA";
@@ -18,6 +19,8 @@ type Turma = {
   dias_semana?: string[] | null;
   hora_inicio?: string | null;
   hora_fim?: string | null;
+  capacidade?: number | null;
+  resumo_alunos?: Partial<ResumoAlunosTurma> | null;
 };
 
 type Aluno = {
@@ -1198,6 +1201,12 @@ export default function DiarioDeClassePage() {
                   </div>
                 )}
 
+                {turmaSelecionada ? (
+                  <div className="mt-4">
+                    <TurmaResumoOperacional resumo={turmaSelecionada.resumo_alunos} />
+                  </div>
+                ) : null}
+
                 <div className="mt-4 flex flex-col gap-2">
                   {!turmaId ? (
                     <div className="text-sm text-muted-foreground">
@@ -1755,6 +1764,9 @@ function TurmaPanel(props: {
         <span>Marcados: {props.presencasRegistradas}</span>
         <span>Pendentes: {props.pendentesCount}</span>
         <span>Status: {props.aulaFechada ? "FECHADA" : "PENDENTE"}</span>
+      </div>
+      <div className="mt-4">
+        <TurmaResumoOperacional resumo={props.turma?.resumo_alunos} />
       </div>
     </div>
   );

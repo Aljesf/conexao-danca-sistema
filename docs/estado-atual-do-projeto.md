@@ -1,5 +1,5 @@
 ## Modulo atual
-Dashboard Escola - leitura institucional, leitura por modalidade e saude das turmas
+Dashboard Escola + Calendario operacional + Diario de classe
 
 ## SQL concluido
 - views e refinamentos para composicao por turma
@@ -11,11 +11,17 @@ Dashboard Escola - leitura institucional, leitura por modalidade e saude das tur
 ## APIs concluidas
 - `src/app/api/escola/dashboard/route.ts`
 - `src/app/api/escola/dashboard/detalhes/route.ts`
+- `src/app/api/turmas/route.ts`
+- `src/app/api/calendario/grade/route.ts`
+- `src/app/api/professor/diario-de-classe/turmas/route.ts`
 
 ## Paginas / componentes concluidos
 - `src/app/(private)/escola/page.tsx`
+- `src/app/(private)/escola/calendario/page.tsx`
+- `src/app/(private)/escola/diario-de-classe/page.tsx`
 - `src/components/escola/EscolaTurmaComposicaoCard.tsx`
 - `src/components/escola/EscolaDashboardAlunosModal.tsx`
+- `src/components/turmas/TurmaResumoOperacional.tsx`
 
 ## O que foi consolidado neste chat
 - cards institucionais refinados
@@ -23,6 +29,13 @@ Dashboard Escola - leitura institucional, leitura por modalidade e saude das tur
 - drill-down por pagantes, concessoes e alunos ativos
 - leitura por modalidade filtrada
 - receita total, receita pagante e absorcao institucional
+- diario de classe com resumo operacional de turma
+- grade do dia com metricas de ocupacao e perfil institucional
+- grade do dia com cabecalho agregado por dia
+- resumo operacional visual aprimorado por turma
+- leitura de pagantes e concessoes do dia
+- exibicao de capacidade e vagas
+- reuso do mesmo resumo na frequencia
 - padronizacao conceitual:
   - alunos ativos = ocupacao real
   - vagas disponiveis = capacidade - alunos ativos
@@ -32,6 +45,7 @@ Dashboard Escola - leitura institucional, leitura por modalidade e saude das tur
 - revisar turmas sem capacidade preenchida
 - evoluir comparativos entre modalidades
 - validar continuamente a regra de valor mensal por vinculo
+- gerar validacao visual autenticada com prints do calendario e do diario
 
 ## Versao do sistema
 Sistema Conexao Danca - Dashboard Escola
@@ -41,3 +55,4 @@ Versao logica: v1.0 consolidada do dashboard analitico da Escola
 1. drill-down com abertura da ficha do aluno/matricula
 2. comparativo entre modalidades
 3. indicadores de sustentabilidade por modalidade/turma
+4. expandir o resumo operacional para outras listagens de turmas quando fizer sentido

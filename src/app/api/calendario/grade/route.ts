@@ -1,5 +1,7 @@
-﻿import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { anexarResumoAlunosTurmas, carregarResumoAlunosTurmas } from "@/lib/academico/turmasResumoServer";
 import { requireUser } from "@/lib/supabase/api-auth";
+import type { ResumoAlunosTurma } from "@/lib/turmas";
 
 type Turma = {
   turma_id: number;
@@ -10,6 +12,8 @@ type Turma = {
   ano_referencia: number | null;
   periodo_letivo_id: number | null;
   status: string | null;
+  capacidade: number | null;
+  resumo_alunos?: ResumoAlunosTurma | null;
 };
 
 type TurmaHorario = {
@@ -31,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   let turmasQ = supabase
     .from("turmas")
-    .select("turma_id,nome,curso,nivel,turno,ano_referencia,periodo_letivo_id,status")
+    .select("turma_id,nome,curso,nivel,turno,ano_referencia,periodo_letivo_id,status,capacidade")
     .order("turma_id", { ascending: false });
 
   if (periodoLetivoId) turmasQ = turmasQ.eq("periodo_letivo_id", Number(periodoLetivoId));
@@ -48,10 +52,20 @@ export async function GET(req: NextRequest) {
 
   if (horariosErr) return NextResponse.json({ error: horariosErr.message }, { status: 500 });
 
+  let turmasComResumo = (turmas ?? []) as Turma[];
+
+  try {
+    const resumoByTurmaId = await carregarResumoAlunosTurmas(supabase, turmaIds);
+    turmasComResumo = anexarResumoAlunosTurmas(turmasComResumo, resumoByTurmaId);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Erro ao carregar resumo operacional da grade.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
   return NextResponse.json({
     periodo_letivo_id: periodoLetivoId ? Number(periodoLetivoId) : null,
-    turmas: (turmas ?? []) as Turma[],
+    turmas: turmasComResumo,
     horarios: (horarios ?? []) as TurmaHorario[],
   });
 }
-
