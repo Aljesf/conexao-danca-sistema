@@ -96,7 +96,7 @@ export function FinanceiroMensalDetalheModal({
   const opcoesCompetencia = useMemo(
     () =>
       Array.from(new Set((payload?.composicao ?? []).map((item) => item.competencia)))
-        .sort((a, b) => b.localeCompare(a))
+        .sort((a, b) => a.localeCompare(b))
         .map((competencia) => ({
           valor: competencia,
           label: formatarCompetenciaLabel(competencia),
@@ -135,7 +135,14 @@ export function FinanceiroMensalDetalheModal({
       if (filtroNeofin && item.neofin_label !== filtroNeofin) return false;
       if (!query) return true;
 
-      return [item.pessoa_nome, item.pessoa_label, item.descricao, item.referencia]
+      return [
+        item.pessoa_nome,
+        item.pessoa_label,
+        item.descricao,
+        item.referencia,
+        item.canal_recebimento_label,
+        item.origem_recebimento_sistema,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(query);
@@ -155,6 +162,8 @@ export function FinanceiroMensalDetalheModal({
   }, [itensFiltrados, payload]);
 
   const itensSemNeofin = itensFiltrados.filter((item) => item.neofin_situacao_operacional !== "VINCULADA").length;
+  const itensNeoFinConfirmados = itensFiltrados.filter((item) => item.confirmado_via_neofin).length;
+  const itensBaixaInterna = itensFiltrados.filter((item) => item.confirmado_via_baixa_interna).length;
   const itensVencidos = itensFiltrados.filter((item) => item.valor_vencido_centavos > 0).length;
   const itensFuturos = itensFiltrados.filter((item) => item.competencia > competenciaAtual).length;
   const itensGeradosAntecipadamente = itensFiltrados.filter((item) => item.gerado_antecipadamente).length;
@@ -170,7 +179,7 @@ export function FinanceiroMensalDetalheModal({
             ) : null}
           </DialogHeader>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-4">
+          <div className="mt-4 grid gap-3 lg:grid-cols-5">
             <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Total exibido</p>
               <p className="mt-1.5 text-lg font-semibold text-slate-950">
@@ -195,10 +204,18 @@ export function FinanceiroMensalDetalheModal({
             </div>
 
             <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sem NeoFin</p>
-              <p className="mt-1.5 text-lg font-semibold text-slate-950">{itensSemNeofin}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">NeoFin confirmado</p>
+              <p className="mt-1.5 text-lg font-semibold text-slate-950">{itensNeoFinConfirmados}</p>
               <p className="mt-1 text-xs text-slate-500">
-                {itensSemNeofin} {itensSemNeofin === 1 ? "item esta" : "itens estao"} sem vinculo NeoFin.
+                {itensNeoFinConfirmados} {itensNeoFinConfirmados === 1 ? "item tem" : "itens tem"} confirmacao financeira NeoFin.
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Baixa interna</p>
+              <p className="mt-1.5 text-lg font-semibold text-slate-950">{itensBaixaInterna}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                {itensBaixaInterna} {itensBaixaInterna === 1 ? "item foi" : "itens foram"} confirmados por meios internos.
               </p>
             </div>
 
@@ -221,10 +238,18 @@ export function FinanceiroMensalDetalheModal({
               Previsao baseada em lancamentos ativos ja gerados na Conta Interna Aluno.
             </p>
           ) : null}
+          {itensSemNeofin > 0 ? (
+            <p className="mt-2 text-xs text-slate-500">
+              {itensSemNeofin} {itensSemNeofin === 1 ? "item esta" : "itens estao"} sem vinculo NeoFin.
+            </p>
+          ) : null}
           {(payload?.resumo_exclusoes.total_itens_excluidos ?? 0) > 0 ? (
             <p className="mt-2 text-xs text-slate-500">
               Itens cancelados/expurgados foram excluidos desta composicao principal.
             </p>
+          ) : null}
+          {payload?.resumo_exclusoes.mensagem ? (
+            <p className="mt-2 text-xs text-slate-500">{payload.resumo_exclusoes.mensagem}</p>
           ) : null}
         </div>
 
@@ -314,12 +339,13 @@ export function FinanceiroMensalDetalheModal({
           ) : null}
 
           <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="w-full min-w-[1040px] text-sm">
+            <table className="w-full min-w-[1160px] text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="px-3 py-3 text-left">Pessoa</th>
                   <th className="px-3 py-3 text-left">Descricao</th>
                   <th className="px-3 py-3 text-left">Origem</th>
+                  <th className="px-3 py-3 text-left">Canal</th>
                   <th className="px-3 py-3 text-left">Competencia</th>
                   <th className="px-3 py-3 text-left">Vencimento</th>
                   <th className="px-3 py-3 text-left">Status</th>
@@ -330,7 +356,7 @@ export function FinanceiroMensalDetalheModal({
               <tbody>
                 {itensFiltrados.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
+                    <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
                       Sem itens para os filtros atuais.
                     </td>
                   </tr>
@@ -353,6 +379,12 @@ export function FinanceiroMensalDetalheModal({
                         <div className="text-xs text-slate-500">
                           {item.conta_conexao_id ? `Conta #${item.conta_conexao_id}` : "Sem conta interna"}
                           {item.origem_lancamento ? ` | ${item.origem_lancamento}` : ""}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-slate-600">
+                        <div>{item.canal_recebimento_label ?? "Nao classificado"}</div>
+                        <div className="text-xs text-slate-500">
+                          {item.forma_pagamento_codigo ?? item.metodo_pagamento ?? item.origem_recebimento_sistema ?? "--"}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-slate-600">{item.competencia_label}</td>

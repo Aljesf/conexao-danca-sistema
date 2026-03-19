@@ -14,9 +14,12 @@ import {
 } from "@/lib/financeiro/creditoConexao/cobrancas";
 import {
   addCompetenciaMonths,
+  addIsoDays,
   compareCompetenciaAsc,
   montarDashboardFinanceiroComposicaoItem,
+  montarDashboardFinanceiroRecebimentoItem,
   montarDashboardFinanceiroMensalPayload,
+  startOfCompetencia,
   type DashboardFinanceiroMensalResponse,
 } from "@/lib/financeiro/dashboardMensalContaInterna";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
@@ -45,6 +48,17 @@ type CobrancaAvulsaMetaRow = {
   id: number;
   status: string | null;
   pago_em: string | null;
+  forma_pagamento: string | null;
+  valor_centavos: number | null;
+  valor_pago_centavos: number | null;
+  vencimento: string | null;
+  pessoa_id: number | null;
+  origem_tipo: string | null;
+  origem_id: number | null;
+  observacao: string | null;
+  motivo_excecao: string | null;
+  criado_em: string | null;
+  atualizado_em: string | null;
 };
 
 type ContaConexaoDashboardRow = {
@@ -91,6 +105,19 @@ type FaturaDashboardRow = {
   neofin_invoice_id: string | null;
 };
 
+type RecebimentoDashboardRow = {
+  id: number;
+  cobranca_id: number | null;
+  centro_custo_id: number | null;
+  valor_centavos: number | null;
+  data_pagamento: string | null;
+  metodo_pagamento: string | null;
+  forma_pagamento_codigo: string | null;
+  origem_sistema: string | null;
+  observacoes: string | null;
+  created_at: string | null;
+};
+
 function toInt(value: string | null, fallback: number): number {
   const parsed = value ? Number(value) : Number.NaN;
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
@@ -130,11 +157,27 @@ function upper(value: unknown): string {
 function calcularDiasAtraso(vencimento: string | null): number {
   const due = textOrNull(vencimento);
   if (!due || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return 0;
-  const today = new Date();
-  const todayIso = new Date(today.getTime() - today.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  const todayIso = dataAtualIso();
   if (due >= todayIso) return 0;
   const diffMs = new Date(`${todayIso}T00:00:00`).getTime() - new Date(`${due}T00:00:00`).getTime();
   return Math.max(Math.floor(diffMs / 86_400_000), 0);
+}
+
+function dataAtualIso(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function belongsToTipoConta(
+  pessoaId: number | null,
+  tipoConta: string,
+  tiposContaPorPessoa: Map<number, Set<string>>,
+): boolean {
+  if (typeof pessoaId !== "number" || !Number.isFinite(pessoaId)) return false;
+  if (tipoConta === "TODOS") return tiposContaPorPessoa.has(pessoaId);
+  const tipos = tiposContaPorPessoa.get(pessoaId);
+  return Boolean(tipos?.has(tipoConta));
 }
 
 function criarDestaques(
@@ -222,50 +265,55 @@ export async function GET(req: NextRequest) {
       ? competenciaFimMinimo
       : competenciaFimPorLimite;
   const limite = countCompetenciasInclusive(competenciaInicio, competenciaFim);
+  const hojeIso = dataAtualIso();
+  const inicioCompetenciaSelecionada = startOfCompetencia(competenciaSelecionada);
+  const inicioUltimos7Dias = addIsoDays(hojeIso, -6);
+  const inicioRecebimentos = inicioCompetenciaSelecionada < inicioUltimos7Dias
+    ? inicioCompetenciaSelecionada
+    : inicioUltimos7Dias;
+  const operacionalSelect = [
+    "cobranca_id",
+    "cobranca_fonte",
+    "pessoa_id",
+    "pessoa_nome",
+    "pessoa_label",
+    "competencia_ano_mes",
+    "competencia_label",
+    "tipo_cobranca",
+    "data_vencimento",
+    "valor_centavos",
+    "valor_pago_centavos",
+    "saldo_centavos",
+    "saldo_aberto_centavos",
+    "status_cobranca",
+    "status_bruto",
+    "status_operacional",
+    "neofin_charge_id",
+    "neofin_invoice_id",
+    "neofin_situacao_operacional",
+    "origem_tipo",
+    "origem_subtipo",
+    "origem_id",
+    "origem_referencia_label",
+    "dias_atraso",
+    "fatura_id",
+    "fatura_competencia",
+    "fatura_status",
+    "conta_conexao_id",
+    "tipo_conta",
+    "tipo_conta_label",
+    "permite_vinculo_manual",
+    "data_pagamento",
+    "link_pagamento",
+    "linha_digitavel",
+    "descricao",
+    "created_at",
+    "updated_at",
+  ].join(",");
 
   let query = supabase
     .from("vw_financeiro_cobrancas_operacionais")
-    .select(
-      [
-        "cobranca_id",
-        "cobranca_fonte",
-        "pessoa_id",
-        "pessoa_nome",
-        "pessoa_label",
-        "competencia_ano_mes",
-        "competencia_label",
-        "tipo_cobranca",
-        "data_vencimento",
-        "valor_centavos",
-        "valor_pago_centavos",
-        "saldo_centavos",
-        "saldo_aberto_centavos",
-        "status_cobranca",
-        "status_bruto",
-        "status_operacional",
-        "neofin_charge_id",
-        "neofin_invoice_id",
-        "neofin_situacao_operacional",
-        "origem_tipo",
-        "origem_subtipo",
-        "origem_id",
-        "origem_referencia_label",
-        "dias_atraso",
-        "fatura_id",
-        "fatura_competencia",
-        "fatura_status",
-        "conta_conexao_id",
-        "tipo_conta",
-        "tipo_conta_label",
-        "permite_vinculo_manual",
-        "data_pagamento",
-        "link_pagamento",
-        "linha_digitavel",
-        "descricao",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
+    .select(operacionalSelect)
     .gte("competencia_ano_mes", competenciaInicio)
     .lte("competencia_ano_mes", competenciaFim)
     .order("competencia_ano_mes", { ascending: true, nullsFirst: false })
@@ -302,6 +350,16 @@ export async function GET(req: NextRequest) {
   const operacionalRows = (operacionalData ?? []) as DashboardOperacionalRow[];
   const contas = ((contasRaw ?? []) as ContaConexaoDashboardRow[]).filter((item) => item.ativo !== false);
   const today = new Date();
+  const tiposContaPorPessoa = new Map<number, Set<string>>();
+
+  for (const conta of contas) {
+    for (const pessoaId of [conta.responsavel_financeiro_pessoa_id, conta.pessoa_titular_id]) {
+      if (typeof pessoaId !== "number" || !Number.isFinite(pessoaId) || pessoaId <= 0) continue;
+      const tipos = tiposContaPorPessoa.get(pessoaId) ?? new Set<string>();
+      if (textOrNull(conta.tipo_conta)) tipos.add(String(conta.tipo_conta).toUpperCase());
+      tiposContaPorPessoa.set(pessoaId, tipos);
+    }
+  }
 
   const cobrancaIds = Array.from(
     new Set(
@@ -327,6 +385,40 @@ export async function GET(req: NextRequest) {
     ),
   );
 
+  const [recebimentosRecentesResult, avulsasPagasRecentesResult] = await Promise.all([
+    cobrancaIds.length > 0
+      ? supabase
+        .from("recebimentos")
+        .select("id,cobranca_id,centro_custo_id,valor_centavos,data_pagamento,metodo_pagamento,forma_pagamento_codigo,origem_sistema,observacoes,created_at")
+        .in("cobranca_id", cobrancaIds)
+        .gte("data_pagamento", `${inicioRecebimentos}T00:00:00`)
+        .lte("data_pagamento", `${hojeIso}T23:59:59`)
+        .order("data_pagamento", { ascending: false, nullsFirst: false })
+        .order("id", { ascending: false })
+      : Promise.resolve({ data: [] as RecebimentoDashboardRow[], error: null }),
+    avulsaIds.length > 0
+      ? supabase
+        .from("financeiro_cobrancas_avulsas")
+        .select("id,pessoa_id,valor_centavos,valor_pago_centavos,status,pago_em,forma_pagamento,vencimento,origem_tipo,origem_id,observacao,motivo_excecao,criado_em,atualizado_em")
+        .in("id", avulsaIds)
+        .not("pago_em", "is", null)
+        .gte("pago_em", `${inicioRecebimentos}T00:00:00`)
+        .lte("pago_em", `${hojeIso}T23:59:59`)
+        .order("pago_em", { ascending: false, nullsFirst: false })
+      : Promise.resolve({ data: [] as CobrancaAvulsaMetaRow[], error: null }),
+  ]);
+
+  if (recebimentosRecentesResult.error || avulsasPagasRecentesResult.error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "erro_buscar_recebimentos_recentes_dashboard_mensal",
+        detail: recebimentosRecentesResult.error?.message ?? avulsasPagasRecentesResult.error?.message ?? "erro_desconhecido",
+      },
+      { status: 500 },
+    );
+  }
+
   const [cobrancasMetaResult, avulsasMetaResult, pessoasResult] = await Promise.all([
     cobrancaIds.length > 0
       ? supabase
@@ -335,7 +427,10 @@ export async function GET(req: NextRequest) {
         .in("id", cobrancaIds)
       : Promise.resolve({ data: [] as CobrancaMetaRow[], error: null }),
     avulsaIds.length > 0
-      ? supabase.from("financeiro_cobrancas_avulsas").select("id,status,pago_em").in("id", avulsaIds)
+      ? supabase
+        .from("financeiro_cobrancas_avulsas")
+        .select("id,pessoa_id,valor_centavos,valor_pago_centavos,status,pago_em,forma_pagamento,vencimento,origem_tipo,origem_id,observacao,motivo_excecao,criado_em,atualizado_em")
+        .in("id", avulsaIds)
       : Promise.resolve({ data: [] as CobrancaAvulsaMetaRow[], error: null }),
     pessoaIds.length > 0
       ? supabase.from("pessoas").select("id,nome").in("id", pessoaIds)
@@ -369,6 +464,8 @@ export async function GET(req: NextRequest) {
       .map((row) => [Number(row.id), textOrNull(row.nome) ?? `Pessoa #${row.id}`]),
   );
   const contasById = new Map<number, ContaConexaoDashboardRow>(contas.map((row) => [Number(row.id), row]));
+  const recebimentosRecentes = (recebimentosRecentesResult.data ?? []) as RecebimentoDashboardRow[];
+  const avulsasPagasRecentes = (avulsasPagasRecentesResult.data ?? []) as CobrancaAvulsaMetaRow[];
 
   const contaIds = contas.map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
   const { data: lancamentosRaw, error: lancamentosError } = contaIds.length > 0
@@ -578,14 +675,72 @@ export async function GET(req: NextRequest) {
       });
     });
 
+  const itensOperacionaisPorCobrancaId = new Map(
+    itensOperacionais
+      .filter((item) => item.cobranca_fonte !== "COBRANCA_AVULSA" && typeof item.cobranca_id === "number")
+      .map((item) => [Number(item.cobranca_id), item] as const),
+  );
+  const itensOperacionaisPorAvulsaId = new Map(
+    itensOperacionais
+      .filter((item) => item.cobranca_fonte === "COBRANCA_AVULSA" && typeof item.cobranca_id === "number")
+      .map((item) => [Number(item.cobranca_id), item] as const),
+  );
+
+  const itensRecebimentosCanonicos = recebimentosRecentes
+    .map((row) => {
+      const cobrancaId = Number(row.cobranca_id ?? 0);
+      const baseItem = itensOperacionaisPorCobrancaId.get(cobrancaId);
+      const valorRecebido = Number(row.valor_centavos ?? 0);
+      const dataPagamento = textOrNull(row.data_pagamento)?.slice(0, 10) ?? null;
+
+      if (!baseItem || valorRecebido <= 0 || !dataPagamento) return null;
+
+      return montarDashboardFinanceiroRecebimentoItem(baseItem, {
+        recebimento_id: Number(row.id),
+        cobranca_key: `${baseItem.cobranca_key}:RECEBIMENTO:${row.id}`,
+        valor_recebido_centavos: valorRecebido,
+        data_pagamento: dataPagamento,
+        origem_recebimento_sistema: textOrNull(row.origem_sistema),
+        forma_pagamento_codigo: textOrNull(row.forma_pagamento_codigo),
+        metodo_pagamento: textOrNull(row.metodo_pagamento),
+        referencia: textOrNull(row.observacoes) ?? `recebimento:${row.id}`,
+      });
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  const itensRecebimentosAvulsos = avulsasPagasRecentes
+    .filter((row) => belongsToTipoConta(Number(row.pessoa_id ?? 0) || null, tipoConta, tiposContaPorPessoa))
+    .map((row) => {
+      const avulsaId = Number(row.id);
+      const baseItem = itensOperacionaisPorAvulsaId.get(avulsaId);
+      const valorRecebido = Number(row.valor_pago_centavos ?? 0) || Number(row.valor_centavos ?? 0);
+      const dataPagamento = textOrNull(row.pago_em)?.slice(0, 10) ?? null;
+
+      if (!baseItem || valorRecebido <= 0 || !dataPagamento) return null;
+
+      return montarDashboardFinanceiroRecebimentoItem(baseItem, {
+        recebimento_id: avulsaId,
+        cobranca_key: `${baseItem.cobranca_key}:RECEBIMENTO_AVULSA:${row.id}`,
+        valor_recebido_centavos: valorRecebido,
+        data_pagamento: dataPagamento,
+        origem_recebimento_sistema: "COBRANCA_AVULSA",
+        forma_pagamento_codigo: textOrNull(row.forma_pagamento),
+        metodo_pagamento: textOrNull(row.forma_pagamento),
+        referencia: textOrNull(row.observacao) ?? `recebimento_avulsa:${row.id}`,
+      });
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
   const payloadBase = montarDashboardFinanceiroMensalPayload({
     items: [...itensOperacionais, ...itensLancamentosFuturos],
+    receiptItems: [...itensRecebimentosCanonicos, ...itensRecebimentosAvulsos],
     competenciaSelecionada,
     competenciaInicio,
     competenciaFim,
     limite,
     tipoConta,
     competenciaAtualReal: competenciaBase,
+    todayIso: hojeIso,
   });
   const payload: DashboardFinanceiroMensalResponse = {
     ...payloadBase,

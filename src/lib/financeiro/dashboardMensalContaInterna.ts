@@ -1,4 +1,5 @@
 import {
+  formatarDataLabel,
   formatarCompetenciaLabel,
   inferirNeofinStatusCobranca,
   montarNeofinLabel,
@@ -12,6 +13,10 @@ import {
 export type DashboardMensalCardKey =
   | "previsto_para_receber"
   | "recebido_no_mes"
+  | "recebido_via_neofin"
+  | "recebido_baixa_interna"
+  | "recebido_hoje"
+  | "recebido_ultimos_7_dias"
   | "pendente_do_mes"
   | "em_cobranca_neofin"
   | "inadimplencia_do_mes";
@@ -19,6 +24,14 @@ export type DashboardMensalCardKey =
 export type DashboardMensalNaturezaKey = "previsto" | "pago" | "pendente" | "vencido" | "neofin";
 
 export type DashboardFinanceiroFonteItem = "COBRANCA" | "COBRANCA_AVULSA" | "LANCAMENTO";
+
+export type DashboardFinanceiroCanalRecebimento =
+  | "NEOFIN_CONFIRMADO"
+  | "INTERNO_DINHEIRO"
+  | "INTERNO_PIX"
+  | "INTERNO_CARTAO"
+  | "INTERNO_OUTROS"
+  | "NAO_CLASSIFICADO";
 
 export type DashboardFinanceiroStatusNormalizado =
   | "RECEBIDO_CONFIRMADO"
@@ -41,6 +54,7 @@ export type DashboardFinanceiroComposicaoItem = {
   competencia_label: string;
   cobranca_id: number | null;
   lancamento_id: number | null;
+  recebimento_id: number | null;
   cobranca_key: string;
   cobranca_fonte: DashboardFinanceiroFonteItem;
   pessoa_id: number | null;
@@ -80,6 +94,13 @@ export type DashboardFinanceiroComposicaoItem = {
   neofin_status: NeofinStatusCobranca;
   neofin_label: string;
   neofin_situacao_operacional: NeofinSituacaoOperacional;
+  canal_recebimento: DashboardFinanceiroCanalRecebimento | null;
+  canal_recebimento_label: string | null;
+  origem_recebimento_sistema: string | null;
+  forma_pagamento_codigo: string | null;
+  metodo_pagamento: string | null;
+  confirmado_via_neofin: boolean;
+  confirmado_via_baixa_interna: boolean;
   data_vencimento: string | null;
   data_pagamento: string | null;
   observacao_resumo: string | null;
@@ -107,6 +128,7 @@ export type DashboardFinanceiroCardDetalhe = {
   titulo: string;
   competencia: string;
   competencia_label: string;
+  subtitulo: string | null;
   total_centavos: number;
   percentual: number | null;
   composicao: DashboardFinanceiroComposicaoItem[];
@@ -148,6 +170,10 @@ export type DashboardFinanceiroMensalResponse = {
   cards: {
     previsto_mes_centavos: number;
     pago_mes_centavos: number;
+    recebido_via_neofin_mes_centavos: number;
+    recebido_baixa_interna_mes_centavos: number;
+    recebido_hoje_centavos: number;
+    recebido_ultimos_7_dias_centavos: number;
     pendente_mes_centavos: number;
     neofin_mes_centavos: number;
     inadimplencia_mes_percentual: number;
@@ -168,6 +194,7 @@ export type DashboardFinanceiroNormalizacaoInput = {
   competencia: string;
   cobranca_id?: number | null;
   lancamento_id?: number | null;
+  recebimento_id?: number | null;
   cobranca_key: string;
   cobranca_fonte: DashboardFinanceiroFonteItem;
   pessoa_id?: number | null;
@@ -195,6 +222,13 @@ export type DashboardFinanceiroNormalizacaoInput = {
   neofin_status?: NeofinStatusCobranca | null;
   neofin_label?: string | null;
   neofin_situacao_operacional?: NeofinSituacaoOperacional | null;
+  canal_recebimento?: DashboardFinanceiroCanalRecebimento | null;
+  canal_recebimento_label?: string | null;
+  origem_recebimento_sistema?: string | null;
+  forma_pagamento_codigo?: string | null;
+  metodo_pagamento?: string | null;
+  confirmado_via_neofin?: boolean;
+  confirmado_via_baixa_interna?: boolean;
   fatura_id?: number | null;
   fatura_competencia?: string | null;
   fatura_status?: string | null;
@@ -213,12 +247,14 @@ export type DashboardFinanceiroNormalizacaoInput = {
 
 type MontarDashboardFinanceiroMensalParams = {
   items: DashboardFinanceiroComposicaoItem[];
+  receiptItems: DashboardFinanceiroComposicaoItem[];
   competenciaSelecionada: string;
   competenciaInicio: string;
   competenciaFim: string;
   limite: number;
   tipoConta: string;
   competenciaAtualReal: string;
+  todayIso: string;
 };
 
 function normalizarTexto(value: string | null | undefined): string | null {
@@ -252,6 +288,39 @@ function upper(value: string | null | undefined): string {
     .replace(/[\u0300-\u036f]/g, "")
     .toUpperCase() ?? "";
 }
+
+const CANAIS_INTERNOS_POR_ORIGEM = new Set([
+  "ADMIN_FINANCEIRO",
+  "PAGAMENTO_PRESENCIAL",
+  "COBRANCA_AVULSA",
+  "CARTAO_REPASSE",
+]);
+
+const CODIGOS_DINHEIRO = new Set(["DINHEIRO"]);
+const CODIGOS_PIX = new Set(["PIX"]);
+const CODIGOS_CARTAO = new Set([
+  "CARTAO",
+  "CARTAO_CREDITO_AVISTA",
+  "CARTAO_CREDITO_PARCELADO",
+  "CARTAO_DEBITO",
+  "CARTAO_CONEXAO_ALUNO",
+  "CARTAO_CONEXAO_COLABORADOR",
+  "CREDITO_OPERADORA",
+]);
+
+type DashboardReceiptClassificationInput = {
+  possui_vinculo_neofin: boolean;
+  origem_recebimento_sistema?: string | null;
+  forma_pagamento_codigo?: string | null;
+  metodo_pagamento?: string | null;
+};
+
+type DashboardReceiptClassification = {
+  canal_recebimento: DashboardFinanceiroCanalRecebimento;
+  canal_recebimento_label: string;
+  confirmado_via_neofin: boolean;
+  confirmado_via_baixa_interna: boolean;
+};
 
 function statusOperacionalLabel(status: StatusOperacionalCobranca): string {
   switch (status) {
@@ -287,10 +356,6 @@ export function compareCompetenciaAsc(a: string, b: string): number {
   return competenciaToIndex(a) - competenciaToIndex(b);
 }
 
-function compareCompetenciaDesc(a: string, b: string): number {
-  return compareCompetenciaAsc(b, a);
-}
-
 export function addCompetenciaMonths(competencia: string, offset: number): string {
   const [yearRaw, monthRaw] = competencia.split("-");
   const year = Number(yearRaw);
@@ -299,6 +364,27 @@ export function addCompetenciaMonths(competencia: string, offset: number): strin
   const nextYear = date.getFullYear();
   const nextMonth = String(date.getMonth() + 1).padStart(2, "0");
   return `${nextYear}-${nextMonth}`;
+}
+
+export function startOfCompetencia(competencia: string): string {
+  return `${competencia}-01`;
+}
+
+export function endOfCompetencia(competencia: string): string {
+  const [yearRaw, monthRaw] = competencia.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const date = new Date(year, month, 0);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+export function addIsoDays(dateIso: string, offset: number): string {
+  const [yearRaw, monthRaw, dayRaw] = dateIso.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  const date = new Date(year, month - 1, day + offset, 12, 0, 0);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 export function buildCompetenciaSeries(inicio: string, fim: string): string[] {
@@ -317,6 +403,93 @@ export function buildCompetenciaSeries(inicio: string, fim: string): string[] {
 
 function isStatusCancelado(value: string | null | undefined): boolean {
   return new Set(["CANCELADO", "CANCELADA", "CANCELED", "CANCELLED", "VOID"]).has(upper(value));
+}
+
+function hasInternalOrigin(origemRecebimentoSistema: string | null | undefined): boolean {
+  return CANAIS_INTERNOS_POR_ORIGEM.has(upper(origemRecebimentoSistema));
+}
+
+function isDinheiro(codeOrMethod: string | null | undefined): boolean {
+  return CODIGOS_DINHEIRO.has(upper(codeOrMethod));
+}
+
+function isPix(codeOrMethod: string | null | undefined): boolean {
+  return CODIGOS_PIX.has(upper(codeOrMethod));
+}
+
+function isCartao(codeOrMethod: string | null | undefined): boolean {
+  const normalized = upper(codeOrMethod);
+  return (
+    CODIGOS_CARTAO.has(normalized) ||
+    normalized.includes("CARTAO") ||
+    normalized.includes("CREDITO") ||
+    normalized.includes("DEBITO")
+  );
+}
+
+function hasExplicitInternalMarker(input: DashboardReceiptClassificationInput): boolean {
+  return (
+    hasInternalOrigin(input.origem_recebimento_sistema) ||
+    isDinheiro(input.forma_pagamento_codigo) ||
+    isDinheiro(input.metodo_pagamento) ||
+    isPix(input.forma_pagamento_codigo) ||
+    isPix(input.metodo_pagamento) ||
+    isCartao(input.forma_pagamento_codigo) ||
+    isCartao(input.metodo_pagamento)
+  );
+}
+
+export function isNeoFinConfirmedReceipt(input: DashboardReceiptClassificationInput): boolean {
+  return input.possui_vinculo_neofin && !hasExplicitInternalMarker(input);
+}
+
+export function isInternalConfirmedReceipt(input: DashboardReceiptClassificationInput): boolean {
+  return !isNeoFinConfirmedReceipt(input);
+}
+
+export function classifyReceiptChannel(input: DashboardReceiptClassificationInput): DashboardReceiptClassification {
+  if (isNeoFinConfirmedReceipt(input)) {
+    return {
+      canal_recebimento: "NEOFIN_CONFIRMADO",
+      canal_recebimento_label: "NeoFin confirmado",
+      confirmado_via_neofin: true,
+      confirmado_via_baixa_interna: false,
+    };
+  }
+
+  if (isPix(input.forma_pagamento_codigo) || isPix(input.metodo_pagamento)) {
+    return {
+      canal_recebimento: "INTERNO_PIX",
+      canal_recebimento_label: "Baixa interna via PIX",
+      confirmado_via_neofin: false,
+      confirmado_via_baixa_interna: true,
+    };
+  }
+
+  if (isDinheiro(input.forma_pagamento_codigo) || isDinheiro(input.metodo_pagamento)) {
+    return {
+      canal_recebimento: "INTERNO_DINHEIRO",
+      canal_recebimento_label: "Baixa interna em dinheiro",
+      confirmado_via_neofin: false,
+      confirmado_via_baixa_interna: true,
+    };
+  }
+
+  if (isCartao(input.forma_pagamento_codigo) || isCartao(input.metodo_pagamento)) {
+    return {
+      canal_recebimento: "INTERNO_CARTAO",
+      canal_recebimento_label: "Baixa interna em cartao",
+      confirmado_via_neofin: false,
+      confirmado_via_baixa_interna: true,
+    };
+  }
+
+  return {
+    canal_recebimento: "INTERNO_OUTROS",
+    canal_recebimento_label: "Baixa interna / outros meios",
+    confirmado_via_neofin: false,
+    confirmado_via_baixa_interna: true,
+  };
 }
 
 function inferirStatusOperacional(
@@ -386,6 +559,14 @@ function buildObservacaoResumo(item: DashboardFinanceiroComposicaoItem): string 
 
   if (item.elegivel_recebido && item.data_pagamento) {
     observacoes.push(`Recebimento confirmado em ${item.data_pagamento}`);
+  }
+
+  if (item.elegivel_recebido && item.canal_recebimento_label) {
+    observacoes.push(item.canal_recebimento_label);
+  }
+
+  if (item.confirmado_via_neofin) {
+    observacoes.push("NeoFin confirmado por recebimento local");
   }
 
   if (item.elegivel_pendente && !item.elegivel_neofin) {
@@ -531,6 +712,14 @@ function cardTitulo(indicador: DashboardMensalCardKey): string {
       return "Previsto para receber";
     case "recebido_no_mes":
       return "Recebido no mes";
+    case "recebido_via_neofin":
+      return "Recebido via NeoFin";
+    case "recebido_baixa_interna":
+      return "Recebido por baixa interna";
+    case "recebido_hoje":
+      return "Recebido hoje";
+    case "recebido_ultimos_7_dias":
+      return "Recebido ultimos 7 dias";
     case "pendente_do_mes":
       return "Pendente do mes";
     case "em_cobranca_neofin":
@@ -552,6 +741,14 @@ function cardObservacao(
   switch (indicador) {
     case "recebido_no_mes":
       return `${prefixoExclusao}Somente recebimentos financeiros confirmados entram neste total. ${observacaoCompetencia}`;
+    case "recebido_via_neofin":
+      return `${prefixoExclusao}NeoFin so entra como recebido quando ha confirmacao local de recebimento elegivel. Sincronizacao remota isolada nao compoe este total.`;
+    case "recebido_baixa_interna":
+      return `${prefixoExclusao}Entram apenas baixas internas, presenciais, avulsas ou outros meios nao classificados como NeoFin confirmado.`;
+    case "recebido_hoje":
+      return `${prefixoExclusao}Janela movel do dia corrente usando a data efetiva do recebimento confirmado.`;
+    case "recebido_ultimos_7_dias":
+      return `${prefixoExclusao}Janela movel dos ultimos 7 dias, incluindo hoje, pela data efetiva do recebimento confirmado.`;
     case "pendente_do_mes":
       return `${prefixoExclusao}Saldo aberto elegivel da competencia operacional selecionada. ${observacaoCompetencia}`;
     case "em_cobranca_neofin":
@@ -590,6 +787,7 @@ function montarCardDetalhe(
       titulo: cardTitulo(indicador),
       competencia,
       competencia_label: competenciaLabel,
+      subtitulo: `Competencia ${competenciaLabel}`,
       total_centavos: totalVencido,
       percentual: totalPrevisto > 0 ? Math.round((totalVencido / totalPrevisto) * 1000) / 10 : 0,
       composicao,
@@ -615,6 +813,7 @@ function montarCardDetalhe(
     titulo: cardTitulo(indicador),
     competencia,
     competencia_label: competenciaLabel,
+    subtitulo: `Competencia ${competenciaLabel}`,
     total_centavos: totalNatureza(composicao, natureza),
     percentual: null,
     composicao,
@@ -622,6 +821,33 @@ function montarCardDetalhe(
     resumo: resumirComposicao(composicao, excluidos, competenciaAtualReal),
     resumo_exclusoes: resumoExclusoes,
     observacao_resumo: cardObservacao(indicador, observacaoCompetencia, resumoExclusoes),
+  };
+}
+
+function montarCardDetalheRecebimentos(params: {
+  indicador: DashboardMensalCardKey;
+  competencia: string;
+  subtitulo: string;
+  itemsTodos: DashboardFinanceiroComposicaoItem[];
+  competenciaAtualReal: string;
+}): DashboardFinanceiroCardDetalhe {
+  const elegiveis = sortComposicao(params.itemsTodos.filter((item) => !item.excluido_do_total), "pago");
+  const excluidos = sortComposicao(params.itemsTodos.filter((item) => item.excluido_do_total), "pago");
+  const resumoExclusoes = resumirExclusoes(excluidos);
+
+  return {
+    indicador: params.indicador,
+    titulo: cardTitulo(params.indicador),
+    competencia: params.competencia,
+    competencia_label: formatarCompetenciaLabel(params.competencia),
+    subtitulo: params.subtitulo,
+    total_centavos: totalNatureza(elegiveis, "pago"),
+    percentual: null,
+    composicao: elegiveis,
+    composicao_excluida: excluidos,
+    resumo: resumirComposicao(elegiveis, excluidos, params.competenciaAtualReal),
+    resumo_exclusoes: resumoExclusoes,
+    observacao_resumo: cardObservacao(params.indicador, "", resumoExclusoes),
   };
 }
 
@@ -676,14 +902,19 @@ export function montarDashboardFinanceiroComposicaoItem(
     numeroSeguro(input.valor_pendente_base_centavos) || Math.max(valorNominalCentavos - valorRecebidoCentavos, 0),
     0,
   );
-  const statusOperacional =
+  const statusInferido = inferirStatusOperacional(
+    normalizarTexto(input.data_vencimento),
+    valorNominalCentavos,
+    valorRecebidoCentavos,
+    valorPendenteCentavos,
+  );
+  const statusOperacionalBase =
     input.status_operacional ??
-    inferirStatusOperacional(
-      normalizarTexto(input.data_vencimento),
-      valorNominalCentavos,
-      valorRecebidoCentavos,
-      valorPendenteCentavos,
-    );
+    statusInferido;
+  const statusOperacional =
+    statusOperacionalBase === "PAGO" && valorRecebidoCentavos <= 0 && valorPendenteCentavos > 0
+      ? statusInferido
+      : statusOperacionalBase;
   const statusOriginal = normalizarTexto(input.status_original) ?? normalizarTexto(input.status_bruto);
   const cancelado = input.cancelado === true || isStatusCancelado(statusOriginal) || isStatusCancelado(input.status_bruto);
   const expurgado = input.expurgado === true;
@@ -736,6 +967,7 @@ export function montarDashboardFinanceiroComposicaoItem(
     competencia_label: formatarCompetenciaLabel(input.competencia),
     cobranca_id: input.cobranca_id ?? null,
     lancamento_id: input.lancamento_id ?? null,
+    recebimento_id: input.recebimento_id ?? null,
     cobranca_key: input.cobranca_key,
     cobranca_fonte: input.cobranca_fonte,
     pessoa_id: input.pessoa_id ?? null,
@@ -775,6 +1007,13 @@ export function montarDashboardFinanceiroComposicaoItem(
     neofin_status: neofinStatus,
     neofin_label: normalizarTexto(input.neofin_label) ?? montarNeofinLabel(neofinStatus),
     neofin_situacao_operacional: neofinSituacao,
+    canal_recebimento: input.canal_recebimento ?? null,
+    canal_recebimento_label: normalizarTexto(input.canal_recebimento_label),
+    origem_recebimento_sistema: normalizarTexto(input.origem_recebimento_sistema),
+    forma_pagamento_codigo: normalizarTexto(input.forma_pagamento_codigo),
+    metodo_pagamento: normalizarTexto(input.metodo_pagamento),
+    confirmado_via_neofin: input.confirmado_via_neofin === true,
+    confirmado_via_baixa_interna: input.confirmado_via_baixa_interna === true,
     data_vencimento: normalizarTexto(input.data_vencimento),
     data_pagamento: normalizarTexto(input.data_pagamento),
     observacao_resumo: null,
@@ -786,6 +1025,62 @@ export function montarDashboardFinanceiroComposicaoItem(
     dias_em_atraso: Math.max(numeroSeguro(input.dias_em_atraso), 0),
     created_at: normalizarTexto(input.created_at),
     updated_at: normalizarTexto(input.updated_at),
+  };
+
+  composicao.observacao_resumo = buildObservacaoResumo(composicao);
+  return composicao;
+}
+
+export function montarDashboardFinanceiroRecebimentoItem(
+  baseItem: DashboardFinanceiroComposicaoItem,
+  input: {
+    recebimento_id: number | null;
+    cobranca_key: string;
+    valor_recebido_centavos: number;
+    data_pagamento: string;
+    origem_recebimento_sistema?: string | null;
+    forma_pagamento_codigo?: string | null;
+    metodo_pagamento?: string | null;
+    referencia?: string | null;
+  },
+): DashboardFinanceiroComposicaoItem {
+  const classificacao = classifyReceiptChannel({
+    possui_vinculo_neofin:
+      baseItem.neofin_status !== "SEM_NEOFIN" ||
+      baseItem.neofin_situacao_operacional === "VINCULADA",
+    origem_recebimento_sistema: input.origem_recebimento_sistema,
+    forma_pagamento_codigo: input.forma_pagamento_codigo,
+    metodo_pagamento: input.metodo_pagamento,
+  });
+
+  const composicao: DashboardFinanceiroComposicaoItem = {
+    ...baseItem,
+    recebimento_id: input.recebimento_id,
+    cobranca_key: input.cobranca_key,
+    referencia: normalizarTexto(input.referencia) ?? baseItem.referencia,
+    valor_nominal_centavos: numeroSeguro(input.valor_recebido_centavos),
+    valor_previsto_centavos: 0,
+    valor_recebido_centavos: numeroSeguro(input.valor_recebido_centavos),
+    valor_pendente_centavos: 0,
+    valor_vencido_centavos: 0,
+    valor_neofin_centavos: 0,
+    elegivel_previsto: false,
+    elegivel_recebido: !baseItem.excluido_do_total && numeroSeguro(input.valor_recebido_centavos) > 0,
+    elegivel_pendente: false,
+    elegivel_vencido: false,
+    elegivel_neofin: false,
+    status: "PAGO",
+    status_label: statusOperacionalLabel("PAGO"),
+    status_normalizado: "RECEBIDO_CONFIRMADO",
+    data_pagamento: normalizarTexto(input.data_pagamento),
+    canal_recebimento: classificacao.canal_recebimento,
+    canal_recebimento_label: classificacao.canal_recebimento_label,
+    origem_recebimento_sistema: normalizarTexto(input.origem_recebimento_sistema),
+    forma_pagamento_codigo: normalizarTexto(input.forma_pagamento_codigo),
+    metodo_pagamento: normalizarTexto(input.metodo_pagamento),
+    confirmado_via_neofin: classificacao.confirmado_via_neofin,
+    confirmado_via_baixa_interna: classificacao.confirmado_via_baixa_interna,
+    observacao_resumo: null,
   };
 
   composicao.observacao_resumo = buildObservacaoResumo(composicao);
@@ -805,7 +1100,7 @@ export function montarDashboardFinanceiroMensalPayload(
 
   const competencias = buildCompetenciaSeries(params.competenciaInicio, params.competenciaFim);
   const meses = [...competencias]
-    .sort(compareCompetenciaDesc)
+    .sort(compareCompetenciaAsc)
     .map((competencia) =>
       criarCompetenciaDetalhe(
         competencia,
@@ -817,9 +1112,54 @@ export function montarDashboardFinanceiroMensalPayload(
     meses.find((item) => item.competencia === params.competenciaSelecionada) ??
     criarCompetenciaDetalhe(params.competenciaSelecionada, [], params.competenciaAtualReal);
 
+  const inicioMesSelecionado = startOfCompetencia(params.competenciaSelecionada);
+  const fimMesSelecionado = endOfCompetencia(params.competenciaSelecionada);
+  const inicioUltimos7Dias = addIsoDays(params.todayIso, -6);
+  const recebimentosMes = sortComposicao(
+    params.receiptItems.filter((item) => {
+      const pagamento = normalizarTexto(item.data_pagamento)?.slice(0, 10);
+      return Boolean(
+        item.elegivel_recebido &&
+        !item.excluido_do_total &&
+        pagamento &&
+        pagamento >= inicioMesSelecionado &&
+        pagamento <= fimMesSelecionado,
+      );
+    }),
+    "pago",
+  );
+  const recebimentosViaNeofinMes = recebimentosMes.filter((item) => item.confirmado_via_neofin);
+  const recebimentosBaixaInternaMes = recebimentosMes.filter((item) => item.confirmado_via_baixa_interna);
+  const recebimentosHoje = sortComposicao(
+    params.receiptItems.filter(
+      (item) =>
+        item.elegivel_recebido &&
+        !item.excluido_do_total &&
+        normalizarTexto(item.data_pagamento)?.slice(0, 10) === params.todayIso,
+    ),
+    "pago",
+  );
+  const recebimentosUltimos7Dias = sortComposicao(
+    params.receiptItems.filter((item) => {
+      const pagamento = normalizarTexto(item.data_pagamento)?.slice(0, 10);
+      return Boolean(
+        item.elegivel_recebido &&
+        !item.excluido_do_total &&
+        pagamento &&
+        pagamento >= inicioUltimos7Dias &&
+        pagamento <= params.todayIso,
+      );
+    }),
+    "pago",
+  );
+
   const cards = {
     previsto_mes_centavos: mesSelecionado.previsto_centavos,
     pago_mes_centavos: mesSelecionado.pago_centavos,
+    recebido_via_neofin_mes_centavos: totalNatureza(recebimentosViaNeofinMes, "pago"),
+    recebido_baixa_interna_mes_centavos: totalNatureza(recebimentosBaixaInternaMes, "pago"),
+    recebido_hoje_centavos: totalNatureza(recebimentosHoje, "pago"),
+    recebido_ultimos_7_dias_centavos: totalNatureza(recebimentosUltimos7Dias, "pago"),
     pendente_mes_centavos: mesSelecionado.pendente_centavos,
     neofin_mes_centavos: mesSelecionado.neofin_centavos,
     inadimplencia_mes_percentual:
@@ -842,6 +1182,34 @@ export function montarDashboardFinanceiroMensalPayload(
       itemsSelecionados,
       params.competenciaAtualReal,
     ),
+    recebido_via_neofin: montarCardDetalheRecebimentos({
+      indicador: "recebido_via_neofin",
+      competencia: params.competenciaSelecionada,
+      subtitulo: `Recebimentos confirmados em ${formatarCompetenciaLabel(params.competenciaSelecionada)}`,
+      itemsTodos: recebimentosViaNeofinMes,
+      competenciaAtualReal: params.competenciaAtualReal,
+    }),
+    recebido_baixa_interna: montarCardDetalheRecebimentos({
+      indicador: "recebido_baixa_interna",
+      competencia: params.competenciaSelecionada,
+      subtitulo: `Baixas internas e outros meios em ${formatarCompetenciaLabel(params.competenciaSelecionada)}`,
+      itemsTodos: recebimentosBaixaInternaMes,
+      competenciaAtualReal: params.competenciaAtualReal,
+    }),
+    recebido_hoje: montarCardDetalheRecebimentos({
+      indicador: "recebido_hoje",
+      competencia: params.competenciaSelecionada,
+      subtitulo: `Recebimentos confirmados em ${formatarDataLabel(params.todayIso)}`,
+      itemsTodos: recebimentosHoje,
+      competenciaAtualReal: params.competenciaAtualReal,
+    }),
+    recebido_ultimos_7_dias: montarCardDetalheRecebimentos({
+      indicador: "recebido_ultimos_7_dias",
+      competencia: params.competenciaSelecionada,
+      subtitulo: `Janela movel de ${formatarDataLabel(inicioUltimos7Dias)} ate ${formatarDataLabel(params.todayIso)}`,
+      itemsTodos: recebimentosUltimos7Dias,
+      competenciaAtualReal: params.competenciaAtualReal,
+    }),
     pendente_do_mes: montarCardDetalhe(
       "pendente_do_mes",
       params.competenciaSelecionada,
