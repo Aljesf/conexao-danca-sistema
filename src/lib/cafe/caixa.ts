@@ -91,6 +91,13 @@ type VendaRow = Record<string, unknown> & {
   created_at: string | null;
 };
 
+type CobrancaCafeStatusRow = {
+  id: number;
+  status: string | null;
+  cancelada_em: string | null;
+  cancelamento_tipo: string | null;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -284,6 +291,15 @@ function normalizarVendaLegada(venda: VendaRow): VendaRow {
   };
 }
 
+function isCobrancaCafeCancelada(cobranca: CobrancaCafeStatusRow | null | undefined) {
+  if (!cobranca) return false;
+  return (
+    upper(cobranca.status) === "CANCELADA" ||
+    Boolean(asString(cobranca.cancelada_em)) ||
+    upper(cobranca.cancelamento_tipo) === "RESET_OPERACIONAL_CAFE"
+  );
+}
+
 function isFutureBillingFormaPagamento(value: unknown) {
   const normalized = asString(value)?.toUpperCase();
   return (
@@ -455,7 +471,26 @@ async function enrichVendas(supabase: any, vendas: VendaRow[]) {
   }
 
   const faturaPorCobranca = new Map<number, Record<string, unknown>>();
+  const cobrancaStatusPorId = new Map<number, CobrancaCafeStatusRow>();
   if (cobrancaIds.length > 0) {
+    const { data: cobrancas, error: cobrancasError } = await supabase
+      .from("cobrancas")
+      .select("id,status,cancelada_em,cancelamento_tipo")
+      .in("id", cobrancaIds);
+
+    if (cobrancasError) throw cobrancasError;
+
+    for (const cobranca of (cobrancas ?? []) as Array<Record<string, unknown>>) {
+      const id = asInt(cobranca.id);
+      if (!id) continue;
+      cobrancaStatusPorId.set(id, {
+        id,
+        status: asString(cobranca.status),
+        cancelada_em: asString(cobranca.cancelada_em),
+        cancelamento_tipo: asString(cobranca.cancelamento_tipo),
+      });
+    }
+
     const { data: lancamentos, error: lancamentosError } = await supabase
       .from("credito_conexao_lancamentos")
       .select("id,cobranca_id")
@@ -521,8 +556,17 @@ async function enrichVendas(supabase: any, vendas: VendaRow[]) {
     const pagadorId = asInt(venda.pagador_pessoa_id);
     const colaboradorPessoaId = asInt(venda.colaborador_pessoa_id);
     const cobrancaId = asInt(venda.cobranca_id);
+    const cobrancaCancelada = cobrancaId ? isCobrancaCafeCancelada(cobrancaStatusPorId.get(cobrancaId)) : false;
+    const vendaEfetiva = cobrancaCancelada
+      ? {
+          ...vendaNormalizada,
+          status_pagamento: CAFE_STATUS_PAGAMENTO.CANCELADO,
+          status_financeiro: "CANCELADO",
+        }
+      : vendaNormalizada;
+
     return {
-      ...vendaNormalizada,
+      ...vendaEfetiva,
       pagador_nome: pagadorId ? nomePessoa.get(pagadorId) ?? `Pessoa #${pagadorId}` : null,
       colaborador_nome:
         colaboradorPessoaId ? nomePessoa.get(colaboradorPessoaId) ?? `Pessoa #${colaboradorPessoaId}` : null,
@@ -995,14 +1039,17 @@ export async function listarComandasCafe(supabase: any, filters: URLSearchParams
   if (isIsoDate(dataInicial)) query = query.gte("data_operacao", dataInicial);
   if (isIsoDate(dataFinal)) query = query.lte("data_operacao", dataFinal);
   if (colaboradorPessoaId) query = query.eq("colaborador_pessoa_id", colaboradorPessoaId);
-  if (statusPagamento) query = query.eq("status_pagamento", statusPagamento);
   if (isCompetencia(competencia)) query = query.eq("data_competencia", competencia);
 
   const { data, error } = await query;
   if (error) throw error;
   console.log("[CAFE_CAIXA][LISTAR] comandas encontradas:", Array.isArray(data) ? data.length : 0);
 
-  return enrichVendas(supabase, ((data ?? []) as VendaRow[]));
+  const enriched = await enrichVendas(supabase, ((data ?? []) as VendaRow[]));
+  if (statusPagamento) {
+    return enriched.filter((item) => upper(item.status_pagamento) === upper(statusPagamento));
+  }
+  return enriched.filter((item) => upper(item.status_pagamento) !== CAFE_STATUS_PAGAMENTO.CANCELADO);
 }
 
 export async function detalharComandaCafe(supabase: any, vendaId: number) {
