@@ -1,6 +1,11 @@
 // src/app/api/turmas/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  getColaboradorIdForUser,
+  isAdminUser,
+} from "@/app/api/professor/diario-de-classe/_lib/auth";
+import { getProfessorOperationalAccess } from "@/app/api/professor/_lib/operacional";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
 import { resolverHorarioTurma } from "@/lib/turmas";
@@ -296,11 +301,47 @@ export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
 
-  const { supabase } = auth;
+  const { supabase, userId } = auth;
 
-  const { data, error } = await supabase
-    .from("turmas")
-    .select(`
+  let turmaIdsPermitidas: number[] | null = null;
+  try {
+    const isAdmin = await isAdminUser(supabase, userId);
+    const access = isAdmin ? { podeVerOutrasTurmas: true } : await getProfessorOperationalAccess(userId);
+
+    if (!isAdmin && !access.podeVerOutrasTurmas) {
+      const colaboradorId = await getColaboradorIdForUser(supabase, userId);
+      if (!colaboradorId) {
+        return NextResponse.json({ data: [] });
+      }
+
+      const { data: vinculos, error: vinculosError } = await supabase
+        .from("turma_professores")
+        .select("turma_id")
+        .eq("colaborador_id", colaboradorId)
+        .eq("ativo", true);
+
+      if (vinculosError) {
+        return NextResponse.json({ error: vinculosError.message }, { status: 500 });
+      }
+
+      turmaIdsPermitidas = Array.from(
+        new Set(
+          (vinculos ?? [])
+            .map((row) => row.turma_id)
+            .filter((turmaId): turmaId is number => typeof turmaId === "number")
+        )
+      );
+
+      if (turmaIdsPermitidas.length === 0) {
+        return NextResponse.json({ data: [] });
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao validar permissoes de turmas.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  let query = supabase.from("turmas").select(`
       turma_id,
       nome,
       nivel,
@@ -324,6 +365,12 @@ export async function GET(request: NextRequest) {
     `)
     .order("turma_id", { ascending: true })
     .limit(200);
+
+  if (turmaIdsPermitidas) {
+    query = query.in("turma_id", turmaIdsPermitidas);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

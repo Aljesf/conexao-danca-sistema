@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import DiarioModal from "@/components/DiarioModal";
 import { formatarHorario } from "@/lib/turmas";
 
 type DiarioStatus = "PENDENTE" | "PRONTO" | "ERRO";
@@ -286,6 +287,7 @@ export default function DiarioDeClassePage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [professores, setProfessores] = useState<ProfessorOption[]>([]);
   const [professorFiltro, setProfessorFiltro] = useState<number | null>(null);
+  const [modalTurmaOpen, setModalTurmaOpen] = useState(false);
 
   const [dataAula, setDataAula] = useState<string>(todayYYYYMMDD());
   const [aula, setAula] = useState<Aula | null>(null);
@@ -626,6 +628,17 @@ export default function DiarioDeClassePage() {
     setAnotacaoErro("");
   }
 
+  function abrirModalTurma(nextTurmaId: number) {
+    setTurmaId(nextTurmaId);
+    setAba("frequencia");
+    setModalTurmaOpen(true);
+  }
+
+  function fecharModalTurma() {
+    setModalTurmaOpen(false);
+    fecharAnotacao();
+  }
+
   async function salvarAnotacao() {
     if (!anotacaoAluno) return;
     if (!anotacaoDescricao.trim()) {
@@ -930,6 +943,11 @@ export default function DiarioDeClassePage() {
     const blocos = plano?.plano_aula_blocos ?? [];
     return [...blocos].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
   }, [plano]);
+  const turmaModalTitulo =
+    turmaSelecionada?.nome ?? turmaSelecionada?.titulo ?? (turmaId ? `Turma ${turmaId}` : "Diario de classe");
+  const turmaModalMeta = turmaSelecionada
+    ? `${formatarHorario(turmaSelecionada)} • ${Array.isArray(turmaSelecionada.dias_semana) && turmaSelecionada.dias_semana.length > 0 ? turmaSelecionada.dias_semana.join(", ") : "Dias nao definidos"}`
+    : `Data ${dataAula}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-4 py-6">
@@ -984,6 +1002,26 @@ export default function DiarioDeClassePage() {
                 />
                 <span className="text-xs text-slate-500">Dia da semana: {dataSemana}</span>
               </div>
+              {isAdmin ? (
+                <div className="mt-3">
+                  <div className="text-xs font-semibold text-slate-700">Professor</div>
+                  <select
+                    className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                    value={professorFiltro ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value ? Number(e.target.value) : null;
+                      setProfessorFiltro(v);
+                    }}
+                  >
+                    <option value="">Todos</option>
+                    {professores.map((p) => (
+                      <option key={p.colaborador_id} value={p.colaborador_id}>
+                        {p.nome ?? `Colaborador ${p.colaborador_id}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1041,27 +1079,6 @@ export default function DiarioDeClassePage() {
             </select>
           </div>
 
-          {isAdmin ? (
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-slate-500">Professor</span>
-              <select
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
-                value={professorFiltro ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value ? Number(e.target.value) : null;
-                  setProfessorFiltro(v);
-                }}
-              >
-                <option value="">Todos</option>
-                {professores.map((p) => (
-                  <option key={p.colaborador_id} value={p.colaborador_id}>
-                    {p.nome ?? `Colaborador ${p.colaborador_id}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-
           <div className="flex flex-col gap-1">
             <span className="text-xs text-slate-500">Aula</span>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
@@ -1071,6 +1088,17 @@ export default function DiarioDeClassePage() {
                   ? "Abrindo aula..."
                   : "Selecione uma turma"}
             </div>
+            <button
+              type="button"
+              className="inline-flex w-fit rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              disabled={!turmaId}
+              onClick={() => {
+                if (!turmaId) return;
+                abrirModalTurma(turmaId);
+              }}
+            >
+              Abrir diario
+            </button>
           </div>
         </div>
 
@@ -1114,10 +1142,10 @@ export default function DiarioDeClassePage() {
                       type="button"
                       className="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       onClick={() => {
-                        setTurmaId(t.turma_id);
+                        abrirModalTurma(t.turma_id);
                       }}
                     >
-                      Abrir chamada
+                      Abrir diario
                     </button>
                     <button
                       type="button"
@@ -1136,26 +1164,20 @@ export default function DiarioDeClassePage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap gap-2 border-b border-slate-200 p-3">
-          <BotaoAba ativo={aba === "frequencia"} onClick={() => setAba("frequencia")}>
-            Frequencia
-          </BotaoAba>
-          <BotaoAba ativo={aba === "plano"} onClick={() => setAba("plano")}>
-            Plano de aula
-          </BotaoAba>
-          <BotaoAba ativo={aba === "conteudo"} onClick={() => setAba("conteudo")}>
-            Conteudo do curso
-          </BotaoAba>
-          <BotaoAba ativo={aba === "observacoes"} onClick={() => setAba("observacoes")}>
-            Observacoes
-          </BotaoAba>
-          <BotaoAba ativo={aba === "avaliacoes"} onClick={() => setAba("avaliacoes")}>
-            Avaliacoes
-          </BotaoAba>
-        </div>
-
-        <div className="p-4">
+      <DiarioModal
+        open={modalTurmaOpen}
+        onClose={fecharModalTurma}
+        turmaNome={turmaModalTitulo}
+        turmaMeta={turmaModalMeta}
+        tabs={[
+          { key: "frequencia", label: "Frequencia", active: aba === "frequencia", onClick: () => setAba("frequencia") },
+          { key: "plano", label: "Plano", active: aba === "plano", onClick: () => setAba("plano") },
+          { key: "conteudo", label: "Conteudo", active: aba === "conteudo", onClick: () => setAba("conteudo") },
+          { key: "observacoes", label: "Observacoes", active: aba === "observacoes", onClick: () => setAba("observacoes") },
+          { key: "avaliacoes", label: "Avaliacoes", active: aba === "avaliacoes", onClick: () => setAba("avaliacoes") },
+        ]}
+      >
+        <div>
           <h2 className="text-lg font-semibold text-slate-900">{tituloAba}</h2>
 
           {aba === "frequencia" ? (
@@ -1614,7 +1636,7 @@ export default function DiarioDeClassePage() {
             </div>
           ) : null}
         </div>
-      </section>
+      </DiarioModal>
 
       </div>
 
@@ -1735,17 +1757,6 @@ function TurmaPanel(props: {
         <span>Status: {props.aulaFechada ? "FECHADA" : "PENDENTE"}</span>
       </div>
     </div>
-  );
-}
-
-function BotaoAba(props: { ativo: boolean; onClick: () => void; children: React.ReactNode }) {
-  const base = "rounded-full px-4 py-2 text-sm transition border";
-  const ativo = "bg-primary text-primary-foreground border-primary";
-  const inativo = "bg-background text-foreground hover:bg-muted border-border";
-  return (
-    <button type="button" className={`${base} ${props.ativo ? ativo : inativo}`} onClick={props.onClick}>
-      {props.children}
-    </button>
   );
 }
 

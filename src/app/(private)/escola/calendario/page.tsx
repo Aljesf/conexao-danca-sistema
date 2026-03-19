@@ -234,6 +234,16 @@ export default function EscolaCalendarioDashboard() {
       });
   }, [gradeHorarios, gradeTurmas, selectedDay]);
 
+  const turmasOrdenadas = useMemo(
+    () =>
+      [...gradeDoDia].sort((a, b) => {
+        const horaA = a.hora_inicio ?? "";
+        const horaB = b.hora_inicio ?? "";
+        return horaA.localeCompare(horaB) || a.nome.localeCompare(b.nome);
+      }),
+    [gradeDoDia]
+  );
+
   const monthCounts = useMemo(() => groupCounts(items), [items]);
 
   const todayISO = useMemo(() => isoDate(new Date()), []);
@@ -325,13 +335,13 @@ export default function EscolaCalendarioDashboard() {
         </SectionCard>
       ) : null}
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <SectionCard
           title="Calendário mensal"
           subtitle={monthTitle(cursor)}
           description="Clique em um dia para ver o resumo e os eventos."
           actions={<div className="text-xs text-muted-foreground">Hoje: {todayISO}</div>}
-          className="xl:col-span-2"
+          className="lg:col-span-2"
         >
           <div>
             <div className="grid grid-cols-7 gap-2 text-xs text-muted-foreground mb-2">
@@ -406,7 +416,7 @@ export default function EscolaCalendarioDashboard() {
           </div>
         </SectionCard>
 
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <SectionCard title="Dia selecionado" subtitle="Resumo">
             <div className="text-base font-semibold capitalize text-slate-900">{dayTitle(selectedDay)}</div>
             <div className="mt-2 text-xs text-slate-500">{itemsForSelectedDay.length} item(ns)</div>
@@ -467,35 +477,35 @@ export default function EscolaCalendarioDashboard() {
               </a>
             </div>
           </SectionCard>
-
-          <SectionCard
-            title="Grade do dia"
-            subtitle="Turmas agendadas"
-            actions={<span className="text-xs text-slate-400">{gradeDoDia.length}</span>}
-          >
-            {gradeErr ? (
-              <p className="text-sm text-rose-700">{gradeErr}</p>
-            ) : gradeDoDia.length === 0 ? (
-              <p className="text-sm text-slate-600">Nenhuma turma agendada para este dia.</p>
-            ) : (
-              <div className="space-y-2">
-                {gradeDoDia.map((turma) => (
-                  <div
-                    key={`grade-${turma.turma_id}`}
-                    className="rounded-2xl border border-slate-200/80 bg-white px-3 py-2 shadow-sm"
-                  >
-                    <div className="text-sm font-semibold text-slate-900">{turma.nome}</div>
-                    <p className="text-xs text-slate-500">{formatarHorario(turma)}</p>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {[turma.curso, turma.nivel, turma.turno].filter(Boolean).join(" / ") || "Turma"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </SectionCard>
         </div>
       </div>
+
+      <SectionCard
+        title="Grade do dia"
+        subtitle="Turmas agendadas"
+        actions={<span className="text-xs text-slate-400">{turmasOrdenadas.length}</span>}
+      >
+        {gradeErr ? (
+          <p className="text-sm text-rose-700">{gradeErr}</p>
+        ) : turmasOrdenadas.length === 0 ? (
+          <p className="text-sm text-slate-600">Nenhuma turma agendada para este dia.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {turmasOrdenadas.map((turma) => (
+              <div
+                key={`grade-${turma.turma_id}`}
+                className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition hover:shadow-md"
+              >
+                <div className="text-sm font-semibold text-slate-900">{formatarHorario(turma)}</div>
+                <div className="mt-1 text-base font-medium text-slate-900">{turma.nome}</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {[turma.curso, turma.nivel, turma.turno].filter(Boolean).join(" / ") || "Turma"}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
