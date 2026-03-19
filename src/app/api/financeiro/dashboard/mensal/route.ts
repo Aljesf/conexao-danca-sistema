@@ -2,20 +2,26 @@ import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import {
-  calcularResumoMensalFinanceiro,
   formatarCompetenciaLabel,
   montarCobrancaOperacionalBase,
-  type CobrancaOperacionalItem,
   type CobrancaOperacionalViewBase,
-  type DashboardFinanceiroMensalResponse,
 } from "@/lib/financeiro/creditoConexao/cobrancas";
+import {
+  addCompetenciaMonths,
+  montarDashboardFinanceiroComposicaoItem,
+  montarDashboardFinanceiroMensalPayload,
+  type DashboardFinanceiroMensalResponse,
+} from "@/lib/financeiro/dashboardMensalContaInterna";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type DashboardOperacionalRow = CobrancaOperacionalViewBase & {
   origem_tipo: string | null;
   origem_subtipo: string | null;
+  origem_id: number | null;
+  conta_conexao_id: number | null;
   descricao: string | null;
   created_at: string | null;
+  updated_at: string | null;
 };
 
 function toInt(value: string | null, fallback: number): number {
@@ -31,33 +37,6 @@ function competenciaAtual(): string {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 7);
-}
-
-function addMonths(competencia: string, offset: number): string {
-  const [yearRaw, monthRaw] = competencia.split("-");
-  const year = Number(yearRaw);
-  const month = Number(monthRaw);
-  const date = new Date(year, month - 1 + offset, 1);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-
-function criarResumoVazio(competencia: string) {
-  return {
-    competencia,
-    competencia_label: formatarCompetenciaLabel(competencia),
-    previsto_centavos: 0,
-    pago_centavos: 0,
-    pendente_centavos: 0,
-    a_vencer_centavos: 0,
-    vencido_centavos: 0,
-    neofin_centavos: 0,
-  };
-}
-
-function roundPercent(value: number): number {
-  return Math.round(value * 10) / 10;
 }
 
 function criarDestaques(
@@ -128,6 +107,7 @@ export async function GET(req: NextRequest) {
   const tipoConta = (url.searchParams.get("tipo_conta") ?? "ALUNO").trim().toUpperCase();
   const competenciaBase = competenciaAtual();
   const competenciaSelecionada = isCompetencia(competencia) ? competencia : competenciaBase;
+  const competenciaInicio = addCompetenciaMonths(competenciaSelecionada, -(limite - 1));
 
   if (competencia && !isCompetencia(competencia)) {
     return NextResponse.json({ ok: false, error: "competencia_invalida" }, { status: 400 });
@@ -162,11 +142,13 @@ export async function GET(req: NextRequest) {
         "neofin_situacao_operacional",
         "origem_tipo",
         "origem_subtipo",
+        "origem_id",
         "origem_referencia_label",
         "dias_atraso",
         "fatura_id",
         "fatura_competencia",
         "fatura_status",
+        "conta_conexao_id",
         "tipo_conta",
         "tipo_conta_label",
         "permite_vinculo_manual",
@@ -175,6 +157,7 @@ export async function GET(req: NextRequest) {
         "linha_digitavel",
         "descricao",
         "created_at",
+        "updated_at",
       ].join(","),
     )
     .order("competencia_ano_mes", { ascending: false, nullsFirst: false })
@@ -184,11 +167,8 @@ export async function GET(req: NextRequest) {
     query = query.eq("tipo_conta", tipoConta);
   }
 
-  if (isCompetencia(competencia)) {
-    query = query.eq("competencia_ano_mes", competencia);
-  } else {
-    query = query.gte("competencia_ano_mes", addMonths(competenciaBase, -(limite - 1)));
-  }
+  query = query.gte("competencia_ano_mes", competenciaInicio);
+  query = query.lte("competencia_ano_mes", competenciaSelecionada);
 
   const { data, error } = await query;
 
@@ -201,40 +181,33 @@ export async function GET(req: NextRequest) {
 
   const today = new Date();
   const itens = ((data ?? []) as unknown[]).map((raw) => {
-    const item = montarCobrancaOperacionalBase(raw as DashboardOperacionalRow, today);
+    const row = raw as DashboardOperacionalRow;
+    const item = montarCobrancaOperacionalBase(row, today);
     item.cobranca_url = item.cobranca_fonte === "COBRANCA_AVULSA"
       ? `/administracao/financeiro/cobrancas-avulsas/${item.cobranca_id}`
       : `/admin/governanca/cobrancas/${item.cobranca_id}`;
-    return item;
+    return montarDashboardFinanceiroComposicaoItem({
+      ...item,
+      conta_conexao_id: row.conta_conexao_id,
+      origem_id: row.origem_id,
+      descricao: row.descricao,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    });
   });
 
-  const resumos = calcularResumoMensalFinanceiro(itens as CobrancaOperacionalItem[]);
-  const resumoSelecionado =
-    resumos.find((item) => item.competencia === competenciaSelecionada) ?? criarResumoVazio(competenciaSelecionada);
-
-  const cards: DashboardFinanceiroMensalResponse["cards"] = {
-    previsto_mes_centavos: resumoSelecionado.previsto_centavos,
-    pago_mes_centavos: resumoSelecionado.pago_centavos,
-    pendente_mes_centavos: resumoSelecionado.pendente_centavos,
-    neofin_mes_centavos: resumoSelecionado.neofin_centavos,
-    inadimplencia_mes_percentual:
-      resumoSelecionado.previsto_centavos > 0
-        ? roundPercent((resumoSelecionado.vencido_centavos / resumoSelecionado.previsto_centavos) * 100)
-        : 0,
-  };
-
+  const payloadBase = montarDashboardFinanceiroMensalPayload({
+    items: itens,
+    competenciaSelecionada,
+    competenciaInicio,
+    competenciaFim: competenciaSelecionada,
+    limite,
+    tipoConta,
+    competenciaAtualReal: competenciaBase,
+  });
   const payload: DashboardFinanceiroMensalResponse = {
-    competencia_atual: competenciaSelecionada,
-    cards,
-    meses: resumos.slice(0, limite).map((resumo) => ({
-      competencia: resumo.competencia,
-      previsto_centavos: resumo.previsto_centavos,
-      pago_centavos: resumo.pago_centavos,
-      pendente_centavos: resumo.pendente_centavos,
-      vencido_centavos: resumo.vencido_centavos,
-      neofin_centavos: resumo.neofin_centavos,
-    })),
-    destaques: criarDestaques(competenciaSelecionada, cards),
+    ...payloadBase,
+    destaques: criarDestaques(competenciaSelecionada, payloadBase.cards),
   };
 
   return NextResponse.json({ ok: true, ...payload }, { status: 200 });
