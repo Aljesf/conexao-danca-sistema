@@ -40,8 +40,8 @@ function statusOperacionalLegado(value: LinhaCarteiraCanonica["statusOperacional
   return "PENDENTE_A_VENCER";
 }
 
-function neofinSituacaoLegada(value: LinhaCarteiraCanonica["situacaoNeoFin"]): NeofinSituacaoOperacional {
-  if (value === "EM_COBRANCA_NEOFIN") return "VINCULADA";
+function neofinSituacaoLegada(item: LinhaCarteiraCanonica): NeofinSituacaoOperacional {
+  if (item.houveGeracaoNeoFin) return "VINCULADA";
   return "NAO_VINCULADA";
 }
 
@@ -60,14 +60,14 @@ function aceitarLinhaPorStatusNeofin(
   filtro: StatusNeofinFiltro | null | undefined,
 ): boolean {
   if (!filtro || filtro === "TODOS") return true;
-  if (filtro === "VINCULADA") return linha.situacaoNeoFin === "EM_COBRANCA_NEOFIN";
-  if (filtro === "NAO_VINCULADA") return linha.situacaoNeoFin !== "EM_COBRANCA_NEOFIN";
+  if (filtro === "VINCULADA") return linha.houveGeracaoNeoFin;
+  if (filtro === "NAO_VINCULADA") return !linha.houveGeracaoNeoFin;
   return false;
 }
 
 function mapLinhaCanonica(item: LinhaCarteiraCanonica): CobrancaOperacionalItem {
   const statusOperacional = statusOperacionalLegado(item.statusOperacional);
-  const neofinSituacao = neofinSituacaoLegada(item.situacaoNeoFin);
+  const neofinSituacao = neofinSituacaoLegada(item);
   const neofinStatus = neofinStatusLegado(neofinSituacao, statusOperacional);
 
   return {
@@ -96,13 +96,13 @@ function mapLinhaCanonica(item: LinhaCarteiraCanonica): CobrancaOperacionalItem 
     neofin_situacao_label: montarNeofinSituacaoLabel(neofinSituacao, neofinStatus),
     neofin_charge_id: null,
     neofin_invoice_id: item.neofinInvoiceId,
-    origem_tipo: item.origemTipo,
-    origem_subtipo: item.origemSubtipo,
-    origem_referencia_label: item.origemLabel,
+    origem_tipo: "CONTA_INTERNA",
+    origem_subtipo: item.contextoPrincipal,
+    origem_referencia_label: item.contaInternaLabel,
     dias_em_atraso: item.diasAtraso,
-    fatura_id: item.faturaId,
-    fatura_competencia: item.faturaCompetencia,
-    fatura_status: item.faturaStatus,
+    fatura_id: item.faturaContaInternaId,
+    fatura_competencia: item.competenciaAnoMes,
+    fatura_status: item.faturaContaInternaStatus,
     tipo_conta: "ALUNO",
     tipo_conta_label: "Conta Interna Aluno",
     permite_vinculo_manual: item.permiteVinculoManual,

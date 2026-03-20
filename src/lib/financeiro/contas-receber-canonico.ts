@@ -2,10 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   listarCarteiraOperacionalCanonica,
   type FiltrosCarteiraCanonica,
+  type ItemDetalheContaInterna,
   type LinhaCarteiraCanonica,
 } from "@/lib/financeiro/carteira-operacional-canonica";
 import {
   type CobrancaListaItem,
+  type ComposicaoFaturaConexao,
   type ContasReceberAuditoriaInput,
   type ContasReceberAuditoriaPayload,
   type ContextoPrincipal,
@@ -27,6 +29,11 @@ import type { Database } from "@/types/supabase.generated";
 
 type SupabaseDbClient = SupabaseClient<Database>;
 
+type BadgeCanonico = {
+  label: string;
+  tone: "success" | "warning" | "neutral";
+};
+
 function textOrNull(value: unknown): string | null {
   const text = String(value ?? "").trim();
   return text ? text : null;
@@ -44,17 +51,21 @@ function upper(value: string | null | undefined): string {
   return textOrNull(value)?.toUpperCase() ?? "";
 }
 
+function uniqueStrings(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => textOrNull(value)).filter((value): value is string => Boolean(value))));
+}
+
+function compareNullableDateAsc(left: string | null, right: string | null): number {
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return left.localeCompare(right);
+}
+
 function mapOrigemDetalhada(linha: LinhaCarteiraCanonica): OrigemDetalhada {
   if (linha.contextoPrincipal === "CAFE") return "CONSUMO_CAFE";
   if (linha.contextoPrincipal === "LOJA") return "VENDA_LOJA";
-
-  const origemTipo = upper(linha.origemTipo);
-  if (origemTipo.startsWith("MATRICULA")) return "MATRICULA";
-  if (origemTipo === "CREDITO_CONEXAO_FATURA" || origemTipo === "FATURA_CREDITO_CONEXAO") {
-    return "CONTA_INTERNA_ALUNO";
-  }
-  if (linha.contextoPrincipal === "ESCOLA") return "SERVICO_ESCOLA";
-  return "ORIGEM_NAO_RESOLVIDA";
+  return "CONTA_INTERNA_ALUNO";
 }
 
 function buildBucket(linha: LinhaCarteiraCanonica): string {
@@ -63,28 +74,116 @@ function buildBucket(linha: LinhaCarteiraCanonica): string {
   return "QUITADA_OU_ZERO";
 }
 
+function itemTipoToken(item: ItemDetalheContaInterna | undefined): string | null {
+  const tipo = upper(item?.tipoItem);
+  if (!tipo) return "LANCAMENTO_CONTA_INTERNA";
+  if (tipo.includes("MATRICULA")) return "MATRICULA";
+  if (tipo.includes("CAFE")) return "CAFE";
+  if (tipo.includes("LOJA")) return "LOJA";
+  if (tipo.includes("AJUSTE")) return "AJUSTE";
+  if (tipo.includes("COLABORADOR")) return "CONTA_INTERNA_COLABORADOR";
+  return "LANCAMENTO_CONTA_INTERNA";
+}
+
+function resumoComposicao(linha: LinhaCarteiraCanonica): string {
+  const tipos = uniqueStrings(linha.itens.map((item) => item.tipoItem ?? item.descricao));
+  if (tipos.length === 0) return "lancamentos e ajustes da conta interna";
+  if (tipos.length === 1) return tipos[0].toLowerCase();
+  if (tipos.length === 2) return `${tipos[0].toLowerCase()} e ${tipos[1].toLowerCase()}`;
+  return `${tipos[0].toLowerCase()}, ${tipos[1].toLowerCase()} e outros itens da conta interna`;
+}
+
+function coletarAlunoNomes(linha: LinhaCarteiraCanonica): string[] {
+  return uniqueStrings(linha.itens.flatMap((item) => item.alunoNomes));
+}
+
+function alunoResumo(linha: LinhaCarteiraCanonica): string | null {
+  const alunos = coletarAlunoNomes(linha);
+  if (alunos.length === 0) return null;
+  if (alunos.length === 1) return alunos[0];
+  return `${alunos[0]} + ${alunos.length - 1} aluno(s)`;
+}
+
 function buildOrigemLabel(linha: LinhaCarteiraCanonica): string {
-  return `Cobranca oficial #${linha.cobrancaId}`;
+  return linha.contaInternaLabel;
 }
 
 function buildOrigemSecundaria(linha: LinhaCarteiraCanonica): string {
-  const partes = [linha.origemLabel];
-  partes.push(linha.possuiVinculoFatura ? `Fatura vinculada #${linha.faturaId}` : "Sem fatura vinculada");
-  if (linha.faturaCobrancaId) {
-    partes.push(`Cobranca da fatura #${linha.faturaCobrancaId}`);
-  }
+  const partes = [
+    `Cobranca oficial #${linha.cobrancaId}`,
+    linha.faturaContaInternaId ? `Fatura interna #${linha.faturaContaInternaId}` : "Sem fatura interna vinculada",
+    linha.cobrancaFaturaId ? `Cobranca da fatura #${linha.cobrancaFaturaId}` : null,
+    linha.houveGeracaoNeoFin ? "Cobranca NeoFin gerada" : "Cobranca NeoFin nao gerada",
+  ].filter((item): item is string => Boolean(item));
+
   return partes.join(" | ");
 }
 
 function buildOrigemTecnica(linha: LinhaCarteiraCanonica): string {
-  const origem = [linha.origemTipo ?? "-", linha.origemSubtipo ?? "-"].join(" / ");
-  const centro = linha.centroCustoNome
-    ? `${linha.centroCustoCodigo ?? "--"} | ${linha.centroCustoNome}`
-    : "Sem centro de custo";
-  return `Origem ${origem} | Centro ${centro}`;
+  return `Base da cobranca: conta interna | Composicao: ${resumoComposicao(linha)}`;
+}
+
+function buildBadgeCanonico(linha: LinhaCarteiraCanonica): BadgeCanonico {
+  if (!linha.possuiFaturaInterna) {
+    return { label: "Sem fatura interna vinculada", tone: "neutral" };
+  }
+
+  if (linha.houveGeracaoNeoFin) {
+    return { label: "Cobranca NeoFin gerada", tone: "success" };
+  }
+
+  return { label: "Cobranca NeoFin nao gerada", tone: "warning" };
+}
+
+function buildMigracaoObservacao(linha: LinhaCarteiraCanonica): string {
+  return [
+    "Leitura canonica baseada na cobranca oficial da conta interna.",
+    `Composicao resolvida por ${linha.itens.length} item(ns) e ${coletarAlunoNomes(linha).length || 0} aluno(s) relacionado(s).`,
+  ].join(" ");
+}
+
+function buildDescricaoCobranca(linha: LinhaCarteiraCanonica): string {
+  return `Cobranca oficial #${linha.cobrancaId}`;
+}
+
+function buildStatusInterno(linha: LinhaCarteiraCanonica): "QUITADA" | "VENCIDA" | "EM_ABERTO" {
+  if (linha.statusOperacional === "PAGO") return "QUITADA";
+  if (linha.statusOperacional === "VENCIDO") return "VENCIDA";
+  return "EM_ABERTO";
+}
+
+function buildComposicaoDetalhada(linha: LinhaCarteiraCanonica): ComposicaoFaturaConexao | null {
+  if (linha.itens.length === 0) return null;
+
+  return {
+    fatura_id: linha.faturaContaInternaId ?? linha.cobrancaId,
+    conta_conexao_id: linha.contaInternaId,
+    periodo_referencia: linha.competenciaAnoMes,
+    data_vencimento: linha.dataVencimento,
+    valor_total_centavos: linha.valorCentavos,
+    itens: linha.itens.map((item, index) => ({
+      lancamento_id: item.lancamentoId ?? 0,
+      descricao: item.descricao ?? `Item ${index + 1}`,
+      valor_centavos: item.valorCentavos,
+      origem_sistema: item.tipoItem ?? "LANCAMENTO_CONTA_INTERNA",
+      origem_id: item.lancamentoId,
+      cobranca_id_relacionada: linha.cobrancaId,
+      referencia_item: item.referenciaItem,
+      composicao_json: {
+        aluno_nomes: item.alunoNomes,
+        aluno_ids: item.alunoIds,
+        tipo_item: item.tipoItem,
+      },
+    })),
+  };
 }
 
 function mapLinhaToCobrancaListaItem(linha: LinhaCarteiraCanonica): CobrancaListaItem {
+  const badge = buildBadgeCanonico(linha);
+  const primeiroItem = linha.itens[0];
+  const origemItemTipo = itemTipoToken(primeiroItem);
+  const alunoNome = alunoResumo(linha);
+
   return {
     cobranca_id: linha.cobrancaId,
     pessoa_id: linha.pessoaId,
@@ -99,12 +198,7 @@ function mapLinhaToCobrancaListaItem(linha: LinhaCarteiraCanonica): CobrancaList
     valor_aberto_centavos: linha.saldoCentavos,
     valor_recebido_centavos: linha.valorPagoCentavos,
     status_cobranca: linha.statusCobranca,
-    status_interno:
-      linha.statusOperacional === "PAGO"
-        ? "QUITADA"
-        : linha.statusOperacional === "VENCIDO"
-          ? "VENCIDA"
-          : "EM_ABERTO",
+    status_interno: buildStatusInterno(linha),
     centro_custo_id: linha.centroCustoId,
     centro_custo_codigo: linha.centroCustoCodigo,
     centro_custo_nome: linha.centroCustoNome,
@@ -115,35 +209,33 @@ function mapLinhaToCobrancaListaItem(linha: LinhaCarteiraCanonica): CobrancaList
     centro_custo_lancamento_codigo: linha.centroCustoCodigo,
     centro_custo_lancamento_nome: linha.centroCustoNome,
     atraso_dias: linha.diasAtraso,
-    origem_tipo: linha.origemTipo,
-    origem_subtipo: linha.origemSubtipo,
-    origem_id: null,
+    origem_tipo: "CONTA_INTERNA",
+    origem_subtipo: linha.contextoPrincipal,
+    origem_id: linha.contaInternaId,
     ultima_data_recebimento: linha.dataPagamento,
     quantidade_recebimentos: linha.valorPagoCentavos > 0 ? 1 : 0,
     tipo_inconsistencia: null,
     criticidade_inconsistencia: 0,
-    origem_agrupador_tipo: null,
-    origem_agrupador_id: null,
-    origem_item_tipo: linha.origemTipo,
-    origem_item_id: linha.lancamentoId,
-    conta_interna_id: linha.contaConexaoId,
-    alunoNome: null,
+    origem_agrupador_tipo: "CONTA_INTERNA",
+    origem_agrupador_id: linha.contaInternaId,
+    origem_item_tipo: origemItemTipo,
+    origem_item_id: primeiroItem?.lancamentoId ?? null,
+    conta_interna_id: linha.contaInternaId,
+    alunoNome,
     matriculaId: null,
-    migracao_conta_interna_status: linha.possuiVinculoFatura ? "OK" : "AMBIGUO",
-    migracao_conta_interna_observacao: linha.possuiVinculoFatura
-      ? "Leitura canonica com vinculo objetivo por lancamento e fatura."
-      : "Leitura canonica sem fatura vinculada.",
+    migracao_conta_interna_status: "OK",
+    migracao_conta_interna_observacao: buildMigracaoObservacao(linha),
     origem_secundaria: buildOrigemSecundaria(linha),
     origem_tecnica: buildOrigemTecnica(linha),
-    origem_badge_label: linha.possuiVinculoFatura ? "Fatura vinculada" : "Sem fatura",
-    origem_badge_tone: linha.possuiVinculoFatura ? "success" : "neutral",
-    origemAgrupadorTipo: null,
-    origemAgrupadorId: null,
-    origemItemTipo: linha.origemTipo,
-    origemItemId: linha.lancamentoId,
-    contaInternaId: linha.contaConexaoId,
+    origem_badge_label: badge.label,
+    origem_badge_tone: badge.tone,
+    origemAgrupadorTipo: "CONTA_INTERNA",
+    origemAgrupadorId: linha.contaInternaId,
+    origemItemTipo: origemItemTipo,
+    origemItemId: primeiroItem?.lancamentoId ?? null,
+    contaInternaId: linha.contaInternaId,
     origemLabel: buildOrigemLabel(linha),
-    migracaoContaInternaStatus: linha.possuiVinculoFatura ? "OK" : "AMBIGUO",
+    migracaoContaInternaStatus: "OK",
     vencimento_original: linha.dataVencimento,
     vencimento_ajustado_em: null,
     vencimento_ajustado_por: null,
@@ -165,14 +257,10 @@ function mapLinhaToCobrancaListaItem(linha: LinhaCarteiraCanonica): CobrancaList
   };
 }
 
-function compareNullableDateAsc(left: string | null, right: string | null): number {
-  if (!left && !right) return 0;
-  if (!left) return 1;
-  if (!right) return -1;
-  return left.localeCompare(right);
-}
-
-function filtrarPorPeriodo(linhas: LinhaCarteiraCanonica[], input: ContasReceberAuditoriaInput): LinhaCarteiraCanonica[] {
+function filtrarPorPeriodo(
+  linhas: LinhaCarteiraCanonica[],
+  input: ContasReceberAuditoriaInput,
+): LinhaCarteiraCanonica[] {
   const tipoPeriodo = normalizeContasReceberTipoPeriodo(input.tipoPeriodo);
   const competenciaMesAno =
     input.ano && input.mes && /^(0[1-9]|1[0-2])$/.test(input.mes) ? `${input.ano}-${input.mes}` : null;
@@ -237,13 +325,22 @@ function filtrarLinhasCanonicas(
       const haystack = [
         linha.pessoaNome,
         linha.pessoaLabel,
-        linha.origemLabel,
+        linha.contaInternaLabel,
+        linha.contaInternaDescricao ?? "",
         linha.competenciaAnoMes ?? "",
         linha.centroCustoNome ?? "",
         linha.centroCustoCodigo ?? "",
-        linha.origemTipo ?? "",
-        linha.origemSubtipo ?? "",
         String(linha.cobrancaId),
+        linha.contaInternaId ? String(linha.contaInternaId) : "",
+        linha.faturaContaInternaId ? String(linha.faturaContaInternaId) : "",
+        linha.cobrancaFaturaId ? String(linha.cobrancaFaturaId) : "",
+        linha.neofinInvoiceId ?? "",
+        ...linha.itens.flatMap((item) => [
+          item.descricao ?? "",
+          item.referenciaItem ?? "",
+          item.tipoItem ?? "",
+          ...item.alunoNomes,
+        ]),
       ]
         .join(" ")
         .toLowerCase();
@@ -302,10 +399,7 @@ function buildDevedores(items: CobrancaListaItem[]): DevedorAuditoriaItem[] {
   });
 }
 
-function buildMetricasVencidas(
-  items: CobrancaListaItem[],
-  devedores: DevedorAuditoriaItem[],
-): KpiVisaoCard[] {
+function buildMetricasVencidas(items: CobrancaListaItem[], devedores: DevedorAuditoriaItem[]): KpiVisaoCard[] {
   const totalVencido = items.reduce((acc, item) => acc + Math.max(item.valor_aberto_centavos, 0), 0);
   const maiorAtraso = items.reduce((acc, item) => Math.max(acc, item.atraso_dias), 0);
   const ticketMedio = items.length > 0 ? Math.round(totalVencido / items.length) : 0;
@@ -318,7 +412,7 @@ function buildMetricasVencidas(
       valor_centavos: totalVencido,
       valor_numero: null,
       valor_data: null,
-      descricao: "Saldo vencido em aberto na carteira canonica filtrada por competencia.",
+      descricao: "Saldo vencido em aberto na carteira canonica por cobranca oficial.",
     },
     {
       id: "devedores_vencidos",
@@ -327,7 +421,7 @@ function buildMetricasVencidas(
       valor_centavos: null,
       valor_numero: devedores.length,
       valor_data: null,
-      descricao: "Pessoas com pelo menos uma cobranca canonica vencida no filtro atual.",
+      descricao: "Pessoas com pelo menos uma cobranca oficial vencida no filtro atual.",
     },
     {
       id: "maior_atraso",
@@ -336,7 +430,7 @@ function buildMetricasVencidas(
       valor_centavos: null,
       valor_numero: maiorAtraso,
       valor_data: null,
-      descricao: "Maior atraso entre cobrancas canonicas vencidas.",
+      descricao: "Maior atraso entre cobrancas oficiais vencidas.",
     },
     {
       id: "ticket_medio_vencido",
@@ -345,7 +439,7 @@ function buildMetricasVencidas(
       valor_centavos: ticketMedio,
       valor_numero: null,
       valor_data: null,
-      descricao: "Media por cobranca canonica vencida.",
+      descricao: "Media por cobranca oficial vencida.",
     },
   ];
 }
@@ -384,7 +478,7 @@ function buildRankingVencidos(devedores: DevedorAuditoriaItem[]): RankingResumoI
     data_mais_recente: null,
     maior_valor_centavos: item.total_vencido_centavos,
     criticidade: item.maior_atraso_dias,
-    observacao: "Carteira canonica por cobranca oficial",
+    observacao: "Carteira canonica por cobranca oficial da conta interna",
   }));
 }
 
@@ -418,7 +512,11 @@ function ordenarItems(items: CobrancaListaItem[], ordenacao: ContasReceberOrdena
   });
 }
 
-function paginate<T>(items: T[], page: number, pageSize: number): { rows: T[]; total: number; totalPaginas: number; pageAjustada: number } {
+function paginate<T>(
+  items: T[],
+  page: number,
+  pageSize: number,
+): { rows: T[]; total: number; totalPaginas: number; pageAjustada: number } {
   const total = items.length;
   const totalPaginas = total === 0 ? 1 : Math.ceil(total / pageSize);
   const pageAjustada = Math.min(Math.max(page, 1), totalPaginas);
@@ -452,8 +550,40 @@ function buildResumo(items: CobrancaListaItem[]) {
   };
 }
 
+function trilhaCanonica(linha: LinhaCarteiraCanonica): DetalheCobrancaAuditoria["trilha_auditavel"] {
+  const alunos = coletarAlunoNomes(linha);
+  return [
+    { titulo: "Cobranca oficial", valor: `#${linha.cobrancaId}` },
+    { titulo: "Responsavel", valor: linha.pessoaLabel },
+    { titulo: "Base da cobranca", valor: linha.contaInternaLabel },
+    {
+      titulo: "Fatura interna",
+      valor: linha.faturaContaInternaId ? `#${linha.faturaContaInternaId}` : "Sem fatura interna vinculada",
+    },
+    {
+      titulo: "Cobranca da fatura",
+      valor: linha.cobrancaFaturaId ? `#${linha.cobrancaFaturaId}` : "Sem cobranca da fatura",
+    },
+    {
+      titulo: "Cobranca NeoFin",
+      valor: linha.houveGeracaoNeoFin ? "Gerada" : "Nao gerada",
+    },
+    { titulo: "NeoFin invoice", valor: linha.neofinInvoiceId ?? "Sem invoice" },
+    { titulo: "Competencia", valor: linha.competenciaLabel },
+    { titulo: "Vencimento", valor: linha.dataVencimento ?? "Sem vencimento" },
+    { titulo: "Centro de custo", valor: linha.centroCustoNome ? `${linha.centroCustoCodigo ?? "--"} | ${linha.centroCustoNome}` : "Sem centro de custo" },
+    { titulo: "Composicao", valor: resumoComposicao(linha) },
+    { titulo: "Alunos", valor: alunos.length > 0 ? alunos.join(", ") : "Sem alunos identificados" },
+  ];
+}
+
 function buildDetalhe(linha: LinhaCarteiraCanonica | undefined): DetalheCobrancaAuditoria | null {
   if (!linha) return null;
+
+  const badge = buildBadgeCanonico(linha);
+  const primeiroItem = linha.itens[0];
+  const origemItemTipo = itemTipoToken(primeiroItem);
+  const alunoNome = alunoResumo(linha);
 
   return {
     pessoa: {
@@ -462,46 +592,39 @@ function buildDetalhe(linha: LinhaCarteiraCanonica | undefined): DetalheCobranca
     },
     cobranca: {
       id: linha.cobrancaId,
-      descricao: linha.origemLabel,
+      descricao: buildDescricaoCobranca(linha),
       valor_centavos: linha.valorCentavos,
       valor_aberto_centavos: linha.saldoCentavos,
       valor_recebido_centavos: linha.valorPagoCentavos,
       vencimento: linha.dataVencimento,
       competencia_ano_mes: linha.competenciaAnoMes,
       status_cobranca: linha.statusCobranca,
-      status_interno:
-        linha.statusOperacional === "PAGO"
-          ? "QUITADA"
-          : linha.statusOperacional === "VENCIDO"
-            ? "VENCIDA"
-            : "EM_ABERTO",
-      origem_tipo: linha.origemTipo,
-      origem_subtipo: linha.origemSubtipo,
-      origem_id: null,
+      status_interno: buildStatusInterno(linha),
+      origem_tipo: "CONTA_INTERNA",
+      origem_subtipo: linha.contextoPrincipal,
+      origem_id: linha.contaInternaId,
       created_at: null,
       updated_at: null,
-      origem_agrupador_tipo: null,
-      origem_agrupador_id: null,
-      origem_item_tipo: linha.origemTipo,
-      origem_item_id: linha.lancamentoId,
-      conta_interna_id: linha.contaConexaoId,
-      alunoNome: null,
+      origem_agrupador_tipo: "CONTA_INTERNA",
+      origem_agrupador_id: linha.contaInternaId,
+      origem_item_tipo: origemItemTipo,
+      origem_item_id: primeiroItem?.lancamentoId ?? null,
+      conta_interna_id: linha.contaInternaId,
+      alunoNome,
       matriculaId: null,
-      migracao_conta_interna_status: linha.possuiVinculoFatura ? "OK" : "AMBIGUO",
-      migracao_conta_interna_observacao: linha.possuiVinculoFatura
-        ? "Leitura canonica com vinculo por lancamento e fatura."
-        : "Sem fatura vinculada na leitura canonica.",
+      migracao_conta_interna_status: "OK",
+      migracao_conta_interna_observacao: buildMigracaoObservacao(linha),
       origem_secundaria: buildOrigemSecundaria(linha),
       origem_tecnica: buildOrigemTecnica(linha),
-      origem_badge_label: linha.possuiVinculoFatura ? "Fatura vinculada" : "Sem fatura",
-      origem_badge_tone: linha.possuiVinculoFatura ? "success" : "neutral",
-      origemAgrupadorTipo: null,
-      origemAgrupadorId: null,
-      origemItemTipo: linha.origemTipo,
-      origemItemId: linha.lancamentoId,
-      contaInternaId: linha.contaConexaoId,
+      origem_badge_label: badge.label,
+      origem_badge_tone: badge.tone,
+      origemAgrupadorTipo: "CONTA_INTERNA",
+      origemAgrupadorId: linha.contaInternaId,
+      origemItemTipo: origemItemTipo,
+      origemItemId: primeiroItem?.lancamentoId ?? null,
+      contaInternaId: linha.contaInternaId,
       origemLabel: buildOrigemLabel(linha),
-      migracaoContaInternaStatus: linha.possuiVinculoFatura ? "OK" : "AMBIGUO",
+      migracaoContaInternaStatus: "OK",
       vencimento_original: linha.dataVencimento,
       vencimento_ajustado_em: null,
       vencimento_ajustado_por: null,
@@ -539,32 +662,16 @@ function buildDetalhe(linha: LinhaCarteiraCanonica | undefined): DetalheCobranca
         nome: linha.centroCustoNome,
       },
     },
-    documento_vinculado: linha.faturaId
+    documento_vinculado: linha.faturaContaInternaId
       ? {
-          tipo: "FATURA_CREDITO_CONEXAO",
-          id: linha.faturaId,
-          label: `Fatura #${linha.faturaId}${linha.faturaCompetencia ? ` | ${linha.faturaCompetencia}` : ""}`,
+          tipo: "FATURA_INTERNA",
+          id: linha.faturaContaInternaId,
+          label: `Fatura interna #${linha.faturaContaInternaId}`,
         }
       : null,
     trilha_auditavel: trilhaCanonica(linha),
-    composicao_fatura_conexao: null,
+    composicao_fatura_conexao: buildComposicaoDetalhada(linha),
   };
-}
-
-function trilhaCanonica(linha: LinhaCarteiraCanonica): DetalheCobrancaAuditoria["trilha_auditavel"] {
-  return [
-    { titulo: "Cobranca oficial", valor: `#${linha.cobrancaId}` },
-    { titulo: "Origem", valor: buildOrigemTecnica(linha) },
-    { titulo: "Competencia", valor: linha.competenciaAnoMes ?? "Sem competencia" },
-    { titulo: "Lancamento", valor: linha.lancamentoId ? `#${linha.lancamentoId}` : "Sem lancamento vinculado" },
-    { titulo: "Fatura vinculada", valor: linha.faturaId ? `#${linha.faturaId}` : "Sem fatura vinculada" },
-    {
-      titulo: "Cobranca da fatura",
-      valor: linha.faturaCobrancaId ? `#${linha.faturaCobrancaId}` : "Sem cobranca da fatura",
-    },
-    { titulo: "Situacao NeoFin", valor: linha.situacaoNeoFin },
-    { titulo: "NeoFin invoice", valor: linha.neofinInvoiceId ?? "Sem invoice" },
-  ];
 }
 
 function buildCanonicalFilters(input: ContasReceberAuditoriaInput): FiltrosCarteiraCanonica {

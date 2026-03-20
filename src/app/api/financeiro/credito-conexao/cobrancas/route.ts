@@ -27,11 +27,26 @@ function normalizarStatusOperacional(value: string | null): "PAGO" | "PENDENTE" 
 
 function normalizarSituacaoNeoFin(
   value: string | null,
-): "SEM_FATURA" | "FATURA_SEM_NEOFIN" | "EM_COBRANCA_NEOFIN" | null {
+): "SEM_FATURA_INTERNA" | "SEM_COBRANCA_NEOFIN" | "COM_COBRANCA_NEOFIN" | null {
   const normalized = textOrNull(value)?.toUpperCase();
-  if (normalized === "EM_COBRANCA_NEOFIN" || normalized === "VINCULADA") return "EM_COBRANCA_NEOFIN";
-  if (normalized === "FATURA_SEM_NEOFIN") return "FATURA_SEM_NEOFIN";
-  if (normalized === "SEM_FATURA" || normalized === "NAO_VINCULADA") return "SEM_FATURA";
+  if (
+    normalized === "COM_COBRANCA_NEOFIN" ||
+    normalized === "NEOFIN_GERADA" ||
+    normalized === "EM_COBRANCA_NEOFIN" ||
+    normalized === "VINCULADA"
+  ) {
+    return "COM_COBRANCA_NEOFIN";
+  }
+  if (
+    normalized === "SEM_COBRANCA_NEOFIN" ||
+    normalized === "NEOFIN_NAO_GERADA" ||
+    normalized === "FATURA_SEM_NEOFIN"
+  ) {
+    return "SEM_COBRANCA_NEOFIN";
+  }
+  if (normalized === "SEM_FATURA_INTERNA" || normalized === "SEM_FATURA" || normalized === "NAO_VINCULADA") {
+    return "SEM_FATURA_INTERNA";
+  }
   return null;
 }
 

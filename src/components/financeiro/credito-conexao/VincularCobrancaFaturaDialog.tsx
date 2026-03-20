@@ -50,6 +50,12 @@ function mensagemErroVinculo(): string {
   return "Nao foi possivel registrar o vinculo manual agora. Revise os dados e tente novamente.";
 }
 
+function statusNeoFinHumano(item: LinhaCarteiraCanonica): string {
+  if (item.houveGeracaoNeoFin) return "Cobranca NeoFin gerada";
+  if (!item.possuiFaturaInterna) return "Sem fatura interna vinculada";
+  return "Cobranca NeoFin nao gerada";
+}
+
 export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -148,9 +154,9 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Vincular cobranca a fatura</h2>
+            <h2 className="text-base font-semibold text-slate-900">Vincular cobranca oficial a fatura interna</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Use o vinculo manual apenas para corrigir a relacao entre cobranca oficial e fatura da conta interna.
+              Use o vinculo manual apenas para corrigir a relacao entre a cobranca oficial da conta interna e sua fatura interna.
             </p>
           </div>
           <button
@@ -168,7 +174,7 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Cobranca selecionada</p>
               <h3 className="mt-2 text-base font-semibold text-slate-900">{item.pessoaLabel}</h3>
-              <p className="mt-1 text-sm text-slate-600">{item.origemLabel}</p>
+              <p className="mt-1 text-sm text-slate-600">Cobranca oficial #{item.cobrancaId}</p>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
@@ -180,12 +186,16 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
                   <p className="mt-1 text-sm font-medium text-slate-900">{formatBRLFromCents(item.valorCentavos)}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Conta interna</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{item.contaInternaLabel}</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Vencimento</p>
                   <p className="mt-1 text-sm font-medium text-slate-900">{formatarDataLabel(item.dataVencimento)}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Situacao NeoFin</p>
-                  <p className="mt-1 text-sm font-medium text-slate-900">{item.situacaoNeoFin}</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Cobranca NeoFin</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{statusNeoFinHumano(item)}</p>
                 </div>
               </div>
             </div>
@@ -194,10 +204,10 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
                 <p className="text-xs uppercase tracking-wide text-slate-500">Fatura em foco</p>
                 <h3 className="mt-2 text-base font-semibold text-slate-900">
-                  {sugestaoSelecionada.competencia_label} - Fatura #{sugestaoSelecionada.fatura_id}
+                  {sugestaoSelecionada.competencia_label} - Fatura interna #{sugestaoSelecionada.fatura_id}
                 </h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  {sugestaoSelecionada.conta_label ?? "Conta interna do aluno"} | Status {sugestaoSelecionada.status ?? "-"}
+                  {sugestaoSelecionada.conta_label ?? "Conta interna"} | Status {sugestaoSelecionada.status ?? "-"}
                 </p>
 
                 {sugestaoSelecionada.competencia_diferente ? (
@@ -209,8 +219,8 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
                       onChange={(event) => setConfirmarCompetenciaDiferente(event.target.checked)}
                     />
                     <span>
-                      Confirmo o vinculo em competencia diferente. A cobranca e da competencia {item.competenciaLabel} e a
-                      fatura escolhida e {sugestaoSelecionada.competencia_label}.
+                      Confirmo o vinculo em competencia diferente. A cobranca oficial e da competencia {item.competenciaLabel}
+                      {" "}e a fatura interna escolhida e {sugestaoSelecionada.competencia_label}.
                     </span>
                   </label>
                 ) : null}
@@ -242,7 +252,7 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
           <section className="space-y-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-500">Sugestoes de fatura</p>
-              <h3 className="mt-1 text-base font-semibold text-slate-900">Prioridade por pessoa e competencia</h3>
+              <h3 className="mt-1 text-base font-semibold text-slate-900">Prioridade por conta interna e competencia</h3>
             </div>
 
             {loading ? (
@@ -253,7 +263,7 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
 
             {!loading && sugestoes.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-                Nenhuma fatura encontrada para esta pessoa no recorte operacional.
+                Nenhuma fatura interna encontrada para esta cobranca no recorte operacional.
               </div>
             ) : null}
 
@@ -278,10 +288,10 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold">
-                        {sugestao.competencia_label} - Fatura #{sugestao.fatura_id}
+                        {sugestao.competencia_label} - Fatura interna #{sugestao.fatura_id}
                       </p>
                       <p className={`mt-1 text-sm ${selecionada ? "text-white/80" : "text-slate-600"}`}>
-                        {sugestao.conta_label ?? "Conta interna do aluno"} | Vencimento {formatarDataLabel(sugestao.data_vencimento)}
+                        {sugestao.conta_label ?? "Conta interna"} | Vencimento {formatarDataLabel(sugestao.data_vencimento)}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -310,7 +320,7 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
 
                   {sugestao.cobranca_vinculada_id ? (
                     <p className={`mt-3 text-sm ${selecionada ? "text-white/80" : "text-slate-600"}`}>
-                      Fatura ja possui cobranca vinculada: #{sugestao.cobranca_vinculada_id}
+                      Fatura interna ja possui cobranca vinculada: #{sugestao.cobranca_vinculada_id}
                     </p>
                   ) : null}
 

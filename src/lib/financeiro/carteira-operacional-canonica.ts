@@ -3,9 +3,9 @@ import { formatarCompetenciaLabel, montarPessoaLabel } from "@/lib/financeiro/cr
 import type { Database } from "@/types/supabase.generated";
 
 type SupabaseDbClient = SupabaseClient<Database>;
+type JsonObject = Record<string, unknown>;
 type ContextoCarteiraCanonica = "ESCOLA" | "CAFE" | "LOJA" | "OUTRO";
 type StatusOperacionalCanonico = "PAGO" | "PENDENTE" | "VENCIDO";
-type SituacaoNeoFinCanonica = "SEM_FATURA" | "FATURA_SEM_NEOFIN" | "EM_COBRANCA_NEOFIN";
 
 type CobrancaBaseRow = {
   id: number;
@@ -32,10 +32,17 @@ type RecebimentoRow = {
 
 type LancamentoRow = {
   id: number;
-  cobranca_id: number | null;
+  aluno_id: number | null;
   centro_custo_id: number | null;
-  conta_conexao_id: number | null;
+  cobranca_id: number | null;
   competencia: string | null;
+  composicao_json: Database["public"]["Tables"]["credito_conexao_lancamentos"]["Row"]["composicao_json"];
+  conta_conexao_id: number;
+  descricao: string | null;
+  matricula_id: number | null;
+  origem_sistema: string;
+  referencia_item: string | null;
+  valor_centavos: number;
 };
 
 type FaturaLancamentoRow = {
@@ -46,20 +53,25 @@ type FaturaLancamentoRow = {
 type FaturaRow = {
   id: number;
   cobranca_id: number | null;
-  periodo_referencia: string | null;
-  status: string | null;
+  conta_conexao_id: number;
   data_vencimento: string | null;
   neofin_invoice_id: string | null;
+  periodo_referencia: string;
+  status: string;
 };
 
 type CentroCustoRow = Database["public"]["Tables"]["centros_custo"]["Row"];
+type ContaInternaRow = Database["public"]["Tables"]["credito_conexao_contas"]["Row"];
+type MatriculaRow = Pick<Database["public"]["Tables"]["matriculas"]["Row"], "id" | "pessoa_id" | "responsavel_financeiro_id">;
+type PessoaRow = Pick<Database["public"]["Tables"]["pessoas"]["Row"], "id" | "nome">;
 
-type FaturaMeta = {
-  faturaId: number | null;
-  faturaCompetencia: string | null;
-  faturaStatus: string | null;
-  faturaCobrancaId: number | null;
+type MetaFaturaPrincipal = {
+  contaInternaId: number | null;
+  cobrancaFaturaId: number | null;
+  dataVencimento: string | null;
+  faturaContaInternaId: number | null;
   neofinInvoiceId: string | null;
+  status: string | null;
 };
 
 export type FiltrosCarteiraCanonica = {
@@ -76,7 +88,17 @@ export type FiltrosCarteiraCanonica = {
   contexto?: ContextoCarteiraCanonica | null;
 };
 
-export type LinhaCarteiraCanonica = {
+export type ItemDetalheContaInterna = {
+  lancamentoId: number | null;
+  referenciaItem: string | null;
+  descricao: string | null;
+  valorCentavos: number;
+  alunoIds: number[];
+  alunoNomes: string[];
+  tipoItem: string | null;
+};
+
+export type LinhaCarteiraContaInterna = {
   cobrancaId: number;
   cobrancaFonte: "COBRANCA";
   pessoaId: number | null;
@@ -88,9 +110,6 @@ export type LinhaCarteiraCanonica = {
   centroCustoCodigo: string | null;
   centroCustoNome: string | null;
   contextoPrincipal: ContextoCarteiraCanonica;
-  origemTipo: string | null;
-  origemSubtipo: string | null;
-  origemLabel: string;
   statusCobranca: string | null;
   valorCentavos: number;
   valorPagoCentavos: number;
@@ -99,19 +118,22 @@ export type LinhaCarteiraCanonica = {
   dataPagamento: string | null;
   diasAtraso: number;
   statusOperacional: StatusOperacionalCanonico;
-  lancamentoId: number | null;
-  contaConexaoId: number | null;
-  faturaId: number | null;
-  faturaCompetencia: string | null;
-  faturaStatus: string | null;
-  faturaCobrancaId: number | null;
+  contaInternaId: number | null;
+  contaInternaDescricao: string | null;
+  contaInternaLabel: string;
+  faturaContaInternaId: number | null;
+  faturaContaInternaStatus: string | null;
+  cobrancaFaturaId: number | null;
   neofinInvoiceId: string | null;
-  possuiVinculoFatura: boolean;
-  situacaoNeoFin: SituacaoNeoFinCanonica;
+  houveGeracaoNeoFin: boolean;
+  possuiFaturaInterna: boolean;
+  itens: ItemDetalheContaInterna[];
   cobrancaUrl: string;
   faturaUrl: string | null;
   permiteVinculoManual: boolean;
 };
+
+export type LinhaCarteiraCanonica = LinhaCarteiraContaInterna;
 
 export type ResumoCarteiraOperacionalCanonica = {
   previstoCentavos: number;
@@ -124,7 +146,7 @@ export type ResumoCarteiraOperacionalCanonica = {
 export type GrupoCarteiraPorCompetencia = {
   competencia: string;
   competenciaLabel: string;
-  itens: LinhaCarteiraCanonica[];
+  itens: LinhaCarteiraContaInterna[];
   resumo: ResumoCarteiraOperacionalCanonica;
 };
 
@@ -144,6 +166,11 @@ function numeroSeguro(valor: unknown): number {
   return Number.isFinite(numero) ? Math.trunc(numero) : 0;
 }
 
+function inteiroPositivoOuNull(valor: unknown): number | null {
+  const numero = numeroSeguro(valor);
+  return numero > 0 ? numero : null;
+}
+
 function dataValida(valor: string | null | undefined): valor is string {
   return typeof valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valor);
 }
@@ -155,6 +182,50 @@ function competenciaValida(valor: string | null | undefined): valor is string {
 function localIsoDate(date: Date): string {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
+}
+
+function asJsonObject(valor: unknown): JsonObject | null {
+  if (!valor || typeof valor !== "object" || Array.isArray(valor)) return null;
+  return valor as JsonObject;
+}
+
+function asJsonObjectArray(valor: unknown): JsonObject[] {
+  if (!Array.isArray(valor)) return [];
+  return valor
+    .map((item) => asJsonObject(item))
+    .filter((item): item is JsonObject => Boolean(item));
+}
+
+function dedupePositiveInts(values: Array<number | null | undefined>): number[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => inteiroPositivoOuNull(value))
+        .filter((value): value is number => typeof value === "number" && value > 0),
+    ),
+  );
+}
+
+function addPositiveInt(target: Set<number>, value: unknown) {
+  const numero = inteiroPositivoOuNull(value);
+  if (numero) target.add(numero);
+}
+
+function addPositiveIntArray(target: Set<number>, value: unknown) {
+  if (!Array.isArray(value)) return;
+
+  for (const item of value) {
+    if (typeof item === "object" && item && !Array.isArray(item)) {
+      const registro = item as JsonObject;
+      addPositiveInt(target, registro.id);
+      addPositiveInt(target, registro.pessoa_id);
+      addPositiveInt(target, registro.aluno_id);
+      addPositiveInt(target, registro.aluno_pessoa_id);
+      continue;
+    }
+
+    addPositiveInt(target, item);
+  }
 }
 
 function diferencaDias(hojeIso: string, vencimento: string | null): number {
@@ -178,15 +249,6 @@ function calcularStatusOperacional(params: {
   return "PENDENTE";
 }
 
-function calcularSituacaoNeoFin(params: {
-  faturaId: number | null;
-  neofinInvoiceId: string | null;
-}): SituacaoNeoFinCanonica {
-  if (!params.faturaId) return "SEM_FATURA";
-  if (!params.neofinInvoiceId) return "FATURA_SEM_NEOFIN";
-  return "EM_COBRANCA_NEOFIN";
-}
-
 function prioridadeFaturaStatus(status: string | null): number {
   switch (textoOuNull(status)?.toUpperCase()) {
     case "ABERTA":
@@ -206,52 +268,210 @@ function prioridadeFaturaStatus(status: string | null): number {
 
 function inferirContextoPrincipal(
   centroCusto: CentroCustoRow | undefined,
-  origemTipo: string | null,
+  origemSistema: string | null,
 ): ContextoCarteiraCanonica {
   const contextos = centroCusto?.contextos_aplicaveis ?? [];
   if (contextos.includes("ESCOLA")) return "ESCOLA";
   if (contextos.includes("CAFE")) return "CAFE";
   if (contextos.includes("LOJA")) return "LOJA";
 
-  const origem = textoOuNull(origemTipo)?.toUpperCase() ?? "";
-  if (origem === "CAFE") return "CAFE";
-  if (origem === "LOJA" || origem === "LOJA_VENDA") return "LOJA";
-  if (
-    origem.startsWith("MATRICULA") ||
-    origem === "SERVICO_ESCOLA" ||
-    origem === "FATURA_CREDITO_CONEXAO" ||
-    origem === "CREDITO_CONEXAO_FATURA"
-  ) {
-    return "ESCOLA";
-  }
-
+  const origem = textoOuNull(origemSistema)?.toUpperCase() ?? "";
+  if (origem === "CAFE" || origem.includes("CAFE")) return "CAFE";
+  if (origem === "LOJA" || origem.includes("LOJA")) return "LOJA";
+  if (origem.startsWith("MATRICULA") || origem.includes("FATURA")) return "ESCOLA";
   return "OUTRO";
 }
 
-function montarOrigemLabel(origemTipo: string | null, origemSubtipo: string | null): string {
-  const partes = [textoOuNull(origemTipo), textoOuNull(origemSubtipo)].filter(
-    (item): item is string => Boolean(item),
-  );
-  if (partes.length === 0) return "Origem: nao informada";
-  return `Origem: ${partes.join(" / ")}`;
+function humanizarToken(valor: string | null | undefined): string | null {
+  const texto = textoOuNull(valor);
+  if (!texto) return null;
+
+  return texto
+    .toLowerCase()
+    .split(/[_\s/:-]+/)
+    .filter(Boolean)
+    .map((parte) => parte.charAt(0).toUpperCase() + parte.slice(1))
+    .join(" ");
 }
 
-function matchesBusca(linha: LinhaCarteiraCanonica, busca: string | undefined): boolean {
+function descreverContaInterna(conta: ContaInternaRow | undefined): string | null {
+  const tipoConta = textoOuNull(conta?.tipo_conta)?.toUpperCase();
+  if (tipoConta === "ALUNO") return "Conta interna do aluno";
+  if (tipoConta === "COLABORADOR") return "Conta interna do colaborador";
+
+  const descricao = textoOuNull(conta?.descricao_exibicao);
+  if (!descricao) return "Conta interna";
+  const descricaoNormalizada = descricao.replace(/cart(?:a|\u00E3)o\s+conex(?:a|\u00E3)o/gi, "Conta interna");
+  return descricaoNormalizada;
+  return descricao.replace(/cart[aã]o\s+conex[aã]o/gi, "Conta interna");
+}
+
+function contaInternaLabel(contaInternaId: number | null): string {
+  return contaInternaId ? `Conta interna #${contaInternaId}` : "Conta interna nao vinculada";
+}
+
+function resolverTipoItem(lancamento: LancamentoRow, item: JsonObject | null): string | null {
+  if (inteiroPositivoOuNull(item?.turma_id)) return "Matricula";
+
+  if (inteiroPositivoOuNull(item?.produto_id)) {
+    const origem = textoOuNull(lancamento.origem_sistema)?.toUpperCase() ?? "";
+    if (origem.includes("LOJA")) return "Venda loja";
+    return "Consumo cafe";
+  }
+
+  const origemSistema = textoOuNull(lancamento.origem_sistema)?.toUpperCase() ?? "";
+  if (origemSistema.startsWith("MATRICULA")) return "Matricula";
+  if (origemSistema.includes("CAFE")) return "Consumo cafe";
+  if (origemSistema.includes("LOJA")) return "Venda loja";
+  if (origemSistema.includes("AJUSTE")) return "Ajuste";
+  if (origemSistema.includes("FATURA")) return "Lancamento da conta interna";
+  return humanizarToken(origemSistema);
+}
+
+function resolverValorItem(item: JsonObject | null, fallback: number): number {
+  const candidatos = [
+    inteiroPositivoOuNull(item?.valor_centavos),
+    inteiroPositivoOuNull(item?.valor_total_centavos),
+    inteiroPositivoOuNull(item?.total_centavos),
+  ].filter((valor): valor is number => typeof valor === "number" && valor >= 0);
+
+  if (candidatos.length > 0) return candidatos[0];
+  return Math.max(fallback, 0);
+}
+
+function resolverDescricaoItem(lancamento: LancamentoRow, item: JsonObject | null, index: number): string | null {
+  return (
+    textoOuNull(item?.descricao) ??
+    textoOuNull(item?.label) ??
+    textoOuNull(lancamento.descricao) ??
+    `Item ${index + 1}`
+  );
+}
+
+function extrairAlunoIdsDeRegistro(registro: JsonObject | null): number[] {
+  if (!registro) return [];
+
+  const ids = new Set<number>();
+  addPositiveInt(ids, registro.aluno_id);
+  addPositiveInt(ids, registro.aluno_pessoa_id);
+  addPositiveIntArray(ids, registro.aluno_ids);
+  addPositiveIntArray(ids, registro.alunos);
+  return Array.from(ids);
+}
+
+function coletarPessoaIdsDeLancamento(lancamento: LancamentoRow): number[] {
+  const ids = new Set<number>();
+  addPositiveInt(ids, lancamento.aluno_id);
+
+  const composicao = asJsonObject(lancamento.composicao_json);
+  addPositiveInt(ids, composicao?.aluno_id);
+  addPositiveInt(ids, composicao?.aluno_pessoa_id);
+  addPositiveIntArray(ids, composicao?.aluno_ids);
+  addPositiveIntArray(ids, composicao?.alunos);
+
+  const itens = asJsonObjectArray(composicao?.itens);
+  for (const item of itens) {
+    addPositiveInt(ids, item.aluno_id);
+    addPositiveInt(ids, item.aluno_pessoa_id);
+    addPositiveIntArray(ids, item.aluno_ids);
+    addPositiveIntArray(ids, item.alunos);
+  }
+
+  return Array.from(ids);
+}
+
+function nomesDosAlunos(alunoIds: number[], pessoasMap: Map<number, PessoaRow>): string[] {
+  return alunoIds.map((id) => textoOuNull(pessoasMap.get(id)?.nome) ?? `Aluno #${id}`);
+}
+
+function montarItensContaInterna(params: {
+  lancamentos: LancamentoRow[];
+  matriculasMap: Map<number, MatriculaRow>;
+  pessoasMap: Map<number, PessoaRow>;
+  valorFallbackCentavos: number;
+}): ItemDetalheContaInterna[] {
+  const itensConsolidados: ItemDetalheContaInterna[] = [];
+
+  for (const lancamento of params.lancamentos) {
+    const composicao = asJsonObject(lancamento.composicao_json);
+    const itensJson = asJsonObjectArray(composicao?.itens);
+
+    const alunoIdsBase = new Set<number>([
+      ...dedupePositiveInts([
+        lancamento.aluno_id,
+        lancamento.matricula_id ? params.matriculasMap.get(lancamento.matricula_id)?.pessoa_id : null,
+      ]),
+      ...extrairAlunoIdsDeRegistro(composicao),
+    ]);
+
+    if (itensJson.length > 0) {
+      itensJson.forEach((item, index) => {
+        const alunoIds = new Set<number>([...alunoIdsBase, ...extrairAlunoIdsDeRegistro(item)]);
+
+        itensConsolidados.push({
+          lancamentoId: lancamento.id,
+          referenciaItem: textoOuNull(lancamento.referencia_item),
+          descricao: resolverDescricaoItem(lancamento, item, index),
+          valorCentavos: resolverValorItem(item, itensJson.length === 1 ? lancamento.valor_centavos : 0),
+          alunoIds: Array.from(alunoIds),
+          alunoNomes: nomesDosAlunos(Array.from(alunoIds), params.pessoasMap),
+          tipoItem: resolverTipoItem(lancamento, item),
+        });
+      });
+      continue;
+    }
+
+    itensConsolidados.push({
+      lancamentoId: lancamento.id,
+      referenciaItem: textoOuNull(lancamento.referencia_item),
+      descricao: textoOuNull(lancamento.descricao) ?? "Lancamento da conta interna",
+      valorCentavos: Math.max(numeroSeguro(lancamento.valor_centavos), 0),
+      alunoIds: Array.from(alunoIdsBase),
+      alunoNomes: nomesDosAlunos(Array.from(alunoIdsBase), params.pessoasMap),
+      tipoItem: resolverTipoItem(lancamento, null),
+    });
+  }
+
+  if (itensConsolidados.length > 0) {
+    return itensConsolidados;
+  }
+
+  return [
+    {
+      lancamentoId: null,
+      referenciaItem: null,
+      descricao: "Composicao da cobranca nao detalhada",
+      valorCentavos: Math.max(params.valorFallbackCentavos, 0),
+      alunoIds: [],
+      alunoNomes: [],
+      tipoItem: "Lancamento da conta interna",
+    },
+  ];
+}
+
+function matchesBusca(linha: LinhaCarteiraContaInterna, busca: string | undefined): boolean {
   const termo = textoOuNull(busca)?.toLowerCase();
   if (!termo) return true;
 
   const alvo = [
     linha.pessoaNome,
     linha.pessoaLabel,
-    linha.origemLabel,
+    linha.contaInternaDescricao ?? "",
+    linha.contaInternaLabel,
     linha.competenciaAnoMes ?? "",
     linha.centroCustoCodigo ?? "",
     linha.centroCustoNome ?? "",
-    linha.origemTipo ?? "",
-    linha.origemSubtipo ?? "",
+    linha.neofinInvoiceId ?? "",
     String(linha.cobrancaId),
-    linha.faturaId ? String(linha.faturaId) : "",
-    linha.faturaCobrancaId ? String(linha.faturaCobrancaId) : "",
+    linha.contaInternaId ? String(linha.contaInternaId) : "",
+    linha.faturaContaInternaId ? String(linha.faturaContaInternaId) : "",
+    linha.cobrancaFaturaId ? String(linha.cobrancaFaturaId) : "",
+    ...linha.itens.flatMap((item) => [
+      item.descricao ?? "",
+      item.referenciaItem ?? "",
+      item.tipoItem ?? "",
+      ...item.alunoNomes,
+    ]),
   ]
     .join(" ")
     .toLowerCase();
@@ -259,14 +479,14 @@ function matchesBusca(linha: LinhaCarteiraCanonica, busca: string | undefined): 
   return alvo.includes(termo);
 }
 
-function filtrarPorCompetencia(linha: LinhaCarteiraCanonica, filtros: FiltrosCarteiraCanonica): boolean {
+function filtrarPorCompetencia(linha: LinhaCarteiraContaInterna, filtros: FiltrosCarteiraCanonica): boolean {
   if (filtros.competencia && linha.competenciaAnoMes !== filtros.competencia) return false;
   if (filtros.competenciaInicio && (linha.competenciaAnoMes ?? "") < filtros.competenciaInicio) return false;
   if (filtros.competenciaFim && (linha.competenciaAnoMes ?? "") > filtros.competenciaFim) return false;
   return true;
 }
 
-function filtrarPorVencimento(linha: LinhaCarteiraCanonica, filtros: FiltrosCarteiraCanonica): boolean {
+function filtrarPorVencimento(linha: LinhaCarteiraContaInterna, filtros: FiltrosCarteiraCanonica): boolean {
   if (filtros.vencimentoInicio && dataValida(linha.dataVencimento) && linha.dataVencimento < filtros.vencimentoInicio) {
     return false;
   }
@@ -274,6 +494,39 @@ function filtrarPorVencimento(linha: LinhaCarteiraCanonica, filtros: FiltrosCart
     return false;
   }
   if (filtros.vencimentoInicio && !dataValida(linha.dataVencimento)) return false;
+  return true;
+}
+
+function matchesStatusOperacional(linha: LinhaCarteiraContaInterna, filtro: string | null | undefined): boolean {
+  const status = textoOuNull(filtro)?.toUpperCase();
+  if (!status || status === "TODOS") return true;
+  return linha.statusOperacional === status;
+}
+
+function matchesSituacaoNeoFin(linha: LinhaCarteiraContaInterna, filtro: string | null | undefined): boolean {
+  const situacao = textoOuNull(filtro)?.toUpperCase();
+  if (!situacao || situacao === "TODOS") return true;
+
+  if (situacao === "SEM_FATURA_INTERNA" || situacao === "SEM_FATURA") {
+    return !linha.possuiFaturaInterna;
+  }
+
+  if (
+    situacao === "SEM_COBRANCA_NEOFIN" ||
+    situacao === "NEOFIN_NAO_GERADA" ||
+    situacao === "FATURA_SEM_NEOFIN"
+  ) {
+    return linha.possuiFaturaInterna && !linha.houveGeracaoNeoFin;
+  }
+
+  if (
+    situacao === "COM_COBRANCA_NEOFIN" ||
+    situacao === "NEOFIN_GERADA" ||
+    situacao === "EM_COBRANCA_NEOFIN"
+  ) {
+    return linha.houveGeracaoNeoFin;
+  }
+
   return true;
 }
 
@@ -335,7 +588,9 @@ async function carregarLancamentos(
   for (const chunk of chunkNumbers(cobrancaIds)) {
     const { data, error } = await supabase
       .from("credito_conexao_lancamentos")
-      .select("id,cobranca_id,centro_custo_id,conta_conexao_id,competencia")
+      .select(
+        "id,aluno_id,centro_custo_id,cobranca_id,competencia,composicao_json,conta_conexao_id,descricao,matricula_id,origem_sistema,referencia_item,valor_centavos",
+      )
       .in("cobranca_id", chunk)
       .order("id", { ascending: true });
 
@@ -380,7 +635,7 @@ async function carregarFaturasMap(
   for (const chunk of chunkNumbers(faturaIds)) {
     const { data, error } = await supabase
       .from("credito_conexao_faturas")
-      .select("id,cobranca_id,periodo_referencia,status,data_vencimento,neofin_invoice_id")
+      .select("id,cobranca_id,conta_conexao_id,data_vencimento,neofin_invoice_id,periodo_referencia,status")
       .in("id", chunk);
 
     if (error) {
@@ -415,12 +670,78 @@ async function carregarCentrosCustoMap(
   return new Map(rows.map((row) => [row.id, row]));
 }
 
+async function carregarContasInternasMap(
+  supabase: SupabaseDbClient,
+  contaIds: number[],
+): Promise<Map<number, ContaInternaRow>> {
+  const rows: ContaInternaRow[] = [];
+
+  for (const chunk of chunkNumbers(contaIds)) {
+    const { data, error } = await supabase
+      .from("credito_conexao_contas")
+      .select("id,descricao_exibicao,pessoa_titular_id,responsavel_financeiro_pessoa_id,tipo_conta")
+      .in("id", chunk);
+
+    if (error) {
+      throw new Error(`erro_buscar_contas_internas_canonicas:${error.message}`);
+    }
+
+    rows.push(...((data ?? []) as ContaInternaRow[]));
+  }
+
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+async function carregarMatriculasMap(
+  supabase: SupabaseDbClient,
+  matriculaIds: number[],
+): Promise<Map<number, MatriculaRow>> {
+  const rows: MatriculaRow[] = [];
+
+  for (const chunk of chunkNumbers(matriculaIds)) {
+    const { data, error } = await supabase
+      .from("matriculas")
+      .select("id,pessoa_id,responsavel_financeiro_id")
+      .in("id", chunk);
+
+    if (error) {
+      throw new Error(`erro_buscar_matriculas_canonicas:${error.message}`);
+    }
+
+    rows.push(...((data ?? []) as MatriculaRow[]));
+  }
+
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+async function carregarPessoasMap(
+  supabase: SupabaseDbClient,
+  pessoaIds: number[],
+): Promise<Map<number, PessoaRow>> {
+  const rows: PessoaRow[] = [];
+
+  for (const chunk of chunkNumbers(pessoaIds)) {
+    const { data, error } = await supabase
+      .from("pessoas")
+      .select("id,nome")
+      .in("id", chunk);
+
+    if (error) {
+      throw new Error(`erro_buscar_pessoas_canonicas:${error.message}`);
+    }
+
+    rows.push(...((data ?? []) as PessoaRow[]));
+  }
+
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
 function escolherFaturaPrincipal(
   lancamentos: LancamentoRow[],
   linksPorLancamento: Map<number, number[]>,
   faturasMap: Map<number, FaturaRow>,
   competencia: string | null,
-): { lancamentoId: number | null; contaConexaoId: number | null; meta: FaturaMeta } {
+): MetaFaturaPrincipal {
   const candidatos = lancamentos
     .map((lancamento) => {
       const faturas = (linksPorLancamento.get(lancamento.id) ?? [])
@@ -438,9 +759,9 @@ function escolherFaturaPrincipal(
         });
 
       return {
-        lancamentoId: lancamento.id,
-        contaConexaoId: numeroSeguro(lancamento.conta_conexao_id) || null,
+        contaInternaId: numeroSeguro(lancamento.conta_conexao_id) || null,
         fatura: faturas[0] ?? null,
+        lancamentoId: lancamento.id,
       };
     })
     .sort((a, b) => {
@@ -463,35 +784,29 @@ function escolherFaturaPrincipal(
   const principal = candidatos[0];
   if (!principal) {
     return {
-      lancamentoId: null,
-      contaConexaoId: null,
-      meta: {
-        faturaId: null,
-        faturaCompetencia: null,
-        faturaStatus: null,
-        faturaCobrancaId: null,
-        neofinInvoiceId: null,
-      },
+      contaInternaId: null,
+      cobrancaFaturaId: null,
+      dataVencimento: null,
+      faturaContaInternaId: null,
+      neofinInvoiceId: null,
+      status: null,
     };
   }
 
   return {
-    lancamentoId: principal.lancamentoId,
-    contaConexaoId: principal.contaConexaoId,
-    meta: {
-      faturaId: principal.fatura?.id ?? null,
-      faturaCompetencia: textoOuNull(principal.fatura?.periodo_referencia),
-      faturaStatus: textoOuNull(principal.fatura?.status),
-      faturaCobrancaId: numeroSeguro(principal.fatura?.cobranca_id) || null,
-      neofinInvoiceId: textoOuNull(principal.fatura?.neofin_invoice_id),
-    },
+    contaInternaId: principal.fatura?.conta_conexao_id ?? principal.contaInternaId,
+    cobrancaFaturaId: inteiroPositivoOuNull(principal.fatura?.cobranca_id),
+    dataVencimento: textoOuNull(principal.fatura?.data_vencimento),
+    faturaContaInternaId: principal.fatura?.id ?? null,
+    neofinInvoiceId: textoOuNull(principal.fatura?.neofin_invoice_id),
+    status: textoOuNull(principal.fatura?.status),
   };
 }
 
 export async function listarCarteiraOperacionalCanonica(
   supabase: SupabaseDbClient,
   filtros: FiltrosCarteiraCanonica,
-): Promise<LinhaCarteiraCanonica[]> {
+): Promise<LinhaCarteiraContaInterna[]> {
   let query = supabase
     .from("cobrancas")
     .select(
@@ -545,8 +860,8 @@ export async function listarCarteiraOperacionalCanonica(
   const lancamentoIds = lancamentos.map((item) => item.id);
   const faturaLinks = lancamentoIds.length > 0 ? await carregarFaturaLinks(supabase, lancamentoIds) : [];
   const faturaIds = faturaLinks
-    .map((item) => numeroSeguro(item.fatura_id))
-    .filter((item) => item > 0);
+    .map((item) => inteiroPositivoOuNull(item.fatura_id))
+    .filter((item): item is number => typeof item === "number");
   const faturasMap =
     faturaIds.length > 0 ? await carregarFaturasMap(supabase, faturaIds) : new Map<number, FaturaRow>();
 
@@ -572,103 +887,153 @@ export async function listarCarteiraOperacionalCanonica(
   const centroCustoIds = Array.from(
     new Set(
       [
-        ...cobrancas.map((item) => numeroSeguro(item.centro_custo_id)),
-        ...lancamentos.map((item) => numeroSeguro(item.centro_custo_id)),
-      ].filter((item) => item > 0),
+        ...cobrancas.map((item) => inteiroPositivoOuNull(item.centro_custo_id)),
+        ...lancamentos.map((item) => inteiroPositivoOuNull(item.centro_custo_id)),
+      ].filter((item): item is number => typeof item === "number"),
     ),
   );
-  const centrosCustoMap =
-    centroCustoIds.length > 0 ? await carregarCentrosCustoMap(supabase, centroCustoIds) : new Map<number, CentroCustoRow>();
+  const contaIds = Array.from(
+    new Set(
+      [
+        ...lancamentos.map((item) => inteiroPositivoOuNull(item.conta_conexao_id)),
+        ...Array.from(faturasMap.values()).map((item) => inteiroPositivoOuNull(item.conta_conexao_id)),
+      ].filter((item): item is number => typeof item === "number"),
+    ),
+  );
+  const matriculaIds = Array.from(
+    new Set(
+      lancamentos
+        .map((item) => inteiroPositivoOuNull(item.matricula_id))
+        .filter((item): item is number => typeof item === "number"),
+    ),
+  );
+
+  const [centrosCustoMap, contasInternasMap, matriculasMap] = await Promise.all([
+    centroCustoIds.length > 0
+      ? carregarCentrosCustoMap(supabase, centroCustoIds)
+      : Promise.resolve(new Map<number, CentroCustoRow>()),
+    contaIds.length > 0
+      ? carregarContasInternasMap(supabase, contaIds)
+      : Promise.resolve(new Map<number, ContaInternaRow>()),
+    matriculaIds.length > 0
+      ? carregarMatriculasMap(supabase, matriculaIds)
+      : Promise.resolve(new Map<number, MatriculaRow>()),
+  ]);
+
+  const pessoaIds = new Set<number>();
+  for (const cobranca of cobrancas) {
+    addPositiveInt(pessoaIds, cobranca.pessoa_id);
+  }
+  for (const conta of contasInternasMap.values()) {
+    addPositiveInt(pessoaIds, conta.pessoa_titular_id);
+    addPositiveInt(pessoaIds, conta.responsavel_financeiro_pessoa_id);
+  }
+  for (const matricula of matriculasMap.values()) {
+    addPositiveInt(pessoaIds, matricula.pessoa_id);
+    addPositiveInt(pessoaIds, matricula.responsavel_financeiro_id);
+  }
+  for (const lancamento of lancamentos) {
+    for (const pessoaId of coletarPessoaIdsDeLancamento(lancamento)) {
+      pessoaIds.add(pessoaId);
+    }
+  }
+
+  const pessoasMap =
+    pessoaIds.size > 0
+      ? await carregarPessoasMap(supabase, Array.from(pessoaIds))
+      : new Map<number, PessoaRow>();
 
   const todayIso = localIsoDate(new Date());
+
   const linhas = cobrancas
-    .map((item) => {
-      const recebimentos = recebimentosMap.get(item.id);
-      const valorCentavos = numeroSeguro(item.valor_centavos);
+    .map((cobranca) => {
+      const recebimentos = recebimentosMap.get(cobranca.id);
+      const valorCentavos = numeroSeguro(cobranca.valor_centavos);
       const valorPagoCentavos = Math.max(0, recebimentos?.totalPagoCentavos ?? 0);
       const saldoCentavos = Math.max(valorCentavos - valorPagoCentavos, 0);
-      const lancamentosRelacionados = lancamentosPorCobranca.get(item.id) ?? [];
-      const centroCustoId =
-        numeroSeguro(item.centro_custo_id) || numeroSeguro(lancamentosRelacionados[0]?.centro_custo_id) || null;
-      const centroCusto = centroCustoId ? centrosCustoMap.get(centroCustoId) : undefined;
-      const competenciaAnoMes = competenciaValida(item.competencia_ano_mes) ? item.competencia_ano_mes : null;
+      const lancamentosRelacionados = lancamentosPorCobranca.get(cobranca.id) ?? [];
+      const competenciaAnoMes = competenciaValida(cobranca.competencia_ano_mes) ? cobranca.competencia_ano_mes : null;
       const faturaPrincipal = escolherFaturaPrincipal(
         lancamentosRelacionados,
         linksPorLancamento,
         faturasMap,
         competenciaAnoMes,
       );
+      const contaInternaId =
+        faturaPrincipal.contaInternaId ??
+        inteiroPositivoOuNull(lancamentosRelacionados[0]?.conta_conexao_id) ??
+        null;
+      const contaInterna = contaInternaId ? contasInternasMap.get(contaInternaId) : undefined;
+      const centroCustoId =
+        inteiroPositivoOuNull(cobranca.centro_custo_id) ??
+        inteiroPositivoOuNull(lancamentosRelacionados[0]?.centro_custo_id) ??
+        null;
+      const centroCusto = centroCustoId ? centrosCustoMap.get(centroCustoId) : undefined;
       const statusOperacional = calcularStatusOperacional({
         valorCentavos,
         valorPagoCentavos,
-        dataVencimento: textoOuNull(item.vencimento),
+        dataVencimento: textoOuNull(cobranca.vencimento),
         todayIso,
       });
-      const situacaoNeoFin = calcularSituacaoNeoFin({
-        faturaId: faturaPrincipal.meta.faturaId,
-        neofinInvoiceId: faturaPrincipal.meta.neofinInvoiceId,
-      });
-      const pessoaId = numeroSeguro(item.pessoa_id) || null;
-      const pessoaNome =
-        textoOuNull(item.pessoas?.nome) ?? (pessoaId ? `Pessoa #${pessoaId}` : "Pessoa nao identificada");
-      const pessoaLabel = montarPessoaLabel(pessoaNome, pessoaId);
-      const dataVencimento = textoOuNull(item.vencimento);
+      const dataVencimento = textoOuNull(cobranca.vencimento);
       const diasAtraso = statusOperacional === "VENCIDO" ? diferencaDias(todayIso, dataVencimento) : 0;
+      const responsavelContaId = inteiroPositivoOuNull(contaInterna?.responsavel_financeiro_pessoa_id);
+      const titularContaId = inteiroPositivoOuNull(contaInterna?.pessoa_titular_id);
+      const pessoaIdCobranca = inteiroPositivoOuNull(cobranca.pessoa_id);
+      const pessoaId = responsavelContaId ?? pessoaIdCobranca ?? titularContaId ?? null;
+      const pessoaNome =
+        textoOuNull(pessoasMap.get(pessoaId ?? -1)?.nome) ??
+        textoOuNull(cobranca.pessoas?.nome) ??
+        (pessoaId ? `Pessoa #${pessoaId}` : "Pessoa nao identificada");
+      const itens = montarItensContaInterna({
+        lancamentos: lancamentosRelacionados,
+        matriculasMap,
+        pessoasMap,
+        valorFallbackCentavos: valorCentavos,
+      });
 
       return {
-        cobrancaId: item.id,
+        cobrancaId: cobranca.id,
         cobrancaFonte: "COBRANCA",
         pessoaId,
         pessoaNome,
-        pessoaLabel,
+        pessoaLabel: montarPessoaLabel(pessoaNome, pessoaId),
         competenciaAnoMes,
         competenciaLabel: formatarCompetenciaLabel(competenciaAnoMes),
         centroCustoId,
         centroCustoCodigo: textoOuNull(centroCusto?.codigo),
         centroCustoNome: textoOuNull(centroCusto?.nome),
-        contextoPrincipal: inferirContextoPrincipal(centroCusto, textoOuNull(item.origem_tipo)),
-        origemTipo: textoOuNull(item.origem_tipo),
-        origemSubtipo: textoOuNull(item.origem_subtipo),
-        origemLabel: montarOrigemLabel(textoOuNull(item.origem_tipo), textoOuNull(item.origem_subtipo)),
-        statusCobranca: textoOuNull(item.status),
+        contextoPrincipal: inferirContextoPrincipal(centroCusto, textoOuNull(lancamentosRelacionados[0]?.origem_sistema)),
+        statusCobranca: textoOuNull(cobranca.status),
         valorCentavos,
         valorPagoCentavos,
         saldoCentavos,
         dataVencimento,
-        dataPagamento: recebimentos?.ultimaDataPagamento ?? textoOuNull(item.data_pagamento),
+        dataPagamento: recebimentos?.ultimaDataPagamento ?? textoOuNull(cobranca.data_pagamento),
         diasAtraso,
         statusOperacional,
-        lancamentoId: faturaPrincipal.lancamentoId,
-        contaConexaoId: faturaPrincipal.contaConexaoId,
-        faturaId: faturaPrincipal.meta.faturaId,
-        faturaCompetencia: faturaPrincipal.meta.faturaCompetencia,
-        faturaStatus: faturaPrincipal.meta.faturaStatus,
-        faturaCobrancaId: faturaPrincipal.meta.faturaCobrancaId,
-        neofinInvoiceId: faturaPrincipal.meta.neofinInvoiceId,
-        possuiVinculoFatura: Boolean(faturaPrincipal.meta.faturaId),
-        situacaoNeoFin,
-        cobrancaUrl: `/admin/governanca/cobrancas/${item.id}`,
-        faturaUrl: faturaPrincipal.meta.faturaId
-          ? `/admin/financeiro/credito-conexao/faturas/${faturaPrincipal.meta.faturaId}`
+        contaInternaId,
+        contaInternaDescricao: descreverContaInterna(contaInterna),
+        contaInternaLabel: contaInternaLabel(contaInternaId),
+        faturaContaInternaId: faturaPrincipal.faturaContaInternaId,
+        faturaContaInternaStatus: faturaPrincipal.status,
+        cobrancaFaturaId: faturaPrincipal.cobrancaFaturaId,
+        neofinInvoiceId: faturaPrincipal.neofinInvoiceId,
+        houveGeracaoNeoFin: Boolean(faturaPrincipal.neofinInvoiceId),
+        possuiFaturaInterna: Boolean(faturaPrincipal.faturaContaInternaId),
+        itens,
+        cobrancaUrl: `/admin/governanca/cobrancas/${cobranca.id}`,
+        faturaUrl: faturaPrincipal.faturaContaInternaId
+          ? `/admin/financeiro/credito-conexao/faturas/${faturaPrincipal.faturaContaInternaId}`
           : null,
-        permiteVinculoManual: !faturaPrincipal.meta.faturaId,
-      } satisfies LinhaCarteiraCanonica;
+        permiteVinculoManual: !faturaPrincipal.faturaContaInternaId,
+      } satisfies LinhaCarteiraContaInterna;
     })
     .filter((linha) => filtrarPorCompetencia(linha, filtros))
     .filter((linha) => filtrarPorVencimento(linha, filtros))
     .filter((linha) => matchesBusca(linha, filtros.busca))
-    .filter((linha) => {
-      if (filtros.statusOperacional && filtros.statusOperacional !== "todos" && filtros.statusOperacional !== "TODOS") {
-        return linha.statusOperacional === filtros.statusOperacional;
-      }
-      return true;
-    })
-    .filter((linha) => {
-      if (filtros.situacaoNeoFin && filtros.situacaoNeoFin !== "todos" && filtros.situacaoNeoFin !== "TODOS") {
-        return linha.situacaoNeoFin === filtros.situacaoNeoFin;
-      }
-      return true;
-    })
+    .filter((linha) => matchesStatusOperacional(linha, filtros.statusOperacional))
+    .filter((linha) => matchesSituacaoNeoFin(linha, filtros.situacaoNeoFin))
     .filter((linha) => {
       if (!filtros.contexto) return true;
       return linha.contextoPrincipal === filtros.contexto;
@@ -690,7 +1055,7 @@ export async function listarCarteiraOperacionalCanonica(
 }
 
 export function resumirCarteiraOperacional(
-  linhas: LinhaCarteiraCanonica[],
+  linhas: LinhaCarteiraContaInterna[],
 ): ResumoCarteiraOperacionalCanonica {
   return linhas.reduce<ResumoCarteiraOperacionalCanonica>(
     (acc, linha) => {
@@ -702,7 +1067,7 @@ export function resumirCarteiraOperacional(
         acc.vencidoCentavos += linha.saldoCentavos;
       }
 
-      if (linha.situacaoNeoFin === "EM_COBRANCA_NEOFIN") {
+      if (linha.houveGeracaoNeoFin) {
         acc.emCobrancaNeoFinCentavos += linha.saldoCentavos;
       }
 
@@ -719,9 +1084,9 @@ export function resumirCarteiraOperacional(
 }
 
 export function agruparCarteiraPorCompetencia(
-  linhas: LinhaCarteiraCanonica[],
+  linhas: LinhaCarteiraContaInterna[],
 ): GrupoCarteiraPorCompetencia[] {
-  const mapa = new Map<string, LinhaCarteiraCanonica[]>();
+  const mapa = new Map<string, LinhaCarteiraContaInterna[]>();
 
   for (const linha of linhas) {
     const chave = linha.competenciaAnoMes ?? "SEM_COMPETENCIA";

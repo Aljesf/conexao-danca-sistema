@@ -87,7 +87,7 @@ function PagamentoModal({
           <div>
             <h2 className="text-base font-semibold text-slate-900">Registrar recebimento</h2>
             <p className="mt-1 text-sm text-slate-600">{item.pessoaLabel}</p>
-            <p className="text-sm text-slate-500">{item.origemLabel}</p>
+            <p className="text-sm text-slate-500">Cobranca oficial #{item.cobrancaId}</p>
           </div>
           <button
             type="button"
@@ -283,8 +283,8 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
   return (
     <FinancePageShell
-      title="Carteira operacional canonica por competencia"
-      subtitle="Leitura canonica a partir de cobrancas oficiais, com vinculo derivado de lancamento e fatura quando existir."
+      title="Cobrancas oficiais por competencia"
+      subtitle="Leitura canonica por cobranca oficial da conta interna, com composicao por itens e NeoFin apenas como camada externa."
       actions={
         <Button type="button" variant="secondary" onClick={() => setReloadToken((current) => current + 1)} disabled={loading}>
           {loading ? "Atualizando..." : "Atualizar"}
@@ -297,8 +297,9 @@ export default function AdminCreditoConexaoCobrancasPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-slate-700">
-            Esta tela agora usa a mesma carteira canonica de cobrancas da visao de contas a receber. A chave principal
-            e sempre a cobranca oficial; lancamento, fatura e NeoFin entram apenas como vinculo derivado.
+            Esta tela usa a mesma carteira canonica de cobrancas da visao de contas a receber. A unidade economica e
+            sempre a cobranca oficial da conta interna; itens, fatura interna e NeoFin entram apenas como composicao ou
+            vinculo derivado.
           </div>
 
           {feedback ? (
@@ -321,7 +322,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
             <Input
               value={busca}
               onChange={(event) => setBusca(event.target.value)}
-              placeholder="Buscar por pessoa, cobranca, fatura ou competencia"
+              placeholder="Buscar por responsavel, cobranca, conta interna, aluno ou fatura"
               disabled={loading}
             />
 
@@ -343,10 +344,10 @@ export default function AdminCreditoConexaoCobrancasPage() {
               className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
               disabled={loading}
             >
-              <option value="TODOS">Situacao NeoFin: todas</option>
-              <option value="SEM_FATURA">Sem fatura</option>
-              <option value="FATURA_SEM_NEOFIN">Fatura sem NeoFin</option>
-              <option value="EM_COBRANCA_NEOFIN">Em cobranca NeoFin</option>
+              <option value="TODOS">Cobranca NeoFin: todas</option>
+              <option value="SEM_FATURA_INTERNA">Sem fatura interna vinculada</option>
+              <option value="SEM_COBRANCA_NEOFIN">Cobranca NeoFin nao gerada</option>
+              <option value="COM_COBRANCA_NEOFIN">Cobranca NeoFin gerada</option>
             </select>
 
             <div className="flex flex-wrap gap-2">
@@ -379,7 +380,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
         <CardContent className="space-y-4">
           {loading && !data ? (
             <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-              Carregando carteira canonica da competencia...
+              Carregando cobrancas oficiais da conta interna...
             </div>
           ) : null}
 

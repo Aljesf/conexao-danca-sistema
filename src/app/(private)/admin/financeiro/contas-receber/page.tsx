@@ -429,7 +429,7 @@ export default function AdminContasReceberPage() {
           "Use a visao para mudar o foco da tela entre atraso, exposicao futura, recebimento e revisao.",
           "O contexto mostra onde o saldo nasce de verdade: Escola, Cafe, Loja ou casos em revisao.",
           "Na visao Vencidas, mes/ano e competencia passam a usar a mesma cobranca canonica da tela de cobrancas por competencia.",
-          "A auditoria da cobranca abre a trilha financeira completa e a composicao da fatura do Cartao Conexao quando existir.",
+          "A auditoria da cobranca abre a trilha financeira completa, a composicao da conta interna e a fatura interna quando existir.",
         ]}
       />
 

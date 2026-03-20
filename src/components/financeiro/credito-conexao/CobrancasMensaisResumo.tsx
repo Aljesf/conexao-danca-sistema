@@ -24,7 +24,7 @@ export function CobrancasMensaisResumo({ resumo, totalCobrancas }: Props) {
         <div>
           <h2 className="text-base font-semibold text-slate-900">Resumo geral da carteira operacional</h2>
           <p className="text-sm text-slate-600">
-            Leitura consolidada da carteira canonica de cobrancas, com vinculos derivados de fatura e NeoFin.
+            Leitura consolidada da carteira canonica por cobranca oficial da conta interna, com fatura interna e NeoFin apenas como camadas derivadas.
           </p>
         </div>
         <p className="text-sm text-slate-500">{totalCobrancas} cobranca(s) elegivel(is) no filtro atual</p>

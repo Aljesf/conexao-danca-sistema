@@ -34,7 +34,7 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Competencia ativa</p>
           <h2 className="mt-1 text-xl font-semibold text-slate-900">{competencia.competenciaLabel}</h2>
           <p className="text-sm text-slate-600">
-            Cada linha abaixo representa exatamente uma cobranca oficial canonica da competencia selecionada.
+            Cada linha abaixo representa uma cobranca oficial da conta interna, com a composicao economica detalhada por itens.
           </p>
         </div>
 
@@ -50,7 +50,7 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
       <div className="mt-5 space-y-4">
         <CobrancaStatusSection
           titulo="Vencido"
-          descricao="Cobrancas oficiais da competencia com saldo aberto e vencimento ja ultrapassado."
+          descricao="Cobrancas oficiais da conta interna com saldo aberto e vencimento ja ultrapassado."
           tipo="pendente_vencido"
           itens={vencido}
           onRegistrarRecebimento={onRegistrarRecebimento}
@@ -59,7 +59,7 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
 
         <CobrancaStatusSection
           titulo="Pendente"
-          descricao="Cobrancas oficiais da competencia ainda abertas, mas nao vencidas."
+          descricao="Cobrancas oficiais da conta interna ainda abertas, mas nao vencidas."
           tipo="pendente_a_vencer"
           itens={pendente}
           onRegistrarRecebimento={onRegistrarRecebimento}
@@ -68,7 +68,7 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
 
         <CobrancaStatusSection
           titulo="Pago"
-          descricao="Cobrancas oficiais da competencia com saldo zerado pela leitura canonica."
+          descricao="Cobrancas oficiais da conta interna com saldo zerado pela leitura canonica."
           tipo="pago"
           itens={pago}
           onRegistrarRecebimento={onRegistrarRecebimento}
