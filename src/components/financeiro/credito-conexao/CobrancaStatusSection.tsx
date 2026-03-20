@@ -1,24 +1,24 @@
 "use client";
 
 import { formatBRLFromCents } from "@/lib/formatters/money";
-import { type CobrancaOperacionalItem } from "@/lib/financeiro/creditoConexao/cobrancas";
+import { type LinhaCarteiraCanonica } from "@/lib/financeiro/carteira-operacional-canonica";
 import { CobrancaRow } from "./CobrancaRow";
 
 type Props = {
   titulo: string;
   descricao: string;
   tipo: "pago" | "pendente_a_vencer" | "pendente_vencido";
-  itens: CobrancaOperacionalItem[];
-  onRegistrarRecebimento?: (item: CobrancaOperacionalItem) => void;
-  onVincularFatura?: (item: CobrancaOperacionalItem) => void;
+  itens: LinhaCarteiraCanonica[];
+  onRegistrarRecebimento?: (item: LinhaCarteiraCanonica) => void;
+  onVincularFatura?: (item: LinhaCarteiraCanonica) => void;
 };
 
-function calcularTotal(tipo: Props["tipo"], itens: CobrancaOperacionalItem[]): number {
+function calcularTotal(tipo: Props["tipo"], itens: LinhaCarteiraCanonica[]): number {
   return itens.reduce((acc, item) => {
     if (tipo === "pago") {
-      return acc + item.valor_pago_centavos;
+      return acc + item.valorPagoCentavos;
     }
-    return acc + item.saldo_aberto_centavos;
+    return acc + item.saldoCentavos;
   }, 0);
 }
 
@@ -57,7 +57,7 @@ export function CobrancaStatusSection({ titulo, descricao, tipo, itens, onRegist
         ) : (
           itens.map((item) => (
             <CobrancaRow
-              key={`${tipo}-${item.cobranca_key}`}
+              key={`${tipo}-${item.cobrancaId}`}
               item={item}
               onRegistrarRecebimento={onRegistrarRecebimento}
               onVincularFatura={onVincularFatura}

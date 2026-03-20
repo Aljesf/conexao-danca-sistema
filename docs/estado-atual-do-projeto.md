@@ -1,5 +1,5 @@
 ## Modulo atual
-Conta interna do aluno - carteira operacional por competencia alinhada a contas a receber, com fatura, cobranca vinculada e leitura NeoFin consistente
+Convergencia canonica entre contas a receber vencidas e cobrancas por competencia, usando `cobrancas` como fonte principal e vinculos derivados para lancamentos, faturas e NeoFin
 
 ## SQL concluido
 - nenhuma migration nova foi criada neste ciclo
@@ -15,6 +15,7 @@ Conta interna do aluno - carteira operacional por competencia alinhada a contas 
   - `supabase/sql/diagnosticos/20260319_auditoria_centro_custo_dashboard.sql`
   - `supabase/sql/diagnosticos/20260319_diagnostico_neofin_cartao_conexao.sql`
   - `supabase/sql/diagnosticos/20260319_diagnostico_competencia_ativa_vs_contas_receber.sql`
+  - `supabase/sql/diagnosticos/20260320_diagnostico_convergencia_cobrancas_competencia.sql`
 
 ## APIs concluidas
 - `src/lib/credito-conexao/processarFechamentoAutomaticoMensal.ts`
@@ -33,12 +34,17 @@ Conta interna do aluno - carteira operacional por competencia alinhada a contas 
 - `src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts`
 - `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`
 - `src/lib/financeiro/competenciaAtiva/resolverCarteiraOperacionalPorCompetencia.ts`
+- `src/lib/financeiro/carteira-operacional-canonica.ts`
+- `src/lib/financeiro/contas-receber-canonico.ts`
 - `src/app/api/financeiro/credito-conexao/cobrancas/route.ts`
+- `src/app/api/financeiro/contas-a-receber/route.ts`
+- `src/app/api/financeiro/contas-a-receber/vencidas/por-pessoa/route.ts`
 
 ## Paginas / componentes concluidos
 - `src/app/(private)/admin/financeiro/credito-conexao/faturas/[id]/page.tsx`
 - `src/app/(private)/admin/governanca/cobrancas/[id]/page.tsx`
 - `src/app/(private)/admin/financeiro/credito-conexao/cobrancas/page.tsx`
+- `src/app/(private)/admin/financeiro/contas-receber/page.tsx`
 - `src/components/financeiro/credito-conexao/CobrancasMensaisResumo.tsx`
 - `src/components/financeiro/credito-conexao/CobrancasCompetenciaCard.tsx`
 - `src/components/financeiro/credito-conexao/CobrancaStatusSection.tsx`
@@ -54,13 +60,22 @@ Conta interna do aluno - carteira operacional por competencia alinhada a contas 
   - exportacao Excel nos modais e no topo do header
   - melhoria visual e operacional dos modais
   - ajuste do bloco de centro de custo
+- nesta atualizacao de 2026-03-20 foi consolidado adicionalmente:
+  - convergencia funcional entre contas a receber vencidas e cobrancas por competencia
+  - leitura canonica centralizada em helper compartilhado (`src/lib/financeiro/carteira-operacional-canonica.ts`)
+  - tela de competencia passando a responder de `cobrancas`, com `credito_conexao_lancamentos` e `credito_conexao_faturas` apenas como vinculo derivado
+  - tela de contas a receber vencidas reaproveitando a mesma base canonica para cards, lista e devedores
+  - correcao semantica dos rotulos visuais para privilegiar `cobranca oficial`, `origem`, `fatura vinculada` e `cobranca da fatura`
+  - NeoFin validado apenas quando existe fatura vinculada e `neofin_invoice_id`, mantendo a cobranca da fatura como referencia objetiva
 
 ## O que foi consolidado neste ciclo
 - a tela de competencia ativa passou a usar a mesma carteira real de contas a receber como criterio canonico de elegibilidade
-- a selecao operacional da competencia ativa agora nasce de `vw_financeiro_contas_receber_flat` + `cobrancas`, e usa `vw_financeiro_cobrancas_operacionais` apenas para enriquecer as cobrancas oficiais ainda elegiveis
-- a comparacao real em base local mostrou que a leitura antiga trazia `422` itens e a nova passou para `315`, removendo `107` itens indevidos:
-  - `96` cancelados
-  - `11` expurgados
+- a leitura canonica compartilhada agora nasce de `cobrancas`, exclui `CANCELADA` / `EXPURGADA` / `SUBSTITUIDA` e usa `recebimentos`, `credito_conexao_lancamentos` e `credito_conexao_faturas` apenas como enriquecimento objetivo
+- a validacao direta em base real para `2026-03` fechou os numeros entre as duas telas:
+  - competencia `2026-03`: `21` cobrancas canonicas, `R$ 3.839,00` previsto, `R$ 631,00` vencido
+  - contas a receber vencidas em `MES_ANO 03/2026`: `R$ 631,00` vencido, `5` cobrancas, `4` devedores
+  - contexto `ESCOLA` em `03/2026`: `R$ 609,00` vencido, `4` cobrancas, `3` devedores, batendo com o subconjunto vencido da competencia
+- a validacao objetiva de NeoFin no recorte `2026-03` retornou `0` casos de `EM_COBRANCA_NEOFIN` sem `faturaId` e `0` casos com NeoFin sem `faturaCobrancaId`
 - itens cancelados, expurgados ou substituidos por reprocessamento deixaram de aparecer como carteira operacional da competencia ativa
 - a competencia ativa agora fala a mesma linguagem publica da carteira real:
   - conta interna do aluno
@@ -104,7 +119,7 @@ Conta interna do aluno - carteira operacional por competencia alinhada a contas 
   - `0` origens com duplicidade de cobranca canonica nao cancelada no recorte validado
 
 ## Pendencias
-- homologacao visual autenticada da tela de competencia ativa da conta interna contra a tela de contas a receber
+- homologacao visual autenticada da convergencia de marco/2026 entre `/financeiro/contas-receber` e `/financeiro/credito-conexao/cobrancas`
 - homologacao visual autenticada da tela de fatura da conta interna e do detalhe da cobranca financeira
 - amarrar o servico de fechamento mensal a um gatilho operacional explicito de bootstrap/cron; nesta etapa foi criado o servico canonico e a rota administrativa, mas nao foi adicionado disparo oculto na UI
 - backfill historico dos casos antigos em que `credito_conexao_faturas.cobranca_id` ainda aponta para cobranca-item ou `neofin_invoice_id` permanece nulo
@@ -114,12 +129,13 @@ Conta interna do aluno - carteira operacional por competencia alinhada a contas 
 
 ## Bloqueios
 - `npm run lint` continua falhando por erros preexistentes em outras areas do repositorio
+- `npm run build` passou com sucesso, mas o projeto pula validacao de tipos/lint no build atual
 - captura automatica de prints reais segue bloqueada por autenticacao local nas rotas privadas
 - nao existe hoje um scheduler/boot executor explicito versionado chamando o fechamento mensal; a logica ficou pronta, mas a orquestracao operacional ainda depende de definicao do ambiente
 
 ## Versao do sistema
-Sistema Conexao Danca - Conta interna do aluno / carteira operacional / fatura / NeoFin
-Versao logica: v1.9 competencia ativa alinhada a contas a receber e sem cancelados na leitura operacional
+Sistema Conexao Danca - carteira operacional canonica / contas a receber / competencia / NeoFin
+Versao logica: v1.10 convergencia canonica entre vencidos e cobrancas por competencia
 
 ## Proximas acoes
 1. homologar em sessao autenticada a nova tela de competencia ativa contra a carteira oficial de contas a receber

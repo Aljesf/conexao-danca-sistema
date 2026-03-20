@@ -10,12 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  type CobrancaOperacionalItem,
-  type CobrancasMensaisResponse,
-} from "@/lib/financeiro/creditoConexao/cobrancas";
+  type GrupoCarteiraPorCompetencia,
+  type LinhaCarteiraCanonica,
+  type ResumoCarteiraOperacionalCanonica,
+} from "@/lib/financeiro/carteira-operacional-canonica";
 
-type ApiResponse = CobrancasMensaisResponse & {
+type ApiResponse = {
   ok: boolean;
+  resumoGeral: ResumoCarteiraOperacionalCanonica;
+  competencias: GrupoCarteiraPorCompetencia[];
+  totalCobrancas: number;
+  linhas: LinhaCarteiraCanonica[];
   error?: string;
   detail?: string | null;
 };
@@ -51,7 +56,7 @@ function competenciaAtualLocal(): string {
 }
 
 type PagamentoModalProps = {
-  item: CobrancaOperacionalItem | null;
+  item: LinhaCarteiraCanonica | null;
   open: boolean;
   dataPagamento: string;
   metodoPagamento: "PIX" | "DINHEIRO";
@@ -81,8 +86,8 @@ function PagamentoModal({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Registrar recebimento</h2>
-            <p className="mt-1 text-sm text-slate-600">{item.pessoa_label}</p>
-            <p className="text-sm text-slate-500">{item.origem_referencia_label}</p>
+            <p className="mt-1 text-sm text-slate-600">{item.pessoaLabel}</p>
+            <p className="text-sm text-slate-500">{item.origemLabel}</p>
           </div>
           <button
             type="button"
@@ -142,9 +147,9 @@ export default function AdminCreditoConexaoCobrancasPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [reloadToken, setReloadToken] = useState(0);
-  const [data, setData] = useState<CobrancasMensaisResponse | null>(null);
-  const [modalPagamento, setModalPagamento] = useState<CobrancaOperacionalItem | null>(null);
-  const [modalVinculo, setModalVinculo] = useState<CobrancaOperacionalItem | null>(null);
+  const [data, setData] = useState<ApiResponse | null>(null);
+  const [modalPagamento, setModalPagamento] = useState<LinhaCarteiraCanonica | null>(null);
+  const [modalVinculo, setModalVinculo] = useState<LinhaCarteiraCanonica | null>(null);
   const [dataPagamento, setDataPagamento] = useState(localTodayIso());
   const [metodoPagamento, setMetodoPagamento] = useState<"PIX" | "DINHEIRO">("PIX");
   const [savingPagamento, setSavingPagamento] = useState(false);
@@ -161,9 +166,9 @@ export default function AdminCreditoConexaoCobrancasPage() {
       try {
         const params = new URLSearchParams();
         params.set("limite", "36");
-        if (buscaDiferida.trim()) params.set("q", buscaDiferida.trim());
+        if (buscaDiferida.trim()) params.set("busca", buscaDiferida.trim());
         if (statusOperacional !== "TODOS") params.set("status_operacional", statusOperacional);
-        if (statusNeofin !== "TODOS") params.set("status_neofin", statusNeofin);
+        if (statusNeofin !== "TODOS") params.set("situacao_neofin", statusNeofin);
 
         const response = await fetch(`/api/financeiro/credito-conexao/cobrancas?${params.toString()}`, {
           cache: "no-store",
@@ -193,7 +198,10 @@ export default function AdminCreditoConexaoCobrancasPage() {
   }, [buscaDiferida, reloadToken, statusNeofin, statusOperacional]);
 
   useEffect(() => {
-    const disponiveis = data?.competencias_disponiveis ?? [];
+    const disponiveis = (data?.competencias ?? []).map((item) => ({
+      competencia: item.competencia,
+      competenciaLabel: item.competenciaLabel,
+    }));
     if (disponiveis.length === 0) {
       setCompetenciaAtiva(null);
       return;
@@ -207,7 +215,6 @@ export default function AdminCreditoConexaoCobrancasPage() {
     const competenciaAtual = competenciaAtualLocal();
     const competenciaPadrao =
       ordenadas.find((item) => item.competencia === competenciaAtual)?.competencia ??
-      data?.competencia_ativa_padrao ??
       ordenadas[0]?.competencia ??
       null;
 
@@ -215,11 +222,11 @@ export default function AdminCreditoConexaoCobrancasPage() {
   }, [competenciaAtiva, data]);
 
   const competenciaAtual = useMemo(() => {
-    if (!competenciaAtiva) return data?.meses[0] ?? null;
-    return data?.meses.find((mes) => mes.competencia === competenciaAtiva) ?? data?.meses[0] ?? null;
+    if (!competenciaAtiva) return data?.competencias[0] ?? null;
+    return data?.competencias.find((mes) => mes.competencia === competenciaAtiva) ?? data?.competencias[0] ?? null;
   }, [competenciaAtiva, data]);
 
-  function abrirModalPagamento(item: CobrancaOperacionalItem) {
+  function abrirModalPagamento(item: LinhaCarteiraCanonica) {
     setModalPagamento(item);
     setDataPagamento(localTodayIso());
     setMetodoPagamento("PIX");
@@ -236,7 +243,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cobranca_id: modalPagamento.cobranca_id,
+          cobranca_id: modalPagamento.cobrancaId,
           data_pagamento: dataPagamento,
           metodo_pagamento: metodoPagamento,
         }),
@@ -254,7 +261,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
       setFeedback({
         tipo: "sucesso",
-        mensagem: json.message ?? `Recebimento registrado para a cobranca #${modalPagamento.cobranca_id}.`,
+        mensagem: json.message ?? `Recebimento registrado para a cobranca #${modalPagamento.cobrancaId}.`,
       });
       setModalPagamento(null);
       setReloadToken((current) => current + 1);
@@ -276,8 +283,8 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
   return (
     <FinancePageShell
-      title="Conta interna do aluno - carteira operacional por competencia"
-      subtitle="Leitura da carteira real de contas a receber por competencia, com foco em conta interna, fatura e cobranca vinculada."
+      title="Carteira operacional canonica por competencia"
+      subtitle="Leitura canonica a partir de cobrancas oficiais, com vinculo derivado de lancamento e fatura quando existir."
       actions={
         <Button type="button" variant="secondary" onClick={() => setReloadToken((current) => current + 1)} disabled={loading}>
           {loading ? "Atualizando..." : "Atualizar"}
@@ -290,9 +297,8 @@ export default function AdminCreditoConexaoCobrancasPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-slate-700">
-            A competencia ativa usa a mesma elegibilidade da carteira real de contas a receber. Itens cancelados,
-            expurgados ou substituidos operacionalmente deixam de compor esta leitura. NeoFin continua sendo camada de
-            cobranca, nao criterio de existencia da cobranca oficial.
+            Esta tela agora usa a mesma carteira canonica de cobrancas da visao de contas a receber. A chave principal
+            e sempre a cobranca oficial; lancamento, fatura e NeoFin entram apenas como vinculo derivado.
           </div>
 
           {feedback ? (
@@ -327,8 +333,8 @@ export default function AdminCreditoConexaoCobrancasPage() {
             >
               <option value="TODOS">Status operacional: todos</option>
               <option value="PAGO">Pago</option>
-              <option value="PENDENTE_A_VENCER">Pendente a vencer</option>
-              <option value="PENDENTE_VENCIDO">Pendente vencido</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="VENCIDO">Vencido</option>
             </select>
 
             <select
@@ -338,9 +344,9 @@ export default function AdminCreditoConexaoCobrancasPage() {
               disabled={loading}
             >
               <option value="TODOS">Situacao NeoFin: todas</option>
-              <option value="VINCULADA">Em cobranca NeoFin</option>
-              <option value="NAO_VINCULADA">Sem cobranca NeoFin</option>
-              <option value="FALHA_INTEGRACAO">Falha de integracao</option>
+              <option value="SEM_FATURA">Sem fatura</option>
+              <option value="FATURA_SEM_NEOFIN">Fatura sem NeoFin</option>
+              <option value="EM_COBRANCA_NEOFIN">Em cobranca NeoFin</option>
             </select>
 
             <div className="flex flex-wrap gap-2">
@@ -355,10 +361,13 @@ export default function AdminCreditoConexaoCobrancasPage() {
         </CardContent>
       </Card>
 
-      {data ? <CobrancasMensaisResumo resumo={data.resumo_geral} /> : null}
+      {data ? <CobrancasMensaisResumo resumo={data.resumoGeral} totalCobrancas={data.totalCobrancas} /> : null}
 
       <CompetenciaTabs
-        items={data?.competencias_disponiveis ?? []}
+        items={(data?.competencias ?? []).map((item) => ({
+          competencia: item.competencia,
+          competenciaLabel: item.competenciaLabel,
+        }))}
         active={competenciaAtiva}
         onChange={setCompetenciaAtiva}
       />
@@ -370,7 +379,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
         <CardContent className="space-y-4">
           {loading && !data ? (
             <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-              Carregando carteira operacional da competencia...
+              Carregando carteira canonica da competencia...
             </div>
           ) : null}
 

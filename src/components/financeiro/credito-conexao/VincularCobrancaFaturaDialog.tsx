@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatBRLFromCents } from "@/lib/formatters/money";
-import { formatarDataLabel, type CobrancaOperacionalItem } from "@/lib/financeiro/creditoConexao/cobrancas";
+import { type LinhaCarteiraCanonica } from "@/lib/financeiro/carteira-operacional-canonica";
+import { formatarDataLabel } from "@/lib/financeiro/creditoConexao/cobrancas";
 
 type SugestaoFatura = {
   fatura_id: number;
@@ -35,7 +36,7 @@ type VinculoResponse = {
 };
 
 type Props = {
-  item: CobrancaOperacionalItem | null;
+  item: LinhaCarteiraCanonica | null;
   open: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
@@ -70,8 +71,8 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
     async function carregarSugestoes() {
       try {
         const params = new URLSearchParams();
-        params.set("cobranca_id", String(item.cobranca_id));
-        params.set("cobranca_fonte", item.cobranca_fonte);
+        params.set("cobranca_id", String(item.cobrancaId));
+        params.set("cobranca_fonte", item.cobrancaFonte);
 
         const response = await fetch(`/api/financeiro/credito-conexao/faturas/sugestoes?${params.toString()}`, {
           cache: "no-store",
@@ -118,8 +119,8 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cobranca_id: item.cobranca_id,
-          cobranca_fonte: item.cobranca_fonte,
+          cobranca_id: item.cobrancaId,
+          cobranca_fonte: item.cobrancaFonte,
           fatura_id: sugestaoSelecionada.fatura_id,
           confirmar_competencia_diferente: confirmarCompetenciaDiferente,
         }),
@@ -166,25 +167,25 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
           <section className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Cobranca selecionada</p>
-              <h3 className="mt-2 text-base font-semibold text-slate-900">{item.pessoa_label}</h3>
-              <p className="mt-1 text-sm text-slate-600">{item.origem_referencia_label}</p>
+              <h3 className="mt-2 text-base font-semibold text-slate-900">{item.pessoaLabel}</h3>
+              <p className="mt-1 text-sm text-slate-600">{item.origemLabel}</p>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Competencia</p>
-                  <p className="mt-1 text-sm font-medium text-slate-900">{item.competencia_label}</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{item.competenciaLabel}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Valor</p>
-                  <p className="mt-1 text-sm font-medium text-slate-900">{formatBRLFromCents(item.valor_centavos)}</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{formatBRLFromCents(item.valorCentavos)}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Vencimento</p>
-                  <p className="mt-1 text-sm font-medium text-slate-900">{formatarDataLabel(item.data_vencimento)}</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{formatarDataLabel(item.dataVencimento)}</p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Situacao NeoFin</p>
-                  <p className="mt-1 text-sm font-medium text-slate-900">{item.neofin_situacao_label}</p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">{item.situacaoNeoFin}</p>
                 </div>
               </div>
             </div>
@@ -208,7 +209,7 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
                       onChange={(event) => setConfirmarCompetenciaDiferente(event.target.checked)}
                     />
                     <span>
-                      Confirmo o vinculo em competencia diferente. A cobranca e da competencia {item.competencia_label} e a
+                      Confirmo o vinculo em competencia diferente. A cobranca e da competencia {item.competenciaLabel} e a
                       fatura escolhida e {sugestaoSelecionada.competencia_label}.
                     </span>
                   </label>

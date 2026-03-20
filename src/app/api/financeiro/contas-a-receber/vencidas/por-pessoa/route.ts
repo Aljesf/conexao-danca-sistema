@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
-import { listarTitulosVencidosPorPessoa } from "@/lib/financeiro/contas-receber-auditoria";
+import {
+  listarTitulosVencidosCanonicosPorPessoa,
+} from "@/lib/financeiro/contas-receber-canonico";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 export async function GET(req: NextRequest) {
@@ -15,7 +17,22 @@ export async function GET(req: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin();
-    const titulos = await listarTitulosVencidosPorPessoa(supabase, pessoaId);
+    const titulos = await listarTitulosVencidosCanonicosPorPessoa(supabase, pessoaId, {
+      visao: "VENCIDAS",
+      tipoPeriodo: searchParams.get("tipo_periodo") ?? undefined,
+      situacao: searchParams.get("situacao") ?? undefined,
+      status: searchParams.get("status") ?? undefined,
+      bucket: searchParams.get("bucket") ?? undefined,
+      competencia: searchParams.get("competencia") ?? undefined,
+      competenciaInicio: searchParams.get("competencia_inicio") ?? undefined,
+      competenciaFim: searchParams.get("competencia_fim") ?? undefined,
+      vencimentoInicio: searchParams.get("vencimento_inicio") ?? undefined,
+      vencimentoFim: searchParams.get("vencimento_fim") ?? undefined,
+      contexto: searchParams.get("contexto") ?? undefined,
+      ano: searchParams.get("ano") ?? undefined,
+      mes: searchParams.get("mes") ?? undefined,
+      q: searchParams.get("q") ?? undefined,
+    });
 
     return NextResponse.json({
       ok: true,

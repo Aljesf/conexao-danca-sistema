@@ -3,58 +3,25 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { formatBRLFromCents } from "@/lib/formatters/money";
-import { formatarDataLabel, type CobrancaOperacionalItem } from "@/lib/financeiro/creditoConexao/cobrancas";
+import { type LinhaCarteiraCanonica } from "@/lib/financeiro/carteira-operacional-canonica";
+import { formatarDataLabel } from "@/lib/financeiro/creditoConexao/cobrancas";
 
 type Props = {
-  item: CobrancaOperacionalItem;
-  onRegistrarRecebimento?: (item: CobrancaOperacionalItem) => void;
-  onVincularFatura?: (item: CobrancaOperacionalItem) => void;
+  item: LinhaCarteiraCanonica;
+  onRegistrarRecebimento?: (item: LinhaCarteiraCanonica) => void;
+  onVincularFatura?: (item: LinhaCarteiraCanonica) => void;
 };
 
-function statusClassName(status: CobrancaOperacionalItem["status_operacional"]): string {
-  switch (status) {
-    case "PAGO":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "PENDENTE_VENCIDO":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    default:
-      return "border-amber-200 bg-amber-50 text-amber-700";
-  }
+function statusClassName(status: LinhaCarteiraCanonica["statusOperacional"]): string {
+  if (status === "PAGO") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "VENCIDO") return "border-rose-200 bg-rose-50 text-rose-700";
+  return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
-function statusLabel(status: CobrancaOperacionalItem["status_operacional"]): string {
-  switch (status) {
-    case "PAGO":
-      return "Pago";
-    case "PENDENTE_VENCIDO":
-      return "Pendente vencido";
-    default:
-      return "Pendente a vencer";
-  }
-}
-
-function tipoClassName(tipo: CobrancaOperacionalItem["tipo_cobranca"]): string {
-  switch (tipo) {
-    case "AVULSA":
-      return "border-sky-200 bg-sky-50 text-sky-700";
-    case "MENSALIDADE":
-      return "border-slate-200 bg-slate-50 text-slate-700";
-    default:
-      return "border-violet-200 bg-violet-50 text-violet-700";
-  }
-}
-
-function neofinClassName(situacao: CobrancaOperacionalItem["neofin_situacao_operacional"]): string {
-  switch (situacao) {
-    case "VINCULADA":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "FALHA_INTEGRACAO":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    case "NAO_VINCULADA":
-      return "border-slate-200 bg-slate-50 text-slate-700";
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-500";
-  }
+function situacaoNeoFinClassName(situacao: LinhaCarteiraCanonica["situacaoNeoFin"]): string {
+  if (situacao === "EM_COBRANCA_NEOFIN") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (situacao === "FATURA_SEM_NEOFIN") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
 function ActionLink({ href, label }: { href: string; label: string }) {
@@ -69,40 +36,21 @@ function ActionLink({ href, label }: { href: string; label: string }) {
 }
 
 export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: Props) {
-  const podeVincular = Boolean(onVincularFatura)
-    && (item.permite_vinculo_manual
-      || item.neofin_situacao_operacional === "NAO_VINCULADA"
-      || item.neofin_situacao_operacional === "FALHA_INTEGRACAO");
-  const podeRegistrarRecebimento = item.status_operacional !== "PAGO"
-    && item.cobranca_fonte === "COBRANCA"
-    && Boolean(onRegistrarRecebimento);
-  const acaoPrimariaTipo = podeVincular
-    ? "VINCULAR"
-    : podeRegistrarRecebimento
-      ? "RECEBER"
-      : item.fatura_url
-        ? "FATURA"
-        : item.cobranca_url
-          ? "DETALHE"
-          : "NENHUMA";
-
-  const acaoPrimaria = acaoPrimariaTipo === "VINCULAR"
+  const podeRegistrarRecebimento = item.statusOperacional !== "PAGO" && Boolean(onRegistrarRecebimento);
+  const podeVincular = item.permiteVinculoManual && Boolean(onVincularFatura);
+  const acaoPrimaria = podeVincular
     ? (
         <Button type="button" onClick={() => onVincularFatura?.(item)} className="w-full sm:w-auto">
-          Vincular a fatura oficial
+          Vincular fatura oficial
         </Button>
       )
-    : acaoPrimariaTipo === "RECEBER"
+    : podeRegistrarRecebimento
       ? (
           <Button type="button" onClick={() => onRegistrarRecebimento?.(item)} className="w-full sm:w-auto">
             Registrar recebimento
           </Button>
         )
-      : acaoPrimariaTipo === "FATURA" && item.fatura_url
-        ? <ActionLink href={item.fatura_url} label="Abrir fatura" />
-        : acaoPrimariaTipo === "DETALHE" && item.cobranca_url
-          ? <ActionLink href={item.cobranca_url} label="Ver detalhe" />
-          : null;
+      : <ActionLink href={item.cobrancaUrl} label="Abrir cobranca" />;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -110,44 +58,57 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900">{item.pessoa_label}</p>
-              <p className="truncate text-sm text-slate-600">{item.origem_referencia_label}</p>
+              <p className="text-sm font-semibold text-slate-900">{item.pessoaLabel}</p>
+              <p className="truncate text-sm text-slate-600">{item.origemLabel}</p>
+              <p className="text-xs text-slate-500">Cobranca oficial #{item.cobrancaId}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClassName(item.status_operacional)}`}>
-                {statusLabel(item.status_operacional)}
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClassName(item.statusOperacional)}`}>
+                {item.statusOperacional}
               </span>
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${tipoClassName(item.tipo_cobranca)}`}>
-                {item.tipo_cobranca_label}
+              <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                {item.origemTipo ?? "SEM_ORIGEM"}{item.origemSubtipo ? ` / ${item.origemSubtipo}` : ""}
               </span>
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${neofinClassName(item.neofin_situacao_operacional)}`}>
-                {item.neofin_situacao_label}
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situacaoNeoFinClassName(item.situacaoNeoFin)}`}>
+                {item.situacaoNeoFin}
               </span>
             </div>
           </div>
 
           <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Competencia</p>
+              <p className="mt-1 font-medium text-slate-800">{item.competenciaLabel}</p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
               <p className="text-xs uppercase tracking-wide text-slate-500">Vencimento</p>
-              <p className="mt-1 font-medium text-slate-800">{formatarDataLabel(item.data_vencimento)}</p>
+              <p className="mt-1 font-medium text-slate-800">{formatarDataLabel(item.dataVencimento)}</p>
             </div>
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
               <p className="text-xs uppercase tracking-wide text-slate-500">Valor</p>
-              <p className="mt-1 font-medium text-slate-800">{formatBRLFromCents(item.valor_centavos)}</p>
+              <p className="mt-1 font-medium text-slate-800">{formatBRLFromCents(item.valorCentavos)}</p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Saldo</p>
+              <p className="mt-1 font-medium text-slate-800">{formatBRLFromCents(item.saldoCentavos)}</p>
             </div>
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
               <p className="text-xs uppercase tracking-wide text-slate-500">Fatura vinculada</p>
+              <p className="mt-1 font-medium text-slate-800">{item.faturaId ? `#${item.faturaId}` : "Sem fatura vinculada"}</p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Cobranca da fatura</p>
+              <p className="mt-1 font-medium text-slate-800">{item.faturaCobrancaId ? `#${item.faturaCobrancaId}` : "Sem cobranca da fatura"}</p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Centro de custo</p>
               <p className="mt-1 font-medium text-slate-800">
-                {item.fatura_id
-                  ? `#${item.fatura_id}${item.fatura_competencia ? ` - ${item.fatura_competencia}` : ""}`
-                  : "Sem fatura vinculada"}
+                {item.centroCustoNome ? `${item.centroCustoCodigo ?? "--"} | ${item.centroCustoNome}` : "Sem centro de custo"}
               </p>
             </div>
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Atraso</p>
-              <p className="mt-1 font-medium text-slate-800">
-                {item.dias_em_atraso > 0 ? `${item.dias_em_atraso} dias` : "Sem atraso"}
-              </p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Situacao NeoFin</p>
+              <p className="mt-1 font-medium text-slate-800">{item.situacaoNeoFin}</p>
             </div>
           </div>
         </div>
@@ -159,22 +120,8 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
               Registrar recebimento
             </Button>
           ) : null}
-          {item.fatura_url && acaoPrimariaTipo !== "FATURA" ? (
-            <ActionLink href={item.fatura_url} label="Abrir fatura vinculada" />
-          ) : null}
-          {item.cobranca_url && acaoPrimariaTipo !== "DETALHE" ? (
-            <ActionLink href={item.cobranca_url} label="Ver cobranca vinculada" />
-          ) : null}
-          {item.link_pagamento ? (
-            <a
-              href={item.link_pagamento}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              Abrir pagamento NeoFin
-            </a>
-          ) : null}
+          {item.faturaUrl ? <ActionLink href={item.faturaUrl} label="Abrir fatura vinculada" /> : null}
+          <ActionLink href={item.cobrancaUrl} label="Ver cobranca oficial" />
         </div>
       </div>
     </div>

@@ -2,15 +2,15 @@
 
 import { formatBRLFromCents } from "@/lib/formatters/money";
 import {
-  type CobrancaOperacionalItem,
-  type CobrancasCompetenciaGrupo,
-} from "@/lib/financeiro/creditoConexao/cobrancas";
+  type GrupoCarteiraPorCompetencia,
+  type LinhaCarteiraCanonica,
+} from "@/lib/financeiro/carteira-operacional-canonica";
 import { CobrancaStatusSection } from "./CobrancaStatusSection";
 
 type Props = {
-  competencia: CobrancasCompetenciaGrupo;
-  onRegistrarRecebimento?: (item: CobrancaOperacionalItem) => void;
-  onVincularFatura?: (item: CobrancaOperacionalItem) => void;
+  competencia: GrupoCarteiraPorCompetencia;
+  onRegistrarRecebimento?: (item: LinhaCarteiraCanonica) => void;
+  onVincularFatura?: (item: LinhaCarteiraCanonica) => void;
 };
 
 function TotalCard({ titulo, valor }: { titulo: string; valor: number }) {
@@ -23,51 +23,54 @@ function TotalCard({ titulo, valor }: { titulo: string; valor: number }) {
 }
 
 export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, onVincularFatura }: Props) {
+  const pago = competencia.itens.filter((item) => item.statusOperacional === "PAGO");
+  const pendente = competencia.itens.filter((item) => item.statusOperacional === "PENDENTE");
+  const vencido = competencia.itens.filter((item) => item.statusOperacional === "VENCIDO");
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Competencia ativa</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-900">{competencia.competencia_label}</h2>
+          <h2 className="mt-1 text-xl font-semibold text-slate-900">{competencia.competenciaLabel}</h2>
           <p className="text-sm text-slate-600">
-            Carteira operacional elegivel da competencia, com leitura de conta interna, fatura vinculada e cobranca oficial.
+            Cada linha abaixo representa exatamente uma cobranca oficial canonica da competencia selecionada.
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <TotalCard titulo="Previsto" valor={competencia.totais.previsto_centavos} />
-          <TotalCard titulo="Pago" valor={competencia.totais.pago_centavos} />
-          <TotalCard titulo="Pendente" valor={competencia.totais.pendente_centavos} />
-          <TotalCard titulo="A vencer" valor={competencia.totais.a_vencer_centavos} />
-          <TotalCard titulo="Vencido" valor={competencia.totais.vencido_centavos} />
-          <TotalCard titulo="Em cobranca NeoFin" valor={competencia.totais.neofin_centavos} />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <TotalCard titulo="Previsto" valor={competencia.resumo.previstoCentavos} />
+          <TotalCard titulo="Pago" valor={competencia.resumo.pagoCentavos} />
+          <TotalCard titulo="Pendente" valor={competencia.resumo.pendenteCentavos} />
+          <TotalCard titulo="Vencido" valor={competencia.resumo.vencidoCentavos} />
+          <TotalCard titulo="Em cobranca NeoFin" valor={competencia.resumo.emCobrancaNeoFinCentavos} />
         </div>
       </div>
 
       <div className="mt-5 space-y-4">
         <CobrancaStatusSection
-          titulo="Pendente vencido"
-          descricao="Cobrancas oficiais ja vencidas na carteira operacional desta competencia."
+          titulo="Vencido"
+          descricao="Cobrancas oficiais da competencia com saldo aberto e vencimento ja ultrapassado."
           tipo="pendente_vencido"
-          itens={competencia.grupos.pendente_vencido}
+          itens={vencido}
           onRegistrarRecebimento={onRegistrarRecebimento}
           onVincularFatura={onVincularFatura}
         />
 
         <CobrancaStatusSection
-          titulo="Pendente a vencer"
-          descricao="Cobrancas oficiais ainda dentro da janela operacional da competencia."
+          titulo="Pendente"
+          descricao="Cobrancas oficiais da competencia ainda abertas, mas nao vencidas."
           tipo="pendente_a_vencer"
-          itens={competencia.grupos.pendente_a_vencer}
+          itens={pendente}
           onRegistrarRecebimento={onRegistrarRecebimento}
           onVincularFatura={onVincularFatura}
         />
 
         <CobrancaStatusSection
           titulo="Pago"
-          descricao="Recebimentos liquidados da cobranca oficial vinculada a esta competencia."
+          descricao="Cobrancas oficiais da competencia com saldo zerado pela leitura canonica."
           tipo="pago"
-          itens={competencia.grupos.pago}
+          itens={pago}
           onRegistrarRecebimento={onRegistrarRecebimento}
           onVincularFatura={onVincularFatura}
         />

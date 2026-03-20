@@ -3,9 +3,11 @@ import { guardApiByRole } from "@/lib/auth/roleGuard";
 import {
   listarContasReceberAuditoria,
   listarContasReceberAuditoriaFallback,
+  listarPerdasCancelamentoDetalhadas,
   validarContasReceberInput,
   type ContasReceberAuditoriaInput,
 } from "@/lib/financeiro/contas-receber-auditoria";
+import { montarPayloadContasReceberVencidasCanonico } from "@/lib/financeiro/contas-receber-canonico";
 import {
   normalizeContasReceberOrdenacao,
   normalizeContasReceberTipoPeriodo,
@@ -154,7 +156,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin();
-    const payload = await listarContasReceberAuditoria(supabase, input);
+    const payload =
+      visao === "VENCIDAS"
+        ? await montarPayloadContasReceberVencidasCanonico(
+            supabase,
+            input,
+            await listarPerdasCancelamentoDetalhadas(supabase).catch(() => []),
+          )
+        : await listarContasReceberAuditoria(supabase, input);
 
     return NextResponse.json({
       ok: true,
