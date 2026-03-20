@@ -33,7 +33,7 @@ type PagamentoResponse = {
 };
 
 function mensagemErroCobrancas(): string {
-  return "Nao foi possivel carregar a carteira operacional agora. Atualize a pagina ou tente novamente em instantes.";
+  return "Nao foi possivel carregar a carteira operacional da conta interna agora. Atualize a pagina ou tente novamente em instantes.";
 }
 
 function mensagemErroPagamento(): string {
@@ -276,8 +276,8 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
   return (
     <FinancePageShell
-      title="Conta Interna Aluno - Carteira operacional"
-      subtitle="Visao mensal SaaS da carteira do aluno com mensalidades, avulsas, cobrancas sem NeoFin e ajuste manual de vinculo."
+      title="Conta interna do aluno - carteira operacional por competencia"
+      subtitle="Leitura da carteira real de contas a receber por competencia, com foco em conta interna, fatura e cobranca vinculada."
       actions={
         <Button type="button" variant="secondary" onClick={() => setReloadToken((current) => current + 1)} disabled={loading}>
           {loading ? "Atualizando..." : "Atualizar"}
@@ -290,9 +290,9 @@ export default function AdminCreditoConexaoCobrancasPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-slate-700">
-            A carteira inclui mensalidades, avulsas e cobrancas sem NeoFin. NeoFin e camada operacional de cobranca, nao
-            criterio de existencia da divida. O vinculo manual com fatura deve ser usado como recurso administrativo
-            excepcional.
+            A competencia ativa usa a mesma elegibilidade da carteira real de contas a receber. Itens cancelados,
+            expurgados ou substituidos operacionalmente deixam de compor esta leitura. NeoFin continua sendo camada de
+            cobranca, nao criterio de existencia da cobranca oficial.
           </div>
 
           {feedback ? (
@@ -315,7 +315,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
             <Input
               value={busca}
               onChange={(event) => setBusca(event.target.value)}
-              placeholder="Buscar por nome, ID ou referencia"
+              placeholder="Buscar por pessoa, cobranca, fatura ou competencia"
               disabled={loading}
             />
 
@@ -339,7 +339,7 @@ export default function AdminCreditoConexaoCobrancasPage() {
             >
               <option value="TODOS">Situacao NeoFin: todas</option>
               <option value="VINCULADA">Em cobranca NeoFin</option>
-              <option value="NAO_VINCULADA">Sem vinculo NeoFin</option>
+              <option value="NAO_VINCULADA">Sem cobranca NeoFin</option>
               <option value="FALHA_INTEGRACAO">Falha de integracao</option>
             </select>
 
@@ -365,18 +365,18 @@ export default function AdminCreditoConexaoCobrancasPage() {
 
       <Card className="border-slate-200 bg-white shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-800">Competencia ativa</CardTitle>
+          <CardTitle className="text-base text-slate-800">Competencia ativa da carteira</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {loading && !data ? (
             <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-              Carregando carteira operacional...
+              Carregando carteira operacional da competencia...
             </div>
           ) : null}
 
           {!loading && !competenciaAtual ? (
             <div className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-              Nenhuma cobranca encontrada para o filtro atual.
+              Nenhuma cobranca elegivel encontrada para o filtro atual.
             </div>
           ) : null}
 

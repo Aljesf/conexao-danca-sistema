@@ -20,9 +20,9 @@ export function CompetenciaTabs({ items, active, onChange }: Props) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Competencias</p>
-          <h2 className="mt-1 text-base font-semibold text-slate-900">Carteira por mes</h2>
+          <h2 className="mt-1 text-base font-semibold text-slate-900">Carteira por competencia</h2>
         </div>
-        <p className="text-sm text-slate-500">A aba ativa concentra a leitura operacional do momento.</p>
+        <p className="text-sm text-slate-500">A aba ativa reproduz a leitura operacional da carteira real.</p>
       </div>
 
       <div className="mt-4 overflow-x-auto pb-1">

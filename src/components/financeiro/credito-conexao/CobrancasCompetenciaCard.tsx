@@ -30,7 +30,7 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Competencia ativa</p>
           <h2 className="mt-1 text-xl font-semibold text-slate-900">{competencia.competencia_label}</h2>
           <p className="text-sm text-slate-600">
-            Mensalidades, avulsas, cobrancas sem NeoFin e inconsistencias operacionais reunidas no mesmo mes.
+            Carteira operacional elegivel da competencia, com leitura de conta interna, fatura vinculada e cobranca oficial.
           </p>
         </div>
 
@@ -47,7 +47,7 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
       <div className="mt-5 space-y-4">
         <CobrancaStatusSection
           titulo="Pendente vencido"
-          descricao="Risco imediato. Priorize cobranca ativa, ajuste de vinculo e saneamento da carteira."
+          descricao="Cobrancas oficiais ja vencidas na carteira operacional desta competencia."
           tipo="pendente_vencido"
           itens={competencia.grupos.pendente_vencido}
           onRegistrarRecebimento={onRegistrarRecebimento}
@@ -56,7 +56,7 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
 
         <CobrancaStatusSection
           titulo="Pendente a vencer"
-          descricao="Titulos ainda dentro da janela operacional do ciclo atual."
+          descricao="Cobrancas oficiais ainda dentro da janela operacional da competencia."
           tipo="pendente_a_vencer"
           itens={competencia.grupos.pendente_a_vencer}
           onRegistrarRecebimento={onRegistrarRecebimento}
@@ -65,7 +65,7 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
 
         <CobrancaStatusSection
           titulo="Pago"
-          descricao="Recebimentos liquidados para a competencia ativa."
+          descricao="Recebimentos liquidados da cobranca oficial vinculada a esta competencia."
           tipo="pago"
           itens={competencia.grupos.pago}
           onRegistrarRecebimento={onRegistrarRecebimento}

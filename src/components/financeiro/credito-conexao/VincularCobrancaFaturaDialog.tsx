@@ -147,9 +147,9 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Vincular a fatura</h2>
+            <h2 className="text-base font-semibold text-slate-900">Vincular cobranca a fatura</h2>
             <p className="mt-1 text-sm text-slate-600">
-              NeoFin e camada de cobranca. O vinculo manual deve ser usado apenas para corrigir ou completar o fluxo.
+              Use o vinculo manual apenas para corrigir a relacao entre cobranca oficial e fatura da conta interna.
             </p>
           </div>
           <button
@@ -196,7 +196,7 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
                   {sugestaoSelecionada.competencia_label} - Fatura #{sugestaoSelecionada.fatura_id}
                 </h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  {sugestaoSelecionada.conta_label ?? "Conta Interna Aluno"} | Status {sugestaoSelecionada.status ?? "-"}
+                  {sugestaoSelecionada.conta_label ?? "Conta interna do aluno"} | Status {sugestaoSelecionada.status ?? "-"}
                 </p>
 
                 {sugestaoSelecionada.competencia_diferente ? (
@@ -280,7 +280,7 @@ export function VincularCobrancaFaturaDialog({ item, open, onClose, onSuccess }:
                         {sugestao.competencia_label} - Fatura #{sugestao.fatura_id}
                       </p>
                       <p className={`mt-1 text-sm ${selecionada ? "text-white/80" : "text-slate-600"}`}>
-                        {sugestao.conta_label ?? "Conta Interna Aluno"} | Vencimento {formatarDataLabel(sugestao.data_vencimento)}
+                        {sugestao.conta_label ?? "Conta interna do aluno"} | Vencimento {formatarDataLabel(sugestao.data_vencimento)}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">

@@ -52,7 +52,7 @@ export function CobrancaStatusSection({ titulo, descricao, tipo, itens, onRegist
       <div className="mt-4 space-y-3">
         {itens.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-300 bg-white/80 px-4 py-5 text-sm text-slate-500">
-            Nenhuma cobranca nesta faixa operacional.
+            Nenhuma cobranca elegivel nesta faixa operacional.
           </div>
         ) : (
           itens.map((item) => (

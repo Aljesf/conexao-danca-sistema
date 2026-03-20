@@ -1,5 +1,5 @@
 ## Modulo atual
-Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
+Conta interna do aluno - carteira operacional por competencia alinhada a contas a receber, com fatura, cobranca vinculada e leitura NeoFin consistente
 
 ## SQL concluido
 - nenhuma migration nova foi criada neste ciclo
@@ -14,6 +14,7 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
 - permanecem ativos os diagnosticos ja criados:
   - `supabase/sql/diagnosticos/20260319_auditoria_centro_custo_dashboard.sql`
   - `supabase/sql/diagnosticos/20260319_diagnostico_neofin_cartao_conexao.sql`
+  - `supabase/sql/diagnosticos/20260319_diagnostico_competencia_ativa_vs_contas_receber.sql`
 
 ## APIs concluidas
 - `src/lib/credito-conexao/processarFechamentoAutomaticoMensal.ts`
@@ -31,10 +32,19 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
 - `src/app/api/governanca/cobrancas/[id]/sincronizar-neofin/route.ts`
 - `src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts`
 - `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`
+- `src/lib/financeiro/competenciaAtiva/resolverCarteiraOperacionalPorCompetencia.ts`
+- `src/app/api/financeiro/credito-conexao/cobrancas/route.ts`
 
 ## Paginas / componentes concluidos
 - `src/app/(private)/admin/financeiro/credito-conexao/faturas/[id]/page.tsx`
 - `src/app/(private)/admin/governanca/cobrancas/[id]/page.tsx`
+- `src/app/(private)/admin/financeiro/credito-conexao/cobrancas/page.tsx`
+- `src/components/financeiro/credito-conexao/CobrancasMensaisResumo.tsx`
+- `src/components/financeiro/credito-conexao/CobrancasCompetenciaCard.tsx`
+- `src/components/financeiro/credito-conexao/CobrancaStatusSection.tsx`
+- `src/components/financeiro/credito-conexao/CobrancaRow.tsx`
+- `src/components/financeiro/credito-conexao/CompetenciaTabs.tsx`
+- `src/components/financeiro/credito-conexao/VincularCobrancaFaturaDialog.tsx`
 - a etapa anterior do dashboard financeiro permanece consolidada com:
   - drill-down dos cards e competencias
   - exclusao de cancelados/expurgados da composicao principal
@@ -46,6 +56,18 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
   - ajuste do bloco de centro de custo
 
 ## O que foi consolidado neste ciclo
+- a tela de competencia ativa passou a usar a mesma carteira real de contas a receber como criterio canonico de elegibilidade
+- a selecao operacional da competencia ativa agora nasce de `vw_financeiro_contas_receber_flat` + `cobrancas`, e usa `vw_financeiro_cobrancas_operacionais` apenas para enriquecer as cobrancas oficiais ainda elegiveis
+- a comparacao real em base local mostrou que a leitura antiga trazia `422` itens e a nova passou para `315`, removendo `107` itens indevidos:
+  - `96` cancelados
+  - `11` expurgados
+- itens cancelados, expurgados ou substituidos por reprocessamento deixaram de aparecer como carteira operacional da competencia ativa
+- a competencia ativa agora fala a mesma linguagem publica da carteira real:
+  - conta interna do aluno
+  - competencia
+  - fatura vinculada
+  - cobranca vinculada
+- a semantica antiga de matricula deixou de ser o eixo principal da tela; quando existir, aparece apenas como origem do lancamento/cobranca
 - a fatura da conta interna virou tela operacional final, com hierarquia visual clara, cabecalho util, card de pagamento, card da cobranca oficial da fatura, lancamentos legiveis e auditoria tecnica recolhivel
 - a leitura de pagamento da fatura passou a priorizar a cobranca canonica e os dados remotos da NeoFin, sem depender do `charge_id` textual legado para exibir boleto/Pix
 - a abertura publica do NeoFin foi endurecida para usar apenas URL com correspondencia confirmada entre cobranca local e entidade remota
@@ -82,6 +104,7 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
   - `0` origens com duplicidade de cobranca canonica nao cancelada no recorte validado
 
 ## Pendencias
+- homologacao visual autenticada da tela de competencia ativa da conta interna contra a tela de contas a receber
 - homologacao visual autenticada da tela de fatura da conta interna e do detalhe da cobranca financeira
 - amarrar o servico de fechamento mensal a um gatilho operacional explicito de bootstrap/cron; nesta etapa foi criado o servico canonico e a rota administrativa, mas nao foi adicionado disparo oculto na UI
 - backfill historico dos casos antigos em que `credito_conexao_faturas.cobranca_id` ainda aponta para cobranca-item ou `neofin_invoice_id` permanece nulo
@@ -95,10 +118,11 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
 - nao existe hoje um scheduler/boot executor explicito versionado chamando o fechamento mensal; a logica ficou pronta, mas a orquestracao operacional ainda depende de definicao do ambiente
 
 ## Versao do sistema
-Sistema Conexao Danca - Conta Interna do Aluno / Fatura / NeoFin
-Versao logica: v1.8 links publicos NeoFin com correspondencia validada e bloqueio de fallback aleatorio
+Sistema Conexao Danca - Conta interna do aluno / carteira operacional / fatura / NeoFin
+Versao logica: v1.9 competencia ativa alinhada a contas a receber e sem cancelados na leitura operacional
 
 ## Proximas acoes
+1. homologar em sessao autenticada a nova tela de competencia ativa contra a carteira oficial de contas a receber
 1. homologar em sessao autenticada a nova tela da fatura da conta interna com casos recentes de boleto e segunda via
 2. homologar o detalhe da cobranca financeira para cobrancas `FATURA_CREDITO_CONEXAO` com invoice remota resolvida
 3. conectar `src/app/api/financeiro/credito-conexao/fechamento-mensal/processar/route.ts` a um gatilho operacional explicito de bootstrap ou agenda

@@ -2,12 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import {
   agruparCobrancasPorCompetencia,
-  montarCobrancaOperacionalBase,
   type CobrancasMensaisResponse,
   type CobrancaFonteOperacional,
   type CobrancaOperacionalItem,
-  type CobrancaOperacionalViewBase,
 } from "@/lib/financeiro/creditoConexao/cobrancas";
+import { resolverCarteiraOperacionalPorCompetencia } from "@/lib/financeiro/competenciaAtiva/resolverCarteiraOperacionalPorCompetencia";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
@@ -24,16 +23,6 @@ type FaturaSugestaoRow = {
     pessoa_titular_id: number | null;
     descricao_exibicao: string | null;
   } | null;
-};
-
-type CobrancaOperacionalViewRow = CobrancaOperacionalViewBase & {
-  origem_tipo: string | null;
-  origem_subtipo: string | null;
-  conta_conexao_id: number | null;
-  cobranca_origem_id: number | null;
-  created_at: string | null;
-  updated_at: string | null;
-  descricao: string | null;
 };
 
 const DEFAULT_LIMITE = 24;
@@ -232,66 +221,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "competencia_invalida" }, { status: 400 });
   }
 
-  let cobrancasQuery = supabase
-    .from("vw_financeiro_cobrancas_operacionais")
-    .select(
-      [
-        "cobranca_id",
-        "cobranca_fonte",
-        "pessoa_id",
-        "pessoa_nome",
-        "pessoa_label",
-        "competencia_ano_mes",
-        "competencia_label",
-        "tipo_cobranca",
-        "data_vencimento",
-        "valor_centavos",
-        "valor_pago_centavos",
-        "saldo_centavos",
-        "saldo_aberto_centavos",
-        "status_cobranca",
-        "status_bruto",
-        "status_operacional",
-        "neofin_charge_id",
-        "neofin_invoice_id",
-        "neofin_situacao_operacional",
-        "origem_tipo",
-        "origem_subtipo",
-        "origem_referencia_label",
-        "dias_atraso",
-        "fatura_id",
-        "fatura_competencia",
-        "fatura_status",
-        "tipo_conta",
-        "tipo_conta_label",
-        "permite_vinculo_manual",
-        "data_pagamento",
-        "link_pagamento",
-        "linha_digitavel",
-        "descricao",
-        "cobranca_origem_id",
-        "conta_conexao_id",
-        "created_at",
-        "updated_at",
-      ].join(","),
-    )
-    .eq("tipo_conta", "ALUNO")
-    .order("competencia_ano_mes", { ascending: false, nullsFirst: false })
-    .order("data_vencimento", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false, nullsFirst: false });
-
-  if (competencia) {
-    cobrancasQuery = cobrancasQuery.eq("competencia_ano_mes", competencia);
-  }
-
-  if (statusOperacional === "PAGO" || statusOperacional === "PENDENTE_A_VENCER" || statusOperacional === "PENDENTE_VENCIDO") {
-    cobrancasQuery = cobrancasQuery.eq("status_operacional", statusOperacional);
-  }
-
-  if (statusNeofin !== "TODOS") {
-    cobrancasQuery = cobrancasQuery.eq("neofin_situacao_operacional", statusNeofin);
-  }
-
   const faturasQuery = supabase
     .from("credito_conexao_faturas")
     .select(
@@ -314,14 +243,26 @@ export async function GET(req: NextRequest) {
     .order("periodo_referencia", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false });
 
-  const [{ data: cobrancasData, error: cobrancasError }, { data: faturasData, error: faturasError }] = await Promise.all([
-    cobrancasQuery,
-    faturasQuery,
-  ]);
+  let itens: CobrancaOperacionalItem[] = [];
+  let faturasData: unknown[] | null = null;
+  let faturasError: { message: string } | null = null;
 
-  if (cobrancasError) {
+  try {
+    [itens, { data: faturasData, error: faturasError }] = await Promise.all([
+      resolverCarteiraOperacionalPorCompetencia(supabase, {
+        competencia,
+        statusOperacional,
+        statusNeofin,
+      }),
+      faturasQuery,
+    ]);
+  } catch (error) {
     return NextResponse.json(
-      { ok: false, error: "erro_buscar_carteira_operacional", detail: cobrancasError.message },
+      {
+        ok: false,
+        error: "erro_buscar_carteira_operacional",
+        detail: error instanceof Error ? error.message : "erro_desconhecido",
+      },
       { status: 500 },
     );
   }
@@ -344,10 +285,7 @@ export async function GET(req: NextRequest) {
     faturasPorPessoa.set(pessoaId, existente);
   }
 
-  const today = new Date();
-  const itens = ((cobrancasData ?? []) as unknown[]).map((raw) => {
-    const row = raw as CobrancaOperacionalViewRow;
-    const item = montarCobrancaOperacionalBase(row, today);
+  const itensEnriquecidos = itens.map((item) => {
     item.cobranca_url = buildCobrancaUrl({
       cobranca_fonte: item.cobranca_fonte,
       cobranca_id: item.cobranca_id,
@@ -356,7 +294,7 @@ export async function GET(req: NextRequest) {
     return item;
   });
 
-  const itensFiltrados = itens.filter((item) => matchesQuery(item, q));
+  const itensFiltrados = itensEnriquecidos.filter((item) => matchesQuery(item, q));
   const resumoGeral = criarResumoGeral(itensFiltrados);
   const mesesAgrupados = agruparCobrancasPorCompetencia(itensFiltrados);
   const totalCompetencias = mesesAgrupados.length;

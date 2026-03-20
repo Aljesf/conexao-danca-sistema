@@ -89,7 +89,7 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
   const acaoPrimaria = acaoPrimariaTipo === "VINCULAR"
     ? (
         <Button type="button" onClick={() => onVincularFatura?.(item)} className="w-full sm:w-auto">
-          Vincular a fatura
+          Vincular a fatura oficial
         </Button>
       )
     : acaoPrimariaTipo === "RECEBER"
@@ -136,9 +136,11 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
               <p className="mt-1 font-medium text-slate-800">{formatBRLFromCents(item.valor_centavos)}</p>
             </div>
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Fatura</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Fatura vinculada</p>
               <p className="mt-1 font-medium text-slate-800">
-                {item.fatura_id ? `#${item.fatura_id}${item.fatura_competencia ? ` - ${item.fatura_competencia}` : ""}` : "Sem vinculo"}
+                {item.fatura_id
+                  ? `#${item.fatura_id}${item.fatura_competencia ? ` - ${item.fatura_competencia}` : ""}`
+                  : "Sem fatura vinculada"}
               </p>
             </div>
             <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
@@ -158,9 +160,11 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
             </Button>
           ) : null}
           {item.fatura_url && acaoPrimariaTipo !== "FATURA" ? (
-            <ActionLink href={item.fatura_url} label="Abrir fatura" />
+            <ActionLink href={item.fatura_url} label="Abrir fatura vinculada" />
           ) : null}
-          {item.cobranca_url && acaoPrimariaTipo !== "DETALHE" ? <ActionLink href={item.cobranca_url} label="Ver detalhe" /> : null}
+          {item.cobranca_url && acaoPrimariaTipo !== "DETALHE" ? (
+            <ActionLink href={item.cobranca_url} label="Ver cobranca vinculada" />
+          ) : null}
           {item.link_pagamento ? (
             <a
               href={item.link_pagamento}
@@ -168,7 +172,7 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
               rel="noreferrer"
               className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
-              Abrir boleto
+              Abrir pagamento NeoFin
             </a>
           ) : null}
         </div>
