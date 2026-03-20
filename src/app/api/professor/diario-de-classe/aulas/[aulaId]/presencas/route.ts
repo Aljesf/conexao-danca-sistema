@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { canAccessTurma, getColaboradorIdForUser, getUserOrThrow } from "../../../_lib/auth";
 import { getAulaOrFail, salvarPresencasDaAula, zBodyFrequencia } from "../../../_lib/presencas";
+import { getAulaFrequenciaPayload } from "@/lib/academico/frequencia";
 
 const zAulaId = z.coerce.number().int().positive();
 
@@ -24,20 +25,17 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ aulaId:
   const perm = await canAccessTurma({ supabase, userId: user.id, turmaId: aulaRes.aula.turma_id });
   if (!perm.ok) return NextResponse.json(perm, { status: perm.status });
 
-  const { data, error } = await supabase
-    .from("turma_aula_presencas")
-    .select("*")
-    .eq("aula_id", aulaId.data)
-    .order("aluno_pessoa_id", { ascending: true });
+  try {
+    const payload = await getAulaFrequenciaPayload({
+      supabase,
+      aulaId: aulaId.data,
+    });
 
-  if (error) {
-    return NextResponse.json(
-      { ok: false, code: "ERRO_BUSCAR_PRESENCAS", message: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: true, ...payload });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ERRO_BUSCAR_PRESENCAS";
+    return NextResponse.json({ ok: false, code: "ERRO_BUSCAR_PRESENCAS", message }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true, aula: aulaRes.aula, presencas: data ?? [] });
 }
 
 /**
@@ -81,7 +79,9 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ aulaId:
       registradoPorColaboradorId: colaboradorId,
     });
 
-    return NextResponse.json({ ok: true, ...result });
+    const payload = await getAulaFrequenciaPayload({ supabase, aulaId: aulaId.data });
+
+    return NextResponse.json({ ok: true, salvas: result.salvas, ...payload });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "ERRO_SALVAR_PRESENCAS";
     return NextResponse.json({ ok: false, code: "ERRO_SALVAR_PRESENCAS", message: msg }, { status: 500 });

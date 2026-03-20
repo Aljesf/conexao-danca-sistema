@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getUserOrThrow, canAccessTurma } from "../../../_lib/auth";
+import { listarAlunosDaTurmaFrequencia } from "@/lib/academico/frequencia";
 
 const zAulaId = z.coerce.number().int().positive();
 
@@ -29,21 +30,23 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ aulaId
     return NextResponse.json({ ok: true, aula, message: "Aula ja estava fechada." });
   }
 
-  const { data: alunos, error: alunosErr } = await supabase
-    .from("turma_aluno")
-    .select("aluno_pessoa_id")
-    .eq("turma_id", aula.turma_id);
-
-  if (alunosErr) {
+  let alunosAtivos: Awaited<ReturnType<typeof listarAlunosDaTurmaFrequencia>>["ativos"] = [];
+  try {
+    const alunosTurma = await listarAlunosDaTurmaFrequencia({
+      supabase,
+      turmaId: aula.turma_id,
+      refDate: aula.data_aula,
+    });
+    alunosAtivos = alunosTurma.ativos;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ERRO_LISTAR_ALUNOS_TURMA";
     return NextResponse.json(
-      { ok: false, code: "ERRO_LISTAR_ALUNOS_TURMA", message: alunosErr.message },
+      { ok: false, code: "ERRO_LISTAR_ALUNOS_TURMA", message },
       { status: 500 }
     );
   }
 
-  const alunoIds = (alunos ?? [])
-    .map((a) => a.aluno_pessoa_id)
-    .filter((x): x is number => typeof x === "number");
+  const alunoIds = alunosAtivos.map((a) => a.aluno_pessoa_id);
 
   if (alunoIds.length === 0) {
     return NextResponse.json(

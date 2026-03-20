@@ -1,13 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { canAccessTurma, getUserOrThrow, zTurmaId } from "../../../_lib/auth";
-
-type TurmaAlunoRow = {
-  aluno_pessoa_id: number;
-  matricula_id: number | null;
-  status: string | null;
-  matricula: { status: string | null } | null;
-  pessoa: { nome: string | null; nascimento: string | null } | null;
-};
+import { listarAlunosDaTurmaFrequencia } from "@/lib/academico/frequencia";
 
 /**
  * GET /api/professor/diario-de-classe/turmas/:turmaId/alunos
@@ -27,39 +20,44 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ turmaId
   const perm = await canAccessTurma({ supabase, userId: user.id, turmaId: turmaId.data });
   if (!perm.ok) return NextResponse.json(perm, { status: perm.status });
 
-  const { data, error } = await supabase
-    .from("turma_aluno")
-    .select("aluno_pessoa_id, matricula_id, status, matricula:matriculas(status), pessoa:pessoas(id,nome,nascimento)")
-    .eq("turma_id", turmaId.data)
-    .order("aluno_pessoa_id", { ascending: true });
+  try {
+    const alunosTurma = await listarAlunosDaTurmaFrequencia({
+      supabase,
+      turmaId: turmaId.data,
+    });
 
-  if (error) {
+    return NextResponse.json({
+      ok: true,
+      alunos: alunosTurma.ativos.map((row) => ({
+        aluno_pessoa_id: row.aluno_pessoa_id,
+        nome: row.nome ?? null,
+        data_nascimento: row.data_nascimento ?? null,
+        matricula_id: row.matricula_id ?? null,
+        matricula_status: row.matricula_status ?? null,
+        turma_aluno_status: row.turma_aluno_status ?? null,
+      })),
+      alunos_ativos: alunosTurma.ativos.map((row) => ({
+        aluno_pessoa_id: row.aluno_pessoa_id,
+        nome: row.nome ?? null,
+        data_nascimento: row.data_nascimento ?? null,
+        matricula_id: row.matricula_id ?? null,
+        matricula_status: row.matricula_status ?? null,
+        turma_aluno_status: row.turma_aluno_status ?? null,
+      })),
+      alunos_historico: alunosTurma.historico.map((row) => ({
+        aluno_pessoa_id: row.aluno_pessoa_id,
+        nome: row.nome ?? null,
+        data_nascimento: row.data_nascimento ?? null,
+        matricula_id: row.matricula_id ?? null,
+        matricula_status: row.matricula_status ?? null,
+        turma_aluno_status: row.turma_aluno_status ?? null,
+      })),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ERRO_LISTAR_ALUNOS";
     return NextResponse.json(
-      { ok: false, code: "ERRO_LISTAR_ALUNOS", message: error.message },
+      { ok: false, code: "ERRO_LISTAR_ALUNOS", message },
       { status: 500 }
     );
   }
-
-  const rows = (data as unknown as TurmaAlunoRow[] | null) ?? [];
-
-  const alunosNormalizados = rows.map((row) => ({
-    aluno_pessoa_id: row.aluno_pessoa_id,
-    nome: row.pessoa?.nome ?? null,
-    data_nascimento: row.pessoa?.nascimento ?? null,
-    matricula_id: row.matricula_id ?? null,
-    matricula_status: row.matricula?.status ?? null,
-    turma_aluno_status: row.status ?? null,
-  }));
-
-  const alunosAtivos = alunosNormalizados.filter((row) => String(row.matricula_status ?? "").toUpperCase() === "ATIVA");
-  const alunosHistorico = alunosNormalizados.filter(
-    (row) => String(row.matricula_status ?? "").toUpperCase() !== "ATIVA",
-  );
-
-  return NextResponse.json({
-    ok: true,
-    alunos: alunosAtivos,
-    alunos_ativos: alunosAtivos,
-    alunos_historico: alunosHistorico,
-  });
 }

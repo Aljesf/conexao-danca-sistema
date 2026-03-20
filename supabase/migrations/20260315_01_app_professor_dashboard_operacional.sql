@@ -27,9 +27,6 @@ alter table if exists public.turma_aula_presencas
 alter table if exists public.turma_aula_presencas
   add column if not exists registrado_por_colaborador_id bigint null;
 
-alter table if exists public.turma_aula_presencas
-  add column if not exists registrado_em timestamptz not null default now();
-
 do $$
 begin
   if to_regclass('public.turma_aula_presencas') is not null then
@@ -53,25 +50,17 @@ create index if not exists idx_turma_aula_presencas_reg_auth_user
 create index if not exists idx_turma_aula_presencas_reg_colaborador
   on public.turma_aula_presencas (registrado_por_colaborador_id);
 
-create index if not exists idx_turma_aula_presencas_registrado_em
-  on public.turma_aula_presencas (registrado_em desc);
-
 update public.turma_aula_presencas
 set
-  registrado_por_auth_user_id = coalesce(registrado_por_auth_user_id, registrado_por),
-  registrado_em = coalesce(registrado_em, created_at)
+  registrado_por_auth_user_id = coalesce(registrado_por_auth_user_id, registrado_por)
 where
-  registrado_por_auth_user_id is null
-  or registrado_em is null;
+  registrado_por_auth_user_id is null;
 
 comment on column public.turma_aula_presencas.registrado_por_auth_user_id is
 'Auth user (profiles.user_id) que registrou a frequencia pelo App Professor/API.';
 
 comment on column public.turma_aula_presencas.registrado_por_colaborador_id is
 'Colaborador operacional vinculado ao auth user que registrou a frequencia.';
-
-comment on column public.turma_aula_presencas.registrado_em is
-'Timestamp operacional do ultimo registro de frequencia.';
 
 create or replace view public.vw_app_professor_agenda_hoje as
 with professor_vinculado as (

@@ -11,6 +11,7 @@ import { AbaCuidadosAluno } from "@/components/pessoas/AbaCuidadosAluno";
 import { AbaMedidasDeclaradas } from "@/components/pessoas/AbaMedidasDeclaradas";
 import { AbaObservacoesGerais } from "@/components/pessoas/AbaObservacoesGerais";
 import { AbaObservacoesPedagogicas } from "@/components/pessoas/AbaObservacoesPedagogicas";
+import FrequenciaAlunoCard from "@/components/pessoas/FrequenciaAlunoCard";
 import FormulariosInternosCard from "@/components/pessoas/FormulariosInternosCard";
 import MovimentoMcdCard from "@/components/pessoas/MovimentoMcdCard";
 import { PessoaResumoFinanceiro } from "@/components/pessoas/PessoaResumoFinanceiro";
@@ -24,6 +25,7 @@ import type { EnderecoPessoa, Pessoa } from "@/types/pessoas";
 type AbaId =
   | "dados"
   | "escolar"
+  | "frequencia"
   | "observacoes"
   | "cuidados"
   | "medidas"
@@ -212,6 +214,7 @@ export default function PessoaDetalhesPage() {
     const abaMap: Record<string, AbaId> = {
       dados: "dados",
       escolar: "escolar",
+      frequencia: "frequencia",
       observacoes: "observacoes",
       cuidados: "cuidados",
       medidas: "medidas",
@@ -458,6 +461,7 @@ export default function PessoaDetalhesPage() {
   const abas: { id: AbaId; label: string; icon: string }[] = [
     { id: "dados", label: "Dados da pessoa", icon: "" },
     { id: "escolar", label: "Dados escolares", icon: "" },
+    { id: "frequencia", label: "Frequencia", icon: "" },
     { id: "observacoes", label: "Observacoes", icon: "" },
     { id: "cuidados", label: "Cuidados do aluno", icon: "" },
     { id: "medidas", label: "Medidas", icon: "" },
@@ -934,6 +938,21 @@ export default function PessoaDetalhesPage() {
                         </div>
                       )}
                   </SectionCard>
+                </div>
+              )}
+
+              {abaAtiva === "frequencia" && (
+                <div className="space-y-4">
+                  <h2 className="text-base font-semibold text-slate-800 md:text-lg">
+                    Frequencia
+                  </h2>
+                  {pessoa?.id ? (
+                    <FrequenciaAlunoCard pessoaId={pessoa.id} />
+                  ) : (
+                    <SectionCard title="Frequencia">
+                      <p className="text-sm text-slate-600">Carregando...</p>
+                    </SectionCard>
+                  )}
                 </div>
               )}
               {/* Aba: Observacoes */}

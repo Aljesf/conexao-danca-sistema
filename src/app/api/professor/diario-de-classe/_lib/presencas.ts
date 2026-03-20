@@ -46,8 +46,6 @@ export async function salvarPresencasDaAula(params: {
   registradoPorAuthUserId: string;
   registradoPorColaboradorId: number | null;
 }) {
-  const registradoEm = new Date().toISOString();
-
   const rows = params.itens.map((item) => ({
     aula_id: params.aulaId,
     aluno_pessoa_id: item.alunoPessoaId,
@@ -57,7 +55,6 @@ export async function salvarPresencasDaAula(params: {
     registrado_por: params.registradoPorAuthUserId,
     registrado_por_auth_user_id: params.registradoPorAuthUserId,
     registrado_por_colaborador_id: params.registradoPorColaboradorId,
-    registrado_em: registradoEm,
   }));
 
   const idsMantidos = new Set(rows.map((row) => row.aluno_pessoa_id));

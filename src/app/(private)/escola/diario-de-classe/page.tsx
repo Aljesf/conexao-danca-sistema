@@ -208,6 +208,18 @@ function mapPresencaToLinha(
     };
   }
 
+  if (presenca?.status === "PRESENTE") {
+    return {
+      aluno_pessoa_id: aluno.aluno_pessoa_id,
+      nome,
+      base_status: "PRESENTE",
+      atraso_ativo: false,
+      minutos_atraso: null,
+      justificativa_ativa: false,
+      justificativa_texto: "",
+    };
+  }
+
   return createLinhaPendente(aluno);
 }
 

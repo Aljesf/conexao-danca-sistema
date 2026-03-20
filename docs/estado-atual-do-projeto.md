@@ -1,173 +1,75 @@
 ## Modulo atual
-Convergencia canonica e correcao semantica entre contas a receber vencidas e cobrancas por competencia, usando `cobrancas` como fonte principal e a conta interna como dominio visual oficial
+Academico - Diario de Classe / Frequencia
 
 ## SQL concluido
-- nenhuma migration nova foi criada neste ciclo
-- a estrutura existente foi validada como suficiente para o fechamento mensal configuravel:
-  - `credito_conexao_contas.dia_fechamento`
-  - `credito_conexao_contas.dia_vencimento`
-  - `credito_conexao_contas.dia_vencimento_preferido`
-  - `credito_conexao_configuracoes.dia_fechamento`
-  - `credito_conexao_configuracoes.dia_vencimento`
-  - `financeiro_config.dia_fechamento_faturas`
-  - `financeiro_config_cobranca.provider_ativo`
-- permanecem ativos os diagnosticos ja criados:
-  - `supabase/sql/diagnosticos/20260319_auditoria_centro_custo_dashboard.sql`
-  - `supabase/sql/diagnosticos/20260319_diagnostico_neofin_cartao_conexao.sql`
-  - `supabase/sql/diagnosticos/20260319_diagnostico_competencia_ativa_vs_contas_receber.sql`
-  - `supabase/sql/diagnosticos/20260320_diagnostico_convergencia_cobrancas_competencia.sql`
-  - `supabase/sql/diagnosticos/20260320_diagnostico_semantica_conta_interna_cobrancas.sql`
-  - `supabase/sql/diagnosticos/20260320_diagnostico_consolidacao_conta_interna_multiplas_matriculas.sql`
+- nenhum campo temporal novo foi necessario em `turma_aula_presencas`
+- o schema canonico ja estava correto com `created_at` e `updated_at`
+- o repositorio foi realinhado para usar apenas a auditoria temporal canonica da tabela de presencas
+- a migration `supabase/migrations/20260315_01_app_professor_dashboard_operacional.sql` foi ajustada para nao criar mais a coluna temporal incorreta
+- os indices canônicos de frequencia permanecem os mesmos da base original:
+  - `idx_turma_aula_presencas_aula_id`
+  - `idx_turma_aula_presencas_aluno_id`
+  - `turma_aula_presencas_unq_aula_aluno`
 
 ## APIs concluidas
-- `src/lib/credito-conexao/processarFechamentoAutomaticoMensal.ts`
-- `src/app/api/financeiro/credito-conexao/fechamento-mensal/processar/route.ts`
-- `src/app/api/financeiro/credito-conexao/faturas/fechamento-automatico/route.ts`
-- `src/lib/credito-conexao/processarCobrancaCanonicaFatura.ts`
-- `src/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura.ts`
-- `src/lib/financeiro/cobranca/resolverPagamentoExibivel.ts`
-- `src/lib/neofinBilling.ts`
-- `src/lib/neofinClient.ts`
-- `src/lib/neofinResolverLinkPublico.ts`
-- `src/lib/financeiro/cobranca/providers/neofinProvider.ts`
-- `src/app/api/credito-conexao/faturas/[id]/route.ts`
-- `src/app/api/governanca/cobrancas/[id]/route.ts`
-- `src/app/api/governanca/cobrancas/[id]/sincronizar-neofin/route.ts`
-- `src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts`
-- `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`
-- `src/lib/financeiro/competenciaAtiva/resolverCarteiraOperacionalPorCompetencia.ts`
-- `src/lib/financeiro/carteira-operacional-canonica.ts`
-- `src/lib/financeiro/contas-receber-canonico.ts`
-- `src/app/api/financeiro/credito-conexao/cobrancas/route.ts`
-- `src/app/api/financeiro/credito-conexao/faturas/route.ts`
-- `src/app/api/financeiro/contas-a-receber/route.ts`
-- `src/app/api/financeiro/contas-a-receber/vencidas/por-pessoa/route.ts`
+- `src/lib/academico/frequencia.ts`
+- `src/app/api/professor/diario-de-classe/aulas/[aulaId]/presencas/route.ts`
+- `src/app/api/professor/diario-de-classe/aulas/[aulaId]/fechar/route.ts`
+- `src/app/api/professor/diario-de-classe/turmas/[turmaId]/alunos/route.ts`
+- `src/app/api/academico/turmas/[id]/frequencia/route.ts`
+- `src/app/api/pessoas/[id]/frequencia/route.ts`
+- o endpoint do diario passou a retornar payload consolidado com:
+  - turma
+  - aula
+  - alunos com status de presenca
+  - resumo operacional e de chamada
+- o save da chamada segue idempotente por `aula_id + aluno_pessoa_id`
 
 ## Paginas / componentes concluidos
-- `src/app/(private)/admin/financeiro/credito-conexao/faturas/[id]/page.tsx`
-- `src/app/(private)/admin/governanca/cobrancas/[id]/page.tsx`
-- `src/app/(private)/admin/financeiro/credito-conexao/cobrancas/page.tsx`
-- `src/app/(private)/admin/financeiro/contas-receber/page.tsx`
-- `src/components/financeiro/credito-conexao/CobrancasMensaisResumo.tsx`
-- `src/components/financeiro/credito-conexao/CobrancasCompetenciaCard.tsx`
-- `src/components/financeiro/credito-conexao/CobrancaStatusSection.tsx`
-- `src/components/financeiro/credito-conexao/CobrancaRow.tsx`
-- `src/components/financeiro/credito-conexao/CompetenciaTabs.tsx`
-- `src/components/financeiro/credito-conexao/VincularCobrancaFaturaDialog.tsx`
-- `src/components/documentos/RecibosContaConexao.tsx`
-- `src/components/pessoas/PessoaResumoFinanceiro.tsx`
-- a etapa anterior do dashboard financeiro permanece consolidada com:
-  - drill-down dos cards e competencias
-  - exclusao de cancelados/expurgados da composicao principal
-  - competencias futuras por lancamentos ja gerados
-  - leitura rapida reposicionada
-  - cards de saude imediata
-  - exportacao Excel nos modais e no topo do header
-  - melhoria visual e operacional dos modais
-  - ajuste do bloco de centro de custo
-- nesta atualizacao de 2026-03-20 foi consolidado adicionalmente:
-  - convergencia funcional entre contas a receber vencidas e cobrancas por competencia
-  - leitura canonica centralizada em helper compartilhado (`src/lib/financeiro/carteira-operacional-canonica.ts`)
-  - tela de competencia passando a responder de `cobrancas`, com `credito_conexao_lancamentos` e `credito_conexao_faturas` apenas como vinculo derivado
-  - tela de contas a receber vencidas reaproveitando a mesma base canonica para cards, lista e devedores
-  - correcao semantica dos rotulos visuais para privilegiar `cobranca oficial`, `conta interna`, `fatura interna`, `cobranca NeoFin` e `itens da cobranca`
-  - substituicao do destaque visual legado de `Cartao Conexao` por `Conta interna` nas telas de competencia e auditoria
-  - separacao explicita entre `fatura interna` e `cobranca NeoFin`, tratando NeoFin apenas como camada externa de cobranca
-  - matricula passando a aparecer apenas como item da composicao da cobranca, nunca como titulo principal da linha
-  - composicao da cobranca renderizada por `itens[]`, incluindo casos de multiplos itens no mesmo responsavel
-  - NeoFin validado apenas quando existe fatura interna vinculada e `neofin_invoice_id`
-  - resolucao de aluno e matricula reforcada no helper canonico, com fallback por `referencia_item`, `matricula_id`, `turma_aluno` e contexto da conta interna quando aplicavel
-  - exposicao de metadados de consolidacao (`chaveConsolidacao`, multiplos itens, multiplos alunos e titulos distintos na mesma fatura interna) para a UI nao quebrar semanticamente a mesma fatura
-  - rota de recibos/faturas da conta interna refeita com contrato amigavel, sem expor erro cru e sem depender de select relacional fragil
+- `src/app/(private)/escola/diario-de-classe/page.tsx`
+- `src/app/(private)/escola/academico/turmas/[turmaId]/page.tsx`
+- `src/app/(private)/pessoas/[id]/page.tsx`
+- `src/components/academico/frequencia/FrequenciaResumoTurmaCard.tsx`
+- `src/components/academico/frequencia/FrequenciaHistoricoTurmaTable.tsx`
+- `src/components/academico/frequencia/FrequenciaTurmaSection.tsx`
+- `src/components/pessoas/FrequenciaAlunoCard.tsx`
 
 ## O que foi consolidado neste ciclo
-- a tela de competencia ativa passou a usar a mesma carteira real de contas a receber como criterio canonico de elegibilidade
-- a leitura canonica compartilhada agora nasce de `cobrancas`, exclui `CANCELADA` / `EXPURGADA` / `SUBSTITUIDA` e usa `recebimentos`, `credito_conexao_lancamentos` e `credito_conexao_faturas` apenas como enriquecimento objetivo
-- a semantica visual da tela `/financeiro/credito-conexao/cobrancas` passou a tratar cada linha como uma cobranca oficial de conta interna, com composicao detalhada por itens
-- a validacao direta em base real para `2026-03` fechou os numeros entre as duas telas:
-  - competencia `2026-03`: `21` cobrancas canonicas, `R$ 3.839,00` previsto, `R$ 630,00` vencido
-  - contas a receber vencidas em `MES_ANO 03/2026`: `R$ 630,00` vencido, `5` cobrancas, `4` devedores
-  - contexto `ESCOLA` em `03/2026`: `R$ 609,00` vencido, `4` cobrancas, `3` devedores, batendo com o subconjunto vencido da competencia
-- a mesma fatura interna agora pode aparecer corretamente em mais de um card sem ser tratada como duplicacao visual indevida; no recorte `2026-03` existem exemplos reais com `2` titulos oficiais para a mesma `chaveConsolidacao`
-- a carteira atual tambem mostra exemplos reais de cobrancas com multiplos itens na mesma conta interna, preservando a composicao por item sem fundir titulos legitimos
-- a validacao objetiva de NeoFin no recorte `2026-03` retornou `0` casos com cobranca NeoFin gerada sem fatura interna vinculada
-- a resolucao de aluno deixou de se perder nos casos de escola com matricula identificavel; no recorte validado, os itens ainda sem aluno resolvido ficaram restritos a consumo de cafe sem vinculo academico (`cobranca #426`)
-- a carteira atual mostra exemplos reais de multiplos itens na mesma cobranca oficial, mas nao ha casos reais encontrados com multiplos alunos na mesma cobranca no dataset validado
-- a area de recibos/faturas da conta interna passou a responder com contrato padronizado, estado vazio amigavel e erro funcional `erro_listar_faturas_credito_conexao` tratado sem quebrar a pagina
-- a melhoria de produtividade foi validada no uso operacional da tela, reduzindo ambiguidade entre cobranca oficial, conta interna, fatura interna, NeoFin e itens da cobranca
-- fechamento desta etapa:
-  - `npm run build`: ok
-  - `npm run lint`: erro legado fora do escopo, sem bloqueio desta entrega
-- itens cancelados, expurgados ou substituidos por reprocessamento deixaram de aparecer como carteira operacional da competencia ativa
-- a competencia ativa agora fala a mesma linguagem publica da carteira real:
-  - conta interna do aluno
-  - competencia
-  - fatura interna
-  - cobranca NeoFin
-  - cobranca oficial
-- a semantica antiga de matricula deixou de ser o eixo principal da tela; quando existir, aparece apenas como item da composicao
-- a fatura da conta interna virou tela operacional final, com hierarquia visual clara, cabecalho util, card de pagamento, card da cobranca oficial da fatura, lancamentos legiveis e auditoria tecnica recolhivel
-- a leitura de pagamento da fatura passou a priorizar a cobranca canonica e os dados remotos da NeoFin, sem depender do `charge_id` textual legado para exibir boleto/Pix
-- a abertura publica do NeoFin foi endurecida para usar apenas URL com correspondencia confirmada entre cobranca local e entidade remota
-- o fallback perigoso que podia abrir `billing/{chargeId}` sem validacao foi removido da UI e da camada de resolucao
-- a resolucao de pagamento exibivel foi centralizada em `src/lib/financeiro/cobranca/resolverPagamentoExibivel.ts`, retornando:
-  - `tipo_exibicao`
-  - `invoice_id`
-  - `neofin_charge_id`
-  - `link_pagamento`
-  - `link_pagamento_validado`
-  - `link_pagamento_origem`
-  - `correspondencia_confirmada`
-  - `tipo_correspondencia`
-  - `payment_number`
-  - `linha_digitavel`
-  - `codigo_barras`
-  - `pix_copia_cola`
-  - `qr_code_url`
-  - `status_sincronizado`
-  - `origem_dos_dados`
-- a busca por `integration_identifier` na NeoFin deixou de aceitar candidatos recentes sem identificador realmente presente no payload remoto
-- a UI da fatura e da governanca financeira agora informa se o link e oficial da invoice, oficial da parcela, fallback validado ou indisponivel
-- cobrancas pagas com URL confirmada passaram a ser mostradas como historico informativo, e nao mais como segunda via ativa
-- a regra de `invoice_valida` foi endurecida para nao considerar somente um identificador textual legado como invoice aproveitavel
-- o detalhe da cobranca financeira passou a exibir invoice resolvida, origem dos dados e dados remotos/local/legado sem confundir a cobranca canonica com o legado
-- o fluxo de fechamento automatico mensal foi canonicamente concentrado em `processarFechamentoAutomaticoMensal.ts`
-- o fluxo automatico, a rota legada de fechamento automatico e os fluxos manuais de fechar/gerar cobranca agora convergem para `processarCobrancaCanonicaFatura.ts`
-- foi criada rota administrativa para reprocessamento/manual seguro:
-  - `/api/financeiro/credito-conexao/fechamento-mensal/processar`
-- a validacao em base real confirmou:
-  - `33` contas ALUNO avaliadas no dry-run
-  - `31` contas com acao elegivel
-  - `0` erros no dry-run auditado
-  - `0` origens com duplicidade de cobranca canonica nao cancelada no recorte validado
+- o erro 500 do diario causado pelo desacoplamento entre API e schema foi removido no back-end e no SQL versionado
+- o front do diario foi corrigido para reabrir uma aula mostrando `PRESENTE` corretamente, em vez de voltar como pendente
+- o fechamento da chamada agora considera os alunos ativos da turma no contexto da frequencia, evitando pendencias artificiais de historico
+- a frequencia ficou centralizada em helper compartilhado, reutilizado por diario, detalhe da turma e perfil da pessoa
+- a pagina da turma passou a exibir:
+  - percentual medio da turma
+  - ultimas aulas registradas
+  - tabela resumida por aluno
+  - historico completo reutilizando a API `/api/academico/turmas/[id]/frequencia`
+- o perfil da pessoa/aluno passou a exibir:
+  - turmas com historico de frequencia
+  - percentual por turma
+  - presencas recentes
+  - faltas/justificativas e status consolidado
+- a busca final pela coluna incorreta ficou zerada em codigo, SQL e documentacao
+
+## Validacao executada
+- busca final pela coluna incorreta: ok, sem resultados em `src`, `supabase` e `docs`
+- `npx eslint` nos arquivos alterados pelo fluxo de frequencia: ok
+- `npm run build`: ok
+- `npm run lint`: continua falhando por backlog preexistente fora do escopo deste modulo
 
 ## Pendencias
-- homologacao visual autenticada da convergencia de marco/2026 entre `/financeiro/contas-receber` e `/financeiro/credito-conexao/cobrancas`
-- homologacao visual autenticada da tela de fatura da conta interna e do detalhe da cobranca financeira
-- capturar prints autenticados da nova semantica de conta interna na tela de competencia e na tela de contas a receber
-- caso seja necessario para QA visual, localizar um ambiente/base com exemplo real de cobranca consolidada com multiplos alunos; no dataset validado nao houve ocorrencia
-- amarrar o servico de fechamento mensal a um gatilho operacional explicito de bootstrap/cron; nesta etapa foi criado o servico canonico e a rota administrativa, mas nao foi adicionado disparo oculto na UI
-- backfill historico dos casos antigos em que `credito_conexao_faturas.cobranca_id` ainda aponta para cobranca-item ou `neofin_invoice_id` permanece nulo
-- normalizar historicos em que a cobranca local ainda esta pendente, mas o billing remoto ja consta como `paid`, para reduzir ruido operacional nas telas
-- enriquecer os casos em que a NeoFin nao devolve linha digitavel/barcode/Pix, para confirmar em homologacao quais campos o provider realmente disponibiliza por billing
-- seguir com saneamento do backlog global de lint fora do escopo deste modulo
-- manter pendente apenas a homologacao visual autenticada e a captura de prints, por depender de sessao local ativa
+- backlog global de lint em modulos antigos de admin/loja continua aberto e impede `npm run lint` limpo no repositório inteiro
+- se houver nova rodada de refatoracao ampla da pagina da turma, ela deve partir da base agora estabilizada de frequencia, sem reintroduzir regra duplicada
 
 ## Bloqueios
-- `npm run lint` continua falhando por erros preexistentes em outras areas do repositorio
-- `npm run build` passou com sucesso, mas o projeto pula validacao de tipos/lint no build atual
-- captura automatica de prints reais segue bloqueada por autenticacao local nas rotas privadas; sem sessao, `/financeiro/credito-conexao/cobrancas` responde `307` para `/login`
-- nao existe hoje um scheduler/boot executor explicito versionado chamando o fechamento mensal; a logica ficou pronta, mas a orquestracao operacional ainda depende de definicao do ambiente
+- `npm run lint` nao zera por erros antigos e nao relacionados ao diario/frequencia
+- o `build` atual segue configurado para pular validacao de lint e tipos durante a etapa de `next build`
 
 ## Versao do sistema
-Sistema Conexao Danca - carteira operacional canonica / contas a receber / competencia / NeoFin
-Versao logica: v1.12 consolidacao canonica por conta interna, fatura interna e recibos operacionais
+Sistema Conexao Danca - modulo academico de diario de classe e frequencia consolidada
+Versao logica: v1.13 diario de classe alinhado ao schema canonico e historico reutilizavel por turma e aluno
 
 ## Proximas acoes
-1. homologar em sessao autenticada a nova tela de competencia ativa contra a carteira oficial de contas a receber
-1. homologar em sessao autenticada a nova tela da fatura da conta interna com casos recentes de boleto e segunda via
-2. homologar o detalhe da cobranca financeira para cobrancas `FATURA_CREDITO_CONEXAO` com invoice remota resolvida
-3. conectar `src/app/api/financeiro/credito-conexao/fechamento-mensal/processar/route.ts` a um gatilho operacional explicito de bootstrap ou agenda
-4. executar backfill dos historicos com `neofin_invoice_id` ausente e referencias legadas antigas
-5. monitorar em producao as novas faturas para confirmar preenchimento de link, linha digitavel e Pix quando a NeoFin retornar esses campos
-6. homologar visualmente os novos estados `oficial da invoice`, `oficial da parcela`, `historico informativo` e `indisponivel` na fatura e na governanca
+1. homologar em sessao autenticada o fluxo completo do diario: abrir aula, salvar, reabrir, fechar e reconsultar
+2. validar com usuarios do academico se o percentual consolidado deve tratar `JUSTIFICADA` apenas como falta justificada ou como presenca abonada
+3. atacar o backlog global de lint do repositório em uma frente separada, sem misturar com o modulo academico

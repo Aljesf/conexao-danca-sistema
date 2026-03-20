@@ -6,6 +6,7 @@ import { EditarGradeHorariosDialog } from "./_components/EditarGradeHorariosDial
 import { EncontrosCard } from "./_components/EncontrosCard";
 import { NovaAvaliacaoDialog } from "./_components/NovaAvaliacaoDialog";
 import { VincularProfessorDialog } from "./_components/VincularProfessorDialog";
+import { FrequenciaTurmaSection } from "@/components/academico/frequencia/FrequenciaTurmaSection";
 import { listarAvaliacoesDaTurma } from "@/lib/academico/turmaAvaliacoesServer";
 import { listarProfessoresDaTurma, type TurmaProfessor } from "@/lib/academico/turmaProfessoresServer";
 import { listarHorariosDaTurma, obterTurmaPorId } from "@/lib/academico/turmasServer";
@@ -256,6 +257,14 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
             {turma.observacoes}
           </p>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <header>
+          <h2 className="text-xl font-semibold text-slate-900">Frequencia da turma</h2>
+          <p className="text-sm text-slate-500">Historico reutilizavel do diario de classe para turma e aluno.</p>
+        </header>
+        <FrequenciaTurmaSection turmaId={turmaKey} />
       </section>
 
       <section className="space-y-3">
