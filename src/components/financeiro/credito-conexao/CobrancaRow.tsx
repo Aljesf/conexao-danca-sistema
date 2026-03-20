@@ -47,8 +47,13 @@ function neofinBadge(item: LinhaCarteiraCanonica): { label: string; className: s
 }
 
 function formatarAlunos(item: LinhaCarteiraCanonica["itens"][number]): string {
-  if (item.alunoNomes.length === 0) return "Sem aluno identificado";
+  if (item.alunoNomes.length === 0) return "Aluno nao vinculado automaticamente";
   return item.alunoNomes.join(", ");
+}
+
+function formatarMatriculas(item: LinhaCarteiraCanonica["itens"][number]): string {
+  if (item.matriculaIds.length === 0) return "Sem matricula identificada";
+  return item.matriculaIds.map((matriculaId) => `#${matriculaId}`).join(", ");
 }
 
 function ActionLink({ href, label }: { href: string; label: string }) {
@@ -98,22 +103,49 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
               <p className="text-sm font-medium text-slate-700">Cobranca oficial #{item.cobrancaId}</p>
               <p className="mt-1 text-sm text-slate-500">
                 Base da cobranca: conta interna
-                {item.contaInternaId ? ` · ${item.contaInternaLabel}` : ""}
-                {item.contaInternaDescricao ? ` · ${item.contaInternaDescricao}` : ""}
+                {item.contaInternaId ? ` | ${item.contaInternaLabel}` : ""}
+                {item.contaInternaDescricao ? ` | ${item.contaInternaDescricao}` : ""}
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClassName(item.statusOperacional)}`}>
+              <span
+                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClassName(item.statusOperacional)}`}
+              >
                 {item.statusOperacional}
               </span>
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${contextoClassName(item.contextoPrincipal)}`}>
+              <span
+                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${contextoClassName(item.contextoPrincipal)}`}
+              >
                 {item.contextoPrincipal}
               </span>
-              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${neofin.className}`}>
+              <span
+                className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${neofin.className}`}
+              >
                 {neofin.label}
               </span>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            {item.totalTitulosMesmaConsolidacao > 1 ? (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                Existem {item.totalTitulosMesmaConsolidacao} titulos oficiais validos para esta mesma conta interna,
+                fatura interna e competencia. Cada card continua representando uma cobranca oficial distinta.
+              </div>
+            ) : null}
+
+            {item.possuiMultiplosItens ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                Cobranca composta por multiplos itens da conta interna.
+              </div>
+            ) : null}
+
+            {item.possuiMultiplosAlunos ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Cobranca composta por itens de multiplos alunos.
+              </div>
+            ) : null}
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -123,19 +155,20 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
             <MetaCard label="Saldo" value={formatBRLFromCents(item.saldoCentavos)} />
             <MetaCard
               label="Fatura interna"
-              value={item.faturaContaInternaId ? `#${item.faturaContaInternaId}` : "Sem fatura interna vinculada"}
+              value={item.faturaInternaId ? `#${item.faturaInternaId}` : "Sem fatura interna vinculada"}
             />
             <MetaCard
               label="Cobranca da fatura"
               value={item.cobrancaFaturaId ? `#${item.cobrancaFaturaId}` : "Sem cobranca da fatura"}
             />
-            <MetaCard
-              label="Cobranca NeoFin"
-              value={item.houveGeracaoNeoFin ? "Gerada" : "Nao gerada"}
-            />
+            <MetaCard label="Cobranca NeoFin" value={item.houveGeracaoNeoFin ? "Gerada" : "Nao gerada"} />
             <MetaCard
               label="Centro de custo"
-              value={item.centroCustoNome ? `${item.centroCustoCodigo ?? "--"} | ${item.centroCustoNome}` : "Sem centro de custo"}
+              value={
+                item.centroCustoNome
+                  ? `${item.centroCustoCodigo ?? "--"} | ${item.centroCustoNome}`
+                  : "Sem centro de custo"
+              }
             />
           </div>
 
@@ -147,23 +180,33 @@ export function CobrancaRow({ item, onRegistrarRecebimento, onVincularFatura }: 
                   Composicao: matriculas, lancamentos e ajustes da conta interna.
                 </p>
               </div>
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">{item.itens.length} item(ns)</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                {item.totalItens} item(ns) | {item.totalAlunosRelacionados} aluno(s)
+              </p>
             </div>
 
             <div className="mt-4 space-y-3">
               {item.itens.map((detalhe, index) => (
-                <div key={`${item.cobrancaId}-${detalhe.lancamentoId ?? index}-${index}`} className="rounded-xl border border-white bg-white px-3 py-3 shadow-sm">
+                <div
+                  key={`${item.cobrancaId}-${detalhe.lancamentoId ?? index}-${index}`}
+                  className="rounded-xl border border-white bg-white px-3 py-3 shadow-sm"
+                >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-1">
-                      <p className="text-sm font-semibold text-slate-900">{detalhe.tipoItem ?? "Lancamento da conta interna"}</p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {detalhe.tipoItem ?? "Lancamento da conta interna"}
+                      </p>
                       <p className="text-sm text-slate-700">{detalhe.descricao ?? "Item sem descricao detalhada"}</p>
                       <p className="text-xs text-slate-500">Aluno(s): {formatarAlunos(detalhe)}</p>
+                      <p className="text-xs text-slate-500">Matricula(s): {formatarMatriculas(detalhe)}</p>
                       <p className="text-xs text-slate-500">
                         {detalhe.referenciaItem ? `Referencia ${detalhe.referenciaItem}` : "Sem referencia detalhada"}
-                        {detalhe.lancamentoId ? ` · Lancamento #${detalhe.lancamentoId}` : ""}
+                        {detalhe.lancamentoId ? ` | Lancamento #${detalhe.lancamentoId}` : ""}
                       </p>
                     </div>
-                    <div className="text-sm font-semibold text-slate-900">{formatBRLFromCents(detalhe.valorCentavos)}</div>
+                    <div className="text-sm font-semibold text-slate-900">
+                      {formatBRLFromCents(detalhe.valorCentavos)}
+                    </div>
                   </div>
                 </div>
               ))}

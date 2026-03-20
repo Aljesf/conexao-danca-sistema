@@ -819,7 +819,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
             <CardHeader>
               <CardTitle>Cobrancas avulsas</CardTitle>
               <CardDescription>
-                Cobrancas geradas manualmente para excecoes (fora do Cartao Conexao).
+                Cobrancas geradas manualmente para excecoes (fora da conta interna).
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -912,7 +912,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
           <Card>
             <CardHeader>
-              <CardTitle>Cartao Conexao (faturas)</CardTitle>
+              <CardTitle>Conta interna (faturas)</CardTitle>
               <CardDescription>
                 Faturas pendentes: {data.agregados.faturas_pendentes_qtd} - Total:{" "}
                 {formatBRLFromCentavos(data.agregados.faturas_pendentes_total_centavos)} - Em atraso:{" "}
@@ -936,7 +936,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                     {data.faturas_credito_conexao.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-3 text-muted-foreground">
-                          Nenhuma fatura pendente do Cartao Conexao encontrada.
+                          Nenhuma fatura pendente da conta interna encontrada.
                         </td>
                       </tr>
                     ) : (

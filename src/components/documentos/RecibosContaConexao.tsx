@@ -4,51 +4,48 @@ import { useEffect, useState } from "react";
 import { ReciboModal, type ReciboModalParams } from "@/components/documentos/ReciboModal";
 
 type FaturaItem = {
-  fatura_id: number;
-  competencia_ano_mes: string;
-  valor_total_centavos: number;
-  status_fatura: string;
-  data_fechamento: string | null;
+  faturaId: number;
+  contaInternaId: number | null;
+  contaInternaDescricao: string | null;
+  competenciaAnoMes: string;
+  status: string | null;
+  totalCentavos: number;
+  cobrancaFaturaId: number | null;
+  neofinInvoiceId: string | null;
+  houveGeracaoNeoFin: boolean;
+  dataFechamento: string | null;
+  dataVencimento: string | null;
+  itens: Array<{
+    lancamentoId: number;
+    descricao: string | null;
+    referenciaItem: string | null;
+    valorCentavos: number;
+    alunoIds: number[];
+    alunoNomes: string[];
+    matriculaIds: number[];
+  }>;
 };
 
-type FaturaApiRaw = {
-  id?: number;
-  fatura_id?: number;
-  periodo_referencia?: string;
-  competencia_ano_mes?: string;
-  valor_total_centavos?: number;
-  status?: string;
-  status_fatura?: string;
-  data_fechamento?: string | null;
+type FaturasApiResponse = {
+  ok?: boolean;
+  code?: string;
+  message?: string;
+  faturas?: FaturaItem[];
 };
 
-function toPositiveInt(value: unknown): number | null {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n <= 0) return null;
-  return n;
+function formatarMoeda(valorCentavos: number): string {
+  return (valorCentavos / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
-function toCentavos(value: unknown): number {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.trunc(n);
+function mensagemErroFaturas(): string {
+  return "Nao foi possivel carregar os recibos da conta interna.";
 }
 
-function toText(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  return String(value);
-}
-
-function mapRawFatura(raw: FaturaApiRaw): FaturaItem | null {
-  const faturaId = toPositiveInt(raw.fatura_id ?? raw.id);
-  if (!faturaId) return null;
-  return {
-    fatura_id: faturaId,
-    competencia_ano_mes: toText(raw.competencia_ano_mes ?? raw.periodo_referencia) || "-",
-    valor_total_centavos: toCentavos(raw.valor_total_centavos),
-    status_fatura: toText(raw.status_fatura ?? raw.status) || "-",
-    data_fechamento: raw.data_fechamento ?? null,
-  };
+function statusNeoFin(fatura: FaturaItem): string {
+  return fatura.houveGeracaoNeoFin ? "Cobranca NeoFin gerada" : "Cobranca NeoFin nao gerada";
 }
 
 export function RecibosContaConexao(props: { pessoaTitularId: number }) {
@@ -63,37 +60,44 @@ export function RecibosContaConexao(props: { pessoaTitularId: number }) {
   async function carregarFaturas() {
     setErro(null);
     setLoading(true);
+
     try {
-      const r = await fetch(`/api/financeiro/credito-conexao/faturas?titular_pessoa_id=${pessoaTitularId}`, {
+      const response = await fetch(`/api/financeiro/credito-conexao/faturas?titular_pessoa_id=${pessoaTitularId}`, {
         cache: "no-store",
       });
-      const data = (await r.json()) as { ok?: boolean; error?: string; faturas?: FaturaApiRaw[] };
-      if (!r.ok) {
-        setErro(data?.error ?? "falha_ao_carregar_faturas");
+      const json = (await response.json().catch(() => null)) as FaturasApiResponse | null;
+
+      if (!response.ok || !json?.ok) {
+        setFaturas([]);
+        setErro(json?.message ?? mensagemErroFaturas());
         return;
       }
 
-      const mapped = (data?.faturas ?? [])
-        .map(mapRawFatura)
-        .filter((x): x is FaturaItem => Boolean(x))
-        .sort((a, b) => (b.data_fechamento ?? "").localeCompare(a.data_fechamento ?? ""));
-      setFaturas(mapped);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "erro_desconhecido");
+      const lista = [...(json.faturas ?? [])].sort((a, b) => {
+        const byCompetencia = (b.competenciaAnoMes ?? "").localeCompare(a.competenciaAnoMes ?? "");
+        if (byCompetencia !== 0) return byCompetencia;
+        return b.faturaId - a.faturaId;
+      });
+
+      setFaturas(lista);
+    } catch {
+      setFaturas([]);
+      setErro(mensagemErroFaturas());
     } finally {
       setLoading(false);
     }
   }
 
-  function abrirModalRecibo(competencia: string) {
+  function abrirModalRecibo(competenciaAnoMes: string) {
     setErro(null);
-    if (!competencia || !/^\d{4}-\d{2}$/.test(competencia)) {
-      setErro("competencia_invalida_para_preview");
+    if (!competenciaAnoMes || !/^\d{4}-\d{2}$/.test(competenciaAnoMes)) {
+      setErro("Nao foi possivel abrir o recibo desta competencia.");
       return;
     }
+
     setReciboParams({
       tipo: "CONTA_INTERNA",
-      competencia,
+      competencia: competenciaAnoMes,
       responsavel_pessoa_id: pessoaTitularId,
     });
     setReciboOpen(true);
@@ -108,9 +112,9 @@ export function RecibosContaConexao(props: { pessoaTitularId: number }) {
     <div className="rounded-2xl border bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold">Recibos da conta (por competencia)</h3>
+          <h3 className="text-base font-semibold">Recibos da conta interna (por competencia)</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Gere recibo/demonstrativo da conta interna do titular por competencia, com itens discriminados.
+            Recibos emitidos a partir das faturas internas e de seus itens vinculados.
           </p>
         </div>
 
@@ -127,38 +131,49 @@ export function RecibosContaConexao(props: { pessoaTitularId: number }) {
         <table className="w-full text-sm">
           <thead className="text-xs uppercase text-muted-foreground">
             <tr>
+              <th className="py-2 text-left">Fatura interna</th>
               <th className="py-2 text-left">Competencia</th>
               <th className="py-2 text-left">Status</th>
+              <th className="py-2 text-left">NeoFin</th>
               <th className="py-2 text-right">Total</th>
               <th className="py-2 text-right">Acoes</th>
             </tr>
           </thead>
           <tbody>
-            {faturas.map((f) => (
-              <tr key={f.fatura_id} className="border-t">
-                <td className="py-2">{f.competencia_ano_mes}</td>
-                <td className="py-2">{f.status_fatura}</td>
-                <td className="py-2 text-right">
-                  {(f.valor_total_centavos / 100).toLocaleString("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  })}
+            {faturas.map((fatura) => (
+              <tr key={fatura.faturaId} className="border-t">
+                <td className="py-2">
+                  <div className="font-medium text-slate-900">#{fatura.faturaId}</div>
+                  <div className="text-xs text-slate-500">
+                    {fatura.contaInternaId ? `Conta interna #${fatura.contaInternaId}` : "Conta interna nao resolvida"}
+                    {fatura.itens.length > 0 ? ` | ${fatura.itens.length} item(ns)` : ""}
+                  </div>
                 </td>
+                <td className="py-2">{fatura.competenciaAnoMes}</td>
+                <td className="py-2">{fatura.status ?? "Sem status"}</td>
+                <td className="py-2">
+                  <div>{statusNeoFin(fatura)}</div>
+                  {fatura.neofinInvoiceId ? (
+                    <div className="text-xs text-slate-500">Invoice {fatura.neofinInvoiceId}</div>
+                  ) : null}
+                </td>
+                <td className="py-2 text-right">{formatarMoeda(fatura.totalCentavos)}</td>
                 <td className="py-2 text-right">
                   <button
                     className="rounded-md bg-black px-3 py-2 text-xs font-medium text-white disabled:opacity-50"
                     disabled={loading}
-                    onClick={() => abrirModalRecibo(f.competencia_ano_mes)}
+                    onClick={() => abrirModalRecibo(fatura.competenciaAnoMes)}
                   >
                     Recibo
                   </button>
                 </td>
               </tr>
             ))}
-            {faturas.length === 0 ? (
+
+            {!loading && faturas.length === 0 ? (
               <tr>
-                <td colSpan={4} className="py-4 text-center text-muted-foreground">
-                  Nenhuma fatura encontrada para este titular.
+                <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                  Nenhuma fatura interna encontrada para este responsavel.
                 </td>
               </tr>
             ) : null}

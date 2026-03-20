@@ -17,6 +17,7 @@ Convergencia canonica e correcao semantica entre contas a receber vencidas e cob
   - `supabase/sql/diagnosticos/20260319_diagnostico_competencia_ativa_vs_contas_receber.sql`
   - `supabase/sql/diagnosticos/20260320_diagnostico_convergencia_cobrancas_competencia.sql`
   - `supabase/sql/diagnosticos/20260320_diagnostico_semantica_conta_interna_cobrancas.sql`
+  - `supabase/sql/diagnosticos/20260320_diagnostico_consolidacao_conta_interna_multiplas_matriculas.sql`
 
 ## APIs concluidas
 - `src/lib/credito-conexao/processarFechamentoAutomaticoMensal.ts`
@@ -38,6 +39,7 @@ Convergencia canonica e correcao semantica entre contas a receber vencidas e cob
 - `src/lib/financeiro/carteira-operacional-canonica.ts`
 - `src/lib/financeiro/contas-receber-canonico.ts`
 - `src/app/api/financeiro/credito-conexao/cobrancas/route.ts`
+- `src/app/api/financeiro/credito-conexao/faturas/route.ts`
 - `src/app/api/financeiro/contas-a-receber/route.ts`
 - `src/app/api/financeiro/contas-a-receber/vencidas/por-pessoa/route.ts`
 
@@ -52,6 +54,8 @@ Convergencia canonica e correcao semantica entre contas a receber vencidas e cob
 - `src/components/financeiro/credito-conexao/CobrancaRow.tsx`
 - `src/components/financeiro/credito-conexao/CompetenciaTabs.tsx`
 - `src/components/financeiro/credito-conexao/VincularCobrancaFaturaDialog.tsx`
+- `src/components/documentos/RecibosContaConexao.tsx`
+- `src/components/pessoas/PessoaResumoFinanceiro.tsx`
 - a etapa anterior do dashboard financeiro permanece consolidada com:
   - drill-down dos cards e competencias
   - exclusao de cancelados/expurgados da composicao principal
@@ -72,6 +76,9 @@ Convergencia canonica e correcao semantica entre contas a receber vencidas e cob
   - matricula passando a aparecer apenas como item da composicao da cobranca, nunca como titulo principal da linha
   - composicao da cobranca renderizada por `itens[]`, incluindo casos de multiplos itens no mesmo responsavel
   - NeoFin validado apenas quando existe fatura interna vinculada e `neofin_invoice_id`
+  - resolucao de aluno e matricula reforcada no helper canonico, com fallback por `referencia_item`, `matricula_id`, `turma_aluno` e contexto da conta interna quando aplicavel
+  - exposicao de metadados de consolidacao (`chaveConsolidacao`, multiplos itens, multiplos alunos e titulos distintos na mesma fatura interna) para a UI nao quebrar semanticamente a mesma fatura
+  - rota de recibos/faturas da conta interna refeita com contrato amigavel, sem expor erro cru e sem depender de select relacional fragil
 
 ## O que foi consolidado neste ciclo
 - a tela de competencia ativa passou a usar a mesma carteira real de contas a receber como criterio canonico de elegibilidade
@@ -81,8 +88,16 @@ Convergencia canonica e correcao semantica entre contas a receber vencidas e cob
   - competencia `2026-03`: `21` cobrancas canonicas, `R$ 3.839,00` previsto, `R$ 630,00` vencido
   - contas a receber vencidas em `MES_ANO 03/2026`: `R$ 630,00` vencido, `5` cobrancas, `4` devedores
   - contexto `ESCOLA` em `03/2026`: `R$ 609,00` vencido, `4` cobrancas, `3` devedores, batendo com o subconjunto vencido da competencia
+- a mesma fatura interna agora pode aparecer corretamente em mais de um card sem ser tratada como duplicacao visual indevida; no recorte `2026-03` existem exemplos reais com `2` titulos oficiais para a mesma `chaveConsolidacao`
+- a carteira atual tambem mostra exemplos reais de cobrancas com multiplos itens na mesma conta interna, preservando a composicao por item sem fundir titulos legitimos
 - a validacao objetiva de NeoFin no recorte `2026-03` retornou `0` casos com cobranca NeoFin gerada sem fatura interna vinculada
+- a resolucao de aluno deixou de se perder nos casos de escola com matricula identificavel; no recorte validado, os itens ainda sem aluno resolvido ficaram restritos a consumo de cafe sem vinculo academico (`cobranca #426`)
 - a carteira atual mostra exemplos reais de multiplos itens na mesma cobranca oficial, mas nao ha casos reais encontrados com multiplos alunos na mesma cobranca no dataset validado
+- a area de recibos/faturas da conta interna passou a responder com contrato padronizado, estado vazio amigavel e erro funcional `erro_listar_faturas_credito_conexao` tratado sem quebrar a pagina
+- a melhoria de produtividade foi validada no uso operacional da tela, reduzindo ambiguidade entre cobranca oficial, conta interna, fatura interna, NeoFin e itens da cobranca
+- fechamento desta etapa:
+  - `npm run build`: ok
+  - `npm run lint`: erro legado fora do escopo, sem bloqueio desta entrega
 - itens cancelados, expurgados ou substituidos por reprocessamento deixaram de aparecer como carteira operacional da competencia ativa
 - a competencia ativa agora fala a mesma linguagem publica da carteira real:
   - conta interna do aluno
@@ -136,6 +151,7 @@ Convergencia canonica e correcao semantica entre contas a receber vencidas e cob
 - normalizar historicos em que a cobranca local ainda esta pendente, mas o billing remoto ja consta como `paid`, para reduzir ruido operacional nas telas
 - enriquecer os casos em que a NeoFin nao devolve linha digitavel/barcode/Pix, para confirmar em homologacao quais campos o provider realmente disponibiliza por billing
 - seguir com saneamento do backlog global de lint fora do escopo deste modulo
+- manter pendente apenas a homologacao visual autenticada e a captura de prints, por depender de sessao local ativa
 
 ## Bloqueios
 - `npm run lint` continua falhando por erros preexistentes em outras areas do repositorio
@@ -145,7 +161,7 @@ Convergencia canonica e correcao semantica entre contas a receber vencidas e cob
 
 ## Versao do sistema
 Sistema Conexao Danca - carteira operacional canonica / contas a receber / competencia / NeoFin
-Versao logica: v1.11 convergencia canonica e semantica de conta interna entre vencidos e cobrancas por competencia
+Versao logica: v1.12 consolidacao canonica por conta interna, fatura interna e recibos operacionais
 
 ## Proximas acoes
 1. homologar em sessao autenticada a nova tela de competencia ativa contra a carteira oficial de contas a receber

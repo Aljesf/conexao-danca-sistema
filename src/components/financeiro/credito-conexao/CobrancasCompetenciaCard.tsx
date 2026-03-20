@@ -34,7 +34,8 @@ export function CobrancasCompetenciaCard({ competencia, onRegistrarRecebimento, 
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Competencia ativa</p>
           <h2 className="mt-1 text-xl font-semibold text-slate-900">{competencia.competenciaLabel}</h2>
           <p className="text-sm text-slate-600">
-            Cada linha abaixo representa uma cobranca oficial da conta interna, com a composicao economica detalhada por itens.
+            Cada linha abaixo representa uma cobranca oficial da conta interna. Titulos distintos podem compartilhar a
+            mesma fatura interna sem erro, enquanto a composicao economica continua detalhada por itens.
           </p>
         </div>
 

@@ -40,6 +40,7 @@ type LancamentoRow = {
   conta_conexao_id: number;
   descricao: string | null;
   matricula_id: number | null;
+  origem_id: number | null;
   origem_sistema: string;
   referencia_item: string | null;
   valor_centavos: number;
@@ -64,6 +65,10 @@ type CentroCustoRow = Database["public"]["Tables"]["centros_custo"]["Row"];
 type ContaInternaRow = Database["public"]["Tables"]["credito_conexao_contas"]["Row"];
 type MatriculaRow = Pick<Database["public"]["Tables"]["matriculas"]["Row"], "id" | "pessoa_id" | "responsavel_financeiro_id">;
 type PessoaRow = Pick<Database["public"]["Tables"]["pessoas"]["Row"], "id" | "nome">;
+type TurmaAlunoRow = Pick<
+  Database["public"]["Tables"]["turma_aluno"]["Row"],
+  "matricula_id" | "aluno_pessoa_id" | "turma_id"
+>;
 
 type MetaFaturaPrincipal = {
   contaInternaId: number | null;
@@ -95,6 +100,9 @@ export type ItemDetalheContaInterna = {
   valorCentavos: number;
   alunoIds: number[];
   alunoNomes: string[];
+  matriculaIds: number[];
+  contaInternaId: number | null;
+  faturaInternaId: number | null;
   tipoItem: string | null;
 };
 
@@ -122,12 +130,19 @@ export type LinhaCarteiraContaInterna = {
   contaInternaDescricao: string | null;
   contaInternaLabel: string;
   faturaContaInternaId: number | null;
+  faturaInternaId: number | null;
   faturaContaInternaStatus: string | null;
   cobrancaFaturaId: number | null;
   neofinInvoiceId: string | null;
   houveGeracaoNeoFin: boolean;
   possuiFaturaInterna: boolean;
   itens: ItemDetalheContaInterna[];
+  totalItens: number;
+  totalAlunosRelacionados: number;
+  possuiMultiplosItens: boolean;
+  possuiMultiplosAlunos: boolean;
+  chaveConsolidacao: string;
+  totalTitulosMesmaConsolidacao: number;
   cobrancaUrl: string;
   faturaUrl: string | null;
   permiteVinculoManual: boolean;
@@ -221,11 +236,35 @@ function addPositiveIntArray(target: Set<number>, value: unknown) {
       addPositiveInt(target, registro.pessoa_id);
       addPositiveInt(target, registro.aluno_id);
       addPositiveInt(target, registro.aluno_pessoa_id);
+      addPositiveInt(target, registro.matricula_id);
       continue;
     }
 
     addPositiveInt(target, item);
   }
+}
+
+function extrairIdsPorReferencia(referencia: string | null | undefined, tokens: string[]): number[] {
+  const texto = textoOuNull(referencia);
+  if (!texto) return [];
+
+  const ids = new Set<number>();
+  for (const token of tokens) {
+    const regex = new RegExp(`${token}(?:_id)?[:#](\\d+)`, "gi");
+    for (const match of texto.matchAll(regex)) {
+      addPositiveInt(ids, Number(match[1]));
+    }
+  }
+
+  return Array.from(ids);
+}
+
+function extrairMatriculaIdsDeReferencia(referencia: string | null | undefined): number[] {
+  return extrairIdsPorReferencia(referencia, ["matricula"]);
+}
+
+function extrairAlunoIdsDeReferencia(referencia: string | null | undefined): number[] {
+  return extrairIdsPorReferencia(referencia, ["aluno", "pessoa"]);
 }
 
 function diferencaDias(hojeIso: string, vencimento: string | null): number {
@@ -301,9 +340,7 @@ function descreverContaInterna(conta: ContaInternaRow | undefined): string | nul
 
   const descricao = textoOuNull(conta?.descricao_exibicao);
   if (!descricao) return "Conta interna";
-  const descricaoNormalizada = descricao.replace(/cart(?:a|\u00E3)o\s+conex(?:a|\u00E3)o/gi, "Conta interna");
-  return descricaoNormalizada;
-  return descricao.replace(/cart[aã]o\s+conex[aã]o/gi, "Conta interna");
+  return descricao.replace(/cart(?:a|\u00E3)o\s+conex(?:a|\u00E3)o/gi, "Conta interna");
 }
 
 function contaInternaLabel(contaInternaId: number | null): string {
@@ -348,6 +385,21 @@ function resolverDescricaoItem(lancamento: LancamentoRow, item: JsonObject | nul
   );
 }
 
+function extrairMatriculaIdsDeRegistro(registro: JsonObject | null): number[] {
+  if (!registro) return [];
+
+  const ids = new Set<number>();
+  addPositiveInt(ids, registro.matricula_id);
+  addPositiveInt(ids, registro.id_matricula);
+  addPositiveIntArray(ids, registro.matricula_ids);
+  addPositiveIntArray(ids, registro.matriculas);
+
+  const matricula = asJsonObject(registro.matricula);
+  addPositiveInt(ids, matricula?.id);
+
+  return Array.from(ids);
+}
+
 function extrairAlunoIdsDeRegistro(registro: JsonObject | null): number[] {
   if (!registro) return [];
 
@@ -359,9 +411,40 @@ function extrairAlunoIdsDeRegistro(registro: JsonObject | null): number[] {
   return Array.from(ids);
 }
 
+function coletarMatriculaIdsDeLancamentoBruto(lancamento: LancamentoRow): number[] {
+  const ids = new Set<number>();
+  addPositiveInt(ids, lancamento.matricula_id);
+
+  const origemSistema = textoOuNull(lancamento.origem_sistema)?.toUpperCase() ?? "";
+  if (origemSistema.startsWith("MATRICULA")) {
+    addPositiveInt(ids, lancamento.origem_id);
+  }
+
+  for (const matriculaId of extrairMatriculaIdsDeReferencia(lancamento.referencia_item)) {
+    ids.add(matriculaId);
+  }
+
+  const composicao = asJsonObject(lancamento.composicao_json);
+  for (const matriculaId of extrairMatriculaIdsDeRegistro(composicao)) {
+    ids.add(matriculaId);
+  }
+
+  const itens = asJsonObjectArray(composicao?.itens);
+  for (const item of itens) {
+    for (const matriculaId of extrairMatriculaIdsDeRegistro(item)) {
+      ids.add(matriculaId);
+    }
+  }
+
+  return Array.from(ids);
+}
+
 function coletarPessoaIdsDeLancamento(lancamento: LancamentoRow): number[] {
   const ids = new Set<number>();
   addPositiveInt(ids, lancamento.aluno_id);
+  for (const alunoId of extrairAlunoIdsDeReferencia(lancamento.referencia_item)) {
+    ids.add(alunoId);
+  }
 
   const composicao = asJsonObject(lancamento.composicao_json);
   addPositiveInt(ids, composicao?.aluno_id);
@@ -384,10 +467,80 @@ function nomesDosAlunos(alunoIds: number[], pessoasMap: Map<number, PessoaRow>):
   return alunoIds.map((id) => textoOuNull(pessoasMap.get(id)?.nome) ?? `Aluno #${id}`);
 }
 
+function resolverAlunoIdsPorContaInterna(contaInterna: ContaInternaRow | undefined): number[] {
+  const tipoConta = textoOuNull(contaInterna?.tipo_conta)?.toUpperCase();
+  if (tipoConta !== "ALUNO") return [];
+
+  return dedupePositiveInts([inteiroPositivoOuNull(contaInterna?.pessoa_titular_id)]);
+}
+
+function resolverDetalheItemContaInterna(params: {
+  lancamento: LancamentoRow;
+  item: JsonObject | null;
+  index: number;
+  linksPorLancamento: Map<number, number[]>;
+  matriculasMap: Map<number, MatriculaRow>;
+  turmaAlunoMap: Map<number, TurmaAlunoRow>;
+  pessoasMap: Map<number, PessoaRow>;
+  contasInternasMap: Map<number, ContaInternaRow>;
+}): ItemDetalheContaInterna {
+  const { item, lancamento } = params;
+  const composicao = asJsonObject(lancamento.composicao_json);
+  const possuiItensNaComposicao = asJsonObjectArray(composicao?.itens).length > 0;
+  const origemSistema = textoOuNull(lancamento.origem_sistema)?.toUpperCase() ?? "";
+  const matriculaIds = new Set<number>([
+    ...dedupePositiveInts([lancamento.matricula_id]),
+    ...(origemSistema.startsWith("MATRICULA") ? dedupePositiveInts([lancamento.origem_id]) : []),
+    ...extrairMatriculaIdsDeReferencia(lancamento.referencia_item),
+    ...(!possuiItensNaComposicao || !item ? extrairMatriculaIdsDeRegistro(composicao) : []),
+    ...extrairMatriculaIdsDeRegistro(item),
+  ]);
+
+  const alunoIds = new Set<number>([
+    ...dedupePositiveInts([lancamento.aluno_id]),
+    ...extrairAlunoIdsDeReferencia(lancamento.referencia_item),
+    ...(!possuiItensNaComposicao || !item ? extrairAlunoIdsDeRegistro(composicao) : []),
+    ...extrairAlunoIdsDeRegistro(item),
+  ]);
+
+  for (const matriculaId of matriculaIds) {
+    const matricula = params.matriculasMap.get(matriculaId);
+    addPositiveInt(alunoIds, matricula?.pessoa_id);
+    addPositiveInt(alunoIds, params.turmaAlunoMap.get(matriculaId)?.aluno_pessoa_id);
+  }
+
+  if (alunoIds.size === 0) {
+    const contaInterna = params.contasInternasMap.get(lancamento.conta_conexao_id);
+    for (const alunoId of resolverAlunoIdsPorContaInterna(contaInterna)) {
+      alunoIds.add(alunoId);
+    }
+  }
+
+  const alunoIdsOrdenados = Array.from(alunoIds).sort((a, b) => a - b);
+  const matriculaIdsOrdenados = Array.from(matriculaIds).sort((a, b) => a - b);
+  const faturaInternaId = inteiroPositivoOuNull(params.linksPorLancamento.get(lancamento.id)?.[0]) ?? null;
+
+  return {
+    lancamentoId: lancamento.id,
+    referenciaItem: textoOuNull(lancamento.referencia_item),
+    descricao: resolverDescricaoItem(lancamento, item, params.index),
+    valorCentavos: resolverValorItem(item, Math.max(numeroSeguro(lancamento.valor_centavos), 0)),
+    alunoIds: alunoIdsOrdenados,
+    alunoNomes: nomesDosAlunos(alunoIdsOrdenados, params.pessoasMap),
+    matriculaIds: matriculaIdsOrdenados,
+    contaInternaId: inteiroPositivoOuNull(lancamento.conta_conexao_id),
+    faturaInternaId,
+    tipoItem: resolverTipoItem(lancamento, item) ?? (matriculaIdsOrdenados.length > 0 ? "Matricula" : "Lancamento da conta interna"),
+  };
+}
+
 function montarItensContaInterna(params: {
   lancamentos: LancamentoRow[];
+  linksPorLancamento: Map<number, number[]>;
   matriculasMap: Map<number, MatriculaRow>;
+  turmaAlunoMap: Map<number, TurmaAlunoRow>;
   pessoasMap: Map<number, PessoaRow>;
+  contasInternasMap: Map<number, ContaInternaRow>;
   valorFallbackCentavos: number;
 }): ItemDetalheContaInterna[] {
   const itensConsolidados: ItemDetalheContaInterna[] = [];
@@ -396,39 +549,38 @@ function montarItensContaInterna(params: {
     const composicao = asJsonObject(lancamento.composicao_json);
     const itensJson = asJsonObjectArray(composicao?.itens);
 
-    const alunoIdsBase = new Set<number>([
-      ...dedupePositiveInts([
-        lancamento.aluno_id,
-        lancamento.matricula_id ? params.matriculasMap.get(lancamento.matricula_id)?.pessoa_id : null,
-      ]),
-      ...extrairAlunoIdsDeRegistro(composicao),
-    ]);
-
     if (itensJson.length > 0) {
       itensJson.forEach((item, index) => {
-        const alunoIds = new Set<number>([...alunoIdsBase, ...extrairAlunoIdsDeRegistro(item)]);
-
         itensConsolidados.push({
-          lancamentoId: lancamento.id,
-          referenciaItem: textoOuNull(lancamento.referencia_item),
-          descricao: resolverDescricaoItem(lancamento, item, index),
+          ...resolverDetalheItemContaInterna({
+            lancamento,
+            item,
+            index,
+            linksPorLancamento: params.linksPorLancamento,
+            matriculasMap: params.matriculasMap,
+            turmaAlunoMap: params.turmaAlunoMap,
+            pessoasMap: params.pessoasMap,
+            contasInternasMap: params.contasInternasMap,
+          }),
           valorCentavos: resolverValorItem(item, itensJson.length === 1 ? lancamento.valor_centavos : 0),
-          alunoIds: Array.from(alunoIds),
-          alunoNomes: nomesDosAlunos(Array.from(alunoIds), params.pessoasMap),
-          tipoItem: resolverTipoItem(lancamento, item),
         });
       });
       continue;
     }
 
     itensConsolidados.push({
-      lancamentoId: lancamento.id,
-      referenciaItem: textoOuNull(lancamento.referencia_item),
+      ...resolverDetalheItemContaInterna({
+        lancamento,
+        item: null,
+        index: 0,
+        linksPorLancamento: params.linksPorLancamento,
+        matriculasMap: params.matriculasMap,
+        turmaAlunoMap: params.turmaAlunoMap,
+        pessoasMap: params.pessoasMap,
+        contasInternasMap: params.contasInternasMap,
+      }),
       descricao: textoOuNull(lancamento.descricao) ?? "Lancamento da conta interna",
       valorCentavos: Math.max(numeroSeguro(lancamento.valor_centavos), 0),
-      alunoIds: Array.from(alunoIdsBase),
-      alunoNomes: nomesDosAlunos(Array.from(alunoIdsBase), params.pessoasMap),
-      tipoItem: resolverTipoItem(lancamento, null),
     });
   }
 
@@ -444,6 +596,9 @@ function montarItensContaInterna(params: {
       valorCentavos: Math.max(params.valorFallbackCentavos, 0),
       alunoIds: [],
       alunoNomes: [],
+      matriculaIds: [],
+      contaInternaId: null,
+      faturaInternaId: null,
       tipoItem: "Lancamento da conta interna",
     },
   ];
@@ -470,6 +625,7 @@ function matchesBusca(linha: LinhaCarteiraContaInterna, busca: string | undefine
       item.descricao ?? "",
       item.referenciaItem ?? "",
       item.tipoItem ?? "",
+      ...item.matriculaIds.map((matriculaId) => String(matriculaId)),
       ...item.alunoNomes,
     ]),
   ]
@@ -589,7 +745,7 @@ async function carregarLancamentos(
     const { data, error } = await supabase
       .from("credito_conexao_lancamentos")
       .select(
-        "id,aluno_id,centro_custo_id,cobranca_id,competencia,composicao_json,conta_conexao_id,descricao,matricula_id,origem_sistema,referencia_item,valor_centavos",
+        "id,aluno_id,centro_custo_id,cobranca_id,competencia,composicao_json,conta_conexao_id,descricao,matricula_id,origem_id,origem_sistema,referencia_item,valor_centavos",
       )
       .in("cobranca_id", chunk)
       .order("id", { ascending: true });
@@ -712,6 +868,36 @@ async function carregarMatriculasMap(
   }
 
   return new Map(rows.map((row) => [row.id, row]));
+}
+
+async function carregarTurmaAlunoMap(
+  supabase: SupabaseDbClient,
+  matriculaIds: number[],
+): Promise<Map<number, TurmaAlunoRow>> {
+  const rows: TurmaAlunoRow[] = [];
+
+  for (const chunk of chunkNumbers(matriculaIds)) {
+    const { data, error } = await supabase
+      .from("turma_aluno")
+      .select("matricula_id,aluno_pessoa_id,turma_id")
+      .in("matricula_id", chunk)
+      .order("turma_aluno_id", { ascending: false });
+
+    if (error) {
+      throw new Error(`erro_buscar_turma_aluno_canonicos:${error.message}`);
+    }
+
+    rows.push(...((data ?? []) as TurmaAlunoRow[]));
+  }
+
+  const mapa = new Map<number, TurmaAlunoRow>();
+  for (const row of rows) {
+    const matriculaId = inteiroPositivoOuNull(row.matricula_id);
+    if (!matriculaId || mapa.has(matriculaId)) continue;
+    mapa.set(matriculaId, row);
+  }
+
+  return mapa;
 }
 
 async function carregarPessoasMap(
@@ -902,13 +1088,11 @@ export async function listarCarteiraOperacionalCanonica(
   );
   const matriculaIds = Array.from(
     new Set(
-      lancamentos
-        .map((item) => inteiroPositivoOuNull(item.matricula_id))
-        .filter((item): item is number => typeof item === "number"),
+      lancamentos.flatMap((item) => coletarMatriculaIdsDeLancamentoBruto(item)),
     ),
   );
 
-  const [centrosCustoMap, contasInternasMap, matriculasMap] = await Promise.all([
+  const [centrosCustoMap, contasInternasMap, matriculasMap, turmaAlunoMap] = await Promise.all([
     centroCustoIds.length > 0
       ? carregarCentrosCustoMap(supabase, centroCustoIds)
       : Promise.resolve(new Map<number, CentroCustoRow>()),
@@ -918,6 +1102,9 @@ export async function listarCarteiraOperacionalCanonica(
     matriculaIds.length > 0
       ? carregarMatriculasMap(supabase, matriculaIds)
       : Promise.resolve(new Map<number, MatriculaRow>()),
+    matriculaIds.length > 0
+      ? carregarTurmaAlunoMap(supabase, matriculaIds)
+      : Promise.resolve(new Map<number, TurmaAlunoRow>()),
   ]);
 
   const pessoaIds = new Set<number>();
@@ -931,6 +1118,9 @@ export async function listarCarteiraOperacionalCanonica(
   for (const matricula of matriculasMap.values()) {
     addPositiveInt(pessoaIds, matricula.pessoa_id);
     addPositiveInt(pessoaIds, matricula.responsavel_financeiro_id);
+  }
+  for (const turmaAluno of turmaAlunoMap.values()) {
+    addPositiveInt(pessoaIds, turmaAluno.aluno_pessoa_id);
   }
   for (const lancamento of lancamentos) {
     for (const pessoaId of coletarPessoaIdsDeLancamento(lancamento)) {
@@ -987,10 +1177,20 @@ export async function listarCarteiraOperacionalCanonica(
         (pessoaId ? `Pessoa #${pessoaId}` : "Pessoa nao identificada");
       const itens = montarItensContaInterna({
         lancamentos: lancamentosRelacionados,
+        linksPorLancamento,
         matriculasMap,
+        turmaAlunoMap,
         pessoasMap,
+        contasInternasMap,
         valorFallbackCentavos: valorCentavos,
       });
+      const totalAlunosRelacionados = new Set(itens.flatMap((item) => item.alunoIds)).size;
+      const chaveConsolidacao = [
+        pessoaId ?? "SEM_PESSOA",
+        competenciaAnoMes ?? "SEM_COMPETENCIA",
+        contaInternaId ?? "SEM_CONTA_INTERNA",
+        faturaPrincipal.faturaContaInternaId ?? "SEM_FATURA_INTERNA",
+      ].join(":");
 
       return {
         cobrancaId: cobranca.id,
@@ -1016,12 +1216,19 @@ export async function listarCarteiraOperacionalCanonica(
         contaInternaDescricao: descreverContaInterna(contaInterna),
         contaInternaLabel: contaInternaLabel(contaInternaId),
         faturaContaInternaId: faturaPrincipal.faturaContaInternaId,
+        faturaInternaId: faturaPrincipal.faturaContaInternaId,
         faturaContaInternaStatus: faturaPrincipal.status,
         cobrancaFaturaId: faturaPrincipal.cobrancaFaturaId,
         neofinInvoiceId: faturaPrincipal.neofinInvoiceId,
         houveGeracaoNeoFin: Boolean(faturaPrincipal.neofinInvoiceId),
         possuiFaturaInterna: Boolean(faturaPrincipal.faturaContaInternaId),
         itens,
+        totalItens: itens.length,
+        totalAlunosRelacionados,
+        possuiMultiplosItens: itens.length > 1,
+        possuiMultiplosAlunos: totalAlunosRelacionados > 1,
+        chaveConsolidacao,
+        totalTitulosMesmaConsolidacao: 1,
         cobrancaUrl: `/admin/governanca/cobrancas/${cobranca.id}`,
         faturaUrl: faturaPrincipal.faturaContaInternaId
           ? `/admin/financeiro/credito-conexao/faturas/${faturaPrincipal.faturaContaInternaId}`
@@ -1039,7 +1246,20 @@ export async function listarCarteiraOperacionalCanonica(
       return linha.contextoPrincipal === filtros.contexto;
     });
 
-  return linhas.sort((a, b) => {
+  const totalPorChaveConsolidacao = new Map<string, number>();
+  for (const linha of linhas) {
+    totalPorChaveConsolidacao.set(
+      linha.chaveConsolidacao,
+      (totalPorChaveConsolidacao.get(linha.chaveConsolidacao) ?? 0) + 1,
+    );
+  }
+
+  return linhas
+    .map((linha) => ({
+      ...linha,
+      totalTitulosMesmaConsolidacao: totalPorChaveConsolidacao.get(linha.chaveConsolidacao) ?? 1,
+    }))
+    .sort((a, b) => {
     const competenciaA = a.competenciaAnoMes ?? "";
     const competenciaB = b.competenciaAnoMes ?? "";
     const byCompetencia = competenciaB.localeCompare(competenciaA);
@@ -1050,8 +1270,8 @@ export async function listarCarteiraOperacionalCanonica(
     const byVencimento = vencimentoA.localeCompare(vencimentoB);
     if (byVencimento !== 0) return byVencimento;
 
-    return b.cobrancaId - a.cobrancaId;
-  });
+      return b.cobrancaId - a.cobrancaId;
+    });
 }
 
 export function resumirCarteiraOperacional(

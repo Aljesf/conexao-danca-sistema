@@ -97,6 +97,16 @@ function coletarAlunoNomes(linha: LinhaCarteiraCanonica): string[] {
   return uniqueStrings(linha.itens.flatMap((item) => item.alunoNomes));
 }
 
+function coletarMatriculaIds(linha: LinhaCarteiraCanonica): number[] {
+  return Array.from(new Set(linha.itens.flatMap((item) => item.matriculaIds)));
+}
+
+function matriculaResumoId(linha: LinhaCarteiraCanonica): number | null {
+  const matriculaIds = coletarMatriculaIds(linha);
+  if (matriculaIds.length === 0) return null;
+  return matriculaIds[0] ?? null;
+}
+
 function alunoResumo(linha: LinhaCarteiraCanonica): string | null {
   const alunos = coletarAlunoNomes(linha);
   if (alunos.length === 0) return null;
@@ -138,7 +148,7 @@ function buildBadgeCanonico(linha: LinhaCarteiraCanonica): BadgeCanonico {
 function buildMigracaoObservacao(linha: LinhaCarteiraCanonica): string {
   return [
     "Leitura canonica baseada na cobranca oficial da conta interna.",
-    `Composicao resolvida por ${linha.itens.length} item(ns) e ${coletarAlunoNomes(linha).length || 0} aluno(s) relacionado(s).`,
+    `Composicao resolvida por ${linha.totalItens} item(ns) e ${linha.totalAlunosRelacionados} aluno(s) relacionado(s).`,
   ].join(" ");
 }
 
@@ -172,6 +182,9 @@ function buildComposicaoDetalhada(linha: LinhaCarteiraCanonica): ComposicaoFatur
       composicao_json: {
         aluno_nomes: item.alunoNomes,
         aluno_ids: item.alunoIds,
+        matricula_ids: item.matriculaIds,
+        conta_interna_id: item.contaInternaId,
+        fatura_interna_id: item.faturaInternaId,
         tipo_item: item.tipoItem,
       },
     })),
@@ -222,7 +235,7 @@ function mapLinhaToCobrancaListaItem(linha: LinhaCarteiraCanonica): CobrancaList
     origem_item_id: primeiroItem?.lancamentoId ?? null,
     conta_interna_id: linha.contaInternaId,
     alunoNome,
-    matriculaId: null,
+    matriculaId: matriculaResumoId(linha),
     migracao_conta_interna_status: "OK",
     migracao_conta_interna_observacao: buildMigracaoObservacao(linha),
     origem_secundaria: buildOrigemSecundaria(linha),
@@ -611,7 +624,7 @@ function buildDetalhe(linha: LinhaCarteiraCanonica | undefined): DetalheCobranca
       origem_item_id: primeiroItem?.lancamentoId ?? null,
       conta_interna_id: linha.contaInternaId,
       alunoNome,
-      matriculaId: null,
+      matriculaId: matriculaResumoId(linha),
       migracao_conta_interna_status: "OK",
       migracao_conta_interna_observacao: buildMigracaoObservacao(linha),
       origem_secundaria: buildOrigemSecundaria(linha),
