@@ -72,6 +72,8 @@ type CobrancaResumoRow = {
   link_pagamento: string | null;
   linha_digitavel: string | null;
   neofin_payload: Record<string, unknown> | null;
+  parcela_numero?: number | null;
+  total_parcelas?: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -128,7 +130,7 @@ async function buscarCobrancaPorId(
   const { data } = await supabase
     .from("cobrancas")
     .select(
-      "id,pessoa_id,descricao,valor_centavos,vencimento,status,metodo_pagamento,origem_tipo,origem_subtipo,origem_id,neofin_charge_id,link_pagamento,linha_digitavel,neofin_payload,created_at,updated_at",
+      "id,pessoa_id,descricao,valor_centavos,vencimento,status,metodo_pagamento,origem_tipo,origem_subtipo,origem_id,neofin_charge_id,link_pagamento,linha_digitavel,neofin_payload,parcela_numero,total_parcelas,created_at,updated_at",
     )
     .eq("id", cobrancaId)
     .maybeSingle();
@@ -143,7 +145,7 @@ async function buscarCobrancaCanonica(
   const { data } = await supabase
     .from("cobrancas")
     .select(
-      "id,pessoa_id,descricao,valor_centavos,vencimento,status,metodo_pagamento,origem_tipo,origem_subtipo,origem_id,neofin_charge_id,link_pagamento,linha_digitavel,neofin_payload,created_at,updated_at",
+      "id,pessoa_id,descricao,valor_centavos,vencimento,status,metodo_pagamento,origem_tipo,origem_subtipo,origem_id,neofin_charge_id,link_pagamento,linha_digitavel,neofin_payload,parcela_numero,total_parcelas,created_at,updated_at",
     )
     .eq("origem_id", faturaId)
     .in("origem_tipo", ["FATURA_CREDITO_CONEXAO", "CREDITO_CONEXAO_FATURA"])
@@ -177,13 +179,21 @@ async function montarPagamentoExibivel(
       invoice_id: null,
       integration_identifier: buildIntegrationIdentifier(fatura.id),
       link_pagamento: null,
+      link_pagamento_validado: false,
+      link_pagamento_origem: "indisponivel",
+      correspondencia_confirmada: false,
+      tipo_correspondencia: "none",
+      payment_number: null,
       linha_digitavel: null,
       codigo_barras: null,
       pix_copia_cola: null,
       qr_code_url: null,
       qr_code_bruto: null,
       origem_dos_dados: "legado",
+      link_historico_informativo: false,
       charge_id_textual_legado: false,
+      mensagem_operacional: "Nao existe cobranca NeoFin resolvida para esta fatura.",
+      observacao_validacao: "Sem cobranca vinculada para validar URL publica.",
     };
   }
 

@@ -26,6 +26,8 @@ type CobrancaDetalheRow = {
   link_pagamento: string | null;
   linha_digitavel: string | null;
   neofin_payload: Record<string, unknown> | null;
+  parcela_numero: number | null;
+  total_parcelas: number | null;
   created_at: string | null;
   updated_at: string | null;
   pessoa: {
@@ -116,6 +118,8 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
       link_pagamento,
       linha_digitavel,
       neofin_payload,
+      parcela_numero,
+      total_parcelas,
       created_at,
       updated_at,
       pessoa:pessoas(id,nome,cpf,email,telefone)
@@ -237,6 +241,8 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
       link_pagamento: cobranca.link_pagamento,
       linha_digitavel: cobranca.linha_digitavel,
       neofin_payload: cobranca.neofin_payload,
+      parcela_numero: cobranca.parcela_numero,
+      total_parcelas: cobranca.total_parcelas,
     },
   });
 

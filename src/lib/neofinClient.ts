@@ -1,7 +1,9 @@
 import {
   extractNeofinBillingDetails,
   findMatchingNeofinBillingCandidate,
+  firstNonEmptyString,
   looksLikeNeofinBillingNumber,
+  normalizeNeofinIdentifier,
 } from "@/lib/neofinBilling";
 
 const NEOFIN_BASE_URL = process.env.NEOFIN_BASE_URL ?? "https://api.sandbox.neofin.services";
@@ -158,12 +160,14 @@ export async function findRecentNeofinBillingByIntegrationIdentifier(
     });
 
     if (match) {
-      const details = extractNeofinBillingDetails(match, {
-        identifier: normalized,
-        integrationIdentifier: normalized,
-      });
-      const exactIntegration = details.integrationIdentifier === normalized;
-      const exactId = details.billingId === normalized;
+      const rawIntegration =
+        normalizeNeofinIdentifier(match.integration_identifier)
+        ?? normalizeNeofinIdentifier(match.integrationIdentifier);
+      const rawId = normalizeNeofinIdentifier(
+        firstNonEmptyString(match.id, match.billing_id, match.billing_number, match.charge_id),
+      );
+      const exactIntegration = rawIntegration === normalized;
+      const exactId = rawId === normalized;
 
       if (exactIntegration || exactId) {
         return {

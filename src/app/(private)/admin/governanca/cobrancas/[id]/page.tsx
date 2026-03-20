@@ -50,6 +50,11 @@ type CobrancaDetalhe = {
     neofin_charge_id: string | null;
     integration_identifier: string | null;
     link_pagamento: string | null;
+    link_pagamento_validado: boolean;
+    link_pagamento_origem: "invoice_oficial_neofin" | "billing_oficial_neofin" | "parcela_oficial_neofin" | "billing_reconstruido_validado" | "link_local_validado" | "indisponivel";
+    correspondencia_confirmada: boolean;
+    tipo_correspondencia: "invoice" | "billing" | "payment" | "installment" | "none";
+    payment_number: string | null;
     linha_digitavel: string | null;
     codigo_barras: string | null;
     pix_copia_cola: string | null;
@@ -58,7 +63,10 @@ type CobrancaDetalhe = {
     origem_dos_dados: "remoto" | "local" | "legado";
     invoice_valida: boolean;
     segunda_via_disponivel: boolean;
+    link_historico_informativo: boolean;
     charge_id_textual_legado: boolean;
+    mensagem_operacional: string | null;
+    observacao_validacao: string | null;
   } | null;
   created_at: string | null;
   updated_at: string | null;
@@ -125,13 +133,27 @@ function previewPayload(payload: Record<string, unknown> | null): string {
   return raw.length <= 2200 ? JSON.stringify(payload, null, 2) : `${raw.slice(0, 2200)}...`;
 }
 
-function neofinUrl(item: CobrancaDetalhe | null): string | null {
-  if (!item) return null;
-  if (item.pagamento_exibivel?.link_pagamento) return item.pagamento_exibivel.link_pagamento;
-  if (item.link_pagamento) return item.link_pagamento;
-  const chargeId = item.pagamento_exibivel?.neofin_charge_id ?? item.neofin_charge_id;
-  if (!chargeId) return null;
-  return `https://api.sandbox.neofin.services/billing/${encodeURIComponent(chargeId)}`;
+function paymentLinkOriginLabel(value: CobrancaDetalhe["pagamento_exibivel"] extends infer P ? P extends { link_pagamento_origem: infer O } ? O : never : never): string {
+  return value === "invoice_oficial_neofin"
+    ? "Oficial da invoice"
+    : value === "billing_oficial_neofin"
+      ? "Oficial do billing"
+      : value === "parcela_oficial_neofin"
+        ? "Oficial da parcela"
+        : value === "billing_reconstruido_validado"
+          ? "Billing reconstruido validado"
+          : value === "link_local_validado"
+            ? "Fallback local validado"
+            : "Indisponivel";
+}
+
+function paymentLinkActionLabel(pagamento: CobrancaDetalhe["pagamento_exibivel"]): string {
+  if (!pagamento?.link_pagamento_validado) return "Abrir no NeoFin indisponivel";
+  if (pagamento.link_historico_informativo) return "Abrir historico no NeoFin";
+  if (pagamento.tipo_correspondencia === "payment" || pagamento.tipo_correspondencia === "installment") {
+    return "Abrir parcela no NeoFin";
+  }
+  return "Abrir no NeoFin";
 }
 
 function statusClasses(status: string | null | undefined): string {
@@ -250,7 +272,6 @@ export default function GovernancaCobrancaDetalhePage() {
   }
 
   const titulo = useMemo(() => (item?.id ? `Cobranca #${item.id}` : `Cobranca #${Number.isFinite(id) ? id : "-"}`), [id, item]);
-  const linkNeofin = neofinUrl(item);
   const pagamentoExibivel = item?.pagamento_exibivel ?? null;
 
   return (
@@ -349,13 +370,18 @@ export default function GovernancaCobrancaDetalhePage() {
               <Field label="Invoice" value={pagamentoExibivel?.invoice_id ?? "-"} />
               <Field label="Status remoto" value={pagamentoExibivel?.status_sincronizado ?? "-"} />
               <Field label="Tipo remoto" value={pagamentoExibivel?.tipo_remoto ?? "-"} />
-              <Field label="Link de pagamento" value={pagamentoExibivel?.link_pagamento ?? item.link_pagamento ?? "-"} />
+              <Field label="Origem do link" value={paymentLinkOriginLabel(pagamentoExibivel?.link_pagamento_origem)} />
+              <Field label="Correspondencia confirmada" value={pagamentoExibivel?.correspondencia_confirmada ? "Sim" : "Nao"} />
+              <Field label="Tipo de correspondencia" value={pagamentoExibivel?.tipo_correspondencia ?? "-"} />
+              <Field label="Payment number" value={pagamentoExibivel?.payment_number ?? "-"} />
+              <Field label="Link de pagamento validado" value={pagamentoExibivel?.link_pagamento ?? "-"} />
               <Field label="Linha digitavel" value={pagamentoExibivel?.linha_digitavel ?? item.linha_digitavel ?? "-"} />
               <Field label="Codigo de barras" value={pagamentoExibivel?.codigo_barras ?? "-"} />
               <Field label="Pix copia e cola" value={pagamentoExibivel?.pix_copia_cola ?? "-"} />
               <Field label="QR Pix" value={pagamentoExibivel?.qr_code_url ?? pagamentoExibivel?.qr_code_bruto ?? "-"} />
+              {pagamentoExibivel?.mensagem_operacional ? <div className={`rounded-2xl border px-4 py-3 text-sm ${pagamentoExibivel.correspondencia_confirmada ? pagamentoExibivel.link_historico_informativo ? "border-amber-200 bg-amber-50 text-amber-800" : "border-sky-200 bg-sky-50 text-sky-800" : "border-rose-200 bg-rose-50 text-rose-700"}`}>{pagamentoExibivel.mensagem_operacional}</div> : null}
               <div className="flex flex-wrap gap-2">
-                {linkNeofin ? <a className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href={linkNeofin} target="_blank" rel="noreferrer">Abrir no NeoFin</a> : null}
+                {pagamentoExibivel?.link_pagamento_validado && pagamentoExibivel.link_pagamento ? <a className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href={pagamentoExibivel.link_pagamento} target="_blank" rel="noreferrer">{paymentLinkActionLabel(pagamentoExibivel)}</a> : <Button type="button" variant="secondary" disabled>Abrir no NeoFin indisponivel</Button>}
                 {item.neofin_charge_id ? <Button type="button" variant="secondary" disabled={loadingAction !== null} onClick={() => void executarAcao("sincronizar", `/api/governanca/cobrancas/${item.id}/sincronizar-neofin`, null).then((response) => response && setFeedback({ tipo: "sucesso", mensagem: `Sincronizacao NeoFin concluida para a cobranca #${item.id}.` }))}>{loadingAction === "sincronizar" ? "Sincronizando..." : "Sincronizar com NeoFin"}</Button> : null}
               </div>
               <Field label="Payload resumo" value={<pre className="max-h-80 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700">{previewPayload(item.neofin_payload)}</pre>} />

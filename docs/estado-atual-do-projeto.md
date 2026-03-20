@@ -24,6 +24,7 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
 - `src/lib/financeiro/cobranca/resolverPagamentoExibivel.ts`
 - `src/lib/neofinBilling.ts`
 - `src/lib/neofinClient.ts`
+- `src/lib/neofinResolverLinkPublico.ts`
 - `src/lib/financeiro/cobranca/providers/neofinProvider.ts`
 - `src/app/api/credito-conexao/faturas/[id]/route.ts`
 - `src/app/api/governanca/cobrancas/[id]/route.ts`
@@ -47,17 +48,27 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
 ## O que foi consolidado neste ciclo
 - a fatura da conta interna virou tela operacional final, com hierarquia visual clara, cabecalho util, card de pagamento, card da cobranca oficial da fatura, lancamentos legiveis e auditoria tecnica recolhivel
 - a leitura de pagamento da fatura passou a priorizar a cobranca canonica e os dados remotos da NeoFin, sem depender do `charge_id` textual legado para exibir boleto/Pix
+- a abertura publica do NeoFin foi endurecida para usar apenas URL com correspondencia confirmada entre cobranca local e entidade remota
+- o fallback perigoso que podia abrir `billing/{chargeId}` sem validacao foi removido da UI e da camada de resolucao
 - a resolucao de pagamento exibivel foi centralizada em `src/lib/financeiro/cobranca/resolverPagamentoExibivel.ts`, retornando:
   - `tipo_exibicao`
   - `invoice_id`
   - `neofin_charge_id`
   - `link_pagamento`
+  - `link_pagamento_validado`
+  - `link_pagamento_origem`
+  - `correspondencia_confirmada`
+  - `tipo_correspondencia`
+  - `payment_number`
   - `linha_digitavel`
   - `codigo_barras`
   - `pix_copia_cola`
   - `qr_code_url`
   - `status_sincronizado`
   - `origem_dos_dados`
+- a busca por `integration_identifier` na NeoFin deixou de aceitar candidatos recentes sem identificador realmente presente no payload remoto
+- a UI da fatura e da governanca financeira agora informa se o link e oficial da invoice, oficial da parcela, fallback validado ou indisponivel
+- cobrancas pagas com URL confirmada passaram a ser mostradas como historico informativo, e nao mais como segunda via ativa
 - a regra de `invoice_valida` foi endurecida para nao considerar somente um identificador textual legado como invoice aproveitavel
 - o detalhe da cobranca financeira passou a exibir invoice resolvida, origem dos dados e dados remotos/local/legado sem confundir a cobranca canonica com o legado
 - o fluxo de fechamento automatico mensal foi canonicamente concentrado em `processarFechamentoAutomaticoMensal.ts`
@@ -74,6 +85,7 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
 - homologacao visual autenticada da tela de fatura da conta interna e do detalhe da cobranca financeira
 - amarrar o servico de fechamento mensal a um gatilho operacional explicito de bootstrap/cron; nesta etapa foi criado o servico canonico e a rota administrativa, mas nao foi adicionado disparo oculto na UI
 - backfill historico dos casos antigos em que `credito_conexao_faturas.cobranca_id` ainda aponta para cobranca-item ou `neofin_invoice_id` permanece nulo
+- normalizar historicos em que a cobranca local ainda esta pendente, mas o billing remoto ja consta como `paid`, para reduzir ruido operacional nas telas
 - enriquecer os casos em que a NeoFin nao devolve linha digitavel/barcode/Pix, para confirmar em homologacao quais campos o provider realmente disponibiliza por billing
 - seguir com saneamento do backlog global de lint fora do escopo deste modulo
 
@@ -84,7 +96,7 @@ Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
 
 ## Versao do sistema
 Sistema Conexao Danca - Conta Interna do Aluno / Fatura / NeoFin
-Versao logica: v1.7 fechamento mensal canonico e tela operacional da fatura concluidos
+Versao logica: v1.8 links publicos NeoFin com correspondencia validada e bloqueio de fallback aleatorio
 
 ## Proximas acoes
 1. homologar em sessao autenticada a nova tela da fatura da conta interna com casos recentes de boleto e segunda via
@@ -92,3 +104,4 @@ Versao logica: v1.7 fechamento mensal canonico e tela operacional da fatura conc
 3. conectar `src/app/api/financeiro/credito-conexao/fechamento-mensal/processar/route.ts` a um gatilho operacional explicito de bootstrap ou agenda
 4. executar backfill dos historicos com `neofin_invoice_id` ausente e referencias legadas antigas
 5. monitorar em producao as novas faturas para confirmar preenchimento de link, linha digitavel e Pix quando a NeoFin retornar esses campos
+6. homologar visualmente os novos estados `oficial da invoice`, `oficial da parcela`, `historico informativo` e `indisponivel` na fatura e na governanca
