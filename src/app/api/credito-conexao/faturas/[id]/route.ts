@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
-import { extractNeofinBillingDetails, firstNonEmptyString, looksLikeNeofinBillingNumber } from "@/lib/neofinBilling";
-import { getNeofinBilling } from "@/lib/neofinClient";
+import { resolverPagamentoExibivel } from "@/lib/financeiro/cobranca/resolverPagamentoExibivel";
 
 type FaturaRow = {
   id: number;
@@ -62,6 +61,7 @@ type CobrancaResumoRow = {
   pessoa_id: number | null;
   descricao: string | null;
   valor_centavos: number | null;
+  competencia_ano_mes?: string | null;
   vencimento: string | null;
   status: string | null;
   metodo_pagamento: string | null;
@@ -76,17 +76,47 @@ type CobrancaResumoRow = {
   updated_at: string | null;
 };
 
-function isCanonicalOrigem(origemTipo: string | null | undefined): boolean {
-  const normalized = String(origemTipo ?? "").trim().toUpperCase();
-  return normalized === "FATURA_CREDITO_CONEXAO" || normalized === "CREDITO_CONEXAO_FATURA";
-}
-
 function coerceCobranca(value: unknown): CobrancaResumoRow | null {
   return value && typeof value === "object" ? (value as CobrancaResumoRow) : null;
 }
 
 function buildIntegrationIdentifier(faturaId: number): string {
   return `fatura-credito-conexao-${faturaId}`;
+}
+
+async function buscarRecebimentosResumo(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  cobrancaId: number | null,
+) {
+  if (!cobrancaId || !Number.isFinite(cobrancaId)) {
+    return {
+      quantidade: 0,
+      total_centavos: 0,
+      ultimo_pagamento: null,
+      ultimo_recebimento_id: null,
+    };
+  }
+
+  const { data } = await supabase
+    .from("recebimentos")
+    .select("id,valor_centavos,data_pagamento")
+    .eq("cobranca_id", cobrancaId)
+    .order("data_pagamento", { ascending: false, nullsFirst: false })
+    .order("id", { ascending: false });
+
+  const rows = (data ?? []) as Array<{
+    id?: number | null;
+    valor_centavos?: number | null;
+    data_pagamento?: string | null;
+  }>;
+
+  return {
+    quantidade: rows.length,
+    total_centavos: rows.reduce((acc, row) => acc + Number(row.valor_centavos ?? 0), 0),
+    ultimo_pagamento: typeof rows[0]?.data_pagamento === "string" ? rows[0].data_pagamento : null,
+    ultimo_recebimento_id:
+      typeof rows[0]?.id === "number" && Number.isFinite(rows[0].id) ? rows[0].id : null,
+  };
 }
 
 async function buscarCobrancaPorId(
@@ -140,7 +170,7 @@ async function montarPagamentoExibivel(
       usa_cobranca_canonica: false,
       invoice_valida: false,
       segunda_via_disponivel: false,
-      tipo_exibido: "Nao informado",
+      tipo_exibicao: "Nao informado",
       tipo_remoto: null,
       status_sincronizado: null,
       neofin_charge_id: null,
@@ -149,63 +179,27 @@ async function montarPagamentoExibivel(
       link_pagamento: null,
       linha_digitavel: null,
       codigo_barras: null,
-      qr_code_pix: null,
-      pix_copia_e_cola: null,
+      pix_copia_cola: null,
+      qr_code_url: null,
+      qr_code_bruto: null,
+      origem_dos_dados: "legado",
+      charge_id_textual_legado: false,
     };
   }
 
   const integrationIdentifier = buildIntegrationIdentifier(fatura.id);
-  const preferredLookupId =
-    (looksLikeNeofinBillingNumber(fatura.neofin_invoice_id) ? fatura.neofin_invoice_id : null)
-    ?? cobrancaEscolhida.neofin_charge_id
-    ?? integrationIdentifier;
-
-  const remote = await getNeofinBilling({ identifier: preferredLookupId });
-  const detalhes = extractNeofinBillingDetails(
-    remote.ok ? remote.body : cobrancaEscolhida.neofin_payload,
-    {
-      identifier: preferredLookupId,
-      integrationIdentifier,
-    },
-  );
-
-  const invoiceId =
-    firstNonEmptyString(
-      looksLikeNeofinBillingNumber(fatura.neofin_invoice_id) ? fatura.neofin_invoice_id : null,
-      looksLikeNeofinBillingNumber(detalhes.billingId) ? detalhes.billingId : null,
-    ) ?? null;
-
-  const tipoExibido =
-    isCanonicalOrigem(cobrancaEscolhida.origem_tipo) &&
-    (cobrancaEscolhida.neofin_charge_id || invoiceId) &&
-    (detalhes.displayType === "OUTROS_BANCOS" || detalhes.displayType === "NAO_INFORMADO")
-      ? "Boleto/Pix"
-      : detalhes.displayLabel;
+  const pagamento = await resolverPagamentoExibivel({
+    cobranca: cobrancaEscolhida,
+    neofinInvoiceId: fatura.neofin_invoice_id,
+    integrationIdentifier,
+  });
 
   return {
     cobranca_vinculada_id: cobrancaVinculada?.id ?? null,
     cobranca_canonica_id: cobrancaCanonica?.id ?? null,
     cobranca_exibida_id: cobrancaEscolhida.id,
     usa_cobranca_canonica: Boolean(cobrancaCanonica && cobrancaCanonica.id === cobrancaEscolhida.id),
-    invoice_valida: Boolean(invoiceId || cobrancaEscolhida.neofin_charge_id),
-    segunda_via_disponivel: Boolean(
-      detalhes.paymentLink ||
-      detalhes.digitableLine ||
-      detalhes.barcode ||
-      detalhes.pixQrCode ||
-      detalhes.pixCopyPaste,
-    ),
-    tipo_exibido: tipoExibido,
-    tipo_remoto: detalhes.remoteType,
-    status_sincronizado: detalhes.remoteStatus ?? cobrancaEscolhida.status ?? null,
-    neofin_charge_id: cobrancaEscolhida.neofin_charge_id ?? null,
-    invoice_id: invoiceId,
-    integration_identifier: detalhes.integrationIdentifier ?? integrationIdentifier,
-    link_pagamento: detalhes.paymentLink ?? cobrancaEscolhida.link_pagamento ?? null,
-    linha_digitavel: detalhes.digitableLine ?? cobrancaEscolhida.linha_digitavel ?? null,
-    codigo_barras: detalhes.barcode ?? null,
-    qr_code_pix: detalhes.pixQrCode ?? null,
-    pix_copia_e_cola: detalhes.pixCopyPaste ?? null,
+    ...pagamento,
   };
 }
 
@@ -320,6 +314,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const cobrancaVinculada = await buscarCobrancaPorId(supabase, Number(faturaRow.cobranca_id ?? 0) || null);
   const cobrancaCanonica = await buscarCobrancaCanonica(supabase, faturaId);
+  const [recebimentosCobrancaCanonica, recebimentosCobrancaVinculada] = await Promise.all([
+    buscarRecebimentosResumo(supabase, cobrancaCanonica?.id ?? null),
+    buscarRecebimentosResumo(supabase, cobrancaVinculada?.id ?? null),
+  ]);
   const pagamentoExibivel = await montarPagamentoExibivel(faturaRow, cobrancaVinculada, cobrancaCanonica);
 
   return NextResponse.json({
@@ -330,8 +328,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       pessoa,
       pivot: (pivots ?? []) as PivotRow[],
       lancamentos,
-      cobranca_vinculada: cobrancaVinculada,
-      cobranca_canonica: cobrancaCanonica,
+      cobranca_vinculada: cobrancaVinculada
+        ? {
+            ...cobrancaVinculada,
+            recebimentos_resumo: recebimentosCobrancaVinculada,
+          }
+        : null,
+      cobranca_canonica: cobrancaCanonica
+        ? {
+            ...cobrancaCanonica,
+            recebimentos_resumo: recebimentosCobrancaCanonica,
+          }
+        : null,
       pagamento_exibivel: pagamentoExibivel,
     },
   });

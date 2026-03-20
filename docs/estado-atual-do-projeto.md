@@ -1,99 +1,94 @@
 ## Modulo atual
-Dashboard Financeiro - Conta Interna Aluno, centro de custo e revisao da integracao Neofin x Cartao Conexao
+Conta interna do aluno - fatura, pagamento NeoFin e fechamento mensal canonico
 
 ## SQL concluido
-- auditoria operacional do bloco `Resultado por centro de custo` sem criar migration nova
-- `supabase/migrations/20260306_01_financeiro_cobrancas_dashboard_refactor.sql`: mantida como base da view operacional do dashboard mensal da Conta Interna Aluno
-- `supabase/migrations/20251210_credito_conexao.sql`: confirmados `credito_conexao_lancamentos`, `credito_conexao_faturas` e `credito_conexao_fatura_lancamentos` como trilha de heranca de centro para receitas da Conta Interna Aluno
-- `supabase/migrations/20251218_governanca_boletos_neofin.sql`: mantida a governanca de cobranca NeoFin via `cobrancas` e `recebimentos`
-- `supabase/sql/diagnosticos/20260319_auditoria_centro_custo_dashboard.sql`: criado diagnostico para comparar recebimentos/pagamentos confirmados vs `movimento_financeiro` e rastrear perdas de centro em cobrancas, faturas e lancamentos
-- `supabase/sql/diagnosticos/20260319_diagnostico_neofin_cartao_conexao.sql`: criado diagnostico para distinguir cobranca canonica da fatura, cobranca-item, ausencia de `neofin_invoice_id`, referencias textuais da Neofin e possiveis duplicidades externas por competencia
 - nenhuma migration nova foi criada neste ciclo
+- a estrutura existente foi validada como suficiente para o fechamento mensal configuravel:
+  - `credito_conexao_contas.dia_fechamento`
+  - `credito_conexao_contas.dia_vencimento`
+  - `credito_conexao_contas.dia_vencimento_preferido`
+  - `credito_conexao_configuracoes.dia_fechamento`
+  - `credito_conexao_configuracoes.dia_vencimento`
+  - `financeiro_config.dia_fechamento_faturas`
+  - `financeiro_config_cobranca.provider_ativo`
+- permanecem ativos os diagnosticos ja criados:
+  - `supabase/sql/diagnosticos/20260319_auditoria_centro_custo_dashboard.sql`
+  - `supabase/sql/diagnosticos/20260319_diagnostico_neofin_cartao_conexao.sql`
 
 ## APIs concluidas
-- `src/app/api/financeiro/dashboard/mensal/route.ts`
-- `src/app/api/financeiro/dashboard-inteligente/centros-custo/route.ts`
+- `src/lib/credito-conexao/processarFechamentoAutomaticoMensal.ts`
+- `src/app/api/financeiro/credito-conexao/fechamento-mensal/processar/route.ts`
+- `src/app/api/financeiro/credito-conexao/faturas/fechamento-automatico/route.ts`
+- `src/lib/credito-conexao/processarCobrancaCanonicaFatura.ts`
+- `src/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura.ts`
+- `src/lib/financeiro/cobranca/resolverPagamentoExibivel.ts`
+- `src/lib/neofinBilling.ts`
+- `src/lib/neofinClient.ts`
+- `src/lib/financeiro/cobranca/providers/neofinProvider.ts`
+- `src/app/api/credito-conexao/faturas/[id]/route.ts`
+- `src/app/api/governanca/cobrancas/[id]/route.ts`
+- `src/app/api/governanca/cobrancas/[id]/sincronizar-neofin/route.ts`
 - `src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts`
 - `src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts`
-- `src/app/api/credito-conexao/faturas/[id]/route.ts`
-- `src/app/api/governanca/cobrancas/[id]/sincronizar-neofin/route.ts`
-- `src/app/api/integracoes/neofin/cobrancas/gerar-boleto/route.ts`
-- `src/app/api/integracoes/neofin/cobrancas/sync-boleto/route.ts`
-- `src/lib/financeiro/dashboardMensalContaInterna.ts`
-- `src/lib/financeiro/dashboardCentroCusto.ts`
-- `src/lib/financeiro/dashboardInteligente.ts`
-- `src/lib/financeiro/centrosCusto.ts`
-- `src/lib/financeiro/processarClassificacaoFinanceira.ts`
-- `src/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura.ts`
-- `src/lib/credito-conexao/processarCobrancaCanonicaFatura.ts`
-- `src/lib/financeiro/cobranca/providers/neofinProvider.ts`
-- `src/lib/neofinClient.ts`
-- `src/lib/neofinBilling.ts`
 
 ## Paginas / componentes concluidos
-- `src/app/(private)/admin/financeiro/page.tsx`
 - `src/app/(private)/admin/financeiro/credito-conexao/faturas/[id]/page.tsx`
-- `src/components/financeiro/dashboard/FinanceiroMensalSection.tsx`
-- `src/components/financeiro/dashboard/FinanceiroMensalDetalheModal.tsx`
-- `src/components/financeiro/dashboard/FinanceiroCentroCustoDetalheModal.tsx`
-- `src/components/financeiro/dashboard/FinanceiroDashboardModalShell.tsx`
-- `src/lib/export/xlsx.ts`
-- `src/shadcn/ui.tsx`
+- `src/app/(private)/admin/governanca/cobrancas/[id]/page.tsx`
+- a etapa anterior do dashboard financeiro permanece consolidada com:
+  - drill-down dos cards e competencias
+  - exclusao de cancelados/expurgados da composicao principal
+  - competencias futuras por lancamentos ja gerados
+  - leitura rapida reposicionada
+  - cards de saude imediata
+  - exportacao Excel nos modais e no topo do header
+  - melhoria visual e operacional dos modais
+  - ajuste do bloco de centro de custo
 
 ## O que foi consolidado neste ciclo
-- drill-down completo dos cards do topo e das competencias recentes, com modais auditaveis por composicao
-- exclusao de cancelados, expurgados e equivalentes inativos da composicao principal do dashboard
-- competencias futuras agora aparecem com base em lancamentos ativos ja gerados pela matricula/cartao conexao
-- a leitura rapida do mes foi reposicionada para faixa horizontal, sem consumir a lateral da tabela principal
-- cards de saude imediata foram adicionados para NeoFin confirmado, baixa interna, hoje e ultimos 7 dias
-- a regra de recebimento NeoFin e baixa interna foi auditada e consolidada com classificacao operacional central
-- a regra do bloco `Resultado por centro de custo` deixou de depender apenas de `movimento_financeiro` para receitas
-- receitas agora usam recebimentos efetivamente confirmados no periodo, com heranca de centro por esta ordem:
-  - `recebimentos.centro_custo_id`
-  - `cobrancas.centro_custo_id`
-  - `credito_conexao_lancamentos.centro_custo_id` vinculados a cobranca
-  - `credito_conexao_fatura_lancamentos` + `credito_conexao_lancamentos` para cobrancas de fatura
-  - fallback operacional por origem quando a trilha de centro existe apenas na geracao da carteira
-- despesas agora usam pagamentos efetivamente confirmados em `contas_pagar_pagamentos`, com fallback para `contas_pagar.centro_custo_id`
-- `movimento_financeiro` continua como complemento:
-  - receitas standalone entram quando nao representam recebimentos/rateios ja refletidos na carteira confirmada
-  - despesas standalone entram quando nao representam pagamentos de `contas_pagar` ja confirmados
-- o snapshot inteligente passou a consumir a nova apuracao de centro de custo, mantendo coerencia entre card e drill-down
-- o dashboard ganhou drill-down por centro de custo com modal detalhado, filtros e exportacao em Excel
-- os modais de composicao da saude mensal agora exportam arquivo `.xlsx` real, respeitando filtros ativos
-- o botao `Exportar Excel` foi padronizado no header superior direito dos modais do dashboard financeiro, reutilizando a mesma acao e os mesmos filtros do conteudo exibido
-- os modais do dashboard financeiro agora abrem maiores, permitem resize manual e contam com acao de maximizar/restaurar para leitura de tabelas largas
-- o helper `src/lib/export/xlsx.ts` foi criado para padronizar titulo, contexto, resumo e colunas exportadas
-- os arquivos Excel do dashboard financeiro agora saem prontos para conferencia operacional, com moeda numerica formatada, datas legiveis, cabecalho superior organizado, autofilter, painel congelado e nome de arquivo padronizado
-- o mapeamento de centros em `processarClassificacaoFinanceira.ts` foi corrigido para os codigos reais `ESCOLA`, `CAFE`, `LOJA` e `FIN`, evitando classificacoes novas com alias quebrado
-- a integracao Neofin x Cartao Conexao foi revisada para usar a cobranca canonica da fatura como fonte unica de boleto/Pix
-- o fluxo manual e o fluxo automatico de fechamento passaram a compartilhar `processarCobrancaCanonicaFatura.ts`, evitando divergencia entre geracao antecipada e fechamento normal
-- o provider NeoFin do Cartao Conexao passou a enviar `billingType: "boleto"` explicitamente, em vez de depender do fallback `generic`
-- a leitura de retorno da Neofin foi centralizada em `src/lib/neofinBilling.ts`, com extracao unica de `billing_url`, linha digitavel, codigo de barras, QR Pix, Pix copia e cola, tipo e status remoto
-- `src/lib/neofinClient.ts` deixou de assumir que o `integration_identifier` textual e o ID real da cobranca e passou a resolver o billing numerico de forma segura, sem cair no primeiro item de uma listagem generica
-- a pagina de detalhe da fatura do Cartao Conexao passou a priorizar a cobranca canonica e a invoice da fatura, mesmo quando o legado ainda aponta `credito_conexao_faturas.cobranca_id` para uma cobranca-item
-- a UI de detalhe da fatura passou a exibir segunda via sem recriar cobranca e bloquear a acao manual quando ja existe invoice valida
+- a fatura da conta interna virou tela operacional final, com hierarquia visual clara, cabecalho util, card de pagamento, card da cobranca oficial da fatura, lancamentos legiveis e auditoria tecnica recolhivel
+- a leitura de pagamento da fatura passou a priorizar a cobranca canonica e os dados remotos da NeoFin, sem depender do `charge_id` textual legado para exibir boleto/Pix
+- a resolucao de pagamento exibivel foi centralizada em `src/lib/financeiro/cobranca/resolverPagamentoExibivel.ts`, retornando:
+  - `tipo_exibicao`
+  - `invoice_id`
+  - `neofin_charge_id`
+  - `link_pagamento`
+  - `linha_digitavel`
+  - `codigo_barras`
+  - `pix_copia_cola`
+  - `qr_code_url`
+  - `status_sincronizado`
+  - `origem_dos_dados`
+- a regra de `invoice_valida` foi endurecida para nao considerar somente um identificador textual legado como invoice aproveitavel
+- o detalhe da cobranca financeira passou a exibir invoice resolvida, origem dos dados e dados remotos/local/legado sem confundir a cobranca canonica com o legado
+- o fluxo de fechamento automatico mensal foi canonicamente concentrado em `processarFechamentoAutomaticoMensal.ts`
+- o fluxo automatico, a rota legada de fechamento automatico e os fluxos manuais de fechar/gerar cobranca agora convergem para `processarCobrancaCanonicaFatura.ts`
+- foi criada rota administrativa para reprocessamento/manual seguro:
+  - `/api/financeiro/credito-conexao/fechamento-mensal/processar`
+- a validacao em base real confirmou:
+  - `33` contas ALUNO avaliadas no dry-run
+  - `31` contas com acao elegivel
+  - `0` erros no dry-run auditado
+  - `0` origens com duplicidade de cobranca canonica nao cancelada no recorte validado
 
 ## Pendencias
-- validacao visual autenticada com prints reais do dashboard, do modal mensal exportavel e do detalhe por centro de custo
-- eventual enriquecimento futuro da composicao mensal com centro de custo nominal quando a trilha estiver disponivel em toda a cadeia operacional
-- revisao futura dos recebimentos ainda sem centro resolvido apontados pelo diagnostico para eliminar sobras fora do bloco principal
-- backfill operacional dos casos historicos em que `credito_conexao_faturas.cobranca_id` ainda aponta para cobranca-item ou `neofin_invoice_id` ficou nulo mesmo com invoice remota existente
-- validacao autenticada com casos recentes do Cartao Conexao para confirmar na UI o fim do texto `Outros bancos` quando a cobranca canonica da fatura ja possui boleto/Pix valido
+- homologacao visual autenticada da tela de fatura da conta interna e do detalhe da cobranca financeira
+- amarrar o servico de fechamento mensal a um gatilho operacional explicito de bootstrap/cron; nesta etapa foi criado o servico canonico e a rota administrativa, mas nao foi adicionado disparo oculto na UI
+- backfill historico dos casos antigos em que `credito_conexao_faturas.cobranca_id` ainda aponta para cobranca-item ou `neofin_invoice_id` permanece nulo
+- enriquecer os casos em que a NeoFin nao devolve linha digitavel/barcode/Pix, para confirmar em homologacao quais campos o provider realmente disponibiliza por billing
+- seguir com saneamento do backlog global de lint fora do escopo deste modulo
 
 ## Bloqueios
-- `npm run lint` continua falhando no repositorio por erros preexistentes fora do escopo deste modulo
-- captura local de prints depende de sessao autenticada; sem login valido a rota privada redireciona para `/login`
+- `npm run lint` continua falhando por erros preexistentes em outras areas do repositorio
+- captura automatica de prints reais segue bloqueada por autenticacao local nas rotas privadas
+- nao existe hoje um scheduler/boot executor explicito versionado chamando o fechamento mensal; a logica ficou pronta, mas a orquestracao operacional ainda depende de definicao do ambiente
 
 ## Versao do sistema
-Sistema Conexao Danca - Dashboard Financeiro e integracao Neofin
-Versao logica: v1.6 revisao canonica Neofin x Cartao Conexao concluida
+Sistema Conexao Danca - Conta Interna do Aluno / Fatura / NeoFin
+Versao logica: v1.7 fechamento mensal canonico e tela operacional da fatura concluidos
 
 ## Proximas acoes
-1. validar em ambiente autenticado os centros `Escola Conexao Danca`, `Ballet Cafe`, `AJ Dance Store` e `Intermediacao Financeira` com dados reais da janela atual
-2. gerar os prints finais do bloco corrigido, dos modais com `Exportar Excel`, do resize/maximizacao e do arquivo `.xlsx` aberto
-3. validar em ambiente autenticado faturas recentes do Cartao Conexao para confirmar reaproveitamento de invoice e exibir Boleto/Pix a partir da cobranca canonica
-4. executar saneamento orientado pelo diagnostico para corrigir historicos com `neofin_invoice_id` ausente e vinculos antigos de cobranca-item
-5. monitorar o comportamento da etapa em producao apos o deploy e recolher feedback operacional
-6. reduzir o estoque de recebimentos sem centro resolvido apontados pela query diagnostica
-7. atacar a fila de erros globais de lint para recuperar validacao completa do repositorio
+1. homologar em sessao autenticada a nova tela da fatura da conta interna com casos recentes de boleto e segunda via
+2. homologar o detalhe da cobranca financeira para cobrancas `FATURA_CREDITO_CONEXAO` com invoice remota resolvida
+3. conectar `src/app/api/financeiro/credito-conexao/fechamento-mensal/processar/route.ts` a um gatilho operacional explicito de bootstrap ou agenda
+4. executar backfill dos historicos com `neofin_invoice_id` ausente e referencias legadas antigas
+5. monitorar em producao as novas faturas para confirmar preenchimento de link, linha digitavel e Pix quando a NeoFin retornar esses campos

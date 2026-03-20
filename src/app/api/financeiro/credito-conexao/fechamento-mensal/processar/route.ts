@@ -25,15 +25,8 @@ export async function POST(req: NextRequest) {
     supabase,
     contaConexaoId: Number.isFinite(contaConexaoId) && contaConexaoId > 0 ? contaConexaoId : null,
     force: body.force === true,
-    dryRun: body.dry_run !== false,
+    dryRun: body.dry_run === true,
   });
 
-  return NextResponse.json(
-    {
-      ...resultado,
-      rota_legada: true,
-      message: "Rota legada delegada ao servico canonico de fechamento mensal.",
-    },
-    { status: 200 },
-  );
+  return NextResponse.json(resultado, { status: 200 });
 }

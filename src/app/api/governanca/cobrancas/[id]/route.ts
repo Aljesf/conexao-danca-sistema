@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { formatarCompetenciaLabel, montarPessoaLabel } from "@/lib/financeiro/creditoConexao/cobrancas";
+import { resolverPagamentoExibivel } from "@/lib/financeiro/cobranca/resolverPagamentoExibivel";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type RouteContext = {
@@ -225,6 +226,19 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   const statusCancelado = statusNormalizado === "CANCELADA";
   const competencia = inferirCompetencia(cobranca.competencia_ano_mes, cobranca.vencimento);
   const pessoaNome = normalizarTexto(cobranca.pessoa?.nome) ?? null;
+  const pagamentoExibivel = await resolverPagamentoExibivel({
+    cobranca: {
+      id: cobranca.id,
+      origem_tipo: cobranca.origem_tipo,
+      origem_id: cobranca.origem_id,
+      metodo_pagamento: cobranca.metodo_pagamento,
+      status: cobranca.status,
+      neofin_charge_id: cobranca.neofin_charge_id,
+      link_pagamento: cobranca.link_pagamento,
+      linha_digitavel: cobranca.linha_digitavel,
+      neofin_payload: cobranca.neofin_payload,
+    },
+  });
 
   return NextResponse.json(
     {
@@ -235,6 +249,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
         pessoa_label: montarPessoaLabel(pessoaNome, pessoaId),
         competencia_ano_mes: competencia,
         competencia_label: competencia ? formatarCompetenciaLabel(competencia) : null,
+        pagamento_exibivel: pagamentoExibivel,
         recebimentos_resumo: {
           quantidade: recebimentos.length,
           total_centavos: totalRecebido,
