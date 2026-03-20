@@ -44,7 +44,6 @@ export async function salvarPresencasDaAula(params: {
   itens: Array<z.infer<typeof zItemFrequencia>>;
   removerAlunoPessoaIds?: number[];
   registradoPorAuthUserId: string;
-  registradoPorColaboradorId: number | null;
 }) {
   const rows = params.itens.map((item) => ({
     aula_id: params.aulaId,
@@ -53,8 +52,6 @@ export async function salvarPresencasDaAula(params: {
     minutos_atraso: item.status === "ATRASO" ? (item.minutosAtraso ?? 1) : null,
     observacao: item.observacao ?? null,
     registrado_por: params.registradoPorAuthUserId,
-    registrado_por_auth_user_id: params.registradoPorAuthUserId,
-    registrado_por_colaborador_id: params.registradoPorColaboradorId,
   }));
 
   const idsMantidos = new Set(rows.map((row) => row.aluno_pessoa_id));

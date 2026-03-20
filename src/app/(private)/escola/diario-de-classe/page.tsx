@@ -120,6 +120,8 @@ type LinhaChamada = {
   justificativa_texto: string;
 };
 
+type FeedbackState = { tipo: "sucesso" | "erro"; mensagem: string } | null;
+
 function todayYYYYMMDD(): string {
   const d = new Date();
   const yyyy = String(d.getFullYear());
@@ -144,6 +146,21 @@ function weekdayLabelFromISO(dateISO: string): string {
   const d = new Date(`${dateISO}T00:00:00`);
   const wd = d.getDay();
   return ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][wd] ?? "";
+}
+
+function formatDateBR(dateISO?: string | null): string | null {
+  if (!dateISO) return null;
+  const match = dateISO.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function getMensagemSucessoFrequencia(dateISO?: string | null): string {
+  const dataFormatada = formatDateBR(dateISO);
+  if (!dataFormatada) {
+    return "Frequencia do dia salva com sucesso.";
+  }
+  return `Frequencia da aula de ${dataFormatada} salva com sucesso.`;
 }
 
 function defaultObservadoEm(dataAula: string, horaInicio?: string | null): string {
@@ -320,6 +337,7 @@ export default function DiarioDeClassePage() {
 
   const [salvando, setSalvando] = useState<boolean>(false);
   const [salvoOk, setSalvoOk] = useState<boolean>(false);
+  const [frequenciaFeedback, setFrequenciaFeedback] = useState<FeedbackState>(null);
   const [fechando, setFechando] = useState<boolean>(false);
   const [fecharErro, setFecharErro] = useState<string>("");
   const [fecharPendentes, setFecharPendentes] = useState<number[]>([]);
@@ -422,6 +440,7 @@ export default function DiarioDeClassePage() {
 
     (async () => {
       setSalvoOk(false);
+      setFrequenciaFeedback(null);
       setAula(null);
       setPlano(null);
       setPlanoInstancia(null);
@@ -534,6 +553,11 @@ export default function DiarioDeClassePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aula?.id]);
 
+  function limparFeedbackSalvamento() {
+    setSalvoOk(false);
+    setFrequenciaFeedback(null);
+  }
+
   function setBaseStatus(alunoId: number, novo: PresencaBaseStatus) {
     setLinhas((prev) =>
       prev.map((l) => {
@@ -556,7 +580,7 @@ export default function DiarioDeClassePage() {
         };
       })
     );
-    setSalvoOk(false);
+    limparFeedbackSalvamento();
   }
 
   function toggleAtraso(alunoId: number) {
@@ -572,7 +596,7 @@ export default function DiarioDeClassePage() {
         };
       })
     );
-    setSalvoOk(false);
+    limparFeedbackSalvamento();
   }
 
   function toggleJustificativa(alunoId: number) {
@@ -588,7 +612,7 @@ export default function DiarioDeClassePage() {
         };
       })
     );
-    setSalvoOk(false);
+    limparFeedbackSalvamento();
   }
 
   function setMinutosAtraso(alunoId: number, mins: number) {
@@ -599,7 +623,7 @@ export default function DiarioDeClassePage() {
         return { ...l, minutos_atraso: Math.max(1, mins) };
       })
     );
-    setSalvoOk(false);
+    limparFeedbackSalvamento();
   }
 
   function setJustificativaTexto(alunoId: number, texto: string) {
@@ -610,7 +634,7 @@ export default function DiarioDeClassePage() {
         return { ...l, justificativa_texto: texto };
       })
     );
-    setSalvoOk(false);
+    limparFeedbackSalvamento();
   }
 
   function limparLinha(alunoId: number) {
@@ -621,7 +645,7 @@ export default function DiarioDeClassePage() {
           : l
       )
     );
-    setSalvoOk(false);
+    limparFeedbackSalvamento();
   }
 
   function abrirAnotacao(linha: LinhaChamada) {
@@ -702,8 +726,10 @@ export default function DiarioDeClassePage() {
       (l) => l.base_status === "FALTA" && l.justificativa_ativa && !l.justificativa_texto.trim()
     );
     if (faltaSemMotivo) {
-      setStatus("ERRO");
-      setErroMsg(`Justificativa obrigatoria para ${faltaSemMotivo.nome}.`);
+      setFrequenciaFeedback({
+        tipo: "erro",
+        mensagem: `Justificativa obrigatoria para ${faltaSemMotivo.nome}.`,
+      });
       return;
     }
 
@@ -714,16 +740,17 @@ export default function DiarioDeClassePage() {
         (!l.minutos_atraso || l.minutos_atraso < 1)
     );
     if (atrasoSemMinutos) {
-      setStatus("ERRO");
-      setErroMsg(`Minutos de atraso obrigatorios para ${atrasoSemMinutos.nome}.`);
+      setFrequenciaFeedback({
+        tipo: "erro",
+        mensagem: `Minutos de atraso obrigatorios para ${atrasoSemMinutos.nome}.`,
+      });
       return;
     }
 
     setSalvando(true);
-    setErroMsg("");
+    setFrequenciaFeedback(null);
     setFecharErro("");
     setFecharPendentes([]);
-    setStatus("PENDENTE");
 
     try {
       const itens: ItemPresenca[] = linhas
@@ -761,8 +788,10 @@ export default function DiarioDeClassePage() {
         .map((l) => l.aluno_pessoa_id);
 
       if (itens.length === 0 && removerAlunoPessoaIds.length === 0) {
-        setStatus("ERRO");
-        setErroMsg("Nao ha alteracoes de frequencia para salvar.");
+        setFrequenciaFeedback({
+          tipo: "erro",
+          mensagem: "Nao ha alteracoes de frequencia para salvar.",
+        });
         return;
       }
 
@@ -775,8 +804,10 @@ export default function DiarioDeClassePage() {
       );
 
       if (!r.ok) {
-        setStatus("ERRO");
-        setErroMsg(r.message);
+        setFrequenciaFeedback({
+          tipo: "erro",
+          mensagem: r.message || "Nao foi possivel salvar a frequencia no momento.",
+        });
         return;
       }
 
@@ -794,10 +825,15 @@ export default function DiarioDeClassePage() {
       setLinhas(reconciliado);
       baselineRef.current = serializeLinhas(reconciliado);
       setSalvoOk(true);
-      setStatus("PRONTO");
-    } catch (e: unknown) {
-      setStatus("ERRO");
-      setErroMsg(e instanceof Error ? e.message : "Erro ao salvar frequencia.");
+      setFrequenciaFeedback({
+        tipo: "sucesso",
+        mensagem: getMensagemSucessoFrequencia(aula.data_aula ?? dataAula),
+      });
+    } catch {
+      setFrequenciaFeedback({
+        tipo: "erro",
+        mensagem: "Nao foi possivel salvar a frequencia no momento.",
+      });
     } finally {
       setSalvando(false);
     }
@@ -1393,6 +1429,18 @@ export default function DiarioDeClassePage() {
                     </button>
                   </div>
                 </div>
+
+                {frequenciaFeedback ? (
+                  <div
+                    className={`mt-3 rounded-lg border p-3 text-sm ${
+                      frequenciaFeedback.tipo === "sucesso"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-rose-200 bg-rose-50 text-rose-700"
+                    }`}
+                  >
+                    {frequenciaFeedback.mensagem}
+                  </div>
+                ) : null}
 
                 {fecharErro ? (
                   <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">

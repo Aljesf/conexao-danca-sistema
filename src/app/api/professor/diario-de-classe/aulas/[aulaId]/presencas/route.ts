@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { canAccessTurma, getColaboradorIdForUser, getUserOrThrow } from "../../../_lib/auth";
+import { canAccessTurma, getUserOrThrow } from "../../../_lib/auth";
 import { getAulaOrFail, salvarPresencasDaAula, zBodyFrequencia } from "../../../_lib/presencas";
 import { getAulaFrequenciaPayload } from "@/lib/academico/frequencia";
 
@@ -32,9 +32,15 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ aulaId:
     });
 
     return NextResponse.json({ ok: true, ...payload });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "ERRO_BUSCAR_PRESENCAS";
-    return NextResponse.json({ ok: false, code: "ERRO_BUSCAR_PRESENCAS", message }, { status: 500 });
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "ERRO_BUSCAR_PRESENCAS",
+        message: "Nao foi possivel carregar a frequencia desta aula no momento.",
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -61,14 +67,6 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ aulaId:
   const perm = await canAccessTurma({ supabase, userId: user.id, turmaId: aulaRes.aula.turma_id });
   if (!perm.ok) return NextResponse.json(perm, { status: perm.status });
 
-  let colaboradorId: number | null = null;
-  try {
-    colaboradorId = await getColaboradorIdForUser(supabase, user.id);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "ERRO_BUSCAR_COLABORADOR";
-    return NextResponse.json({ ok: false, code: msg }, { status: 500 });
-  }
-
   try {
     const result = await salvarPresencasDaAula({
       supabase,
@@ -76,14 +74,19 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ aulaId:
       itens: body.data.itens,
       removerAlunoPessoaIds: body.data.removerAlunoPessoaIds,
       registradoPorAuthUserId: user.id,
-      registradoPorColaboradorId: colaboradorId,
     });
 
     const payload = await getAulaFrequenciaPayload({ supabase, aulaId: aulaId.data });
 
     return NextResponse.json({ ok: true, salvas: result.salvas, ...payload });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "ERRO_SALVAR_PRESENCAS";
-    return NextResponse.json({ ok: false, code: "ERRO_SALVAR_PRESENCAS", message: msg }, { status: 500 });
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "ERRO_SALVAR_PRESENCAS",
+        message: "Nao foi possivel salvar a frequencia no momento.",
+      },
+      { status: 500 }
+    );
   }
 }

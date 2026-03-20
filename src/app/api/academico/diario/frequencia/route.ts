@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import {
   canAccessTurma,
-  getColaboradorIdForUser,
   getUserOrThrow,
 } from "@/app/api/professor/diario-de-classe/_lib/auth";
 import { getAulaOrFail, salvarPresencasDaAula } from "@/app/api/professor/diario-de-classe/_lib/presencas";
@@ -41,15 +40,7 @@ export async function POST(request: NextRequest) {
 
   const perm = await canAccessTurma({ supabase, userId: user.id, turmaId: aulaRes.aula.turma_id });
   if (!perm.ok) {
-    return NextResponse.json({ error: perm.code }, { status: perm.status });
-  }
-
-  let colaboradorId: number | null = null;
-  try {
-    colaboradorId = await getColaboradorIdForUser(supabase, user.id);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "ERRO_BUSCAR_COLABORADOR";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: perm.message ?? perm.code }, { status: perm.status });
   }
 
   const itens = body.data.frequencias
@@ -69,12 +60,13 @@ export async function POST(request: NextRequest) {
       itens,
       removerAlunoPessoaIds,
       registradoPorAuthUserId: user.id,
-      registradoPorColaboradorId: colaboradorId,
     });
 
     return NextResponse.json({ success: true });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "ERRO_SALVAR_PRESENCAS";
-    return NextResponse.json({ error: msg }, { status: 500 });
+  } catch {
+    return NextResponse.json(
+      { error: "Nao foi possivel salvar a frequencia no momento." },
+      { status: 500 }
+    );
   }
 }

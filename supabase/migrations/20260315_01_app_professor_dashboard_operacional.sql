@@ -3,7 +3,7 @@ begin;
 -- Base operacional do App Professor:
 -- 1) agenda operacional do dia
 -- 2) aniversariantes do dia e da semana
--- 3) rastreabilidade de quem registrou frequencia
+-- 3) consultas operacionais sem alterar o schema canonico de frequencia
 
 create or replace function public.fn_dia_semana_pt(p_data date)
 returns text
@@ -20,47 +20,6 @@ as $$
     when 7 then 'Domingo'
   end;
 $$;
-
-alter table if exists public.turma_aula_presencas
-  add column if not exists registrado_por_auth_user_id uuid null;
-
-alter table if exists public.turma_aula_presencas
-  add column if not exists registrado_por_colaborador_id bigint null;
-
-do $$
-begin
-  if to_regclass('public.turma_aula_presencas') is not null then
-    if not exists (
-      select 1
-      from pg_constraint
-      where conname = 'turma_aula_presencas_registrado_por_colaborador_fk'
-    ) then
-      alter table public.turma_aula_presencas
-        add constraint turma_aula_presencas_registrado_por_colaborador_fk
-        foreign key (registrado_por_colaborador_id)
-        references public.colaboradores(id)
-        on delete set null;
-    end if;
-  end if;
-end $$;
-
-create index if not exists idx_turma_aula_presencas_reg_auth_user
-  on public.turma_aula_presencas (registrado_por_auth_user_id);
-
-create index if not exists idx_turma_aula_presencas_reg_colaborador
-  on public.turma_aula_presencas (registrado_por_colaborador_id);
-
-update public.turma_aula_presencas
-set
-  registrado_por_auth_user_id = coalesce(registrado_por_auth_user_id, registrado_por)
-where
-  registrado_por_auth_user_id is null;
-
-comment on column public.turma_aula_presencas.registrado_por_auth_user_id is
-'Auth user (profiles.user_id) que registrou a frequencia pelo App Professor/API.';
-
-comment on column public.turma_aula_presencas.registrado_por_colaborador_id is
-'Colaborador operacional vinculado ao auth user que registrou a frequencia.';
 
 create or replace view public.vw_app_professor_agenda_hoje as
 with professor_vinculado as (
