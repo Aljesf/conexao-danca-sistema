@@ -220,7 +220,7 @@ export default function EscolaTurmaServicosPage() {
             <button
               type="button"
               className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700"
-              onClick={() => router.push(`/escola/academico/turmas/${turmaId}`)}
+              onClick={() => router.push(`/escola/turmas/${turmaId}`)}
             >
               Voltar
             </button>

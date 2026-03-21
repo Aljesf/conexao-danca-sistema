@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import DiarioModal from "@/components/DiarioModal";
 import { TurmaResumoOperacional } from "@/components/turmas/TurmaResumoOperacional";
@@ -155,6 +155,17 @@ function weekdayLabelFromISO(dateISO: string): string {
   const d = new Date(`${dateISO}T00:00:00`);
   const wd = d.getDay();
   return ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][wd] ?? "";
+}
+
+function parsePositiveInt(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseDateParam(value: string | null): string | null {
+  if (!value) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
 }
 
 function formatDateBR(dateISO?: string | null): string | null {
@@ -360,6 +371,9 @@ async function fetchJson<T>(
 
 export default function DiarioDeClassePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const turmaIdFromUrl = useMemo(() => parsePositiveInt(searchParams.get("turmaId")), [searchParams]);
+  const dataAulaFromUrl = useMemo(() => parseDateParam(searchParams.get("date")) ?? todayYYYYMMDD(), [searchParams]);
   const [aba, setAba] = useState<
     "frequencia" | "plano" | "conteudo" | "observacoes" | "avaliacoes"
   >("frequencia");
@@ -368,13 +382,13 @@ export default function DiarioDeClassePage() {
   const [erroMsg, setErroMsg] = useState<string>("");
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [turmaId, setTurmaId] = useState<number | null>(null);
+  const [turmaId, setTurmaId] = useState<number | null>(turmaIdFromUrl);
   const [isAdmin, setIsAdmin] = useState(false);
   const [professores, setProfessores] = useState<ProfessorOption[]>([]);
   const [professorFiltro, setProfessorFiltro] = useState<number | null>(null);
   const [modalTurmaOpen, setModalTurmaOpen] = useState(false);
 
-  const [dataAula, setDataAula] = useState<string>(todayYYYYMMDD());
+  const [dataAula, setDataAula] = useState<string>(dataAulaFromUrl);
   const [aula, setAula] = useState<Aula | null>(null);
   const [plano, setPlano] = useState<PlanoAula | null>(null);
   const [planoInstancia, setPlanoInstancia] = useState<PlanoInstancia | null>(null);
@@ -426,6 +440,18 @@ export default function DiarioDeClassePage() {
         return "Diario de classe";
     }
   }, [aba]);
+
+  useEffect(() => {
+    if (turmaIdFromUrl !== null) {
+      setTurmaId(turmaIdFromUrl);
+    }
+  }, [turmaIdFromUrl]);
+
+  useEffect(() => {
+    if (dataAulaFromUrl) {
+      setDataAula(dataAulaFromUrl);
+    }
+  }, [dataAulaFromUrl]);
 
   useEffect(() => {
     let alive = true;
@@ -1081,7 +1107,7 @@ export default function DiarioDeClassePage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              href="/escola/academico/turmas"
+              href="/escola/turmas"
               className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Turmas
@@ -1279,7 +1305,7 @@ export default function DiarioDeClassePage() {
                       type="button"
                       className="inline-flex rounded-full border border-sky-200 px-3 py-1 text-xs font-semibold text-sky-700 hover:bg-sky-50"
                       onClick={() => {
-                        router.push(`/escola/academico/turmas/${t.turma_id}`);
+                        router.push(`/escola/turmas/${t.turma_id}`);
                       }}
                     >
                       Configurar turma

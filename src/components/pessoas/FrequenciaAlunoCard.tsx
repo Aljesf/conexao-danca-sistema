@@ -149,7 +149,7 @@ export function FrequenciaAlunoCard({ pessoaId }: Props) {
                         )}
                       </td>
                       <td className="py-3 text-right">
-                        <Link href={`/escola/academico/turmas/${turma.turma_id}`} className="text-xs font-medium text-violet-600 hover:underline">
+                        <Link href={`/escola/turmas/${turma.turma_id}`} className="text-xs font-medium text-violet-600 hover:underline">
                           Abrir turma
                         </Link>
                       </td>

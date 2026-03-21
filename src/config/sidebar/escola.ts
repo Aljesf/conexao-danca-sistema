@@ -60,7 +60,7 @@ export const escolaSidebar: SidebarSection[] = [
       { label: "📊 Avaliações", href: "/escola/academico/avaliacoes" },
       { label: "👩‍🏫 Professores", href: "/escola/academico/professores" }, // TODO(migracao): rota ainda nao existe
       { label: "➕ Nova turma", href: "/escola/academico/turmas/nova" },
-      { label: "🏫 Turmas", href: "/escola/academico/turmas" },
+      { label: "🏫 Turmas", href: "/escola/turmas" },
       { label: "🧮 Grade", href: "/escola/academico/turmas/grade" },
       { label: "📒 Diário de classe", href: "/escola/diario-de-classe" },
     ],

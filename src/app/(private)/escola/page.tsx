@@ -850,7 +850,7 @@ export default function EscolaDashboardPage() {
                     <EscolaTurmaComposicaoCard
                       key={turma.turma_id}
                       turma={turma}
-                      hrefDetalhe={`/escola/academico/turmas/${turma.turma_id}`}
+                      hrefDetalhe={`/escola/turmas/${turma.turma_id}`}
                       onClickAlunosAtivos={() =>
                         void abrirModalDetalhes(
                           `escopo=turma&turma_id=${turma.turma_id}&tipo=alunos_ativos`,

@@ -262,7 +262,7 @@ export default function CursoLivreDetalhePage({ params }: { params: Promise<Para
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Link className="rounded-md border px-3 py-2 text-sm" href={`/escola/academico/turmas/${t.turma_id}`}>
+                    <Link className="rounded-md border px-3 py-2 text-sm" href={`/escola/turmas/${t.turma_id}`}>
                       Abrir turma
                     </Link>
                     <button className="rounded-md border px-3 py-2 text-sm" onClick={() => onApagarTurma(t.turma_id)}>

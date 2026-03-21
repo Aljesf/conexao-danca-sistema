@@ -200,7 +200,7 @@ export default function AppShell({ children, systemSettings, user, logoutAction 
                           {searchResults.turmas.map((turma) => (
                             <li key={`turma-${turma.turma_id}`}>
                               <Link
-                                href={`/escola/academico/turmas/${turma.turma_id}`}
+                                href={`/escola/turmas/${turma.turma_id}`}
                                 className="block px-4 py-2 text-sm hover:bg-slate-50"
                                 onClick={handleResultClick}
                               >
