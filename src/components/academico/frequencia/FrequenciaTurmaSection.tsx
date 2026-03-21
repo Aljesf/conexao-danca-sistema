@@ -13,6 +13,26 @@ type Props = {
   turmaId: number;
 };
 
+function formatRangeDate(date: Date) {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildDefaultRange() {
+  const today = new Date();
+  const start = new Date(today);
+  const end = new Date(today);
+  start.setDate(start.getDate() - 60);
+  end.setDate(end.getDate() + 14);
+
+  return {
+    dataInicio: formatRangeDate(start),
+    dataFim: formatRangeDate(end),
+  };
+}
+
 export function FrequenciaTurmaSection({ turmaId }: Props) {
   const [data, setData] = useState<HistoricoFrequenciaTurmaResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -20,14 +40,21 @@ export function FrequenciaTurmaSection({ turmaId }: Props) {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    const range = buildDefaultRange();
 
     async function carregar() {
       try {
         setLoading(true);
         setError(null);
 
-        const res = await fetch(`/api/academico/turmas/${turmaId}/frequencia`, {
+        const params = new URLSearchParams({
+          data_inicio: range.dataInicio,
+          data_fim: range.dataFim,
+        });
+        const res = await fetch(`/api/academico/turmas/${turmaId}/frequencia?${params.toString()}`, {
           cache: "no-store",
+          signal: controller.signal,
         });
         const json = (await res.json().catch(() => null)) as ApiResponse | null;
 
@@ -39,6 +66,7 @@ export function FrequenciaTurmaSection({ turmaId }: Props) {
           setData(json);
         }
       } catch (err) {
+        if (controller.signal.aborted) return;
         if (!active) return;
         setError(err instanceof Error ? err.message : "Falha ao carregar frequencia da turma.");
       } finally {
@@ -51,6 +79,7 @@ export function FrequenciaTurmaSection({ turmaId }: Props) {
     void carregar();
     return () => {
       active = false;
+      controller.abort();
     };
   }, [turmaId]);
 
@@ -75,6 +104,9 @@ export function FrequenciaTurmaSection({ turmaId }: Props) {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-xs text-slate-600">
+        Recorte operacional carregado: ultimos 60 dias e proximos 14 dias.
+      </div>
       <FrequenciaResumoTurmaCard data={data} />
       <FrequenciaHistoricoTurmaTable data={data} />
     </div>

@@ -42,11 +42,16 @@ Academico - Diario de Classe / Execucao de Aula / Frequencia
 - o historico do aluno passou a calcular percentual somente sobre aulas validadas
 - a listagem `/escola/academico/turmas` saiu da tabela seca e foi reorganizada em painel operacional com filtros, cards-resumo, agrupamento e acoes rapidas
 - a grade `/escola/academico/turmas/grade` ganhou sinalizacao da situacao operacional de hoje por turma
+- o diagnostico de lentidao apontou dois fatores principais: falta de `loading.tsx`/`error.tsx` nas rotas privadas e consolidacao pesada por turma no SSR da listagem `/escola/academico/turmas`
+- a listagem de turmas foi contida para usar snapshot operacional em lote, evitando calcular execucao profunda turma por turma no carregamento inicial
+- o bloco `FrequenciaTurmaSection` passou a consultar um recorte operacional padrao de 60 dias para tras e 14 dias para frente, reduzindo payload e tempo de resposta no detalhe da turma
+- as rotas privadas agora possuem fallback explicito de loading e erro, eliminando o comportamento de tela em branco durante transicoes lentas ou falhas de render
 
 ## Pendencias
-- o painel de turmas ainda pode receber uma segunda etapa de performance caso o volume de turmas cresca e a consolidacao por turma precise de cache ou agregacao em lote
+- o painel de turmas ainda pode receber uma segunda etapa de performance caso o volume de turmas cresca e a consolidacao detalhada precise de cache ou agregacao materializada
 - a nomenclatura visual entre `PENDENTE` e `NAO_REALIZADA` ainda pode ser refinada com a equipe pedagogica, mas a regra funcional ja esta aplicada
 - a homologacao manual com perfis distintos continua recomendada para confirmar o fluxo completo em ambiente autenticado
+- o historico completo de frequencia continua disponivel pela API com filtros, mas a tela da turma agora privilegia um recorte operacional para preservar responsividade
 
 ## Bloqueios
 - `npm run lint` global continua falhando por backlog historico fora do modulo academico, principalmente em areas antigas de admin/loja
@@ -58,5 +63,5 @@ Versao logica: v1.15 diario de classe com abertura/validacao de aula e painel op
 
 ## Proximas acoes
 - homologar com administrador e professor vinculado o fluxo completo: abrir aula, salvar frequencia, fechar, reabrir e revisar reflexo na turma e no aluno
-- avaliar se vale materializar indicadores operacionais de turmas em view/helper dedicado para reduzir consultas da listagem principal
+- avaliar se vale materializar indicadores operacionais de turmas em view/helper dedicado para reduzir ainda mais consultas da listagem principal
 - atacar o backlog global de lint em modulo separado para permitir fechamento limpo do repositorio

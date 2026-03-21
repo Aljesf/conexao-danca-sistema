@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { listarProfessoresDaTurma } from "@/lib/academico/turmaProfessoresServer";
 import { listarTurmas } from "@/lib/academico/turmasServer";
-import { calcularResumoExecucaoTurma } from "@/lib/academico/execucao-aula";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { formatarHorario } from "@/lib/turmas";
 import type { Turma } from "@/types/turmas";
@@ -20,11 +18,51 @@ type SearchParams = {
   agrupar?: SearchValue;
 };
 
+type SituacaoExecucao = "PREVISTA" | "PENDENTE" | "ABERTA" | "VALIDADA" | "NAO_REALIZADA";
+
 type TurmaListItem = {
   turma: Turma;
   turmaId: number;
   professorPrincipal: string | null;
-  execucao: Awaited<ReturnType<typeof calcularResumoExecucaoTurma>>;
+  execucao: ExecucaoTurmaCardSnapshot;
+};
+
+type ProximaOcorrencia = {
+  data_aula: string;
+  situacao: SituacaoExecucao;
+};
+
+type ExecucaoTurmaCardSnapshot = {
+  total_previstas_periodo: number;
+  total_validadas: number;
+  total_abertas: number;
+  total_pendentes: number;
+  total_nao_realizadas: number;
+  realizadaHoje: boolean;
+  hasPendencia: boolean;
+  proximaPrevista: ProximaOcorrencia | null;
+  pendenciaMaisProxima: ProximaOcorrencia | null;
+  ultimaRegistrada: ProximaOcorrencia | null;
+};
+
+type TurmaProfessorLookupRow = {
+  turma_id: number;
+  principal: boolean | null;
+  ativo: boolean | null;
+  data_inicio: string | null;
+  colaborador?: {
+    pessoa?: {
+      nome?: string | null;
+    } | null;
+  } | null;
+};
+
+type AulaExecucaoLookupRow = {
+  id: number;
+  turma_id: number;
+  data_aula: string;
+  status_execucao: string | null;
+  fechada_em: string | null;
 };
 
 function getFirstValue(value: SearchValue) {
@@ -73,10 +111,287 @@ function getTodayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function padDate(date: Date) {
+  const yyyy = String(date.getUTCFullYear());
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(date.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function toUtcDate(dateISO: string) {
+  return new Date(`${dateISO}T00:00:00Z`);
+}
+
+function addDays(dateISO: string, days: number) {
+  const date = toUtcDate(dateISO);
+  date.setUTCDate(date.getUTCDate() + days);
+  return padDate(date);
+}
+
+function getDayOfWeekFromISO(dateISO: string) {
+  return toUtcDate(dateISO).getUTCDay();
+}
+
+function normalizeWeekdayLabel(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function weekdayToNumber(value: string): number | null {
+  const normalized = normalizeWeekdayLabel(value);
+  const map = new Map<string, number>([
+    ["DOM", 0],
+    ["DOMINGO", 0],
+    ["SUN", 0],
+    ["SEG", 1],
+    ["SEGUNDA", 1],
+    ["MON", 1],
+    ["TER", 2],
+    ["TERCA", 2],
+    ["TUE", 2],
+    ["QUA", 3],
+    ["QUARTA", 3],
+    ["WED", 3],
+    ["QUI", 4],
+    ["QUINTA", 4],
+    ["THU", 4],
+    ["SEX", 5],
+    ["SEXTA", 5],
+    ["FRI", 5],
+    ["SAB", 6],
+    ["SABADO", 6],
+    ["SAT", 6],
+  ]);
+  return map.get(normalized) ?? null;
+}
+
+function normalizeSituacao(statusExecucao: string | null | undefined, fechadaEm: string | null | undefined): SituacaoExecucao {
+  const normalized = (statusExecucao ?? "").trim().toUpperCase();
+  if (normalized === "VALIDADA" || normalized === "FECHADA" || Boolean(fechadaEm)) {
+    return "VALIDADA";
+  }
+  if (normalized === "ABERTA") {
+    return "ABERTA";
+  }
+  if (normalized === "NAO_REALIZADA") {
+    return "NAO_REALIZADA";
+  }
+  return "PENDENTE";
+}
+
+function createExecucaoSnapshotFallback(): ExecucaoTurmaCardSnapshot {
+  return {
+    total_previstas_periodo: 0,
+    total_validadas: 0,
+    total_abertas: 0,
+    total_pendentes: 0,
+    total_nao_realizadas: 0,
+    realizadaHoje: false,
+    hasPendencia: false,
+    proximaPrevista: null,
+    pendenciaMaisProxima: null,
+    ultimaRegistrada: null,
+  };
+}
+
+function buildExpectedDates(turma: Turma, startISO: string, endISO: string) {
+  const weekdays = Array.isArray(turma.dias_semana)
+    ? turma.dias_semana.map(weekdayToNumber).filter((value): value is number => value != null)
+    : [];
+
+  if (weekdays.length === 0) {
+    return [] as string[];
+  }
+
+  const occurrences: string[] = [];
+  let cursor = startISO;
+  while (cursor <= endISO) {
+    if (weekdays.includes(getDayOfWeekFromISO(cursor))) {
+      occurrences.push(cursor);
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  return occurrences;
+}
+
+async function carregarProfessoresPrincipaisMap(params: {
+  supabase: Awaited<ReturnType<typeof getSupabaseServer>>;
+  turmaIds: number[];
+}) {
+  if (params.turmaIds.length === 0) {
+    return new Map<number, string | null>();
+  }
+
+  const { data, error } = await params.supabase
+    .from("turma_professores")
+    .select(
+      `
+        turma_id,
+        principal,
+        ativo,
+        data_inicio,
+        colaborador:colaboradores!turma_professores_colaborador_id_fkey (
+          pessoa:pessoas!colaboradores_pessoa_id_fkey (
+            nome
+          )
+        )
+      `,
+    )
+    .in("turma_id", params.turmaIds)
+    .order("principal", { ascending: false })
+    .order("data_inicio", { ascending: true });
+
+  if (error) {
+    console.error("[TurmasPage] Erro ao carregar professores principais:", error);
+    return new Map<number, string | null>();
+  }
+
+  const grouped = new Map<number, TurmaProfessorLookupRow[]>();
+  for (const row of (data ?? []) as TurmaProfessorLookupRow[]) {
+    const turmaId = Number(row.turma_id);
+    if (!Number.isFinite(turmaId) || turmaId <= 0) continue;
+    const list = grouped.get(turmaId) ?? [];
+    list.push(row);
+    grouped.set(turmaId, list);
+  }
+
+  const result = new Map<number, string | null>();
+  for (const turmaId of params.turmaIds) {
+    const rows = grouped.get(turmaId) ?? [];
+    const preferred =
+      rows.find((row) => row.ativo && row.principal && row.colaborador?.pessoa?.nome?.trim()) ??
+      rows.find((row) => row.ativo && row.colaborador?.pessoa?.nome?.trim()) ??
+      rows.find((row) => row.colaborador?.pessoa?.nome?.trim()) ??
+      null;
+
+    result.set(turmaId, preferred?.colaborador?.pessoa?.nome?.trim() ?? null);
+  }
+
+  return result;
+}
+
+async function carregarExecucaoTurmasMap(params: {
+  supabase: Awaited<ReturnType<typeof getSupabaseServer>>;
+  turmas: Array<{ turma: Turma; turmaId: number }>;
+}) {
+  const turmaIds = params.turmas.map((item) => item.turmaId);
+  const today = getTodayISO();
+  const windowStart = addDays(today, -30);
+  const windowEnd = addDays(today, 14);
+
+  if (turmaIds.length === 0) {
+    return new Map<number, ExecucaoTurmaCardSnapshot>();
+  }
+
+  const { data, error } = await params.supabase
+    .from("turma_aulas")
+    .select("id,turma_id,data_aula,status_execucao,fechada_em")
+    .in("turma_id", turmaIds)
+    .gte("data_aula", windowStart)
+    .lte("data_aula", windowEnd)
+    .order("data_aula", { ascending: false })
+    .order("id", { ascending: false });
+
+  if (error) {
+    console.error("[TurmasPage] Erro ao carregar snapshot de execucao:", error);
+    return new Map(turmaIds.map((turmaId) => [turmaId, createExecucaoSnapshotFallback()]));
+  }
+
+  const aulasPorTurma = new Map<number, AulaExecucaoLookupRow[]>();
+  for (const row of (data ?? []) as AulaExecucaoLookupRow[]) {
+    const turmaId = Number(row.turma_id);
+    if (!Number.isFinite(turmaId) || turmaId <= 0) continue;
+    const list = aulasPorTurma.get(turmaId) ?? [];
+    list.push(row);
+    aulasPorTurma.set(turmaId, list);
+  }
+
+  const result = new Map<number, ExecucaoTurmaCardSnapshot>();
+
+  for (const item of params.turmas) {
+    const aulas = aulasPorTurma.get(item.turmaId) ?? [];
+    const latestByDate = new Map<string, AulaExecucaoLookupRow>();
+    for (const aula of aulas) {
+      if (!latestByDate.has(aula.data_aula)) {
+        latestByDate.set(aula.data_aula, aula);
+      }
+    }
+
+    const expectedDates = buildExpectedDates(item.turma, windowStart, windowEnd);
+    const expectedSet = new Set(expectedDates);
+    const ocorrencias = expectedDates.map((dataAula) => {
+      const aula = latestByDate.get(dataAula);
+      return {
+        data_aula: dataAula,
+        situacao: aula
+          ? normalizeSituacao(aula.status_execucao, aula.fechada_em)
+          : dataAula > today
+            ? "PREVISTA"
+            : dataAula === today
+              ? "PENDENTE"
+              : "NAO_REALIZADA",
+      } satisfies ProximaOcorrencia;
+    });
+
+    for (const aula of aulas) {
+      if (expectedSet.has(aula.data_aula)) continue;
+      ocorrencias.push({
+        data_aula: aula.data_aula,
+        situacao: normalizeSituacao(aula.status_execucao, aula.fechada_em),
+      });
+    }
+
+    ocorrencias.sort((a, b) => a.data_aula.localeCompare(b.data_aula));
+
+    const total_validadas = ocorrencias.filter((itemExecucao) => itemExecucao.situacao === "VALIDADA").length;
+    const total_abertas = ocorrencias.filter((itemExecucao) => itemExecucao.situacao === "ABERTA").length;
+    const total_pendentes = ocorrencias.filter((itemExecucao) => itemExecucao.situacao === "PENDENTE").length;
+    const total_nao_realizadas = ocorrencias.filter((itemExecucao) => itemExecucao.situacao === "NAO_REALIZADA").length;
+    const pendencias = ocorrencias.filter((itemExecucao) =>
+      itemExecucao.situacao === "ABERTA" ||
+      itemExecucao.situacao === "PENDENTE" ||
+      itemExecucao.situacao === "NAO_REALIZADA",
+    );
+    const pendenciasPassadas = [...pendencias]
+      .filter((itemExecucao) => itemExecucao.data_aula <= today)
+      .sort((a, b) => b.data_aula.localeCompare(a.data_aula));
+    const pendenciasFuturas = pendencias
+      .filter((itemExecucao) => itemExecucao.data_aula > today)
+      .sort((a, b) => a.data_aula.localeCompare(b.data_aula));
+    const ultimaRegistradaRaw = aulas[0] ?? null;
+
+    result.set(item.turmaId, {
+      total_previstas_periodo: ocorrencias.length,
+      total_validadas,
+      total_abertas,
+      total_pendentes,
+      total_nao_realizadas,
+      realizadaHoje: ocorrencias.some(
+        (itemExecucao) => itemExecucao.data_aula === today && itemExecucao.situacao === "VALIDADA",
+      ),
+      hasPendencia: pendencias.length > 0,
+      proximaPrevista:
+        ocorrencias.find((itemExecucao) => itemExecucao.data_aula >= today) ?? null,
+      pendenciaMaisProxima: pendenciasPassadas[0] ?? pendenciasFuturas[0] ?? null,
+      ultimaRegistrada: ultimaRegistradaRaw
+        ? {
+          data_aula: ultimaRegistradaRaw.data_aula,
+          situacao: normalizeSituacao(ultimaRegistradaRaw.status_execucao, ultimaRegistradaRaw.fechada_em),
+        }
+        : null,
+    });
+  }
+
+  return result;
+}
+
 export default async function TurmasPage(props: { searchParams?: Promise<SearchParams> }) {
   const searchParams = (await props.searchParams) ?? {};
   const [turmas, supabase] = await Promise.all([listarTurmas(), getSupabaseServer()]);
-  const today = getTodayISO();
 
   const turmasBase = turmas
     .map((turma) => ({
@@ -85,26 +400,24 @@ export default async function TurmasPage(props: { searchParams?: Promise<SearchP
     }))
     .filter((item) => Number.isFinite(item.turmaId) && item.turmaId > 0);
 
-  const enriched = await Promise.all(
-    turmasBase.map(async ({ turma, turmaId }) => {
-      const [professores, execucao] = await Promise.all([
-        listarProfessoresDaTurma(turmaId),
-        calcularResumoExecucaoTurma({
-          supabase,
-          turmaId,
-        }),
-      ]);
-
-      const professorPrincipal = professores.find((prof) => prof.principal)?.nome_pessoa ?? professores[0]?.nome_pessoa ?? null;
-
-      return {
-        turma,
-        turmaId,
-        professorPrincipal,
-        execucao,
-      } satisfies TurmaListItem;
+  const turmaIds = turmasBase.map((item) => item.turmaId);
+  const [professoresMap, execucaoMap] = await Promise.all([
+    carregarProfessoresPrincipaisMap({
+      supabase,
+      turmaIds,
     }),
-  );
+    carregarExecucaoTurmasMap({
+      supabase,
+      turmas: turmasBase,
+    }),
+  ]);
+
+  const enriched = turmasBase.map(({ turma, turmaId }) => ({
+    turma,
+    turmaId,
+    professorPrincipal: professoresMap.get(turmaId) ?? null,
+    execucao: execucaoMap.get(turmaId) ?? createExecucaoSnapshotFallback(),
+  })) satisfies TurmaListItem[];
 
   const filters = {
     curso: getFirstValue(searchParams.curso),
@@ -154,15 +467,8 @@ export default async function TurmasPage(props: { searchParams?: Promise<SearchP
     total: filtered.length,
     ativas: filtered.filter((item) => (item.turma.status ?? "").toUpperCase() === "ATIVA").length,
     preparacao: filtered.filter((item) => (item.turma.status ?? "").toUpperCase() === "EM_PREPARACAO").length,
-    pendencia: filtered.filter(
-      (item) =>
-        item.execucao.total_abertas + item.execucao.total_pendentes + item.execucao.total_nao_realizadas > 0,
-    ).length,
-    realizadasHoje: filtered.filter((item) =>
-      item.execucao.aulas_previstas.some(
-        (aula) => aula.data_aula === today && aula.situacao === "VALIDADA",
-      ),
-    ).length,
+    pendencia: filtered.filter((item) => item.execucao.hasPendencia).length,
+    realizadasHoje: filtered.filter((item) => item.execucao.realizadaHoje).length,
   };
 
   const groups = new Map<string, TurmaListItem[]>();
@@ -192,7 +498,7 @@ export default async function TurmasPage(props: { searchParams?: Promise<SearchP
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Academico</p>
               <h1 className="mt-1 text-3xl font-semibold text-slate-900">Turmas</h1>
               <p className="mt-1 text-sm text-slate-500">
-                Painel operacional com filtros, status da execucao das aulas e acoes rapidas do modulo.
+                Painel operacional com filtros e snapshot recente da execucao das aulas, sem bloquear a navegacao com consolidacao profunda por turma.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -343,11 +649,10 @@ export default async function TurmasPage(props: { searchParams?: Promise<SearchP
                     const diasTexto = Array.isArray(turma.dias_semana)
                       ? turma.dias_semana.join(", ")
                       : turma.dias_semana ?? "Dias nao definidos";
-                    const proxima = item.execucao.proximas_previstas[0] ?? null;
-                    const pendencia = item.execucao.pendencias[0] ?? null;
+                    const proxima = item.execucao.proximaPrevista;
+                    const pendencia = item.execucao.pendenciaMaisProxima;
+                    const ultimaRegistrada = item.execucao.ultimaRegistrada;
                     const statusTurma = turma.status ?? "Sem status";
-                    const hasPendencia =
-                      item.execucao.total_abertas + item.execucao.total_pendentes + item.execucao.total_nao_realizadas > 0;
 
                     return (
                       <article key={item.turmaId} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
@@ -360,7 +665,7 @@ export default async function TurmasPage(props: { searchParams?: Promise<SearchP
                               <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeTone(statusTurma)}`}>
                                 {statusTurma}
                               </span>
-                              {hasPendencia ? (
+                              {item.execucao.hasPendencia ? (
                                 <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
                                   Pendencia operacional
                                 </span>
@@ -378,9 +683,9 @@ export default async function TurmasPage(props: { searchParams?: Promise<SearchP
 
                           <div className="grid gap-2 text-xs text-slate-600 md:min-w-[260px]">
                             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                              <div className="font-semibold text-slate-900">Execucao</div>
+                              <div className="font-semibold text-slate-900">Execucao recente</div>
                               <div className="mt-1">
-                                {item.execucao.total_validadas} validadas / {item.execucao.total_previstas_periodo} previstas
+                                {item.execucao.total_validadas} validadas / {item.execucao.total_previstas_periodo} previstas no recorte
                               </div>
                               <div className="mt-1">
                                 {item.execucao.total_abertas} abertas | {item.execucao.total_pendentes} pendentes | {item.execucao.total_nao_realizadas} nao realizadas
@@ -396,6 +701,12 @@ export default async function TurmasPage(props: { searchParams?: Promise<SearchP
                               <div className="font-semibold text-slate-900">Lacuna mais proxima</div>
                               <div className="mt-1">
                                 {pendencia ? `${formatDate(pendencia.data_aula)} | ${pendencia.situacao}` : "Nenhuma pendencia"}
+                              </div>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                              <div className="font-semibold text-slate-900">Ultimo registro</div>
+                              <div className="mt-1">
+                                {ultimaRegistrada ? `${formatDate(ultimaRegistrada.data_aula)} | ${ultimaRegistrada.situacao}` : "Sem aula registrada"}
                               </div>
                             </div>
                           </div>
