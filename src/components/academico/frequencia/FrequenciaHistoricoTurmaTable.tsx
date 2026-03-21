@@ -28,6 +28,7 @@ function getStatusLabel(percentual: number, minima?: number | null) {
 
 export function FrequenciaHistoricoTurmaTable({ data }: Props) {
   const alunos = data.alunos;
+  const pendencias = data.execucao.pendencias_operacionais.slice(0, 8);
 
   return (
     <div id="frequencia-historico-completo" className="rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-sm">
@@ -35,13 +36,34 @@ export function FrequenciaHistoricoTurmaTable({ data }: Props) {
         <div>
           <h3 className="text-xl font-semibold text-slate-900">Historico completo da turma</h3>
           <p className="text-sm text-slate-500">
-            Percentuais consolidados por aluno com base nos registros de presenca do periodo.
+            Percentuais consolidados por aluno com base apenas nas aulas validadas no periodo.
           </p>
         </div>
         <div className="text-xs text-slate-500">
           Alunos com registro: {data.resumo.total_alunos_com_registro} / {data.resumo.total_alunos}
         </div>
       </div>
+
+      {pendencias.length > 0 ? (
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+          <p className="text-sm font-semibold text-amber-900">Pendencias de execucao</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {pendencias.map((item) => (
+              <div key={`${item.data_aula}-${item.origem}-${item.situacao_execucao}`} className="rounded-2xl border border-amber-200 bg-white px-4 py-3">
+                <div className="text-sm font-semibold text-slate-900">
+                  {new Date(`${item.data_aula}T00:00:00`).toLocaleDateString("pt-BR")}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {item.hora_inicio ?? "--:--"} - {item.hora_fim ?? "--:--"} | {item.origem}
+                </div>
+                <span className="mt-2 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                  {item.situacao_execucao}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {alunos.length === 0 ? (
         <p className="mt-4 text-sm text-slate-500">Nenhum aluno encontrado para os filtros informados.</p>

@@ -5,6 +5,7 @@ import {
   getUserOrThrow,
 } from "@/app/api/professor/diario-de-classe/_lib/auth";
 import { getAulaOrFail, salvarPresencasDaAula } from "@/app/api/professor/diario-de-classe/_lib/presencas";
+import { registrarFrequenciaSalvaNaAula } from "@/lib/academico/execucao-aula";
 
 const zBody = z.object({
   diario_aula_id: z.coerce.number().int().positive(),
@@ -60,6 +61,11 @@ export async function POST(request: NextRequest) {
       itens,
       removerAlunoPessoaIds,
       registradoPorAuthUserId: user.id,
+    });
+    await registrarFrequenciaSalvaNaAula({
+      supabase,
+      aulaId: body.data.diario_aula_id,
+      userId: user.id,
     });
 
     return NextResponse.json({ success: true });

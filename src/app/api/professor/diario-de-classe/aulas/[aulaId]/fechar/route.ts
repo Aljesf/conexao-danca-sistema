@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getUserOrThrow, canAccessTurma } from "../../../_lib/auth";
 import { listarAlunosDaTurmaFrequencia } from "@/lib/academico/frequencia";
+import { fecharAula, getAulaExecucaoById } from "@/lib/academico/execucao-aula";
 
 const zAulaId = z.coerce.number().int().positive();
 
@@ -27,7 +28,12 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ aulaId
   if (!perm.ok) return NextResponse.json(perm, { status: perm.status });
 
   if (aula.fechada_em) {
-    return NextResponse.json({ ok: true, aula, message: "Aula ja estava fechada." });
+    try {
+      const aulaResolvida = await getAulaExecucaoById(supabase, aula.id);
+      return NextResponse.json({ ok: true, aula: aulaResolvida, message: "Aula ja estava fechada." });
+    } catch {
+      return NextResponse.json({ ok: true, aula, message: "Aula ja estava fechada." });
+    }
   }
 
   let alunosAtivos: Awaited<ReturnType<typeof listarAlunosDaTurmaFrequencia>>["ativos"] = [];
@@ -108,19 +114,20 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ aulaId
     aulaNumero = (typeof maxVal === "number" && Number.isFinite(maxVal) ? maxVal : 0) + 1;
   }
 
-  const { data: aulaUpd, error: updErr } = await supabase
-    .from("turma_aulas")
-    .update({ fechada_em: new Date().toISOString(), fechada_por: user.id, aula_numero: aulaNumero })
-    .eq("id", aula.id)
-    .select("id, turma_id, data_aula, aula_numero, fechada_em, fechada_por")
-    .single();
+  try {
+    const aulaUpd = await fecharAula({
+      supabase,
+      aulaId: aula.id,
+      userId: user.id,
+      aulaNumero,
+    });
 
-  if (updErr || !aulaUpd) {
+    return NextResponse.json({ ok: true, aula: aulaUpd });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro";
     return NextResponse.json(
-      { ok: false, code: "ERRO_FECHAR_AULA", message: updErr?.message ?? "Erro" },
+      { ok: false, code: "ERRO_FECHAR_AULA", message },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({ ok: true, aula: aulaUpd });
 }

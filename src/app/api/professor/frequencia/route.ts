@@ -6,6 +6,7 @@ import {
   salvarPresencasDaAula,
   zItemFrequencia,
 } from "../diario-de-classe/_lib/presencas";
+import { registrarFrequenciaSalvaNaAula } from "@/lib/academico/execucao-aula";
 
 const zBody = z
   .object({
@@ -56,6 +57,11 @@ export async function POST(request: NextRequest) {
       itens: body.data.itens,
       removerAlunoPessoaIds: body.data.removerAlunoPessoaIds,
       registradoPorAuthUserId: user.id,
+    });
+    await registrarFrequenciaSalvaNaAula({
+      supabase,
+      aulaId: body.data.aulaId,
+      userId: user.id,
     });
 
     return NextResponse.json({ ok: true, ...result }, { status: 200 });

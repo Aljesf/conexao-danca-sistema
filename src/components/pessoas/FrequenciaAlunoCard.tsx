@@ -66,7 +66,7 @@ export function FrequenciaAlunoCard({ pessoaId }: Props) {
   }, [pessoaId]);
 
   return (
-    <SectionCard title="Frequencia" description="Historico consolidado por turma e ultimos registros de presenca.">
+    <SectionCard title="Frequencia" description="Historico consolidado por turma com base apenas nas aulas validadas e nos ultimos registros de presenca.">
       {loading ? <p className="text-sm text-slate-600">Carregando frequencia...</p> : null}
 
       {!loading && error ? <p className="text-sm text-rose-600">{error}</p> : null}
@@ -121,7 +121,7 @@ export function FrequenciaAlunoCard({ pessoaId }: Props) {
                       </td>
                       <td className="py-3 pr-3">
                         <div className="font-semibold text-slate-900">{turma.percentual_frequencia}%</div>
-                        <div className="text-xs text-slate-500">{turma.total_aulas} aulas</div>
+                        <div className="text-xs text-slate-500">{turma.total_aulas} aulas validadas</div>
                       </td>
                       <td className="py-3 pr-3">
                         {turma.presencas}

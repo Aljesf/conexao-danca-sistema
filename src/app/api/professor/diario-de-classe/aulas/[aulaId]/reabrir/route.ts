@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getUserOrThrow, isAdminUser } from "../../../_lib/auth";
+import { reabrirAulaExecucao } from "@/lib/academico/execucao-aula";
 
 const zAulaId = z.coerce.number().int().positive();
 
@@ -22,19 +23,18 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ aulaId
   }
   if (!admin) return NextResponse.json({ ok: false, code: "SOMENTE_ADMIN" }, { status: 403 });
 
-  const { data, error } = await supabase
-    .from("turma_aulas")
-    .update({ fechada_em: null, fechada_por: null })
-    .eq("id", aulaId.data)
-    .select("id, turma_id, data_aula, fechada_em, fechada_por")
-    .single();
+  try {
+    const aula = await reabrirAulaExecucao({
+      supabase,
+      aulaId: aulaId.data,
+    });
 
-  if (error || !data) {
+    return NextResponse.json({ ok: true, aula });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro";
     return NextResponse.json(
-      { ok: false, code: "ERRO_REABRIR_AULA", message: error?.message ?? "Erro" },
+      { ok: false, code: "ERRO_REABRIR_AULA", message },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({ ok: true, aula: data });
 }

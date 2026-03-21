@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { canAccessTurma, getUserOrThrow, zDataAula, zTurmaId } from "../../_lib/auth";
+import { abrirOuCriarAula } from "@/lib/academico/execucao-aula";
 
 const zBody = z.object({
   turmaId: zTurmaId,
@@ -27,23 +28,19 @@ export async function POST(request: NextRequest) {
   const perm = await canAccessTurma({ supabase, userId: user.id, turmaId: body.data.turmaId });
   if (!perm.ok) return NextResponse.json(perm, { status: perm.status });
 
-  const payload = {
-    turma_id: body.data.turmaId,
-    data_aula: body.data.dataAula,
-    hora_inicio: body.data.horaInicio ?? null,
-    hora_fim: body.data.horaFim ?? null,
-    criado_por: user.id,
-  };
+  try {
+    const aula = await abrirOuCriarAula({
+      supabase,
+      turmaId: body.data.turmaId,
+      dataAula: body.data.dataAula,
+      userId: user.id,
+      horaInicio: body.data.horaInicio ?? null,
+      horaFim: body.data.horaFim ?? null,
+    });
 
-  const { data, error } = await supabase
-    .from("turma_aulas")
-    .upsert(payload, { onConflict: "turma_id,data_aula" })
-    .select("*")
-    .single();
-
-  if (error) {
-    return NextResponse.json({ ok: false, code: "ERRO_ABRIR_AULA", message: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, aula });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ERRO_ABRIR_AULA";
+    return NextResponse.json({ ok: false, code: "ERRO_ABRIR_AULA", message }, { status: 500 });
   }
-
-  return NextResponse.json({ ok: true, aula: data });
 }

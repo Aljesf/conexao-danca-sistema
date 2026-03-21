@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getUserOrThrow, canAccessTurma } from "../../_lib/auth";
+import { getAulaExecucaoById } from "@/lib/academico/execucao-aula";
 
 const zAulaId = z.coerce.number().int().positive();
 
@@ -14,16 +15,22 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ aulaId:
 
   const { supabase, user } = auth;
 
-  const { data: aula, error } = await supabase
+  const { data: aulaBase, error } = await supabase
     .from("turma_aulas")
-    .select("id, turma_id, data_aula, hora_inicio, hora_fim, fechada_em, fechada_por")
+    .select("id, turma_id")
     .eq("id", aulaId.data)
     .single();
 
-  if (error || !aula) return NextResponse.json({ ok: false, code: "AULA_NAO_ENCONTRADA" }, { status: 404 });
+  if (error || !aulaBase) return NextResponse.json({ ok: false, code: "AULA_NAO_ENCONTRADA" }, { status: 404 });
 
-  const perm = await canAccessTurma({ supabase, userId: user.id, turmaId: aula.turma_id });
+  const perm = await canAccessTurma({ supabase, userId: user.id, turmaId: aulaBase.turma_id });
   if (!perm.ok) return NextResponse.json(perm, { status: perm.status });
 
-  return NextResponse.json({ ok: true, aula });
+  try {
+    const aula = await getAulaExecucaoById(supabase, aulaId.data);
+    return NextResponse.json({ ok: true, aula });
+  } catch (loadError) {
+    const message = loadError instanceof Error ? loadError.message : "AULA_NAO_ENCONTRADA";
+    return NextResponse.json({ ok: false, code: "AULA_NAO_ENCONTRADA", message }, { status: 404 });
+  }
 }

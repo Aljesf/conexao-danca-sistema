@@ -3,6 +3,7 @@ import { z } from "zod";
 import { canAccessTurma, getUserOrThrow } from "../../../_lib/auth";
 import { getAulaOrFail, salvarPresencasDaAula, zBodyFrequencia } from "../../../_lib/presencas";
 import { getAulaFrequenciaPayload } from "@/lib/academico/frequencia";
+import { registrarFrequenciaSalvaNaAula } from "@/lib/academico/execucao-aula";
 
 const zAulaId = z.coerce.number().int().positive();
 
@@ -76,7 +77,12 @@ export async function PUT(request: NextRequest, ctx: { params: Promise<{ aulaId:
       registradoPorAuthUserId: user.id,
     });
 
-    const payload = await getAulaFrequenciaPayload({ supabase, aulaId: aulaId.data });
+    const aula = await registrarFrequenciaSalvaNaAula({
+      supabase,
+      aulaId: aulaId.data,
+      userId: user.id,
+    });
+    const payload = await getAulaFrequenciaPayload({ supabase, aulaId: aulaId.data, aula });
 
     return NextResponse.json({ ok: true, salvas: result.salvas, ...payload });
   } catch {

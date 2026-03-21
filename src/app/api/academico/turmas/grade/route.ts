@@ -39,6 +39,11 @@ type TurmaHorario = {
   fim: string;
 };
 
+type ExecucaoHoje = {
+  turma_id: number;
+  situacao: "PREVISTA" | "PENDENTE" | "ABERTA" | "VALIDADA" | "NAO_REALIZADA";
+};
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -114,6 +119,7 @@ export async function GET(request: NextRequest) {
 
   const turmas = (turmasData ?? []) as Turma[];
   const turmaIds = turmas.map((t) => t.turma_id);
+  const hoje = new Date().toISOString().slice(0, 10);
 
   const { data: horariosData, error: hErr } = await supabase
     .from("turmas_horarios")
@@ -121,6 +127,37 @@ export async function GET(request: NextRequest) {
     .in("turma_id", turmaIds.length ? turmaIds : [-1]);
 
   if (hErr) return NextResponse.json({ error: hErr.message }, { status: 500 });
+
+  const { data: aulasHojeData, error: aulasHojeErr } = await supabase
+    .from("turma_aulas")
+    .select("turma_id,status_execucao,fechada_em")
+    .in("turma_id", turmaIds.length ? turmaIds : [-1])
+    .eq("data_aula", hoje);
+
+  if (aulasHojeErr) return NextResponse.json({ error: aulasHojeErr.message }, { status: 500 });
+
+  const execucaoHojeMap = new Map<number, ExecucaoHoje["situacao"]>();
+  for (const aula of aulasHojeData ?? []) {
+    const turmaId = Number(aula.turma_id);
+    if (!Number.isFinite(turmaId) || turmaId <= 0) continue;
+
+    const status = String(aula.status_execucao ?? "").toUpperCase();
+    const situacao: ExecucaoHoje["situacao"] =
+      status === "VALIDADA" || aula.fechada_em
+        ? "VALIDADA"
+        : status === "ABERTA"
+          ? "ABERTA"
+          : status === "NAO_REALIZADA"
+            ? "NAO_REALIZADA"
+            : "PENDENTE";
+
+    execucaoHojeMap.set(turmaId, situacao);
+  }
+
+  const execucaoHoje: ExecucaoHoje[] = turmas.map((turma) => ({
+    turma_id: turma.turma_id,
+    situacao: execucaoHojeMap.get(turma.turma_id) ?? "PENDENTE",
+  }));
 
   return NextResponse.json({
     filtros: {
@@ -131,6 +168,7 @@ export async function GET(request: NextRequest) {
     espacos,
     turmas,
     horarios: (horariosData ?? []) as TurmaHorario[],
+    execucao_hoje: execucaoHoje,
   });
 }
 

@@ -37,8 +37,17 @@ type Aula = {
   data_aula: string;
   hora_inicio?: string | null;
   hora_fim?: string | null;
+  status_execucao?: "PENDENTE" | "ABERTA" | "VALIDADA" | "NAO_REALIZADA" | null;
+  aberta_em?: string | null;
+  aberta_por?: string | null;
+  aberta_por_nome?: string | null;
   fechada_em?: string | null;
   fechada_por?: string | null;
+  fechada_por_nome?: string | null;
+  frequencia_salva_em?: string | null;
+  frequencia_salva_por?: string | null;
+  frequencia_salva_por_nome?: string | null;
+  observacao_execucao?: string | null;
   aula_numero?: number | null;
 };
 
@@ -167,6 +176,50 @@ function defaultObservadoEm(dataAula: string, horaInicio?: string | null): strin
   const hora = normalizeHora(horaInicio);
   if (hora) return `${dataAula}T${hora}`;
   return `${dataAula}T${toHHmm(new Date())}`;
+}
+
+function formatDateTimeBR(value?: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString("pt-BR");
+}
+
+function getExecucaoAulaUi(aula?: Aula | null) {
+  const status = aula?.status_execucao ?? null;
+
+  switch (status) {
+    case "VALIDADA":
+      return {
+        label: "Aula validada",
+        badge: "VALIDADA",
+        tone: "border-emerald-200 bg-emerald-50 text-emerald-700",
+      };
+    case "ABERTA":
+      return {
+        label: "Aula aberta",
+        badge: "ABERTA",
+        tone: "border-sky-200 bg-sky-50 text-sky-700",
+      };
+    case "NAO_REALIZADA":
+      return {
+        label: "Aula nao realizada",
+        badge: "NAO_REALIZADA",
+        tone: "border-rose-200 bg-rose-50 text-rose-700",
+      };
+    case "PENDENTE":
+      return {
+        label: "Aula pendente",
+        badge: "PENDENTE",
+        tone: "border-amber-200 bg-amber-50 text-amber-800",
+      };
+    default:
+      return {
+        label: "Aula prevista",
+        badge: "PREVISTA",
+        tone: "border-slate-200 bg-slate-100 text-slate-700",
+      };
+  }
 }
 
 function createLinhaPendente(aluno: Pick<Aluno, "aluno_pessoa_id" | "nome">): LinhaChamada {
@@ -504,7 +557,7 @@ export default function DiarioDeClassePage() {
       setFecharErro("");
       setFecharPendentes([]);
 
-      const presRes = await fetchJson<{ ok: boolean; presencas: PresencaDb[] }>(
+      const presRes = await fetchJson<{ ok: boolean; aula?: Aula; presencas: PresencaDb[] }>(
         `/api/professor/diario-de-classe/aulas/${abrirRes.data.aula.id}/presencas`
       );
 
@@ -514,6 +567,10 @@ export default function DiarioDeClassePage() {
         setStatus("ERRO");
         setErroMsg(presRes.message);
         return;
+      }
+
+      if (presRes.data.aula) {
+        setAula(presRes.data.aula);
       }
 
       const presencas = Array.isArray(presRes.data.presencas)
@@ -795,7 +852,7 @@ export default function DiarioDeClassePage() {
         return;
       }
 
-      const r = await fetchJson<{ ok: boolean; presencas: PresencaDb[] }>(
+      const r = await fetchJson<{ ok: boolean; aula?: Aula; presencas: PresencaDb[] }>(
         `/api/professor/diario-de-classe/aulas/${aula.id}/presencas`,
         {
           method: "PUT",
@@ -812,6 +869,9 @@ export default function DiarioDeClassePage() {
       }
 
       const presencas = Array.isArray(r.data.presencas) ? r.data.presencas : [];
+      if (r.data.aula) {
+        setAula(r.data.aula);
+      }
       const mapPres = new Map<number, PresencaDb>();
       for (const p of presencas) mapPres.set(p.aluno_pessoa_id, p);
 
@@ -966,17 +1026,25 @@ export default function DiarioDeClassePage() {
   );
 
   const aulaFechada = Boolean(aula?.fechada_em);
-  const statusLabel = status === "ERRO" ? "Erro" : aulaFechada ? "Chamada FECHADA" : "Chamada PENDENTE";
-  const statusSubtitle = aulaFechada
-    ? `Fechada em ${aula?.fechada_em ? new Date(aula.fechada_em).toLocaleString() : "--"}`
-    : "A chamada precisa ser fechada para validar presencas.";
-  const statusBadgeLabel = status === "ERRO" ? "ERRO" : aulaFechada ? "FECHADA" : "PENDENTE";
-  const statusBadgeTone =
+  const execucaoUi = getExecucaoAulaUi(aula);
+  const abertaEmLabel = formatDateTimeBR(aula?.aberta_em);
+  const fechadaEmLabel = formatDateTimeBR(aula?.fechada_em);
+  const frequenciaSalvaEmLabel = formatDateTimeBR(aula?.frequencia_salva_em);
+  const statusLabel = status === "ERRO" ? "Erro" : execucaoUi.label;
+  const statusSubtitle =
     status === "ERRO"
-      ? "border-rose-200 bg-rose-50 text-rose-700"
-      : aulaFechada
-        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-        : "border-amber-200 bg-amber-50 text-amber-800";
+      ? erroMsg || "Falha ao carregar diario."
+      : aula?.status_execucao === "VALIDADA"
+        ? `Validada em ${fechadaEmLabel ?? "--"} por ${aula?.fechada_por_nome ?? "nao informado"}.`
+        : aula?.status_execucao === "ABERTA"
+          ? `Aberta em ${abertaEmLabel ?? "--"} por ${aula?.aberta_por_nome ?? "nao informado"}.`
+          : aula?.status_execucao === "NAO_REALIZADA"
+            ? "A aula prevista nao foi validada no periodo esperado."
+            : aula
+              ? "A aula foi aberta e precisa de frequencia salva e fechamento para ser validada."
+              : "Selecione uma turma para abrir a aula do dia.";
+  const statusBadgeLabel = status === "ERRO" ? "ERRO" : execucaoUi.badge;
+  const statusBadgeTone = status === "ERRO" ? "border-rose-200 bg-rose-50 text-rose-700" : execucaoUi.tone;
   const aulaNumeroLabel = typeof aula?.aula_numero === "number" ? `#${aula.aula_numero}` : "--";
   const dataSemana = weekdayLabelFromISO(dataAula);
   const presencasMarcadas = countLinhasMarcadas(linhas);
@@ -1087,7 +1155,7 @@ export default function DiarioDeClassePage() {
           <div className="text-xs text-slate-500">{statusSubtitle}</div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
           <Card title="Status" value={statusLabel} subtitle={statusSubtitle} />
           <Card title="Data" value={dataAula} subtitle={`Dia da semana: ${dataSemana}`} />
           <Card
@@ -1095,7 +1163,16 @@ export default function DiarioDeClassePage() {
             value={aulaNumeroLabel}
             subtitle={aula ? `Turma ${aula.turma_id}` : "Selecione uma turma"}
           />
-          <Card title="Professor" value="-" subtitle="fase API (futuro: auto do usuario)" />
+          <Card
+            title="Abertura"
+            value={aula?.aberta_por_nome ?? "Nao aberta"}
+            subtitle={abertaEmLabel ?? "Sem horario registrado"}
+          />
+          <Card
+            title="Fechamento"
+            value={aula?.fechada_por_nome ?? "Pendente"}
+            subtitle={fechadaEmLabel ?? "Aguardando validacao"}
+          />
         </div>
 
         <div className="mt-3">
@@ -1240,14 +1317,46 @@ export default function DiarioDeClassePage() {
                 </div>
 
                 {!aulaFechada ? (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    Status pendente: a chamada so sera valida apos o fechamento.
+                  <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                    {aula?.status_execucao === "ABERTA"
+                      ? `Aula aberta por ${aula?.aberta_por_nome ?? "nao informado"} em ${abertaEmLabel ?? "--"}.`
+                      : "Status pendente: a chamada so sera valida apos o fechamento."}
                   </div>
                 ) : (
                   <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                    Chamada fechada. Fechada por: {aula?.fechada_por ?? "nao informado"}.
+                    Chamada validada. Fechada por {aula?.fechada_por_nome ?? "nao informado"} em {fechadaEmLabel ?? "--"}.
                   </div>
                 )}
+
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Status da aula
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">{execucaoUi.badge}</div>
+                    <div className="text-xs text-slate-500">{statusSubtitle}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Abertura
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {aula?.aberta_por_nome ?? "Nao registrada"}
+                    </div>
+                    <div className="text-xs text-slate-500">{abertaEmLabel ?? "Sem horario"}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Frequencia / fechamento
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {aula?.fechada_por_nome ?? aula?.frequencia_salva_por_nome ?? "Pendente"}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {fechadaEmLabel ?? frequenciaSalvaEmLabel ?? "Sem horario"}
+                    </div>
+                  </div>
+                </div>
 
                 {turmaSelecionada ? (
                   <div className="mt-4">

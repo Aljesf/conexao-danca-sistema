@@ -196,6 +196,7 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
       nome: p.nome_pessoa ?? "Colaborador",
       funcao_nome: p.funcao_nome ?? "Professor",
     })) ?? [];
+  const professorPrincipal = professores.find((prof) => prof.principal) ?? professores[0] ?? null;
   const cursoNivel = [turma.curso, turma.nivel].filter(Boolean).join(" / ") || "Curso nao informado";
   const localNome = turma.espaco?.local?.nome ?? "-";
   const espacoNome = turma.espaco?.nome ?? (turma.espaco_id ? `Espaco #${turma.espaco_id}` : "-");
@@ -262,7 +263,10 @@ export default async function TurmaDetalhePage({ params }: TurmaPageProps) {
       <section className="space-y-3">
         <header>
           <h2 className="text-xl font-semibold text-slate-900">Frequencia da turma</h2>
-          <p className="text-sm text-slate-500">Historico reutilizavel do diario de classe para turma e aluno.</p>
+          <p className="text-sm text-slate-500">
+            Historico reutilizavel do diario de classe com execucao prevista x realizada.
+            {professorPrincipal ? ` Professor principal: ${professorPrincipal.nome}.` : ""}
+          </p>
         </header>
         <FrequenciaTurmaSection turmaId={turmaKey} />
       </section>

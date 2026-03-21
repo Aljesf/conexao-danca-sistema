@@ -1,5 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { carregarResumoAlunosTurmas } from "@/lib/academico/turmasResumoServer";
+import {
+  calcularResumoExecucaoTurma,
+  resolveAulasExecucao,
+  type AulaExecucaoResolved,
+  type AulaExecucaoRow,
+  type SituacaoExecucaoAula,
+  type StatusExecucaoAula,
+} from "@/lib/academico/execucao-aula";
 import { getResumoAlunosTurma, type ResumoAlunosTurma } from "@/lib/turmas";
 
 type Supa = SupabaseClient<any, any, any, any, any>;
@@ -28,18 +36,7 @@ type TurmaAlunoRow = {
   pessoa: { id: number; nome: string | null; nascimento: string | null } | null;
 };
 
-type AulaRow = {
-  id: number;
-  turma_id: number;
-  data_aula: string;
-  hora_inicio: string | null;
-  hora_fim: string | null;
-  fechada_em: string | null;
-  fechada_por: string | null;
-  aula_numero: number | null;
-  created_at: string | null;
-  updated_at: string | null;
-};
+type AulaRow = AulaExecucaoResolved;
 
 type PresencaRow = {
   id: number;
@@ -85,8 +82,18 @@ export type FrequenciaAulaResumo = {
   hora_inicio: string | null;
   hora_fim: string | null;
   aula_numero: number | null;
+  status_execucao: StatusExecucaoAula;
+  situacao_execucao: SituacaoExecucaoAula;
+  aberta_em: string | null;
+  aberta_por: string | null;
+  aberta_por_nome: string | null;
   fechada_em: string | null;
   fechada_por: string | null;
+  fechada_por_nome: string | null;
+  frequencia_salva_em: string | null;
+  frequencia_salva_por: string | null;
+  frequencia_salva_por_nome: string | null;
+  observacao_execucao: string | null;
   created_at: string | null;
   updated_at: string | null;
   status_chamada: "FECHADA" | "PENDENTE";
@@ -134,8 +141,11 @@ export type HistoricoFrequenciaTurmaResult = {
     total_alunos: number;
     total_alunos_com_registro: number;
     aulas_total: number;
+    aulas_previstas_periodo: number;
+    aulas_abertas: number;
     aulas_fechadas: number;
     aulas_pendentes: number;
+    aulas_nao_realizadas: number;
     presentes: number;
     faltas: number;
     atrasos: number;
@@ -147,9 +157,27 @@ export type HistoricoFrequenciaTurmaResult = {
     capacidade: number | null;
     vagas: number | null;
     ocupacao_percentual: number | null;
+    alertas_operacionais: string[];
   };
   aulas: FrequenciaAulaResumo[];
   alunos: FrequenciaAlunoResumo[];
+  execucao: {
+    ultimas_aulas_registradas: FrequenciaAulaResumo[];
+    proximas_aulas_previstas: Array<{
+      data_aula: string;
+      hora_inicio: string | null;
+      hora_fim: string | null;
+      situacao_execucao: SituacaoExecucaoAula;
+      origem: "GRADE" | "ENCONTRO" | "AULA";
+    }>;
+    pendencias_operacionais: Array<{
+      data_aula: string;
+      hora_inicio: string | null;
+      hora_fim: string | null;
+      situacao_execucao: SituacaoExecucaoAula;
+      origem: "GRADE" | "ENCONTRO" | "AULA";
+    }>;
+  };
 };
 
 export type HistoricoFrequenciaAlunoTurma = {
@@ -397,7 +425,9 @@ async function getAulasDaTurma(params: {
 }) {
   let query = params.supabase
     .from("turma_aulas")
-    .select("id,turma_id,data_aula,hora_inicio,hora_fim,fechada_em,fechada_por,aula_numero,created_at,updated_at")
+    .select(
+      "id,turma_id,data_aula,hora_inicio,hora_fim,aula_numero,status_execucao,aberta_em,aberta_por,fechada_em,fechada_por,frequencia_salva_em,frequencia_salva_por,observacao_execucao,created_at,updated_at",
+    )
     .eq("turma_id", params.turmaId)
     .order("data_aula", { ascending: false })
     .order("id", { ascending: false });
@@ -414,16 +444,7 @@ async function getAulasDaTurma(params: {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as AulaRow[]).map((item) => ({
-    ...item,
-    hora_inicio: item.hora_inicio ?? null,
-    hora_fim: item.hora_fim ?? null,
-    fechada_em: item.fechada_em ?? null,
-    fechada_por: item.fechada_por ?? null,
-    aula_numero: item.aula_numero ?? null,
-    created_at: item.created_at ?? null,
-    updated_at: item.updated_at ?? null,
-  }));
+  return resolveAulasExecucao((data ?? []) as AulaExecucaoRow[]);
 }
 
 async function getPresencasPorAulas(params: {
@@ -480,6 +501,11 @@ export function mapStatusPresenca(status: unknown): StatusPresenca | null {
   }
 
   return null;
+}
+
+function isAulaValidada(aula: Pick<AulaRow, "status_execucao" | "fechada_em"> | null | undefined) {
+  if (!aula) return false;
+  return aula.status_execucao === "VALIDADA" || Boolean(aula.fechada_em);
 }
 
 export async function listarAlunosDaTurmaFrequencia(params: {
@@ -546,7 +572,9 @@ export async function getAulaFrequenciaPayload(params: {
   if (!aula) {
     const { data, error } = await params.supabase
       .from("turma_aulas")
-      .select("id,turma_id,data_aula,hora_inicio,hora_fim,fechada_em,fechada_por,aula_numero,created_at,updated_at")
+      .select(
+        "id,turma_id,data_aula,hora_inicio,hora_fim,aula_numero,status_execucao,aberta_em,aberta_por,fechada_em,fechada_por,frequencia_salva_em,frequencia_salva_por,observacao_execucao,created_at,updated_at",
+      )
       .eq("id", params.aulaId)
       .single();
 
@@ -554,7 +582,8 @@ export async function getAulaFrequenciaPayload(params: {
       throw new Error(error?.message ?? "AULA_NAO_ENCONTRADA");
     }
 
-    aula = data as AulaRow;
+    const [resolved] = await resolveAulasExecucao([data as AulaExecucaoRow]);
+    aula = resolved ?? null;
   }
 
   if (!aula) {
@@ -655,7 +684,7 @@ export async function getAulaFrequenciaPayload(params: {
       capacidade,
       vagas,
       ocupacao_percentual: ocupacaoPercentual,
-      status_chamada: aula.fechada_em ? "FECHADA" : "PENDENTE",
+      status_chamada: isAulaValidada(aula) ? "FECHADA" : "PENDENTE",
     },
   } satisfies AulaFrequenciaPayload;
 }
@@ -671,7 +700,7 @@ export async function getHistoricoFrequenciaTurma(params: {
   const dataInicio = normalizeDate(params.dataInicio);
   const dataFim = normalizeDate(params.dataFim);
 
-  const [turma, alunosTurma, aulas] = await Promise.all([
+  const [turma, alunosTurma, aulas, execucao] = await Promise.all([
     getTurmaInfo({ supabase: params.supabase, turmaId: params.turmaId }),
     listarAlunosDaTurmaFrequencia({
       supabase: params.supabase,
@@ -680,6 +709,12 @@ export async function getHistoricoFrequenciaTurma(params: {
       refDate: dataFim ?? dataInicio ?? null,
     }),
     getAulasDaTurma({
+      supabase: params.supabase,
+      turmaId: params.turmaId,
+      dataInicio,
+      dataFim,
+    }),
+    calcularResumoExecucaoTurma({
       supabase: params.supabase,
       turmaId: params.turmaId,
       dataInicio,
@@ -703,11 +738,21 @@ export async function getHistoricoFrequenciaTurma(params: {
       hora_inicio: aula.hora_inicio ?? null,
       hora_fim: aula.hora_fim ?? null,
       aula_numero: aula.aula_numero ?? null,
+      status_execucao: aula.status_execucao,
+      situacao_execucao: aula.status_execucao,
+      aberta_em: aula.aberta_em ?? null,
+      aberta_por: aula.aberta_por ?? null,
+      aberta_por_nome: aula.aberta_por_nome ?? null,
       fechada_em: aula.fechada_em ?? null,
       fechada_por: aula.fechada_por ?? null,
+      fechada_por_nome: aula.fechada_por_nome ?? null,
+      frequencia_salva_em: aula.frequencia_salva_em ?? null,
+      frequencia_salva_por: aula.frequencia_salva_por ?? null,
+      frequencia_salva_por_nome: aula.frequencia_salva_por_nome ?? null,
+      observacao_execucao: aula.observacao_execucao ?? null,
       created_at: aula.created_at ?? null,
       updated_at: aula.updated_at ?? null,
-      status_chamada: aula.fechada_em ? "FECHADA" : "PENDENTE",
+      status_chamada: isAulaValidada(aula) ? "FECHADA" : "PENDENTE",
       total_registros: 0,
       presentes: 0,
       faltas: 0,
@@ -755,6 +800,14 @@ export async function getHistoricoFrequenciaTurma(params: {
     if (!aula) continue;
 
     const aluno = ensureAluno(presenca.aluno_pessoa_id, presenca.pessoa?.nome ?? null);
+    aula.total_registros += 1;
+    addStatus(aula, status);
+    aula.percentual_presenca = toPercent(aula.presentes + aula.atrasos, aula.total_registros);
+
+    if (!isAulaValidada(aula)) {
+      continue;
+    }
+
     aluno.total_registros += 1;
     addStatus(aluno, status);
     aluno.percentual_frequencia = toPercent(aluno.presentes + aluno.atrasos, aluno.total_registros);
@@ -774,9 +827,6 @@ export async function getHistoricoFrequenciaTurma(params: {
       };
     }
 
-    aula.total_registros += 1;
-    addStatus(aula, status);
-    aula.percentual_presenca = toPercent(aula.presentes + aula.atrasos, aula.total_registros);
     addStatus(totais, status);
   }
 
@@ -814,8 +864,11 @@ export async function getHistoricoFrequenciaTurma(params: {
       total_alunos: turma.resumo_alunos.total_alunos,
       total_alunos_com_registro: alunosComRegistro,
       aulas_total: aulasList.length,
-      aulas_fechadas: aulasList.filter((item) => item.status_chamada === "FECHADA").length,
-      aulas_pendentes: aulasList.filter((item) => item.status_chamada === "PENDENTE").length,
+      aulas_previstas_periodo: execucao.total_previstas_periodo,
+      aulas_abertas: execucao.total_abertas,
+      aulas_fechadas: execucao.total_validadas,
+      aulas_pendentes: execucao.total_pendentes,
+      aulas_nao_realizadas: execucao.total_nao_realizadas,
       presentes: totais.presentes,
       faltas: totais.faltas,
       atrasos: totais.atrasos,
@@ -827,9 +880,29 @@ export async function getHistoricoFrequenciaTurma(params: {
       capacidade,
       vagas,
       ocupacao_percentual: ocupacaoPercentual,
+      alertas_operacionais: execucao.alertas,
     },
     aulas: aulasList,
     alunos,
+    execucao: {
+      ultimas_aulas_registradas: execucao.ultimas_registradas
+        .map((item) => (item.aula_id ? aulasMap.get(item.aula_id) ?? null : null))
+        .filter((item): item is FrequenciaAulaResumo => Boolean(item)),
+      proximas_aulas_previstas: execucao.proximas_previstas.map((item) => ({
+        data_aula: item.data_aula,
+        hora_inicio: item.hora_inicio,
+        hora_fim: item.hora_fim,
+        situacao_execucao: item.situacao,
+        origem: item.origem,
+      })),
+      pendencias_operacionais: execucao.pendencias.map((item) => ({
+        data_aula: item.data_aula,
+        hora_inicio: item.hora_inicio,
+        hora_fim: item.hora_fim,
+        situacao_execucao: item.situacao,
+        origem: item.origem,
+      })),
+    },
   } satisfies HistoricoFrequenciaTurmaResult;
 }
 
@@ -902,7 +975,7 @@ export async function getHistoricoFrequenciaAluno(params: {
     if (!turmaId || !turmaBase) continue;
 
     const aulasFechadasElegiveis = (aulasPorTurmaId.get(turmaId) ?? []).filter((aula) => {
-      if (!aula.fechada_em) return false;
+      if (!isAulaValidada(aula)) return false;
       const data = normalizeDate(aula.data_aula);
       const inicio = normalizeDate(vinculo.dt_inicio);
       const fim = normalizeDate(vinculo.dt_fim);
@@ -981,6 +1054,7 @@ export async function getHistoricoFrequenciaAluno(params: {
 
     const aula = aulasById.get(presenca.aula_id);
     if (!aula) continue;
+    if (!isAulaValidada(aula)) continue;
 
     const turma = turmasMap.get(aula.turma_id);
     if (!turma) continue;
