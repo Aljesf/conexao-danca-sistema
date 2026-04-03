@@ -2,28 +2,22 @@
 
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { createServerActionClient } from "@supabase/auth-helpers-nextjs";
+import {
+  clearSupabaseAuthCookiesFromCookieStore,
+  shouldClearSupabaseAuth,
+} from "@/lib/supabase/auth-utils";
 
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
 
   const cookieStore = await cookies();
+  clearSupabaseAuthCookiesFromCookieStore(cookieStore);
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, { ...options, path: "/" });
-          });
-        },
-      },
-    }
-  );
+  const supabase = createServerActionClient({
+    cookies: () => cookieStore as ReturnType<typeof cookies>,
+  });
 
   const { error } = await supabase.auth.signInWithPassword({
     email,
@@ -31,6 +25,9 @@ export async function loginAction(formData: FormData) {
   });
 
   if (error) {
+    if (shouldClearSupabaseAuth(error)) {
+      clearSupabaseAuthCookiesFromCookieStore(cookieStore);
+    }
     redirect("/login?erro=1");
   }
 

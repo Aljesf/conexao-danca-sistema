@@ -436,7 +436,7 @@ export default function FinanceiroDashboardPage() {
             subtitle="Visao geral do financeiro com saude imediata, leitura mensal SaaS e alertas inteligentes."
             items={[
               "Saude imediata e saude mensal mostram previsto, pago, pendente, vencido e carteira em NeoFin.",
-              "A leitura mensal considera mensalidades, avulsas e cobrancas sem NeoFin dentro da Conta Interna Aluno.",
+              "A leitura mensal considera mensalidades, avulsas e cobrancas sem NeoFin dentro da Conta Interna.",
               "Fluxo de caixa, alertas simples e leitura inteligente mantem a visao executiva do financeiro.",
             ]}
           />

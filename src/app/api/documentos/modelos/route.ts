@@ -15,7 +15,60 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const { supabase } = auth;
+  const { searchParams } = new URL(req.url);
+  const tipoParam = searchParams.get("tipo")?.trim().toUpperCase() || null;
+  const ativoParam = searchParams.get("ativo");
 
+  // Modo compacto: retorna apenas id+titulo para seletores (quando tipo é informado)
+  if (tipoParam) {
+    let query = supabase
+      .from("documentos_modelo")
+      .select("id,titulo,ativo,operacao_id,documentos_operacoes!inner(codigo,tipo_documento_id,documentos_tipos!inner(codigo))")
+      .order("titulo", { ascending: true });
+
+    if (ativoParam === "true") {
+      query = query.eq("ativo", true);
+    }
+
+    const { data: raw, error: filterError } = await query;
+
+    if (filterError) {
+      // Fallback: buscar sem join se as relações falharem
+      let fallbackQuery = supabase
+        .from("documentos_modelo")
+        .select("id,titulo,ativo")
+        .order("titulo", { ascending: true });
+
+      if (ativoParam === "true") {
+        fallbackQuery = fallbackQuery.eq("ativo", true);
+      }
+
+      const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+      if (fallbackError) {
+        return NextResponse.json({ error: fallbackError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ ok: true, modelos: fallbackData ?? [] }, { status: 200 });
+    }
+
+    // Filtrar pelo tipo do documento associado à operação e deduplicar por ID
+    const filtrados = (raw ?? []).filter((m: any) => {
+      const tipoDocCodigo = m.documentos_operacoes?.documentos_tipos?.codigo;
+      return tipoDocCodigo && String(tipoDocCodigo).toUpperCase() === tipoParam;
+    });
+
+    const vistos = new Set<number>();
+    const modelos: { id: number; titulo: string | null }[] = [];
+    for (const m of filtrados as Array<{ id: number; titulo: string | null }>) {
+      if (vistos.has(m.id)) continue;
+      vistos.add(m.id);
+      modelos.push({ id: m.id, titulo: m.titulo });
+    }
+
+    return NextResponse.json({ ok: true, modelos }, { status: 200 });
+  }
+
+  // Modo completo: retorna todos os campos (comportamento original)
   const { data, error } = await supabase
     .from("documentos_modelo")
     .select(

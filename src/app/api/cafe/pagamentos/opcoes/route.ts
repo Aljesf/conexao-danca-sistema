@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { guardApiByRole } from "@/lib/auth/roleGuard";
-import { requireUser } from "@/lib/supabase/api-auth";
+import { guardCafeApiRequest } from "@/lib/auth/cafeApiAccess";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { resolverFormasPagamentoDisponiveis } from "@/lib/financeiro/resolver-formas-pagamento-disponiveis";
+import { resolverElegibilidadeContaInterna } from "@/lib/loja/pessoaContaInterna";
 
 const QuerySchema = z.object({
   comprador_pessoa_id: z.string().trim().optional(),
@@ -48,15 +48,17 @@ function mapTipoFluxoCafe(value: string) {
 function isOpcaoCafePermitida(
   tipoComprador: "NAO_IDENTIFICADO" | "ALUNO" | "COLABORADOR" | "PESSOA_AVULSA",
   tipoFluxo: string,
+  possuiContaInternaAluno: boolean,
+  possuiContaInternaColaborador: boolean,
 ) {
   if (tipoFluxo === "DINHEIRO" || tipoFluxo === "PIX" || tipoFluxo === "CARTAO") {
     return true;
   }
   if (tipoFluxo === "CONTA_INTERNA_ALUNO") {
-    return tipoComprador === "ALUNO";
+    return tipoComprador === "ALUNO" || possuiContaInternaAluno;
   }
   if (tipoFluxo === "CONTA_INTERNA_COLABORADOR") {
-    return tipoComprador === "COLABORADOR";
+    return tipoComprador === "COLABORADOR" || possuiContaInternaColaborador;
   }
   return false;
 }
@@ -78,11 +80,8 @@ function ordemOpcaoCafe(tipoFluxo: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await guardApiByRole(request as unknown as Request);
-  if (denied) return denied as unknown as NextResponse;
-
-  const auth = await requireUser(request);
-  if (auth instanceof NextResponse) return auth;
+  const denied = await guardCafeApiRequest(request);
+  if (denied) return denied;
 
   try {
     const url = new URL(request.url);
@@ -105,6 +104,18 @@ export async function GET(request: NextRequest) {
       centroCustoId: parseOptionalInt(parsed.data.centro_custo_id),
       contexto: "CAFE",
     });
+    const pessoaIdElegibilidade =
+      data.comprador.pessoa_id ?? parseOptionalInt(parsed.data.comprador_pessoa_id);
+    const elegibilidadeContaInterna = pessoaIdElegibilidade
+      ? await resolverElegibilidadeContaInterna(supabase, pessoaIdElegibilidade)
+      : {
+          pessoaId: 0,
+          possuiContaInternaAluno: false,
+          possuiContaInternaColaborador: false,
+          contaInternaAlunoId: null,
+          contaInternaColaboradorId: null,
+          tiposQuitacaoPermitidos: ["PAGAMENTO_IMEDIATO", "PAGAMENTO_PARCIAL"] as const,
+        };
 
     console.log("[CAFE_PAGAMENTOS][OPCOES]", {
       comprador_pessoa_id: data.comprador.pessoa_id,
@@ -123,10 +134,18 @@ export async function GET(request: NextRequest) {
         tipo_fluxo: item.tipo_fluxo,
         habilitado: item.habilitado,
       })),
+      elegibilidade_conta_interna: elegibilidadeContaInterna,
     });
 
     const opcoesFiltradas = data.opcoes
-      .filter((item) => isOpcaoCafePermitida(data.comprador.tipo, item.tipo_fluxo))
+      .filter((item) =>
+        isOpcaoCafePermitida(
+          data.comprador.tipo,
+          item.tipo_fluxo,
+          elegibilidadeContaInterna.possuiContaInternaAluno,
+          elegibilidadeContaInterna.possuiContaInternaColaborador,
+        ),
+      )
       .sort((a, b) => {
         const ordemA = ordemOpcaoCafe(a.tipo_fluxo);
         const ordemB = ordemOpcaoCafe(b.tipo_fluxo);
@@ -155,6 +174,7 @@ export async function GET(request: NextRequest) {
         centro_custo_id: data.centro_custo_id,
         comprador: data.comprador,
         conta_interna: data.conta_interna,
+        elegibilidade_conta_interna: pessoaIdElegibilidade ? elegibilidadeContaInterna : null,
         opcoes: opcoesFiltradas.map((item) => ({
           id: item.id,
           codigo: item.codigo,
@@ -211,6 +231,7 @@ export async function GET(request: NextRequest) {
             payload: null,
           },
         },
+        elegibilidade_conta_interna: null,
         opcoes: [],
       },
       { status: 200 },

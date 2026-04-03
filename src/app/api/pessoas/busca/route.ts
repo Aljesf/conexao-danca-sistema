@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireAuthenticatedApiUser } from "@/lib/auth/cafeApiAccess";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,11 @@ function parseLimit(raw: string | null, fallback = 10, max = 20): number {
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAuthenticatedApiUser(req);
+    if (auth instanceof NextResponse) {
+      return auth;
+    }
+
     const url = new URL(req.url);
     const qRaw = url.searchParams.get("q") ?? url.searchParams.get("query") ?? "";
     const q = normalizeQuery(qRaw);
@@ -38,7 +44,7 @@ export async function GET(req: NextRequest) {
     }
 
     const limit = parseLimit(url.searchParams.get("limit"));
-    const supabase = await createClient();
+    const supabase = getSupabaseServiceClient();
     const like = `%${q}%`;
     const digits = q.replace(/\D/g, "");
 

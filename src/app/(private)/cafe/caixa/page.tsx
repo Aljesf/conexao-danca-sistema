@@ -47,6 +47,7 @@ type PagamentosResponse = {
     pessoa_id: number | null;
     tipo: CafeCompradorTipo;
   };
+  elegibilidade_conta_interna?: ContaInternaElegibilidade | null;
   conta_interna?: {
     elegivel: boolean;
     tipo: "ALUNO" | "COLABORADOR" | null;
@@ -118,6 +119,7 @@ type Comanda = {
   observacoes_internas: string | null;
   cafe_venda_itens?: ComandaItem[];
   fatura?: { id?: number; periodo_referencia?: string | null; status?: string | null } | null;
+  data_hora_venda?: string | null;
 };
 
 type ItemForm = {
@@ -127,7 +129,20 @@ type ItemForm = {
   valor_unitario_centavos: number;
 };
 
-type BuyerType = "SEM_VINCULO" | "PESSOA_AVULSA" | "ALUNO" | "COLABORADOR" | "CARGO_SETOR";
+type BuyerType = "SEM_VINCULO" | "PESSOA_AVULSA" | "ALUNO" | "COLABORADOR";
+type FormTipoQuitacao =
+  | "PAGAMENTO_IMEDIATO"
+  | "PAGAMENTO_PARCIAL"
+  | "CONTA_INTERNA_ALUNO"
+  | "CONTA_INTERNA_COLABORADOR";
+type ContaInternaElegibilidade = {
+  pessoaId: number;
+  possuiContaInternaAluno: boolean;
+  possuiContaInternaColaborador: boolean;
+  contaInternaAlunoId: number | null;
+  contaInternaColaboradorId: number | null;
+  tiposQuitacaoPermitidos: FormTipoQuitacao[];
+};
 
 type ShortcutId = "retroativo" | "baixa" | "conta" | "recentes";
 
@@ -197,37 +212,6 @@ const PAGAMENTO_OPTIONS = [
   { value: "TICKET", label: "Ticket" },
   { value: "TRANSFERENCIA", label: "Transferencia" },
 ] as const;
-const BUYER_TYPE_OPTIONS: Array<{
-  value: BuyerType;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "SEM_VINCULO",
-    label: "Sem vinculo",
-    description: "Lancamento administrativo sem associacao direta.",
-  },
-  {
-    value: "PESSOA_AVULSA",
-    label: "Pessoa avulsa",
-    description: "Venda normal com comprador identificado, sem conta interna.",
-  },
-  {
-    value: "ALUNO",
-    label: "Aluno",
-    description: "Permite conta interna do aluno quando houver elegibilidade financeira.",
-  },
-  {
-    value: "COLABORADOR",
-    label: "Colaborador",
-    description: "Permite saldo em conta interna e integracao com fatura/folha.",
-  },
-  {
-    value: "CARGO_SETOR",
-    label: "Cargo / setor",
-    description: "Estrutura preparada para evolucao futura sem quebrar a tela.",
-  },
-] as const;
 const SECTION_TARGETS: Record<SectionId, string> = {
   formulario: "caixa-formulario",
   baixa: "caixa-baixa",
@@ -255,6 +239,25 @@ function todayIso() {
   return local.toISOString().slice(0, 10);
 }
 
+function nowLocalDateTimeInput() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function isoToDateTimeInput(value: string | null | undefined) {
+  if (!value) return nowLocalDateTimeInput();
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return nowLocalDateTimeInput();
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function serializeDateTimeInput(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function competenciaFromDate(dateIso: string) {
   return dateIso.slice(0, 7);
 }
@@ -263,8 +266,12 @@ function formatCafeErrorMessage(message: string) {
   switch (message) {
     case "conta_interna_exige_colaborador":
       return "Selecione um colaborador com conta interna elegivel para continuar.";
+    case "data_hora_venda_obrigatoria":
+      return "Informe a data e hora reais da venda antes de registrar a comanda.";
     case "competencia_obrigatoria_para_conta_interna":
       return "Informe a competencia de cobranca antes de registrar a comanda em conta interna.";
+    case "valor_pago_abertura_obrigatorio_para_pagamento_parcial":
+      return "Pagamento parcial exige informar um valor pago na abertura maior que zero.";
     case "tabela_preco_id_invalida":
       return "A tabela de preco escolhida nao esta mais disponivel. Atualize o lancamento e tente novamente.";
     default:
@@ -326,18 +333,29 @@ function formatStatus(value: Comanda["status_pagamento"]) {
   }
 }
 
-function formatBuyerType(value: BuyerType) {
+function formatPerfilDetectado(value: CafeCompradorTipo | BuyerType) {
   switch (value) {
-    case "PESSOA_AVULSA":
-      return "Pessoa avulsa";
     case "ALUNO":
       return "Aluno";
     case "COLABORADOR":
       return "Colaborador";
-    case "CARGO_SETOR":
-      return "Cargo / setor";
+    case "PESSOA_AVULSA":
+      return "Pessoa avulsa";
     default:
-      return "Sem vinculo";
+      return "Nao identificado";
+  }
+}
+
+function mapCafeCompradorTipoToBuyerType(value: CafeCompradorTipo): BuyerType {
+  switch (value) {
+    case "ALUNO":
+      return "ALUNO";
+    case "COLABORADOR":
+      return "COLABORADOR";
+    case "PESSOA_AVULSA":
+      return "PESSOA_AVULSA";
+    default:
+      return "SEM_VINCULO";
   }
 }
 
@@ -523,7 +541,7 @@ function ComandaFilaCard({ comanda, onEditar, onDarBaixa, onContaInterna }: Coma
     ? "Comprador vinculado como colaborador."
     : comanda.pagador_nome
       ? "Comprador identificado como pessoa avulsa."
-      : "Sem vinculo especifico informado.";
+      : "Comprador nao identificado no registro legado.";
   const resultadoFinanceiro = emContaInternaColaborador
     ? `Debito em conta interna do colaborador${comanda.data_competencia ? ` na competencia ${comanda.data_competencia}` : ""}.`
     : emContaInternaAluno
@@ -628,6 +646,7 @@ export default function CafeCaixaPage() {
 
   const [modo, setModo] = useState<"DIA" | "RETROATIVO">("DIA");
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [dataHoraVenda, setDataHoraVenda] = useState(nowLocalDateTimeInput());
   const [dataOperacao, setDataOperacao] = useState(todayIso());
   const [tipoComprador, setTipoComprador] = useState<BuyerType>("SEM_VINCULO");
   const [compradorSelecionado, setCompradorSelecionado] = useState<PessoaBuscaItem | null>(null);
@@ -635,14 +654,14 @@ export default function CafeCaixaPage() {
   const [compradores, setCompradores] = useState<PessoaBuscaItem[]>([]);
   const [compradoresLoading, setCompradoresLoading] = useState(false);
   const [colaboradorPessoaId, setColaboradorPessoaId] = useState<string>("");
-  const [buscaColaborador, setBuscaColaborador] = useState("");
-  const [cargoSetorLabel, setCargoSetorLabel] = useState("");
-  const [tipoQuitacao, setTipoQuitacao] = useState<"IMEDIATA" | "PARCIAL" | "CONTA_INTERNA_COLABORADOR" | "CARTAO_CONEXAO">("IMEDIATA");
+  const [tipoQuitacao, setTipoQuitacao] = useState<FormTipoQuitacao>("PAGAMENTO_IMEDIATO");
   const [competencia, setCompetencia] = useState(competenciaFromDate(todayIso()));
   const [observacoesInternas, setObservacoesInternas] = useState("");
   const [centroCustoId, setCentroCustoId] = useState<number | null>(null);
   const [pagamentosDisponiveis, setPagamentosDisponiveis] = useState<PagamentoOpcao[]>([]);
   const [pagamentosLoading, setPagamentosLoading] = useState(false);
+  const [elegibilidadeContaInterna, setElegibilidadeContaInterna] =
+    useState<ContaInternaElegibilidade | null>(null);
   const [contaInternaInfo, setContaInternaInfo] = useState<PagamentosResponse["conta_interna"] | null>(null);
   const [tabelasPreco, setTabelasPreco] = useState<TabelaPrecoOpcao[]>([]);
   const [tabelasPrecoLoading, setTabelasPrecoLoading] = useState(false);
@@ -685,23 +704,13 @@ export default function CafeCaixaPage() {
   );
   const valorPagoAberturaCentavos = Number(valorPagoCentavos || "0");
   const saldoPrevistoCentavos = Math.max(totalItensCentavos - valorPagoAberturaCentavos, 0);
-  const isContaInterna = tipoQuitacao === "CONTA_INTERNA_COLABORADOR";
-  const isCartaoConexao = tipoQuitacao === "CARTAO_CONEXAO";
+  const isPagamentoImediato = tipoQuitacao === "PAGAMENTO_IMEDIATO";
+  const isPagamentoParcial = tipoQuitacao === "PAGAMENTO_PARCIAL";
+  const isContaInternaAluno = tipoQuitacao === "CONTA_INTERNA_ALUNO";
+  const isContaInternaColaborador = tipoQuitacao === "CONTA_INTERNA_COLABORADOR";
+  const isContaInternaFutura = isContaInternaAluno || isContaInternaColaborador;
   const competenciaSugerida = competencia || competenciaFromDate(dataOperacao);
   const competenciaAtual = competenciaFromDate(todayIso());
-
-  const colaboradorAtual = useMemo(
-    () => colaboradores.find((item) => String(item.pessoa_id ?? "") === colaboradorPessoaId) ?? null,
-    [colaboradores, colaboradorPessoaId],
-  );
-
-  const colaboradoresFiltrados = useMemo(() => {
-    const query = buscaColaborador.trim().toLowerCase();
-    const base = query
-      ? colaboradores.filter((item) => item.nome.toLowerCase().includes(query))
-      : colaboradores;
-    return base.filter((item) => item.pessoa_id).slice(0, 8);
-  }, [buscaColaborador, colaboradores]);
 
   const baixaSelecionada = useMemo(
     () => comandas.find((comanda) => comanda.id === baixaId) ?? null,
@@ -733,31 +742,14 @@ export default function CafeCaixaPage() {
     [comandas],
   );
 
-  const compradorNome =
-    tipoComprador === "COLABORADOR"
-      ? colaboradorAtual?.nome ?? "Nenhum colaborador selecionado"
-      : tipoComprador === "ALUNO"
-        ? compradorSelecionado?.nome ?? "Nenhum aluno selecionado"
-      : tipoComprador === "PESSOA_AVULSA"
-        ? compradorSelecionado?.nome ?? "Nenhuma pessoa selecionada"
-        : tipoComprador === "CARGO_SETOR"
-          ? cargoSetorLabel || "Preparado para vinculo futuro"
-          : "Sem vinculo especifico";
-
-  const compradorPessoaId =
-    tipoComprador === "PESSOA_AVULSA" || tipoComprador === "ALUNO"
-      ? compradorSelecionado?.id ?? null
-      : null;
-  const compradorColaboradorId =
-    tipoComprador === "COLABORADOR" ? Number(colaboradorPessoaId || "0") || null : null;
-  const permiteContaInternaAluno =
-    tipoComprador === "ALUNO" &&
-    Boolean(compradorPessoaId) &&
-    Boolean(contaInternaInfo?.elegivel && contaInternaInfo.tipo === "ALUNO");
-  const permiteContaInternaColaborador =
-    tipoComprador === "COLABORADOR" &&
-    Boolean(compradorColaboradorId) &&
-    Boolean(contaInternaInfo?.elegivel && contaInternaInfo.tipo === "COLABORADOR");
+  const compradorNome = compradorSelecionado?.nome ?? "Nenhuma pessoa selecionada";
+  const compradorPessoaId = compradorSelecionado?.id ?? null;
+  const permiteContaInternaAluno = Boolean(
+    compradorPessoaId && elegibilidadeContaInterna?.possuiContaInternaAluno,
+  );
+  const permiteContaInternaColaborador = Boolean(
+    compradorPessoaId && elegibilidadeContaInterna?.possuiContaInternaColaborador,
+  );
   const pagamentoSelecionado = pagamentosDisponiveis.find((item) => item.codigo === metodoPagamento) ?? null;
   const tabelaPrecoAtiva = useMemo(
     () => tabelasPreco.find((item) => item.id === tabelaPrecoId) ?? null,
@@ -765,60 +757,41 @@ export default function CafeCaixaPage() {
   );
   const pagamentosDisponiveisFiltrados = pagamentosDisponiveis.filter((item) => {
     if (!item.habilitado) return true;
-    if (isContaInterna) return item.tipo_fluxo === "CONTA_INTERNA_COLABORADOR";
-    if (isCartaoConexao) {
-      return (
-        item.tipo_fluxo === "CONTA_INTERNA_ALUNO" ||
-        item.tipo_fluxo === "CONTA_INTERNA_COLABORADOR"
-      );
-    }
     return item.tipo_fluxo === "IMEDIATO" || item.tipo_fluxo === "CARTAO_EXTERNO";
   });
-  const permiteFluxoContaInternaAluno =
-    permiteContaInternaAluno &&
-    pagamentosDisponiveis.some((item) => item.habilitado && item.tipo_fluxo === "CONTA_INTERNA_ALUNO");
-  const permiteFluxoContaInternaColaborador =
-    permiteContaInternaColaborador &&
-    pagamentosDisponiveis.some(
-      (item) => item.habilitado && item.tipo_fluxo === "CONTA_INTERNA_COLABORADOR",
-    );
+  const opcoesQuitacao = [
+    { value: "PAGAMENTO_IMEDIATO", label: "Pagamento imediato" },
+    { value: "PAGAMENTO_PARCIAL", label: "Pagamento parcial" },
+    ...(permiteContaInternaAluno
+      ? ([{ value: "CONTA_INTERNA_ALUNO", label: "Conta interna do aluno" }] as const)
+      : []),
+    ...(permiteContaInternaColaborador
+      ? ([{ value: "CONTA_INTERNA_COLABORADOR", label: "Conta interna do colaborador" }] as const)
+      : []),
+  ];
 
-  const resultadoFinanceiro = isContaInterna
-    ? permiteContaInternaColaborador
-      ? "Debito em conta interna do colaborador"
-      : "Conta interna do colaborador aguardando titular elegivel"
-    : isCartaoConexao
-      ? tipoComprador === "ALUNO"
-        ? permiteFluxoContaInternaAluno
-          ? "Debito em conta interna do aluno"
-          : "Conta interna do aluno aguardando titular elegivel"
-        : permiteFluxoContaInternaColaborador
-          ? "Debito em conta interna do colaborador"
-          : "Conta interna do colaborador aguardando titular elegivel"
-    : saldoPrevistoCentavos > 0
-      ? valorPagoAberturaCentavos > 0
-        ? "Parcial no caixa + saldo em aberto"
-        : "Saldo em aberto aguardando baixa real"
-      : "Recebimento no caixa";
+  const resultadoFinanceiro = isContaInternaColaborador
+    ? "Cobranca futura na conta interna do colaborador"
+    : isContaInternaAluno
+      ? "Cobranca futura na conta interna do aluno"
+      : isPagamentoParcial
+        ? "Recebimento parcial com saldo em aberto"
+        : saldoPrevistoCentavos > 0
+          ? "Recebimento imediato com saldo remanescente"
+          : "Recebimento imediato no caixa";
 
   const statusPrevisto = editingId
     ? "Ajuste operacional"
-    : isContaInterna && !permiteContaInternaColaborador
-      ? "Aguardando colaborador"
-      : isCartaoConexao && !permiteFluxoContaInternaAluno && !permiteFluxoContaInternaColaborador
-        ? "Aguardando comprador elegivel"
-      : isCartaoConexao
-        ? tipoComprador === "ALUNO"
-          ? "Em faturamento na conta interna do aluno"
-          : "Em fechamento na conta interna do colaborador"
-      : isContaInterna
-      ? "Em fechamento na conta interna do colaborador"
-      : saldoPrevistoCentavos === 0
-        ? "Pago"
-        : valorPagoAberturaCentavos > 0
-          ? "Parcial"
-          : "Pendente";
-  const competenciaCobranca = isContaInterna || isCartaoConexao ? competenciaSugerida : "Nao se aplica";
+    : isContaInternaAluno
+      ? "Cobranca futura do aluno"
+      : isContaInternaColaborador
+        ? "Cobranca futura do colaborador"
+        : saldoPrevistoCentavos === 0
+          ? "Pago"
+          : valorPagoAberturaCentavos > 0
+            ? "Parcial"
+            : "Pendente";
+  const competenciaCobranca = isContaInternaFutura ? competenciaSugerida : "Nao se aplica";
 
   const filtrosAtivos =
     Boolean(filtroColaboradorPessoaId) ||
@@ -886,13 +859,20 @@ export default function CafeCaixaPage() {
 
   useEffect(() => {
     if (modo === "DIA") {
-      const hoje = todayIso();
-      setDataOperacao(hoje);
-      if (tipoQuitacao === "CONTA_INTERNA_COLABORADOR") {
-        setCompetencia(competenciaFromDate(hoje));
+      const agora = nowLocalDateTimeInput();
+      setDataHoraVenda(agora);
+      if (isContaInternaFutura) {
+        setCompetencia(competenciaFromDate(agora.slice(0, 10)));
       }
     }
-  }, [modo, tipoQuitacao]);
+  }, [isContaInternaFutura, modo]);
+
+  useEffect(() => {
+    const proximaDataOperacao = dataHoraVenda.slice(0, 10);
+    if (proximaDataOperacao && proximaDataOperacao !== dataOperacao) {
+      setDataOperacao(proximaDataOperacao);
+    }
+  }, [dataHoraVenda, dataOperacao]);
 
   useEffect(() => {
     if (modo === "RETROATIVO") {
@@ -901,55 +881,35 @@ export default function CafeCaixaPage() {
   }, [modo]);
 
   useEffect(() => {
-    if (isContaInterna || isCartaoConexao) {
+    if (isContaInternaFutura) {
       setAtalhoAtivo("conta");
     }
-  }, [isCartaoConexao, isContaInterna]);
+  }, [isContaInternaFutura]);
 
   useEffect(() => {
-    if ((isContaInterna || isCartaoConexao) && valorPagoCentavos !== "0") {
+    if (isContaInternaFutura && valorPagoCentavos !== "0") {
       setValorPagoCentavos("0");
     }
-  }, [isCartaoConexao, isContaInterna, valorPagoCentavos]);
+  }, [isContaInternaFutura, valorPagoCentavos]);
 
   useEffect(() => {
-    if (tipoComprador === "COLABORADOR") {
-      if (compradorSelecionado) {
-        setCompradorSelecionado(null);
-      }
-      return;
+    if (!compradorSelecionado) {
+      setTipoComprador("SEM_VINCULO");
+      if (colaboradorPessoaId) setColaboradorPessoaId("");
     }
+  }, [colaboradorPessoaId, compradorSelecionado]);
 
-    if (colaboradorPessoaId) {
-      setColaboradorPessoaId("");
-    }
-    if (buscaColaborador) {
-      setBuscaColaborador("");
-    }
-
-    if (tipoComprador !== "PESSOA_AVULSA" && tipoComprador !== "ALUNO" && compradorSelecionado) {
-      setCompradorSelecionado(null);
-      setBuscaComprador("");
-      setCompradores([]);
-    }
-
-    if (tipoComprador !== "CARGO_SETOR" && cargoSetorLabel) {
-      setCargoSetorLabel("");
+  useEffect(() => {
+    if (permiteContaInternaAluno || permiteContaInternaColaborador) return;
+    if (isContaInternaFutura) {
+      setTipoQuitacao("PAGAMENTO_IMEDIATO");
     }
   }, [
-    buscaColaborador,
-    cargoSetorLabel,
-    colaboradorPessoaId,
-    compradorSelecionado,
-    tipoComprador,
+    isContaInternaFutura,
+    permiteContaInternaAluno,
+    permiteContaInternaColaborador,
+    tipoQuitacao,
   ]);
-
-  useEffect(() => {
-    if (tipoComprador === "COLABORADOR" || tipoComprador === "ALUNO") return;
-    if (tipoQuitacao === "CONTA_INTERNA_COLABORADOR" || tipoQuitacao === "CARTAO_CONEXAO") {
-      setTipoQuitacao(saldoPrevistoCentavos > 0 ? "PARCIAL" : "IMEDIATA");
-    }
-  }, [saldoPrevistoCentavos, tipoComprador, tipoQuitacao]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -958,17 +918,10 @@ export default function CafeCaixaPage() {
       setPagamentosLoading(true);
       try {
         const params = new URLSearchParams();
-        if (tipoComprador === "COLABORADOR" && compradorColaboradorId) {
-          params.set("comprador_pessoa_id", String(compradorColaboradorId));
-          params.set("comprador_tipo", "COLABORADOR");
-        } else if (tipoComprador === "ALUNO" && compradorPessoaId) {
+        if (compradorPessoaId) {
           params.set("comprador_pessoa_id", String(compradorPessoaId));
-          params.set("comprador_tipo", "ALUNO");
-        } else if (tipoComprador === "PESSOA_AVULSA" && compradorPessoaId) {
-          params.set("comprador_pessoa_id", String(compradorPessoaId));
-          params.set("comprador_tipo", "PESSOA_AVULSA");
         } else {
-          params.set("comprador_tipo", tipoComprador === "CARGO_SETOR" ? "NAO_IDENTIFICADO" : tipoComprador);
+          params.set("comprador_tipo", "NAO_IDENTIFICADO");
         }
 
         const response = await fetch(`/api/cafe/pagamentos/opcoes?${params.toString()}`, {
@@ -988,6 +941,16 @@ export default function CafeCaixaPage() {
         setPagamentosDisponiveis(nextOptions);
         setCentroCustoId(payload?.centro_custo_id ?? null);
         setContaInternaInfo(payload?.conta_interna ?? null);
+        setElegibilidadeContaInterna(payload?.elegibilidade_conta_interna ?? null);
+        if (payload?.comprador?.tipo && compradorPessoaId) {
+          const proximoTipo = mapCafeCompradorTipoToBuyerType(payload.comprador.tipo);
+          setTipoComprador(proximoTipo);
+          if (proximoTipo === "COLABORADOR") {
+            setColaboradorPessoaId(String(compradorPessoaId));
+          } else if (colaboradorPessoaId) {
+            setColaboradorPessoaId("");
+          }
+        }
         setMetodoPagamento((current) => {
           const availableCurrent = nextOptions.find((item) => item.codigo === current && item.habilitado);
           return availableCurrent?.codigo ?? nextOptions.find((item) => item.habilitado)?.codigo ?? "";
@@ -995,6 +958,7 @@ export default function CafeCaixaPage() {
       } catch (error) {
         if (!controller.signal.aborted) {
           setPagamentosDisponiveis([]);
+          setElegibilidadeContaInterna(null);
           setContaInternaInfo(null);
           setMetodoPagamento("");
           setMensagem(
@@ -1010,7 +974,7 @@ export default function CafeCaixaPage() {
 
     void carregarPagamentos();
     return () => controller.abort();
-  }, [compradorColaboradorId, compradorPessoaId, tipoComprador]);
+  }, [colaboradorPessoaId, compradorPessoaId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1019,17 +983,10 @@ export default function CafeCaixaPage() {
       setTabelasPrecoLoading(true);
       try {
         const params = new URLSearchParams();
-        if (tipoComprador === "COLABORADOR" && compradorColaboradorId) {
-          params.set("comprador_pessoa_id", String(compradorColaboradorId));
-          params.set("comprador_tipo", "COLABORADOR");
-        } else if (tipoComprador === "ALUNO" && compradorPessoaId) {
+        if (compradorPessoaId) {
           params.set("comprador_pessoa_id", String(compradorPessoaId));
-          params.set("comprador_tipo", "ALUNO");
-        } else if (tipoComprador === "PESSOA_AVULSA" && compradorPessoaId) {
-          params.set("comprador_pessoa_id", String(compradorPessoaId));
-          params.set("comprador_tipo", "PESSOA_AVULSA");
         } else {
-          params.set("comprador_tipo", tipoComprador === "CARGO_SETOR" ? "NAO_IDENTIFICADO" : tipoComprador);
+          params.set("comprador_tipo", "NAO_IDENTIFICADO");
         }
 
         const response = await fetch(`/api/cafe/tabelas-preco?${params.toString()}`, {
@@ -1084,29 +1041,7 @@ export default function CafeCaixaPage() {
 
     void carregarTabelasPreco();
     return () => controller.abort();
-  }, [compradorColaboradorId, compradorPessoaId, tipoComprador]);
-
-  useEffect(() => {
-    const option = pagamentosDisponiveis.find((item) => item.codigo === metodoPagamento);
-    if (!option) return;
-    if (option.tipo_fluxo === "CONTA_INTERNA_COLABORADOR" && tipoQuitacao !== "CONTA_INTERNA_COLABORADOR") {
-      setTipoQuitacao("CONTA_INTERNA_COLABORADOR");
-      return;
-    }
-    if (
-      (option.tipo_fluxo === "CONTA_INTERNA_ALUNO" || option.tipo_fluxo === "CONTA_INTERNA_COLABORADOR") &&
-      tipoQuitacao !== "CARTAO_CONEXAO"
-    ) {
-      setTipoQuitacao(option.tipo_fluxo === "CONTA_INTERNA_ALUNO" ? "CARTAO_CONEXAO" : "CONTA_INTERNA_COLABORADOR");
-      return;
-    }
-    if (
-      (option.tipo_fluxo === "IMEDIATO" || option.tipo_fluxo === "CARTAO_EXTERNO") &&
-      (tipoQuitacao === "CONTA_INTERNA_COLABORADOR" || tipoQuitacao === "CARTAO_CONEXAO")
-    ) {
-      setTipoQuitacao("IMEDIATA");
-    }
-  }, [metodoPagamento, pagamentosDisponiveis, tipoQuitacao]);
+  }, [compradorPessoaId]);
 
   useEffect(() => {
     const current = pagamentosDisponiveisFiltrados.find((item) => item.codigo === metodoPagamento);
@@ -1176,7 +1111,6 @@ export default function CafeCaixaPage() {
 
   useEffect(() => {
     const term = buscaComprador.trim();
-    if (tipoComprador !== "PESSOA_AVULSA" && tipoComprador !== "ALUNO") return;
     if (compradorSelecionado && buscaComprador === compradorSelecionado.nome) {
       setCompradores([]);
       return;
@@ -1218,20 +1152,19 @@ export default function CafeCaixaPage() {
 
     void carregarCompradores();
     return () => controller.abort();
-  }, [buscaComprador, compradorSelecionado, tipoComprador]);
+  }, [buscaComprador, compradorSelecionado]);
 
   function limparFormulario() {
     setEditingId(null);
     setModo("DIA");
+    setDataHoraVenda(nowLocalDateTimeInput());
     setDataOperacao(todayIso());
     setTipoComprador("SEM_VINCULO");
     setCompradorSelecionado(null);
     setBuscaComprador("");
     setCompradores([]);
     setColaboradorPessoaId("");
-    setBuscaColaborador("");
-    setCargoSetorLabel("");
-    setTipoQuitacao("IMEDIATA");
+    setTipoQuitacao("PAGAMENTO_IMEDIATO");
     setCompetencia(competenciaFromDate(todayIso()));
     setObservacoesInternas("");
     setTabelaPrecoId(null);
@@ -1279,11 +1212,6 @@ export default function CafeCaixaPage() {
     setCompradores([]);
   }
 
-  function selecionarColaborador(item: ColaboradorOption) {
-    setColaboradorPessoaId(String(item.pessoa_id ?? ""));
-    setBuscaColaborador(item.nome);
-  }
-
   async function solicitarContaInterna() {
     if (!contaInternaInfo?.suporte?.pode_solicitar || !contaInternaInfo.suporte.payload) return;
 
@@ -1318,78 +1246,81 @@ export default function CafeCaixaPage() {
       return;
     }
 
-    if ((tipoComprador === "PESSOA_AVULSA" || tipoComprador === "ALUNO") && !compradorSelecionado) {
-      setMensagem(tipoComprador === "ALUNO" ? "Selecione o aluno para continuar." : "Selecione a pessoa avulsa para continuar.");
+    if (!compradorSelecionado) {
+      setMensagem("Selecione a pessoa da venda antes de registrar o lancamento.");
       return;
     }
 
-    if (tipoComprador === "COLABORADOR" && !compradorColaboradorId) {
-      setMensagem("Selecione o colaborador para continuar.");
+    if (!serializeDateTimeInput(dataHoraVenda)) {
+      setMensagem("Informe a data e hora reais da venda.");
       return;
     }
 
-    if (isContaInterna && !permiteContaInternaColaborador) {
+    if (isContaInternaColaborador && !permiteContaInternaColaborador) {
       setMensagem("Conta interna do colaborador exige titular elegivel.");
       return;
     }
 
-    if (isCartaoConexao && tipoComprador === "ALUNO" && !permiteFluxoContaInternaAluno) {
+    if (isContaInternaAluno && !permiteContaInternaAluno) {
       setMensagem("Conta interna do aluno exige aluno ou responsavel financeiro elegivel.");
       return;
     }
 
-    if (isCartaoConexao && tipoComprador === "COLABORADOR" && !permiteFluxoContaInternaColaborador) {
-      setMensagem("Conta interna do colaborador exige titular elegivel.");
+    if (isContaInternaFutura && !competencia) {
+      setMensagem("Informe a competencia da cobranca para o fluxo de conta interna.");
       return;
     }
 
-    if (!pagamentoSelecionado?.habilitado) {
+    if ((isPagamentoImediato || isPagamentoParcial) && !pagamentoSelecionado?.habilitado) {
       setMensagem("Selecione uma forma de pagamento valida para continuar.");
+      return;
+    }
+
+    if (isPagamentoParcial && Number(valorPagoCentavos || "0") <= 0) {
+      setMensagem("Pagamento parcial exige valor pago na abertura maior que zero.");
       return;
     }
 
     setSaving(true);
     setMensagem(null);
     try {
-      const compradorPayloadId = tipoComprador === "COLABORADOR" ? compradorColaboradorId : compradorPessoaId;
-      const colaboradorPayloadId = tipoComprador === "COLABORADOR" ? compradorColaboradorId : null;
-      const formaPagamentoPayload = pagamentoSelecionado.codigo;
-      const quitacaoPayload = isContaInterna
-        ? "CONTA_INTERNA_COLABORADOR"
-        : isCartaoConexao
-          ? "CARTAO_CONEXAO"
-          : tipoQuitacao;
-      const valorPagoPayload = isContaInterna || isCartaoConexao ? 0 : Number(valorPagoCentavos || "0");
+      const compradorPayloadId = compradorPessoaId;
+      const colaboradorPayloadId =
+        isContaInternaColaborador || tipoComprador === "COLABORADOR" ? compradorPayloadId : null;
+      const formaPagamentoPayload = pagamentoSelecionado?.codigo ?? null;
+      const dataHoraVendaPayload = serializeDateTimeInput(dataHoraVenda);
+      const quitacaoPayload = tipoQuitacao;
+      const valorPagoPayload = isContaInternaFutura ? null : Number(valorPagoCentavos || "0");
       const payload = editingId
         ? {
+            data_hora_venda: dataHoraVendaPayload,
             data_operacao: dataOperacao,
             tipo_comprador: tipoComprador,
             comprador_id: compradorPayloadId,
             pagador_pessoa_id: compradorPayloadId,
             colaborador_pessoa_id: colaboradorPayloadId,
-            data_competencia: isContaInterna || isCartaoConexao ? competencia : null,
+            competencia_ano_mes: isContaInternaFutura ? competencia : null,
             observacoes_internas: observacoesInternas,
             observacoes: observacoesInternas,
-            forma_pagamento_id: pagamentoSelecionado.id,
-            forma_pagamento: formaPagamentoPayload,
+            forma_pagamento_id: isContaInternaFutura ? null : pagamentoSelecionado?.id ?? null,
+            forma_pagamento_real: isContaInternaFutura ? null : formaPagamentoPayload,
             tabela_preco_id: tabelaPrecoId,
           }
         : {
+            data_hora_venda: dataHoraVendaPayload,
             data_operacao: dataOperacao,
             tipo_comprador: tipoComprador,
             comprador_id: compradorPayloadId,
             pagador_pessoa_id: compradorPayloadId,
             colaborador_pessoa_id: colaboradorPayloadId,
             tipo_quitacao: quitacaoPayload,
-            data_competencia: isContaInterna || isCartaoConexao ? competencia : null,
+            competencia_ano_mes: isContaInternaFutura ? competencia : null,
             observacoes_internas: observacoesInternas,
             observacoes: observacoesInternas,
-            forma_pagamento_id: pagamentoSelecionado.id,
-            forma_pagamento_codigo: formaPagamentoPayload,
-            metodo_pagamento: formaPagamentoPayload,
-            forma_pagamento: formaPagamentoPayload,
+            forma_pagamento_id: isContaInternaFutura ? null : pagamentoSelecionado?.id ?? null,
+            forma_pagamento_real: isContaInternaFutura ? null : formaPagamentoPayload,
             tabela_preco_id: tabelaPrecoId,
-            valor_pago_centavos: valorPagoPayload,
+            valor_pago_abertura_centavos: valorPagoPayload,
             itens: itens.map((item) => ({
               produto_id: item.produto_id,
               quantidade: item.quantidade,
@@ -1429,14 +1360,17 @@ export default function CafeCaixaPage() {
     const comanda = json.data;
     setEditingId(comanda.id);
     setModo(comanda.data_operacao === todayIso() ? "DIA" : "RETROATIVO");
+    setDataHoraVenda(isoToDateTimeInput(comanda.data_hora_venda ?? `${comanda.data_operacao}T12:00:00.000Z`));
     setDataOperacao(comanda.data_operacao);
     if (comanda.colaborador_pessoa_id) {
       setTipoComprador("COLABORADOR");
       setColaboradorPessoaId(String(comanda.colaborador_pessoa_id));
-      setBuscaColaborador(comanda.colaborador_nome ?? "");
-      setCompradorSelecionado(null);
-      setBuscaComprador("");
-      setCargoSetorLabel("");
+      setCompradorSelecionado({
+        id: comanda.colaborador_pessoa_id,
+        nome: comanda.colaborador_nome ?? comanda.pagador_nome ?? `Pessoa #${comanda.colaborador_pessoa_id}`,
+        email: null,
+      });
+      setBuscaComprador(comanda.colaborador_nome ?? comanda.pagador_nome ?? `Pessoa #${comanda.colaborador_pessoa_id}`);
     } else if (comanda.comprador_tipo === "ALUNO" && (comanda.comprador_pessoa_id ?? comanda.pagador_pessoa_id)) {
       const pessoaId = comanda.comprador_pessoa_id ?? comanda.pagador_pessoa_id;
       setTipoComprador("ALUNO");
@@ -1447,8 +1381,6 @@ export default function CafeCaixaPage() {
       });
       setBuscaComprador(comanda.pagador_nome ?? `Pessoa #${pessoaId}`);
       setColaboradorPessoaId("");
-      setBuscaColaborador("");
-      setCargoSetorLabel("");
     } else if (comanda.pagador_pessoa_id) {
       setTipoComprador("PESSOA_AVULSA");
       setCompradorSelecionado({
@@ -1458,24 +1390,29 @@ export default function CafeCaixaPage() {
       });
       setBuscaComprador(comanda.pagador_nome ?? `Pessoa #${comanda.pagador_pessoa_id}`);
       setColaboradorPessoaId("");
-      setBuscaColaborador("");
-      setCargoSetorLabel("");
     } else {
       setTipoComprador("SEM_VINCULO");
       setCompradorSelecionado(null);
       setBuscaComprador("");
       setColaboradorPessoaId("");
-      setBuscaColaborador("");
-      setCargoSetorLabel("");
     }
     setTipoQuitacao(
-      comanda.tipo_quitacao === "CARTAO_CONEXAO" ? "CARTAO_CONEXAO" : comanda.tipo_quitacao === "CONTA_INTERNA" ? "CONTA_INTERNA_COLABORADOR" : comanda.tipo_quitacao,
+      comanda.tipo_quitacao === "CARTAO_CONEXAO"
+        ? "CONTA_INTERNA_ALUNO"
+        : comanda.tipo_quitacao === "CONTA_INTERNA" ||
+            comanda.tipo_quitacao === "CONTA_INTERNA_COLABORADOR"
+          ? "CONTA_INTERNA_COLABORADOR"
+          : comanda.tipo_quitacao === "PARCIAL"
+            ? "PAGAMENTO_PARCIAL"
+            : "PAGAMENTO_IMEDIATO",
     );
     setCompetencia(comanda.data_competencia ?? competenciaFromDate(comanda.data_operacao));
     setObservacoesInternas(comanda.observacoes_internas ?? "");
     setTabelaPrecoId(comanda.tabela_preco_id ?? null);
     setMetodoPagamento(
-      comanda.forma_pagamento && comanda.forma_pagamento !== "CONTA_INTERNA_COLABORADOR"
+      comanda.forma_pagamento &&
+        comanda.forma_pagamento !== "CONTA_INTERNA_COLABORADOR" &&
+        comanda.forma_pagamento !== "CARTAO_CONEXAO_ALUNO"
         ? comanda.forma_pagamento
         : "DINHEIRO",
     );
@@ -1573,13 +1510,15 @@ export default function CafeCaixaPage() {
 
   function ativarFluxoContaInterna() {
     setAtalhoAtivo("conta");
-    const proximoTipo =
-      tipoComprador === "ALUNO" || tipoComprador === "COLABORADOR" ? tipoComprador : "COLABORADOR";
-    if (tipoComprador !== proximoTipo) {
-      setTipoComprador(proximoTipo);
+    if (!compradorSelecionado) {
+      setMensagem("Selecione a pessoa da venda para habilitar a cobranca futura.");
+      scrollToSection("formulario");
+      return;
     }
-    if (!isContaInterna && !isCartaoConexao) {
-      setTipoQuitacao(proximoTipo === "ALUNO" ? "CARTAO_CONEXAO" : "CONTA_INTERNA_COLABORADOR");
+    if (permiteContaInternaAluno) {
+      setTipoQuitacao("CONTA_INTERNA_ALUNO");
+    } else if (permiteContaInternaColaborador) {
+      setTipoQuitacao("CONTA_INTERNA_COLABORADOR");
     }
     scrollToSection(contaInternaId ? "conta" : "formulario");
   }
@@ -1588,7 +1527,7 @@ export default function CafeCaixaPage() {
     return (
       <CafeCard
         title="Fluxos desta tela"
-        description="Escolha o objetivo do momento. Os cards abaixo separam o fluxo direto da comanda, a baixa real e a conversao corretiva de saldo para conta interna."
+        description="Acesse rapidamente o fluxo principal, a baixa real ou a conversao de saldo."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <ShortcutCard
@@ -1609,7 +1548,7 @@ export default function CafeCaixaPage() {
             badge="Fluxo futuro"
             title="Lancar em cobranca futura"
             description="Use conta interna do colaborador ou conta interna do aluno. A comanda ja nasce vinculada a cobranca da competencia."
-            active={atalhoAtivo === "conta" || isContaInterna || isCartaoConexao || contaInternaId !== null}
+            active={atalhoAtivo === "conta" || isContaInternaFutura || contaInternaId !== null}
             onClick={ativarFluxoContaInterna}
           />
           <ShortcutCard
@@ -1632,8 +1571,8 @@ export default function CafeCaixaPage() {
       <div className="space-y-6">
         <CaixaSection
           anchor={SECTION_TARGETS.formulario}
-          title="A. Dados da comanda"
-          description="Defina o contexto do lancamento, a data correta da operacao e quem esta comprando para manter o caixa alinhado com a operacao real do Ballet Cafe."
+          title="A. Operacao"
+          description="Escolha a pessoa, ajuste a data real da venda e deixe a quitacao pronta para lancamento."
           active={modo === "RETROATIVO" || atalhoAtivo === "retroativo"}
         >
           <div className="grid gap-4 md:grid-cols-2">
@@ -1674,193 +1613,110 @@ export default function CafeCaixaPage() {
             </label>
 
             <label className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Data da operacao</span>
+              <span className="font-medium text-slate-700">Data e hora da venda</span>
               <input
                 className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
-                type="date"
-                value={dataOperacao}
-                onChange={(event) => setDataOperacao(event.target.value)}
+                type="datetime-local"
+                value={dataHoraVenda}
+                onChange={(event) => setDataHoraVenda(event.target.value)}
+                required
               />
+              <p className="text-xs leading-5 text-slate-500">
+                Esse horario sera persistido para leitura operacional e analise futura de pico de vendas.
+              </p>
             </label>
 
             <div className="space-y-4 rounded-[22px] border border-[#ead8be] bg-[#fffaf2] p-5 md:col-span-2">
               <div className="space-y-1">
-                <h3 className="text-base font-semibold tracking-tight text-slate-950">Comprador e vinculo</h3>
+                <h3 className="text-base font-semibold tracking-tight text-slate-950">Identificacao da pessoa</h3>
                 <p className="text-sm leading-6 text-slate-600">
-                  Escolha se a comanda pertence a uma pessoa avulsa, a um colaborador, a um futuro cargo/setor ou se nao possui associacao direta.
+                  Selecione a pessoa e o sistema libera automaticamente apenas as quitacoes validas para ela.
                 </p>
               </div>
 
-              <div className="grid gap-2 xl:grid-cols-4">
-                {BUYER_TYPE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={cx(
-                      "rounded-[18px] border px-4 py-3 text-left transition",
-                      tipoComprador === option.value
-                        ? "border-[#c99663] bg-white text-slate-900 shadow-[0_18px_34px_-28px_rgba(180,126,58,0.35)]"
-                        : "border-[#ead8be] bg-[#fff7eb] text-slate-700 hover:border-[#d9b58b]",
-                    )}
-                    onClick={() => setTipoComprador(option.value)}
-                  >
-                    <div className="text-sm font-semibold">{option.label}</div>
-                    <div className="mt-1 text-xs leading-5 text-inherit/80">{option.description}</div>
-                  </button>
-                ))}
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-2 text-sm md:col-span-2">
+                  <span className="font-medium text-slate-700">Pessoa da venda</span>
+                  <div className="relative">
+                    <input
+                      className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
+                      value={buscaComprador}
+                      onChange={(event) => {
+                        setBuscaComprador(event.target.value);
+                        setCompradorSelecionado(null);
+                      }}
+                      placeholder="Buscar por nome ou email"
+                    />
+                    {compradorSelecionado ? (
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                        onClick={() => {
+                          setCompradorSelecionado(null);
+                          setBuscaComprador("");
+                          setCompradores([]);
+                          setTipoComprador("SEM_VINCULO");
+                        }}
+                      >
+                        Limpar
+                      </button>
+                    ) : null}
+                  </div>
+                </label>
+
+                <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm">
+                  <span className="block font-medium text-slate-700">Perfil detectado</span>
+                  <span className="mt-2 block text-base font-semibold text-slate-950">
+                    {formatPerfilDetectado(tipoComprador)}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    {compradorSelecionado
+                      ? "As opcoes de quitacao abaixo ja consideram as contas internas elegiveis dessa pessoa."
+                      : "Selecione uma pessoa para inferencia automatica."}
+                  </span>
+                </div>
               </div>
 
-              {tipoComprador === "PESSOA_AVULSA" || tipoComprador === "ALUNO" ? (
-                <div className="space-y-3">
-                  <label className="space-y-2 text-sm">
-                    <span className="font-medium text-slate-700">
-                      {tipoComprador === "ALUNO" ? "Aluno" : "Pessoa avulsa"}
-                    </span>
-                    <div className="relative">
-                      <input
-                        className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
-                        value={buscaComprador}
-                        onChange={(event) => {
-                          setBuscaComprador(event.target.value);
-                          setCompradorSelecionado(null);
-                        }}
-                        placeholder="Buscar comprador por nome ou email"
-                      />
-                      {compradorSelecionado ? (
-                        <button
-                          type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                          onClick={() => {
-                            setCompradorSelecionado(null);
-                            setBuscaComprador("");
-                            setCompradores([]);
-                          }}
-                        >
-                          Limpar
-                        </button>
-                      ) : null}
-                    </div>
-                  </label>
-
-                  {compradoresLoading ? (
-                    <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-                      Buscando pessoas...
-                    </div>
-                  ) : compradores.length > 0 ? (
-                    <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-white">
-                      {compradores.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="flex w-full items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-left first:border-t-0 hover:bg-slate-50"
-                          onClick={() => selecionarComprador(item)}
-                        >
-                          <span className="font-medium text-slate-900">{item.nome}</span>
-                          <span className="text-xs text-slate-500">{item.email ?? "Pessoa"}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : buscaComprador.trim().length >= 2 ? (
-                    <EmptyState
-                      title="Nenhuma pessoa encontrada"
-                      description="Continue digitando ou troque o tipo de comprador se esta comanda nao precisa de pessoa vinculada."
-                    />
-                  ) : null}
-
-                  <CafePanel className="px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">
-                      {tipoComprador === "ALUNO" ? "Conta interna do aluno" : "Fluxo normal"}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {tipoComprador === "ALUNO"
-                        ? "Aluno pode consumir por pagamento imediato ou seguir para conta interna do aluno quando houver elegibilidade financeira."
-                        : "Pessoa avulsa segue o fluxo normal de venda. O saldo fica no caixa para baixa posterior e nao vai para conta interna."}
-                    </p>
-                  </CafePanel>
+              {compradoresLoading ? (
+                <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+                  Buscando pessoas...
                 </div>
-              ) : null}
-
-              {tipoComprador === "COLABORADOR" ? (
-                <div className="space-y-3">
-                  <label className="space-y-2 text-sm">
-                    <span className="font-medium text-slate-700">Colaborador</span>
-                    <div className="relative">
-                      <input
-                        className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
-                        value={buscaColaborador}
-                        onChange={(event) => {
-                          setBuscaColaborador(event.target.value);
-                          setColaboradorPessoaId("");
-                        }}
-                        placeholder="Buscar colaborador por nome"
-                      />
-                      {colaboradorAtual ? (
-                        <button
-                          type="button"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-xs font-semibold text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-                          onClick={() => {
-                            setColaboradorPessoaId("");
-                            setBuscaColaborador("");
-                          }}
-                        >
-                          Limpar
-                        </button>
-                      ) : null}
-                    </div>
-                  </label>
-
-                  {colaboradoresFiltrados.length > 0 &&
-                  (!colaboradorAtual || buscaColaborador !== colaboradorAtual.nome) ? (
-                    <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-white">
-                      {colaboradoresFiltrados.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className="flex w-full items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-left first:border-t-0 hover:bg-slate-50"
-                          onClick={() => selecionarColaborador(item)}
-                        >
-                          <span className="font-medium text-slate-900">{item.nome}</span>
-                          <span className="text-xs text-slate-500">Pessoa #{item.pessoa_id ?? item.id}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <CafePanel className="px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Fluxo futuro habilitado</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Quando o comprador e colaborador, a comanda pode seguir para conta interna do colaborador por competencia, mantendo coerencia com fatura e folha.
-                    </p>
-                  </CafePanel>
+              ) : compradores.length > 0 ? (
+                <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-white">
+                  {compradores.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-left first:border-t-0 hover:bg-slate-50"
+                      onClick={() => selecionarComprador(item)}
+                    >
+                      <span className="font-medium text-slate-900">{item.nome}</span>
+                      <span className="text-xs text-slate-500">{item.email ?? "Pessoa"}</span>
+                    </button>
+                  ))}
                 </div>
+              ) : buscaComprador.trim().length >= 2 ? (
+                <EmptyState
+                  title="Nenhuma pessoa encontrada"
+                  description="Continue digitando ou ajuste o termo para localizar a pessoa correta."
+                />
               ) : null}
 
-              {tipoComprador === "CARGO_SETOR" ? (
-                <div className="space-y-3">
-                  <label className="space-y-2 text-sm">
-                    <span className="font-medium text-slate-700">Cargo / setor</span>
-                    <input
-                      className="w-full rounded-[18px] border border-dashed border-[#d9b58b] bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-[#c99663]"
-                      value={cargoSetorLabel}
-                      onChange={(event) => setCargoSetorLabel(event.target.value)}
-                      placeholder="Ex.: Professores, Recepcao, Equipe tecnica"
-                    />
-                  </label>
-                  <EmptyState
-                    title="Integracao futura preparada"
-                    description="Ainda nao ha backend para cargo/setor no caixa. O lancamento segue sem vinculo tecnico, mas a interface ja deixa o contexto preparado para a proxima etapa."
-                  />
-                </div>
-              ) : null}
-
-              {tipoComprador === "SEM_VINCULO" ? (
-                <CafePanel className="px-4 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Lancamento administrativo</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Use sem vinculo especifico quando a comanda precisa apenas entrar no caixa administrativo, sem pessoa nem colaborador associados.
-                  </p>
-                </CafePanel>
-              ) : null}
+              <div className="grid gap-3 md:grid-cols-3">
+                <MetricTile
+                  label="Conta interna aluno"
+                  value={permiteContaInternaAluno ? "Disponivel" : "Nao disponivel"}
+                />
+                <MetricTile
+                  label="Conta interna colaborador"
+                  value={permiteContaInternaColaborador ? "Disponivel" : "Nao disponivel"}
+                />
+                <MetricTile
+                  label="Leitura da pessoa"
+                  value={compradorNome}
+                  emphasis={Boolean(compradorSelecionado)}
+                />
+              </div>
 
               <label className="space-y-2 text-sm md:col-span-2">
                 <span className="font-medium text-slate-700">Tabela de preco</span>
@@ -1882,8 +1738,8 @@ export default function CafeCaixaPage() {
                   {tabelasPrecoLoading
                     ? "Resolvendo tabela de preco para este comprador..."
                     : tabelaPrecoAtiva
-                      ? `Tabela ativa: ${tabelaPrecoAtiva.nome}. O catalogo e a comanda usam essa referencia de preco.`
-                      : "Sem tabela diferenciada configurada para este perfil. O Caixa usara a referencia padrao do Cafe."}
+                      ? `Tabela ativa: ${tabelaPrecoAtiva.nome}.`
+                      : "Sem tabela diferenciada configurada para este perfil."}
                 </p>
               </label>
             </div>
@@ -1905,8 +1761,8 @@ export default function CafeCaixaPage() {
           title="B. Itens da comanda"
           description={
             editingId
-              ? "Itens exibidos para referencia. Nesta etapa a API de ajuste altera data, observacoes e vinculo antes do faturamento."
-              : "Monte os itens da comanda para consolidar o valor total do lancamento."
+              ? "Itens exibidos para referencia nesta etapa de ajuste."
+              : "Monte a comanda no mesmo raciocinio do PDV e acompanhe o total em tempo real."
           }
           actions={
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -1915,8 +1771,8 @@ export default function CafeCaixaPage() {
           }
         >
           <CafeSectionIntro
-            title="Catalogo visual da comanda"
-            description="Use o mesmo paradigma do PDV para localizar categorias e clicar nos cards dos produtos. O Caixa continua administrativo, mas a montagem da comanda fica mais rapida e coerente com a operacao real."
+            title="Catalogo da comanda"
+            description="Clique nos produtos para compor a venda com a mesma logica operacional do PDV."
           />
 
           <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
@@ -1939,7 +1795,7 @@ export default function CafeCaixaPage() {
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Comanda montada</p>
                     <h3 className="text-lg font-semibold tracking-tight text-slate-950">Carrinho administrativo</h3>
                     <p className="text-sm leading-6 text-slate-600">
-                      Cada clique em adicionar entra com quantidade 1. Cliques repetidos no mesmo produto somam automaticamente na comanda.
+                      Cada clique adiciona quantidade 1. Cliques repetidos somam automaticamente.
                     </p>
                     <p className="text-xs font-medium text-[#8c6640]">
                       {tabelaPrecoAtiva ? `Tabela ativa: ${tabelaPrecoAtiva.nome}` : "Tabela ativa: padrao do Cafe"}
@@ -1957,8 +1813,8 @@ export default function CafeCaixaPage() {
                   {itens.length === 0 ? (
                     <EmptyState
                       title="Nenhum item na comanda"
-                      description="Use o catalogo visual ao lado para adicionar produtos por categoria. O total da comanda e o resumo operacional serao recalculados automaticamente a cada clique."
-                      hint="Fluxo principal por cards, com busca apenas como apoio"
+                      description="Use o catalogo ao lado para adicionar produtos e montar a venda."
+                      hint="Fluxo por cards"
                     />
                   ) : (
                     itens.map((item) => (
@@ -2031,11 +1887,11 @@ export default function CafeCaixaPage() {
       <div className="space-y-6">
         <CaixaSection
           anchor="caixa-liquidacao"
-          title="C. Liquidacao"
-          description="Essa tela registra vendas reais feitas fora do PDV. Por isso, a liquidacao precisa reproduzir como a venda aconteceu: no caixa, parcialmente ou em conta interna quando o comprador for elegivel."
+          title="C. Quitacao"
+          description="Defina como a venda foi quitada e qual sera o reflexo financeiro."
           active={atalhoAtivo === "baixa"}
         >
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2 text-sm">
               <span className="font-medium text-slate-700">Tipo de quitacao</span>
               <select
@@ -2043,123 +1899,84 @@ export default function CafeCaixaPage() {
                 value={tipoQuitacao}
                 onChange={(event) => setTipoQuitacao(event.target.value as typeof tipoQuitacao)}
               >
-                <option value="IMEDIATA">Pagamento imediato</option>
-                <option value="PARCIAL">Pagamento parcial</option>
-                <option value="CONTA_INTERNA_COLABORADOR" disabled={!permiteContaInternaColaborador}>
-                  Debito direto em conta interna do colaborador
-                </option>
-                <option value="CARTAO_CONEXAO" disabled={!permiteFluxoContaInternaAluno && !permiteFluxoContaInternaColaborador}>
-                  Conta interna do aluno / cobranca futura
-                </option>
-              </select>
-            </label>
-
-            <label className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Forma de pagamento real</span>
-              <select
-                className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
-                value={metodoPagamento}
-                disabled={pagamentosLoading}
-                onChange={(event) => setMetodoPagamento(event.target.value)}
-              >
-                {pagamentosDisponiveisFiltrados.length === 0 ? <option value="">Sem opcoes disponiveis</option> : null}
-                {pagamentosDisponiveisFiltrados.map((option) => (
-                  <option key={option.codigo} value={option.codigo} disabled={!option.habilitado}>
+                {opcoesQuitacao.map((option) => (
+                  <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
               </select>
-              <p className="text-xs leading-5 text-slate-500">
-                {pagamentosLoading
-                  ? "Carregando meios de pagamento validos do contexto Cafe..."
-                  : pagamentoSelecionado?.motivo_bloqueio ?? `Centro de custo Ballet Cafe${centroCustoId ? ` #${centroCustoId}` : ""}.`}
-              </p>
             </label>
 
-            <label className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Valor pago na abertura (centavos)</span>
-              <input
-                className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
-                type="number"
-                min={0}
-                value={valorPagoCentavos}
-                disabled={editingId !== null || isContaInterna || isCartaoConexao}
-                onChange={(event) => setValorPagoCentavos(event.target.value)}
-              />
-            </label>
+            {isPagamentoImediato || isPagamentoParcial ? (
+              <>
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-slate-700">Forma de pagamento real</span>
+                  <select
+                    className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
+                    value={metodoPagamento}
+                    disabled={pagamentosLoading}
+                    onChange={(event) => setMetodoPagamento(event.target.value)}
+                  >
+                    {pagamentosDisponiveisFiltrados.length === 0 ? <option value="">Sem opcoes disponiveis</option> : null}
+                    {pagamentosDisponiveisFiltrados.map((option) => (
+                      <option key={option.codigo} value={option.codigo} disabled={!option.habilitado}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs leading-5 text-slate-500">
+                    {pagamentosLoading
+                      ? "Carregando meios de pagamento validos do contexto Cafe..."
+                      : pagamentoSelecionado?.motivo_bloqueio ?? `Centro de custo Ballet Cafe${centroCustoId ? ` #${centroCustoId}` : ""}.`}
+                  </p>
+                </label>
+
+                <label className="space-y-2 text-sm">
+                  <span className="font-medium text-slate-700">Valor pago na abertura (centavos)</span>
+                  <input
+                    className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
+                    type="number"
+                    min={0}
+                    value={valorPagoCentavos}
+                    disabled={editingId !== null}
+                    onChange={(event) => setValorPagoCentavos(event.target.value)}
+                  />
+                </label>
+              </>
+            ) : (
+              <label className="space-y-2 text-sm md:col-span-1">
+                <span className="font-medium text-slate-700">Competencia da cobranca</span>
+                <input
+                  className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400"
+                  type="month"
+                  value={competencia}
+                  onChange={(event) => setCompetencia(event.target.value)}
+                />
+                <p className="text-xs leading-5 text-slate-500">
+                  Este lancamento nao gera recebimento imediato. O valor seguira para cobranca futura na competencia selecionada.
+                </p>
+              </label>
+            )}
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-2">
-            <CafePanel className="px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Regra operacional</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Essa tela registra vendas reais feitas fora do PDV. Pagamento imediato gera recebimento no caixa. Pagamento parcial mantem saldo aberto. Conta interna do aluno e conta interna do colaborador criam cobranca futura na competencia escolhida.
-              </p>
-            </CafePanel>
-            <CafePanel className="px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Leitura rapida</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                {isContaInterna
-                  ? "A comanda ja nascera como debito em conta interna do colaborador. A competencia define em qual mes esse valor sera cobrado em folha ou fechamento futuro."
-                  : isCartaoConexao
-                    ? tipoComprador === "ALUNO"
-                      ? "A comanda ja nascera vinculada a conta interna do aluno. A competencia define em qual mes o debito entrara na fatura mensal do responsavel."
-                      : "A comanda ja nascera vinculada a conta interna do colaborador. A competencia define em qual mes o debito entrara no fechamento futuro."
-                    : saldoPrevistoCentavos > 0
-                      ? "Ha saldo em aberto previsto. Ele pode receber baixa posterior no caixa e, se necessario, ser convertido depois para conta interna."
-                      : "O total atual indica quitacao integral na abertura, sem saldo pendente."}
-              </p>
-            </CafePanel>
-          </div>
-        </CaixaSection>
+          <CafePanel className="px-4 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Leitura rapida</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {isContaInternaFutura
+                ? "Sera gerada cobranca futura na competencia selecionada."
+                : isPagamentoParcial
+                  ? "Pagamento parcial registra recebimento agora e mantem saldo em aberto."
+                  : "Pagamento imediato registra o recebimento real no caixa."}
+            </p>
+          </CafePanel>
 
-        <CaixaSection
-          anchor="caixa-destino-financeiro"
-          title="D. Resultado financeiro da comanda"
-          description="Defina como a comanda nasce no financeiro. Conta interna do aluno e conta interna do colaborador geram debito direto na competencia escolhida; parcial deixa saldo em aberto para ajuste posterior."
-          active={isContaInterna || isCartaoConexao || contaInternaId !== null || atalhoAtivo === "conta"}
-          variant={isContaInterna || isCartaoConexao || contaInternaId !== null ? "muted" : "default"}
-        >
-          <div className="grid gap-4 md:grid-cols-[1fr_180px_1fr]">
-            <div className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Competencia de cobranca</span>
-              <input
-                className="w-full rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-slate-400 disabled:bg-slate-50"
-                value={competencia}
-                onChange={(event) => setCompetencia(event.target.value)}
-                placeholder="YYYY-MM"
-                disabled={!isContaInterna && !isCartaoConexao}
-              />
-              <p className="text-xs leading-5 text-slate-500">
-                Define o mes em que o valor sera cobrado na conta interna do aluno ou do colaborador.
-              </p>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Status previsto</span>
-              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950">{statusPrevisto}</div>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              <span className="font-medium text-slate-700">Resultado financeiro</span>
-              <div className="rounded-[18px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-950">{resultadoFinanceiro}</div>
-            </div>
-          </div>
-
-          {(isContaInterna && !permiteContaInternaColaborador) || (isCartaoConexao && !permiteFluxoContaInternaAluno && !permiteFluxoContaInternaColaborador) ? (
+          {(isContaInternaColaborador && !permiteContaInternaColaborador) || (isContaInternaAluno && !permiteContaInternaAluno) ? (
             <EmptyState
               title="Fluxo futuro exige comprador elegivel"
-              description="Selecione o colaborador ou aluno correto antes de confirmar este lancamento. A cobranca por competencia depende desse vinculo."
+              description="Selecione uma pessoa elegivel antes de confirmar este lancamento. A cobranca por competencia depende desse vinculo."
               tone="warning"
             />
-          ) : (
-            <CafePanel className="px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Uso recomendado</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Se a liquidacao for conta interna do aluno ou do colaborador, a comanda ja gera debito na competencia escolhida. A folha e as faturas importam a cobranca consolidada, nao a comanda isolada.
-              </p>
-            </CafePanel>
-          )}
+          ) : null}
 
           {contaInternaInfo && !contaInternaInfo.elegivel && contaInternaInfo.suporte?.pode_solicitar ? (
             <CafePanel className="px-4 py-4">
@@ -2178,9 +1995,7 @@ export default function CafeCaixaPage() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-slate-950">Fechamento do lancamento</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                Revise os blocos acima antes de registrar. Esta tela foi desenhada para seguranca de lancamento e regularizacao operacional, nao para venda rapida de balcao.
-              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">Confirme os dados essenciais e registre.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -2208,47 +2023,34 @@ export default function CafeCaixaPage() {
       <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
         <CafeCard
           title="Resumo operacional"
-          description="Confirme comprador, forma de liquidacao, saldo, competencia de cobranca e resultado financeiro antes de gravar."
-          variant={saldoPrevistoCentavos > 0 || isContaInterna || isCartaoConexao ? "muted" : "stats"}
+          description="Conferencia final antes de salvar."
+          variant={saldoPrevistoCentavos > 0 || isContaInternaFutura ? "muted" : "stats"}
         >
           <div className="rounded-[24px] border border-[#ead8be] bg-[linear-gradient(180deg,#fffef9_0%,#fff5e6_100%)] px-5 py-5">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8c6640]">Total da comanda</div>
             <div className="mt-3 text-[2.2rem] font-semibold leading-none tracking-tight text-slate-950">{brl(totalItensCentavos)}</div>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              {editingId
-                ? "Resumo baseado nos itens atuais da comanda em leitura de referencia."
-                : "O painel lateral destaca saldo, competencia de cobranca e o resultado financeiro previsto para a comanda."}
-            </p>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{editingId ? "Resumo da comanda em ajuste." : "Resumo financeiro da operacao atual."}</p>
           </div>
 
           <div className="grid gap-3">
-            <MetricTile label="Tipo de comprador" value={formatBuyerType(tipoComprador)} />
             <MetricTile label="Comprador selecionado" value={compradorNome} />
+            <MetricTile label="Perfil detectado" value={formatPerfilDetectado(tipoComprador)} />
             <MetricTile
-              label="Forma de pagamento"
-              value={pagamentoSelecionado?.label ?? formatFormaPagamento(metodoPagamento)}
+              label="Forma de quitacao"
+              value={
+                isContaInternaAluno
+                  ? "Conta interna do aluno"
+                  : isContaInternaColaborador
+                    ? "Conta interna do colaborador"
+                    : pagamentoSelecionado?.label ?? formatFormaPagamento(metodoPagamento)
+              }
             />
-            <MetricTile label="Tabela de preco" value={tabelaPrecoAtiva?.nome ?? "Padrao do Cafe"} />
-            <MetricTile label="Centro de custo" value={centroCustoId ? `#${centroCustoId} Ballet Cafe` : "Resolvendo"} />
+            <MetricTile label="Total da venda" value={brl(totalItensCentavos)} />
             <MetricTile label="Valor pago" value={brl(valorPagoAberturaCentavos)} />
             <MetricTile label="Saldo em aberto" value={brl(saldoPrevistoCentavos)} emphasis={saldoPrevistoCentavos > 0} />
-            <MetricTile label="Competencia de cobranca" value={competenciaCobranca} emphasis={isContaInterna || isCartaoConexao} />
+            <MetricTile label="Competencia" value={competenciaCobranca} emphasis={isContaInternaFutura} />
             <MetricTile label="Resultado financeiro" value={resultadoFinanceiro} />
-            <MetricTile label="Status operacional previsto" value={statusPrevisto} />
-            {tipoComprador === "COLABORADOR" ? (
-              <MetricTile
-                label="Conta interna do colaborador"
-                value={permiteContaInternaColaborador ? "Disponivel para cobranca, fatura e folha" : "Aguardando conta elegivel"}
-                emphasis
-              />
-            ) : null}
-            {tipoComprador === "ALUNO" ? (
-              <MetricTile
-                label="Conta interna do aluno"
-                value={permiteFluxoContaInternaAluno ? "Disponivel para faturamento mensal" : "Aguardando conta elegivel"}
-                emphasis
-              />
-            ) : null}
+            <MetricTile label="Status previsto" value={statusPrevisto} />
           </div>
         </CafeCard>
 
@@ -2513,7 +2315,7 @@ export default function CafeCaixaPage() {
     <CafePageShell
       eyebrow="Ballet Cafe"
       title="Caixa / Lancamentos"
-      description="Painel administrativo para registrar comandas retroativas, corrigir saldos e definir o tratamento financeiro real de cada comanda, sem transformar esta tela em PDV."
+      description="PDV administrativo para lancamentos retroativos, baixas e cobrancas futuras do Ballet Cafe."
       actions={
         <>
           <Link className={BUTTON_PRIMARY} href="/cafe/vendas">

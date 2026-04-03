@@ -1,4 +1,4 @@
--- Snapshot do schema gerado em 2026-02-12T16:19:00.674Z
+-- Snapshot do schema gerado em 2026-03-23T16:14:44.595Z
 -- Fonte: SUPABASE_DB_URL
 
 -- --------------------------------------------------
@@ -88,6 +88,19 @@ CREATE TABLE public."auditoria_logs" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."auditoria_migracao_conta_interna_cobrancas"
+-- --------------------------------------------------
+CREATE TABLE public."auditoria_migracao_conta_interna_cobrancas" (
+  "id" bigint NOT NULL DEFAULT nextval('auditoria_migracao_conta_interna_cobrancas_id_seq'::regclass),
+  "cobranca_id" bigint NOT NULL,
+  "etapa" text NOT NULL,
+  "classificacao_anterior" jsonb,
+  "classificacao_nova" jsonb,
+  "observacao" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."auth_signup_allowlist"
 -- --------------------------------------------------
 CREATE TABLE public."auth_signup_allowlist" (
@@ -157,6 +170,77 @@ CREATE TABLE public."bairros" (
   "ativo" boolean DEFAULT true,
   "created_at" timestamp with time zone DEFAULT now(),
   "updated_at" timestamp with time zone DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."bolsa_concessoes"
+-- --------------------------------------------------
+CREATE TABLE public."bolsa_concessoes" (
+  "id" bigint NOT NULL DEFAULT nextval('bolsa_concessoes_id_seq'::regclass),
+  "projeto_social_id" bigint NOT NULL,
+  "bolsa_tipo_id" bigint NOT NULL,
+  "pessoa_id" bigint NOT NULL,
+  "matricula_id" bigint,
+  "turma_id" bigint,
+  "data_inicio" date NOT NULL DEFAULT CURRENT_DATE,
+  "data_fim" date,
+  "status" text NOT NULL DEFAULT 'ATIVA'::text,
+  "motivo" text,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "projeto_social_beneficiario_id" bigint
+);
+
+-- --------------------------------------------------
+-- Tabela: public."bolsa_ledger"
+-- --------------------------------------------------
+CREATE TABLE public."bolsa_ledger" (
+  "id" bigint NOT NULL DEFAULT nextval('bolsa_ledger_id_seq'::regclass),
+  "competencia" text NOT NULL,
+  "projeto_social_id" bigint NOT NULL,
+  "bolsa_concessao_id" bigint NOT NULL,
+  "pessoa_id" bigint NOT NULL,
+  "turma_id" bigint,
+  "matricula_id" bigint,
+  "origem_valor_contratado" text NOT NULL,
+  "valor_contratado_centavos" integer NOT NULL,
+  "valor_familia_centavos" integer NOT NULL,
+  "valor_investimento_centavos" integer NOT NULL,
+  "composicao_json" jsonb,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."bolsa_tipos"
+-- --------------------------------------------------
+CREATE TABLE public."bolsa_tipos" (
+  "id" bigint NOT NULL DEFAULT nextval('bolsa_tipos_id_seq'::regclass),
+  "projeto_social_id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "modo" text NOT NULL,
+  "percentual_desconto" numeric,
+  "valor_final_familia_centavos" integer,
+  "observacoes" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_categorias"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_categorias" (
+  "id" bigint NOT NULL DEFAULT nextval('cafe_categorias_id_seq'::regclass),
+  "centro_custo_id" integer,
+  "nome" text NOT NULL,
+  "slug" text NOT NULL,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -270,6 +354,22 @@ CREATE TABLE public."cafe_produtos" (
   "insumo_direto_id" bigint,
   "ativo" boolean NOT NULL DEFAULT true,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "categoria_id" bigint,
+  "subcategoria_id" bigint
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cafe_subcategorias"
+-- --------------------------------------------------
+CREATE TABLE public."cafe_subcategorias" (
+  "id" bigint NOT NULL DEFAULT nextval('cafe_subcategorias_id_seq'::regclass),
+  "categoria_id" bigint NOT NULL,
+  "nome" text NOT NULL,
+  "slug" text NOT NULL,
+  "ordem" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
@@ -297,7 +397,10 @@ CREATE TABLE public."cafe_venda_itens" (
   "produto_id" bigint NOT NULL,
   "quantidade" numeric NOT NULL DEFAULT 1,
   "preco_unitario_centavos" integer NOT NULL DEFAULT 0,
-  "total_centavos" integer NOT NULL DEFAULT 0
+  "total_centavos" integer NOT NULL DEFAULT 0,
+  "descricao_snapshot" text,
+  "valor_unitario_centavos" integer NOT NULL DEFAULT 0,
+  "valor_total_centavos" integer NOT NULL DEFAULT 0
 );
 
 -- --------------------------------------------------
@@ -309,12 +412,20 @@ CREATE TABLE public."cafe_vendas" (
   "consumidor_pessoa_id" bigint,
   "valor_total_centavos" integer NOT NULL DEFAULT 0,
   "forma_pagamento" text NOT NULL,
-  "status_pagamento" text NOT NULL DEFAULT 'PAGO'::text,
+  "status_pagamento" text NOT NULL DEFAULT 'PENDENTE'::text,
   "cobranca_id" bigint,
   "observacoes" text,
   "created_by" uuid,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
-  "tabela_preco_id" bigint
+  "tabela_preco_id" bigint,
+  "data_operacao" date NOT NULL DEFAULT CURRENT_DATE,
+  "data_competencia" text,
+  "colaborador_pessoa_id" bigint,
+  "tipo_quitacao" text NOT NULL DEFAULT 'IMEDIATA'::text,
+  "valor_pago_centavos" integer NOT NULL DEFAULT 0,
+  "valor_em_aberto_centavos" integer NOT NULL DEFAULT 0,
+  "observacoes_internas" text,
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -463,7 +574,61 @@ CREATE TABLE public."cobrancas" (
   "juros_mora_percentual_mensal_aplicavel" numeric,
   "cancelada_em" timestamp with time zone,
   "cancelada_motivo" text,
-  "cancelada_por_user_id" uuid
+  "cancelada_por_user_id" uuid,
+  "expurgada" boolean DEFAULT false,
+  "expurgada_em" timestamp with time zone,
+  "expurgada_por" uuid,
+  "expurgo_motivo" text,
+  "origem_agrupador_tipo" text,
+  "origem_agrupador_id" bigint,
+  "origem_item_tipo" text,
+  "origem_item_id" bigint,
+  "conta_interna_id" bigint,
+  "origem_label" text,
+  "migracao_conta_interna_status" text,
+  "migracao_conta_interna_observacao" text,
+  "vencimento_original" date,
+  "vencimento_ajustado_em" timestamp with time zone,
+  "vencimento_ajustado_por" uuid,
+  "vencimento_ajuste_motivo" text,
+  "cancelada_por" uuid,
+  "cancelamento_motivo" text,
+  "cancelamento_tipo" text
+);
+
+-- --------------------------------------------------
+-- Tabela: public."cobrancas_historico_eventos"
+-- --------------------------------------------------
+CREATE TABLE public."cobrancas_historico_eventos" (
+  "id" bigint NOT NULL DEFAULT nextval('cobrancas_historico_eventos_id_seq'::regclass),
+  "cobranca_id" bigint NOT NULL,
+  "tipo_evento" text NOT NULL,
+  "payload_anterior" jsonb,
+  "payload_novo" jsonb,
+  "observacao" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "created_by" uuid
+);
+
+-- --------------------------------------------------
+-- Tabela: public."colaborador_config_financeira"
+-- --------------------------------------------------
+CREATE TABLE public."colaborador_config_financeira" (
+  "id" bigint NOT NULL DEFAULT nextval('colaborador_config_financeira_id_seq'::regclass),
+  "colaborador_id" bigint NOT NULL,
+  "gera_folha" boolean NOT NULL DEFAULT false,
+  "dia_fechamento" integer NOT NULL DEFAULT 31,
+  "dia_pagamento" integer NOT NULL DEFAULT 5,
+  "pagamento_no_mes_seguinte" boolean NOT NULL DEFAULT true,
+  "politica_desconto_cartao" text NOT NULL DEFAULT 'DESCONTA_NA_FOLHA'::text,
+  "politica_corte_cartao" text NOT NULL DEFAULT 'POR_DIA_FECHAMENTO'::text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "salario_base_centavos" integer NOT NULL DEFAULT 0,
+  "tipo_remuneracao" text NOT NULL DEFAULT 'MENSAL'::text,
+  "valor_hora_centavos" integer NOT NULL DEFAULT 0,
+  "centro_custo_id" integer
 );
 
 -- --------------------------------------------------
@@ -670,6 +835,59 @@ CREATE TABLE public."contratos_modelo" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."coreografia_estilos"
+-- --------------------------------------------------
+CREATE TABLE public."coreografia_estilos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "nome" text NOT NULL,
+  "slug" text NOT NULL,
+  "descricao" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "ordem_exibicao" integer NOT NULL DEFAULT 0,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."coreografia_formacoes"
+-- --------------------------------------------------
+CREATE TABLE public."coreografia_formacoes" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "codigo" text NOT NULL,
+  "nome" text NOT NULL,
+  "quantidade_minima_padrao" integer NOT NULL,
+  "quantidade_maxima_padrao" integer NOT NULL,
+  "quantidade_fixa" boolean NOT NULL DEFAULT false,
+  "ativa" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."coreografias"
+-- --------------------------------------------------
+CREATE TABLE public."coreografias" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "nome" text NOT NULL,
+  "descricao" text,
+  "modalidade" text,
+  "tipo_formacao" USER-DEFINED NOT NULL DEFAULT 'LIVRE'::coreografia_formacao_enum,
+  "quantidade_minima_participantes" integer NOT NULL DEFAULT 1,
+  "quantidade_maxima_participantes" integer NOT NULL DEFAULT 20,
+  "duracao_estimada_segundos" integer,
+  "sugestao_musica" text,
+  "link_musica" text,
+  "professor_responsavel_id" bigint,
+  "turma_base_id" bigint,
+  "observacoes" text,
+  "ativa" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "estilo_id" uuid NOT NULL,
+  "formacao_id" uuid NOT NULL
+);
+
+-- --------------------------------------------------
 -- Tabela: public."credito_conexao_configuracoes"
 -- --------------------------------------------------
 CREATE TABLE public."credito_conexao_configuracoes" (
@@ -704,7 +922,9 @@ CREATE TABLE public."credito_conexao_contas" (
   "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
   "limite_autorizado_centavos" integer,
   "centro_custo_intermediacao_id" integer,
-  "categoria_taxas_id" integer
+  "categoria_taxas_id" integer,
+  "dia_vencimento_preferido" smallint,
+  "responsavel_financeiro_pessoa_id" bigint
 );
 
 -- --------------------------------------------------
@@ -736,6 +956,19 @@ CREATE TABLE public."credito_conexao_faturas" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."credito_conexao_faturas_cobrancas_avulsas"
+-- --------------------------------------------------
+CREATE TABLE public."credito_conexao_faturas_cobrancas_avulsas" (
+  "id" bigint NOT NULL DEFAULT nextval('credito_conexao_faturas_cobrancas_avulsas_id_seq'::regclass),
+  "fatura_id" bigint NOT NULL,
+  "cobranca_avulsa_id" bigint NOT NULL,
+  "confirmado_competencia_diferente" boolean NOT NULL DEFAULT false,
+  "criado_por_user_id" uuid,
+  "created_at" timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- --------------------------------------------------
 -- Tabela: public."credito_conexao_lancamentos"
 -- --------------------------------------------------
 CREATE TABLE public."credito_conexao_lancamentos" (
@@ -753,7 +986,10 @@ CREATE TABLE public."credito_conexao_lancamentos" (
   "competencia" text,
   "referencia_item" text,
   "composicao_json" jsonb,
-  "cobranca_id" bigint
+  "cobranca_id" bigint,
+  "aluno_id" bigint,
+  "matricula_id" bigint,
+  "centro_custo_id" bigint
 );
 
 -- --------------------------------------------------
@@ -866,6 +1102,23 @@ CREATE TABLE public."debug_vercel_pings" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."documentos_cabecalhos"
+-- --------------------------------------------------
+CREATE TABLE public."documentos_cabecalhos" (
+  "id" bigint NOT NULL DEFAULT nextval('documentos_cabecalhos_id_seq'::regclass),
+  "codigo" text NOT NULL,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "html_template" text NOT NULL,
+  "css_template" text,
+  "config_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "layout_template_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."documentos_colecoes"
 -- --------------------------------------------------
 CREATE TABLE public."documentos_colecoes" (
@@ -962,7 +1215,14 @@ CREATE TABLE public."documentos_emitidos" (
   "footer_html" text,
   "header_height_px" integer NOT NULL DEFAULT 120,
   "footer_height_px" integer NOT NULL DEFAULT 80,
-  "page_margin_mm" integer NOT NULL DEFAULT 15
+  "page_margin_mm" integer NOT NULL DEFAULT 15,
+  "recebimento_id" bigint,
+  "operacao_id" bigint,
+  "origem_tipo" text,
+  "origem_id" text,
+  "documento_origem_id" bigint,
+  "motivo_reemissao" text,
+  "tipo_relacao_documental" text NOT NULL DEFAULT 'ORIGINAL'::text
 );
 
 -- --------------------------------------------------
@@ -1066,7 +1326,57 @@ CREATE TABLE public."documentos_modelo" (
   "footer_template_id" bigint,
   "header_height_px" integer NOT NULL DEFAULT 120,
   "footer_height_px" integer NOT NULL DEFAULT 80,
-  "page_margin_mm" integer NOT NULL DEFAULT 15
+  "page_margin_mm" integer NOT NULL DEFAULT 15,
+  "operacao_id" bigint,
+  "cabecalho_id" bigint,
+  "rodape_id" bigint
+);
+
+-- --------------------------------------------------
+-- Tabela: public."documentos_operacoes"
+-- --------------------------------------------------
+CREATE TABLE public."documentos_operacoes" (
+  "id" bigint NOT NULL DEFAULT nextval('documentos_operacoes_id_seq'::regclass),
+  "codigo" text NOT NULL,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "tipo_documento_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "exige_origem" boolean NOT NULL DEFAULT true,
+  "permite_reemissao" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."documentos_operacoes_conjuntos"
+-- --------------------------------------------------
+CREATE TABLE public."documentos_operacoes_conjuntos" (
+  "id" bigint NOT NULL DEFAULT nextval('documentos_operacoes_conjuntos_id_seq'::regclass),
+  "operacao_id" bigint NOT NULL,
+  "conjunto_id" bigint NOT NULL,
+  "ordem" integer NOT NULL DEFAULT 1,
+  "obrigatorio" boolean NOT NULL DEFAULT false,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."documentos_rodapes"
+-- --------------------------------------------------
+CREATE TABLE public."documentos_rodapes" (
+  "id" bigint NOT NULL DEFAULT nextval('documentos_rodapes_id_seq'::regclass),
+  "codigo" text NOT NULL,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "html_template" text NOT NULL,
+  "css_template" text,
+  "config_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "layout_template_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -1283,6 +1593,628 @@ CREATE TABLE public."espacos" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."eventos_escola"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "titulo" text NOT NULL,
+  "descricao" text,
+  "tipo_evento" USER-DEFINED NOT NULL,
+  "natureza_evento" USER-DEFINED NOT NULL,
+  "abrangencia_evento" USER-DEFINED NOT NULL,
+  "contexto" text NOT NULL DEFAULT 'ESCOLA'::text,
+  "centro_custo_codigo" text NOT NULL DEFAULT 'ESCOLA'::text,
+  "publico_alvo" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_contratacoes"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_contratacoes" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "sessao_id" uuid,
+  "prestador_pessoa_id" bigint,
+  "tipo_servico" text NOT NULL,
+  "descricao" text,
+  "valor_previsto_centavos" integer NOT NULL DEFAULT 0,
+  "valor_contratado_centavos" integer,
+  "contrato_acessorio_emitido_id" bigint,
+  "conta_pagar_id" bigint,
+  "status" USER-DEFINED NOT NULL DEFAULT 'RASCUNHO'::evento_contratacao_status_enum,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_coreografia_participantes"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_coreografia_participantes" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "coreografia_id" uuid NOT NULL,
+  "pessoa_id" bigint,
+  "papel" text,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "aluno_id" bigint,
+  "inscricao_id" uuid,
+  "tipo_participante" text NOT NULL DEFAULT 'PESSOA'::text,
+  "ordem_interna" integer,
+  "ativo" boolean NOT NULL DEFAULT true
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_coreografias"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_coreografias" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "subevento_id" uuid,
+  "titulo" text NOT NULL,
+  "categoria" text,
+  "estilo" text,
+  "professor_responsavel_id" bigint,
+  "turma_base_id" bigint,
+  "duracao_estimada_segundos" integer,
+  "ordem_apresentacao" integer,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "descricao" text,
+  "tipo_formacao" USER-DEFINED NOT NULL DEFAULT 'LIVRE'::evento_coreografia_formacao_enum,
+  "quantidade_minima_participantes" integer NOT NULL DEFAULT 1,
+  "quantidade_maxima_participantes" integer NOT NULL DEFAULT 20,
+  "sugestao_musica" text,
+  "link_musica" text,
+  "valor_participacao_coreografia_centavos" integer,
+  "ativa" boolean NOT NULL DEFAULT true
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_dias"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_dias" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "data_evento" date NOT NULL,
+  "titulo" text,
+  "ordem" integer,
+  "status" USER-DEFINED NOT NULL DEFAULT 'PLANEJADO'::evento_dia_status_enum,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_edicao_calendario_itens"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_edicao_calendario_itens" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "tipo" USER-DEFINED NOT NULL,
+  "titulo" text NOT NULL,
+  "descricao" text,
+  "inicio" timestamp with time zone NOT NULL,
+  "fim" timestamp with time zone,
+  "dia_inteiro" boolean NOT NULL DEFAULT false,
+  "local_nome" text,
+  "cidade" text,
+  "endereco" text,
+  "reflete_no_calendario_escola" boolean NOT NULL DEFAULT false,
+  "turma_id" bigint,
+  "grupo_id" bigint,
+  "ordem" integer,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_edicao_configuracoes"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_edicao_configuracoes" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "cobra_taxa_participacao_geral" boolean NOT NULL DEFAULT false,
+  "cobra_por_coreografia" boolean NOT NULL DEFAULT false,
+  "cobra_por_pacote" boolean NOT NULL DEFAULT false,
+  "permite_itens_adicionais" boolean NOT NULL DEFAULT false,
+  "participacao_por_aluno" boolean NOT NULL DEFAULT true,
+  "participacao_por_turma" boolean NOT NULL DEFAULT false,
+  "participacao_por_grupo" boolean NOT NULL DEFAULT false,
+  "participacao_por_coreografia" boolean NOT NULL DEFAULT true,
+  "permite_multiplas_coreografias_aluno" boolean NOT NULL DEFAULT false,
+  "valor_taxa_participacao_centavos" integer NOT NULL DEFAULT 0,
+  "modo_composicao_valor" text NOT NULL DEFAULT 'VALOR_FIXO'::text,
+  "modo_cobranca" text NOT NULL DEFAULT 'UNICA'::text,
+  "quantidade_maxima_parcelas" integer NOT NULL DEFAULT 1,
+  "gera_conta_interna_automaticamente" boolean NOT NULL DEFAULT false,
+  "regras_adicionais" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "permite_pagamento_no_ato" boolean NOT NULL DEFAULT true,
+  "permite_conta_interna" boolean NOT NULL DEFAULT true,
+  "exige_inscricao_geral" boolean NOT NULL DEFAULT true,
+  "permite_inscricao_por_coreografia" boolean NOT NULL DEFAULT true,
+  "permite_vincular_coreografia_depois" boolean NOT NULL DEFAULT true,
+  "permite_parcelamento_conta_interna" boolean NOT NULL DEFAULT false,
+  "maximo_parcelas_conta_interna" integer NOT NULL DEFAULT 1,
+  "competencias_elegiveis_conta_interna" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "permite_competencias_apos_evento" boolean NOT NULL DEFAULT false,
+  "dia_corte_operacional_parcelamento" integer
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_edicao_coreografia_elenco"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_edicao_coreografia_elenco" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_coreografia_id" uuid NOT NULL,
+  "aluno_id" bigint,
+  "pessoa_id" bigint,
+  "inscricao_id" uuid,
+  "tipo_participante" text,
+  "ordem_interna" integer,
+  "papel" text,
+  "observacao" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_edicao_coreografias"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_edicao_coreografias" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "coreografia_id" uuid NOT NULL,
+  "subevento_id" uuid,
+  "ordem_prevista_apresentacao" integer,
+  "valor_participacao_coreografia_centavos" integer,
+  "duracao_prevista_no_evento_segundos" integer,
+  "observacoes_do_evento" text,
+  "ativa" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_edicao_itens_financeiros"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_edicao_itens_financeiros" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "codigo" text,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "tipo_item" text NOT NULL,
+  "modo_cobranca" text NOT NULL DEFAULT 'UNICO'::text,
+  "valor_centavos" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "ordem" integer,
+  "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_edicao_regras_financeiras"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_edicao_regras_financeiras" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "tipo_regra" text NOT NULL,
+  "modo_calculo" text NOT NULL DEFAULT 'VALOR_FIXO'::text,
+  "descricao_regra" text,
+  "formacao_coreografia" text,
+  "estilo_id" uuid,
+  "modalidade_nome" text,
+  "ordem_progressao" integer,
+  "quantidade_minima" integer,
+  "quantidade_maxima" integer,
+  "valor_centavos" integer NOT NULL DEFAULT 0,
+  "valor_por_participante_centavos" integer,
+  "ativa" boolean NOT NULL DEFAULT true,
+  "ordem_aplicacao" integer NOT NULL DEFAULT 0,
+  "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_edicoes"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_edicoes" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "evento_id" uuid NOT NULL,
+  "titulo_exibicao" text NOT NULL,
+  "tema" text,
+  "ano_referencia" integer NOT NULL,
+  "status" USER-DEFINED NOT NULL DEFAULT 'EM_PLANEJAMENTO'::evento_status_enum,
+  "data_inicio" timestamp with time zone,
+  "data_fim" timestamp with time zone,
+  "local_principal_nome" text,
+  "local_principal_endereco" text,
+  "local_principal_cidade" text,
+  "regulamento_resumo" text,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "descricao" text
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_financeiro_referencias"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_financeiro_referencias" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "sessao_id" uuid,
+  "natureza" USER-DEFINED NOT NULL,
+  "origem_tipo" USER-DEFINED NOT NULL,
+  "origem_id" bigint,
+  "pessoa_id" bigint,
+  "descricao" text,
+  "valor_previsto_centavos" integer,
+  "valor_real_centavos" integer,
+  "conta_interna_id" bigint,
+  "cobranca_id" bigint,
+  "recebimento_id" bigint,
+  "conta_pagar_id" bigint,
+  "pagamento_conta_pagar_id" bigint,
+  "movimento_financeiro_id" bigint,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_inscricao_item_movimentos_financeiros"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_inscricao_item_movimentos_financeiros" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "inscricao_id" uuid NOT NULL,
+  "inscricao_item_id" uuid NOT NULL,
+  "tipo_movimento" text NOT NULL DEFAULT 'CONSTITUICAO'::text,
+  "destino_financeiro" USER-DEFINED NOT NULL,
+  "competencia" text,
+  "parcela_numero" integer,
+  "total_parcelas" integer,
+  "valor_centavos" integer NOT NULL DEFAULT 0,
+  "conta_interna_id" bigint,
+  "cobranca_id" bigint,
+  "cobranca_avulsa_id" bigint,
+  "recebimento_id" bigint,
+  "lancamento_conta_interna_id" bigint,
+  "fatura_conta_interna_id" bigint,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_inscricao_itens"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_inscricao_itens" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "inscricao_id" uuid NOT NULL,
+  "modalidade_id" uuid,
+  "subevento_id" uuid,
+  "descricao" text,
+  "quantidade" integer NOT NULL DEFAULT 1,
+  "valor_unitario_centavos" integer NOT NULL DEFAULT 0,
+  "valor_total_centavos" integer NOT NULL DEFAULT 0,
+  "obrigatorio" boolean NOT NULL DEFAULT false,
+  "origem_financeira" text NOT NULL DEFAULT 'EVENTO_ESCOLA'::text,
+  "lancamento_conta_interna_id" bigint,
+  "status" USER-DEFINED NOT NULL DEFAULT 'ATIVO'::evento_inscricao_item_status_enum,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "tipo_item" USER-DEFINED NOT NULL DEFAULT 'ITEM_EDICAO'::eventos_escola_inscricao_item_tipo_enum,
+  "item_configuracao_id" uuid,
+  "coreografia_vinculo_id" uuid,
+  "descricao_snapshot" text,
+  "origem_item" USER-DEFINED NOT NULL DEFAULT 'INSCRICAO_INICIAL'::eventos_escola_inscricao_item_origem_enum,
+  "cancelado_em" timestamp with time zone,
+  "motivo_cancelamento" text,
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_inscricao_parcelas_conta_interna"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_inscricao_parcelas_conta_interna" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "inscricao_id" uuid NOT NULL,
+  "parcela_numero" integer NOT NULL,
+  "total_parcelas" integer NOT NULL,
+  "competencia" text NOT NULL,
+  "valor_centavos" integer NOT NULL DEFAULT 0,
+  "conta_interna_id" bigint NOT NULL,
+  "cobranca_id" bigint,
+  "lancamento_conta_interna_id" bigint,
+  "fatura_conta_interna_id" bigint,
+  "status" text NOT NULL DEFAULT 'PENDENTE'::text,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_inscricoes"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_inscricoes" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "pessoa_id" bigint NOT NULL,
+  "aluno_pessoa_id" bigint,
+  "responsavel_financeiro_id" bigint,
+  "conta_interna_id" bigint,
+  "status_inscricao" USER-DEFINED NOT NULL DEFAULT 'RASCUNHO'::evento_inscricao_status_enum,
+  "status_financeiro" USER-DEFINED NOT NULL DEFAULT 'NAO_GERADO'::evento_financeiro_status_enum,
+  "data_inscricao" timestamp with time zone NOT NULL DEFAULT now(),
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "origem_inscricao" USER-DEFINED NOT NULL DEFAULT 'INSCRICAO_INTERNA'::eventos_escola_origem_inscricao_enum,
+  "participante_externo_id" uuid,
+  "destino_financeiro" USER-DEFINED NOT NULL DEFAULT 'CONTA_INTERNA'::eventos_escola_destino_financeiro_enum,
+  "gerar_em_conta_interna" boolean NOT NULL DEFAULT false,
+  "pagamento_no_ato" boolean NOT NULL DEFAULT false,
+  "valor_total_centavos" integer NOT NULL DEFAULT 0,
+  "cobranca_id" bigint,
+  "cobranca_avulsa_id" bigint,
+  "recebimento_id" bigint,
+  "lancamento_conta_interna_id" bigint,
+  "fatura_conta_interna_id" bigint,
+  "forma_pagamento_codigo" text,
+  "participante_nome_snapshot" text,
+  "quantidade_parcelas_conta_interna" integer NOT NULL DEFAULT 1
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_locais"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_locais" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "nome_local" text NOT NULL,
+  "endereco" text,
+  "cidade" text,
+  "observacoes" text,
+  "principal" boolean NOT NULL DEFAULT false,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_modalidade_precos"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_modalidade_precos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "modalidade_id" uuid NOT NULL,
+  "titulo" text,
+  "valor_centavos" integer NOT NULL,
+  "vigencia_inicio" date,
+  "vigencia_fim" date,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_modalidades"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_modalidades" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "codigo" text,
+  "nome" text NOT NULL,
+  "tipo_modalidade" USER-DEFINED NOT NULL,
+  "descricao" text,
+  "obrigatoria" boolean NOT NULL DEFAULT false,
+  "permite_multiplas_unidades" boolean NOT NULL DEFAULT false,
+  "quantidade_minima" integer,
+  "quantidade_maxima" integer,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_participantes_externos"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_participantes_externos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "pessoa_id" bigint NOT NULL,
+  "responsavel_nome" text,
+  "observacoes" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "documento" text
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_sessao_assentos"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_sessao_assentos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "setor_id" uuid NOT NULL,
+  "codigo" text NOT NULL,
+  "linha" text,
+  "numero" text,
+  "ordem" integer,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_sessao_atividades"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_sessao_atividades" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "sessao_id" uuid NOT NULL,
+  "local_id" uuid,
+  "tipo_atividade" USER-DEFINED NOT NULL,
+  "titulo" text NOT NULL,
+  "descricao" text,
+  "inicio" timestamp with time zone,
+  "fim" timestamp with time zone,
+  "ordem" integer,
+  "aberta_ao_publico" boolean NOT NULL DEFAULT false,
+  "coreografia_id" uuid,
+  "turma_id" bigint,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_sessao_ingresso_lotes"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_sessao_ingresso_lotes" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "ingresso_tipo_id" uuid NOT NULL,
+  "nome" text NOT NULL,
+  "valor_centavos" integer NOT NULL,
+  "quantidade" integer,
+  "inicio_vendas" timestamp with time zone,
+  "fim_vendas" timestamp with time zone,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_sessao_ingresso_pedidos"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_sessao_ingresso_pedidos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "sessao_id" uuid NOT NULL,
+  "comprador_pessoa_id" bigint,
+  "responsavel_financeiro_id" bigint,
+  "status" USER-DEFINED NOT NULL DEFAULT 'RASCUNHO'::evento_ingresso_pedido_status_enum,
+  "valor_total_centavos" integer NOT NULL DEFAULT 0,
+  "cobranca_id" bigint,
+  "recebimento_id" bigint,
+  "expira_em" timestamp with time zone,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_sessao_ingresso_tipos"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_sessao_ingresso_tipos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "sessao_id" uuid NOT NULL,
+  "setor_id" uuid,
+  "codigo" text,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "quantidade_total" integer,
+  "valor_centavos" integer NOT NULL DEFAULT 0,
+  "meia_entrada" boolean NOT NULL DEFAULT false,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_sessao_ingressos"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_sessao_ingressos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "pedido_id" uuid,
+  "sessao_id" uuid NOT NULL,
+  "ingresso_tipo_id" uuid,
+  "lote_id" uuid,
+  "setor_id" uuid,
+  "assento_id" uuid,
+  "codigo_ingresso" text,
+  "nome_portador" text,
+  "documento_portador" text,
+  "valor_centavos" integer NOT NULL DEFAULT 0,
+  "status" USER-DEFINED NOT NULL DEFAULT 'DISPONIVEL'::evento_ingresso_status_enum,
+  "reservado_em" timestamp with time zone,
+  "vendido_em" timestamp with time zone,
+  "cancelado_em" timestamp with time zone,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_sessao_setores"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_sessao_setores" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "sessao_id" uuid NOT NULL,
+  "nome" text NOT NULL,
+  "tipo_setor" USER-DEFINED NOT NULL DEFAULT 'PLATEIA'::evento_setor_tipo_enum,
+  "capacidade" integer,
+  "ordem" integer,
+  "usa_assento_marcado" boolean NOT NULL DEFAULT false,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_sessoes"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_sessoes" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "dia_id" uuid NOT NULL,
+  "local_id" uuid,
+  "titulo" text NOT NULL,
+  "subtitulo" text,
+  "tipo_sessao" USER-DEFINED NOT NULL DEFAULT 'OUTRO'::evento_sessao_tipo_enum,
+  "hora_inicio" time without time zone,
+  "hora_fim" time without time zone,
+  "ordem" integer,
+  "status" USER-DEFINED NOT NULL DEFAULT 'PLANEJADA'::evento_sessao_status_enum,
+  "capacidade_total" integer,
+  "exige_ingresso" boolean NOT NULL DEFAULT false,
+  "usa_mapa_lugares" boolean NOT NULL DEFAULT false,
+  "permite_publico_externo" boolean NOT NULL DEFAULT true,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_subeventos"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_subeventos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "sessao_id" uuid,
+  "titulo" text NOT NULL,
+  "descricao" text,
+  "usa_inscricao_propria" boolean NOT NULL DEFAULT false,
+  "usa_financeiro_proprio" boolean NOT NULL DEFAULT false,
+  "usa_elenco_proprio" boolean NOT NULL DEFAULT false,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."eventos_escola_turmas_vinculos"
+-- --------------------------------------------------
+CREATE TABLE public."eventos_escola_turmas_vinculos" (
+  "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+  "edicao_id" uuid NOT NULL,
+  "sessao_id" uuid,
+  "turma_id" bigint NOT NULL,
+  "tipo_vinculo" USER-DEFINED NOT NULL,
+  "coreografia_id" uuid,
+  "descricao" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."eventos_internos"
 -- --------------------------------------------------
 CREATE TABLE public."eventos_internos" (
@@ -1357,6 +2289,30 @@ CREATE TABLE public."financeiro_cobrancas_avulsas" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."financeiro_cobrancas_avulsas_auditoria"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_cobrancas_avulsas_auditoria" (
+  "id" bigint NOT NULL DEFAULT nextval('financeiro_cobrancas_avulsas_auditoria_id_seq'::regclass),
+  "cobranca_avulsa_id" bigint NOT NULL,
+  "campo" text NOT NULL,
+  "valor_anterior" text,
+  "valor_novo" text,
+  "motivo" text NOT NULL,
+  "criado_em" timestamp with time zone NOT NULL DEFAULT now(),
+  "criado_por" text
+);
+
+-- --------------------------------------------------
+-- Tabela: public."financeiro_config"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_config" (
+  "id" smallint NOT NULL DEFAULT 1,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "dia_fechamento_faturas" smallint NOT NULL DEFAULT 1
+);
+
+-- --------------------------------------------------
 -- Tabela: public."financeiro_politicas_preco"
 -- --------------------------------------------------
 CREATE TABLE public."financeiro_politicas_preco" (
@@ -1376,6 +2332,22 @@ CREATE TABLE public."financeiro_politicas_preco_padroes" (
   "tabela_id" bigint NOT NULL,
   "tabela_item_id" bigint NOT NULL,
   "politica_preco_id" bigint NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."financeiro_recorrencias"
+-- --------------------------------------------------
+CREATE TABLE public."financeiro_recorrencias" (
+  "id" bigint NOT NULL DEFAULT nextval('financeiro_recorrencias_id_seq'::regclass),
+  "tipo" text NOT NULL,
+  "colaborador_id" bigint NOT NULL,
+  "centro_custo_id" integer,
+  "dia_pagamento" integer NOT NULL DEFAULT 5,
+  "pagamento_no_mes_seguinte" boolean NOT NULL DEFAULT true,
+  "valor_centavos" integer NOT NULL DEFAULT 0,
+  "ativo" boolean NOT NULL DEFAULT true,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
@@ -1430,6 +2402,35 @@ CREATE TABLE public."financeiro_tiers" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."folha_contas_pagar_referencias"
+-- --------------------------------------------------
+CREATE TABLE public."folha_contas_pagar_referencias" (
+  "id" bigint NOT NULL DEFAULT nextval('folha_contas_pagar_referencias_id_seq'::regclass),
+  "competencia" text NOT NULL,
+  "folha_id" bigint NOT NULL,
+  "colaborador_id" bigint NOT NULL,
+  "conta_pagar_id" bigint NOT NULL,
+  "centro_custo_id" integer NOT NULL,
+  "valor_centavos" integer NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."folha_pagamento"
+-- --------------------------------------------------
+CREATE TABLE public."folha_pagamento" (
+  "id" bigint NOT NULL DEFAULT nextval('folha_pagamento_id_seq'::regclass),
+  "competencia" text NOT NULL,
+  "status" text NOT NULL DEFAULT 'ABERTA'::text,
+  "data_fechamento" date,
+  "data_pagamento_prevista" date,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."folha_pagamento_colaborador"
 -- --------------------------------------------------
 CREATE TABLE public."folha_pagamento_colaborador" (
@@ -1457,6 +2458,22 @@ CREATE TABLE public."folha_pagamento_eventos" (
   "origem_id" bigint,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."folha_pagamento_itens"
+-- --------------------------------------------------
+CREATE TABLE public."folha_pagamento_itens" (
+  "id" bigint NOT NULL DEFAULT nextval('folha_pagamento_itens_id_seq'::regclass),
+  "folha_id" bigint NOT NULL,
+  "colaborador_id" bigint NOT NULL,
+  "tipo_item" text NOT NULL,
+  "descricao" text NOT NULL,
+  "valor_centavos" integer NOT NULL,
+  "referencia_tipo" text,
+  "referencia_id" bigint,
+  "criado_automatico" boolean NOT NULL DEFAULT false,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -2354,7 +3371,9 @@ CREATE TABLE public."matriculas" (
   "encerramento_tipo" text,
   "encerramento_motivo" text,
   "encerramento_em" timestamp with time zone,
-  "encerramento_por_user_id" uuid
+  "encerramento_por_user_id" uuid,
+  "cancelamento_tipo" text,
+  "gera_perda_financeira" boolean DEFAULT false
 );
 
 -- --------------------------------------------------
@@ -2803,7 +3822,10 @@ CREATE TABLE public."nasc_observacoes" (
   "observacao" text NOT NULL,
   "user_agent" text,
   "viewport_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
-  "context_json" jsonb NOT NULL DEFAULT '{}'::jsonb
+  "context_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "status" text NOT NULL DEFAULT 'ABERTO'::text,
+  "triagem_notas" text,
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -2820,6 +3842,33 @@ CREATE TABLE public."niveis" (
   "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
   "idade_minima" integer,
   "idade_maxima" integer
+);
+
+-- --------------------------------------------------
+-- Tabela: public."nucleo_membros"
+-- --------------------------------------------------
+CREATE TABLE public."nucleo_membros" (
+  "id" bigint NOT NULL DEFAULT nextval('nucleo_membros_id_seq'::regclass),
+  "nucleo_id" bigint NOT NULL,
+  "pessoa_id" bigint NOT NULL,
+  "data_entrada" date NOT NULL DEFAULT CURRENT_DATE,
+  "data_saida" date,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."nucleos"
+-- --------------------------------------------------
+CREATE TABLE public."nucleos" (
+  "id" bigint NOT NULL DEFAULT nextval('nucleos_id_seq'::regclass),
+  "nome" text NOT NULL,
+  "categoria" text,
+  "subcategoria" text,
+  "tipo" text NOT NULL DEFAULT 'DURADOURO'::text,
+  "descricao" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -2933,6 +3982,20 @@ CREATE TABLE public."pessoa_observacoes_pedagogicas" (
   "titulo" text,
   "descricao" text NOT NULL,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."pessoa_responsavel_financeiro_vinculos"
+-- --------------------------------------------------
+CREATE TABLE public."pessoa_responsavel_financeiro_vinculos" (
+  "id" bigint NOT NULL DEFAULT nextval('pessoa_responsavel_financeiro_vinculos_id_seq'::regclass),
+  "responsavel_pessoa_id" bigint NOT NULL,
+  "dependente_pessoa_id" bigint NOT NULL,
+  "origem_tipo" text,
+  "origem_id" bigint,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "criado_em" timestamp with time zone NOT NULL DEFAULT now(),
+  "atualizado_em" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------
@@ -3106,6 +4169,36 @@ CREATE TABLE public."profiles" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."projetos_sociais"
+-- --------------------------------------------------
+CREATE TABLE public."projetos_sociais" (
+  "id" bigint NOT NULL DEFAULT nextval('projetos_sociais_id_seq'::regclass),
+  "escola_id" bigint,
+  "nome" text NOT NULL,
+  "descricao" text,
+  "ativo" boolean NOT NULL DEFAULT true,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
+-- Tabela: public."projetos_sociais_beneficiarios"
+-- --------------------------------------------------
+CREATE TABLE public."projetos_sociais_beneficiarios" (
+  "id" bigint NOT NULL DEFAULT nextval('projetos_sociais_beneficiarios_id_seq'::regclass),
+  "projeto_social_id" bigint NOT NULL,
+  "pessoa_id" bigint NOT NULL,
+  "status" text NOT NULL DEFAULT 'ATIVO'::text,
+  "data_inicio" date NOT NULL DEFAULT CURRENT_DATE,
+  "data_fim" date,
+  "origem_legado" text,
+  "legado_payload" jsonb,
+  "observacoes" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- --------------------------------------------------
 -- Tabela: public."recebimentos"
 -- --------------------------------------------------
 CREATE TABLE public."recebimentos" (
@@ -3199,6 +4292,39 @@ CREATE TABLE public."servicos" (
 );
 
 -- --------------------------------------------------
+-- Tabela: public."suporte_tickets"
+-- --------------------------------------------------
+CREATE TABLE public."suporte_tickets" (
+  "id" bigint NOT NULL DEFAULT nextval('suporte_tickets_id_seq'::regclass),
+  "codigo" text,
+  "tipo" text NOT NULL,
+  "status" text NOT NULL DEFAULT 'ABERTO'::text,
+  "prioridade" text NOT NULL DEFAULT 'MEDIA'::text,
+  "titulo" text,
+  "descricao" text NOT NULL,
+  "contexto_slug" text,
+  "contexto_nome" text,
+  "rota_path" text,
+  "url_completa" text,
+  "pagina_titulo" text,
+  "origem" text NOT NULL DEFAULT 'BOTAO_FLUTUANTE'::text,
+  "screenshot_url" text,
+  "dados_contexto_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "dados_tecnicos_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "erro_mensagem" text,
+  "erro_stack" text,
+  "erro_nome" text,
+  "user_agent" text,
+  "viewport_largura" integer,
+  "viewport_altura" integer,
+  "reported_by" uuid,
+  "responsavel_uuid" uuid,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "resolved_at" timestamp with time zone
+);
+
+-- --------------------------------------------------
 -- Tabela: public."system_settings"
 -- --------------------------------------------------
 CREATE TABLE public."system_settings" (
@@ -3283,7 +4409,13 @@ CREATE TABLE public."turma_aulas" (
   "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
   "fechada_em" timestamp with time zone,
   "fechada_por" uuid,
-  "aula_numero" integer
+  "aula_numero" integer,
+  "status_execucao" USER-DEFINED NOT NULL DEFAULT 'PENDENTE'::status_execucao_aula,
+  "aberta_em" timestamp with time zone,
+  "aberta_por" uuid,
+  "frequencia_salva_em" timestamp with time zone,
+  "frequencia_salva_por" uuid,
+  "observacao_execucao" text
 );
 
 -- --------------------------------------------------
@@ -3404,6 +4536,18 @@ CREATE TABLE public."turmas_horarios" (
   "day_of_week" smallint NOT NULL,
   "inicio" time without time zone NOT NULL,
   "fim" time without time zone NOT NULL
+);
+
+-- --------------------------------------------------
+-- Tabela: public."usuario_contexto_preferencias"
+-- --------------------------------------------------
+CREATE TABLE public."usuario_contexto_preferencias" (
+  "id" bigint NOT NULL DEFAULT nextval('usuario_contexto_preferencias_id_seq'::regclass),
+  "user_id" uuid NOT NULL,
+  "contexto" text NOT NULL,
+  "rota_principal" text NOT NULL,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+  "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 -- --------------------------------------------------

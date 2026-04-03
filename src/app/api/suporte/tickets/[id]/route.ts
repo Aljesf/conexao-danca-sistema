@@ -3,8 +3,15 @@ import { requireUser } from "@/lib/supabase/api-auth";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   isSuporteTicketPrioridade,
+  isSuporteTicketResolvido,
   isSuporteTicketStatus,
 } from "@/lib/suporte/constants";
+import {
+  getLegacySupportScreenshotUrl,
+  listSupportTicketAttachments,
+  mergeLegacySupportAttachment,
+} from "@/lib/suporte/ticket-attachments";
+import { enriquecerTicketComTempo } from "@/lib/suporte/tempo";
 
 function parseId(raw: string) {
   const parsed = Number(raw);
@@ -16,6 +23,12 @@ function normalizeString(value: unknown, maxLength: number) {
   const normalized = value.trim();
   if (!normalized) return null;
   return normalized.slice(0, maxLength);
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function isUuid(value: unknown) {
@@ -50,7 +63,34 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
     return NextResponse.json({ ok: false, error: "ticket_nao_encontrado" }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true, ticket: data });
+  const attachmentsByTicketId = await listSupportTicketAttachments(supabase, [id]);
+  const legacyScreenshotUrl = getLegacySupportScreenshotUrl({
+    id: data.id,
+    screenshot_url: data.screenshot_url,
+    dados_contexto_json: asRecord(data.dados_contexto_json),
+  });
+  const attachments = mergeLegacySupportAttachment(
+    {
+      id: data.id,
+      screenshot_url: data.screenshot_url,
+      dados_contexto_json: asRecord(data.dados_contexto_json),
+    },
+    attachmentsByTicketId.get(id) ?? [],
+  );
+
+  return NextResponse.json({
+    ok: true,
+    ticket: enriquecerTicketComTempo(
+      {
+        ...data,
+        dados_contexto_json: asRecord(data.dados_contexto_json),
+        dados_tecnicos_json: asRecord(data.dados_tecnicos_json),
+        attachments,
+        legacyScreenshotUrl,
+      },
+      new Date(),
+    ),
+  });
 }
 
 export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -68,15 +108,32 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     return NextResponse.json({ ok: false, error: "payload_invalido" }, { status: 400 });
   }
 
+  const supabase = getSupabaseServiceClient();
   const patch: Record<string, unknown> = {};
 
   if ("status" in body) {
     if (!isSuporteTicketStatus(body.status)) {
       return NextResponse.json({ ok: false, error: "status_invalido" }, { status: 400 });
     }
+
+    const { data: currentTicket, error: currentTicketError } = await supabase
+      .from("suporte_tickets")
+      .select("status,resolved_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (currentTicketError) {
+      return NextResponse.json({ ok: false, error: currentTicketError.message }, { status: 500 });
+    }
+
+    if (!currentTicket) {
+      return NextResponse.json({ ok: false, error: "ticket_nao_encontrado" }, { status: 404 });
+    }
+
     patch.status = body.status;
-    patch.resolved_at =
-      body.status === "CONCLUIDO" || body.status === "CANCELADO" ? new Date().toISOString() : null;
+    patch.resolved_at = isSuporteTicketResolvido(body.status)
+      ? currentTicket.resolved_at ?? new Date().toISOString()
+      : null;
   }
 
   if ("prioridade" in body) {
@@ -109,7 +166,6 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     return NextResponse.json({ ok: false, error: "patch_vazio" }, { status: 400 });
   }
 
-  const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("suporte_tickets")
     .update(patch)
@@ -121,5 +177,32 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, ticket: data });
+  const attachmentsByTicketId = await listSupportTicketAttachments(supabase, [id]);
+  const legacyScreenshotUrl = getLegacySupportScreenshotUrl({
+    id: data.id,
+    screenshot_url: data.screenshot_url,
+    dados_contexto_json: asRecord(data.dados_contexto_json),
+  });
+  const attachments = mergeLegacySupportAttachment(
+    {
+      id: data.id,
+      screenshot_url: data.screenshot_url,
+      dados_contexto_json: asRecord(data.dados_contexto_json),
+    },
+    attachmentsByTicketId.get(id) ?? [],
+  );
+
+  return NextResponse.json({
+    ok: true,
+    ticket: enriquecerTicketComTempo(
+      {
+        ...data,
+        dados_contexto_json: asRecord(data.dados_contexto_json),
+        dados_tecnicos_json: asRecord(data.dados_tecnicos_json),
+        attachments,
+        legacyScreenshotUrl,
+      },
+      new Date(),
+    ),
+  });
 }

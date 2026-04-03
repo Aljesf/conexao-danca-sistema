@@ -1,0 +1,551 @@
+{
+  "generated_at": "2026-03-31T12:59:48.772Z",
+  "migration": "20260331_001_corrigir_residuos_matricula_orfa_credito_conexao.sql",
+  "case": {
+    "conta_conexao_id": 1,
+    "pessoa_titular": "Abra?o de Brito Soares",
+    "matricula_origem_id": 1,
+    "residuos_originalmente_detectados_competencias": [
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
+      "2026-11",
+      "2026-12"
+    ],
+    "valor_residuo_centavos": 300
+  },
+  "checks": {
+    "active_residual_lancamentos_300_count": 0,
+    "future_faturas_abril_dezembro": [
+      {
+        "id": "4",
+        "periodo_referencia": "2026-04",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      },
+      {
+        "id": "5",
+        "periodo_referencia": "2026-05",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      },
+      {
+        "id": "6",
+        "periodo_referencia": "2026-06",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      },
+      {
+        "id": "7",
+        "periodo_referencia": "2026-07",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      },
+      {
+        "id": "8",
+        "periodo_referencia": "2026-08",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      },
+      {
+        "id": "9",
+        "periodo_referencia": "2026-09",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      },
+      {
+        "id": "10",
+        "periodo_referencia": "2026-10",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      },
+      {
+        "id": "11",
+        "periodo_referencia": "2026-11",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      },
+      {
+        "id": "12",
+        "periodo_referencia": "2026-12",
+        "status": "CANCELADA",
+        "valor_total_centavos": 0,
+        "folha_pagamento_id": null
+      }
+    ],
+    "fatura_marco_itens": [
+      {
+        "lancamento_id": "577",
+        "valor_centavos": 400,
+        "status": "PENDENTE_FATURA",
+        "descricao": "Cafe colaborador - competencia 2026-03",
+        "origem_sistema": "CAFE",
+        "referencia_item": "cobranca:604"
+      }
+    ],
+    "cobrancas_canceladas_origem_matricula": [
+      {
+        "id": "2",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "3",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "4",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "5",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "6",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "7",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "8",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "9",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "10",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "11",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      },
+      {
+        "id": "12",
+        "status": "CANCELADA",
+        "cancelada_em": "2026-02-09T20:53:42.647Z",
+        "cancelada_motivo": "Encerramento matricula #1: Desistiu"
+      }
+    ]
+  },
+  "api": {
+    "folha_3_detalhes": {
+      "folha": {
+        "id": 3,
+        "competencia": "2026-03",
+        "status": "ABERTA",
+        "data_fechamento": null,
+        "data_pagamento_prevista": "2026-04-05",
+        "observacoes": null,
+        "created_at": "2026-02-13T10:24:08.948095+00:00",
+        "updated_at": "2026-03-16T18:31:34.423964+00:00"
+      },
+      "prev_folha": {
+        "id": 1,
+        "competencia": "2026-02"
+      },
+      "next_folha": {
+        "id": 4,
+        "competencia": "2026-04"
+      },
+      "colaboradores": [
+        {
+          "colaborador_id": 9,
+          "nome": "Abraão de Brito Soares",
+          "proventos_centavos": 162100,
+          "descontos_centavos": 50400,
+          "liquido_centavos": 111700
+        },
+        {
+          "colaborador_id": 1,
+          "nome": "Alírio José Costa e Silva",
+          "proventos_centavos": 162100,
+          "descontos_centavos": 0,
+          "liquido_centavos": 162100
+        },
+        {
+          "colaborador_id": 6,
+          "nome": "Karen Nathyelle da Silva Freire",
+          "proventos_centavos": 1621,
+          "descontos_centavos": 700,
+          "liquido_centavos": 921
+        },
+        {
+          "colaborador_id": 7,
+          "nome": "Luiz Henrique da Fonseca costa",
+          "proventos_centavos": 0,
+          "descontos_centavos": 0,
+          "liquido_centavos": 0
+        }
+      ],
+      "itens": [
+        {
+          "id": 2,
+          "folha_id": 3,
+          "colaborador_id": 9,
+          "tipo_item": "DESCONTO_CREDITO_CONEXAO",
+          "descricao": "Desconto Cartao Conexao (fatura #3)",
+          "valor_centavos": 400,
+          "referencia_tipo": "CREDITO_CONEXAO_FATURA",
+          "referencia_id": 3,
+          "criado_automatico": true,
+          "created_at": "2026-02-13T10:35:52.38023+00:00",
+          "colaborador_nome": "Abraão de Brito Soares",
+          "origem_resumo": {
+            "fatura_id": 3,
+            "competencia": "2026-03",
+            "status_fatura": "EM_ATRASO",
+            "status_origem": "VALIDA",
+            "pode_importar_folha": true,
+            "possui_inconsistencia": false,
+            "total_fatura_centavos": 400,
+            "total_validos_centavos": 400,
+            "total_invalidos_centavos": 0,
+            "origem_amigavel": "Cafe colaborador - competencia 2026-03",
+            "origem_tecnica": "lancamento#577 -> origem=CAFE -> ref=cobranca:604 -> cobranca#604:PENDENTE/CAFE/CONTA_INTERNA_COLABORADOR",
+            "motivos": [],
+            "itens_origem": [
+              {
+                "lancamento_id": 577,
+                "competencia": "2026-03",
+                "descricao": "Cafe colaborador - competencia 2026-03",
+                "origem_amigavel": "Cafe colaborador - competencia 2026-03",
+                "origem_tecnica": "lancamento#577 -> origem=CAFE -> ref=cobranca:604 -> cobranca#604:PENDENTE/CAFE/CONTA_INTERNA_COLABORADOR",
+                "referencia_item": "cobranca:604",
+                "status_origem": "VALIDA",
+                "valor_centavos": 400,
+                "motivos": []
+              }
+            ]
+          }
+        },
+        {
+          "id": 38,
+          "folha_id": 3,
+          "colaborador_id": 1,
+          "tipo_item": "SALARIO_BASE",
+          "descricao": "Salario base (espelho automatico)",
+          "valor_centavos": 162100,
+          "referencia_tipo": null,
+          "referencia_id": null,
+          "criado_automatico": true,
+          "created_at": "2026-03-03T12:25:53.173714+00:00",
+          "colaborador_nome": "Alírio José Costa e Silva",
+          "origem_resumo": null
+        },
+        {
+          "id": 39,
+          "folha_id": 3,
+          "colaborador_id": 9,
+          "tipo_item": "SALARIO_BASE",
+          "descricao": "Salario base (espelho automatico)",
+          "valor_centavos": 162100,
+          "referencia_tipo": null,
+          "referencia_id": null,
+          "criado_automatico": true,
+          "created_at": "2026-03-03T12:25:53.173714+00:00",
+          "colaborador_nome": "Abraão de Brito Soares",
+          "origem_resumo": null
+        },
+        {
+          "id": 40,
+          "folha_id": 3,
+          "colaborador_id": 7,
+          "tipo_item": "SALARIO_BASE",
+          "descricao": "Salario base (espelho automatico)",
+          "valor_centavos": 0,
+          "referencia_tipo": null,
+          "referencia_id": null,
+          "criado_automatico": true,
+          "created_at": "2026-03-03T12:25:53.173714+00:00",
+          "colaborador_nome": "Luiz Henrique da Fonseca costa",
+          "origem_resumo": null
+        },
+        {
+          "id": 41,
+          "folha_id": 3,
+          "colaborador_id": 6,
+          "tipo_item": "SALARIO_BASE",
+          "descricao": "Salario base (espelho automatico)",
+          "valor_centavos": 1621,
+          "referencia_tipo": null,
+          "referencia_id": null,
+          "criado_automatico": true,
+          "created_at": "2026-03-03T12:25:53.173714+00:00",
+          "colaborador_nome": "Karen Nathyelle da Silva Freire",
+          "origem_resumo": null
+        },
+        {
+          "id": 42,
+          "folha_id": 3,
+          "colaborador_id": 6,
+          "tipo_item": "DESCONTO_CREDITO_CONEXAO",
+          "descricao": "Desconto Cartao Conexao (fatura #295)",
+          "valor_centavos": 700,
+          "referencia_tipo": "CREDITO_CONEXAO_FATURA",
+          "referencia_id": 295,
+          "criado_automatico": true,
+          "created_at": "2026-03-03T12:25:54.24772+00:00",
+          "colaborador_nome": "Karen Nathyelle da Silva Freire",
+          "origem_resumo": {
+            "fatura_id": 295,
+            "competencia": "2026-03",
+            "status_fatura": "ABERTA",
+            "status_origem": "VALIDA",
+            "pode_importar_folha": false,
+            "possui_inconsistencia": true,
+            "total_fatura_centavos": 700,
+            "total_validos_centavos": 0,
+            "total_invalidos_centavos": 700,
+            "origem_amigavel": "Venda Cafe #10",
+            "origem_tecnica": "lancamento#327 -> origem=CAFE -> ref=cafe:venda:10",
+            "motivos": [
+              "Lancamento esta cancelado."
+            ],
+            "itens_origem": [
+              {
+                "lancamento_id": 327,
+                "competencia": "2026-03",
+                "descricao": "Venda Cafe #10",
+                "origem_amigavel": "Venda Cafe #10",
+                "origem_tecnica": "lancamento#327 -> origem=CAFE -> ref=cafe:venda:10",
+                "referencia_item": "cafe:venda:10",
+                "status_origem": "VALIDA",
+                "valor_centavos": 700,
+                "motivos": [
+                  "Lancamento esta cancelado."
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 43,
+          "folha_id": 3,
+          "colaborador_id": 9,
+          "tipo_item": "ADIANTAMENTO_SALARIAL",
+          "descricao": "Café - Parcelamento -Saldo (480,00 Janeiro - 500,00 Fevereiro - Falta 850,00)",
+          "valor_centavos": 50000,
+          "referencia_tipo": null,
+          "referencia_id": null,
+          "criado_automatico": false,
+          "created_at": "2026-03-31T12:24:53.474004+00:00",
+          "colaborador_nome": "Abraão de Brito Soares",
+          "origem_resumo": null
+        }
+      ]
+    },
+    "folha_12_detalhes": {
+      "folha": {
+        "id": 12,
+        "competencia": "2026-12",
+        "status": "ABERTA",
+        "data_fechamento": null,
+        "data_pagamento_prevista": "2027-01-05",
+        "observacoes": null,
+        "created_at": "2026-02-13T10:24:08.948095+00:00",
+        "updated_at": "2026-02-13T11:14:14.663758+00:00"
+      },
+      "prev_folha": {
+        "id": 11,
+        "competencia": "2026-11"
+      },
+      "next_folha": {
+        "id": 13,
+        "competencia": "2027-01"
+      },
+      "colaboradores": [
+        {
+          "colaborador_id": 9,
+          "nome": "Abraão de Brito Soares",
+          "proventos_centavos": 162100,
+          "descontos_centavos": 0,
+          "liquido_centavos": 162100
+        },
+        {
+          "colaborador_id": 1,
+          "nome": "Alírio José Costa e Silva",
+          "proventos_centavos": 162100,
+          "descontos_centavos": 0,
+          "liquido_centavos": 162100
+        }
+      ],
+      "itens": [
+        {
+          "id": 32,
+          "folha_id": 12,
+          "colaborador_id": 1,
+          "tipo_item": "SALARIO_BASE",
+          "descricao": "Salario base (espelho automatico)",
+          "valor_centavos": 162100,
+          "referencia_tipo": null,
+          "referencia_id": null,
+          "criado_automatico": true,
+          "created_at": "2026-02-13T11:14:14.663758+00:00",
+          "colaborador_nome": "Alírio José Costa e Silva",
+          "origem_resumo": null
+        },
+        {
+          "id": 33,
+          "folha_id": 12,
+          "colaborador_id": 9,
+          "tipo_item": "SALARIO_BASE",
+          "descricao": "Salario base (espelho automatico)",
+          "valor_centavos": 162100,
+          "referencia_tipo": null,
+          "referencia_id": null,
+          "criado_automatico": true,
+          "created_at": "2026-02-13T11:14:14.663758+00:00",
+          "colaborador_nome": "Abraão de Brito Soares",
+          "origem_resumo": null
+        }
+      ]
+    },
+    "folha_3_importar_cartao": {
+      "imported": 0,
+      "skipped": [
+        {
+          "fatura_id": 87,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 15,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 195,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 374,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 229,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 298,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        }
+      ],
+      "message": "nenhuma_fatura_colaborador_valida"
+    },
+    "folha_12_importar_cartao": {
+      "imported": 0,
+      "skipped": [
+        {
+          "fatura_id": 96,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 24,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 204,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 36,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 238,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        },
+        {
+          "fatura_id": 307,
+          "motivos": [
+            "Fatura sem cadeia integra de origem para importacao em folha."
+          ],
+          "total_fatura_centavos": 0,
+          "total_validos_centavos": 0
+        }
+      ],
+      "message": "nenhuma_fatura_colaborador_valida"
+    }
+  }
+}

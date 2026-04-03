@@ -4,6 +4,17 @@ import { requireUser } from "@/lib/supabase/api-auth";
 import { aplicarBolsaNaMatricula } from "@/lib/bolsas/aplicarBolsaNaMatricula";
 import { calcularValorFamiliaCentavos, isBolsaTipoModo, type BolsaTipoModo } from "@/lib/bolsas/bolsasTypes";
 import { liquidarPrimeiraMatricula } from "@/lib/matriculas/liquidarPrimeiraMatricula";
+import {
+  buscarMatriculaAtivaExistentePorPessoa,
+  insertMatriculaItens,
+  vincularTurmaAlunoPorItens,
+  type MatriculaItemInsert,
+  type MatriculaAtivaExistenteResumo,
+  type TurmaAlunoVinculoResumo,
+} from "@/lib/matriculas/matriculaItens";
+import { inserirMatriculaEventoSupabase } from "@/lib/matriculas/eventos";
+import { buscarMatriculasCanceladasPorPessoa } from "@/lib/matriculas/reativacaoData";
+import type { MatriculaReativacaoEligibilidade } from "@/lib/matriculas/reativacao";
  
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
@@ -68,6 +79,7 @@ type BodyNovo = {
   pessoa_id: number;
   responsavel_financeiro_id: number;
   tipo_matricula: TipoMatricula;
+  ignorar_matricula_cancelada?: boolean | null;
   metodo_liquidacao?: MetodoLiquidacao | null;
   vinculo_id: number;
   nivel_id?: number | null;
@@ -99,6 +111,23 @@ type MatriculaItem = {
   turma_id: number;
 };
 
+type MatriculaItemDraft = {
+  turma_id: number | null;
+  modulo_id: number | null;
+  descricao: string;
+  origem_tipo: string;
+  valor_base_centavos: number;
+  valor_liquido_centavos: number;
+  data_inicio: string | null;
+  observacoes: string | null;
+};
+
+type TurmaResumo = {
+  turma_id: number;
+  produto_id: number | null;
+  nome: string | null;
+};
+
 function badRequest(message: string, details?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error: "bad_request", message, details: details ?? null }, { status: 400 });
 }
@@ -125,6 +154,39 @@ function jsonError(
 
 function serverError(error_code: string, message: string, details?: Record<string, unknown>) {
   return jsonError(error_code, message, 500, details ? { details } : undefined);
+}
+
+function buildMatriculaAtivaExistentePayload(matricula: MatriculaAtivaExistenteResumo) {
+  return {
+    ok: false,
+    error: "matricula_ativa_existente",
+    matricula_existente: true,
+    matricula_id: matricula.id,
+    message:
+      "A pessoa ja possui matricula ativa. Abra a matricula existente para acrescentar/remover modulos ou trocar turma.",
+    matricula: {
+      id: matricula.id,
+      status: matricula.status,
+      tipo_matricula: matricula.tipo_matricula,
+      ano_referencia: matricula.ano_referencia,
+      vinculo_id: matricula.vinculo_id,
+      turma_nome: matricula.turma_nome,
+      data_matricula: matricula.data_matricula,
+      data_inicio_vinculo: matricula.data_inicio_vinculo,
+    },
+  };
+}
+
+function buildMatriculaCanceladaExistentePayload(contexto: MatriculaReativacaoEligibilidade) {
+  return {
+    ok: false,
+    error: "matricula_cancelada_existente",
+    possui_matricula_cancelada: contexto.possui_matricula_cancelada,
+    matriculas_canceladas_encontradas: contexto.matriculas_canceladas_encontradas,
+    acao_sugerida: contexto.acao_sugerida,
+    message:
+      "Esta pessoa possui matricula cancelada. Reative a matricula anterior para preservar historico e ajustar modulos/turmas, ou confirme a criacao de uma nova matricula.",
+  };
 }
 
 function parseDateOrNull(value: unknown): string | null {
@@ -251,6 +313,19 @@ function parseExecucoes(value: unknown): ExecucaoManual[] | null {
   return execucoes;
 }
 
+function buildDescricaoMatriculaItem(params: {
+  turmaNome?: string | null;
+  turmaId?: number | null;
+  moduloId?: number | null;
+  prefixo?: string;
+}) {
+  const turmaNome = typeof params.turmaNome === "string" ? params.turmaNome.trim() : "";
+  if (turmaNome) return turmaNome;
+  if (params.moduloId) return `${params.prefixo ?? "Modulo"} #${params.moduloId}`;
+  if (params.turmaId) return `Turma #${params.turmaId}`;
+  return params.prefixo ?? "Item da matricula";
+}
+
 function isExecucaoManual(x: unknown): x is ExecucaoManual {
   if (!x || typeof x !== "object") return false;
   const record = x as Record<string, unknown>;
@@ -320,6 +395,8 @@ function calcularPrimeiraCobranca(params: {
   totalCentavos: number;
   dataInicio: string | null;
   dataMatricula: string | null;
+  dia_corte_prorata?: number | null;
+  data_limite_exercicio?: string | null;
 }): PrimeiraCobrancaCalc {
   const { totalCentavos, dataInicio, dataMatricula } = params;
   const hoje = new Date();
@@ -330,8 +407,15 @@ function calcularPrimeiraCobranca(params: {
   };
   const dataBase = parseDateParts(dataInicio) ?? parseDateParts(dataMatricula) ?? fallback;
   const { year, month, day } = dataBase;
-  const cutoffDia = 12;
-  const inicioLetivoJaneiro = 12;
+  // M6: cutoffDia e inicioLetivoJaneiro vêm de escola_config_financeira.dia_corte_prorata
+  const cutoffDia = (params as any).dia_corte_prorata ?? 12;
+  const inicioLetivoJaneiro = cutoffDia;
+
+  // M7: Limite máximo de mês baseado em data_limite_exercicio (default: 12)
+  const dataLimiteExercicio = (params as any).data_limite_exercicio as string | null | undefined;
+  const mesLimiteExercicio = dataLimiteExercicio
+    ? Number(dataLimiteExercicio.slice(5, 7)) || 12
+    : 12;
 
   if (month === 1) {
     if (day <= inicioLetivoJaneiro) {
@@ -351,7 +435,7 @@ function calcularPrimeiraCobranca(params: {
       valor_centavos: Math.max(0, valor),
       ano_base: year,
       mes_base: month,
-      mes_primeira_mensalidade: Math.min(12, month + 1),
+      mes_primeira_mensalidade: Math.min(mesLimiteExercicio, month + 1),
     };
   }
 
@@ -373,7 +457,7 @@ function calcularPrimeiraCobranca(params: {
     valor_centavos: Math.max(0, valor),
     ano_base: year,
     mes_base: month,
-    mes_primeira_mensalidade: Math.min(12, month + 1),
+    mes_primeira_mensalidade: Math.min(mesLimiteExercicio, month + 1),
   };
 }
 
@@ -488,6 +572,12 @@ async function rollbackCompensatorioMatricula(params: {
     .delete()
     .eq("matricula_id", matriculaId);
   pushErr("delete_execucoes_manuais", eExecucoes);
+
+  const { error: eItensNovaCamada } = await (supabase as unknown as { from: (table: string) => any })
+    .from("matricula_itens")
+    .delete()
+    .eq("matricula_id", matriculaId);
+  pushErr("delete_matricula_itens", eItensNovaCamada);
 
   const { error: eItens } = await supabase.from("matriculas_itens").delete().eq("matricula_id", matriculaId);
   pushErr("delete_matriculas_itens", eItens);
@@ -707,9 +797,59 @@ export async function POST(request: NextRequest) {
   if (respErr) return serverError("VALIDAR_RESPONSAVEL_FAIL", "Falha ao validar responsavel financeiro.", { respErr });
   if (!respFin) return badRequest("responsavel_financeiro_id nao encontrado.");
 
+  try {
+    const matriculaAtivaExistente = await buscarMatriculaAtivaExistentePorPessoa(
+      admin as unknown as { from: (table: string) => any },
+      pessoaId,
+    );
+
+    if (matriculaAtivaExistente) {
+      return NextResponse.json(buildMatriculaAtivaExistentePayload(matriculaAtivaExistente), {
+        status: 409,
+      });
+    }
+  } catch (matriculaAtivaExistenteError) {
+    return serverError(
+      "VALIDAR_MATRICULA_ATIVA_EXISTENTE_FAIL",
+      "Falha ao validar matricula ativa existente.",
+      {
+        matriculaAtivaExistenteError:
+          matriculaAtivaExistenteError instanceof Error
+            ? matriculaAtivaExistenteError.message
+            : String(matriculaAtivaExistenteError),
+      },
+    );
+  }
+
+  if (!body.ignorar_matricula_cancelada) {
+    try {
+      const matriculasCanceladas = await buscarMatriculasCanceladasPorPessoa(
+        admin as unknown as { from: (table: string) => any },
+        pessoaId,
+      );
+
+      if (matriculasCanceladas.possui_matricula_cancelada) {
+        return NextResponse.json(buildMatriculaCanceladaExistentePayload(matriculasCanceladas), {
+          status: 409,
+        });
+      }
+    } catch (matriculasCanceladasError) {
+      return serverError(
+        "VALIDAR_MATRICULA_CANCELADA_EXISTENTE_FAIL",
+        "Falha ao validar matricula cancelada existente.",
+        {
+          matriculasCanceladasError:
+            matriculasCanceladasError instanceof Error
+              ? matriculasCanceladasError.message
+              : String(matriculasCanceladasError),
+        },
+      );
+    }
+  }
+
   const { data: turmas, error: turmaErr } = await supabase
     .from("turmas")
-    .select("turma_id")
+    .select("turma_id,produto_id,nome")
     .in("turma_id", vinculosIds);
 
   if (turmaErr) return serverError("VALIDAR_TURMA_FAIL", "Falha ao validar turma (vinculo_id).", { turmaErr });
@@ -719,6 +859,17 @@ export async function POST(request: NextRequest) {
   if (missingIds.length > 0) {
     return badRequest("vinculo_id (turma) nao encontrado.", { missing_ids: missingIds });
   }
+
+  const turmasById = new Map<number, TurmaResumo>();
+  (turmas ?? []).forEach((row) => {
+    const turmaId = Number((row as { turma_id?: number }).turma_id);
+    if (!Number.isInteger(turmaId) || turmaId <= 0) return;
+    turmasById.set(turmaId, {
+      turma_id: turmaId,
+      produto_id: parsePositiveIntOrNull((row as { produto_id?: unknown }).produto_id),
+      nome: typeof (row as { nome?: unknown }).nome === "string" ? String((row as { nome?: unknown }).nome) : null,
+    });
+  });
 
   let execucoesValidas: ExecucaoManual[] = execucoesIn;
 
@@ -956,7 +1107,7 @@ export async function POST(request: NextRequest) {
     familia_centavos: 0,
     projeto_social_centavos: 0,
   };
-  let execucoesParaPersistir: ExecucaoPersistencia[] = [];
+  const execucoesParaPersistir: ExecucaoPersistencia[] = [];
 
   if (usarExecucoes) {
     const bolsaTipoIds = Array.from(
@@ -1083,6 +1234,128 @@ export async function POST(request: NextRequest) {
     totalMensalidadeFamiliaCentavos = resumoCusteio.familia_centavos;
   }
 
+  const resolverValorItemPorTurma = async (turmaId: number, fallback: number): Promise<number> => {
+    if (!anoRef) return Math.max(0, Math.trunc(fallback));
+
+    const resolveUrl = new URL("/api/matriculas/precos/resolver", request.url);
+    resolveUrl.searchParams.set("aluno_id", String(pessoaId));
+    resolveUrl.searchParams.set("alvo_tipo", "TURMA");
+    resolveUrl.searchParams.set("alvo_id", String(turmaId));
+    resolveUrl.searchParams.set("ano", String(anoRef));
+
+    const resolveRes = await fetch(resolveUrl.toString(), {
+      headers: { cookie: cookieHeader },
+    });
+
+    const payload = (await resolveRes.json().catch(() => null)) as
+      | {
+          ok?: boolean;
+          message?: string;
+          data?: {
+            valor_final_centavos?: number | null;
+            item_aplicado?: { valor_centavos?: number | null } | null;
+          } | null;
+        }
+      | null;
+
+    if (!resolveRes.ok || !payload?.ok) {
+      throw new Error(payload?.message || `falha_resolver_preco_item_turma_${turmaId}`);
+    }
+
+    const valorDireto = Number(payload.data?.valor_final_centavos ?? NaN);
+    if (Number.isFinite(valorDireto)) return Math.max(0, Math.trunc(valorDireto));
+
+    const valorAplicado = Number(payload.data?.item_aplicado?.valor_centavos ?? NaN);
+    if (Number.isFinite(valorAplicado)) return Math.max(0, Math.trunc(valorAplicado));
+
+    return Math.max(0, Math.trunc(fallback));
+  };
+
+  let matriculaItemDrafts: MatriculaItemDraft[] = [];
+  try {
+    if (usarExecucoes && execucoesValidas.length > 0) {
+      matriculaItemDrafts = execucoesValidas.map((execucao) => {
+        const turma = turmasById.get(execucao.turma_id) ?? null;
+        const descricaoBase =
+          execucao.nivel?.trim() ? `Modulo ${execucao.nivel.trim()}` : "Modulo da matricula";
+        return {
+          turma_id: execucao.turma_id,
+          modulo_id: turma?.produto_id ?? null,
+          descricao: buildDescricaoMatriculaItem({
+            turmaNome: turma?.nome ?? null,
+            turmaId: execucao.turma_id,
+            moduloId: turma?.produto_id ?? null,
+            prefixo: descricaoBase,
+          }),
+          origem_tipo: "CURSO",
+          valor_base_centavos: Math.max(0, Math.trunc(execucao.valor_mensal_centavos)),
+          valor_liquido_centavos: Math.max(0, Math.trunc(execucao.valor_mensal_centavos)),
+          data_inicio: dataInicioVinculo,
+          observacoes: body.observacoes ?? null,
+        };
+      });
+    } else if (itens.length > 0) {
+      const totalItensBase = Math.max(
+        0,
+        Math.trunc(totalMensalidadeFamiliaCentavos > 0 ? totalMensalidadeFamiliaCentavos : totalMensalidadeCentavos),
+      );
+      const valorRateadoBase = itens.length > 0 ? Math.floor(totalItensBase / itens.length) : 0;
+      const restoRateio = itens.length > 0 ? totalItensBase - valorRateadoBase * itens.length : 0;
+
+      const drafts: MatriculaItemDraft[] = [];
+      for (let index = 0; index < itens.length; index += 1) {
+        const item = itens[index];
+        const turma = turmasById.get(item.turma_id) ?? null;
+        const fallback = valorRateadoBase + (index === itens.length - 1 ? restoRateio : 0);
+        const valorResolvido = await resolverValorItemPorTurma(item.turma_id, fallback);
+        drafts.push({
+          turma_id: item.turma_id,
+          modulo_id: item.servico_id,
+          descricao: buildDescricaoMatriculaItem({
+            turmaNome: turma?.nome ?? null,
+            turmaId: item.turma_id,
+            moduloId: item.servico_id,
+            prefixo: "Modulo",
+          }),
+          origem_tipo: "CURSO",
+          valor_base_centavos: valorResolvido,
+          valor_liquido_centavos: valorResolvido,
+          data_inicio: dataInicioVinculo,
+          observacoes: body.observacoes ?? null,
+        });
+      }
+      matriculaItemDrafts = drafts;
+    } else {
+      const turma = turmasById.get(vinculoId) ?? null;
+      const valorLegado = Math.max(
+        0,
+        Math.trunc(totalMensalidadeFamiliaCentavos > 0 ? totalMensalidadeFamiliaCentavos : totalMensalidadeCentavos),
+      );
+      matriculaItemDrafts = [
+        {
+          turma_id: Number.isFinite(vinculoId) && vinculoId > 0 ? vinculoId : null,
+          modulo_id: turma?.produto_id ?? null,
+          descricao: buildDescricaoMatriculaItem({
+            turmaNome: turma?.nome ?? null,
+            turmaId: Number.isFinite(vinculoId) ? vinculoId : null,
+            moduloId: turma?.produto_id ?? null,
+            prefixo: "Modulo principal",
+          }),
+          origem_tipo: "CURSO",
+          valor_base_centavos: valorLegado,
+          valor_liquido_centavos: valorLegado,
+          data_inicio: dataInicioVinculo,
+          observacoes: body.observacoes ?? null,
+        },
+      ];
+    }
+  } catch (itemDraftError) {
+    return serverError("RESOLVER_ITENS_MATRICULA_FAIL", "Falha ao preparar itens da matricula.", {
+      itemDraftError:
+        itemDraftError instanceof Error ? itemDraftError.message : String(itemDraftError),
+    });
+  }
+
   let primeiraCobranca: PrimeiraCobrancaCalc | null = null;
   let primeiraCobrancaStatus: string | null = null;
   let excecaoPrimeiroPagamento = false;
@@ -1090,11 +1363,28 @@ export async function POST(request: NextRequest) {
   let excecaoAutorizadaPor: string | null = null;
   let excecaoCriadaEm: string | null = null;
 
+  // M6/M7: carregar config financeira para pró-rata e limite de exercício
+  let diaCorteProrata: number | null = null;
+  let dataLimiteExercicio: string | null = null;
+  {
+    const { data: cfgFin } = await admin
+      .from("escola_config_financeira")
+      .select("dia_corte_prorata,data_limite_exercicio")
+      .limit(1)
+      .maybeSingle();
+    if (cfgFin) {
+      diaCorteProrata = typeof (cfgFin as any).dia_corte_prorata === "number" ? (cfgFin as any).dia_corte_prorata : null;
+      dataLimiteExercicio = (cfgFin as any).data_limite_exercicio ?? null;
+    }
+  }
+
   if (usarExecucoes) {
     primeiraCobranca = calcularPrimeiraCobranca({
       totalCentavos: totalMensalidadeFamiliaCentavos,
       dataInicio: dataInicioVinculo,
       dataMatricula: dataMatricula,
+      dia_corte_prorata: diaCorteProrata,
+      data_limite_exercicio: dataLimiteExercicio,
     });
 
     if (primeiraCobranca.tipo === "ENTRADA_PRORATA" && politicaModo === "ADIAR_PARA_VENCIMENTO") {
@@ -1109,6 +1399,33 @@ export async function POST(request: NextRequest) {
       primeiraCobrancaStatus = "ADIADA_EXCECAO";
     } else {
       primeiraCobrancaStatus = "PENDENTE";
+    }
+  }
+
+  // A3: Verificar se existe taxa de matrícula na tabela de preços
+  let temTaxaMatricula = false;
+  let valorTaxaMatriculaCentavos: number | null = null;
+  {
+    const taxaAtiva = (await admin
+      .from("escola_config_financeira")
+      .select("taxa_matricula_ativa")
+      .limit(1)
+      .maybeSingle()).data;
+
+    if ((taxaAtiva as any)?.taxa_matricula_ativa && escolaTabelaPrecoCursoId) {
+      const { data: itemTaxa } = await admin
+        .from("matricula_tabela_itens")
+        .select("id,valor_centavos")
+        .eq("tabela_id", escolaTabelaPrecoCursoId)
+        .eq("ativo", true)
+        .eq("codigo_item", "TAXA_MATRICULA")
+        .limit(1)
+        .maybeSingle();
+
+      if (itemTaxa && typeof (itemTaxa as any).valor_centavos === "number" && (itemTaxa as any).valor_centavos > 0) {
+        temTaxaMatricula = true;
+        valorTaxaMatriculaCentavos = (itemTaxa as any).valor_centavos;
+      }
     }
   }
 
@@ -1137,6 +1454,8 @@ export async function POST(request: NextRequest) {
     motivo_excecao_primeiro_pagamento: motivoExcecaoPrimeiroPagamento ?? undefined,
     excecao_autorizada_por: excecaoAutorizadaPor ?? undefined,
     excecao_criada_em: excecaoCriadaEm ?? undefined,
+    tem_taxa_matricula: temTaxaMatricula || undefined,
+    valor_taxa_matricula_centavos: valorTaxaMatriculaCentavos ?? undefined,
   };
 
   for (const k of Object.keys(insertPayload)) {
@@ -1146,7 +1465,7 @@ export async function POST(request: NextRequest) {
   const insertSelect =
     "id, pessoa_id, responsavel_financeiro_id, tipo_matricula, metodo_liquidacao, vinculo_id, ano_referencia, data_matricula, data_inicio_vinculo, escola_tabela_preco_curso_id, plano_pagamento_id, forma_liquidacao_padrao, documento_modelo_id, status";
 
-  let { data: matriculaCriada, error: insErr } = await supabase
+  const { data: matriculaCriadaInicial, error: insErr } = await supabase
     .from("matriculas")
     .insert(insertPayload)
     .select(insertSelect)
@@ -1154,6 +1473,7 @@ export async function POST(request: NextRequest) {
 
   if (insErr) return serverError("CRIAR_MATRICULA_FAIL", "Falha ao criar matricula.", { insErr });
 
+  let matriculaCriada = matriculaCriadaInicial;
   const matriculaId = (matriculaCriada as { id: number }).id;
   const bolsasAplicadas: Array<{
     turma_id: number;
@@ -1175,6 +1495,8 @@ export async function POST(request: NextRequest) {
       matricula_id: matriculaId,
     });
   };
+  let itensCriados: Awaited<ReturnType<typeof insertMatriculaItens>> = [];
+  let vinculosTurmaAluno: TurmaAlunoVinculoResumo[] = [];
 
   if (usarExecucoes && execucoesValidas.length > 0) {
     let hasModeloLiquidacaoColumn = false;
@@ -1221,6 +1543,55 @@ export async function POST(request: NextRequest) {
       return await rollbackAndServerError("MANUAL_INSERT_EXECUCOES_FAIL", "Falha ao salvar valores manuais.", { execErr });
     }
   }
+
+  try {
+    const itensPayload: MatriculaItemInsert[] = matriculaItemDrafts.map((item) => ({
+      matricula_id: matriculaId,
+      curso_id: null,
+      modulo_id: item.modulo_id,
+      turma_id_inicial: item.turma_id,
+      descricao: item.descricao,
+      origem_tipo: item.origem_tipo,
+      valor_base_centavos: item.valor_base_centavos,
+      valor_liquido_centavos: item.valor_liquido_centavos,
+      status: "ATIVO",
+      data_inicio: item.data_inicio,
+      observacoes: item.observacoes,
+    }));
+
+    itensCriados = await insertMatriculaItens(
+      admin as unknown as { from: (table: string) => any },
+      itensPayload,
+    );
+
+    if (itensCriados.length === 0) {
+      return await rollbackAndServerError(
+        "CRIAR_MATRICULA_ITENS_FAIL",
+        "Nenhum item da matricula foi criado.",
+      );
+    }
+
+    vinculosTurmaAluno = await vincularTurmaAlunoPorItens({
+      supabase: admin as unknown as { from: (table: string) => any },
+      matriculaId,
+      alunoPessoaId: pessoaId,
+      dataInicio: dataInicioVinculo,
+      itens: itensCriados.map((item) => ({
+        matricula_item_id: item.id,
+        turma_id: item.turma_id_inicial,
+      })),
+    });
+  } catch (matriculaItemError) {
+    return await rollbackAndServerError(
+      "CRIAR_MATRICULA_ITENS_FAIL",
+      "Falha ao materializar itens da matricula.",
+      {
+        matriculaItemError:
+          matriculaItemError instanceof Error ? matriculaItemError.message : String(matriculaItemError),
+      },
+    );
+  }
+
   if (execucoesBolsa.length > 0) {
     const bolsaDataInicioDefault = parseDateYmdOrNull(dataMatricula) ?? new Date().toISOString().slice(0, 10);
     for (const execucao of execucoesBolsa) {
@@ -1265,6 +1636,7 @@ export async function POST(request: NextRequest) {
     baseUrl: new URL(request.url).origin,
     cookieHeader,
     matriculaId,
+    matriculaItemIds: itensCriados.map((item) => item.id),
     tipoPrimeiraCobranca,
     modo: modoLiquidacaoAutomatica,
     observacoes: body.observacoes ?? null,
@@ -1275,6 +1647,56 @@ export async function POST(request: NextRequest) {
       liquidacao_detail: liquidacaoAto.detail,
       liquidacao_payload: liquidacaoAto.payload ?? null,
     });
+  }
+
+  // A3: Gerar cobrança da taxa de matrícula se houver
+  let taxaMatriculaCobrancaId: number | null = null;
+  if (temTaxaMatricula && valorTaxaMatriculaCentavos && valorTaxaMatriculaCentavos > 0) {
+    try {
+      const { data: cobrancaTaxa, error: cobrancaTaxaErr } = await admin
+        .from("cobrancas")
+        .insert({
+          pessoa_id: respFinId || pessoaId,
+          valor_centavos: valorTaxaMatriculaCentavos,
+          descricao: `Taxa de matrícula #${matriculaId}`,
+          vencimento: new Date().toISOString().slice(0, 10),
+          status: "PENDENTE",
+          origem_tipo: "MATRICULA",
+          origem_id: matriculaId,
+          origem_subtipo: "TAXA_MATRICULA",
+          centro_custo_id: (await admin
+            .from("centros_custo")
+            .select("id")
+            .or("codigo.eq.ESCOLA,codigo.eq.ESC")
+            .eq("ativo", true)
+            .limit(1)
+            .maybeSingle()).data?.id ?? null,
+          competencia_ano_mes: `${anoRef}-${String(new Date().getMonth() + 1).padStart(2, "0")}`,
+        })
+        .select("id")
+        .single();
+
+      if (!cobrancaTaxaErr && cobrancaTaxa) {
+        taxaMatriculaCobrancaId = cobrancaTaxa.id;
+
+        // A3: Registrar em matriculas_financeiro_linhas
+        await admin
+          .from("matriculas_financeiro_linhas")
+          .insert({
+            matricula_id: matriculaId,
+            tipo: "TAXA_MATRICULA",
+            valor_centavos: valorTaxaMatriculaCentavos,
+            descricao: `Taxa de matrícula #${matriculaId}`,
+            origem_tabela: "cobrancas",
+            origem_id: cobrancaTaxa.id,
+            status: "PENDENTE",
+            vencimento: new Date().toISOString().slice(0, 10),
+            data_evento: new Date().toISOString().slice(0, 10),
+          });
+      }
+    } catch (taxaErr) {
+      console.warn("[api/matriculas/novo] Erro ao gerar cobrança taxa matrícula:", taxaErr);
+    }
   }
 
   const { data: matriculaFinal, error: ativarErr } = await supabase
@@ -1295,10 +1717,29 @@ export async function POST(request: NextRequest) {
 
   matriculaCriada = matriculaFinal;
 
+  try {
+    await inserirMatriculaEventoSupabase(admin as unknown as { from: (table: string) => any }, {
+      matricula_id: matriculaId,
+      tipo_evento: "CRIADA",
+      created_by: userId,
+      dados: {
+        tipo_matricula: tipoMatricula,
+        metodo_liquidacao: metodoLiquidacao,
+        itens_criados: itensCriados.length,
+        vinculos_turma_aluno: vinculosTurmaAluno.length,
+      },
+    });
+  } catch (matriculaEventoError) {
+    console.error("[api/matriculas/novo] falha ao registrar evento CRIADA:", matriculaEventoError);
+  }
+
   return NextResponse.json(
     {
       ok: true,
       matricula: matriculaCriada,
+      itens_criados: itensCriados,
+      vinculos_turma_aluno: vinculosTurmaAluno,
+      resumo_financeiro: liquidacaoAto.payload,
       bolsa_aplicacoes: bolsasAplicadas,
       resumo_custeio: resumoCusteio,
       liquidacao_ato: liquidacaoAto.payload,

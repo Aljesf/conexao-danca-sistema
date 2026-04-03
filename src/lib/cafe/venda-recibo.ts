@@ -10,6 +10,10 @@ export type CafeVendaRecibo = {
   id: number;
   numero_legivel: string;
   created_at: string;
+  operador: {
+    nome: string | null;
+    user_id: string | null;
+  };
   competencia: string | null;
   comprador: {
     pessoa_id: number | null;

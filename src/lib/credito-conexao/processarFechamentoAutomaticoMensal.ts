@@ -132,6 +132,11 @@ function normalizeCompetencias(values: Array<string | null | undefined>): string
   return Array.from(new Set(values.filter(isCompetencia).map((value) => value.trim()))).sort(compareCompetencia);
 }
 
+/**
+ * Resolve o dia de fechamento da fatura.
+ * Convenção: dia_fechamento = 0 (ou null) significa "último dia do mês".
+ * Regra de negócio padrão: fechamento sempre no último dia do mês.
+ */
 function resolveDiaFechamento(
   conta: ContaRow,
   cfgTipo: ConfigTipoContaRow | null,
@@ -139,16 +144,28 @@ function resolveDiaFechamento(
   today: Date,
 ): { dia: number; origem: ResultadoConta["origem_configuracao_fechamento"] } {
   const maxDay = lastDayOfMonth(today);
+
+  // Resolve o valor bruto e a origem da configuração
+  let raw: number | null = null;
+  let origem: ResultadoConta["origem_configuracao_fechamento"] = "padrao";
+
   if (typeof conta.dia_fechamento === "number" && Number.isFinite(conta.dia_fechamento)) {
-    return { dia: clampDiaFechamento(conta.dia_fechamento, maxDay), origem: "conta" };
+    raw = conta.dia_fechamento;
+    origem = "conta";
+  } else if (typeof cfgTipo?.dia_fechamento === "number" && Number.isFinite(cfgTipo.dia_fechamento)) {
+    raw = cfgTipo.dia_fechamento;
+    origem = "tipo_conta";
+  } else if (typeof cfgGlobal?.dia_fechamento_faturas === "number" && Number.isFinite(cfgGlobal.dia_fechamento_faturas)) {
+    raw = cfgGlobal.dia_fechamento_faturas;
+    origem = "global";
   }
-  if (typeof cfgTipo?.dia_fechamento === "number" && Number.isFinite(cfgTipo.dia_fechamento)) {
-    return { dia: clampDiaFechamento(cfgTipo.dia_fechamento, maxDay), origem: "tipo_conta" };
+
+  // 0, null ou ausente = último dia do mês (regra de negócio padrão)
+  if (raw === null || raw === 0) {
+    return { dia: maxDay, origem };
   }
-  if (typeof cfgGlobal?.dia_fechamento_faturas === "number" && Number.isFinite(cfgGlobal.dia_fechamento_faturas)) {
-    return { dia: clampDiaFechamento(cfgGlobal.dia_fechamento_faturas, maxDay), origem: "global" };
-  }
-  return { dia: 1, origem: "padrao" };
+
+  return { dia: clampDiaFechamento(raw, maxDay), origem };
 }
 
 function resolveDiaVencimento(conta: ContaRow, cfgTipo: ConfigTipoContaRow | null): number {
@@ -161,7 +178,7 @@ function resolveDiaVencimento(conta: ContaRow, cfgTipo: ConfigTipoContaRow | nul
 }
 
 async function carregarConfiguracoes(supabase: SupabaseClient) {
-  const [{ data: cfgTipo }, { data: cfgGlobal }, { data: cfgCobranca }] = await Promise.all([
+  const [{ data: cfgTipo }, { data: cfgGlobal }, { data: cfgCobranca }, { data: cfgEscola }] = await Promise.all([
     supabase
       .from("credito_conexao_configuracoes")
       .select("tipo_conta,dia_fechamento,dia_vencimento,ativo")
@@ -179,12 +196,22 @@ async function carregarConfiguracoes(supabase: SupabaseClient) {
       .order("id", { ascending: true })
       .limit(1)
       .maybeSingle<ConfigCobrancaRow>(),
+    supabase
+      .from("escola_config_financeira")
+      .select("data_limite_exercicio")
+      .limit(1)
+      .maybeSingle(),
   ]);
+
+  // M7: data_limite_exercicio como YYYY-MM para comparação com competências
+  const dataLimiteRaw = (cfgEscola as any)?.data_limite_exercicio as string | null;
+  const competenciaLimiteExercicio = dataLimiteRaw ? dataLimiteRaw.slice(0, 7) : null;
 
   return {
     cfgTipo: cfgTipo ?? null,
     cfgGlobal: cfgGlobal ?? null,
     providerCode: (cfgCobranca?.provider_ativo ?? "NEOFIN") as CobrancaProviderCode,
+    competenciaLimiteExercicio,
   };
 }
 
@@ -280,7 +307,7 @@ export async function processarFechamentoAutomaticoMensal(
   const competenciaAtual = getCompetencia(hoje);
   const force = input.force === true;
   const dryRun = input.dryRun === true;
-  const { cfgTipo, cfgGlobal, providerCode } = await carregarConfiguracoes(input.supabase);
+  const { cfgTipo, cfgGlobal, providerCode, competenciaLimiteExercicio } = await carregarConfiguracoes(input.supabase);
   const contas = await listarContasAlvo(input.supabase, input.contaConexaoId);
 
   const resultados: ResultadoConta[] = [];
@@ -298,10 +325,15 @@ export async function processarFechamentoAutomaticoMensal(
       listarCompetenciasPendentesDaConta(input.supabase, conta.id, competenciaAtual),
     ]);
 
-    const periodos = normalizeCompetencias([
+    let periodos = normalizeCompetencias([
       ...faturasAbertas.map((row) => row.periodo_referencia),
       ...competenciasPendentes,
     ]);
+
+    // M7: Filtrar competências que ultrapassam data_limite_exercicio
+    if (competenciaLimiteExercicio) {
+      periodos = periodos.filter((comp) => compareCompetencia(comp, competenciaLimiteExercicio) <= 0);
+    }
 
     if (periodos.length === 0) {
       resultados.push({

@@ -94,16 +94,6 @@ export function DocumentoEmissaoResultado({
           <Button type="button" variant="secondary" onClick={onAbrirPreviewInterno}>
             Conferir preview
           </Button>
-          {previewUrl ? (
-            <a
-              className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Abrir preview bruto
-            </a>
-          ) : null}
           {documentoUrl ? (
             <Link
               className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"

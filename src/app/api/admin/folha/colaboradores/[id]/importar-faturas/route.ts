@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { validarFaturasCreditoConexao } from "@/lib/credito-conexao/validarCadeiaOrigem";
 
 type FolhaRow = {
   id: number;
@@ -128,7 +129,44 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
     return NextResponse.json({ ok: true, data: { imported: 0 } });
   }
 
-  const faturaIds = listaFaturas.map((f) => f.id);
+  const validacoesByFatura = await validarFaturasCreditoConexao(
+    supabase as unknown as { from: (table: string) => any },
+    listaFaturas.map((f) => f.id),
+  );
+  const faturasIgnoradas = listaFaturas
+    .map((fatura) => {
+      const validacao = validacoesByFatura.get(fatura.id);
+      if (validacao?.pode_importar_folha) return null;
+
+      return {
+        fatura_id: fatura.id,
+        motivos:
+          validacao?.motivos.length
+            ? validacao.motivos
+            : ["Fatura sem cadeia integra de origem para desconto em folha."],
+        total_fatura_centavos: Number(fatura.valor_total_centavos ?? 0),
+        total_validos_centavos: validacao?.total_validos_centavos ?? 0,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+  const faturasElegiveis = listaFaturas.filter(
+    (fatura) => validacoesByFatura.get(fatura.id)?.pode_importar_folha === true,
+  );
+
+  if (faturasElegiveis.length === 0) {
+    return NextResponse.json(
+      {
+        ok: true,
+        data: {
+          imported: 0,
+          skipped: faturasIgnoradas,
+        },
+      },
+      { status: 200 },
+    );
+  }
+
+  const faturaIds = faturasElegiveis.map((f) => f.id);
   const { data: eventosExistentes, error: eventosError } = await supabase
     .from("folha_pagamento_eventos")
     .select("origem_id")
@@ -149,10 +187,19 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
       .filter((v): v is number => typeof v === "number"),
   );
 
-  const paraImportar = listaFaturas.filter((f) => !existentes.has(f.id));
+  const paraImportar = faturasElegiveis.filter((f) => !existentes.has(f.id));
 
   if (paraImportar.length === 0) {
-    return NextResponse.json({ ok: true, data: { imported: 0 } });
+    return NextResponse.json(
+      {
+        ok: true,
+        data: {
+          imported: 0,
+          skipped: faturasIgnoradas,
+        },
+      },
+      { status: 200 },
+    );
   }
 
   const idsParaAtualizar = paraImportar.map((f) => f.id);
@@ -190,5 +237,8 @@ export async function POST(req: Request, ctx: { params: { id: string } }) {
     );
   }
 
-  return NextResponse.json({ ok: true, data: { imported: eventos.length, eventos: inserted ?? [] } });
+  return NextResponse.json({
+    ok: true,
+    data: { imported: eventos.length, eventos: inserted ?? [], skipped: faturasIgnoradas },
+  });
 }

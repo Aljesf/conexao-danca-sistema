@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/financeiro/credito-conexao/fechamento-mensal/processar",
+      "schedule": "0 23 28-31 * *"
+    },
+    {
+      "path": "/api/financeiro/dashboard-inteligente/cron-diario",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/governanca/cobrancas/poll-neofin",
+      "schedule": "15 */6 * * *"
+    }
+  ]
+}

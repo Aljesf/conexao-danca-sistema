@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { guardCafeApiRequest } from "@/lib/auth/cafeApiAccess";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 function slugify(input: string): string {
@@ -19,8 +20,8 @@ function asIntOrNull(value: unknown): number | null {
   return Math.trunc(value);
 }
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req);
+export async function GET(req: NextRequest) {
+  const denied = await guardCafeApiRequest(req);
   if (denied) return denied as unknown as NextResponse;
 
   const supabase = getSupabaseServiceClient();

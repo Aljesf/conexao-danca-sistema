@@ -244,14 +244,14 @@ export function FinanceiroMensalSection({ mensal, loading, error }: FinanceiroMe
                 : "--"}.
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Previsao baseada em lancamentos ativos ja gerados na Conta Interna Aluno. NeoFin so entra como recebido quando ha confirmacao financeira local; sincronizacao remota isolada nao compoe o total.
+              Previsao baseada em lancamentos ativos ja gerados na Conta Interna. NeoFin so entra como recebido quando ha confirmacao financeira local; sincronizacao remota isolada nao compoe o total.
             </p>
           </div>
           <Link
             href="/admin/financeiro/credito-conexao/cobrancas"
             className="inline-flex items-center rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
-            Abrir Conta Interna Aluno
+            Abrir Conta Interna
           </Link>
         </div>
 
@@ -369,7 +369,7 @@ export function FinanceiroMensalSection({ mensal, loading, error }: FinanceiroMe
             <div className="rounded-lg border border-slate-200 bg-white p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Previsao futura</p>
               <p className="mt-2 text-sm text-slate-600">
-                Competencias futuras entram quando ja existem lancamentos ativos gerados por matricula ou cartao conexao.
+                Competencias futuras entram quando ja existem lancamentos ativos gerados por matricula ou conta interna.
               </p>
             </div>
           </div>

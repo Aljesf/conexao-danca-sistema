@@ -1,28 +1,44 @@
-﻿import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  clearSupabaseBrowserAuthStorage,
+  shouldClearSupabaseAuth,
+} from "@/lib/supabase/auth-utils";
 
 let browserClient: SupabaseClient | null = null;
 
 /**
  * Cliente Supabase para o browser.
- * Usa localStorage (padrão do supabase-js) e evita adapter de cookies no client,
- * eliminando conflito com cookies antigos em formato base64-*.
+ * Mantemos a sessão alinhada aos cookies do app para evitar drift entre browser e server.
  */
 export function getSupabaseBrowser(): SupabaseClient {
   if (browserClient) return browserClient;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  browserClient = createClientComponentClient();
 
-  if (!supabaseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL não configurada.");
-  if (!supabaseAnonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY não configurada.");
+  const originalGetUser = browserClient.auth.getUser.bind(browserClient.auth);
+  browserClient.auth.getUser = async (...args) => {
+    const result = await originalGetUser(...args);
 
-  browserClient = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-  });
+    if (result.error && shouldClearSupabaseAuth(result.error)) {
+      clearSupabaseBrowserAuthStorage();
+      return { data: { user: null }, error: result.error };
+    }
+
+    return result;
+  };
+
+  const originalGetSession = browserClient.auth.getSession.bind(browserClient.auth);
+  browserClient.auth.getSession = async () => {
+    const result = await originalGetSession();
+
+    if (result.error && shouldClearSupabaseAuth(result.error)) {
+      clearSupabaseBrowserAuthStorage();
+      return { data: { session: null }, error: result.error };
+    }
+
+    return result;
+  };
 
   return browserClient;
 }

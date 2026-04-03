@@ -168,7 +168,7 @@ export async function processarClassificacaoFinanceira(
 
   await limparRateiosAnteriores(supabase, cobranca.id);
 
-  // Branch especial para Credito Conexao (fatura)
+  // Branch especial para conta interna por fatura/competencia
   if (origemTipo === "CREDITO_CONEXAO_FATURA" && cobranca.origem_id) {
     const { data: fatura, error: faturaError } = await supabase
       .from("credito_conexao_faturas")
@@ -254,7 +254,7 @@ export async function processarClassificacaoFinanceira(
           data_movimento: dataMovimento,
           origem: "TAXA_CREDITO_CONEXAO",
           origem_id: cobranca.id,
-          descricao: `Taxa parcelamento Credito Conexao (fatura #${cobranca.origem_id} / cobranca #${cobranca.id})`,
+          descricao: `Taxa parcelamento conta interna (fatura #${cobranca.origem_id} / cobranca #${cobranca.id})`,
           usuario_id: null,
         });
 
@@ -339,8 +339,41 @@ export async function processarClassificacaoFinanceira(
       }
     }
 
+    // A1: FIN como câmara de compensação — registrar entrada no FIN
+    const valorTotalRateio = Array.from(agregados.values()).reduce((s, v) => s + v, 0);
+    if (centroFin && valorTotalRateio > 0) {
+      const { error: finEntradaErr } = await supabase.from("movimento_financeiro").insert({
+        tipo: "RECEITA",
+        centro_custo_id: centroFin,
+        valor_centavos: valorTotalRateio,
+        data_movimento: dataMovimento,
+        origem: "RATEIO_COBRANCA",
+        origem_id: cobranca.id,
+        descricao: `[FIN] Entrada pagamento fatura #${cobranca.origem_id} (cobranca #${cobranca.id})`,
+        usuario_id: null,
+      });
+      if (!finEntradaErr) movimentosCriados += 1;
+    }
+
     for (const [centroDestino, valor] of agregados.entries()) {
       if (!valor || valor === 0) continue;
+
+      // A1: Registrar saída do FIN para o centro de destino
+      if (centroFin) {
+        const { error: finSaidaErr } = await supabase.from("movimento_financeiro").insert({
+          tipo: "DESPESA",
+          centro_custo_id: centroFin,
+          valor_centavos: valor,
+          data_movimento: dataMovimento,
+          origem: "RATEIO_COBRANCA",
+          origem_id: cobranca.id,
+          descricao: `[FIN] Repasse para centro #${centroDestino} (fatura #${cobranca.origem_id})`,
+          usuario_id: null,
+        });
+        if (!finSaidaErr) movimentosCriados += 1;
+      }
+
+      // Registrar entrada no centro de destino
       const { error: movError } = await supabase.from("movimento_financeiro").insert({
         tipo: "RECEITA",
         centro_custo_id: centroDestino,
@@ -348,7 +381,7 @@ export async function processarClassificacaoFinanceira(
         data_movimento: dataMovimento,
         origem: "RATEIO_COBRANCA",
         origem_id: cobranca.id,
-        descricao: `Rateio cobrança #${cobranca.id} (fatura Credito Conexao #${cobranca.origem_id})`,
+        descricao: `Rateio cobranca #${cobranca.id} (fatura da conta interna #${cobranca.origem_id})`,
         usuario_id: null,
       });
 
@@ -358,7 +391,7 @@ export async function processarClassificacaoFinanceira(
       movimentosCriados += 1;
     }
 
-    return { ok: true, movimentosCriados, detalhes: { taxa_aplicada: taxaAplicada } };
+    return { ok: true, movimentosCriados, detalhes: { taxa_aplicada: taxaAplicada, fin_intermediacao: !!centroFin } };
   }
 
   // Caso ESCOLA ou CAFE: usa centros dedicados (código ESC / CAF)

@@ -1653,19 +1653,22 @@ export type Database = {
           },
         ]
       }
-        credito_conexao_lancamentos: {
-          Row: {
-            aluno_id: number | null
-            centro_custo_id: number | null
-            cobranca_id: number | null
-            competencia: string | null
-            composicao_json: Json | null
-            conta_conexao_id: number
+      credito_conexao_lancamentos: {
+        Row: {
+          aluno_id: number | null
+          cancelado_em: string | null
+          cancelado_por_user_id: string | null
+          centro_custo_id: number | null
+          cobranca_id: number | null
+          competencia: string | null
+          composicao_json: Json | null
+          conta_conexao_id: number
           created_at: string
           data_lancamento: string
           descricao: string | null
           id: number
           matricula_id: number | null
+          motivo_cancelamento: string | null
           numero_parcelas: number | null
           origem_id: number | null
           origem_sistema: string
@@ -1674,18 +1677,21 @@ export type Database = {
           updated_at: string
           valor_centavos: number
         }
-          Insert: {
-            aluno_id?: number | null
-            centro_custo_id?: number | null
-            cobranca_id?: number | null
-            competencia?: string | null
-            composicao_json?: Json | null
-            conta_conexao_id: number
+        Insert: {
+          aluno_id?: number | null
+          cancelado_em?: string | null
+          cancelado_por_user_id?: string | null
+          centro_custo_id?: number | null
+          cobranca_id?: number | null
+          competencia?: string | null
+          composicao_json?: Json | null
+          conta_conexao_id: number
           created_at?: string
           data_lancamento?: string
           descricao?: string | null
           id?: number
           matricula_id?: number | null
+          motivo_cancelamento?: string | null
           numero_parcelas?: number | null
           origem_id?: number | null
           origem_sistema: string
@@ -1694,18 +1700,21 @@ export type Database = {
           updated_at?: string
           valor_centavos: number
         }
-          Update: {
-            aluno_id?: number | null
-            centro_custo_id?: number | null
-            cobranca_id?: number | null
-            competencia?: string | null
-            composicao_json?: Json | null
-            conta_conexao_id?: number
+        Update: {
+          aluno_id?: number | null
+          cancelado_em?: string | null
+          cancelado_por_user_id?: string | null
+          centro_custo_id?: number | null
+          cobranca_id?: number | null
+          competencia?: string | null
+          composicao_json?: Json | null
+          conta_conexao_id?: number
           created_at?: string
           data_lancamento?: string
           descricao?: string | null
           id?: number
           matricula_id?: number | null
+          motivo_cancelamento?: string | null
           numero_parcelas?: number | null
           origem_id?: number | null
           origem_sistema?: string
@@ -1729,18 +1738,25 @@ export type Database = {
             referencedRelation: "vw_governanca_boletos_neofin"
             referencedColumns: ["cobranca_id"]
           },
-            {
-              foreignKeyName: "credito_conexao_lancamentos_aluno_id_fkey"
-              columns: ["aluno_id"]
-              isOneToOne: false
-              referencedRelation: "pessoas"
-              referencedColumns: ["id"]
-            },
-            {
-              foreignKeyName: "credito_conexao_lancamentos_centro_custo_id_fkey"
-              columns: ["centro_custo_id"]
-              isOneToOne: false
-              referencedRelation: "centros_custo"
+          {
+            foreignKeyName: "credito_conexao_lancamentos_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "pessoas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credito_conexao_lancamentos_cancelado_por_user_id_fkey"
+            columns: ["cancelado_por_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "credito_conexao_lancamentos_centro_custo_id_fkey"
+            columns: ["centro_custo_id"]
+            isOneToOne: false
+            referencedRelation: "centros_custo"
               referencedColumns: ["id"]
             },
             {

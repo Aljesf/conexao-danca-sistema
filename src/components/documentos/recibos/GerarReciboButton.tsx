@@ -9,6 +9,7 @@ import { DocumentoEmissaoResultado } from "@/components/documentos/recibos/Docum
 import { DocumentoMetadadosCard } from "@/components/documentos/recibos/DocumentoMetadadosCard";
 import { DocumentoRenderizacaoCard } from "@/components/documentos/recibos/DocumentoRenderizacaoCard";
 import { DocumentoVariaveisAccordion } from "@/components/documentos/recibos/DocumentoVariaveisAccordion";
+import { ReciboModal } from "@/components/documentos/ReciboModal";
 
 type VariaveisAgrupadas = Record<string, Record<string, string>>;
 
@@ -283,6 +284,7 @@ export function GerarReciboButton({
   const [previewData, setPreviewData] = useState<NormalizedPreview | null>(null);
   const [resultadoEmissao, setResultadoEmissao] = useState<NormalizedEmitResult | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [reciboModalOpen, setReciboModalOpen] = useState(false);
 
   const disabled = !recebimentoId || loading;
   const previewHref = useMemo(() => {
@@ -367,15 +369,15 @@ export function GerarReciboButton({
         <Button type="button" variant="ghost" disabled={previewLoading} onClick={() => void carregarPreview()}>
           {previewLoading ? "Carregando preview..." : "Conferir preview"}
         </Button>
-        {previewHref ? (
-          <a
-            className="text-xs font-medium text-slate-600 underline underline-offset-4 hover:text-slate-900"
-            href={previewHref}
-            target="_blank"
-            rel="noreferrer"
+        {recebimentoId ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-xs"
+            onClick={() => setReciboModalOpen(true)}
           >
-            Abrir preview bruto
-          </a>
+            Ver recibo
+          </Button>
         ) : null}
         {documentoId && documentoUrl ? (
           <Link
@@ -468,15 +470,17 @@ export function GerarReciboButton({
                 <DocumentoVariaveisAccordion grupos={previewData.variaveisAgrupadas} />
 
                 <div className="flex flex-wrap justify-end gap-2">
-                  {previewHref ? (
-                    <a
-                      className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                      href={previewHref}
-                      target="_blank"
-                      rel="noreferrer"
+                  {recebimentoId ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setPreviewOpen(false);
+                        setReciboModalOpen(true);
+                      }}
                     >
-                      Abrir preview bruto
-                    </a>
+                      Ver recibo formatado
+                    </Button>
                   ) : null}
                   <Button type="button" variant="secondary" disabled>
                     Reemissao na proxima etapa
@@ -492,6 +496,13 @@ export function GerarReciboButton({
           </div>
         </DialogContent>
       </Dialog>
+
+      <ReciboModal
+        open={reciboModalOpen}
+        onClose={() => setReciboModalOpen(false)}
+        params={recebimentoId ? { tipo: "RECEBIMENTO", recebimento_id: recebimentoId } : null}
+        title="Recibo de pagamento"
+      />
     </div>
   );
 }

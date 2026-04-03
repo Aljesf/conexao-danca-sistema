@@ -3,7 +3,12 @@ import { requireUser } from "@/lib/supabase/api-auth";
 
 type CalendarOrigin = { tipo: string; id: string };
 
-type CalendarItemKind = "PERIODO_LETIVO" | "FAIXA_LETIVA" | "INSTITUCIONAL" | "EVENTO_INTERNO";
+type CalendarItemKind =
+  | "PERIODO_LETIVO"
+  | "FAIXA_LETIVA"
+  | "INSTITUCIONAL"
+  | "EVENTO_INTERNO"
+  | "EVENTO_EDICAO";
 
 type CalendarItem = {
   kind: CalendarItemKind;
@@ -191,6 +196,35 @@ export async function GET(req: NextRequest) {
       inicio: String(row.inicio),
       fim: row.fim ? String(row.fim) : null,
       origem: { tipo: "eventos_internos", id: String(row.id) },
+    });
+  }
+
+  // 5) Calendario das edicoes de eventos da escola (TIMESTAMPTZ) refletido no calendario geral
+  const { data: evEdicao, error: evEdicaoError } = await supabase
+    .from("eventos_escola_edicao_calendario_itens")
+    .select("id,edicao_id,tipo,titulo,descricao,inicio,fim,local_nome")
+    .eq("ativo", true)
+    .eq("reflete_no_calendario_escola", true)
+    .lte("inicio", endIso)
+    .or(`fim.is.null,fim.gte.${startIso}`)
+    .order("inicio", { ascending: true });
+
+  if (evEdicaoError) {
+    return NextResponse.json({ error: evEdicaoError.message }, { status: 500 });
+  }
+
+  for (const row of evEdicao ?? []) {
+    items.push({
+      kind: "EVENTO_EDICAO",
+      id: String(row.id),
+      titulo: row.titulo,
+      descricao: row.descricao,
+      dominio: "EVENTOS_DA_ESCOLA",
+      categoria: "EDICAO_EVENTO",
+      subcategoria: row.tipo,
+      inicio: String(row.inicio),
+      fim: row.fim ? String(row.fim) : null,
+      origem: { tipo: "eventos_escola_edicao_calendario_itens", id: String(row.id) },
     });
   }
 

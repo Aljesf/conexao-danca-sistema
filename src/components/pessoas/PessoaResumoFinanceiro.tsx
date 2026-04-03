@@ -15,6 +15,35 @@ type ResumoFinanceiro = {
   pessoa_id: number;
   responsavel_financeiro_id: number;
   responsavel_financeiro?: { id: number; nome: string | null } | null;
+  conta_interna?: {
+    id: number;
+    pessoa_titular_id: number;
+    responsavel_financeiro_pessoa_id: number | null;
+    tipo_conta: string | null;
+    descricao_exibicao: string | null;
+    ativo: boolean;
+    dia_vencimento: number | null;
+    dia_vencimento_preferido: number | null;
+  } | null;
+  resumo_geral?: {
+    aberto_hoje_centavos: number;
+    em_atraso_centavos: number;
+    pago_confirmado_centavos: number;
+    quitado_na_conta_interna_centavos: number;
+    recebimentos_confirmados_qtd: number;
+    cobrancas_pagas_qtd: number;
+    proximo_vencimento: string | null;
+  };
+  fatura_atual?: {
+    id: number;
+    competencia: string;
+    data_vencimento: string | null;
+    status: string;
+    valor_total_centavos: number;
+    saldo_aberto_centavos: number;
+    quantidade_itens: number;
+    cobranca_id: number | null;
+  } | null;
   cobrancas: Array<{
     id: number;
     devedor_pessoa_id: number;
@@ -96,6 +125,80 @@ type ResumoFinanceiro = {
     vencida: boolean;
     created_at: string | null;
   }>;
+  faturas_detalhadas?: Array<{
+    id: number;
+    conta_conexao_id: number;
+    periodo_referencia: string;
+    data_vencimento: string | null;
+    valor_total_centavos: number;
+    valor_pago_centavos: number;
+    saldo_aberto_centavos: number;
+    status: string;
+    vencida: boolean;
+    cobranca_id: number | null;
+    quantidade_itens: number;
+    quantidade_cobrancas: number;
+    created_at: string | null;
+    itens: Array<{
+      lancamento_id: number;
+      cobranca_id: number | null;
+      descricao: string | null;
+      valor_centavos: number;
+      status_lancamento: string | null;
+      referencia_item: string | null;
+      origem_sistema: string | null;
+      origem_id: number | null;
+      matricula_id: number | null;
+      data_lancamento: string | null;
+      cobranca_status: string | null;
+      cobranca_vencimento: string | null;
+      data_pagamento: string | null;
+    }>;
+  }>;
+  cobrancas_pagas?: Array<{
+    cobranca_id: number;
+    descricao: string | null;
+    valor_centavos: number;
+    data_pagamento: string | null;
+    vencimento: string | null;
+    status: string | null;
+    competencia: string | null;
+    conta_interna_id: number | null;
+    origem_label: string | null;
+    origem_tipo: string | null;
+    origem_item_tipo: string | null;
+    origem_item_id: number | null;
+  }>;
+  recebimentos_confirmados?: Array<{
+    recebimento_id: number;
+    cobranca_id: number | null;
+    valor_centavos: number;
+    data_pagamento: string | null;
+    metodo_pagamento: string | null;
+    forma_pagamento_codigo: string | null;
+    origem_sistema: string | null;
+    observacoes: string | null;
+    cobranca_descricao: string | null;
+    cobranca_competencia: string | null;
+    conta_interna_id: number | null;
+    em_conta_interna: boolean;
+  }>;
+  historico_operacional?: Array<{
+    grupo: string;
+    label: string;
+    quantidade_itens: number;
+    total_aberto_centavos: number;
+    total_pago_centavos: number;
+    itens: Array<{
+      cobranca_id: number;
+      origem_label: string | null;
+      competencia: string | null;
+      valor_centavos: number;
+      saldo_aberto_centavos: number;
+      status: string | null;
+      conta_interna_id: number | null;
+    }>;
+  }>;
   agregados: {
     cobrancas_pendentes_qtd: number;
     cobrancas_pendentes_total_centavos: number;
@@ -145,13 +248,23 @@ function formatBRLFromCentavos(v: number): string {
   return reais.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function statusBadge(label: string, tone: "neutral" | "warning") {
+function statusBadge(label: string, tone: "neutral" | "warning" | "success") {
   const base = "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium";
   const toneClass =
     tone === "warning"
       ? "border-rose-200 bg-rose-50 text-rose-700"
-      : "border-slate-200 bg-slate-50 text-slate-700";
+      : tone === "success"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-slate-200 bg-slate-50 text-slate-700";
   return <span className={`${base} ${toneClass}`}>{label}</span>;
+}
+
+function formatDateOrDash(value: string | null): string {
+  if (!value) return "-";
+  const raw = value.length >= 10 ? value.slice(0, 10) : value;
+  const date = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleDateString("pt-BR");
 }
 
 function formatDateTimeOrDash(value: string | null): string {
@@ -361,6 +474,12 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
       matriculaCancelamentoTipo: null,
     }));
   }, [data]);
+
+  const resumoGeral = data?.resumo_geral ?? null;
+  const faturaAtual = data?.fatura_atual ?? null;
+  const recebimentosConfirmados = data?.recebimentos_confirmados ?? [];
+  const historicoOperacional = data?.historico_operacional ?? [];
+  const faturasDetalhadas = data?.faturas_detalhadas ?? [];
 
   const allSelecionadas =
     canceladasExpurgaveisIds.length > 0 && canceladasExpurgaveisIds.every((id) => selectedCobrancas.includes(id));
@@ -585,6 +704,218 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
           <Card>
             <CardHeader>
+              <CardTitle>Resumo geral</CardTitle>
+              <CardDescription>
+                A conta interna e a fatura por competencia passam a ser a leitura principal do pendente e do quitado.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 pt-0 md:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Aberto hoje</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {formatBRLFromCentavos(resumoGeral?.aberto_hoje_centavos ?? 0)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-rose-600">Em atraso</div>
+                <div className="mt-1 text-lg font-semibold text-rose-700">
+                  {formatBRLFromCentavos(resumoGeral?.em_atraso_centavos ?? 0)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-emerald-600">Recebido confirmado</div>
+                <div className="mt-1 text-lg font-semibold text-emerald-700">
+                  {formatBRLFromCentavos(resumoGeral?.pago_confirmado_centavos ?? 0)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Quitado na conta interna</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {formatBRLFromCentavos(resumoGeral?.quitado_na_conta_interna_centavos ?? 0)}
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Recebimentos confirmados</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {resumoGeral?.recebimentos_confirmados_qtd ?? 0}
+                </div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Proximo vencimento</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {formatDateOrDash(resumoGeral?.proximo_vencimento ?? null)}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Conta interna e fatura atual</CardTitle>
+              <CardDescription>
+                {data.conta_interna
+                  ? `${data.conta_interna.descricao_exibicao ?? "Conta interna"} #${data.conta_interna.id}`
+                  : "Nenhuma conta interna ativa encontrada para este responsavel."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              {data.conta_interna ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">Configuracao</div>
+                    <div className="mt-1 text-sm text-slate-700">
+                      Tipo: {data.conta_interna.tipo_conta ?? "-"} · Vencimento preferencial:{" "}
+                      {data.conta_interna.dia_vencimento_preferido ?? data.conta_interna.dia_vencimento ?? 12}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">Fatura atual</div>
+                    {faturaAtual ? (
+                      <div className="mt-1 space-y-1 text-sm text-slate-700">
+                        <div className="font-medium text-slate-900">
+                          Competencia {faturaAtual.competencia} · #{faturaAtual.id}
+                        </div>
+                        <div>
+                          {statusBadge(
+                            faturaAtual.status,
+                            faturaAtual.status === "PAGA"
+                              ? "success"
+                              : faturaAtual.status === "EM_ATRASO"
+                                ? "warning"
+                                : "neutral",
+                          )}
+                        </div>
+                        <div>
+                          Total {formatBRLFromCentavos(faturaAtual.valor_total_centavos)} · Saldo{" "}
+                          {formatBRLFromCentavos(faturaAtual.saldo_aberto_centavos)}
+                        </div>
+                        <div>Vencimento {formatDateOrDash(faturaAtual.data_vencimento)}</div>
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-sm text-slate-600">Nenhuma fatura recente encontrada.</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  Esta pessoa ainda nao possui conta interna ativa no modelo atual.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recebimentos confirmados</CardTitle>
+              <CardDescription>
+                Visao financeira real por recebimento confirmado, sem duplicar item operacional como receita.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="py-2 text-left">Recebimento</th>
+                      <th className="py-2 text-left">Data</th>
+                      <th className="py-2 text-left">Origem</th>
+                      <th className="py-2 text-left">Meio</th>
+                      <th className="py-2 text-right">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recebimentosConfirmados.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-3 text-muted-foreground">
+                          Nenhum recebimento confirmado encontrado para este responsavel.
+                        </td>
+                      </tr>
+                    ) : (
+                      recebimentosConfirmados.map((item) => (
+                        <tr key={item.recebimento_id} className="border-t">
+                          <td className="py-2">
+                            <div className="font-medium text-slate-900">#{item.recebimento_id}</div>
+                            <div className="text-xs text-slate-500">
+                              Cobranca {item.cobranca_id ? `#${item.cobranca_id}` : "-"}
+                            </div>
+                          </td>
+                          <td className="py-2">{formatDateOrDash(item.data_pagamento)}</td>
+                          <td className="py-2">
+                            <div>{item.cobranca_descricao ?? "-"}</div>
+                            <div className="text-xs text-slate-500">
+                              {item.em_conta_interna
+                                ? `Conta interna #${item.conta_interna_id}`
+                                : "Recebimento legado em conciliacao"}
+                            </div>
+                          </td>
+                          <td className="py-2">{item.metodo_pagamento ?? item.forma_pagamento_codigo ?? "-"}</td>
+                          <td className="py-2 text-right">{formatBRLFromCentavos(item.valor_centavos)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Historico operacional</CardTitle>
+              <CardDescription>
+                Agrupamento por origem de negocio para separar matriculas, eventos, loja e outros elegiveis.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              {historicoOperacional.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  Nenhum historico operacional consolidado foi encontrado.
+                </div>
+              ) : (
+                historicoOperacional.map((grupo) => (
+                  <div key={grupo.grupo} className="rounded-xl border border-slate-200 bg-white">
+                    <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{grupo.label}</div>
+                        <div className="text-xs text-slate-500">{grupo.quantidade_itens} item(ns)</div>
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        Aberto {formatBRLFromCentavos(grupo.total_aberto_centavos)} · Quitado{" "}
+                        {formatBRLFromCentavos(grupo.total_pago_centavos)}
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto px-4 py-4">
+                      <table className="w-full text-sm">
+                        <thead className="text-xs uppercase text-muted-foreground">
+                          <tr>
+                            <th className="py-2 text-left">Cobranca</th>
+                            <th className="py-2 text-left">Competencia</th>
+                            <th className="py-2 text-left">Origem</th>
+                            <th className="py-2 text-right">Valor</th>
+                            <th className="py-2 text-right">Saldo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {grupo.itens.slice(0, 8).map((item) => (
+                            <tr key={`${grupo.grupo}-${item.cobranca_id}`} className="border-t">
+                              <td className="py-2">#{item.cobranca_id}</td>
+                              <td className="py-2">{item.competencia ?? "-"}</td>
+                              <td className="py-2">{item.origem_label ?? "-"}</td>
+                              <td className="py-2 text-right">{formatBRLFromCentavos(item.valor_centavos)}</td>
+                              <td className="py-2 text-right">{formatBRLFromCentavos(item.saldo_aberto_centavos)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Canceladas elegiveis a expurgo</CardTitle>
               <CardDescription>
                 Cobrancas canceladas ainda nao expurgadas, agrupadas por origem operacional para saneamento auditavel.
@@ -701,9 +1032,9 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
 
           <Card>
             <CardHeader>
-              <CardTitle>Titulos em aberto</CardTitle>
+              <CardTitle>Cobrancas canonicas em aberto</CardTitle>
               <CardDescription>
-                Leitura canonica das cobrancas em aberto, sem ocultar casos ambiguos ou sem conta interna associada.
+                Titulos oficiais ainda pendentes, mantendo a cobranca canonica como unidade financeira base.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -819,7 +1150,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
             <CardHeader>
               <CardTitle>Cobrancas avulsas</CardTitle>
               <CardDescription>
-                Cobrancas geradas manualmente para excecoes (fora da conta interna).
+                Cobrancas geradas manualmente para excecoes operacionais. Quando elegiveis, devem ser reconciliadas para a conta interna.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -914,9 +1245,7 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
             <CardHeader>
               <CardTitle>Conta interna (faturas)</CardTitle>
               <CardDescription>
-                Faturas pendentes: {data.agregados.faturas_pendentes_qtd} - Total:{" "}
-                {formatBRLFromCentavos(data.agregados.faturas_pendentes_total_centavos)} - Em atraso:{" "}
-                {data.agregados.faturas_vencidas_qtd}
+                Competencias e faturas reconciliadas pela conta interna, com composicao por lancamento e cobranca canonica.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -929,32 +1258,40 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                       <th className="py-2 text-left">Vencimento</th>
                       <th className="py-2 text-left">Status</th>
                       <th className="py-2 text-right">Total</th>
+                      <th className="py-2 text-right">Saldo</th>
+                      <th className="py-2 text-right">Itens</th>
                       <th className="py-2 text-right">Abrir</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.faturas_credito_conexao.length === 0 ? (
+                    {faturasDetalhadas.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-3 text-muted-foreground">
-                          Nenhuma fatura pendente da conta interna encontrada.
+                        <td colSpan={8} className="py-3 text-muted-foreground">
+                          Nenhuma fatura recente da conta interna encontrada.
                         </td>
                       </tr>
                     ) : (
-                      data.faturas_credito_conexao.map((f) => {
+                      faturasDetalhadas.map((f) => {
                         const semValor = (f.valor_total_centavos ?? 0) <= 0;
                         const atrasada = f.vencida && !semValor;
+                        const quitada = f.status === "PAGA" || (f.saldo_aberto_centavos ?? 0) <= 0;
+                        const statusTone = quitada ? "success" : atrasada ? "warning" : "neutral";
                         const statusLabel = semValor ? "SEM LANCAMENTOS" : f.status;
                         return (
                           <tr key={f.id} className="border-t">
                             <td className="py-2">#{f.id}</td>
                             <td className="py-2">{f.periodo_referencia}</td>
-                            <td className="py-2">{f.data_vencimento ?? "-"}</td>
+                            <td className="py-2">{formatDateOrDash(f.data_vencimento)}</td>
                             <td className="py-2">
-                              {atrasada ? statusBadge("EM ATRASO", "warning") : statusBadge(statusLabel, "neutral")}
+                              {statusBadge(atrasada && !quitada ? "EM ATRASO" : statusLabel, statusTone)}
                             </td>
                             <td className="py-2 text-right">
                               {formatBRLFromCentavos(f.valor_total_centavos)}
                             </td>
+                            <td className="py-2 text-right">
+                              {formatBRLFromCentavos(f.saldo_aberto_centavos ?? 0)}
+                            </td>
+                            <td className="py-2 text-right">{f.quantidade_itens}</td>
                             <td className="py-2 text-right">
                               <Link
                                 className="rounded-lg border px-3 py-1 text-sm hover:bg-slate-50"
@@ -970,6 +1307,58 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                   </tbody>
                 </table>
               </div>
+              {faturaAtual?.id ? (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Composicao da fatura atual #{faturaAtual.id}
+                  </div>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="text-xs uppercase text-muted-foreground">
+                        <tr>
+                          <th className="py-2 text-left">Lancamento</th>
+                          <th className="py-2 text-left">Origem</th>
+                          <th className="py-2 text-left">Cobranca</th>
+                          <th className="py-2 text-left">Pagamento</th>
+                          <th className="py-2 text-right">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(faturasDetalhadas.find((item) => item.id === faturaAtual.id)?.itens ?? []).length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-3 text-muted-foreground">
+                              Nenhum lancamento vinculado a esta fatura.
+                            </td>
+                          </tr>
+                        ) : (
+                          (faturasDetalhadas.find((item) => item.id === faturaAtual.id)?.itens ?? []).map((item) => (
+                            <tr key={item.lancamento_id} className="border-t">
+                              <td className="py-2">
+                                <div className="font-medium text-slate-900">#{item.lancamento_id}</div>
+                                <div className="text-xs text-slate-500">{item.referencia_item ?? "-"}</div>
+                              </td>
+                              <td className="py-2">
+                                <div>{item.descricao ?? "-"}</div>
+                                <div className="text-xs text-slate-500">
+                                  {item.origem_sistema ?? "-"} {item.origem_id ? `#${item.origem_id}` : ""}
+                                </div>
+                              </td>
+                              <td className="py-2">
+                                {item.cobranca_id ? `#${item.cobranca_id}` : "-"}
+                                {item.cobranca_status ? (
+                                  <div className="text-xs text-slate-500">{item.cobranca_status}</div>
+                                ) : null}
+                              </td>
+                              <td className="py-2">{formatDateOrDash(item.data_pagamento)}</td>
+                              <td className="py-2 text-right">{formatBRLFromCentavos(item.valor_centavos)}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-2 text-xs text-muted-foreground">
                 Observacao: o link de fatura usa a rota do admin financeiro. Se a rota real for diferente, ajuste.
               </div>
@@ -1073,8 +1462,8 @@ export function PessoaResumoFinanceiro({ pessoaId }: { pessoaId: number }) {
                   <option value="DINHEIRO">Dinheiro</option>
                   <option value="CARTAO_CREDITO_AVISTA">Cartao de credito (a vista)</option>
                   <option value="CARTAO_CREDITO_PARCELADO">Cartao de credito (parcelado)</option>
-                  <option value="CARTAO_CONEXAO_ALUNO">Cartao Conexao (Aluno)</option>
-                  <option value="CARTAO_CONEXAO_COLABORADOR">Cartao Conexao (Colaborador)</option>
+                  <option value="CARTAO_CONEXAO_ALUNO">Conta Interna (Aluno)</option>
+                  <option value="CARTAO_CONEXAO_COLABORADOR">Conta Interna (Colaborador)</option>
                   <option value="CREDITO_INTERNO_ALUNO">Credito interno (Aluno)</option>
                   <option value="CREDIARIO_COLABORADOR">Crediario (Colaborador)</option>
                   <option value="OUTRO">Outro</option>

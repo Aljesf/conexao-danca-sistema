@@ -7,6 +7,9 @@ dist/
 !.env.example
 .turbo/
 .vscode/
+.claude/
+.pnpm-store/
+.build-pid.txt
 dev-servicos*.log
 
 # Temporarios locais
@@ -23,3 +26,18 @@ tmp/
 tmp/
 
 .vercel
+Desktop.ini
+desktop.ini
+
+# Google Drive temp files
+.tmp.driveupload/
+.tmp-edge-profile/
+.vercel/output/
+*.tsbuildinfo
+
+# Android / mobile build artifacts
+apps/pdv-bale-cafe/.tmp-*
+apps/pdv-bale-cafe/android/app/build/
+apps/pdv-bale-cafe/android/.gradle/
+apps/pdv-bale-cafe/android/.cxx/
+apps/professor-app/*.apk

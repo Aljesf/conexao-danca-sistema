@@ -1,7 +1,10 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
-import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import {
+  buildReferenciaLojaContaInterna,
+  garantirObrigacaoContaInterna,
+} from "@/lib/financeiro/contaInternaObrigacao";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -105,22 +108,6 @@ function addCompetencia(base: string, offset: number): string {
   return `${yyyy}-${mm}`;
 }
 
-function buildVencimentoFromCompetencia(
-  competencia: string,
-  diaVencimento: number | null
-): string {
-  const [anoStr, mesStr] = competencia.split("-");
-  const ano = Number(anoStr);
-  const mes = Number(mesStr);
-  const maxDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
-  const diaRaw =
-    diaVencimento && Number.isFinite(diaVencimento) ? Math.trunc(diaVencimento) : 12;
-  const dia = Math.min(Math.max(diaRaw, 1), maxDia);
-  const mm = String(mes).padStart(2, "0");
-  const dd = String(dia).padStart(2, "0");
-  return `${ano}-${mm}-${dd}`;
-}
-
 function distribuirCentavos(total: number, parcelas: number): number[] {
   const n = Math.max(1, Math.trunc(parcelas));
   const base = Math.floor(total / n);
@@ -148,6 +135,7 @@ type ContaConexaoResumo = {
   id: number;
   pessoa_titular_id: number;
   dia_vencimento: number | null;
+  tipo_conta?: string | null;
 };
 
 type VendaItemInsert = {
@@ -281,9 +269,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    const itensUnknown = bodyUnknown.itens;
-
     const vendaInsert: JsonRecord = {
       cliente_pessoa_id: clientePessoaId,
       tipo_venda: tipoVenda,
@@ -497,8 +482,9 @@ export async function POST(request: NextRequest) {
 
     const formaBase = formaPagamentoCodigo || formaPagamento;
     const movimentoFinanceiroImediato = isPagamentoImediato(formaBase);
+    const registrarNaContaInterna = Boolean(contaConexaoId && valorTotalCentavos > 0);
 
-    if (movimentoFinanceiroImediato && valorTotalCentavos > 0) {
+    if (movimentoFinanceiroImediato && valorTotalCentavos > 0 && !registrarNaContaInterna) {
       let centroCustoId =
         asInt(bodyUnknown.centro_custo_id ?? bodyUnknown.centroCustoId) ?? null;
 
@@ -643,22 +629,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (isCartaoConexao && contaConexaoId && valorTotalCentavos > 0) {
+    if (contaConexaoId && valorTotalCentavos > 0) {
       const { data: contaRow, error: contaErr } = await supabase
         .from("credito_conexao_contas")
-        .select("id, pessoa_titular_id, dia_vencimento")
+        .select("id, pessoa_titular_id, dia_vencimento, tipo_conta")
         .eq("id", contaConexaoId)
         .maybeSingle();
 
       if (contaErr || !contaRow) {
         await rollbackVenda();
         return NextResponse.json(
-          { ok: false, error: "conta_conexao_invalida", details: contaErr?.message ?? null },
+          { ok: false, error: "conta_interna_invalida", details: contaErr?.message ?? null },
           { status: 400 }
         );
       }
 
       const conta = contaRow as ContaConexaoResumo;
+      const tipoContaInterna =
+        String((contaRow as { tipo_conta?: unknown }).tipo_conta ?? cartaoConexaoTipoConta ?? "ALUNO").toUpperCase() ===
+        "COLABORADOR"
+          ? "COLABORADOR"
+          : "ALUNO";
       const pessoaTitularId = Number(conta.pessoa_titular_id);
       const pessoaCobrancaId =
         Number.isFinite(pessoaTitularId) && pessoaTitularId > 0
@@ -672,9 +663,14 @@ export async function POST(request: NextRequest) {
       const parcelasBase = distribuirCentavos(baseTotalCentavos, parcelas);
       const parcelasTaxa = distribuirCentavos(taxaTotalCentavos, parcelas);
       const cobrancasCriadas: number[] = [];
+      const recebimentosCriados: number[] = [];
 
-      const rollbackCartaoConexao = async () => {
+      const rollbackContaInterna = async () => {
         if (cobrancasCriadas.length === 0) return;
+        if (recebimentosCriados.length > 0) {
+          await supabase.from("movimento_financeiro").delete().eq("origem", "RECEBIMENTO").in("origem_id", recebimentosCriados);
+          await supabase.from("recebimentos").delete().in("id", recebimentosCriados);
+        }
         await supabase.from("credito_conexao_lancamentos").delete().in("cobranca_id", cobrancasCriadas);
         await supabase.from("cobrancas").delete().in("id", cobrancasCriadas);
       };
@@ -684,53 +680,13 @@ export async function POST(request: NextRequest) {
         const valorBase = parcelasBase[i] ?? 0;
         const valorTaxa = parcelasTaxa[i] ?? 0;
         const valorParcela = valorBase + valorTaxa;
-        const vencimento = buildVencimentoFromCompetencia(
-          competencia,
-          conta.dia_vencimento ?? null
-        );
-
         const descricao =
-          parcelas > 1 ? `Venda Loja #${vendaId} (${i + 1}/${parcelas})` : `Venda Loja #${vendaId}`;
-
-        const { data: cobranca, error: cobrErr } = await supabase
-          .from("cobrancas")
-          .insert({
-            pessoa_id: pessoaCobrancaId,
-            descricao,
-            valor_centavos: valorParcela,
-            vencimento,
-            status: "PENDENTE",
-            origem_tipo: "LOJA_VENDA",
-            origem_id: vendaId,
-            origem_subtipo: "CARTAO_CONEXAO",
-            competencia_ano_mes: competencia,
-          })
-          .select("id")
-          .single();
-
-        if (cobrErr || !cobranca) {
-          await rollbackCartaoConexao();
-          await rollbackVenda();
-          return NextResponse.json(
-            { ok: false, error: "falha_criar_cobranca_cartao_conexao", details: cobrErr?.message ?? null },
-            { status: 500 }
-          );
-        }
-
-        const cobrancaId = Number((cobranca as { id?: number }).id);
-        if (!Number.isFinite(cobrancaId) || cobrancaId <= 0) {
-          await rollbackCartaoConexao();
-          await rollbackVenda();
-          return NextResponse.json(
-            { ok: false, error: "cobranca_id_invalido" },
-            { status: 500 }
-          );
-        }
-
-        cobrancasCriadas.push(cobrancaId);
+          parcelas > 1
+            ? `Conta interna - Compra #${vendaId} (${i + 1}/${parcelas})`
+            : `Conta interna - Compra #${vendaId}`;
 
         const composicaoJson: Record<string, unknown> = {
-          origem: "LOJA_PARCELADO",
+          origem: movimentoFinanceiroImediato ? "LOJA_PAGA_NO_ATO" : "LOJA_PARCELADO",
           venda_id: vendaId,
           parcela_numero: i + 1,
           total_parcelas: parcelas,
@@ -754,22 +710,54 @@ export async function POST(request: NextRequest) {
         };
 
         try {
-          await upsertLancamentoPorCobranca({
-            cobrancaId,
-            contaConexaoId,
+          const obrigacao = await garantirObrigacaoContaInterna({
+            supabase,
+            tipoConta: tipoContaInterna,
+            pessoaCobrancaId,
+            contaInternaId: contaConexaoId,
             competencia,
             valorCentavos: valorParcela,
             descricao,
+            origemTipoCobranca: "LOJA_VENDA",
+            origemSubtipoCobranca: "CONTA_INTERNA_COMPRA",
             origemSistema: "LOJA",
             origemId: vendaId,
+            origemItemTipo: "LOJA",
+            origemItemId: vendaId,
+            referenciaItem: buildReferenciaLojaContaInterna(vendaId, competencia, i + 1),
+            diaVencimento: conta.dia_vencimento ?? null,
             composicaoJson,
+            pagamento: movimentoFinanceiroImediato
+              ? {
+                  dataPagamento: todayISODate(),
+                  metodoPagamento: formaBase,
+                  formaPagamentoCodigo: formaPagamentoCodigo ?? formaPagamento,
+                  origemSistemaRecebimento: "LOJA",
+                  observacoes: observacoes ?? observacaoVendedor ?? null,
+                  descricaoMovimento: `Quitacao conta interna - compra #${vendaId}`,
+                  usuarioId: usuarioId,
+                }
+              : null,
+            fallbackLegacyLookup: {
+              origemTipos: ["LOJA_VENDA", "LOJA"],
+              origemSubtipo: "CARTAO_CONEXAO",
+              origemId: vendaId,
+              competenciaAnoMes: competencia,
+            },
           });
+
+          if (obrigacao.cobranca_created) {
+            cobrancasCriadas.push(obrigacao.cobranca_id);
+          }
+          if (obrigacao.recebimento_id) {
+            recebimentosCriados.push(obrigacao.recebimento_id);
+          }
         } catch (err) {
-          await rollbackCartaoConexao();
+          await rollbackContaInterna();
           await rollbackVenda();
           const msg = err instanceof Error ? err.message : "erro_desconhecido";
           return NextResponse.json(
-            { ok: false, error: "falha_upsert_lancamento_cartao_conexao", details: msg },
+            { ok: false, error: "falha_registrar_conta_interna", details: msg },
             { status: 500 }
           );
         }

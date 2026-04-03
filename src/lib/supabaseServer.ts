@@ -1,21 +1,10 @@
-﻿import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
-type CookieOptions = {
-  path?: string;
-  domain?: string;
-  maxAge?: number;
-  expires?: Date;
-  httpOnly?: boolean;
-  secure?: boolean;
-  sameSite?: "lax" | "strict" | "none";
-};
 
 /**
  * Cliente Supabase no SERVER para autenticação baseada em cookies (sessão do usuário).
- * Compatível com Next.js 15 (cookies assíncrono) e cookies Supabase base64-*.
- * Usa SEMPRE ANON KEY.
+ * Em Server Components, só lemos cookies; escrita fica em middleware, actions ou route handlers.
  */
 export async function getSupabaseServerAuth() {
   const cookieStore = await cookies();
@@ -26,17 +15,11 @@ export async function getSupabaseServerAuth() {
   if (!supabaseUrl) throw new Error("NEXT_PUBLIC_SUPABASE_URL não configurada.");
   if (!supabaseAnonKey) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY não configurada.");
 
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          cookieStore.set(name, value, { ...(options as CookieOptions), path: "/" });
-        });
-      },
-    },
+  return createServerComponentClient({
+    cookies: () => cookieStore as ReturnType<typeof cookies>,
+  }, {
+    supabaseUrl,
+    supabaseKey: supabaseAnonKey,
   });
 }
 

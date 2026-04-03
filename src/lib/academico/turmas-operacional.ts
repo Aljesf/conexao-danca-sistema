@@ -37,6 +37,9 @@ type TurmaDetalheRow = TurmaListRow & {
   tipo_turma: string | null;
   data_inicio: string | null;
   data_fim: string | null;
+  capacidade: number | null;
+  periodo_letivo_id: number | null;
+  encerramento_automatico: boolean | null;
   carga_horaria_prevista: number | null;
   frequencia_minima_percentual: number | null;
   observacoes: string | null;
@@ -143,6 +146,9 @@ export type TurmaDetalheOperacional = {
     tipo_turma: string | null;
     data_inicio: string | null;
     data_fim: string | null;
+    capacidade: number | null;
+    periodo_letivo_id: number | null;
+    encerramento_automatico: boolean | null;
     frequencia_minima_percentual: number | null;
     carga_horaria_prevista: number | null;
     observacoes: string | null;
@@ -324,6 +330,9 @@ async function loadTurmaDetalheBase(supabase: Supa, turmaId: number) {
         tipo_turma,
         data_inicio,
         data_fim,
+        capacidade,
+        periodo_letivo_id,
+        encerramento_automatico,
         carga_horaria_prevista,
         frequencia_minima_percentual,
         observacoes,
@@ -566,6 +575,9 @@ export async function getTurmaDetalheOperacional(params: { supabase: Supa; userI
       tipo_turma: turmaBase.tipo_turma ?? null,
       data_inicio: turmaBase.data_inicio ?? null,
       data_fim: turmaBase.data_fim ?? null,
+      capacidade: turmaBase.capacidade ?? null,
+      periodo_letivo_id: turmaBase.periodo_letivo_id ?? null,
+      encerramento_automatico: turmaBase.encerramento_automatico ?? null,
       frequencia_minima_percentual: turmaBase.frequencia_minima_percentual ?? null,
       carga_horaria_prevista: turmaBase.carga_horaria_prevista ?? null,
       observacoes: turmaBase.observacoes ?? null,

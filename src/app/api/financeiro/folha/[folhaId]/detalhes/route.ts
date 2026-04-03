@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  validarFaturasCreditoConexao,
+  type FaturaOrigemValidada,
+  type StatusOrigemFinanceira,
+} from "@/lib/credito-conexao/validarCadeiaOrigem";
 import { createClient } from "@/lib/supabase/server";
 
 type ItemRow = {
@@ -8,13 +13,74 @@ type ItemRow = {
   tipo_item: string;
   descricao: string;
   valor_centavos: number;
+  referencia_tipo: string | null;
+  referencia_id: number | null;
   criado_automatico: boolean;
   created_at: string;
+};
+
+type ItemOrigemDetalhe = {
+  lancamento_id: number;
+  competencia: string | null;
+  descricao: string | null;
+  origem_amigavel: string;
+  origem_tecnica: string;
+  referencia_item: string | null;
+  status_origem: StatusOrigemFinanceira;
+  valor_centavos: number;
+  motivos: string[];
 };
 
 function isDesconto(tipo: string): boolean {
   if (tipo.startsWith("DESCONTO")) return true;
   return ["INSS", "IRRF", "FALTA", "ATRASO", "ADIANTAMENTO_SALARIAL"].includes(tipo);
+}
+
+function upper(value: unknown) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function resumirStatusOrigem(fatura: FaturaOrigemValidada): StatusOrigemFinanceira | "MISTA" {
+  const status = new Set(fatura.itens.map((item) => item.status_origem));
+  if (status.has("ORFA")) return "ORFA";
+  if (status.has("CANCELADA")) return "CANCELADA";
+  if (status.size > 1) return "MISTA";
+  return "VALIDA";
+}
+
+function buildOrigemResumo(fatura: FaturaOrigemValidada | null) {
+  if (!fatura) return null;
+
+  const statusOrigem = resumirStatusOrigem(fatura);
+  const primeiroItem = fatura.itens[0] ?? null;
+
+  return {
+    fatura_id: fatura.fatura_id,
+    competencia: fatura.periodo_referencia,
+    status_fatura: fatura.status_fatura,
+    status_origem: statusOrigem,
+    pode_importar_folha: fatura.pode_importar_folha,
+    possui_inconsistencia: fatura.possui_inconsistencia,
+    total_fatura_centavos: fatura.total_fatura_centavos,
+    total_validos_centavos: fatura.total_validos_centavos,
+    total_invalidos_centavos: fatura.total_invalidos_centavos,
+    origem_amigavel:
+      primeiroItem?.origem_amigavel ??
+      (fatura.itens.length > 1 ? `${fatura.itens.length} lancamentos vinculados` : "Origem nao identificada"),
+    origem_tecnica: primeiroItem?.origem_tecnica ?? `fatura#${fatura.fatura_id}`,
+    motivos: fatura.motivos,
+    itens_origem: fatura.itens.map<ItemOrigemDetalhe>((item) => ({
+      lancamento_id: item.lancamento_id,
+      competencia: item.competencia,
+      descricao: item.descricao,
+      origem_amigavel: item.origem_amigavel,
+      origem_tecnica: item.origem_tecnica,
+      referencia_item: item.referencia_item,
+      status_origem: item.status_origem,
+      valor_centavos: item.valor_centavos,
+      motivos: item.motivos,
+    })),
+  };
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ folhaId: string }> }) {
@@ -65,6 +131,20 @@ export async function GET(_req: Request, ctx: { params: Promise<{ folhaId: strin
   if (iErr) return NextResponse.json({ error: iErr.message }, { status: 500 });
 
   const itensTyped = (itens ?? []) as ItemRow[];
+  const faturaIds = Array.from(
+    new Set(
+      itensTyped
+        .filter((item) => upper(item.referencia_tipo) === "CREDITO_CONEXAO_FATURA")
+        .map((item) => Number(item.referencia_id ?? 0))
+        .filter((value) => Number.isFinite(value) && value > 0),
+    ),
+  );
+
+  const validacoesFatura =
+    faturaIds.length > 0
+      ? await validarFaturasCreditoConexao(supabase as unknown as { from: (table: string) => any }, faturaIds)
+      : new Map<number, FaturaOrigemValidada>();
+
   const colabIds = Array.from(
     new Set(itensTyped.map((x) => Number(x.colaborador_id)).filter((n) => Number.isFinite(n))),
   );
@@ -130,10 +210,19 @@ export async function GET(_req: Request, ctx: { params: Promise<{ folhaId: strin
         ? { id: Number(nextFolha.id), competencia: String(nextFolha.competencia ?? "") }
         : null,
       colaboradores: colaboradoresResumo,
-      itens: itensTyped.map((it) => ({
-        ...it,
-        colaborador_nome: nomePorColab.get(it.colaborador_id) ?? `Colaborador #${it.colaborador_id}`,
-      })),
+      itens: itensTyped.map((it) => {
+        const faturaId = upper(it.referencia_tipo) === "CREDITO_CONEXAO_FATURA" ? Number(it.referencia_id ?? 0) : null;
+        const origemResumo =
+          faturaId && Number.isFinite(faturaId)
+            ? buildOrigemResumo(validacoesFatura.get(faturaId) ?? null)
+            : null;
+
+        return {
+          ...it,
+          colaborador_nome: nomePorColab.get(it.colaborador_id) ?? `Colaborador #${it.colaborador_id}`,
+          origem_resumo: origemResumo,
+        };
+      }),
     },
     { status: 200 },
   );

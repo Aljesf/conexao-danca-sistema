@@ -1,8 +1,10 @@
-﻿import { NextResponse, type NextRequest } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
+import { cookies } from "next/headers";
+import { NextResponse, type NextRequest } from "next/server";
 import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { buildReferenciaMatriculaContaInterna } from "@/lib/financeiro/contaInternaObrigacao";
 import { requireUser } from "@/lib/supabase/api-auth";
+import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 
 type GerarMensalBody = {
   matricula_id?: number;
@@ -149,10 +151,11 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = getSupabaseAdmin();
+    const cookieStore = await cookies();
 
     const { data: matricula, error: matErr } = await admin
       .from("matriculas")
-      .select("id,pessoa_id,responsavel_financeiro_id,ano_referencia")
+      .select("id,pessoa_id,responsavel_financeiro_id,ano_referencia,status")
       .eq("id", matriculaId)
       .maybeSingle();
 
@@ -161,6 +164,36 @@ export async function POST(request: NextRequest) {
     }
     if (!matricula) {
       return errJson("not_found", "Matricula nao encontrada.", 404);
+    }
+
+    const matriculaStatus = String((matricula as { status?: string | null }).status ?? "").trim().toUpperCase();
+
+    // M7: Verificar data_limite_exercicio — não gerar lançamento além do limite
+    {
+      const { data: cfgFin } = await admin
+        .from("escola_config_financeira")
+        .select("data_limite_exercicio")
+        .limit(1)
+        .maybeSingle();
+
+      const dataLimite = (cfgFin as any)?.data_limite_exercicio as string | null;
+      if (dataLimite && competencia) {
+        // competencia é YYYY-MM, data_limite é YYYY-MM-DD
+        const limiteAnoMes = dataLimite.slice(0, 7); // YYYY-MM
+        if (competencia > limiteAnoMes) {
+          return errJson(
+            "conflict",
+            `Competencia ${competencia} ultrapassa o limite do exercicio (${dataLimite}).`,
+            409,
+            { competencia, data_limite_exercicio: dataLimite },
+          );
+        }
+      }
+    }
+    if (matriculaStatus === "CANCELADA") {
+      return errJson("conflict", "matricula_cancelada_nao_pode_gerar_mensalidade", 409, {
+        matricula_id: matriculaId,
+      });
     }
 
     const alunoId = toPositiveNumber((matricula as { pessoa_id?: number }).pessoa_id);
@@ -294,7 +327,7 @@ export async function POST(request: NextRequest) {
       const { data: turma } = await admin.from("turmas").select("nome").eq("turma_id", turmaId).maybeSingle();
       const label = turma?.nome ? String(turma.nome) : `Turma ${turmaId}`;
 
-      let resultado: { valor_centavos: number };
+      let resultado: { valor_centavos: number; descricao: string | null };
       try {
         resultado = await resolverMensalidadePorTurma(request, cookieHeader, alunoId, turmaId, anoRef, ordem);
       } catch (e: unknown) {
@@ -323,7 +356,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const referenciaItem = `mensalidade|matricula:${matriculaId}|comp:${competencia}`;
+    const referenciaItem = buildReferenciaMatriculaContaInterna(matriculaId, competencia);
     const descricao =
       `Mensalidade ${competencia} - ` +
       itens.map((item) => `${item.ordem}a ${item.label}: ${item.valor_brl}`).join(" | ");
@@ -348,6 +381,7 @@ export async function POST(request: NextRequest) {
       .eq("origem_id", matriculaId)
       .eq("origem_subtipo", "CARTAO_CONEXAO")
       .eq("competencia_ano_mes", competencia)
+      .neq("status", "CANCELADA")
       .order("id", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -370,6 +404,9 @@ export async function POST(request: NextRequest) {
           origem_tipo: "MATRICULA",
           origem_id: matriculaId,
           origem_subtipo: "CARTAO_CONEXAO",
+          origem_item_tipo: "MATRICULA",
+          origem_item_id: matriculaId,
+          origem_label: `Matricula #${matriculaId}`,
           competencia_ano_mes: competencia,
         })
         .select("id")
@@ -388,6 +425,9 @@ export async function POST(request: NextRequest) {
           valor_centavos: totalCentavos,
           vencimento,
           origem_subtipo: "CARTAO_CONEXAO",
+          origem_item_tipo: "MATRICULA",
+          origem_item_id: matriculaId,
+          origem_label: `Matricula #${matriculaId}`,
           competencia_ano_mes: competencia,
         })
         .eq("id", cobrancaId);
@@ -407,7 +447,10 @@ export async function POST(request: NextRequest) {
         contaConexaoId,
         competencia,
         valorCentavos: totalCentavos,
+        alunoId,
+        matriculaId,
         descricao,
+        referenciaItem,
         origemSistema: "MATRICULA_MENSAL",
         origemId: matriculaId,
         composicaoJson: composicaoJson as Record<string, unknown>,
@@ -442,5 +485,3 @@ export async function POST(request: NextRequest) {
     return errJson("server_error", "Erro inesperado ao gerar lancamentos mensais.", 500, { message: msg });
   }
 }
-
-

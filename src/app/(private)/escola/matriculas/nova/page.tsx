@@ -5,8 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PessoaSearchBox, { PessoaSearchItem } from "@/components/PessoaSearchBox";
 import { ProjetoSocialAutocomplete } from "@/components/bolsas/ProjetoSocialAutocomplete";
+import { MatriculaReativacaoCard } from "@/components/matriculas/MatriculaReativacaoCard";
 import { SectionCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
 import ToolbarRow from "@/components/layout/ToolbarRow";
+import {
+  buildReativacaoPlano,
+  type MatriculaReativacaoEligibilidade,
+  type ReativacaoConfigItem,
+  type ReativacaoPlano,
+} from "@/lib/matriculas/reativacao";
 
 type TipoMatricula = "REGULAR" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
 type ContextoTipo = "PERIODO_LETIVO" | "CURSO_LIVRE" | "PROJETO_ARTISTICO";
@@ -74,10 +81,25 @@ type TurmasResp = {
 };
 
 type LiquidacaoExecucao = "FAMILIA" | "BOLSA";
+type ModoReativacao = "MESMOS_MODULOS" | "NOVOS_MODULOS";
 
 type MatriculaResp = {
   ok: boolean;
-  matricula?: { id: number };
+  matricula_existente?: boolean;
+  matricula_id?: number;
+  matricula?: {
+    id: number;
+    status?: string | null;
+    tipo_matricula?: string | null;
+    ano_referencia?: number | null;
+    vinculo_id?: number | null;
+    turma_nome?: string | null;
+    data_matricula?: string | null;
+    data_inicio_vinculo?: string | null;
+  } | null;
+  possui_matricula_cancelada?: boolean;
+  matriculas_canceladas_encontradas?: MatriculaReativacaoEligibilidade["matriculas_canceladas_encontradas"];
+  acao_sugerida?: MatriculaReativacaoEligibilidade["acao_sugerida"];
   bolsa_aplicacoes?: Array<{
     turma_id: number;
     projeto_social_beneficiario_id: number;
@@ -87,6 +109,46 @@ type MatriculaResp = {
   }>;
   message?: string;
   error?: string;
+};
+
+type MatriculaExistenteHint = {
+  id: number;
+  status: string | null;
+  tipo_matricula: string | null;
+  ano_referencia: number | null;
+  vinculo_id: number | null;
+  turma_nome: string | null;
+  data_matricula: string | null;
+  data_inicio_vinculo: string | null;
+};
+
+type ReativacaoApiResp = {
+  ok: boolean;
+  possui_matricula_cancelada?: boolean;
+  matriculas_canceladas_encontradas?: MatriculaReativacaoEligibilidade["matriculas_canceladas_encontradas"];
+  acao_sugerida?: MatriculaReativacaoEligibilidade["acao_sugerida"];
+  matricula_reativada?: {
+    id: number;
+    status: string;
+    reativada_em?: string | null;
+    motivo_reativacao?: string | null;
+  } | null;
+  modulos_ativos_finais?: Array<{
+    modulo_id: number;
+    item_id: number;
+    turma_id: number | null;
+  }>;
+  modulos_encerrados?: Array<{
+    modulo_id: number;
+    item_id: number | null;
+  }>;
+  trocas_turma_executadas?: Array<{
+    modulo_id: number;
+    turma_origem_id: number | null;
+    turma_destino_id: number;
+  }>;
+  error?: string;
+  message?: string;
 };
 
 type BolsaTipoOpcao = {
@@ -140,13 +202,13 @@ function createCarrinhoItem(): MatriculaCarrinhoItem {
   };
 }
 
-function extractErrorMessage(data: unknown, status: number): string {
+function extractErrorMessage(data: unknown, status: number | string): string {
   if (data && typeof data === "object") {
     const record = data as Record<string, unknown>;
     if (typeof record.message === "string" && record.message.trim()) return record.message;
     if (typeof record.error === "string" && record.error.trim()) return record.error;
   }
-  return `HTTP ${status}`;
+  return typeof status === "string" ? status : `HTTP ${status}`;
 }
 
 function formatCurrency(cents?: number | null): string {
@@ -307,6 +369,15 @@ export default function NovaMatriculaPage() {
 
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [matriculaExistenteHint, setMatriculaExistenteHint] =
+    useState<MatriculaExistenteHint | null>(null);
+  const [reativacaoContexto, setReativacaoContexto] =
+    useState<MatriculaReativacaoEligibilidade | null>(null);
+  const [matriculaCanceladaSelecionadaId, setMatriculaCanceladaSelecionadaId] = useState<number | null>(null);
+  const [reativacaoExpandida, setReativacaoExpandida] = useState(false);
+  const [modoReativacaoSelecionado, setModoReativacaoSelecionado] = useState<ModoReativacao | null>(null);
+  const [reativando, setReativando] = useState(false);
+  const [criandoNovaMesmoAssim, setCriandoNovaMesmoAssim] = useState(false);
 
   const principalItem = itensCarrinho[0] ?? null;
   const turmaPrincipalId = principalItem?.turma_id ?? null;
@@ -407,6 +478,109 @@ export default function NovaMatriculaPage() {
     [itensCarrinho],
   );
   const bolsaModoOk = !temExecucaoBolsa || modoManualValores;
+  const configuracaoReativacao = useMemo(
+    () =>
+      itensCarrinho
+        .map((item) => {
+          if (!item.servico_id || !item.turma_id) return null;
+          const niveisTurma = item.turma_id ? niveisPorTurma[item.turma_id] ?? [] : [];
+          const nivelNome =
+            item.nivel_id && niveisTurma.length > 0
+              ? niveisTurma.find((nivel) => nivel.id === item.nivel_id)?.nome ?? item.nivel_texto
+              : item.nivel_texto;
+          const valorCentavos = modoManualValores ? parseMoneyToCentavos(item.valor_mensal_reais) : null;
+          return {
+            modulo_id: item.servico_id,
+            turma_id: item.turma_id,
+            nivel: nivelNome.trim() || "Nivel nao informado",
+            nivel_id: item.nivel_id ?? null,
+            liquidacao_tipo: item.liquidacao_tipo,
+            valor_mensal_centavos: valorCentavos,
+            bolsa:
+              item.liquidacao_tipo === "BOLSA" &&
+              Number.isFinite(item.bolsa_projeto_social_id ?? NaN) &&
+              Number.isFinite(item.bolsa_tipo_id ?? NaN)
+                ? {
+                    projeto_social_id: Number(item.bolsa_projeto_social_id),
+                    bolsa_tipo_id: Number(item.bolsa_tipo_id),
+                  }
+                : null,
+          } satisfies ReativacaoConfigItem;
+        })
+        .filter((item): item is ReativacaoConfigItem => !!item),
+    [itensCarrinho, modoManualValores, niveisPorTurma],
+  );
+  const matriculaCanceladaSelecionada = useMemo(
+    () =>
+      reativacaoContexto?.matriculas_canceladas_encontradas.find((item) => item.id === matriculaCanceladaSelecionadaId) ??
+      reativacaoContexto?.matriculas_canceladas_encontradas[0] ??
+      null,
+    [reativacaoContexto, matriculaCanceladaSelecionadaId],
+  );
+  const configuracaoReativacaoMesmosModulos = useMemo<ReativacaoConfigItem[]>(() => {
+    if (!matriculaCanceladaSelecionada) return [];
+
+    return matriculaCanceladaSelecionada.itens
+      .map((item) => {
+        const moduloId = item.modulo_id_resolvido ?? item.modulo_id;
+        if (!moduloId) return null;
+
+        return {
+          modulo_id: moduloId,
+          turma_id: item.turma_atual_id ?? item.turma_inicial_id ?? null,
+          nivel:
+            item.descricao?.trim() ||
+            item.modulo_label?.trim() ||
+            item.turma_atual_nome?.trim() ||
+            item.turma_inicial_nome?.trim() ||
+            `Modulo ${moduloId}`,
+          nivel_id: null,
+          liquidacao_tipo: "FAMILIA",
+          valor_mensal_centavos: null,
+          bolsa: null,
+        } satisfies ReativacaoConfigItem;
+      })
+      .filter((item): item is ReativacaoConfigItem => !!item);
+  }, [matriculaCanceladaSelecionada]);
+  const reativacaoPlanoNovosModulos = useMemo<ReativacaoPlano | null>(() => {
+    if (!matriculaCanceladaSelecionada) return null;
+    if (configuracaoReativacao.length === 0) return null;
+    return buildReativacaoPlano({
+      anteriores: matriculaCanceladaSelecionada.itens,
+      desejados: configuracaoReativacao.map((item) => ({
+        modulo_id: item.modulo_id,
+        turma_id: item.turma_id,
+      })),
+    });
+  }, [configuracaoReativacao, matriculaCanceladaSelecionada]);
+  const reativacaoPlanoMesmosModulos = useMemo<ReativacaoPlano | null>(() => {
+    if (!matriculaCanceladaSelecionada) return null;
+    if (configuracaoReativacaoMesmosModulos.length === 0) return null;
+    return buildReativacaoPlano({
+      anteriores: matriculaCanceladaSelecionada.itens,
+      desejados: configuracaoReativacaoMesmosModulos.map((item) => ({
+        modulo_id: item.modulo_id,
+        turma_id: item.turma_id,
+      })),
+    });
+  }, [configuracaoReativacaoMesmosModulos, matriculaCanceladaSelecionada]);
+  const haModulosHistoricamenteEncerrados = useMemo(() => {
+    if (!matriculaCanceladaSelecionada) return false;
+
+    const statuses = new Set(
+      matriculaCanceladaSelecionada.itens
+        .map((item) => (item.status ?? "").trim().toUpperCase())
+        .filter((value) => value.length > 0),
+    );
+    const cancelamentos = new Set(
+      matriculaCanceladaSelecionada.itens
+        .map((item) => (item.cancelamento_tipo ?? "").trim().toUpperCase())
+        .filter((value) => value.length > 0),
+    );
+    const possuiStatusEncerrado = Array.from(statuses).some((status) => status !== "ATIVO" && status !== "ATIVA");
+
+    return (statuses.size > 1 && possuiStatusEncerrado) || cancelamentos.size > 1;
+  }, [matriculaCanceladaSelecionada]);
 
   const contextoObrigatorio = tipo === "REGULAR";
   const itensCompletosOk =
@@ -500,6 +674,48 @@ export default function NovaMatriculaPage() {
     setPeriodoLetivoId(null);
     setPeriodos([]);
   }, [tipo]);
+
+  useEffect(() => {
+    if (!aluno?.id) {
+      setReativacaoContexto(null);
+      setMatriculaCanceladaSelecionadaId(null);
+      setReativacaoExpandida(false);
+      setModoReativacaoSelecionado(null);
+      setCriandoNovaMesmoAssim(false);
+      return;
+    }
+
+    let ativo = true;
+    (async () => {
+      try {
+        const data = await fetchJSON<ReativacaoApiResp>(`/api/matriculas/reativar?pessoa_id=${aluno.id}`);
+        if (!ativo) return;
+
+        const contexto: MatriculaReativacaoEligibilidade = {
+          possui_matricula_cancelada: Boolean(data.possui_matricula_cancelada),
+          matriculas_canceladas_encontradas: data.matriculas_canceladas_encontradas ?? [],
+          acao_sugerida: data.acao_sugerida ?? "CRIAR_NOVA",
+        };
+
+        setReativacaoContexto(contexto);
+        setMatriculaCanceladaSelecionadaId(contexto.matriculas_canceladas_encontradas[0]?.id ?? null);
+        setReativacaoExpandida(false);
+        setModoReativacaoSelecionado(null);
+        setCriandoNovaMesmoAssim(false);
+      } catch (error) {
+        if (!ativo) return;
+        console.error("[nova-matricula] falha ao consultar reativacao:", error);
+        setReativacaoContexto(null);
+        setMatriculaCanceladaSelecionadaId(null);
+        setReativacaoExpandida(false);
+        setModoReativacaoSelecionado(null);
+      }
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [aluno?.id]);
 
   useEffect(() => {
     if (!contextoObrigatorio) {
@@ -806,181 +1022,227 @@ export default function NovaMatriculaPage() {
     setItensCarrinho((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
-  async function onSubmit() {
-    setErro(null);
+  function buildSubmissionPayloads() {
+    const itensPayload = itensCarrinho
+      .map((item) => ({
+        servico_id: item.servico_id,
+        unidade_execucao_id: item.unidade_execucao_id,
+        turma_id: item.turma_id,
+      }))
+      .filter(
+        (item): item is { servico_id: number; unidade_execucao_id: number; turma_id: number } =>
+          typeof item.servico_id === "number" &&
+          typeof item.unidade_execucao_id === "number" &&
+          typeof item.turma_id === "number",
+      );
 
+    const unidadeExecucaoIds = Array.from(new Set(itensPayload.map((item) => item.unidade_execucao_id)));
+    const execucoesPayload = modoManualValores
+      ? configuracaoReativacao
+          .filter(
+            (item): item is ReativacaoConfigItem & { turma_id: number; valor_mensal_centavos: number } =>
+              typeof item.turma_id === "number" && typeof item.valor_mensal_centavos === "number",
+          )
+          .map((item) => ({
+            turma_id: item.turma_id,
+            nivel: item.nivel,
+            nivel_id: item.nivel_id ?? null,
+            valor_mensal_centavos: item.valor_mensal_centavos,
+            liquidacao_tipo: item.liquidacao_tipo ?? "FAMILIA",
+            bolsa: item.bolsa ?? null,
+          }))
+      : [];
+
+    const vinculosIdsManual = Array.from(new Set(execucoesPayload.map((execucao) => execucao.turma_id)));
+    const vinculoPrincipalIdManual = vinculosIdsManual[0] ?? null;
+    const vinculosIdsAuto = Array.from(new Set(itensPayload.map((item) => item.turma_id)));
+    const vinculoPrincipalIdAuto = vinculosIdsAuto[0] ?? null;
+    const vinculosIdsFinal = modoManualValores ? vinculosIdsManual : vinculosIdsAuto;
+    const vinculoPrincipalIdFinal = modoManualValores ? vinculoPrincipalIdManual : vinculoPrincipalIdAuto;
+
+    if (!vinculoPrincipalIdFinal) {
+      throw new Error("Turma (item 1) nao encontrada para concluir a matricula.");
+    }
+    if (modoManualValores && execucoesPayload.length !== itensCarrinho.length) {
+      throw new Error("Execucoes invalidas para concluir a matricula.");
+    }
+
+    const execucoesBolsa = execucoesPayload.filter((execucao) => execucao.liquidacao_tipo === "BOLSA");
+    const metodoLiquidacaoGlobal =
+      execucoesPayload.length > 0 && execucoesBolsa.length === execucoesPayload.length
+        ? "CREDITO_BOLSA"
+        : "CARTAO_CONEXAO";
+
+    const payload: Record<string, unknown> = {
+      pessoa_id: aluno?.id,
+      responsavel_financeiro_id: responsavel?.id,
+      tipo_matricula: tipo,
+      metodo_liquidacao: metodoLiquidacaoGlobal,
+      vinculo_id: vinculoPrincipalIdFinal,
+      ...(vinculosIdsFinal.length > 1 ? { vinculos_ids: vinculosIdsFinal } : {}),
+      itens: itensPayload,
+      ...(unidadeExecucaoIds.length > 0 ? { unidade_execucao_ids: unidadeExecucaoIds } : {}),
+      data_matricula: dataMatricula,
+      data_inicio_vinculo: dataInicioVinculo,
+      observacoes: observacoes.trim() || null,
+    };
+
+    if (modoManualValores) {
+      payload.execucoes = execucoesPayload;
+      payload.total_mensalidade_centavos = totalMensalidadeCentavos;
+    }
+
+    if (tipo === "REGULAR") {
+      payload.ano_referencia = anoReferencia;
+    }
+
+    if (politicaModo === "ADIAR_PARA_VENCIMENTO") {
+      payload.politica_primeiro_pagamento = {
+        modo: "ADIAR_PARA_VENCIMENTO",
+        motivo_excecao: motivoExcecao.trim(),
+      };
+    } else {
+      payload.politica_primeiro_pagamento = { modo: "PADRAO" };
+    }
+
+    return {
+      itensPayload,
+      execucoesPayload,
+      payload,
+      configuracaoReativacao,
+    };
+  }
+
+  function validarFormularioAntesDeSalvar() {
     if (!aluno || !responsavel) {
-      setErro("Selecione aluno e responsavel financeiro.");
-      return;
+      return "Selecione aluno e responsavel financeiro.";
     }
 
     if (contextoObrigatorio && !contextoId) {
-      setErro("Selecione o contexto da matricula.");
-      return;
+      return "Selecione o contexto da matricula.";
     }
 
     if (!principalCompleto) {
-      setErro("Selecione o curso e a turma principal.");
-      return;
+      return "Selecione o curso e a turma principal.";
     }
 
     if (!itensCompletosOk) {
-      setErro("Complete todos os cursos e turmas antes de continuar.");
-      return;
+      return "Complete todos os cursos e turmas antes de continuar.";
     }
 
     if (niveisCarregando) {
-      setErro("Aguarde o carregamento dos niveis.");
-      return;
+      return "Aguarde o carregamento dos niveis.";
     }
 
     if (!niveisOk) {
-      setErro("Informe o nivel em todas as execucoes.");
-      return;
+      return "Informe o nivel em todas as execucoes.";
     }
 
     if (!valoresOk) {
-      setErro("Informe o valor mensal de todas as execucoes.");
-      return;
+      return "Informe o valor mensal de todas as execucoes.";
     }
 
     if (temExecucaoBolsa && !modoManualValores) {
-      setErro("Para usar bolsa por execução, ative \"Inserir valores manualmente\".");
-      return;
+      return 'Para usar bolsa por execução, ative "Inserir valores manualmente".';
     }
 
     const execucoesBolsaInvalidas = itensCarrinho.filter(
       (item) => item.liquidacao_tipo === "BOLSA" && (!item.bolsa_projeto_social_id || !item.bolsa_tipo_id),
     );
     if (execucoesBolsaInvalidas.length > 0) {
-      setErro("Selecione projeto social e tipo de bolsa em todas as execuções com liquidação por bolsa.");
-      return;
+      return "Selecione projeto social e tipo de bolsa em todas as execuções com liquidação por bolsa.";
     }
 
     if (tipo === "REGULAR" && !anoReferencia) {
-      setErro("Ano referencia obrigatorio para turma regular.");
-      return;
+      return "Ano referencia obrigatorio para turma regular.";
     }
 
     if (politicaModo === "ADIAR_PARA_VENCIMENTO" && !motivoExcecao.trim()) {
-      setErro("Informe o motivo da excecao para adiar o primeiro pagamento.");
+      return "Informe o motivo da excecao para adiar o primeiro pagamento.";
+    }
+
+    return null;
+  }
+
+  async function onSubmit() {
+    setErro(null);
+    setMatriculaExistenteHint(null);
+    const erroValidacao = validarFormularioAntesDeSalvar();
+    if (erroValidacao) {
+      setErro(erroValidacao);
+      return;
+    }
+
+    if (reativacaoContexto?.possui_matricula_cancelada && !criandoNovaMesmoAssim) {
+      setErro("Existe matricula cancelada anterior. Escolha reativar a matricula anterior ou confirme a criacao de uma nova.");
       return;
     }
 
     setLoading(true);
     try {
-      const itensPayload = itensCarrinho
-        .map((item) => ({
-          servico_id: item.servico_id,
-          unidade_execucao_id: item.unidade_execucao_id,
-          turma_id: item.turma_id,
-        }))
-        .filter(
-          (item): item is { servico_id: number; unidade_execucao_id: number; turma_id: number } =>
-            typeof item.servico_id === "number" &&
-            typeof item.unidade_execucao_id === "number" &&
-            typeof item.turma_id === "number",
-        );
-      const unidadeExecucaoIds = Array.from(new Set(itensPayload.map((item) => item.unidade_execucao_id)));
-      const execucoesPayload = modoManualValores
-        ? itensCarrinho
-            .map((item) => {
-              if (!item.turma_id) return null;
-              const valorCentavos = parseMoneyToCentavos(item.valor_mensal_reais);
-              if (valorCentavos === null) return null;
-              const niveisTurma = item.turma_id ? niveisPorTurma[item.turma_id] ?? [] : [];
-              const nivelNome =
-                item.nivel_id && niveisTurma.length > 0
-                  ? niveisTurma.find((nivel) => nivel.id === item.nivel_id)?.nome ?? item.nivel_texto
-                  : item.nivel_texto;
-              return {
-                turma_id: item.turma_id,
-                nivel: nivelNome.trim(),
-                nivel_id: item.nivel_id ?? null,
-                valor_mensal_centavos: valorCentavos,
-                liquidacao_tipo: item.liquidacao_tipo,
-                bolsa:
-                  item.liquidacao_tipo === "BOLSA" &&
-                  Number.isFinite(item.bolsa_projeto_social_id ?? NaN) &&
-                  Number.isFinite(item.bolsa_tipo_id ?? NaN)
-                    ? {
-                        projeto_social_id: Number(item.bolsa_projeto_social_id),
-                        bolsa_tipo_id: Number(item.bolsa_tipo_id),
-                      }
-                    : null,
-              };
-            })
-            .filter(
-              (
-                execucao,
-              ): execucao is {
-                turma_id: number;
-                nivel: string;
-                nivel_id: number | null;
-                valor_mensal_centavos: number;
-                liquidacao_tipo: LiquidacaoExecucao;
-                bolsa: { projeto_social_id: number; bolsa_tipo_id: number } | null;
-              } => !!execucao,
-            )
-        : [];
+      const { payload } = buildSubmissionPayloads();
+      payload.pessoa_id = aluno.id;
+      payload.responsavel_financeiro_id = responsavel.id;
+      payload.ignorar_matricula_cancelada = criandoNovaMesmoAssim;
 
-      const vinculosIdsManual = Array.from(new Set(execucoesPayload.map((execucao) => execucao.turma_id)));
-      const vinculoPrincipalIdManual = vinculosIdsManual[0] ?? null;
-      const vinculosIdsAuto = Array.from(new Set(itensPayload.map((item) => item.turma_id)));
-      const vinculoPrincipalIdAuto = vinculosIdsAuto[0] ?? null;
-      const vinculosIdsFinal = modoManualValores ? vinculosIdsManual : vinculosIdsAuto;
-      const vinculoPrincipalIdFinal = modoManualValores ? vinculoPrincipalIdManual : vinculoPrincipalIdAuto;
-
-      if (!vinculoPrincipalIdFinal) {
-        throw new Error("Turma (item 1) nao encontrada para concluir a matricula.");
-      }
-      if (modoManualValores && execucoesPayload.length !== itensCarrinho.length) {
-        throw new Error("Execucoes invalidas para concluir a matricula.");
-      }
-
-      const execucoesBolsa = execucoesPayload.filter((execucao) => execucao.liquidacao_tipo === "BOLSA");
-      const metodoLiquidacaoGlobal =
-        execucoesPayload.length > 0 && execucoesBolsa.length === execucoesPayload.length
-          ? "CREDITO_BOLSA"
-          : "CARTAO_CONEXAO";
-
-      const payload: Record<string, unknown> = {
-        pessoa_id: aluno.id,
-        responsavel_financeiro_id: responsavel.id,
-        tipo_matricula: tipo,
-        metodo_liquidacao: metodoLiquidacaoGlobal,
-        vinculo_id: vinculoPrincipalIdFinal,
-        ...(vinculosIdsFinal.length > 1 ? { vinculos_ids: vinculosIdsFinal } : {}),
-        itens: itensPayload,
-        ...(unidadeExecucaoIds.length > 0 ? { unidade_execucao_ids: unidadeExecucaoIds } : {}),
-        data_matricula: dataMatricula,
-        data_inicio_vinculo: dataInicioVinculo,
-        observacoes: observacoes.trim() || null,
-      };
-
-      if (modoManualValores) {
-        payload.execucoes = execucoesPayload;
-        payload.total_mensalidade_centavos = totalMensalidadeCentavos;
-      }
-
-      if (tipo === "REGULAR") {
-        payload.ano_referencia = anoReferencia;
-      }
-
-      if (politicaModo === "ADIAR_PARA_VENCIMENTO") {
-        payload.politica_primeiro_pagamento = {
-          modo: "ADIAR_PARA_VENCIMENTO",
-          motivo_excecao: motivoExcecao.trim(),
-        };
-      } else {
-        payload.politica_primeiro_pagamento = { modo: "PADRAO" };
-      }
-
-      const data = await fetchJSON<MatriculaResp>("/api/matriculas/novo", {
+      const response = await fetch("/api/matriculas/novo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+
+      const data = (await response.json().catch(() => null)) as MatriculaResp | null;
+
+      if (!response.ok || !data) {
+        if (response.status === 409 && data?.matricula_existente) {
+          const matriculaExistenteId = Number(
+            data.matricula?.id ?? data.matricula_id ?? 0,
+          );
+
+          if (matriculaExistenteId > 0) {
+            setMatriculaExistenteHint({
+              id: matriculaExistenteId,
+              status: data.matricula?.status ?? null,
+              tipo_matricula: data.matricula?.tipo_matricula ?? null,
+              ano_referencia: data.matricula?.ano_referencia ?? null,
+              vinculo_id: data.matricula?.vinculo_id ?? null,
+              turma_nome: data.matricula?.turma_nome ?? null,
+              data_matricula: data.matricula?.data_matricula ?? null,
+              data_inicio_vinculo: data.matricula?.data_inicio_vinculo ?? null,
+            });
+          }
+
+          setErro(
+            extractErrorMessage(
+              data,
+              "A pessoa ja possui matricula ativa. Abra a matricula existente.",
+            ),
+          );
+          return;
+        }
+
+        if (response.status === 409 && data?.possui_matricula_cancelada) {
+          const contexto: MatriculaReativacaoEligibilidade = {
+            possui_matricula_cancelada: true,
+            matriculas_canceladas_encontradas: data.matriculas_canceladas_encontradas ?? [],
+            acao_sugerida: data.acao_sugerida ?? "REATIVAR",
+          };
+          setReativacaoContexto(contexto);
+          setMatriculaCanceladaSelecionadaId(contexto.matriculas_canceladas_encontradas[0]?.id ?? null);
+          setReativacaoExpandida(true);
+          setModoReativacaoSelecionado(null);
+          setCriandoNovaMesmoAssim(false);
+          setErro(
+            extractErrorMessage(
+              data,
+              "Existe matricula cancelada anterior. Reative a matricula anterior ou confirme a criacao de uma nova.",
+            ),
+          );
+          return;
+        }
+
+        throw new Error(extractErrorMessage(data, response.status));
+      }
 
       const id = data.matricula?.id;
       if (!id) {
@@ -992,6 +1254,109 @@ export default function NovaMatriculaPage() {
       setErro(e instanceof Error ? e.message : "Falha ao criar matricula.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function validarContextoMinimoReativacao() {
+    if (!aluno || !responsavel) {
+      return "Selecione aluno e responsavel financeiro.";
+    }
+
+    if (!matriculaCanceladaSelecionada) {
+      return "Selecione a matricula cancelada a ser reativada.";
+    }
+
+    return null;
+  }
+
+  function buildPayloadReativacao(modo: ModoReativacao) {
+    if (!aluno || !responsavel || !matriculaCanceladaSelecionada) {
+      throw new Error("Nao foi possivel montar o contexto de reativacao.");
+    }
+
+    const usandoMesmosModulos = modo === "MESMOS_MODULOS";
+    const plano = usandoMesmosModulos ? reativacaoPlanoMesmosModulos : reativacaoPlanoNovosModulos;
+    const configuracao = usandoMesmosModulos ? configuracaoReativacaoMesmosModulos : configuracaoReativacao;
+    const tipoHistorico = matriculaCanceladaSelecionada.tipo_matricula;
+    const tipoReativacao =
+      usandoMesmosModulos &&
+      (tipoHistorico === "REGULAR" || tipoHistorico === "CURSO_LIVRE" || tipoHistorico === "PROJETO_ARTISTICO")
+        ? tipoHistorico
+        : tipo;
+
+    if (!plano) {
+      throw new Error("Nao foi possivel montar o diff de reativacao.");
+    }
+
+    return {
+      matricula_id: matriculaCanceladaSelecionada.id,
+      pessoa_id: aluno.id,
+      responsavel_financeiro_id: responsavel.id,
+      tipo_matricula: tipoReativacao,
+      ano_referencia:
+        tipoReativacao === "REGULAR"
+          ? usandoMesmosModulos
+            ? matriculaCanceladaSelecionada.ano_referencia ?? anoReferencia
+            : anoReferencia
+          : null,
+      data_matricula: dataMatricula,
+      data_inicio_vinculo: dataInicioVinculo,
+      observacoes: observacoes.trim() || null,
+      motivo_reativacao: observacoes.trim() || null,
+      total_mensalidade_centavos: usandoMesmosModulos ? null : modoManualValores ? totalMensalidadeCentavos : null,
+      configuracao_desejada: configuracao,
+      modulos_manter: plano.modulos_manter,
+      modulos_remover: plano.modulos_remover,
+      modulos_adicionar: plano.modulos_adicionar,
+      trocas_turma: plano.trocas_turma,
+    };
+  }
+
+  async function onConfirmarReativacao(modo: ModoReativacao) {
+    setErro(null);
+    const erroValidacao =
+      modo === "NOVOS_MODULOS" ? validarFormularioAntesDeSalvar() : validarContextoMinimoReativacao();
+    if (erroValidacao) {
+      setErro(erroValidacao);
+      return;
+    }
+
+    const plano = modo === "MESMOS_MODULOS" ? reativacaoPlanoMesmosModulos : reativacaoPlanoNovosModulos;
+
+    if (!aluno || !responsavel || !matriculaCanceladaSelecionada || !plano) {
+      setErro("Nao foi possivel montar o contexto de reativacao.");
+      return;
+    }
+
+    if (plano.conflitos.length > 0) {
+      setErro(plano.conflitos.join(" "));
+      return;
+    }
+
+    setReativando(true);
+    try {
+      const payload = buildPayloadReativacao(modo);
+
+      const response = await fetch("/api/matriculas/reativar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json().catch(() => null)) as ReativacaoApiResp | null;
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(extractErrorMessage(data, response.status));
+      }
+
+      const id = data.matricula_reativada?.id ?? matriculaCanceladaSelecionada.id;
+      setCriandoNovaMesmoAssim(false);
+      setReativacaoExpandida(false);
+      setModoReativacaoSelecionado(null);
+      router.push(`/escola/matriculas/${id}`);
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Falha ao reativar matricula.");
+    } finally {
+      setReativando(false);
     }
   }
 
@@ -1029,6 +1394,77 @@ export default function NovaMatriculaPage() {
             className="border-rose-200 bg-rose-50/70"
           >
             <div className="text-sm text-rose-700">{erro}</div>
+          </SectionCard>
+        ) : null}
+
+        {reativacaoContexto?.possui_matricula_cancelada ? (
+          <MatriculaReativacaoCard
+            contexto={reativacaoContexto}
+            matriculaSelecionadaId={matriculaCanceladaSelecionada?.id ?? matriculaCanceladaSelecionadaId}
+            expanded={reativacaoExpandida}
+            modoSelecionado={modoReativacaoSelecionado}
+            processandoReativacao={reativando}
+            criandoNovaMesmoAssim={criandoNovaMesmoAssim}
+            planoMesmosModulos={reativacaoPlanoMesmosModulos}
+            planoNovosModulos={reativacaoPlanoNovosModulos}
+            haModulosEncerrados={haModulosHistoricamenteEncerrados}
+            onSelecionarMatricula={(matriculaId) => setMatriculaCanceladaSelecionadaId(matriculaId)}
+            onExpandedChange={(open) => {
+              setReativacaoExpandida(open);
+              if (open) {
+                setCriandoNovaMesmoAssim(false);
+                setErro(null);
+                return;
+              }
+              setModoReativacaoSelecionado(null);
+            }}
+            onSelecionarModo={(modo) => {
+              setModoReativacaoSelecionado(modo);
+              setCriandoNovaMesmoAssim(false);
+              setErro(null);
+            }}
+            onCriarNovaMesmoAssim={() => {
+              setCriandoNovaMesmoAssim(true);
+              setReativacaoExpandida(false);
+              setModoReativacaoSelecionado(null);
+              setErro(null);
+            }}
+            onConfirmarReativacao={(modo) => void onConfirmarReativacao(modo)}
+          />
+        ) : null}
+
+        {matriculaExistenteHint ? (
+          <SectionCard
+            title="Matricula ativa existente"
+            subtitle="Reaproveitar cadastro"
+            description="O sistema bloqueou a duplicidade e orienta continuar pela matricula ja ativa."
+            className="border-amber-200 bg-amber-50/80"
+          >
+            <div className="flex flex-col gap-4 text-sm text-amber-900 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <div>
+                  Matricula #{matriculaExistenteHint.id}
+                  {matriculaExistenteHint.status ? ` • ${matriculaExistenteHint.status}` : ""}
+                </div>
+                <div>
+                  {matriculaExistenteHint.turma_nome
+                    ? `Turma atual: ${matriculaExistenteHint.turma_nome}`
+                    : "Use a matricula existente para adicionar/remover modulos ou trocar turma."}
+                </div>
+                {matriculaExistenteHint.ano_referencia ? (
+                  <div>Ano de referencia: {matriculaExistenteHint.ano_referencia}</div>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/escola/matriculas/${matriculaExistenteHint.id}`}
+                  className="inline-flex items-center rounded-xl border border-amber-300 bg-white px-4 py-2 font-medium text-amber-900 transition hover:bg-amber-100"
+                >
+                  Abrir matricula existente
+                </Link>
+              </div>
+            </div>
           </SectionCard>
         ) : null}
 

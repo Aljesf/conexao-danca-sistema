@@ -505,13 +505,15 @@ export default function ColaboradorDetalhesPage() {
                     {resumo.config_financeira?.politica_desconto_cartao ?? "-"} -{" "}
                     {resumo.config_financeira?.politica_corte_cartao ?? "-"}
                   </div>
-                  <div className="mt-3 text-xs text-slate-500">
-                    Conta interna:{" "}
-                    <span className="font-medium">
-                      {resumo.cartao_conexao
-                        ? `#${resumo.cartao_conexao.id} (${resumo.cartao_conexao.tipo_conta})`
-                        : "Nao criada"}
-                    </span>
+                  <div className="mt-3 text-xs text-slate-500">Conta interna vinculada</div>
+                  <div className="text-sm text-slate-700">
+                    {resumo.conta_interna?.id ? `#${resumo.conta_interna.id}` : "Nao criada"}
+                  </div>
+                  <div className="text-sm text-slate-700">
+                    Tipo: {resumo.conta_interna?.tipo_conta ?? "COLABORADOR"}
+                  </div>
+                  <div className="text-sm text-slate-700">
+                    Politica de desconto: {resumo.config_financeira?.politica_desconto_cartao ?? "-"}
                   </div>
                   <div className="mt-3 text-xs text-slate-500">Acoes rapidas</div>
                   {msgAcao ? <div className="mt-2 text-xs text-slate-600">{msgAcao}</div> : null}

@@ -1,5 +1,6 @@
 import type { SidebarConfig, SidebarItem, SidebarSection } from "./sidebar/types";
 import { escolaSidebar } from "./sidebar/escola";
+import { secretariaSidebar } from "./sidebar/secretaria";
 import { lojaSidebar } from "./sidebar/loja";
 import { cafeSidebar } from "./sidebar/cafe";
 import { adminSidebar } from "./sidebar/admin";
@@ -9,6 +10,7 @@ import { suporteSidebar } from "./sidebar/suporte";
 
 export const sidebarConfig: SidebarConfig = {
   escola: escolaSidebar,
+  secretaria: secretariaSidebar,
   loja: lojaSidebar,
   cafe: cafeSidebar,
   admin: adminSidebar,

@@ -8,6 +8,7 @@ import {
   criarCobrancaCafe,
 } from "@/lib/cafe/financeiro";
 import { resolverPrecoProdutoNoContexto } from "@/lib/cafe/precificacao";
+import { resolverElegibilidadeContaInterna } from "@/lib/loja/pessoaContaInterna";
 
 export const CAFE_TIPO_QUITACAO = {
   IMEDIATA: "IMEDIATA",
@@ -23,7 +24,6 @@ export const CAFE_TIPO_COMPRADOR = {
   PESSOA_AVULSA: "PESSOA_AVULSA",
   ALUNO: "ALUNO",
   COLABORADOR: "COLABORADOR",
-  CARGO_SETOR: "CARGO_SETOR",
 } as const;
 
 export const CAFE_FORMAS_PAGAMENTO = {
@@ -52,6 +52,11 @@ export const CAFE_STATUS_PAGAMENTO = {
 type TipoQuitacao = (typeof CAFE_TIPO_QUITACAO)[keyof typeof CAFE_TIPO_QUITACAO];
 type StatusPagamento = (typeof CAFE_STATUS_PAGAMENTO)[keyof typeof CAFE_STATUS_PAGAMENTO];
 type TipoComprador = (typeof CAFE_TIPO_COMPRADOR)[keyof typeof CAFE_TIPO_COMPRADOR];
+type TipoQuitacaoFormulario =
+  | "PAGAMENTO_IMEDIATO"
+  | "PAGAMENTO_PARCIAL"
+  | "CONTA_INTERNA_ALUNO"
+  | "CONTA_INTERNA_COLABORADOR";
 
 type ParsedItem = {
   produto_id: number;
@@ -69,6 +74,7 @@ type VendaRow = Record<string, unknown> & {
   consumidor_pessoa_id: number | null;
   colaborador_pessoa_id: number | null;
   data_operacao: string;
+  data_hora_venda?: string | null;
   data_competencia: string | null;
   competencia_ano_mes?: string | null;
   tipo_quitacao: TipoQuitacao;
@@ -88,6 +94,9 @@ type VendaRow = Record<string, unknown> & {
   observacao_financeira?: string | null;
   observacoes: string | null;
   observacoes_internas: string | null;
+  created_by?: string | null;
+  operador_nome?: string | null;
+  operador_user_id?: string | null;
   created_at: string | null;
 };
 
@@ -96,6 +105,12 @@ type CobrancaCafeStatusRow = {
   status: string | null;
   cancelada_em: string | null;
   cancelamento_tipo: string | null;
+};
+
+type ProfileOperadorRow = {
+  user_id: string | null;
+  full_name: string | null;
+  pessoa_id: number | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -170,6 +185,32 @@ function isCompetencia(value: string | null | undefined): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
 }
 
+function isIsoDateTime(value: string | null | undefined): value is string {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
+function formatDateTimeToIsoDate(value: string): string {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function coerceTipoQuitacaoFormulario(value: unknown): TipoQuitacaoFormulario {
+  const normalized = asString(value)?.toUpperCase();
+  if (normalized === "PAGAMENTO_PARCIAL" || normalized === CAFE_TIPO_QUITACAO.PARCIAL) {
+    return "PAGAMENTO_PARCIAL";
+  }
+  if (normalized === "CONTA_INTERNA_ALUNO" || normalized === CAFE_TIPO_QUITACAO.CARTAO_CONEXAO) {
+    return "CONTA_INTERNA_ALUNO";
+  }
+  if (
+    normalized === "CONTA_INTERNA_COLABORADOR" ||
+    normalized === CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR ||
+    normalized === CAFE_TIPO_QUITACAO.CONTA_INTERNA
+  ) {
+    return "CONTA_INTERNA_COLABORADOR";
+  }
+  return "PAGAMENTO_IMEDIATO";
+}
+
 function competenciaFromDate(dateIso: string): string {
   return dateIso.slice(0, 7);
 }
@@ -184,37 +225,13 @@ function buildVencimentoFromCompetencia(competencia: string, diaVencimento: numb
   return `${anoRaw}-${mesRaw}-${String(dia).padStart(2, "0")}`;
 }
 
-function coerceTipoQuitacao(value: unknown): TipoQuitacao {
-  const normalized = asString(value)?.toUpperCase();
-  if (normalized === CAFE_TIPO_QUITACAO.PARCIAL) return CAFE_TIPO_QUITACAO.PARCIAL;
-  if (normalized === CAFE_TIPO_QUITACAO.CARTAO_CONEXAO) return CAFE_TIPO_QUITACAO.CARTAO_CONEXAO;
-  if (normalized === CAFE_TIPO_QUITACAO.CONTA_INTERNA) return CAFE_TIPO_QUITACAO.CONTA_INTERNA;
-  if (normalized === CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR) {
-    return CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR;
-  }
-  return CAFE_TIPO_QUITACAO.IMEDIATA;
-}
-
 function coerceTipoComprador(value: unknown): TipoComprador {
   const normalized = asString(value)?.toUpperCase();
   if (normalized === CAFE_TIPO_COMPRADOR.NAO_IDENTIFICADO) return CAFE_TIPO_COMPRADOR.NAO_IDENTIFICADO;
   if (normalized === CAFE_TIPO_COMPRADOR.PESSOA_AVULSA) return CAFE_TIPO_COMPRADOR.PESSOA_AVULSA;
   if (normalized === CAFE_TIPO_COMPRADOR.ALUNO) return CAFE_TIPO_COMPRADOR.ALUNO;
   if (normalized === CAFE_TIPO_COMPRADOR.COLABORADOR) return CAFE_TIPO_COMPRADOR.COLABORADOR;
-  if (normalized === CAFE_TIPO_COMPRADOR.CARGO_SETOR) return CAFE_TIPO_COMPRADOR.NAO_IDENTIFICADO;
   return CAFE_TIPO_COMPRADOR.NAO_IDENTIFICADO;
-}
-
-function isContaInternaFormaPagamento(value: unknown) {
-  const normalized = asString(value)?.toUpperCase();
-  return (
-    normalized === "CONTA_INTERNA" ||
-    normalized === "CARTAO_CONEXAO_COLABORADOR" ||
-    normalized === "CARTAO_CONEXAO_COLAB" ||
-    normalized === CAFE_FORMAS_PAGAMENTO.CONTA_INTERNA_COLABORADOR ||
-    normalized === CAFE_FORMAS_PAGAMENTO.CONTA_INTERNA ||
-    normalized === CAFE_FORMAS_PAGAMENTO.CREDIARIO_COLAB
-  );
 }
 
 function coerceFormaPagamento(value: unknown): string | null {
@@ -288,6 +305,7 @@ function normalizarVendaLegada(venda: VendaRow): VendaRow {
     competencia_ano_mes: asString(venda.competencia_ano_mes) ?? asString(venda.data_competencia),
     origem_financeira: asString(venda.origem_financeira) ?? inferOrigemFinanceiraCafe(venda),
     status_financeiro: asString(venda.status_financeiro) ?? inferStatusFinanceiroCafe(venda),
+    data_hora_venda: asString(venda.data_hora_venda) ?? asString(venda.created_at),
   };
 }
 
@@ -297,18 +315,6 @@ function isCobrancaCafeCancelada(cobranca: CobrancaCafeStatusRow | null | undefi
     upper(cobranca.status) === "CANCELADA" ||
     Boolean(asString(cobranca.cancelada_em)) ||
     upper(cobranca.cancelamento_tipo) === "RESET_OPERACIONAL_CAFE"
-  );
-}
-
-function isFutureBillingFormaPagamento(value: unknown) {
-  const normalized = asString(value)?.toUpperCase();
-  return (
-    normalized === CAFE_FORMAS_PAGAMENTO.CONTA_INTERNA_COLABORADOR ||
-    normalized === CAFE_FORMAS_PAGAMENTO.CONTA_INTERNA ||
-    normalized === CAFE_FORMAS_PAGAMENTO.CREDIARIO_COLAB ||
-    normalized === CAFE_FORMAS_PAGAMENTO.CARTAO_CONEXAO_ALUNO ||
-    normalized === CAFE_FORMAS_PAGAMENTO.CARTAO_CONEXAO_COLABORADOR ||
-    normalized === CAFE_FORMAS_PAGAMENTO.CARTAO_CONEXAO_COLAB
   );
 }
 
@@ -322,7 +328,10 @@ function mapTipoCompradorParaFinanceiro(value: TipoComprador) {
 function resolveStatus(valorTotal: number, valorPago: number, tipoQuitacao: TipoQuitacao): StatusPagamento {
   const pago = Math.max(0, valorPago);
   const aberto = Math.max(valorTotal - pago, 0);
-  if (tipoQuitacao === CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR) {
+  if (
+    tipoQuitacao === CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR ||
+    tipoQuitacao === CAFE_TIPO_QUITACAO.CARTAO_CONEXAO
+  ) {
     return aberto > 0 ? CAFE_STATUS_PAGAMENTO.FATURADO : CAFE_STATUS_PAGAMENTO.PAGO;
   }
   if (aberto <= 0) return CAFE_STATUS_PAGAMENTO.PAGO;
@@ -448,10 +457,37 @@ async function ensureFaturaAbertaCompetencia(
 }
 
 async function enrichVendas(supabase: any, vendas: VendaRow[]) {
+  const operadorUserIds = Array.from(
+    new Set(
+      vendas
+        .map((item) => asString(item.created_by))
+        .filter((value): value is string => typeof value === "string" && value.length > 0),
+    ),
+  );
+
+  const perfisOperador = new Map<string, ProfileOperadorRow>();
+  if (operadorUserIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("user_id,full_name,pessoa_id")
+      .in("user_id", operadorUserIds);
+
+    if (profilesError) throw profilesError;
+
+    for (const profile of (profiles ?? []) as ProfileOperadorRow[]) {
+      const userId = asString(profile.user_id);
+      if (!userId) continue;
+      perfisOperador.set(userId, profile);
+    }
+  }
+
   const pessoaIds = Array.from(
     new Set(
       vendas
         .flatMap((item) => [asInt(item.pagador_pessoa_id), asInt(item.colaborador_pessoa_id)])
+        .concat(
+          Array.from(perfisOperador.values()).map((profile) => asInt(profile.pessoa_id)),
+        )
         .filter((value): value is number => typeof value === "number" && value > 0),
     ),
   );
@@ -468,6 +504,17 @@ async function enrichVendas(supabase: any, vendas: VendaRow[]) {
       const id = asInt((pessoa as Record<string, unknown>).id);
       if (id) nomePessoa.set(id, asString((pessoa as Record<string, unknown>).nome) ?? `Pessoa #${id}`);
     }
+  }
+
+  const nomeOperadorPorUserId = new Map<string, string>();
+  for (const [userId, profile] of perfisOperador.entries()) {
+    const pessoaId = asInt(profile.pessoa_id);
+    const nomeOperador =
+      (pessoaId ? nomePessoa.get(pessoaId) : null) ??
+      asString(profile.full_name) ??
+      `Usuario #${userId.slice(0, 8)}`;
+
+    nomeOperadorPorUserId.set(userId, nomeOperador);
   }
 
   const faturaPorCobranca = new Map<number, Record<string, unknown>>();
@@ -555,6 +602,7 @@ async function enrichVendas(supabase: any, vendas: VendaRow[]) {
     const vendaNormalizada = normalizarVendaLegada(venda);
     const pagadorId = asInt(venda.pagador_pessoa_id);
     const colaboradorPessoaId = asInt(venda.colaborador_pessoa_id);
+    const operadorUserId = asString(venda.created_by);
     const cobrancaId = asInt(venda.cobranca_id);
     const cobrancaCancelada = cobrancaId ? isCobrancaCafeCancelada(cobrancaStatusPorId.get(cobrancaId)) : false;
     const vendaEfetiva = cobrancaCancelada
@@ -570,6 +618,8 @@ async function enrichVendas(supabase: any, vendas: VendaRow[]) {
       pagador_nome: pagadorId ? nomePessoa.get(pagadorId) ?? `Pessoa #${pagadorId}` : null,
       colaborador_nome:
         colaboradorPessoaId ? nomePessoa.get(colaboradorPessoaId) ?? `Pessoa #${colaboradorPessoaId}` : null,
+      operador_user_id: operadorUserId,
+      operador_nome: operadorUserId ? nomeOperadorPorUserId.get(operadorUserId) ?? null : null,
       fatura: cobrancaId ? faturaPorCobranca.get(cobrancaId) ?? null : null,
     };
   });
@@ -1071,49 +1121,26 @@ export async function criarComandaCafe(params: {
   userId: string | null;
 }) {
   const { supabase, body, userId } = params;
-  console.log("[CAFE_CAIXA][CRIAR] iniciando criacao de comanda");
+  console.log("[CAFE_CAIXA][CRIAR] inicio");
   if (!isRecord(body)) throw new Error("payload_invalido");
 
-  const tipoComprador = coerceTipoComprador(
-    body.tipo_comprador ?? body.tipoComprador ?? body.comprador_tipo ?? body.compradorTipo ?? "SEM_VINCULO",
+  const tipoQuitacaoFormulario = coerceTipoQuitacaoFormulario(
+    body.tipo_quitacao ?? body.tipoQuitacao,
   );
-  const tipoCompradorFinanceiro = mapTipoCompradorParaFinanceiro(tipoComprador);
   const origemOperacao = upper(body.origem_operacao ?? body.origemOperacao) === "PDV" ? "PDV" : "CAIXA_ADMIN";
-  const rawFormaPagamento =
-    body.forma_pagamento ?? body.formaPagamento ?? body.metodo_pagamento ?? body.metodoPagamento;
   const tabelaPrecoId = asInt(body.tabela_preco_id ?? body.tabelaPrecoId);
-  const formaPagamentoId = asInt(
-    body.forma_pagamento_saas_id ??
-      body.formaPagamentoSaasId ??
-      body.forma_pagamento_id ??
-      body.formaPagamentoId,
-  );
-  const contaConexaoIdInformada = asInt(
-    body.conta_conexao_id ??
-      body.contaConexaoId ??
-      body.conta_interna_id ??
-      body.contaInternaId,
-  );
-  const metodoPagamento = coerceFormaPagamento(
-    body.metodo_pagamento ?? body.metodoPagamento ?? body.forma_pagamento ?? body.formaPagamento,
-  );
-  const faturamentoFuturoSolicitado =
-    isFutureBillingFormaPagamento(rawFormaPagamento) ||
-    isFutureBillingFormaPagamento(body.forma_pagamento_codigo ?? body.formaPagamentoCodigo);
+  const usaContaInternaAluno = tipoQuitacaoFormulario === "CONTA_INTERNA_ALUNO";
+  const usaContaInternaColaborador =
+    tipoQuitacaoFormulario === "CONTA_INTERNA_COLABORADOR";
+  const faturamentoFuturoSolicitado = usaContaInternaAluno || usaContaInternaColaborador;
   const tipoQuitacao =
-    isContaInternaFormaPagamento(rawFormaPagamento) ||
-    coerceTipoQuitacao(body.tipo_quitacao ?? body.tipoQuitacao) === CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR
-      ? CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR
-      : faturamentoFuturoSolicitado
-        ? CAFE_TIPO_QUITACAO.CARTAO_CONEXAO
-        : coerceTipoQuitacao(body.tipo_quitacao ?? body.tipoQuitacao);
-  // Conta interna como liquidacao principal ja nasce vinculada a cobranca da
-  // competencia escolhida. A conversao posterior fica reservada para saldo
-  // aberto de comandas registradas originalmente em outro fluxo.
-  const contaInternaSolicitada = tipoQuitacao === CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR;
-  const rawDataOperacao = asString(body.data_operacao ?? body.dataOperacao);
-  const dataOperacao = isIsoDate(rawDataOperacao) ? rawDataOperacao : todayIso();
-  const rawCompetencia = asString(body.data_competencia ?? body.competencia ?? body.dataCompetencia);
+    usaContaInternaAluno
+      ? CAFE_TIPO_QUITACAO.CARTAO_CONEXAO
+      : usaContaInternaColaborador
+        ? CAFE_TIPO_QUITACAO.CONTA_INTERNA_COLABORADOR
+        : tipoQuitacaoFormulario === "PAGAMENTO_PARCIAL"
+          ? CAFE_TIPO_QUITACAO.PARCIAL
+          : CAFE_TIPO_QUITACAO.IMEDIATA;
   const compradorPessoaId = asInt(
     body.comprador_id ??
       body.compradorId ??
@@ -1122,22 +1149,95 @@ export async function criarComandaCafe(params: {
       body.pagador_pessoa_id ??
       body.cliente_pessoa_id,
   );
-  const colaboradorPessoaId =
-    asInt(body.colaborador_pessoa_id ?? body.colaboradorPessoaId) ??
-    (tipoComprador === CAFE_TIPO_COMPRADOR.COLABORADOR ? compradorPessoaId : null);
-
-  if (tipoComprador === CAFE_TIPO_COMPRADOR.COLABORADOR && !colaboradorPessoaId) {
-    throw new Error("colaborador_pessoa_id_obrigatorio");
+  const rawDataHoraVenda = asString(body.data_hora_venda ?? body.dataHoraVenda);
+  const dataHoraVenda = isIsoDateTime(rawDataHoraVenda) ? rawDataHoraVenda : nowIso();
+  const rawDataOperacao = asString(body.data_operacao ?? body.dataOperacao);
+  const dataOperacao = isIsoDate(rawDataOperacao)
+    ? rawDataOperacao
+    : formatDateTimeToIsoDate(dataHoraVenda);
+  const rawCompetencia = asString(
+    body.competencia_ano_mes ??
+      body.competenciaAnoMes ??
+      body.data_competencia ??
+      body.competencia ??
+      body.dataCompetencia,
+  );
+  if (!compradorPessoaId) {
+    throw new Error("comprador_pessoa_id_obrigatorio");
   }
+  const tipoCompradorBase = usaContaInternaAluno
+    ? CAFE_TIPO_COMPRADOR.ALUNO
+    : usaContaInternaColaborador
+      ? CAFE_TIPO_COMPRADOR.COLABORADOR
+      : coerceTipoComprador(
+          body.tipo_comprador ??
+            body.tipoComprador ??
+            body.comprador_tipo ??
+            body.compradorTipo ??
+            CAFE_TIPO_COMPRADOR.PESSOA_AVULSA,
+        );
+  const tipoCompradorFinanceiro =
+    usaContaInternaAluno
+      ? CAFE_COMPRADOR_TIPO_FINANCEIRO.ALUNO
+      : usaContaInternaColaborador
+        ? CAFE_COMPRADOR_TIPO_FINANCEIRO.COLABORADOR
+        : mapTipoCompradorParaFinanceiro(tipoCompradorBase);
+  const elegibilidadeContaInterna = compradorPessoaId
+    ? await resolverElegibilidadeContaInterna(supabase, compradorPessoaId)
+    : null;
+  const contaConexaoElegivel =
+    usaContaInternaAluno
+      ? elegibilidadeContaInterna?.contaInternaAlunoId ?? null
+      : usaContaInternaColaborador
+        ? elegibilidadeContaInterna?.contaInternaColaboradorId ?? null
+        : null;
+  const contaConexaoIdInformada =
+    asInt(
+      body.conta_conexao_id ??
+        body.contaConexaoId ??
+        body.conta_interna_id ??
+        body.contaInternaId,
+    ) ?? contaConexaoElegivel;
+  const formaPagamentoId = faturamentoFuturoSolicitado
+    ? null
+    : asInt(
+        body.forma_pagamento_saas_id ??
+          body.formaPagamentoSaasId ??
+          body.forma_pagamento_id ??
+          body.formaPagamentoId,
+      );
+  const metodoPagamento = faturamentoFuturoSolicitado
+    ? usaContaInternaAluno
+      ? CAFE_FORMAS_PAGAMENTO.CARTAO_CONEXAO_ALUNO
+      : CAFE_FORMAS_PAGAMENTO.CONTA_INTERNA_COLABORADOR
+    : coerceFormaPagamento(
+        body.forma_pagamento_real ??
+          body.formaPagamentoReal ??
+          body.metodo_pagamento ??
+          body.metodoPagamento ??
+          body.forma_pagamento ??
+          body.formaPagamento,
+      );
+  const colaboradorPessoaId =
+    usaContaInternaColaborador || tipoCompradorBase === CAFE_TIPO_COMPRADOR.COLABORADOR
+      ? asInt(body.colaborador_pessoa_id ?? body.colaboradorPessoaId) ?? compradorPessoaId
+      : null;
 
-  if (contaInternaSolicitada && !colaboradorPessoaId) {
+  if (faturamentoFuturoSolicitado && !compradorPessoaId) {
+    throw new Error("comprador_obrigatorio_para_fluxo_futuro");
+  }
+  if (usaContaInternaAluno && !elegibilidadeContaInterna?.possuiContaInternaAluno) {
+    throw new Error("conta_interna_aluno_nao_encontrada");
+  }
+  if (usaContaInternaColaborador && !elegibilidadeContaInterna?.possuiContaInternaColaborador) {
+    throw new Error("conta_interna_colaborador_nao_encontrada");
+  }
+  if (usaContaInternaColaborador && !colaboradorPessoaId) {
     throw new Error("conta_interna_exige_colaborador");
   }
-
-  if (contaInternaSolicitada && !rawCompetencia) {
+  if (faturamentoFuturoSolicitado && !rawCompetencia) {
     throw new Error("competencia_obrigatoria_para_conta_interna");
   }
-
   if (!faturamentoFuturoSolicitado && !metodoPagamento && !formaPagamentoId) {
     throw new Error("forma_pagamento_obrigatoria");
   }
@@ -1163,34 +1263,48 @@ export async function criarComandaCafe(params: {
     ? rawCompetencia
     : isCompetencia(rawCompetencia)
       ? rawCompetencia
-      : competenciaFromDate(dataOperacao);
-  const valorPagoInformado = pickCentavos(body, ["valor_pago_centavos", "valorPagoCentavos", "valor_pago", "valorPago"]) ?? 0;
+      : null;
+  const valorPagoInformado =
+    pickCentavos(body, [
+      "valor_pago_abertura_centavos",
+      "valorPagoAberturaCentavos",
+      "valor_pago_centavos",
+      "valorPagoCentavos",
+      "valor_pago",
+      "valorPago",
+    ]) ?? 0;
   const valorPagoCentavos = faturamentoFuturoSolicitado
     ? 0
     : Math.max(0, Math.min(valorTotal, valorPagoInformado));
 
-  if (contaInternaSolicitada && !isCompetencia(competencia)) {
+  if (faturamentoFuturoSolicitado && !isCompetencia(competencia)) {
     throw new Error("competencia_invalida");
   }
-  if (contaInternaSolicitada && valorTotal - valorPagoCentavos <= 0) {
+  if (faturamentoFuturoSolicitado && valorTotal - valorPagoCentavos <= 0) {
     throw new Error("saldo_em_aberto_obrigatorio_para_conta_interna");
+  }
+  if (tipoQuitacaoFormulario === "PAGAMENTO_PARCIAL" && valorPagoCentavos <= 0) {
+    throw new Error("valor_pago_abertura_obrigatorio_para_pagamento_parcial");
   }
 
   const statusPagamento = resolveStatus(valorTotal, valorPagoCentavos, tipoQuitacao);
   const valorEmAberto = Math.max(valorTotal - valorPagoCentavos, 0);
-  const pagadorPessoaId = asInt(
+  const pagadorPessoaId =
+    asInt(
     body.cliente_pessoa_id ??
       body.pagador_pessoa_id ??
       body.comprador_pessoa_id ??
       body.clientePessoaId ??
       compradorPessoaId,
-  );
+  ) ?? compradorPessoaId;
   const consumidorPessoaId = asInt(body.consumidor_pessoa_id ?? body.consumidorPessoaId);
   const observacoesInternas = asString(body.observacoes_internas ?? body.observacoesInternas);
   const observacoes = asString(body.observacoes);
-  console.log("[CAFE_CAIXA][CRIAR] payload normalizado:", {
-    tipoComprador,
+  console.log("[CAFE_CAIXA][CRIAR] payload normalizado", {
+    tipoCompradorBase,
+    tipoQuitacaoFormulario,
     tipoQuitacao,
+    dataHoraVenda,
     dataOperacao,
     competencia,
     compradorPessoaId,
@@ -1203,7 +1317,7 @@ export async function criarComandaCafe(params: {
     valorEmAberto,
   });
 
-  console.log("[CAFE_CAIXA][CRIAR] inserindo comanda principal");
+  console.log("[CAFE_CAIXA][CRIAR] insert venda principal");
   const { data: venda, error: vendaError } = await supabase
     .from("cafe_vendas")
     .insert({
@@ -1211,6 +1325,7 @@ export async function criarComandaCafe(params: {
       consumidor_pessoa_id: consumidorPessoaId,
       colaborador_pessoa_id: colaboradorPessoaId,
       data_operacao: dataOperacao,
+      data_hora_venda: dataHoraVenda,
       data_competencia: faturamentoFuturoSolicitado ? competencia : null,
       tipo_quitacao: tipoQuitacao,
       status_pagamento: statusPagamento,
@@ -1219,9 +1334,9 @@ export async function criarComandaCafe(params: {
       valor_em_aberto_centavos: valorEmAberto,
       tabela_preco_id: tabelaPrecoId,
       forma_pagamento:
-        contaInternaSolicitada
-          ? CAFE_FORMAS_PAGAMENTO.CONTA_INTERNA_COLABORADOR
-          : metodoPagamento ?? asString(body.forma_pagamento_codigo ?? body.formaPagamentoCodigo) ?? null,
+        metodoPagamento ??
+        asString(body.forma_pagamento_codigo ?? body.formaPagamentoCodigo) ??
+        null,
       observacoes,
       observacoes_internas: observacoesInternas,
       created_by: userId,
@@ -1236,7 +1351,7 @@ export async function criarComandaCafe(params: {
   let estoqueRollback: Array<{ insumoId: number; saldoAnterior: number }> = [];
 
   try {
-    console.log("[CAFE_CAIXA][CRIAR] inserindo itens da comanda");
+    console.log("[CAFE_CAIXA][CRIAR] insert itens", { vendaId, itens: itens.length });
     const { error: itensError } = await supabase.from("cafe_venda_itens").insert(
       itens.map((item) => ({
         venda_id: vendaId,
@@ -1253,7 +1368,16 @@ export async function criarComandaCafe(params: {
 
     estoqueRollback = await aplicarConsumoEstoque({ supabase, vendaId, itens, createdBy: userId });
 
-    console.log("[CAFE_CAIXA][CRIAR] aplicando fluxo financeiro integrado");
+    console.log(
+      faturamentoFuturoSolicitado
+        ? "[CAFE_CAIXA][CRIAR] gerando cobranca futura"
+        : "[CAFE_CAIXA][CRIAR] aplicando fluxo financeiro",
+      {
+        vendaId,
+        competencia,
+        tipoQuitacao,
+      },
+    );
     await aplicarFluxoFinanceiroVendaCafe({
       supabase,
       vendaId,
@@ -1279,9 +1403,14 @@ export async function criarComandaCafe(params: {
         valorTotalCentavos: item.valor_total_centavos,
       })),
     });
-    console.log("[CAFE_CAIXA][CRIAR] comanda criada com sucesso:", vendaId);
+    console.log("[CAFE_CAIXA][CRIAR] sucesso", { vendaId });
   } catch (error) {
-    console.error("[CAFE_CAIXA][CRIAR][ERRO] rollback da comanda:", error);
+    console.error("[CAFE_CAIXA][CRIAR][ERRO]", {
+      vendaId,
+      compradorPessoaId,
+      tipoQuitacao,
+      message: error instanceof Error ? error.message : "erro_desconhecido",
+    });
     for (const item of estoqueRollback) {
       await supabase.from("cafe_insumos").update({ saldo_atual: item.saldoAnterior }).eq("id", item.insumoId);
     }
@@ -1348,10 +1477,15 @@ export async function atualizarComandaCafe(params: {
     throw new Error("fatura_ja_fechada_para_esta_comanda");
   }
 
+  const nextDataHoraVenda = isIsoDateTime(asString(body.data_hora_venda ?? body.dataHoraVenda))
+    ? asString(body.data_hora_venda ?? body.dataHoraVenda)!
+    : venda.data_hora_venda ?? `${venda.data_operacao}T00:00:00.000Z`;
   const nextDataOperacao = isIsoDate(asString(body.data_operacao ?? body.dataOperacao))
     ? asString(body.data_operacao ?? body.dataOperacao)!
-    : venda.data_operacao;
-  const nextTipoComprador = coerceTipoComprador(body.tipo_comprador ?? body.tipoComprador);
+    : formatDateTimeToIsoDate(nextDataHoraVenda);
+  const nextTipoComprador = coerceTipoComprador(
+    body.tipo_comprador ?? body.tipoComprador ?? venda.comprador_tipo,
+  );
   const nextObservacoesInternas =
     body.observacoes_internas !== undefined || body.observacoesInternas !== undefined
       ? asString(body.observacoes_internas ?? body.observacoesInternas)
@@ -1385,10 +1519,16 @@ export async function atualizarComandaCafe(params: {
       : venda.data_competencia;
   const nextFormaPagamento =
     body.forma_pagamento !== undefined ||
+    body.forma_pagamento_real !== undefined ||
+    body.formaPagamentoReal !== undefined ||
     body.metodo_pagamento !== undefined ||
     body.metodoPagamento !== undefined
       ? coerceFormaPagamento(
-          body.forma_pagamento ?? body.metodo_pagamento ?? body.metodoPagamento,
+          body.forma_pagamento_real ??
+            body.formaPagamentoReal ??
+            body.forma_pagamento ??
+            body.metodo_pagamento ??
+            body.metodoPagamento,
         )
       : venda.forma_pagamento;
   const nextTabelaPrecoId =
@@ -1420,6 +1560,7 @@ export async function atualizarComandaCafe(params: {
     .from("cafe_vendas")
     .update({
       data_operacao: nextDataOperacao,
+      data_hora_venda: nextDataHoraVenda,
       observacoes: nextObservacoes,
       observacoes_internas: nextObservacoesInternas,
       pagador_pessoa_id: nextCompradorPessoaId,

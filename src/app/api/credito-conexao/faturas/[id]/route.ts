@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { validarFaturasCreditoConexao } from "@/lib/credito-conexao/validarCadeiaOrigem";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { resolverPagamentoExibivel } from "@/lib/financeiro/cobranca/resolverPagamentoExibivel";
+import { enriquecerLancamentosOperacionaisFatura } from "@/lib/financeiro/colaboradoresFinanceiro";
 
 type FaturaRow = {
   id: number;
@@ -46,6 +48,12 @@ type PessoaRow = {
   nome: string | null;
   cpf: string | null;
   email: string | null;
+};
+
+type FolhaColaboradorRow = {
+  id: number;
+  competencia_ano_mes: string | null;
+  status: string | null;
 };
 
 type LancamentoEnriquecidoRow = {
@@ -295,11 +303,23 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     }
   }
 
+  const composicaoOperacional = await enriquecerLancamentosOperacionaisFatura(supabase, lancamentos);
+
   const faturaRow = fatura as FaturaRow;
   const contaConexaoId = Number(faturaRow.conta_conexao_id);
 
   let conta: ContaRow | null = null;
   let pessoa: PessoaRow | null = null;
+  let contextoTitular:
+    | {
+        tipo: "COLABORADOR" | "ALUNO" | "OUTRO";
+        colaborador_id: number | null;
+        competencia: string | null;
+        folha_pagamento_colaborador_id: number | null;
+        status_importacao_folha: string | null;
+        titular_label: string;
+      }
+    | null = null;
 
   if (Number.isFinite(contaConexaoId)) {
     const { data: contaRaw } = await supabase
@@ -320,6 +340,64 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
       pessoa = (pessoaRaw ?? null) as PessoaRow | null;
     }
+
+    const tipoConta = String(conta?.tipo_conta ?? "").trim().toUpperCase();
+    if (tipoConta === "COLABORADOR" && Number.isFinite(pessoaId)) {
+      const { data: colaboradorTitular } = await supabase
+        .from("colaboradores")
+        .select("id,pessoa_id,ativo")
+        .eq("pessoa_id", pessoaId)
+        .order("ativo", { ascending: false })
+        .order("id", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      const competenciaFatura =
+        typeof faturaRow.periodo_referencia === "string" ? faturaRow.periodo_referencia : null;
+      let folhaColaborador: FolhaColaboradorRow | null = null;
+
+      if (colaboradorTitular?.id && competenciaFatura) {
+        const { data: folhaColaboradorRaw } = await supabase
+          .from("folha_pagamento_colaborador")
+          .select("id,competencia_ano_mes,status")
+          .eq("colaborador_id", Number(colaboradorTitular.id))
+          .eq("competencia_ano_mes", competenciaFatura)
+          .order("id", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        folhaColaborador = (folhaColaboradorRaw ?? null) as FolhaColaboradorRow | null;
+      }
+
+      contextoTitular = {
+        tipo: "COLABORADOR",
+        conta_interna_id: conta?.id ?? null,
+        colaborador_id: colaboradorTitular?.id ?? null,
+        competencia: competenciaFatura,
+        folha_pagamento_colaborador_id: folhaColaborador?.id ?? null,
+        status_importacao_folha: folhaColaborador?.id ? folhaColaborador.status ?? "IMPORTADA" : "PENDENTE_IMPORTACAO",
+        titular_label: "Conta interna do colaborador",
+      };
+    } else if (tipoConta === "ALUNO") {
+      contextoTitular = {
+        tipo: "ALUNO",
+        conta_interna_id: conta?.id ?? null,
+        colaborador_id: null,
+        competencia: typeof faturaRow.periodo_referencia === "string" ? faturaRow.periodo_referencia : null,
+        folha_pagamento_colaborador_id: null,
+        status_importacao_folha: null,
+        titular_label: "Conta interna do aluno",
+      };
+    } else {
+      contextoTitular = {
+        tipo: "OUTRO",
+        conta_interna_id: conta?.id ?? null,
+        colaborador_id: null,
+        competencia: typeof faturaRow.periodo_referencia === "string" ? faturaRow.periodo_referencia : null,
+        folha_pagamento_colaborador_id: null,
+        status_importacao_folha: null,
+        titular_label: "Conta interna",
+      };
+    }
   }
 
   const cobrancaVinculada = await buscarCobrancaPorId(supabase, Number(faturaRow.cobranca_id ?? 0) || null);
@@ -329,6 +407,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     buscarRecebimentosResumo(supabase, cobrancaVinculada?.id ?? null),
   ]);
   const pagamentoExibivel = await montarPagamentoExibivel(faturaRow, cobrancaVinculada, cobrancaCanonica);
+  const validacaoOrigem = (
+    await validarFaturasCreditoConexao(
+      supabase as unknown as { from: (table: string) => any },
+      [faturaId],
+    )
+  ).get(faturaId) ?? null;
 
   return NextResponse.json({
     ok: true,
@@ -336,8 +420,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       fatura: faturaRow,
       conta,
       pessoa,
+      contexto_titular: contextoTitular,
       pivot: (pivots ?? []) as PivotRow[],
-      lancamentos,
+      lancamentos: composicaoOperacional.ativos,
+      lancamentos_auditoria: composicaoOperacional.auditoria,
       cobranca_vinculada: cobrancaVinculada
         ? {
             ...cobrancaVinculada,
@@ -351,6 +437,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           }
         : null,
       pagamento_exibivel: pagamentoExibivel,
+      validacao_origem: validacaoOrigem,
     },
   });
 }

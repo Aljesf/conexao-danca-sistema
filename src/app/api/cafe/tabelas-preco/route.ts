@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { guardCafeApiRequest } from "@/lib/auth/cafeApiAccess";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { listarTabelasPrecoDisponiveisCafe } from "@/lib/cafe/precificacao";
 
@@ -12,8 +13,8 @@ type TabelaInsert = {
   ordem?: number;
 };
 
-export async function GET(req: Request) {
-  const denied = await guardApiByRole(req);
+export async function GET(req: NextRequest) {
+  const denied = await guardCafeApiRequest(req);
   if (denied) return denied as unknown as NextResponse;
 
   const supabase = getSupabaseServiceClient();

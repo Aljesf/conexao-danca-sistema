@@ -55,6 +55,19 @@ type FolhaRow = {
   status: string | null;
 };
 
+type PagamentoRow = {
+  colaborador_id: number;
+  tipo: string | null;
+  competencia_ano_mes: string | null;
+  valor_centavos: number | null;
+};
+
+type FolhaEventoRow = {
+  folha_pagamento_id: number;
+  tipo: "PROVENTO" | "DESCONTO";
+  valor_centavos: number | null;
+};
+
 const FATURA_STATUS_ABERTA = new Set(["ABERTA", "EM_ABERTO", "PENDENTE"]);
 
 function compareCompetencia(a: string | null, b: string | null) {
@@ -71,12 +84,23 @@ function normalize(text: string | null | undefined) {
     .toLowerCase();
 }
 
+function competenciaAtual() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function isPagamentoAdiantamento(tipo: string | null | undefined) {
+  const normalized = String(tipo ?? "").trim().toUpperCase();
+  return normalized === "ADIANTAMENTO" || normalized === "SAQUE";
+}
+
 export async function GET(req: Request) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
 
   const supabase = getSupabaseAdmin();
   const { searchParams } = new URL(req.url);
+  const competenciaMesAtual = competenciaAtual();
   const q = searchParams.get("q")?.trim() ?? "";
   const status = (searchParams.get("status") ?? "").trim().toUpperCase();
   const contaInternaFiltro = (searchParams.get("conta_interna") ?? "").trim().toUpperCase();
@@ -137,6 +161,7 @@ export async function GET(req: Request) {
     { data: funcoesRelData, error: funcoesRelError },
     { data: contasData, error: contasError },
     { data: folhasData, error: folhasError },
+    { data: pagamentosData, error: pagamentosError },
   ] = await Promise.all([
     pessoaIds.length
       ? supabase.from("pessoas").select("id,nome").in("id", pessoaIds)
@@ -163,15 +188,21 @@ export async function GET(req: Request) {
       .in("colaborador_id", colaboradorIds)
       .order("competencia_ano_mes", { ascending: false })
       .order("id", { ascending: false }),
+    supabase
+      .from("colaborador_pagamentos")
+      .select("colaborador_id,tipo,competencia_ano_mes,valor_centavos")
+      .in("colaborador_id", colaboradorIds)
+      .eq("competencia_ano_mes", competenciaMesAtual),
   ]);
 
-  if (pessoasError || tiposVinculoError || funcoesRelError || contasError || folhasError) {
+  if (pessoasError || tiposVinculoError || funcoesRelError || contasError || folhasError || pagamentosError) {
     const detail =
       pessoasError?.message ??
       tiposVinculoError?.message ??
       funcoesRelError?.message ??
       contasError?.message ??
       folhasError?.message ??
+      pagamentosError?.message ??
       "falha_carregar_relacoes_financeiras";
 
     return NextResponse.json({ ok: false, error: "falha_carregar_relacoes_financeiras", detail }, { status: 500 });
@@ -259,12 +290,64 @@ export async function GET(req: Request) {
     folhasByColaborador.set(folha.colaborador_id, list);
   }
 
+  const pagamentosByColaborador = new Map<number, PagamentoRow[]>();
+  for (const pagamento of (pagamentosData ?? []) as PagamentoRow[]) {
+    const list = pagamentosByColaborador.get(pagamento.colaborador_id) ?? [];
+    list.push(pagamento);
+    pagamentosByColaborador.set(pagamento.colaborador_id, list);
+  }
+
+  const folhasMesAtual = ((folhasData ?? []) as FolhaRow[]).filter(
+    (item) => item.competencia_ano_mes === competenciaMesAtual,
+  );
+  const folhaMesAtualIds = folhasMesAtual.map((item) => item.id);
+  const { data: eventosMesAtualData, error: eventosMesAtualError } = folhaMesAtualIds.length
+    ? await supabase
+        .from("folha_pagamento_eventos")
+        .select("folha_pagamento_id,tipo,valor_centavos")
+        .in("folha_pagamento_id", folhaMesAtualIds)
+    : { data: [] as FolhaEventoRow[], error: null };
+
+  if (eventosMesAtualError) {
+    return NextResponse.json(
+      { ok: false, error: "falha_listar_eventos_mes_atual", detail: eventosMesAtualError.message },
+      { status: 500 },
+    );
+  }
+
+  const eventosByFolhaId = new Map<number, FolhaEventoRow[]>();
+  for (const evento of (eventosMesAtualData ?? []) as FolhaEventoRow[]) {
+    const list = eventosByFolhaId.get(evento.folha_pagamento_id) ?? [];
+    list.push(evento);
+    eventosByFolhaId.set(evento.folha_pagamento_id, list);
+  }
+
   const rows = colaboradores.map((colaborador) => {
     const pessoaId = colaborador.pessoa_id ?? null;
     const contaInterna = pessoaId ? contaByPessoa.get(pessoaId) ?? null : null;
     const faturas = contaInterna ? faturasByConta.get(contaInterna.id) ?? [] : [];
     const folhas = folhasByColaborador.get(colaborador.id) ?? [];
+    const pagamentosMesAtual = pagamentosByColaborador.get(colaborador.id) ?? [];
     const faturasAbertas = faturas.filter((item) => FATURA_STATUS_ABERTA.has(String(item.status ?? "").toUpperCase()));
+    const faturaMesAtual =
+      faturas.find((item) => item.periodo_referencia === competenciaMesAtual) ?? null;
+    const folhaMesAtual =
+      folhas.find((item) => item.competencia_ano_mes === competenciaMesAtual) ?? null;
+    const eventosMesAtual = folhaMesAtual ? eventosByFolhaId.get(folhaMesAtual.id) ?? [] : [];
+    const proventosMesAtual = eventosMesAtual
+      .filter((item) => item.tipo === "PROVENTO")
+      .reduce((acc, item) => acc + Math.max(Number(item.valor_centavos ?? 0), 0), 0);
+    const descontosMesAtual = eventosMesAtual
+      .filter((item) => item.tipo === "DESCONTO")
+      .reduce((acc, item) => acc + Math.max(Number(item.valor_centavos ?? 0), 0), 0);
+    const adiantamentosMesAtual = pagamentosMesAtual
+      .filter((item) => isPagamentoAdiantamento(item.tipo))
+      .reduce((acc, item) => acc + Math.max(Number(item.valor_centavos ?? 0), 0), 0);
+    const importadoContaInternaMesAtual = Math.max(Number(faturaMesAtual?.valor_total_centavos ?? 0), 0);
+    const saldoLiquidoEstimadoMesAtual =
+      proventosMesAtual > 0
+        ? proventosMesAtual - descontosMesAtual - importadoContaInternaMesAtual
+        : -adiantamentosMesAtual - importadoContaInternaMesAtual;
     const saldoEmAbertoCentavos = faturasAbertas.reduce(
       (acc, item) => acc + Math.max(Number(item.valor_total_centavos ?? 0), 0),
       0,
@@ -329,6 +412,11 @@ export async function GET(req: Request) {
       quantidade_competencias_abertas: competenciasAbertas.length,
       importacao_pendente: importacaoPendente,
       folha_aberta: folhaAberta,
+      competencia_atual: competenciaMesAtual,
+      conta_interna_id: contaInterna?.id ?? null,
+      total_adiantamentos_mes_centavos: adiantamentosMesAtual,
+      total_importado_conta_interna_mes_centavos: importadoContaInternaMesAtual,
+      saldo_liquido_estimado_centavos: saldoLiquidoEstimadoMesAtual,
       ultima_fatura_id: ultimaFatura?.id ?? null,
       ultima_fatura_status: ultimaFatura?.status ?? null,
       ultima_folha_id: folhaDaUltimaCompetencia?.id ?? ultimaFolha?.id ?? null,

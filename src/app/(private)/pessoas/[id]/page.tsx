@@ -47,7 +47,10 @@ type MatriculaPessoaItem = {
   status: string | null;
   created_at: string | null;
   servico_nome: string | null;
+  servico_nome_tooltip?: string | null;
   unidade_execucao_label: string | null;
+  unidade_execucao_tooltip?: string | null;
+  itens_total?: number;
 };
 
 // calcula idade em anos a partir da data de nascimento (YYYY-MM-DD)
@@ -68,7 +71,7 @@ function calcularIdade(dateStr: string | null): number | null {
   return idade;
 }
 
-// Formata o campo genero em texto legÃ­vel
+// Formata o campo genero em texto legivel
 function formatGenero(
   genero: Pessoa["genero"] | null | undefined
 ): string | null {
@@ -80,7 +83,7 @@ function formatGenero(
     case "OUTRO":
       return "Outro";
     case "NAO_INFORMADO":
-      return "NÃ£o informado";
+      return "Não informado";
     default:
       return null;
   }
@@ -105,7 +108,7 @@ export default function PessoaDetalhesPage() {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // campos editÃ¡veis
+  // campos editaveis
   const [nome, setNome] = useState("");
   const [nomeSocial, setNomeSocial] = useState("");
   const [email, setEmail] = useState("");
@@ -193,7 +196,7 @@ export default function PessoaDetalhesPage() {
         setNaturalidade(data.naturalidade ?? "");
         setObservacoes(data.observacoes ?? "");
 
-        // endereÃ§o vindo da API
+        // endereco vindo da API
         applyEndereco(data.endereco ?? null);
       } catch (err: unknown) {
         const msg =
@@ -291,7 +294,7 @@ export default function PessoaDetalhesPage() {
   }
 
   const tipoLabel =
-    pessoa?.tipo_pessoa === "JURIDICA" ? "Pessoa jurÃ­dica" : "Pessoa fÃ­sica";
+    pessoa?.tipo_pessoa === "JURIDICA" ? "Pessoa jurídica" : "Pessoa física";
 
   const idade = calcularIdade(pessoa?.nascimento ?? null);
   const generoLabel = pessoa ? formatGenero(pessoa.genero) : null;
@@ -299,7 +302,7 @@ export default function PessoaDetalhesPage() {
   const updatedByLabel = pessoa?.updated_by_name ?? "-";
 
   const enderecoTitulo = useMemo(
-    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "EndereÃ§o fiscal" : "EndereÃ§o"),
+    () => (pessoa?.tipo_pessoa === "JURIDICA" ? "Endereço fiscal" : "Endereço"),
     [pessoa?.tipo_pessoa]
   );
   useEffect(() => {
@@ -315,7 +318,7 @@ export default function PessoaDetalhesPage() {
         const json = await res.json();
 
         if (!res.ok) {
-          throw new Error(json.error || "Falha ao carregar matriculas.");
+          throw new Error(json.error || "Falha ao carregar matrículas.");
         }
 
         const rawItems = Array.isArray(json.items)
@@ -331,7 +334,7 @@ export default function PessoaDetalhesPage() {
 
         if (active) setMatriculas(deduped);
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Erro ao carregar matriculas.";
+        const msg = err instanceof Error ? err.message : "Erro ao carregar matrículas.";
         if (active) setMatriculasErro(msg);
       } finally {
         if (active) setMatriculasLoading(false);
@@ -372,7 +375,7 @@ export default function PessoaDetalhesPage() {
       if (enderecoAtivo) {
         const logradouroValue = String(endereco?.logradouro ?? "").trim();
         if (!logradouroValue || !endereco?.cidade_id || !endereco?.bairro_id) {
-          setErro("Endereco incompleto. Informe logradouro, cidade e bairro.");
+          setErro("Endereço incompleto. Informe logradouro, cidade e bairro.");
           setSaving(false);
           return;
         }
@@ -461,14 +464,14 @@ export default function PessoaDetalhesPage() {
   const abas: { id: AbaId; label: string; icon: string }[] = [
     { id: "dados", label: "Dados da pessoa", icon: "" },
     { id: "escolar", label: "Dados escolares", icon: "" },
-    { id: "frequencia", label: "Frequencia", icon: "" },
-    { id: "observacoes", label: "Observacoes", icon: "" },
+    { id: "frequencia", label: "Frequência", icon: "" },
+    { id: "observacoes", label: "Observações", icon: "" },
     { id: "cuidados", label: "Cuidados do aluno", icon: "" },
     { id: "medidas", label: "Medidas", icon: "" },
-    { id: "observacoes_gerais", label: "Observacoes gerais", icon: "" },
-    { id: "observacoes_pedagogicas", label: "Observacoes pedagogicas", icon: "" },
-    { id: "contato", label: "Informacoes de contato", icon: "" },
-    { id: "endereco", label: "Endereco", icon: "" },
+    { id: "observacoes_gerais", label: "Observações gerais", icon: "" },
+    { id: "observacoes_pedagogicas", label: "Observações pedagógicas", icon: "" },
+    { id: "contato", label: "Informações de contato", icon: "" },
+    { id: "endereco", label: "Endereço", icon: "" },
     { id: "vinculos", label: "Vínculos", icon: "" },
     { id: "resumo", label: "Resumo financeiro", icon: "" },
     { id: "sistema", label: "Dados do sistema", icon: "" },
@@ -501,7 +504,7 @@ export default function PessoaDetalhesPage() {
           </div>
         </div>
 
-        {/* CabeÃ§alho com avatar grande e status */}
+        {/* Cabecalho com avatar grande e status */}
         <header className="rounded-3xl border border-violet-100/70 bg-white/95 px-6 py-6 shadow-sm backdrop-blur">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-1 flex-col items-center gap-4 md:flex-row md:items-center">
@@ -530,13 +533,13 @@ export default function PessoaDetalhesPage() {
 
                 {generoLabel && (
                   <p className="mt-0.5 text-sm text-slate-600">
-                    GÃªnero: {generoLabel}
+                    Gênero: {generoLabel}
                   </p>
                 )}
 
                 <p className="mt-2 max-w-xl text-[15px] text-slate-600">
-                  VisÃ£o geral deste cadastro. Aqui vocÃª pode consultar e, se
-                  tiver permissÃ£o, editar os dados da pessoa.
+                  Visão geral deste cadastro. Aqui você pode consultar e, se
+                  tiver permissão, editar os dados da pessoa.
                 </p>
 
                 {pessoa?.telefone && (
@@ -612,7 +615,7 @@ export default function PessoaDetalhesPage() {
                       {saving
                         ? "Salvando..."
                         : editMode
-                        ? "Salvar alteraÃ§Ãµes"
+                        ? "Salvar alterações"
                         : "Editar dados"}
                     </button>
                   </div>
@@ -638,7 +641,7 @@ export default function PessoaDetalhesPage() {
           </div>
         )}
 
-        {/* ConteÃºdo principal */}
+        {/* Conteudo principal */}
         {!loading && pessoa && (
           <>
             {/* NAV de ABAS */}
@@ -663,7 +666,7 @@ export default function PessoaDetalhesPage() {
                 );
               })}
             </nav>
-            {/* ConteÃºdo das abas */}
+            {/* Conteudo das abas */}
             <div className="rounded-3xl border border-violet-100 bg-white/95 p-6 text-[15px] text-slate-700 shadow-sm backdrop-blur-sm md:p-7">
               {/* Aba: Dados da pessoa */}
               {abaAtiva === "dados" && (
@@ -750,7 +753,7 @@ export default function PessoaDetalhesPage() {
 
                       <div className="grid gap-4 md:grid-cols-2">
                         <div>
-                          <p className="text-sm text-slate-400">GÃªnero</p>
+                          <p className="text-sm text-slate-400">Gênero</p>
                           {editMode ? (
                             <select
                               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-300"
@@ -760,7 +763,7 @@ export default function PessoaDetalhesPage() {
                               }
                             >
                               <option value="NAO_INFORMADO">
-                                NÃ£o informado
+                                Não informado
                               </option>
                               <option value="MASCULINO">Masculino</option>
                               <option value="FEMININO">Feminino</option>
@@ -784,19 +787,19 @@ export default function PessoaDetalhesPage() {
                                 )
                               }
                             >
-                              <option value="">NÃ£o informado</option>
+                              <option value="">Não informado</option>
                               <option value="SOLTEIRO">Solteiro(a)</option>
                               <option value="CASADO">Casado(a)</option>
                               <option value="DIVORCIADO">Divorciado(a)</option>
-                              <option value="VIUVO">ViÃºvo(a)</option>
+                              <option value="VIUVO">Viúvo(a)</option>
                               <option value="UNIAO_ESTAVEL">
-                                UniÃ£o estÃ¡vel
+                                União estável
                               </option>
                               <option value="OUTRO">Outro</option>
                             </select>
                           ) : (
                             <p className="mt-1">
-                              {estadoCivil ? estadoCivil : "NÃ£o informado"}
+                              {estadoCivil ? estadoCivil : "Não informado"}
                             </p>
                           )}
                         </div>
@@ -834,14 +837,14 @@ export default function PessoaDetalhesPage() {
                         <p className="text-sm text-slate-400">Tipo de pessoa</p>
                         <p className="mt-1">
                           {pessoa.tipo_pessoa === "JURIDICA"
-                            ? "Pessoa jurÃ­dica"
-                            : "Pessoa fÃ­sica"}
+                            ? "Pessoa jurídica"
+                            : "Pessoa física"}
                         </p>
                       </div>
 
                       <div>
                         <p className="text-sm text-slate-400">Idade</p>
-                        <p className="mt-1">{idade ?? "NÃ£o informado"}</p>
+                        <p className="mt-1">{idade ?? "Não informado"}</p>
                       </div>
                     </div>
                   </div>
@@ -855,10 +858,10 @@ export default function PessoaDetalhesPage() {
                     Dados escolares
                   </h2>
 
-                  <SectionCard title="Matriculas e vinculos escolares">
+                  <SectionCard title="Matrículas e vínculos escolares">
                     {matriculasLoading && (
                       <p className="text-sm text-slate-600">
-                        Carregando matriculas...
+                        Carregando matrículas...
                       </p>
                     )}
 
@@ -870,7 +873,7 @@ export default function PessoaDetalhesPage() {
                       !matriculasErro &&
                       matriculas.length === 0 && (
                         <p className="text-sm text-slate-600">
-                          Nenhuma matricula vinculada a esta pessoa.
+                          Nenhuma matrícula vinculada a esta pessoa.
                         </p>
                       )}
 
@@ -882,11 +885,11 @@ export default function PessoaDetalhesPage() {
                             <thead>
                               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                                 <th className="py-2 pr-3">Ano</th>
-                                <th className="py-2 pr-3">Curso/Servico</th>
+                                <th className="py-2 pr-3">Curso/Serviço</th>
                                 <th className="py-2 pr-3">Turma/UE</th>
                                 <th className="py-2 pr-3">Status</th>
                                 <th className="py-2 pr-3">Criada em</th>
-                                <th className="py-2 text-right">Acao</th>
+                                <th className="py-2 text-right">Ação</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -898,12 +901,20 @@ export default function PessoaDetalhesPage() {
                                       {item.ano_referencia ?? "-"}
                                     </td>
                                     <td className="py-3 pr-3">
-                                      {item.servico_nome ?? "-"}
+                                      <span
+                                        title={
+                                          item.servico_nome_tooltip ?? undefined
+                                        }
+                                      >
+                                        {item.servico_nome ?? "-"}
+                                      </span>
                                     </td>
                                     <td className="py-3 pr-3">
                                       <span
                                         title={
-                                          item.unidade_execucao_label ?? undefined
+                                          item.unidade_execucao_tooltip ??
+                                          item.unidade_execucao_label ??
+                                          undefined
                                         }
                                       >
                                         {item.unidade_execucao_label ?? "-"}
@@ -944,12 +955,12 @@ export default function PessoaDetalhesPage() {
               {abaAtiva === "frequencia" && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Frequencia
+                    Frequência
                   </h2>
                   {pessoa?.id ? (
                     <FrequenciaAlunoCard pessoaId={pessoa.id} />
                   ) : (
-                    <SectionCard title="Frequencia">
+                    <SectionCard title="Frequência">
                       <p className="text-sm text-slate-600">Carregando...</p>
                     </SectionCard>
                   )}
@@ -959,7 +970,7 @@ export default function PessoaDetalhesPage() {
               {abaAtiva === "observacoes" && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    Observacoes
+                    Observações
                   </h2>
                   {editMode ? (
                     <textarea
@@ -970,7 +981,7 @@ export default function PessoaDetalhesPage() {
                     />
                   ) : (
                     <p className="text-slate-700">
-                      {observacoes || "Nenhuma observacao registrada."}
+                      {observacoes || "Nenhuma observação registrada."}
                     </p>
                   )}
                 </div>
@@ -1000,7 +1011,7 @@ export default function PessoaDetalhesPage() {
                 pessoa?.id ? (
                   <AbaObservacoesGerais pessoaId={pessoa.id} />
                 ) : (
-                  <SectionCard title="Observacoes gerais">
+                  <SectionCard title="Observações gerais">
                     <p className="text-sm text-slate-600">Carregando...</p>
                   </SectionCard>
                 )
@@ -1010,7 +1021,7 @@ export default function PessoaDetalhesPage() {
                 pessoa?.id ? (
                   <AbaObservacoesPedagogicas pessoaId={pessoa.id} />
                 ) : (
-                  <SectionCard title="Observacoes pedagogicas">
+                  <SectionCard title="Observações pedagógicas">
                     <p className="text-sm text-slate-600">Carregando...</p>
                   </SectionCard>
                 )
@@ -1019,7 +1030,7 @@ export default function PessoaDetalhesPage() {
               {abaAtiva === "contato" && (
                 <div className="space-y-6">
                   <h2 className="text-base font-semibold text-slate-800 md:text-lg">
-                    InformaÃ§Ãµes de contato
+                    Informações de contato
                   </h2>
 
                   <div className="grid gap-6 md:grid-cols-2">
@@ -1057,7 +1068,7 @@ export default function PessoaDetalhesPage() {
                     <div className="space-y-4">
                       <div>
                         <p className="text-sm text-slate-400">
-                          Telefone secundÃ¡rio
+                          Telefone secundário
                         </p>
                         {editMode ? (
                           <input

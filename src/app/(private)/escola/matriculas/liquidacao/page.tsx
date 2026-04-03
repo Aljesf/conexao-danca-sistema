@@ -471,7 +471,7 @@ export default function Page() {
       }
 
       if (json?.status === "LANCADA_CARTAO") {
-        alert("Lancado no Cartao Conexao. Verifique a fatura do periodo.");
+        alert("Lancado na Conta Interna. Verifique a fatura da competencia.");
       }
       if (json?.modo === "MOVIMENTO" || json?.status === "LIQUIDADO_INSTITUCIONAL") {
         alert("Liquidação institucional registrada no Movimento.");
@@ -518,7 +518,7 @@ export default function Page() {
       {isMovimentoInstitucional ? (
         <p className="text-sm text-muted-foreground mt-2">
           Liquidação institucional configurada para esta matrícula. Não será criado recebimento presencial nem lançamento
-          no Cartão Conexão para a primeira liquidação.
+          na Conta Interna para a primeira liquidação.
         </p>
       ) : isHibridoExecucoes ? (
         <p className="text-sm text-muted-foreground mt-2">
@@ -528,7 +528,7 @@ export default function Page() {
       ) : (
         <p className="text-sm text-muted-foreground mt-2">
           Este valor refere-se a <strong>entrada no ato</strong>. A mensalidade recorrente sera cobrada separadamente
-          via <strong> Cartao Conexao</strong>.
+          via <strong> Conta Interna</strong>.
         </p>
       )}
 
@@ -596,8 +596,8 @@ export default function Page() {
               value={tipoPrimeira}
               onChange={(e) => setTipoPrimeira(e.target.value as typeof tipoPrimeira)}
             >
-              <option value="ENTRADA_PRORATA">Entrada / Pro-rata (fora do Cartao Conexao)</option>
-              <option value="MENSALIDADE_CHEIA_CARTAO">Mensalidade cheia (Cartao Conexao)</option>
+              <option value="ENTRADA_PRORATA">Entrada / Pro-rata na Conta Interna</option>
+              <option value="MENSALIDADE_CHEIA_CARTAO">Mensalidade cheia na Conta Interna</option>
             </select>
           </div>
           ) : null}
@@ -607,7 +607,7 @@ export default function Page() {
               <label className="text-sm font-medium">Acao no ato</label>
               <select className="border rounded-md p-2" value={modo} onChange={(e) => setModo(e.target.value as typeof modo)}>
                 <option value="PAGAR_AGORA">Pagar agora (gera recebimento)</option>
-                <option value="LANCAR_NO_CARTAO">Lancar no Cartao Conexao (sem recebimento)</option>
+                <option value="LANCAR_NO_CARTAO">Lancar na Conta Interna (sem recebimento)</option>
                 <option value="ADIAR_EXCECAO">Excecao: adiar primeiro pagamento (auditoria)</option>
               </select>
             </div>
@@ -654,7 +654,7 @@ export default function Page() {
           {modo === "LANCAR_NO_CARTAO" ? (
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">
-                {isHibridoExecucoes ? "Valor família a lançar no Cartão (centavos)" : "Valor a lancar no Cartao (centavos)"}
+                {isHibridoExecucoes ? "Valor família a lançar na Conta Interna (centavos)" : "Valor a lancar na Conta Interna (centavos)"}
               </label>
               <input
                 className="border rounded-md p-2"
@@ -662,14 +662,14 @@ export default function Page() {
                 value={valorCentavos}
                 onChange={(e) => setValorCentavos(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">Este lancamento nao cria recebimento nem movimento de caixa.</p>
+              <p className="text-xs text-muted-foreground">Este item entra em aberto na conta interna e aguarda quitacao na fatura da competencia.</p>
             </div>
           ) : null}
 
           {modo === "ADIAR_EXCECAO" ? (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-muted-foreground">
-                Sera gerada uma cobranca avulsa (fora do Cartao Conexao) no Contas a Receber e no Relatorio Financeiro do Aluno.
+                A excecao continua registrada na conta interna, com trilha auditavel e competencia conciliada pela fatura.
               </p>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Motivo da excecao (obrigatorio)</label>

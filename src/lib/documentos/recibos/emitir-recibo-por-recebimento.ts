@@ -4,6 +4,7 @@ import { buildDocumentoEmitidoPdfUrl } from "@/lib/documentos/core/documento-emi
 import { montarLayoutDocumental } from "@/lib/documentos/core/montar-layout-documental";
 import {
   resolverModeloPorOperacao,
+  resolverModeloPorId,
   type DocumentoOperacaoResolvida,
   type ModeloPorOperacaoResolvido,
 } from "@/lib/documentos/core/resolver-modelo-por-operacao";
@@ -89,8 +90,9 @@ async function prepararReciboPorRecebimento(params: {
   supabase: SupabaseClient;
   recebimentoId: number;
   operadorUserId: string | null;
+  modeloId?: number;
 }): Promise<PipelineReciboPorRecebimento> {
-  const { supabase, recebimentoId, operadorUserId } = params;
+  const { supabase, recebimentoId, operadorUserId, modeloId } = params;
 
   const montagem = await montarReciboPorRecebimento({
     supabase,
@@ -98,10 +100,12 @@ async function prepararReciboPorRecebimento(params: {
     operadorUserId,
   });
 
-  const resolucaoModelo = await resolverModeloPorOperacao({
-    supabase,
-    operacaoCodigo: "RECIBO_PAGAMENTO_CONFIRMADO",
-  });
+  const resolucaoModelo = modeloId
+    ? await resolverModeloPorId({ supabase, modeloId })
+    : await resolverModeloPorOperacao({
+        supabase,
+        operacaoCodigo: "RECIBO_PAGAMENTO_CONFIRMADO",
+      });
 
   const conteudoTemplate = resolveModeloTemplate(resolucaoModelo.modelo);
   const layout = montarLayoutDocumental({
@@ -126,6 +130,7 @@ export async function gerarPreviewReciboPorRecebimento(params: {
   supabase: SupabaseClient;
   recebimentoId: number;
   operadorUserId: string | null;
+  modeloId?: number;
 }): Promise<PreviewReciboDocumento> {
   const pipeline = await prepararReciboPorRecebimento(params);
   return buildPreview(pipeline);

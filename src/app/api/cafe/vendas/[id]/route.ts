@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { PUT } from "@/app/api/cafe/caixa/[id]/route";
-import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { guardCafeApiRequest } from "@/lib/auth/cafeApiAccess";
 import { detalharComandaCafe } from "@/lib/cafe/caixa";
 import { resolverCentroCustoCafe } from "@/lib/cafe/financeiro";
 import {
@@ -18,6 +18,7 @@ type VendaDetalheRow = Record<string, unknown> & {
   id: number;
   created_at?: string | null;
   data_operacao?: string | null;
+  data_hora_venda?: string | null;
   data_competencia?: string | null;
   competencia_ano_mes?: string | null;
   pagador_pessoa_id?: number | null;
@@ -26,6 +27,8 @@ type VendaDetalheRow = Record<string, unknown> & {
   colaborador_pessoa_id?: number | null;
   pagador_nome?: string | null;
   colaborador_nome?: string | null;
+  operador_nome?: string | null;
+  operador_user_id?: string | null;
   forma_pagamento?: string | null;
   tabela_preco_id?: number | null;
   centro_custo_id?: number | null;
@@ -224,7 +227,7 @@ async function resolverItens(
 }
 
 export async function GET(request: NextRequest, ctx: RouteContext) {
-  const denied = await guardApiByRole(request);
+  const denied = await guardCafeApiRequest(request);
   if (denied) return denied;
 
   try {
@@ -244,7 +247,15 @@ export async function GET(request: NextRequest, ctx: RouteContext) {
     const response: CafeVendaRecibo = {
       id: venda.id,
       numero_legivel: formatCafeVendaNumeroLegivel(venda.id),
-      created_at: asString(venda.created_at) ?? asString(venda.data_operacao) ?? new Date().toISOString(),
+      created_at:
+        asString(venda.data_hora_venda) ??
+        asString(venda.created_at) ??
+        asString(venda.data_operacao) ??
+        new Date().toISOString(),
+      operador: {
+        nome: asString(venda.operador_nome),
+        user_id: asString(venda.operador_user_id),
+      },
       competencia: resolverCompetencia(venda),
       comprador,
       perfil_resolvido: inferirPerfilResolvido(venda),

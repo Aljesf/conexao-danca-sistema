@@ -688,7 +688,7 @@ function criarObservacaoCompetencia(
   const partes: string[] = [];
 
   if (geradosAntecipadamente > 0) {
-    partes.push("Previsao baseada em lancamentos ativos ja gerados na Conta Interna Aluno.");
+    partes.push("Previsao baseada em lancamentos ativos ja gerados na Conta Interna.");
   }
   if (recebidos > 0) {
     partes.push(`${recebidos} ${pluralizar("item", recebidos)} com recebimento financeiro confirmado.`);

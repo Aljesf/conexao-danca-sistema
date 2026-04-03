@@ -2,14 +2,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/supabase/api-auth";
-import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
+import { logAuditoria } from "@/lib/auditoriaLog";
 import { normalizeCpf, validateCpf } from "@/lib/validators/cpf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function errorJson(status: number, payload: any) {
+const IS_DEV = process.env.NODE_ENV !== "production";
+
+function errorJson(status: number, payload: unknown) {
   return NextResponse.json(payload, { status });
+}
+
+function logPessoasDev(...parts: unknown[]) {
+  if (!IS_DEV) return;
+  console.log("[GET /api/pessoas]", ...parts);
 }
 
 const PessoaUpsertSchema = z
@@ -38,13 +45,23 @@ function sanitizeCpfForDb(cpfRaw: string | null | undefined): string | null {
 }
 
 export async function GET(request: NextRequest) {
+  const routeStart = Date.now();
+  const cookieNames = request.cookies.getAll().map((cookie) => cookie.name);
+
+  logPessoasDev("cookies recebidos:", cookieNames);
+
   try {
     const url = new URL(request.url);
     const search = (url.searchParams.get("search") ?? "").trim();
     const auth = await requireUser(request);
-    if (auth instanceof NextResponse) return auth;
+    if (auth instanceof NextResponse) {
+      logPessoasDev("status auth:", "unauthorized");
+      logPessoasDev("tempo total:", Date.now() - routeStart, "ms");
+      return auth;
+    }
 
     const { supabase } = auth;
+    logPessoasDev("status auth:", "authenticated");
 
     if (search) {
       const like = `%${search}%`;
@@ -59,55 +76,31 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         console.error("GET /api/pessoas search erro:", error);
+        logPessoasDev("tempo total:", Date.now() - routeStart, "ms");
         return errorJson(500, { error: "Erro ao buscar pessoas." });
       }
 
+      logPessoasDev("tempo total:", Date.now() - routeStart, "ms");
       return NextResponse.json({ pessoas: data ?? [] });
     }
 
     const { data, error } = await supabase
       .from("pessoas")
-      .select(
-        `
-        id,
-        user_id,
-        nome,
-        nome_social,
-        email,
-        telefone,
-        telefone_secundario,
-        nascimento,
-        genero,
-        estado_civil,
-        nacionalidade,
-        naturalidade,
-        cpf,
-        cnpj,
-        razao_social,
-        nome_fantasia,
-        inscricao_estadual,
-        tipo_pessoa,
-        ativo,
-        observacoes,
-        neofin_customer_id,
-        foto_url,
-        endereco,
-        created_at,
-        updated_at,
-        created_by,
-        updated_by
-      `
-      )
-      .order("created_at", { ascending: false });
+      .select("id,nome,email,telefone,cpf,ativo,tipo_pessoa")
+      .order("created_at", { ascending: false })
+      .limit(50);
 
     if (error) {
       console.error("GET /api/pessoas erro:", error);
+      logPessoasDev("tempo total:", Date.now() - routeStart, "ms");
       return errorJson(500, { error: "Erro ao listar pessoas." });
     }
 
+    logPessoasDev("tempo total:", Date.now() - routeStart, "ms");
     return NextResponse.json({ data });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("GET /api/pessoas crash:", err);
+    logPessoasDev("tempo total:", Date.now() - routeStart, "ms");
     return errorJson(500, { error: "Erro interno ao listar pessoas." });
   }
 }

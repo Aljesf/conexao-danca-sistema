@@ -41,6 +41,13 @@ function toNumber(value: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function isStatusCancelado(status: unknown) {
+  const normalized = String(status ?? "")
+    .trim()
+    .toUpperCase();
+  return normalized === "CANCELADA" || normalized === "CANCELADO";
+}
+
 export async function GET(req: NextRequest) {
   const denied = await guardApiByRole(req as any);
   if (denied) return denied as any;
@@ -64,7 +71,7 @@ export async function GET(req: NextRequest) {
     // Contas a pagar pendentes (somar em JS para evitar PGRST200)
     let pagarQuery = supabaseAdmin
       .from("contas_pagar")
-      .select("valor_centavos, vencimento, centro_custo_id")
+      .select("valor_centavos, vencimento, centro_custo_id, status")
       .neq("status", "PAGO");
 
     if (centroCustoValido) pagarQuery = pagarQuery.eq("centro_custo_id", centroCustoId);
@@ -73,17 +80,20 @@ export async function GET(req: NextRequest) {
 
     const { data: pagarData, error: pagarError } = await pagarQuery;
     if (pagarError) throw pagarError;
-    const pagar_pendente_centavos = (pagarData ?? []).reduce(
-      (acc: number, row: any) => acc + toNumber(row?.valor_centavos),
-      0
-    );
+    const pagar_pendente_centavos = (pagarData ?? []).reduce((acc: number, row: any) => {
+      if (isStatusCancelado(row?.status)) return acc;
+      return acc + toNumber(row?.valor_centavos);
+    }, 0);
 
     // Contas a receber pendentes (status diferentes de PAGO/RECEBIDO)
     let receberQuery = supabaseAdmin
       .from("cobrancas")
-      .select("valor_centavos, vencimento, centro_custo_id")
+      .select("valor_centavos, vencimento, centro_custo_id, status, expurgada")
       .neq("status", "RECEBIDO")
-      .neq("status", "PAGO");
+      .neq("status", "PAGO")
+      .neq("status", "CANCELADA")
+      .neq("status", "CANCELADO")
+      .or("expurgada.is.null,expurgada.eq.false");
 
     if (centroCustoValido) receberQuery = receberQuery.eq("centro_custo_id", centroCustoId);
     if (dataInicio) receberQuery = receberQuery.gte("vencimento", dataInicio);
@@ -91,10 +101,10 @@ export async function GET(req: NextRequest) {
 
     const { data: receberData, error: receberError } = await receberQuery;
     if (receberError) throw receberError;
-    const receber_pendente_centavos = (receberData ?? []).reduce(
-      (acc: number, row: any) => acc + toNumber(row?.valor_centavos),
-      0
-    );
+    const receber_pendente_centavos = (receberData ?? []).reduce((acc: number, row: any) => {
+      if (isStatusCancelado(row?.status) || row?.expurgada === true) return acc;
+      return acc + toNumber(row?.valor_centavos);
+    }, 0);
 
     // Movimentacao por centro de custo (receitas/entradas e despesas/saidas)
     let movimentoQuery = supabaseAdmin

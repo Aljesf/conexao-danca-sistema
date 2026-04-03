@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/requireUser";
+import { TurmaDetalheHeaderCard } from "@/components/turmas/TurmaDetalheHeaderCard";
 import { getSupabaseServerAuth } from "@/lib/supabaseServer";
 import {
   getTurmaDetalheOperacional,
@@ -12,11 +13,6 @@ export const dynamic = "force-dynamic";
 type PageProps = {
   params: Promise<{ turmaId: string }>;
 };
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "Nao informado";
-  return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
-}
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "Nao informado";
@@ -51,77 +47,7 @@ export default async function EscolaTurmaDetalhePage({ params }: PageProps) {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-6 md:px-6">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-          <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Escola / Turmas</p>
-                <h1 className="text-3xl font-semibold text-slate-900">
-                  {detalhe.turma.nome ?? `Turma #${detalhe.turma.turma_id}`}
-                </h1>
-                <p className="text-sm text-slate-600">
-                  {[detalhe.turma.curso, detalhe.turma.nivel, detalhe.turma.turno].filter(Boolean).join(" • ") ||
-                    "Turma sem classificacao"}
-                </p>
-                <p className="text-sm text-slate-500">
-                  Professor principal: {detalhe.turma.professor_principal ?? "Nao vinculado"} •{" "}
-                  {detalhe.turma.grade_horario}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  href="/escola/turmas"
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Voltar
-                </Link>
-                <Link
-                  href={`/escola/diario-de-classe?turmaId=${detalhe.turma.turma_id}`}
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Abrir diario
-                </Link>
-                <Link
-                  href={`/escola/turmas/${detalhe.turma.turma_id}/servicos`}
-                  className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                >
-                  Servicos
-                </Link>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Status</p>
-                <p className="mt-1 text-base font-semibold text-slate-900">{detalhe.turma.status ?? "Sem status"}</p>
-                <p className="text-xs text-slate-500">{detalhe.turma.tipo_turma ?? "Tipo nao informado"}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Alunos</p>
-                <p className="mt-1 text-base font-semibold text-slate-900">{detalhe.turma.total_alunos}</p>
-                <p className="text-xs text-slate-500">Resumo de frequencia por aluno</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Aulas confirmadas</p>
-                <p className="mt-1 text-base font-semibold text-slate-900">{detalhe.aulas_confirmadas.length}</p>
-                <p className="text-xs text-slate-500">Detalhe completo apenas por aula</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Calendario</p>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
-                  {formatDate(detalhe.turma.data_inicio)} - {formatDate(detalhe.turma.data_fim)}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {detalhe.turma.local_nome ?? "Sem local"} • {detalhe.turma.espaco_nome ?? "Sem espaco"}
-                </p>
-              </div>
-            </div>
-
-            {detalhe.turma.observacoes ? (
-              <p className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                {detalhe.turma.observacoes}
-              </p>
-            ) : null}
-          </section>
+          <TurmaDetalheHeaderCard initialTurma={detalhe.turma} aulasConfirmadasCount={detalhe.aulas_confirmadas.length} />
 
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex flex-col gap-1">

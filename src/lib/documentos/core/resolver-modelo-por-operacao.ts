@@ -490,3 +490,109 @@ export async function resolverModeloPorOperacao(params: {
     },
   };
 }
+
+export async function resolverModeloPorId(params: {
+  supabase: SupabaseClient;
+  modeloId: number;
+}): Promise<ModeloPorOperacaoResolvido> {
+  const { supabase, modeloId } = params;
+
+  const { data: modelo } = await supabase
+    .from("documentos_modelo")
+    .select(
+      [
+        "id",
+        "titulo",
+        "formato",
+        "conteudo_html",
+        "texto_modelo_md",
+        "cabecalho_html",
+        "rodape_html",
+        "layout_id",
+        "header_template_id",
+        "footer_template_id",
+        "header_height_px",
+        "footer_height_px",
+        "page_margin_mm",
+        "operacao_id",
+        "cabecalho_id",
+        "rodape_id",
+        "tipo_documento_id",
+      ].join(","),
+    )
+    .eq("id", modeloId)
+    .eq("ativo", true)
+    .maybeSingle();
+
+  const modeloResolvido = modelo as unknown as DocumentoModeloResolvido | null;
+  if (!modeloResolvido) {
+    throw new Error("modelo_operacao_nao_encontrado");
+  }
+
+  const operacaoId = normalizarNumber(modeloResolvido.operacao_id);
+  let operacao: DocumentoOperacaoResolvida | null = null;
+
+  if (operacaoId) {
+    const { data: op } = await supabase
+      .from("documentos_operacoes")
+      .select("id,codigo,nome,descricao,tipo_documento_id,ativo,exige_origem,permite_reemissao")
+      .eq("id", operacaoId)
+      .maybeSingle<{
+        id: number;
+        codigo: string;
+        nome: string;
+        descricao: string | null;
+        tipo_documento_id: number | null;
+        ativo: boolean;
+        exige_origem: boolean;
+        permite_reemissao: boolean;
+      }>();
+
+    if (op) {
+      const tipoOperacao = await carregarTipoDocumento(supabase, normalizarNumber(op.tipo_documento_id));
+      operacao = {
+        id: op.id,
+        codigo: op.codigo,
+        nome: op.nome,
+        descricao: op.descricao,
+        tipo_documento_id: normalizarNumber(op.tipo_documento_id),
+        tipo_documento_codigo: tipoOperacao?.codigo ?? null,
+        tipo_documento_nome: tipoOperacao?.nome ?? null,
+        ativo: op.ativo,
+        exige_origem: op.exige_origem,
+        permite_reemissao: op.permite_reemissao,
+      };
+    }
+  }
+
+  if (!operacao) {
+    operacao = {
+      id: 0,
+      codigo: "RECIBO_PAGAMENTO_CONFIRMADO",
+      nome: "Recibo de pagamento",
+      descricao: null,
+      tipo_documento_id: null,
+      tipo_documento_codigo: null,
+      tipo_documento_nome: null,
+      ativo: true,
+      exige_origem: false,
+      permite_reemissao: false,
+    };
+  }
+
+  const { cabecalho, rodape, metadadosFallback } = await resolverPartesModelo({
+    supabase,
+    modelo: modeloResolvido,
+  });
+
+  return {
+    operacao,
+    modelo: modeloResolvido,
+    cabecalho,
+    rodape,
+    metadadosFallback: {
+      ...metadadosFallback,
+      tipoDocumentoCodigoSolicitado: null,
+    },
+  };
+}

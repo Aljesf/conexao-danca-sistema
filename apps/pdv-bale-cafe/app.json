@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "PDV Bale Cafe",
+    "slug": "pdv-bale-cafe",
+    "scheme": "pdvbalecafe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.conexaodados.pdvbalecafe"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

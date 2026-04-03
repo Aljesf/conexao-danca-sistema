@@ -756,7 +756,7 @@ export async function calcularDashboardCentroCusto(
       centro_custo_id: Number(lancamento.centro_custo_id),
       base_centavos: toNumber(lancamento.valor_centavos),
       conta_interna_id: lancamento.conta_conexao_id ?? null,
-      observacao_resumo: "Centro herdado do lancamento financeiro gerado na Conta Interna Aluno",
+      observacao_resumo: "Centro herdado do lancamento financeiro gerado na Conta Interna",
     });
     directBucketsByCobranca.set(lancamento.cobranca_id, atual);
   }
@@ -790,7 +790,7 @@ export async function calcularDashboardCentroCusto(
         centro_custo_id: Number(row.centro_custo_id),
         base_centavos: toNumber(row.valor_centavos),
         conta_interna_id: row.conta_conexao_id ?? null,
-        observacao_resumo: "Centro herdado dos lancamentos agrupados na fatura da Conta Interna Aluno",
+        observacao_resumo: "Centro herdado dos lancamentos agrupados na fatura da Conta Interna",
       }));
 
     const agrupados = agruparBucketsPorCentro(buckets);

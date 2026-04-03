@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  isGrupoTipo,
+  mapNucleoToGrupo,
+  normalizeText,
+  NUCLEO_SELECT,
+  type GrupoApi,
+  type NucleoRow,
+} from "./_lib";
 
 type GrupoCreate = {
   nome: string;
-  categoria: string;
+  categoria?: string | null;
   subcategoria?: string | null;
   tipo: "TEMPORARIO" | "DURADOURO";
   descricao?: string | null;
@@ -19,10 +27,8 @@ export async function GET(req: Request): Promise<Response> {
   const supabase = createAdminClient();
 
   let q = supabase
-    .from("aluno_grupos")
-    .select("id,nome,categoria,subcategoria,tipo,descricao,ativo,data_inicio,data_fim,created_at,updated_at")
-    .order("categoria", { ascending: true })
-    .order("subcategoria", { ascending: true })
+    .from("nucleos")
+    .select(NUCLEO_SELECT)
     .order("nome", { ascending: true });
 
   if (search.length >= 2) {
@@ -36,7 +42,8 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, data: data ?? [] });
+  const grupos = ((data ?? []) as NucleoRow[]).map(mapNucleoToGrupo);
+  return NextResponse.json({ ok: true, data: grupos satisfies GrupoApi[] });
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -52,34 +59,28 @@ export async function POST(req: Request): Promise<Response> {
   if (!body?.nome?.trim()) {
     return NextResponse.json({ ok: false, error: "nome e obrigatorio." }, { status: 400 });
   }
-  if (!body?.categoria?.trim()) {
-    return NextResponse.json({ ok: false, error: "categoria e obrigatoria." }, { status: 400 });
-  }
-  if (!body?.tipo) {
+  if (!isGrupoTipo(body?.tipo)) {
     return NextResponse.json({ ok: false, error: "tipo e obrigatorio." }, { status: 400 });
   }
 
   const payload = {
     nome: body.nome.trim(),
-    categoria: body.categoria.trim(),
-    subcategoria: body.subcategoria?.trim() ?? null,
+    categoria: normalizeText(body.categoria),
+    subcategoria: normalizeText(body.subcategoria),
     tipo: body.tipo,
-    descricao: body.descricao ?? null,
-    ativo: body.ativo ?? true,
-    data_inicio: body.data_inicio ?? null,
-    data_fim: body.data_fim ?? null,
+    descricao: normalizeText(body.descricao),
     updated_at: new Date().toISOString(),
   };
 
   const { data, error } = await supabase
-    .from("aluno_grupos")
+    .from("nucleos")
     .insert(payload)
-    .select("id,nome,categoria,subcategoria,tipo,descricao,ativo,data_inicio,data_fim,created_at,updated_at")
+    .select(NUCLEO_SELECT)
     .single();
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, data }, { status: 201 });
+  return NextResponse.json({ ok: true, data: mapNucleoToGrupo(data as NucleoRow) }, { status: 201 });
 }

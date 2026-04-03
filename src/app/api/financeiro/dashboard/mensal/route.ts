@@ -154,6 +154,11 @@ function upper(value: unknown): string {
     .toUpperCase() ?? "";
 }
 
+function isStatusCanceladoLike(value: unknown): boolean {
+  const normalized = upper(value);
+  return normalized === "CANCELADO" || normalized === "CANCELADA";
+}
+
 function calcularDiasAtraso(vencimento: string | null): number {
   const due = textOrNull(vencimento);
   if (!due || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return 0;
@@ -193,7 +198,7 @@ function criarDestaques(
         tipo: "INFO",
         titulo: `Sem carteira prevista em ${competenciaLabel}`,
         descricao: "Nao ha lancamentos elegiveis para a competencia selecionada.",
-        acao_sugerida: "Revisar geracao de mensalidades, cartao conexao e cancelamentos operacionais.",
+        acao_sugerida: "Revisar geracao de mensalidades, conta interna e cancelamentos operacionais.",
       },
     ];
   }
@@ -466,6 +471,24 @@ export async function GET(req: NextRequest) {
   const contasById = new Map<number, ContaConexaoDashboardRow>(contas.map((row) => [Number(row.id), row]));
   const recebimentosRecentes = (recebimentosRecentesResult.data ?? []) as RecebimentoDashboardRow[];
   const avulsasPagasRecentes = (avulsasPagasRecentesResult.data ?? []) as CobrancaAvulsaMetaRow[];
+  const operacionalRowsCanonicos = operacionalRows.filter((row) => {
+    const cobrancaId = Number(row.cobranca_id ?? 0) || null;
+    const isAvulsa = upper(String(row.cobranca_fonte ?? "")) === "COBRANCA_AVULSA";
+
+    if (!cobrancaId) return true;
+
+    if (isAvulsa) {
+      const metaAvulsa = avulsasMetaById.get(cobrancaId) ?? null;
+      const statusAvulsa = metaAvulsa?.status ?? row.status_bruto ?? row.status_cobranca;
+      return !isStatusCanceladoLike(statusAvulsa);
+    }
+
+    const metaCobranca = cobrancasMetaById.get(cobrancaId) ?? null;
+    const statusCobranca = metaCobranca?.status ?? row.status_bruto ?? row.status_cobranca;
+    if (isStatusCanceladoLike(statusCobranca)) return false;
+    if (Boolean(metaCobranca?.expurgada)) return false;
+    return true;
+  });
 
   const contaIds = contas.map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
   const { data: lancamentosRaw, error: lancamentosError } = contaIds.length > 0
@@ -529,7 +552,7 @@ export async function GET(req: NextRequest) {
     ((faturasRaw ?? []) as FaturaDashboardRow[]).map((row) => [Number(row.id), row]),
   );
 
-  const itensOperacionais = operacionalRows.map((row) => {
+  const itensOperacionais = operacionalRowsCanonicos.map((row) => {
     const item = montarCobrancaOperacionalBase(row, today);
     item.cobranca_url = item.cobranca_fonte === "COBRANCA_AVULSA"
       ? `/administracao/financeiro/cobrancas-avulsas/${item.cobranca_id}`
@@ -649,7 +672,7 @@ export async function GET(req: NextRequest) {
         origem_id: Number(row.origem_id ?? 0) || null,
         origem_lancamento: textOrNull(row.origem_sistema),
         origem_fatura: textOrNull(fatura?.status),
-        descricao: textOrNull(row.descricao) ?? "Lancamento futuro da Conta Interna Aluno",
+        descricao: textOrNull(row.descricao) ?? "Lancamento futuro da Conta Interna",
         referencia: textOrNull(row.referencia_item) ?? `lancamento:${row.id}`,
         status_operacional: statusOperacional as StatusOperacionalCobranca,
         status_bruto: textOrNull(row.status),

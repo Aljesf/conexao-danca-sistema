@@ -200,7 +200,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <h1 className="text-xl font-semibold">Reprocessar financeiro da matricula</h1>
           <p className="text-sm text-muted-foreground">
-            Corrige matriculas que ficaram sem cobrancas/lancamentos/faturas no Cartao Conexao.
+            Corrige matriculas que ficaram sem cobrancas, lancamentos ou faturas na conta interna.
           </p>
         </div>
 
@@ -211,7 +211,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
               className="mt-1 w-full rounded-md border px-3 py-2"
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Ex.: Matricula criada sem gerar lancamentos do Cartao Conexao."
+              placeholder="Ex.: Matricula criada sem gerar lancamentos da conta interna."
             />
             <p className="mt-1 text-xs text-muted-foreground">
               Campo usado para auditoria humana e rastreabilidade.
@@ -226,7 +226,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
               onChange={(e) => setForcarRebuild(e.target.checked)}
             />
             <label htmlFor="forcar" className="text-sm">
-              Forcar rebuild/atualizacao imediata das faturas do Cartao Conexao
+              Forcar rebuild/atualizacao imediata das faturas da conta interna
             </label>
           </div>
         </div>
@@ -246,7 +246,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
         ) : null}
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
-          <h2 className="text-base font-semibold">Entrada (fora do Cartao Conexao)</h2>
+          <h2 className="text-base font-semibold">Entrada na conta interna</h2>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -310,7 +310,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">Mensalidades (Cartao Conexao)</h2>
+            <h2 className="text-base font-semibold">Mensalidades na conta interna</h2>
             <button className="rounded-md border px-3 py-2 text-sm" onClick={addMensalidade} type="button">
               Adicionar competencia
             </button>
@@ -353,7 +353,7 @@ export default function ReprocessarFinanceiroMatriculaPage() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Cada competencia vira uma cobranca elegivel ao Cartao Conexao e um lancamento canonico por cobranca_id.
+            Cada competencia vira uma cobranca canonica da conta interna e um lancamento idempotente por cobranca_id.
           </p>
         </div>
 

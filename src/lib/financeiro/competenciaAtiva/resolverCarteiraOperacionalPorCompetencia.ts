@@ -104,7 +104,7 @@ function mapLinhaCanonica(item: LinhaCarteiraCanonica): CobrancaOperacionalItem 
     fatura_competencia: item.competenciaAnoMes,
     fatura_status: item.faturaContaInternaStatus,
     tipo_conta: "ALUNO",
-    tipo_conta_label: "Conta Interna Aluno",
+    tipo_conta_label: "Conta Interna",
     permite_vinculo_manual: item.permiteVinculoManual,
     sugestao_competencia_vinculo: item.competenciaAnoMes,
     sugestao_fatura_ids: [],

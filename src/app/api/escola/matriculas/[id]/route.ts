@@ -3,6 +3,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { formatUnidadeExecucaoLabel } from "@/lib/escola/formatters/unidadeExecucaoLabel";
 import { requireUser } from "@/lib/supabase/api-auth";
+import { listMatriculaItensDetalhe } from "@/lib/matriculas/matriculaItens";
 
 export const dynamic = "force-dynamic";
 
@@ -62,10 +63,34 @@ type TurmaVinculadaResumo = {
 };
 
 type ItemMatriculaResumo = {
-  turma_id: number;
-  turma_nome: string | null;
+  id: number;
+  descricao: string;
+  origem_tipo: string;
+  status: string;
+  turma_id_inicial: number | null;
+  turma_inicial_nome: string | null;
+  turma_atual_id: number | null;
+  turma_atual_nome: string | null;
   ue_id: number | null;
   ue_label: string | null;
+  valor_base_centavos: number;
+  valor_liquido_centavos: number;
+  data_inicio: string | null;
+  data_fim: string | null;
+  cancelamento_tipo: string | null;
+};
+
+type ResumoLegado = {
+  turma_atual: TurmaVinculadaResumo | null;
+  pessoa: {
+    id: number | null;
+    nome: string | null;
+  } | null;
+  responsavel: {
+    id: number | null;
+    nome: string | null;
+  } | null;
+  status: string | null;
 };
 
 type MatriculaEncerramentoResumo = {
@@ -189,19 +214,32 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: st
       : { data: null };
 
     let precoAplicado: Record<string, unknown> | null = null;
-    const { data: itens, error: itensErr } = await admin
-      .from("matriculas_itens")
-      .select("id,item_id,valor_centavos,moeda,created_at")
+    const { data: itensPreco, error: itensPrecoErr } = await admin
+      .from("matricula_itens")
+      .select("id,valor_liquido_centavos,created_at")
       .eq("matricula_id", matriculaId)
       .order("created_at", { ascending: false })
       .limit(1);
 
-    if (itensErr && !isSchemaMissing(itensErr)) {
-      return errJson("server_error", "Falha ao buscar itens da matricula.", 500, { itensErr });
+    if (itensPrecoErr && !isSchemaMissing(itensPrecoErr)) {
+      console.error("[matricula_detalhe] falha ao buscar preco aplicado canonico", {
+        matriculaId,
+        error: itensPrecoErr,
+      });
     }
 
-    if (itens && itens.length > 0) {
-      precoAplicado = itens[0] as Record<string, unknown>;
+    if (itensPreco && itensPreco.length > 0) {
+      const itemPreco = itensPreco[0] as {
+        id?: number | null;
+        valor_liquido_centavos?: number | null;
+        created_at?: string | null;
+      };
+      precoAplicado = {
+        id: itemPreco.id ?? null,
+        valor_centavos: Number(itemPreco.valor_liquido_centavos ?? 0),
+        moeda: "BRL",
+        created_at: itemPreco.created_at ?? null,
+      };
     }
 
     const planoPagamentoId = toPositiveNumber((matricula as { plano_pagamento_id?: number | null }).plano_pagamento_id);
@@ -469,26 +507,109 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: st
       ueByTurma.set(turmaId, record);
     });
 
-    const itensMatricula: ItemMatriculaResumo[] = turmasVinculadas.map((turma) => {
-      const ue = ueByTurma.get(turma.turma_id) ?? null;
-      const ueLabel = ue
-        ? formatUnidadeExecucaoLabel({
-            unidadeExecucaoId: toPositiveNumber(ue.unidade_execucao_id),
-            origemTipo: ue.origem_tipo,
-            turmaId: turma.turma_id,
-            turmaNome: turma.nome,
-            unidadeDenominacao: ue.denominacao,
-            unidadeNome: ue.nome,
-          })
-        : null;
+    let itensMatricula: ItemMatriculaResumo[] = [];
+    let itensGranularesIndisponiveis = false;
+    let diagnosticoItens: string | null = null;
+    try {
+      const itensDetalhe = await listMatriculaItensDetalhe(
+        admin as unknown as { from: (table: string) => any },
+        matriculaId,
+      );
 
-      return {
-        turma_id: turma.turma_id,
-        turma_nome: turma.nome ?? null,
-        ue_id: ue ? toPositiveNumber(ue.unidade_execucao_id) : null,
-        ue_label: ueLabel,
-      };
-    });
+      const turmaIdsParaUe = Array.from(
+        new Set(
+          itensDetalhe
+            .flatMap((item) => [item.turma_atual_id, item.turma_id_inicial])
+            .filter((item): item is number => typeof item === "number" && Number.isFinite(item) && item > 0),
+        ),
+      );
+      const { data: uesItensRaw, error: uesItensErr } =
+        turmaIdsParaUe.length > 0
+          ? await admin
+              .from("escola_unidades_execucao")
+              .select("unidade_execucao_id,denominacao,nome,origem_id,origem_tipo")
+              .eq("origem_tipo", "TURMA")
+              .in("origem_id", turmaIdsParaUe)
+          : { data: null, error: null };
+
+      if (uesItensErr && !isSchemaMissing(uesItensErr)) {
+        return errJson("server_error", "Falha ao buscar unidades de execucao dos itens.", 500, { uesItensErr });
+      }
+
+      const ueItemByTurma = new Map<number, UnidadeExecucaoRow>();
+      (uesItensRaw ?? []).forEach((row) => {
+        const record = row as UnidadeExecucaoRow;
+        const turmaId = toPositiveNumber(record.origem_id);
+        if (!turmaId) return;
+        ueItemByTurma.set(turmaId, record);
+      });
+
+      const turmaNomeById = new Map<number, string | null>();
+      turmasVinculadas.forEach((turma) => {
+        turmaNomeById.set(turma.turma_id, turma.nome ?? null);
+      });
+
+      itensMatricula = itensDetalhe.map((item) => {
+        const turmaUeId = item.turma_atual_id ?? item.turma_id_inicial;
+        const ue = turmaUeId ? ueItemByTurma.get(turmaUeId) ?? null : null;
+        const ueLabel = ue
+          ? formatUnidadeExecucaoLabel({
+              unidadeExecucaoId: toPositiveNumber(ue.unidade_execucao_id),
+              origemTipo: ue.origem_tipo,
+              turmaId: turmaUeId,
+              turmaNome: item.turma_atual_nome ?? turmaNomeById.get(item.turma_id_inicial ?? 0) ?? null,
+              unidadeDenominacao: ue.denominacao,
+              unidadeNome: ue.nome,
+            })
+          : null;
+
+        return {
+          id: item.id,
+          descricao: item.descricao,
+          origem_tipo: item.origem_tipo,
+          status: item.status,
+          turma_id_inicial: item.turma_id_inicial,
+          turma_inicial_nome: turmaNomeById.get(item.turma_id_inicial ?? 0) ?? null,
+          turma_atual_id: item.turma_atual_id,
+          turma_atual_nome: item.turma_atual_nome,
+          ue_id: ue ? toPositiveNumber(ue.unidade_execucao_id) : null,
+          ue_label: ueLabel,
+          valor_base_centavos: item.valor_base_centavos,
+          valor_liquido_centavos: item.valor_liquido_centavos,
+          data_inicio: item.data_inicio,
+          data_fim: item.data_fim,
+          cancelamento_tipo: item.cancelamento_tipo,
+        };
+      });
+
+      if (!precoAplicado && itensDetalhe.length > 0) {
+        const primeiroItem = itensDetalhe[0];
+        precoAplicado = {
+          valor_centavos: primeiroItem.valor_liquido_centavos,
+          moeda: "BRL",
+          created_at: primeiroItem.created_at,
+        };
+      }
+    } catch (itensNovaCamadaErr) {
+      itensGranularesIndisponiveis = true;
+      diagnosticoItens = isSchemaMissing(itensNovaCamadaErr)
+        ? "schema_nao_aplicado"
+        : "falha_consulta_itens";
+
+      if (isSchemaMissing(itensNovaCamadaErr)) {
+        console.warn("[matricula_detalhe] itens granulares indisponiveis por schema", {
+          matriculaId,
+          diagnosticoItens,
+          error: itensNovaCamadaErr,
+        });
+      } else {
+        console.error("[matricula_detalhe] falha ao buscar itens granulares", {
+          matriculaId,
+          diagnosticoItens,
+          error: itensNovaCamadaErr,
+        });
+      }
+    }
 
     const ueRow = unidadeExecucao as UnidadeExecucaoRow | null;
     const unidadeExecucaoLabel = ueRow
@@ -508,6 +629,27 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: st
       responsavel_pessoa_id: responsavelPessoaId,
       responsavel_financeiro_pessoa_id: responsavelFinanceiroPessoaId,
     };
+
+    const resumoLegado: ResumoLegado | null =
+      itensMatricula.length === 0
+        ? {
+            turma_atual:
+              turmasVinculadas[0] ??
+              ((turma as { turma_id?: number | null; nome?: string | null } | null)?.turma_id
+                ? {
+                    turma_id: toPositiveNumber(
+                      (turma as { turma_id?: number | null } | null)?.turma_id,
+                    ) ?? 0,
+                    nome: (turma as { nome?: string | null } | null)?.nome ?? null,
+                  }
+                : null),
+            pessoa: pessoaId ? { id: pessoaId, nome: (pessoa?.nome ?? null) as string | null } : null,
+            responsavel: responsavelId
+              ? { id: responsavelId, nome: (responsavel?.nome ?? null) as string | null }
+              : null,
+            status: typeof matriculaPayload.status === "string" ? matriculaPayload.status : null,
+          }
+        : null;
 
     return okJson(
       {
@@ -529,6 +671,10 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id?: st
         encerramentos,
         turmas_vinculadas: turmasVinculadas,
         itens_matricula: itensMatricula,
+        itens_granulares: itensMatricula,
+        itens_granulares_indisponiveis: itensGranularesIndisponiveis,
+        diagnostico_itens: diagnosticoItens,
+        resumo_legado: resumoLegado,
         historico: encerramentos,
       },
       200,

@@ -2,6 +2,7 @@ import type { ContextKey } from "@/context/BrandingContext";
 
 export type AppContextKey =
   | "ESCOLA"
+  | "SECRETARIA"
   | "LOJA"
   | "CAFE"
   | "ADMIN"
@@ -27,6 +28,14 @@ export const CONTEXTOS_CONFIG: AppContextItem[] = [
     emoji: "🏫",
     description: "Operacao academica e matriculas",
     href: "/escola",
+  },
+  {
+    key: "SECRETARIA",
+    brandingKey: "secretaria",
+    label: "Secretaria da Escola",
+    emoji: "🏢",
+    description: "Matriculas, caixa e atendimento da escola",
+    href: "/secretaria",
   },
   {
     key: "LOJA",

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -17,6 +18,7 @@ type SidebarProps = {
 
 const sidebarContextMap: Record<AnyContext, SidebarContext> = {
   escola: "escola",
+  secretaria: "secretaria",
   loja: "loja",
   lanchonete: "cafe",
   administracao: "admin",
@@ -29,6 +31,7 @@ const sidebarContextMap: Record<AnyContext, SidebarContext> = {
 
 const brandingContextMap: Record<AnyContext, ContextKey> = {
   escola: "escola",
+  secretaria: "secretaria",
   loja: "loja",
   lanchonete: "lanchonete",
   administracao: "administracao",
@@ -41,9 +44,10 @@ const brandingContextMap: Record<AnyContext, ContextKey> = {
 
 const sidebarToContextKey: Record<
   SidebarContext,
-  "ESCOLA" | "LOJA" | "CAFE" | "ADMIN" | "BOLSAS" | "FINANCEIRO" | "SUPORTE"
+  "ESCOLA" | "SECRETARIA" | "LOJA" | "CAFE" | "ADMIN" | "BOLSAS" | "FINANCEIRO" | "SUPORTE"
 > = {
   escola: "ESCOLA",
+  secretaria: "SECRETARIA",
   loja: "LOJA",
   cafe: "CAFE",
   admin: "ADMIN",
@@ -54,6 +58,8 @@ const sidebarToContextKey: Record<
 
 const contextLabels: Record<SidebarContext, string> = {
   escola: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.escola)?.label ?? "Escola",
+  secretaria:
+    CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.secretaria)?.label ?? "Secretaria da Escola",
   loja: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.loja)?.label ?? "AJ Dance Store",
   cafe: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.cafe)?.label ?? "Ballet Cafe",
   admin: CONTEXTOS_CONFIG.find((ctx) => ctx.key === sidebarToContextKey.admin)?.label ?? "Administracao do Sistema",
@@ -138,7 +144,13 @@ export default function Sidebar({ context }: SidebarProps) {
     <aside className="flex h-full w-72 flex-col bg-gradient-to-b from-[color:var(--accent-1,#eef2ff)] to-[color:var(--accent-3,#e0e7ff)] text-sm text-slate-700">
       <div className="flex flex-col items-center gap-3 border-b border-black/5 py-6">
         {logoUrl ? (
-          <img src={logoUrl} alt={metaLabel} className="h-28 w-28 rounded-3xl object-contain shadow-sm" />
+          <Image
+            src={logoUrl}
+            alt={metaLabel}
+            width={112}
+            height={112}
+            className="h-28 w-28 rounded-3xl object-contain shadow-sm"
+          />
         ) : (
           <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-white text-xl font-semibold text-slate-700 shadow-sm">
             {logoFallback}

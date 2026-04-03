@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  isGrupoTipo,
+  mapNucleoToGrupo,
+  normalizeText,
+  NUCLEO_SELECT,
+  parseId,
+  type NucleoRow,
+} from "../_lib";
 
 type Params = { params: Promise<{ id: string }> };
 
 type GrupoUpdate = {
   nome?: string;
-  categoria?: string;
+  categoria?: string | null;
   subcategoria?: string | null;
   tipo?: "TEMPORARIO" | "DURADOURO";
   descricao?: string | null;
@@ -17,31 +25,34 @@ type GrupoUpdate = {
 export async function GET(_req: Request, { params }: Params): Promise<Response> {
   const supabase = createAdminClient();
   const { id } = await params;
-  const grupoId = Number(id);
+  const grupoId = parseId(id);
 
-  if (!Number.isFinite(grupoId)) {
+  if (grupoId === null) {
     return NextResponse.json({ ok: false, error: "id invalido." }, { status: 400 });
   }
 
   const { data, error } = await supabase
-    .from("aluno_grupos")
-    .select("id,nome,categoria,subcategoria,tipo,descricao,ativo,data_inicio,data_fim,created_at,updated_at")
+    .from("nucleos")
+    .select(NUCLEO_SELECT)
     .eq("id", grupoId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
+  if (!data) {
+    return NextResponse.json({ ok: false, error: "grupo nao encontrado." }, { status: 404 });
+  }
 
-  return NextResponse.json({ ok: true, data });
+  return NextResponse.json({ ok: true, data: mapNucleoToGrupo(data as NucleoRow) });
 }
 
 export async function PUT(req: Request, { params }: Params): Promise<Response> {
   const supabase = createAdminClient();
   const { id } = await params;
-  const grupoId = Number(id);
+  const grupoId = parseId(id);
 
-  if (!Number.isFinite(grupoId)) {
+  if (grupoId === null) {
     return NextResponse.json({ ok: false, error: "id invalido." }, { status: 400 });
   }
 
@@ -56,42 +67,56 @@ export async function PUT(req: Request, { params }: Params): Promise<Response> {
     updated_at: new Date().toISOString(),
   };
 
-  if (typeof body.nome === "string") payload.nome = body.nome.trim();
-  if (typeof body.categoria === "string") payload.categoria = body.categoria.trim();
-  if (body.subcategoria !== undefined) payload.subcategoria = body.subcategoria?.trim() ?? null;
-  if (body.tipo !== undefined) payload.tipo = body.tipo;
-  if (body.descricao !== undefined) payload.descricao = body.descricao ?? null;
-  if (body.ativo !== undefined) payload.ativo = Boolean(body.ativo);
-  if (body.data_inicio !== undefined) payload.data_inicio = body.data_inicio ?? null;
-  if (body.data_fim !== undefined) payload.data_fim = body.data_fim ?? null;
+  if (body.nome !== undefined) {
+    const nome = normalizeText(body.nome);
+    if (!nome) {
+      return NextResponse.json({ ok: false, error: "nome e obrigatorio." }, { status: 400 });
+    }
+    payload.nome = nome;
+  }
+  if (body.categoria !== undefined) payload.categoria = normalizeText(body.categoria);
+  if (body.subcategoria !== undefined) payload.subcategoria = normalizeText(body.subcategoria);
+  if (body.tipo !== undefined) {
+    if (!isGrupoTipo(body.tipo)) {
+      return NextResponse.json({ ok: false, error: "tipo invalido." }, { status: 400 });
+    }
+    payload.tipo = body.tipo;
+  }
+  if (body.descricao !== undefined) payload.descricao = normalizeText(body.descricao);
 
   const { data, error } = await supabase
-    .from("aluno_grupos")
+    .from("nucleos")
     .update(payload)
     .eq("id", grupoId)
-    .select("id,nome,categoria,subcategoria,tipo,descricao,ativo,data_inicio,data_fim,created_at,updated_at")
-    .single();
+    .select(NUCLEO_SELECT)
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
+  if (!data) {
+    return NextResponse.json({ ok: false, error: "grupo nao encontrado." }, { status: 404 });
+  }
 
-  return NextResponse.json({ ok: true, data });
+  return NextResponse.json({ ok: true, data: mapNucleoToGrupo(data as NucleoRow) });
 }
 
 export async function DELETE(_req: Request, { params }: Params): Promise<Response> {
   const supabase = createAdminClient();
   const { id } = await params;
-  const grupoId = Number(id);
+  const grupoId = parseId(id);
 
-  if (!Number.isFinite(grupoId)) {
+  if (grupoId === null) {
     return NextResponse.json({ ok: false, error: "id invalido." }, { status: 400 });
   }
 
-  const { error } = await supabase.from("aluno_grupos").delete().eq("id", grupoId);
+  const { data, error } = await supabase.from("nucleos").delete().eq("id", grupoId).select("id").maybeSingle();
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ ok: false, error: "grupo nao encontrado." }, { status: 404 });
   }
 
   return NextResponse.json({ ok: true });

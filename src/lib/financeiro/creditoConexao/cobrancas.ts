@@ -322,7 +322,7 @@ export function montarTipoCobrancaLabel(tipo: TipoCobrancaOperacional | string |
 export function montarTipoContaLabel(tipoConta: string | null | undefined): string | null {
   switch (normalizarTexto(tipoConta)?.toUpperCase()) {
     case "ALUNO":
-      return "Conta Interna Aluno";
+      return "Conta Interna";
     case "COLABORADOR":
       return "Conta Interna Colaborador";
     default:

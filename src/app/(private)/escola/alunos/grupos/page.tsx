@@ -1,5 +1,6 @@
-﻿"use client";
+"use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Grupo = {
@@ -26,7 +27,6 @@ export default function EscolaAlunosGruposPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [grupos, setGrupos] = useState<Grupo[]>([]);
 
   const [form, setForm] = useState({
@@ -51,13 +51,14 @@ export default function EscolaAlunosGruposPage() {
   const loadGrupos = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
       const res = await fetch(`/api/escola/alunos/grupos?${qs}`, { method: "GET" });
       const json = (await res.json()) as ApiResponse<Grupo[]>;
-      if (!json.ok) throw new Error(json.error ?? "Falha ao carregar grupos.");
+      if (!json.ok) throw new Error(json.error ?? "Falha ao carregar nucleos.");
       setGrupos(json.data ?? []);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Erro ao carregar grupos.";
+      const msg = e instanceof Error ? e.message : "Erro ao carregar nucleos.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -88,12 +89,12 @@ export default function EscolaAlunosGruposPage() {
       });
 
       const json = (await res.json()) as ApiResponse<Grupo>;
-      if (!json.ok) throw new Error(json.error ?? "Falha ao criar grupo.");
+      if (!json.ok) throw new Error(json.error ?? "Falha ao criar nucleo.");
 
       setForm({ nome: "", categoria: "", subcategoria: "", tipo: "DURADOURO", descricao: "" });
       await loadGrupos();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Erro ao criar grupo.";
+      const msg = e instanceof Error ? e.message : "Erro ao criar nucleo.";
       setError(msg);
     } finally {
       setSaving(false);
@@ -101,158 +102,185 @@ export default function EscolaAlunosGruposPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-pink-50 to-white px-4 py-6">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(244,114,182,0.12),_transparent_30%),linear-gradient(to_bottom,_#fff7fb,_#ffffff)] px-4 py-6">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="text-sm text-slate-500">ALUNOS</div>
-          <h1 className="text-2xl font-semibold">Grupos de alunos</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Grupos administrativos manuais (nao pedagogicos). Use para Companhia, Estagio, Filhos de colaborador, etc.
-          </p>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h2 className="text-base font-semibold">Criar grupo</h2>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <section className="overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_28px_80px_-48px_rgba(15,23,42,0.35)]">
+          <div className="grid gap-6 px-6 py-7 md:grid-cols-[1.2fr_0.8fr] md:px-8">
             <div>
-              <label className="text-sm font-medium text-slate-700">Nome</label>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Escola</div>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Nucleos</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                Agrupamentos administrativos e estrategicos para companhia, elenco, estagio, beneficios internos e
+                outros contextos de organizacao dos alunos.
+              </p>
+            </div>
+
+            <div className="grid gap-3 rounded-[24px] border border-pink-100 bg-pink-50/60 p-4 text-sm text-slate-600 sm:grid-cols-3 md:grid-cols-1">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">Nucleos</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{grupos.length}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">Busca</div>
+                <div className="mt-1">Pesquise por nome, categoria ou subnucleo.</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">Modulo</div>
+                <div className="mt-1">Listagem institucional com detalhe proprio por nucleo.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-white/80 bg-white p-6 shadow-[0_24px_60px_-42px_rgba(15,23,42,0.35)] md:p-8">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Cadastrar nucleo</h2>
+              <p className="text-sm text-slate-600">Preencha os dados basicos para criar um novo agrupamento.</p>
+            </div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">Cadastro administrativo</div>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Nome</span>
               <input
                 value={form.nome}
                 onChange={(e) => setForm((v) => ({ ...v, nome: e.target.value }))}
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
                 placeholder="Ex.: Companhia de Danca"
               />
-            </div>
+            </label>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700">Categoria</label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Categoria</span>
               <input
                 value={form.categoria}
                 onChange={(e) => setForm((v) => ({ ...v, categoria: e.target.value }))}
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
                 placeholder="Ex.: Companhia"
               />
-            </div>
+            </label>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700">Subcategoria</label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Subnucleo</span>
               <input
                 value={form.subcategoria}
                 onChange={(e) => setForm((v) => ({ ...v, subcategoria: e.target.value }))}
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2"
-                placeholder="Ex.: Mirim (opcional)"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
+                placeholder="Ex.: Mirim"
               />
-            </div>
+            </label>
 
-            <div>
-              <label className="text-sm font-medium text-slate-700">Tipo</label>
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">Tipo</span>
               <select
                 value={form.tipo}
                 onChange={(e) => setForm((v) => ({ ...v, tipo: e.target.value as "TEMPORARIO" | "DURADOURO" }))}
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2"
+                className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
               >
                 <option value="DURADOURO">Duradouro</option>
                 <option value="TEMPORARIO">Temporario</option>
               </select>
-            </div>
+            </label>
 
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium text-slate-700">Descricao</label>
-              <input
+            <label className="block md:col-span-2">
+              <span className="text-sm font-medium text-slate-700">Descricao</span>
+              <textarea
                 value={form.descricao}
                 onChange={(e) => setForm((v) => ({ ...v, descricao: e.target.value }))}
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2"
-                placeholder="Uso interno (opcional)"
+                className="mt-1 min-h-28 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
+                placeholder="Descreva rapidamente o objetivo deste nucleo."
               />
-            </div>
+            </label>
           </div>
 
           {error ? (
-            <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
+            <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
           ) : null}
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-5 flex justify-end">
             <button
               type="button"
               disabled={saving}
               onClick={() => void createGrupo()}
-              className="rounded-xl border px-4 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
             >
-              {saving ? "Salvando..." : "Criar grupo"}
+              {saving ? "Salvando..." : "Criar nucleo"}
             </button>
           </div>
-        </div>
+        </section>
 
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+        <section className="rounded-[28px] border border-white/80 bg-white p-6 shadow-[0_24px_60px_-42px_rgba(15,23,42,0.35)] md:p-8">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h2 className="text-base font-semibold">Grupos cadastrados</h2>
-              <p className="text-sm text-slate-600">{loading ? "Carregando..." : `${grupos.length} grupo(s)`}</p>
+              <h2 className="text-lg font-semibold text-slate-950">Nucleos cadastrados</h2>
+              <p className="text-sm text-slate-600">
+                {loading ? "Carregando..." : `${grupos.length} nucleo(s) disponivel(is)`}
+              </p>
             </div>
 
             <div className="w-full max-w-md">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nome/categoria/subcategoria"
-                className="w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2"
-              />
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">Buscar</span>
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Nome, categoria ou subnucleo"
+                  className="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-pink-300 focus:ring-2 focus:ring-pink-100"
+                />
+              </label>
             </div>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-slate-500">
-                <tr className="border-b">
-                  <th className="py-2 text-left">Grupo</th>
-                  <th className="py-2 text-left">Categoria</th>
-                  <th className="py-2 text-left">Subcategoria</th>
-                  <th className="py-2 text-left">Tipo</th>
-                  <th className="py-2 text-right">Acoes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grupos.map((g) => (
-                  <tr key={g.id} className="border-b hover:bg-slate-50">
-                    <td className="py-2">
-                      <div className="font-medium">{g.nome}</div>
-                      <div className="text-xs text-slate-500">ID: {g.id}</div>
-                    </td>
-                    <td className="py-2">{g.categoria}</td>
-                    <td className="py-2">{g.subcategoria ?? "-"}</td>
-                    <td className="py-2">{g.tipo === "DURADOURO" ? "Duradouro" : "Temporario"}</td>
-                    <td className="py-2 text-right">
-                      <button
-                        type="button"
-                        className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                        onClick={() => alert("Gestao de membros (UI) entra na proxima iteracao.")}
-                      >
-                        Membros
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            {grupos.map((grupo) => (
+              <article
+                key={grupo.id}
+                className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-5 transition hover:border-slate-300 hover:bg-white"
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-semibold text-slate-950">{grupo.nome}</h3>
+                      <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-medium text-slate-700">
+                        {grupo.tipo === "DURADOURO" ? "Duradouro" : "Temporario"}
+                      </span>
+                    </div>
 
-                {!loading && grupos.length === 0 ? (
-                  <tr>
-                    <td className="py-6 text-center text-slate-500" colSpan={5}>
-                      Nenhum grupo encontrado.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                      {grupo.categoria ? (
+                        <span className="rounded-full bg-white px-2.5 py-1 ring-1 ring-slate-200">{grupo.categoria}</span>
+                      ) : null}
+                      {grupo.subcategoria ? (
+                        <span className="rounded-full bg-pink-50 px-2.5 py-1 text-pink-700 ring-1 ring-pink-100">
+                          {grupo.subcategoria}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-600">
+                      {grupo.descricao?.trim() || "Sem descricao cadastrada para este nucleo."}
+                    </p>
+                  </div>
+
+                  <Link
+                    href={`/escola/alunos/grupos/${grupo.id}`}
+                    className="inline-flex rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800"
+                  >
+                    Abrir nucleo
+                  </Link>
+                </div>
+              </article>
+            ))}
+
+            {!loading && grupos.length === 0 ? (
+              <div className="rounded-[24px] border border-dashed border-slate-300 px-6 py-12 text-center text-sm text-slate-500 lg:col-span-2">
+                Nenhum nucleo encontrado para os filtros atuais.
+              </div>
+            ) : null}
           </div>
-        </div>
-
-        <div className="rounded-2xl border bg-white p-6 text-sm text-slate-600 shadow-sm">
-          <p className="font-medium text-slate-700">Proxima iteracao</p>
-          <p className="mt-1">
-            Implementar gestao de membros do grupo (buscar pessoa e adicionar/remover), usando as rotas de API ja criadas.
-          </p>
-        </div>
+        </section>
       </div>
     </div>
   );

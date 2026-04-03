@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { validarFaturasCreditoConexao } from "@/lib/credito-conexao/validarCadeiaOrigem";
 
 export async function POST(_req: Request, ctx: { params: Promise<{ folhaId: string }> }) {
   const supabase = await createClient();
@@ -31,7 +32,44 @@ export async function POST(_req: Request, ctx: { params: Promise<{ folhaId: stri
     return NextResponse.json({ imported: 0, message: "sem_faturas_para_importar" }, { status: 200 });
   }
 
-  const contaIds = Array.from(new Set(faturas.map((f) => Number(f.conta_conexao_id)).filter((id) => Number.isFinite(id))));
+  const validacoesByFatura = await validarFaturasCreditoConexao(
+    supabase as unknown as { from: (table: string) => any },
+    faturas.map((f) => Number(f.id)),
+  );
+  const faturasIgnoradas = faturas
+    .map((fatura) => {
+      const validacao = validacoesByFatura.get(Number(fatura.id));
+      if (validacao?.pode_importar_folha) return null;
+
+      return {
+        fatura_id: Number(fatura.id),
+        motivos:
+          validacao?.motivos.length
+            ? validacao.motivos
+            : ["Fatura sem cadeia integra de origem para importacao em folha."],
+        total_fatura_centavos: Number(fatura.valor_total_centavos ?? 0),
+        total_validos_centavos: validacao?.total_validos_centavos ?? 0,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+  const faturasElegiveis = faturas.filter(
+    (fatura) => validacoesByFatura.get(Number(fatura.id))?.pode_importar_folha === true,
+  );
+
+  if (faturasElegiveis.length === 0) {
+    return NextResponse.json(
+      {
+        imported: 0,
+        skipped: faturasIgnoradas,
+        message: "sem_faturas_validas_para_importar",
+      },
+      { status: 200 },
+    );
+  }
+
+  const contaIds = Array.from(
+    new Set(faturasElegiveis.map((f) => Number(f.conta_conexao_id)).filter((id) => Number.isFinite(id))),
+  );
   if (contaIds.length === 0) {
     return NextResponse.json({ imported: 0, message: "sem_contas_validas" }, { status: 200 });
   }
@@ -83,7 +121,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ folhaId: stri
 
   const faturaIdsParaVincular: number[] = [];
 
-  for (const f of faturas) {
+  for (const f of faturasElegiveis) {
     const contaId = Number(f.conta_conexao_id);
     const meta = pessoaTitularPorConta.get(contaId);
     if (!meta) continue;
@@ -111,7 +149,14 @@ export async function POST(_req: Request, ctx: { params: Promise<{ folhaId: stri
   }
 
   if (itensToInsert.length === 0) {
-    return NextResponse.json({ imported: 0, message: "nenhuma_fatura_colaborador_valida" }, { status: 200 });
+    return NextResponse.json(
+      {
+        imported: 0,
+        skipped: faturasIgnoradas,
+        message: "nenhuma_fatura_colaborador_valida",
+      },
+      { status: 200 },
+    );
   }
 
   const { error: delErr } = await supabase
@@ -134,6 +179,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ folhaId: stri
 
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
-  return NextResponse.json({ imported: itensToInsert.length }, { status: 200 });
+  return NextResponse.json(
+    {
+      imported: itensToInsert.length,
+      skipped: faturasIgnoradas,
+    },
+    { status: 200 },
+  );
 }
-

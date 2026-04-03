@@ -16,6 +16,7 @@ export type SidebarSection = {
 
 export type SidebarConfig = {
   escola: SidebarSection[];
+  secretaria: SidebarSection[];
   loja: SidebarSection[];
   cafe: SidebarSection[];
   admin: SidebarSection[];

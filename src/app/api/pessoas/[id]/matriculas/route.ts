@@ -17,6 +17,27 @@ type MatriculaRow = {
   vinculo_id?: number | null;
 };
 
+type MatriculaItemRow = {
+  id: number;
+  matricula_id: number;
+  descricao: string | null;
+  origem_tipo: string | null;
+  status: string | null;
+  turma_id_inicial: number | null;
+  valor_base_centavos: number | null;
+  valor_liquido_centavos: number | null;
+};
+
+type TurmaAlunoRow = {
+  turma_aluno_id: number;
+  matricula_id: number | null;
+  matricula_item_id: number | null;
+  turma_id: number | null;
+  dt_inicio: string | null;
+  dt_fim: string | null;
+  status: string | null;
+};
+
 type TurmaRow = {
   turma_id: number;
   produto_id: number | null;
@@ -43,6 +64,65 @@ function toPositiveNumber(value: unknown): number | null {
 
 function normalizeNumberArray(values: Array<number | null | undefined>): number[] {
   return Array.from(new Set(values.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)));
+}
+
+function toNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function dedupeStrings(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const value of values) {
+    const normalized = toNonEmptyString(value);
+    if (!normalized) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    ordered.push(normalized);
+  }
+  return ordered;
+}
+
+function summarizeLabels(values: string[]): string | null {
+  if (values.length === 0) return null;
+  if (values.length === 1) return values[0];
+  if (values.length === 2) return `${values[0]} + ${values[1]}`;
+  return `${values[0]} + ${values[1]} + ${values.length - 2} mais`;
+}
+
+function normalizeItemDescricao(descricao: string | null): string | null {
+  const normalized = toNonEmptyString(descricao);
+  if (!normalized) return null;
+  return normalized.replace(/^Item legado\s*-\s*/i, "").trim();
+}
+
+function deriveServicoLabelFromDescricao(descricao: string | null): string | null {
+  const normalized = normalizeItemDescricao(descricao);
+  if (!normalized) return null;
+  const parts = normalized
+    .split(" - ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts[0] ?? normalized;
+}
+
+function buildUnidadeExecucaoLabel(params: {
+  turmaId: number | null;
+  turmaNome: string | null;
+  ue: UnidadeExecucaoRow | undefined;
+}): string | null {
+  const { turmaId, turmaNome, ue } = params;
+  if (ue) {
+    return formatUnidadeExecucaoLabel({
+      unidadeExecucaoId: toPositiveNumber(ue.unidade_execucao_id),
+      origemTipo: ue.origem_tipo,
+      turmaId,
+      turmaNome,
+      unidadeDenominacao: ue.denominacao,
+      unidadeNome: ue.nome,
+    });
+  }
+  return turmaNome;
 }
 
 export async function GET(request: NextRequest, ctx: RouteCtx) {
@@ -82,7 +162,43 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
     }
 
     const rows = (data ?? []) as MatriculaRow[];
-    const turmaIds = normalizeNumberArray(rows.map((r) => toPositiveNumber(r.vinculo_id)));
+    if (rows.length === 0) {
+      return NextResponse.json({ items: [] }, { status: 200 });
+    }
+
+    const matriculaIds = rows.map((row) => row.id).filter((idValue) => Number.isFinite(idValue));
+
+    let itensRows: MatriculaItemRow[] = [];
+    const { data: itensData, error: itensErr } = await supabase
+      .from("matricula_itens")
+      .select(
+        "id,matricula_id,descricao,origem_tipo,status,turma_id_inicial,valor_base_centavos,valor_liquido_centavos",
+      )
+      .in("matricula_id", matriculaIds)
+      .order("id", { ascending: true });
+
+    if (itensErr && !isSchemaMissing(itensErr)) {
+      return NextResponse.json({ error: itensErr.message }, { status: 500 });
+    }
+    itensRows = ((itensData ?? []) as MatriculaItemRow[]) ?? [];
+
+    let turmaAlunoRows: TurmaAlunoRow[] = [];
+    const { data: turmaAlunoData, error: turmaAlunoErr } = await supabase
+      .from("turma_aluno")
+      .select("turma_aluno_id,matricula_id,matricula_item_id,turma_id,dt_inicio,dt_fim,status")
+      .in("matricula_id", matriculaIds)
+      .order("dt_inicio", { ascending: false });
+
+    if (turmaAlunoErr && !isSchemaMissing(turmaAlunoErr)) {
+      return NextResponse.json({ error: turmaAlunoErr.message }, { status: 500 });
+    }
+    turmaAlunoRows = ((turmaAlunoData ?? []) as TurmaAlunoRow[]) ?? [];
+
+    const turmaIds = normalizeNumberArray([
+      ...rows.map((row) => toPositiveNumber(row.vinculo_id)),
+      ...itensRows.map((item) => toPositiveNumber(item.turma_id_inicial)),
+      ...turmaAlunoRows.map((row) => toPositiveNumber(row.turma_id)),
+    ]);
 
     const turmaMap = new Map<number, TurmaRow>();
     if (turmaIds.length > 0) {
@@ -116,47 +232,137 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
       });
     }
 
-    const servicoIds = normalizeNumberArray(
-      rows.map((r) => toPositiveNumber(r.servico_id ?? r.produto_id)),
-    );
-    turmaMap.forEach((t) => {
-      const servico = toPositiveNumber(t.produto_id);
-      if (servico) servicoIds.push(servico);
-    });
-    const uniqueServicoIds = Array.from(new Set(servicoIds));
+    const servicoIds = normalizeNumberArray([
+      ...rows.map((row) => toPositiveNumber(row.servico_id ?? row.produto_id)),
+      ...Array.from(turmaMap.values()).map((turma) => toPositiveNumber(turma.produto_id)),
+    ]);
 
-    const servicoMap = new Map<number, { id: number; titulo?: string | null }>();
-    if (uniqueServicoIds.length > 0) {
+    const servicoMap = new Map<number, { id: number; titulo: string | null }>();
+    if (servicoIds.length > 0) {
       const { data: servicos, error: servicosErr } = await supabase
         .from("escola_produtos_educacionais")
         .select("id,titulo")
-        .in("id", uniqueServicoIds);
+        .in("id", servicoIds);
       if (servicosErr && !isSchemaMissing(servicosErr)) {
         return NextResponse.json({ error: servicosErr.message }, { status: 500 });
       }
       (servicos ?? []).forEach((s) => {
         const row = s as { id?: number; titulo?: string | null };
-        const id = toPositiveNumber(row.id);
-        if (id) servicoMap.set(id, { id, titulo: row.titulo ?? null });
+        const servicoId = toPositiveNumber(row.id);
+        if (servicoId) {
+          servicoMap.set(servicoId, {
+            id: servicoId,
+            titulo: toNonEmptyString(row.titulo),
+          });
+        }
       });
     }
 
+    const itensByMatricula = new Map<number, MatriculaItemRow[]>();
+    for (const item of itensRows) {
+      const bucket = itensByMatricula.get(item.matricula_id) ?? [];
+      bucket.push(item);
+      itensByMatricula.set(item.matricula_id, bucket);
+    }
+
+    const turmaAlunoByMatricula = new Map<number, TurmaAlunoRow[]>();
+    for (const vinculo of turmaAlunoRows) {
+      const matriculaId = toPositiveNumber(vinculo.matricula_id);
+      if (!matriculaId) continue;
+      const bucket = turmaAlunoByMatricula.get(matriculaId) ?? [];
+      bucket.push(vinculo);
+      turmaAlunoByMatricula.set(matriculaId, bucket);
+    }
+
+    const turmaAlunoByItem = new Map<number, TurmaAlunoRow[]>();
+    for (const vinculo of turmaAlunoRows) {
+      const itemId = toPositiveNumber(vinculo.matricula_item_id);
+      if (!itemId) continue;
+      const bucket = turmaAlunoByItem.get(itemId) ?? [];
+      bucket.push(vinculo);
+      turmaAlunoByItem.set(itemId, bucket);
+    }
+
     const items = rows.map((row) => {
-      const turmaId = toPositiveNumber(row.vinculo_id);
-      const turma = turmaId ? turmaMap.get(turmaId) : undefined;
-      const servicoId = toPositiveNumber(row.servico_id ?? row.produto_id ?? turma?.produto_id);
-      const servicoNome = servicoId ? servicoMap.get(servicoId)?.titulo?.trim() ?? null : null;
-      const ue = turmaId ? ueMap.get(turmaId) : undefined;
-      const unidadeExecucaoLabel = ue
-        ? formatUnidadeExecucaoLabel({
-            unidadeExecucaoId: toPositiveNumber(ue.unidade_execucao_id),
-            origemTipo: ue.origem_tipo,
+      const matriculaItems = itensByMatricula.get(row.id) ?? [];
+      const matriculaVinculos = turmaAlunoByMatricula.get(row.id) ?? [];
+
+      const activeVinculos = matriculaVinculos.filter((vinculo) => !toNonEmptyString(vinculo.dt_fim));
+      const vinculosPreferidos = activeVinculos.length > 0 ? activeVinculos : matriculaVinculos;
+
+      const servicoLabels = dedupeStrings(
+        matriculaItems.flatMap((item) => {
+          const itemVinculos = turmaAlunoByItem.get(item.id) ?? [];
+          const activeItemVinculos = itemVinculos.filter((vinculo) => !toNonEmptyString(vinculo.dt_fim));
+          const vinculoAtual = (activeItemVinculos[0] ?? itemVinculos[0]) ?? null;
+          const turmaAtual = toPositiveNumber(vinculoAtual?.turma_id)
+            ? turmaMap.get(Number(vinculoAtual?.turma_id))
+            : undefined;
+          const turmaInicial = toPositiveNumber(item.turma_id_inicial)
+            ? turmaMap.get(Number(item.turma_id_inicial))
+            : undefined;
+
+          const byTurmaAtual = turmaAtual?.produto_id
+            ? servicoMap.get(Number(turmaAtual.produto_id))?.titulo
+            : null;
+          const byTurmaInicial = turmaInicial?.produto_id
+            ? servicoMap.get(Number(turmaInicial.produto_id))?.titulo
+            : null;
+          const byDescricao = deriveServicoLabelFromDescricao(item.descricao);
+
+          return [byTurmaAtual, byTurmaInicial, byDescricao];
+        }),
+      );
+
+      const turmaLabels = dedupeStrings(
+        vinculosPreferidos.map((vinculo) => {
+          const turmaId = toPositiveNumber(vinculo.turma_id);
+          const turma = turmaId ? turmaMap.get(turmaId) : undefined;
+          const ue = turmaId ? ueMap.get(turmaId) : undefined;
+          return buildUnidadeExecucaoLabel({
             turmaId,
             turmaNome: turma?.nome ?? null,
-            unidadeDenominacao: ue.denominacao,
-            unidadeNome: ue.nome,
-          })
+            ue,
+          });
+        }),
+      );
+
+      const turmaInicialLabels = dedupeStrings(
+        matriculaItems.map((item) => {
+          const turmaId = toPositiveNumber(item.turma_id_inicial);
+          const turma = turmaId ? turmaMap.get(turmaId) : undefined;
+          const ue = turmaId ? ueMap.get(turmaId) : undefined;
+          return buildUnidadeExecucaoLabel({
+            turmaId,
+            turmaNome: turma?.nome ?? null,
+            ue,
+          });
+        }),
+      );
+
+      const turmaIdFallback = toPositiveNumber(row.vinculo_id);
+      const turmaFallback = turmaIdFallback ? turmaMap.get(turmaIdFallback) : undefined;
+      const ueFallback = turmaIdFallback ? ueMap.get(turmaIdFallback) : undefined;
+      const servicoFallbackId = toPositiveNumber(row.servico_id ?? row.produto_id ?? turmaFallback?.produto_id);
+      const servicoFallback = servicoFallbackId
+        ? servicoMap.get(servicoFallbackId)?.titulo ?? null
         : null;
+      const unidadeExecucaoFallback = buildUnidadeExecucaoLabel({
+        turmaId: turmaIdFallback,
+        turmaNome: turmaFallback?.nome ?? null,
+        ue: ueFallback,
+      });
+
+      const servicoLabelList = servicoLabels.length > 0 ? servicoLabels : dedupeStrings([servicoFallback]);
+      const turmaLabelList =
+        turmaLabels.length > 0
+          ? turmaLabels
+          : turmaInicialLabels.length > 0
+            ? turmaInicialLabels
+            : dedupeStrings([unidadeExecucaoFallback]);
+
+      const servicoNome = summarizeLabels(servicoLabelList);
+      const unidadeExecucaoLabel = summarizeLabels(turmaLabelList);
 
       return {
         id: row.id,
@@ -165,10 +371,14 @@ export async function GET(request: NextRequest, ctx: RouteCtx) {
         ano_referencia: row.ano_referencia,
         status: row.status ?? null,
         created_at: row.created_at,
-        servico_id: servicoId,
-        unidade_execucao_id: ue ? toPositiveNumber(ue.unidade_execucao_id) : null,
+        servico_id: servicoFallbackId,
+        unidade_execucao_id: turmaIdFallback ? toPositiveNumber(ueFallback?.unidade_execucao_id) : null,
         servico_nome: servicoNome,
+        servico_nome_tooltip: servicoLabelList.join(" | ") || null,
         unidade_execucao_label: unidadeExecucaoLabel,
+        unidade_execucao_tooltip: turmaLabelList.join(" | ") || null,
+        itens_total: matriculaItems.length,
+        itens_origem_legado: matriculaItems.every((item) => (item.origem_tipo ?? "").toUpperCase() === "LEGADO"),
       };
     });
 

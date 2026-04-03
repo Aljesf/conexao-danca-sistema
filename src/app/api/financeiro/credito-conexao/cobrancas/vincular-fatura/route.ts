@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
 
   if (toText(fatura.conta?.tipo_conta)?.toUpperCase() !== "ALUNO") {
     return NextResponse.json(
-      { ok: false, error: "fatura_fora_do_escopo", message: "A fatura informada nao pertence a Conta Interna Aluno." },
+      { ok: false, error: "fatura_fora_do_escopo", message: "A fatura informada nao pertence a Conta Interna." },
       { status: 400 },
     );
   }

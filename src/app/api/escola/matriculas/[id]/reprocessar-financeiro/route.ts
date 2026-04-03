@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
-import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
+import {
+  buildReferenciaMatriculaContaInterna,
+  buildReferenciaMatriculaEntradaContaInterna,
+  garantirObrigacaoContaInterna,
+} from "@/lib/financeiro/contaInternaObrigacao";
+import { recalcularComprasFatura } from "@/lib/financeiro/creditoConexaoFaturas";
+import {
+  buildReferenciaMatriculaItemCompetencia,
+  listMatriculaItensAtivos,
+} from "@/lib/matriculas/matriculaItens";
 
 type ReprocessarPayload = {
   entrada?: {
@@ -67,12 +76,8 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function toTimestamptzNoonUtc(dateYYYYMMDD: string): string {
-  return `${dateYYYYMMDD}T12:00:00.000Z`;
-}
-
 function buildReferenciaLancamentoCartaoConexao(matriculaId: number, competencia: string): string {
-  return `matricula:${matriculaId}|cartao_conexao|competencia:${competencia}`;
+  return buildReferenciaMatriculaContaInterna(matriculaId, competencia);
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id?: string }> }) {
@@ -387,42 +392,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
 
     if (errCobExist) throw errCobExist;
 
-    if (cobExistentes && cobExistentes.length > 0) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "reprocessamento_bloqueado_ja_existe",
-          detail:
-            "Ja existem cobrancas elegiveis ao Cartao Conexao para esta matricula/competencia. Para evitar duplicidade, o reprocessamento foi bloqueado.",
-          cobrancas_existentes: cobExistentes,
-        },
-        { status: 409 },
-      );
-    }
-
     const referenciasPayload = competenciasPayload.map((competencia) =>
       buildReferenciaLancamentoCartaoConexao(matriculaId, competencia),
     );
     const { data: lancExistentes, error: errLancExist } = await supabase
       .from("credito_conexao_lancamentos")
-      .select("id, competencia, referencia_item, status")
+      .select("id, cobranca_id, competencia, referencia_item, status")
       .eq("origem_id", matriculaId)
       .in("referencia_item", referenciasPayload);
 
     if (errLancExist) throw errLancExist;
-
-    if (lancExistentes && lancExistentes.length > 0) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "reprocessamento_bloqueado_lancamento_existente",
-          detail:
-            "Ja existem lancamentos elegiveis ao Cartao Conexao para esta matricula/competencia. Para evitar duplicidade, o reprocessamento foi bloqueado.",
-          lancamentos_existentes: lancExistentes,
-        },
-        { status: 409 },
-      );
-    }
 
     const { data: conta, error: contaErr } = await supabase
       .from("credito_conexao_contas")
@@ -441,7 +420,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
         .insert({
           pessoa_titular_id: responsavelId,
           tipo_conta: "ALUNO",
-          descricao_exibicao: "Cartao Conexao Aluno",
+          descricao_exibicao: "Conta interna do aluno",
           ativo: true,
         })
         .select("*")
@@ -453,11 +432,28 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
       contaConexaoId = Number(conta.id);
     }
 
+    let matriculaItensAtivos: Awaited<ReturnType<typeof listMatriculaItensAtivos>> = [];
+    try {
+      matriculaItensAtivos = await listMatriculaItensAtivos(
+        supabase as unknown as { from: (table: string) => any },
+        matriculaId,
+      );
+    } catch (matriculaItensError) {
+      throw matriculaItensError;
+    }
+
     const resultados: {
       cobrancas_criadas: number[];
       cobrancas_atualizadas: number[];
       referencias_lancamento: string[];
       lancamentos_upsert: Array<{ cobranca_id: number | null; lancamento_id: number | null }>;
+      resultados_por_item?: Array<{
+        item_id: number;
+        competencia: string;
+        lancamento_criado: boolean;
+        lancamento_reutilizado: boolean;
+        bloqueado_por_idempotencia: boolean;
+      }>;
       entrada?: { cobranca_id: number | null; recebimento_id: number | null };
       faturas_rebuild?: Array<{ competencia: string; fatura_id: number | null }>;
     } = {
@@ -465,77 +461,221 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
       cobrancas_atualizadas: [],
       referencias_lancamento: [],
       lancamentos_upsert: [],
+      resultados_por_item: [],
     };
 
     if (payload.entrada && payload.entrada.valor_centavos > 0) {
       const hoje = new Date().toISOString().slice(0, 10);
       const dataPagamento = payload.entrada.data_pagamento ?? hoje;
+      const obrigacaoEntrada = await garantirObrigacaoContaInterna({
+        supabase,
+        tipoConta: "ALUNO",
+        pessoaCobrancaId: responsavelId,
+        contaInternaId: contaConexaoId,
+        competencia: dataPagamento.slice(0, 7),
+        valorCentavos: payload.entrada.valor_centavos,
+        descricao: "Conta interna - Entrada / pro-rata (reprocessamento matricula)",
+        origemTipoCobranca: "MATRICULA",
+        origemSubtipoCobranca: "CONTA_INTERNA_ENTRADA_PRORATA",
+        origemSistema: "MATRICULA_REPROCESSAR",
+        origemId: matriculaId,
+        origemItemTipo: "MATRICULA",
+        origemItemId: matriculaId,
+        referenciaItem: buildReferenciaMatriculaEntradaContaInterna(matriculaId, dataPagamento.slice(0, 7)),
+        diaVencimento:
+          Number.isFinite(Number((conta ?? {}) && (conta as { dia_vencimento?: unknown }).dia_vencimento))
+            ? Number((conta as { dia_vencimento?: unknown }).dia_vencimento)
+            : 12,
+        alunoId: Number(matricula.pessoa_id ?? 0) || null,
+        matriculaId,
+        observacoes: payload.entrada.observacoes ?? payload.motivo ?? null,
+        pagamento: payload.entrada.pago_no_ato
+          ? {
+              dataPagamento,
+              metodoPagamento: payload.entrada.metodo_pagamento ?? "PIX",
+              formaPagamentoCodigo: payload.entrada.metodo_pagamento ?? "PIX",
+              origemSistemaRecebimento: "MATRICULA",
+              observacoes: payload.entrada.observacoes ?? "Reprocessamento manual.",
+              descricaoMovimento: "Quitacao conta interna - reprocessamento de matricula",
+            }
+          : null,
+      });
 
-      const { data: cobrancaEntrada, error: errCobE } = await supabase
-        .from("cobrancas")
-        .insert({
-          pessoa_id: responsavelId,
-          descricao: "Entrada (reprocessada)",
-          valor_centavos: payload.entrada.valor_centavos,
-          vencimento: dataPagamento,
-          status: payload.entrada.pago_no_ato ? "PAGA" : "PENDENTE",
-          data_pagamento: payload.entrada.pago_no_ato ? dataPagamento : null,
-          metodo_pagamento: payload.entrada.metodo_pagamento ?? null,
-          observacoes: payload.entrada.observacoes ?? null,
-          origem_tipo: "MATRICULA",
-          origem_id: matriculaId,
-        })
-        .select("id, centro_custo_id")
-        .single();
-
-      if (errCobE) throw errCobE;
-
-      let recebimentoId: number | null = null;
-      if (payload.entrada.pago_no_ato) {
-        const metodo = payload.entrada.metodo_pagamento ?? "PIX";
-        const { data: receb, error: errRec } = await supabase
-          .from("recebimentos")
-          .insert({
-            cobranca_id: cobrancaEntrada.id,
-            centro_custo_id: cobrancaEntrada.centro_custo_id ?? null,
-            valor_centavos: payload.entrada.valor_centavos,
-            data_pagamento: toTimestamptzNoonUtc(dataPagamento),
-            metodo_pagamento: metodo,
-            origem_sistema: "MATRICULA",
-            observacoes: payload.entrada.observacoes ?? "Reprocessamento manual.",
-            forma_pagamento_codigo: metodo,
-          })
-          .select("id")
-          .single();
-
-        if (errRec) throw errRec;
-        recebimentoId = receb.id;
-      }
-
-      resultados.entrada = { cobranca_id: cobrancaEntrada.id, recebimento_id: recebimentoId };
+      resultados.entrada = {
+        cobranca_id: obrigacaoEntrada.cobranca_id,
+        recebimento_id: obrigacaoEntrada.recebimento_id ?? null,
+      };
     }
 
-    for (const m of payload.mensalidades) {
-      const descricao = m.descricao ?? "Mensalidade (reprocessada)";
-      const referenciaItem = buildReferenciaLancamentoCartaoConexao(matriculaId, m.competencia);
+    if (matriculaItensAtivos.length > 0) {
+      const valorRateadoBase =
+        matriculaItensAtivos.length > 0
+          ? Math.floor(
+              payload.mensalidades.reduce((acc, item) => acc + item.valor_centavos, 0) / matriculaItensAtivos.length,
+            )
+          : 0;
 
-      const lanc = await upsertLancamentoPorCobranca({
-        cobrancaId: null,
-        referenciaItem,
-        supabase,
-        contaConexaoId,
-        competencia: m.competencia,
-        valorCentavos: m.valor_centavos,
-        descricao,
-        origemSistema: "MATRICULA_MENSAL",
-        origemId: matriculaId,
-      });
+      const referenciasPorItem = competenciasPayload.flatMap((competencia) =>
+        matriculaItensAtivos.map((item) => buildReferenciaMatriculaItemCompetencia(item.id, competencia)),
+      );
 
-      resultados.referencias_lancamento.push(referenciaItem);
-      resultados.lancamentos_upsert.push({
-        cobranca_id: null,
-        lancamento_id: lanc?.id ?? null,
-      });
+      const { data: lancamentosItemExistentes, error: errLancamentosItemExistentes } = await supabase
+        .from("credito_conexao_lancamentos")
+        .select("id,cobranca_id,competencia,referencia_item,status")
+        .in("referencia_item", referenciasPorItem);
+
+      if (errLancamentosItemExistentes) throw errLancamentosItemExistentes;
+
+      const lancamentoExistenteByReferencia = new Map<
+        string,
+        { id: number; cobranca_id: number | null; status: string | null }
+      >();
+      for (const row of (lancamentosItemExistentes ?? []) as Array<Record<string, unknown>>) {
+        const referencia = typeof row.referencia_item === "string" ? row.referencia_item : null;
+        const id = Number(row.id ?? 0);
+        if (!referencia || !Number.isFinite(id) || id <= 0) continue;
+        if (lancamentoExistenteByReferencia.has(referencia)) continue;
+        lancamentoExistenteByReferencia.set(referencia, {
+          id,
+          cobranca_id: Number.isFinite(Number(row.cobranca_id)) ? Number(row.cobranca_id) : null,
+          status: typeof row.status === "string" ? row.status : null,
+        });
+      }
+
+      for (const m of payload.mensalidades) {
+        for (let index = 0; index < matriculaItensAtivos.length; index += 1) {
+          const item = matriculaItensAtivos[index];
+          const valorItemBase =
+            item.valor_liquido_centavos > 0
+              ? item.valor_liquido_centavos
+              : index === matriculaItensAtivos.length - 1
+                ? m.valor_centavos - valorRateadoBase * (matriculaItensAtivos.length - 1)
+                : valorRateadoBase;
+          const valorItem = Math.max(0, valorItemBase);
+          if (valorItem <= 0) continue;
+
+          const referenciaItem = buildReferenciaMatriculaItemCompetencia(item.id, m.competencia);
+          const lancamentoExistente = lancamentoExistenteByReferencia.get(referenciaItem) ?? null;
+
+          if (lancamentoExistente) {
+            resultados.referencias_lancamento.push(referenciaItem);
+            resultados.lancamentos_upsert.push({
+              cobranca_id: lancamentoExistente.cobranca_id,
+              lancamento_id: lancamentoExistente.id,
+            });
+            resultados.resultados_por_item?.push({
+              item_id: item.id,
+              competencia: m.competencia,
+              lancamento_criado: false,
+              lancamento_reutilizado: true,
+              bloqueado_por_idempotencia: false,
+            });
+            continue;
+          }
+
+          const obrigacao = await garantirObrigacaoContaInterna({
+            supabase,
+            tipoConta: "ALUNO",
+            pessoaCobrancaId: responsavelId,
+            contaInternaId: contaConexaoId,
+            competencia: m.competencia,
+            valorCentavos: valorItem,
+            descricao: m.descricao ?? item.descricao,
+            origemTipoCobranca: "CONTA_INTERNA",
+            origemSubtipoCobranca: "CONTA_INTERNA_MENSALIDADE",
+            origemSistema: "MATRICULA_REPROCESSAR",
+            origemId: matriculaId,
+            origemItemTipo: "MATRICULA_ITEM",
+            origemItemId: item.id,
+            referenciaItem,
+            diaVencimento:
+              Number.isFinite(Number((conta ?? {}) && (conta as { dia_vencimento?: unknown }).dia_vencimento))
+                ? Number((conta as { dia_vencimento?: unknown }).dia_vencimento)
+                : 12,
+            alunoId: Number(matricula.pessoa_id ?? 0) || null,
+            matriculaId,
+            composicaoJson: {
+              fonte: "MATRICULA_ITENS_REPROCESSAMENTO",
+              competencia: m.competencia,
+              item_id: item.id,
+              turma_id: item.turma_id_inicial,
+              valor_centavos: valorItem,
+              descricao: item.descricao,
+            },
+            fallbackLegacyLookup: {
+              origemTipos: ["MATRICULA", "MATRICULA_MENSALIDADE"],
+              origemSubtipo: "CARTAO_CONEXAO",
+              origemId: matriculaId,
+              competenciaAnoMes: m.competencia,
+            },
+          });
+
+          if (obrigacao.cobranca_created) {
+            resultados.cobrancas_criadas.push(obrigacao.cobranca_id);
+          } else {
+            resultados.cobrancas_atualizadas.push(obrigacao.cobranca_id);
+          }
+
+          resultados.referencias_lancamento.push(referenciaItem);
+          resultados.lancamentos_upsert.push({
+            cobranca_id: obrigacao.cobranca_id,
+            lancamento_id: obrigacao.lancamento_id ?? null,
+          });
+          resultados.resultados_por_item?.push({
+            item_id: item.id,
+            competencia: m.competencia,
+            lancamento_criado: obrigacao.lancamento_created,
+            lancamento_reutilizado: !obrigacao.lancamento_created,
+            bloqueado_por_idempotencia: false,
+          });
+        }
+      }
+    } else {
+      for (const m of payload.mensalidades) {
+        const descricao = m.descricao ?? `Conta interna - Mensalidade ${m.competencia}`;
+        const referenciaItem = buildReferenciaLancamentoCartaoConexao(matriculaId, m.competencia);
+
+        const obrigacao = await garantirObrigacaoContaInterna({
+          supabase,
+          tipoConta: "ALUNO",
+          pessoaCobrancaId: responsavelId,
+          contaInternaId: contaConexaoId,
+          competencia: m.competencia,
+          valorCentavos: m.valor_centavos,
+          descricao,
+          origemTipoCobranca: "CONTA_INTERNA",
+          origemSubtipoCobranca: "CONTA_INTERNA_MENSALIDADE",
+          origemSistema: "MATRICULA_REPROCESSAR",
+          origemId: matriculaId,
+          origemItemTipo: "MATRICULA",
+          origemItemId: matriculaId,
+          referenciaItem,
+          diaVencimento:
+            Number.isFinite(Number((conta ?? {}) && (conta as { dia_vencimento?: unknown }).dia_vencimento))
+              ? Number((conta as { dia_vencimento?: unknown }).dia_vencimento)
+              : 12,
+          alunoId: Number(matricula.pessoa_id ?? 0) || null,
+          matriculaId,
+          fallbackLegacyLookup: {
+            origemTipos: ["MATRICULA", "MATRICULA_MENSALIDADE"],
+            origemSubtipo: "CARTAO_CONEXAO",
+            origemId: matriculaId,
+            competenciaAnoMes: m.competencia,
+          },
+        });
+
+        if (obrigacao.cobranca_created) {
+          resultados.cobrancas_criadas.push(obrigacao.cobranca_id);
+        } else {
+          resultados.cobrancas_atualizadas.push(obrigacao.cobranca_id);
+        }
+
+        resultados.referencias_lancamento.push(referenciaItem);
+        resultados.lancamentos_upsert.push({
+          cobranca_id: obrigacao.cobranca_id,
+          lancamento_id: obrigacao.lancamento_id ?? null,
+        });
+      }
     }
 
     if (payload.forcar_rebuild_fatura) {
@@ -551,68 +691,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
           .maybeSingle();
 
         if (errFatFind) throw errFatFind;
-
-        let faturaId: number;
-        if (!faturaExistente?.id) {
-          const hoje = new Date().toISOString().slice(0, 10);
-          const { data: novaFatura, error: errFatIns } = await supabase
-            .from("credito_conexao_faturas")
-            .insert({
-              conta_conexao_id: contaConexaoId,
-              periodo_referencia: competencia,
-              data_fechamento: hoje,
-              data_vencimento: null,
-              valor_total_centavos: 0,
-              status: "ABERTA",
-            })
-            .select("id")
-            .single();
-
-          if (errFatIns) throw errFatIns;
-          faturaId = novaFatura.id;
-        } else {
-          faturaId = faturaExistente.id;
+        const faturaId = Number(faturaExistente?.id ?? 0);
+        if (!Number.isFinite(faturaId) || faturaId <= 0) {
+          resultados.faturas_rebuild.push({ competencia, fatura_id: null });
+          continue;
         }
 
-        const { error: errDel } = await supabase
-          .from("credito_conexao_fatura_lancamentos")
-          .delete()
-          .eq("fatura_id", faturaId);
-
-        if (errDel) throw errDel;
-
-        const { data: lancs, error: errLancs } = await supabase
-          .from("credito_conexao_lancamentos")
-          .select("id, valor_centavos, status, referencia_item, cobranca_id")
-          .eq("conta_conexao_id", contaConexaoId)
-          .eq("competencia", competencia)
-          .in("status", ["PENDENTE_FATURA", "FATURADO"]);
-
-        if (errLancs) throw errLancs;
-
-        const lista = lancs ?? [];
-
-        if (lista.length > 0) {
-          const payloadPivot = lista.map((l) => ({ fatura_id: faturaId, lancamento_id: l.id }));
-          const { error: errLink } = await supabase
-            .from("credito_conexao_fatura_lancamentos")
-            .insert(payloadPivot);
-
-          if (errLink) throw errLink;
-        }
-
-        const total = lista.reduce(
-          (acc, l) => acc + (typeof l.valor_centavos === "number" ? l.valor_centavos : 0),
-          0,
-        );
-
-        const { error: errFatUpd } = await supabase
-          .from("credito_conexao_faturas")
-          .update({ valor_total_centavos: total })
-          .eq("id", faturaId);
-
-        if (errFatUpd) throw errFatUpd;
-
+        await recalcularComprasFatura(supabase as any, faturaId);
         resultados.faturas_rebuild.push({ competencia, fatura_id: faturaId });
       }
     }
@@ -623,6 +708,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id?: string }>
         matricula_id: matriculaId,
         conta_conexao_id: contaConexaoId,
         resultados,
+        cobrancas_existentes: cobExistentes ?? [],
+        lancamentos_existentes: lancExistentes ?? [],
       },
       { status: 200 },
     );

@@ -1,4 +1,32 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { calcularTaxasFatura } from "@/lib/credito-conexao/calcularTaxasFatura";
+
+const STATUSS_QUITADOS = new Set([
+  "PAGO",
+  "PAGA",
+  "RECEBIDO",
+  "RECEBIDA",
+  "LIQUIDADO",
+  "LIQUIDADA",
+  "QUITADO",
+  "QUITADA",
+]);
+
+const STATUSS_LANCAMENTO_EXCLUIDOS = new Set(["CANCELADO", "CANCELADA", "INATIVO", "INATIVA"]);
+
+function textOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function upper(value: unknown): string {
+  return textOrNull(value)?.toUpperCase() ?? "";
+}
+
+function isQuitado(status: string | null | undefined): boolean {
+  return STATUSS_QUITADOS.has(upper(status));
+}
 
 function addMonth(periodo: string) {
   const [yStr, mStr] = periodo.split("-");
@@ -123,23 +151,95 @@ export async function vincularLancamentoNaFatura(
 }
 
 export async function recalcularComprasFatura(supabase: SupabaseClient, fatura_id: number) {
+  const { data: fatura, error: faturaError } = await supabase
+    .from("credito_conexao_faturas")
+    .select("id,status,data_vencimento,cobranca_id")
+    .eq("id", fatura_id)
+    .maybeSingle();
+
+  if (faturaError) {
+    throw faturaError;
+  }
+
   const { data, error } = await supabase
     .from("credito_conexao_fatura_lancamentos")
-    .select("lancamento:credito_conexao_lancamentos (valor_centavos)")
+    .select("lancamento:credito_conexao_lancamentos (id,valor_centavos,status,cobranca_id)")
     .eq("fatura_id", fatura_id);
 
   if (error) {
     throw error;
   }
 
-  const comprasCentavos =
-    data?.reduce((sum: number, row: any) => sum + Number(row.lancamento?.valor_centavos ?? 0), 0) ??
-    0;
+  const lancamentosValidos = (data ?? [])
+    .map((row: any) => row.lancamento ?? null)
+    .filter((row: any) => row && !STATUSS_LANCAMENTO_EXCLUIDOS.has(upper(row.status)));
+
+  const comprasCentavos = lancamentosValidos.reduce(
+    (sum: number, row: any) => sum + Number(row?.valor_centavos ?? 0),
+    0,
+  );
+
+  const cobrancaIdsRelacionadas = Array.from(
+    new Set(
+      lancamentosValidos
+        .map((row: any) => Number(row?.cobranca_id ?? 0))
+        .filter((value: number) => Number.isFinite(value) && value > 0),
+    ),
+  );
+
+  const faturaCobrancaId = Number((fatura as any)?.cobranca_id ?? 0);
+  const cobrancaIdsLookup = Array.from(
+    new Set(
+      [...cobrancaIdsRelacionadas, faturaCobrancaId]
+        .filter((value) => Number.isFinite(value) && value > 0),
+    ),
+  );
+
+  const { data: cobrancasRaw, error: cobrancasError } = cobrancaIdsLookup.length > 0
+    ? await supabase
+      .from("cobrancas")
+      .select("id,status")
+      .in("id", cobrancaIdsLookup)
+    : { data: [], error: null };
+
+  if (cobrancasError) {
+    throw cobrancasError;
+  }
+
+  const cobrancasById = new Map<number, { id: number; status: string | null }>(
+    ((cobrancasRaw ?? []) as Array<Record<string, unknown>>)
+      .map((row) => ({
+        id: Number(row.id ?? 0),
+        status: textOrNull(row.status),
+      }))
+      .filter((row) => Number.isFinite(row.id) && row.id > 0)
+      .map((row) => [row.id, row]),
+  );
+
+  let statusFatura = upper((fatura as any)?.status) === "CANCELADA" ? "CANCELADA" : "ABERTA";
+  const cobrancaCanonicaQuitada =
+    faturaCobrancaId > 0 && isQuitado(cobrancasById.get(faturaCobrancaId)?.status ?? null);
+  const todasCobrancasItensQuitadas =
+    cobrancaIdsRelacionadas.length > 0 &&
+    cobrancaIdsRelacionadas.every((id) => isQuitado(cobrancasById.get(id)?.status ?? null));
+  const dataVencimento = textOrNull((fatura as any)?.data_vencimento);
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  if (statusFatura !== "CANCELADA") {
+    if (comprasCentavos > 0 && (cobrancaCanonicaQuitada || todasCobrancasItensQuitadas)) {
+      statusFatura = "PAGA";
+    } else if (comprasCentavos > 0 && dataVencimento && dataVencimento < hoje) {
+      statusFatura = "EM_ATRASO";
+    } else {
+      statusFatura = "ABERTA";
+    }
+  }
 
   const { error: updErr } = await supabase
     .from("credito_conexao_faturas")
     .update({
       valor_total_centavos: comprasCentavos,
+      status: statusFatura,
       updated_at: new Date().toISOString(),
     })
     .eq("id", fatura_id);
@@ -148,5 +248,70 @@ export async function recalcularComprasFatura(supabase: SupabaseClient, fatura_i
     throw updErr;
   }
 
+  // A5: Aplicar multa e juros quando fatura muda para EM_ATRASO
+  if (statusFatura === "EM_ATRASO") {
+    try {
+      await calcularTaxasFatura(supabase, fatura_id);
+    } catch (taxaErr) {
+      console.warn("[recalcularComprasFatura] Erro ao calcular taxas:", taxaErr);
+    }
+  }
+
   return comprasCentavos;
+}
+
+export async function recalcularFaturasRelacionadasPorCobranca(
+  supabase: SupabaseClient,
+  cobrancaId: number,
+) {
+  const faturaIds = new Set<number>();
+
+  const { data: faturasPorCobranca, error: faturasPorCobrancaError } = await supabase
+    .from("credito_conexao_faturas")
+    .select("id")
+    .eq("cobranca_id", cobrancaId);
+
+  if (faturasPorCobrancaError) {
+    throw faturasPorCobrancaError;
+  }
+
+  for (const row of (faturasPorCobranca ?? []) as Array<Record<string, unknown>>) {
+    const faturaId = Number(row.id ?? 0);
+    if (Number.isFinite(faturaId) && faturaId > 0) faturaIds.add(faturaId);
+  }
+
+  const { data: lancamentos, error: lancamentosError } = await supabase
+    .from("credito_conexao_lancamentos")
+    .select("id")
+    .eq("cobranca_id", cobrancaId);
+
+  if (lancamentosError) {
+    throw lancamentosError;
+  }
+
+  const lancamentoIds = ((lancamentos ?? []) as Array<Record<string, unknown>>)
+    .map((row) => Number(row.id ?? 0))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (lancamentoIds.length > 0) {
+    const { data: pivots, error: pivotsError } = await supabase
+      .from("credito_conexao_fatura_lancamentos")
+      .select("fatura_id")
+      .in("lancamento_id", lancamentoIds);
+
+    if (pivotsError) {
+      throw pivotsError;
+    }
+
+    for (const row of (pivots ?? []) as Array<Record<string, unknown>>) {
+      const faturaId = Number(row.fatura_id ?? 0);
+      if (Number.isFinite(faturaId) && faturaId > 0) faturaIds.add(faturaId);
+    }
+  }
+
+  for (const faturaId of faturaIds) {
+    await recalcularComprasFatura(supabase, faturaId);
+  }
+
+  return Array.from(faturaIds.values());
 }

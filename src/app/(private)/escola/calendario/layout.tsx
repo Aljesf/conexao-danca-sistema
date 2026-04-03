@@ -29,8 +29,8 @@ export default function EscolaCalendarioLayout({
               <Link className={pillNeutral} href="/escola/calendario">
                 Visao geral
               </Link>
-              <Link className={pillNeutral} href="/escola/calendario/eventos-internos">
-                Eventos internos
+              <Link className={pillNeutral} href="/escola/eventos">
+                Eventos da Escola
               </Link>
               <Link className={pillNeutral} href="/escola/calendario/feriados">
                 Feriados

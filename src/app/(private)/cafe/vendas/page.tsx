@@ -634,11 +634,13 @@ export default function CafeVendasPage() {
         pagamentoSelecionado.tipo_fluxo === "IMEDIATO" || pagamentoSelecionado.tipo_fluxo === "CARTAO_EXTERNO"
           ? totalCentavos
           : 0;
+      const dataHoraVenda = new Date().toISOString();
       const response = await fetch("/api/cafe/vendas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           data_operacao: todayIso(),
+          data_hora_venda: dataHoraVenda,
           origem_operacao: "PDV",
           comprador_tipo: compradorTipo,
           comprador_id: compradorSelecionado?.id ?? null,

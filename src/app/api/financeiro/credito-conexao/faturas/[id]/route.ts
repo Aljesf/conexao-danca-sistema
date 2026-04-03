@@ -63,10 +63,67 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .order("lancamento_id", { ascending: true });
 
   if (Array.isArray(itensData)) {
-    itens = itensData as Array<Record<string, unknown>>;
+    itens = (itensData as Array<Record<string, unknown>>).filter((item) => {
+      const status = String(item.status_lancamento ?? "").trim().toUpperCase();
+      return !status.includes("CANCEL");
+    });
   }
 
-  return NextResponse.json({ ok: true, fatura: data, itens });
+  const contaId = Number(data.conta_conexao_id ?? 0);
+  let contexto_titular: Record<string, unknown> | null = null;
+
+  if (Number.isFinite(contaId) && contaId > 0) {
+    const { data: conta } = await supabase
+      .from("credito_conexao_contas")
+      .select("id,tipo_conta,pessoa_titular_id,descricao_exibicao")
+      .eq("id", contaId)
+      .maybeSingle();
+
+    const tipoConta = String(conta?.tipo_conta ?? "").trim().toUpperCase();
+    if (tipoConta === "COLABORADOR" && Number(conta?.pessoa_titular_id ?? 0) > 0) {
+      const { data: colaborador } = await supabase
+        .from("colaboradores")
+        .select("id,pessoa_id,ativo")
+        .eq("pessoa_id", Number(conta?.pessoa_titular_id))
+        .order("ativo", { ascending: false })
+        .order("id", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      const competencia = String(data.periodo_referencia ?? "") || null;
+      const { data: folhaColaborador } =
+        colaborador?.id && competencia
+          ? await supabase
+              .from("folha_pagamento_colaborador")
+              .select("id,status")
+              .eq("colaborador_id", Number(colaborador.id))
+              .eq("competencia_ano_mes", competencia)
+              .order("id", { ascending: false })
+              .limit(1)
+              .maybeSingle()
+          : { data: null };
+
+      contexto_titular = {
+        tipo: "COLABORADOR",
+        titular_label: "Conta interna do colaborador",
+        colaborador_id: colaborador?.id ?? null,
+        competencia,
+        folha_pagamento_colaborador_id: folhaColaborador?.id ?? null,
+        status_importacao_folha: folhaColaborador?.id ? folhaColaborador.status ?? "IMPORTADA" : "PENDENTE_IMPORTACAO",
+      };
+    } else if (tipoConta === "ALUNO") {
+      contexto_titular = {
+        tipo: "ALUNO",
+        titular_label: "Conta interna do aluno",
+        colaborador_id: null,
+        competencia: String(data.periodo_referencia ?? "") || null,
+        folha_pagamento_colaborador_id: null,
+        status_importacao_folha: null,
+      };
+    }
+  }
+
+  return NextResponse.json({ ok: true, fatura: data, itens, contexto_titular });
 }
 
 

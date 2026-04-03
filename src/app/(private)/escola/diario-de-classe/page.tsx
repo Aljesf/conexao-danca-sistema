@@ -1,13 +1,14 @@
 "use client";
 
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DiarioModal from "@/components/DiarioModal";
 import { TurmaResumoOperacional } from "@/components/turmas/TurmaResumoOperacional";
 import { formatarHorario, type ResumoAlunosTurma } from "@/lib/turmas";
 
-type DiarioStatus = "PENDENTE" | "PRONTO" | "ERRO";
+type DiarioStatus = "PENDENTE" | "PRONTO";
 type PresencaBaseStatus = "PRESENTE" | "FALTA";
 type PresencaStatus = "PRESENTE" | "FALTA" | "JUSTIFICADA" | "ATRASO";
 
@@ -130,6 +131,65 @@ type LinhaChamada = {
 };
 
 type FeedbackState = { tipo: "sucesso" | "erro"; mensagem: string } | null;
+type TurmaScope = "MINHAS_TURMAS" | "TODAS";
+type TurmasResponse = {
+  ok: boolean;
+  turmas: Turma[];
+  scope?: "own" | "all";
+  pode_ver_todas_turmas?: boolean;
+};
+type SessionTokenResult = {
+  accessToken: string | null;
+  sessionCorrompida: boolean;
+};
+type FetchProfessorJsonOptions = RequestInit & {
+  mensagemErroPadrao?: string;
+  nomeOperacao?: string;
+};
+type ConsultarAulaResponse = {
+  ok: boolean;
+  aula: Aula | null;
+  aula_id: number | null;
+  status_execucao?: Aula["status_execucao"] | "PENDENTE";
+  aberta_em?: string | null;
+  aberta_por?: string | null;
+  aula_aberta?: boolean;
+};
+type AbrirAulaResponse = {
+  ok: boolean;
+  aula: Aula;
+  aula_id: number;
+  status_execucao?: Aula["status_execucao"];
+  aberta_em?: string | null;
+  aberta_por?: string | null;
+  aula_aberta?: boolean;
+};
+type EncerramentoResumo = {
+  ok: boolean;
+  aula: Aula;
+  aula_id: number;
+  status_execucao?: Aula["status_execucao"];
+  aberta_em?: string | null;
+  fechada_em?: string | null;
+  duracao_minutos?: number | null;
+  total_alunos: number;
+  presentes: number;
+  faltas: number;
+  frequencia_salva_em?: string | null;
+  professor_nome?: string | null;
+  message?: string;
+};
+
+const DIARIO_AUTH_CORROMPIDA_MENSAGEM =
+  "A autenticacao local do navegador estava corrompida. Faca login novamente.";
+const DIARIO_SESSAO_EXPIRADA_MENSAGEM =
+  "Sessao expirada ou nao encontrada. Faca login novamente.";
+const DIARIO_ENDPOINT_NAO_ENCONTRADO_MENSAGEM =
+  "Endpoint nao encontrado. Verifique a integracao desta tela.";
+const DIARIO_FALHA_CARREGAMENTO_MENSAGEM = "Falha ao carregar dados do Diario.";
+const DIARIO_SEM_ACESSO_TURMA_MENSAGEM =
+  "Voce nao tem permissao para acessar esta turma no Diario de Classe.";
+const DIARIO_ADMIN_MENSAGEM = "Voce nao tem permissao administrativa para esta operacao.";
 
 function todayYYYYMMDD(): string {
   const d = new Date();
@@ -194,6 +254,17 @@ function formatDateTimeBR(value?: string | null): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleString("pt-BR");
+}
+
+function formatDuracaoMinutos(value?: number | null): string {
+  if (!value || value <= 0) return "--";
+
+  const horas = Math.floor(value / 60);
+  const minutos = value % 60;
+
+  if (horas === 0) return `${minutos} min`;
+  if (minutos === 0) return `${horas}h`;
+  return `${horas}h ${minutos}min`;
 }
 
 function getExecucaoAulaUi(aula?: Aula | null) {
@@ -312,6 +383,11 @@ function hasLinhasPendentes(linhas: LinhaChamada[]): boolean {
   return linhas.some((linha) => linha.base_status === null);
 }
 
+function hasFrequenciaPersistida(aula?: Aula | null, presencas?: PresencaDb[] | null): boolean {
+  if (aula?.fechada_em || aula?.frequencia_salva_em) return true;
+  return Array.isArray(presencas) && presencas.length > 0;
+}
+
 function serializeLinhas(linhas: LinhaChamada[]): string {
   const payload = [...linhas]
     .sort((a, b) => a.aluno_pessoa_id - b.aluno_pessoa_id)
@@ -369,6 +445,102 @@ async function fetchJson<T>(
   return { ok: true, data: json as T };
 }
 
+function isSupabaseAuthStorageKey(key: string): boolean {
+  return key.startsWith("sb-") && key.includes("auth-token");
+}
+
+function clearBrokenSupabaseBrowserAuthStorage(): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    for (let i = window.localStorage.length - 1; i >= 0; i -= 1) {
+      const key = window.localStorage.key(i);
+      if (!key || !isSupabaseAuthStorageKey(key)) continue;
+
+      const rawValue = window.localStorage.getItem(key);
+      if (!rawValue) continue;
+
+      const trimmed = rawValue.trim();
+      const looksBroken =
+        trimmed.startsWith("base64-") ||
+        (!trimmed.startsWith("{") && !trimmed.startsWith("[") && trimmed.includes("base64-"));
+
+      if (looksBroken) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch (error) {
+    console.error("Erro ao limpar localStorage auth do Supabase", error);
+  }
+
+  try {
+    const cookies = document.cookie.split(";");
+    for (const cookieEntry of cookies) {
+      const [rawName] = cookieEntry.split("=");
+      const cookieName = rawName?.trim();
+      if (!cookieName || !isSupabaseAuthStorageKey(cookieName)) continue;
+
+      document.cookie = `${cookieName}=; Max-Age=0; path=/`;
+      document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+    }
+  } catch (error) {
+    console.error("Erro ao limpar cookies auth do Supabase", error);
+  }
+}
+
+function normalizarMensagemErroDiario(error: unknown): string {
+  const mensagem =
+    error instanceof Error ? error.message : "Nao foi possivel carregar o Diario de Classe.";
+  const texto = mensagem.toLowerCase();
+
+  if (
+    texto.includes("autenticacao local do navegador estava corrompida") ||
+    texto.includes("sessao local corrompida") ||
+    texto.includes("cookie") ||
+    texto.includes("base64") ||
+    texto.includes("json")
+  ) {
+    return DIARIO_AUTH_CORROMPIDA_MENSAGEM;
+  }
+
+  if (
+    texto.includes("nao autenticado") ||
+    texto.includes("sessao expirada") ||
+    texto.includes("sessao nao encontrada") ||
+    texto.includes("sessao expirada ou nao encontrada")
+  ) {
+    return DIARIO_SESSAO_EXPIRADA_MENSAGEM;
+  }
+
+  if (
+    texto.includes("endpoint nao encontrado") ||
+    texto.includes("erro http 404") ||
+    texto.includes(" 404") ||
+    texto === "404" ||
+    texto.includes("not found")
+  ) {
+    return DIARIO_ENDPOINT_NAO_ENCONTRADO_MENSAGEM;
+  }
+
+  if (texto.includes("sem acesso turma")) {
+    return DIARIO_SEM_ACESSO_TURMA_MENSAGEM;
+  }
+
+  if (texto.includes("somente_admin")) {
+    return DIARIO_ADMIN_MENSAGEM;
+  }
+
+  if (
+    texto.includes("erro http 500") ||
+    texto.includes("falha ao carregar dados do diario") ||
+    texto.includes("nao foi possivel concluir a operacao do diario de classe")
+  ) {
+    return DIARIO_FALHA_CARREGAMENTO_MENSAGEM;
+  }
+
+  return mensagem;
+}
+
 export default function DiarioDeClassePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -379,11 +551,13 @@ export default function DiarioDeClassePage() {
   >("frequencia");
 
   const [status, setStatus] = useState<DiarioStatus>("PENDENTE");
-  const [erroMsg, setErroMsg] = useState<string>("");
+  const [turmasErro, setTurmasErro] = useState("");
 
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [turmaId, setTurmaId] = useState<number | null>(turmaIdFromUrl);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [podeVerTodasTurmas, setPodeVerTodasTurmas] = useState(false);
+  const [turmaScope, setTurmaScope] = useState<TurmaScope>("MINHAS_TURMAS");
   const [professores, setProfessores] = useState<ProfessorOption[]>([]);
   const [professorFiltro, setProfessorFiltro] = useState<number | null>(null);
   const [modalTurmaOpen, setModalTurmaOpen] = useState(false);
@@ -397,18 +571,21 @@ export default function DiarioDeClassePage() {
   const [planoAplicando, setPlanoAplicando] = useState(false);
   const [planoConcluindo, setPlanoConcluindo] = useState(false);
   const [notasPosAula, setNotasPosAula] = useState("");
+  const [diarioErro, setDiarioErro] = useState("");
 
   const [alunos, setAlunos] = useState<Aluno[]>([]);
   const [alunosHistorico, setAlunosHistorico] = useState<Aluno[]>([]);
   const [linhas, setLinhas] = useState<LinhaChamada[]>([]);
 
   const [salvando, setSalvando] = useState<boolean>(false);
-  const [salvoOk, setSalvoOk] = useState<boolean>(false);
   const [frequenciaFeedback, setFrequenciaFeedback] = useState<FeedbackState>(null);
   const [fechando, setFechando] = useState<boolean>(false);
   const [fecharErro, setFecharErro] = useState<string>("");
   const [fecharPendentes, setFecharPendentes] = useState<number[]>([]);
+  const [resumoEncerramento, setResumoEncerramento] = useState<EncerramentoResumo | null>(null);
+  const [modalEncerramentoAberto, setModalEncerramentoAberto] = useState(false);
 
+  const professorAccessTokenRef = useRef<string | null>(null);
   const baselineRef = useRef<string | null>(null);
   const linhasSignature = useMemo(() => serializeLinhas(linhas), [linhas]);
   const dirty = useMemo(() => {
@@ -423,6 +600,280 @@ export default function DiarioDeClassePage() {
   const [anotacaoDataHora, setAnotacaoDataHora] = useState("");
   const [anotacaoErro, setAnotacaoErro] = useState("");
   const [anotacaoSalvando, setAnotacaoSalvando] = useState(false);
+
+  const getProfessorAccessTokenSafe = useCallback(async (): Promise<SessionTokenResult> => {
+    if (professorAccessTokenRef.current) {
+      console.info("[diario] token reutilizado em memoria");
+      return {
+        accessToken: professorAccessTokenRef.current,
+        sessionCorrompida: false,
+      };
+    }
+
+    const authStart = performance.now();
+
+    try {
+      const supabase = createClientComponentClient();
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+      const elapsed = performance.now() - authStart;
+      console.info("[diario] tempo auth.getSession", Math.round(elapsed), "ms");
+
+      if (error) {
+        const message = error.message.toLowerCase();
+        const isCorrupted =
+          message.includes("parse") ||
+          message.includes("json") ||
+          message.includes("cookie") ||
+          message.includes("base64");
+
+        if (isCorrupted) {
+          professorAccessTokenRef.current = null;
+          clearBrokenSupabaseBrowserAuthStorage();
+          return { accessToken: null, sessionCorrompida: true };
+        }
+
+        throw error;
+      }
+
+      const accessToken = session?.access_token ?? null;
+      professorAccessTokenRef.current = accessToken;
+      console.info("[diario] token obtido via auth.getSession");
+
+      return {
+        accessToken,
+        sessionCorrompida: false,
+      };
+    } catch (error) {
+      const elapsed = performance.now() - authStart;
+      console.info("[diario] tempo auth.getSession com erro", Math.round(elapsed), "ms");
+      const message =
+        error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      const isCorrupted =
+        message.includes("parse") ||
+        message.includes("json") ||
+        message.includes("cookie") ||
+        message.includes("base64");
+
+      if (isCorrupted) {
+        professorAccessTokenRef.current = null;
+        clearBrokenSupabaseBrowserAuthStorage();
+        return { accessToken: null, sessionCorrompida: true };
+      }
+
+      professorAccessTokenRef.current = null;
+      console.error("Erro ao obter token do professor", error);
+      return { accessToken: null, sessionCorrompida: false };
+    }
+  }, []);
+
+  const fetchProfessorJson = useCallback(
+    async function fetchProfessorJsonInner<T>(
+      input: RequestInfo | URL,
+      options: FetchProfessorJsonOptions = {},
+    ): Promise<T> {
+      const {
+        mensagemErroPadrao,
+        nomeOperacao = "operacao_desconhecida",
+        headers,
+        ...rest
+      } = options;
+      const requestStart = performance.now();
+      console.info("[diario] inicio fetch", nomeOperacao, String(input));
+      const tokenResult = await getProfessorAccessTokenSafe();
+
+      if (tokenResult.sessionCorrompida) {
+        throw new Error(DIARIO_AUTH_CORROMPIDA_MENSAGEM);
+      }
+
+      if (!tokenResult.accessToken) {
+        throw new Error(DIARIO_SESSAO_EXPIRADA_MENSAGEM);
+      }
+
+      const response = await fetch(input, {
+        ...rest,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${tokenResult.accessToken}`,
+          ...(headers ?? {}),
+        },
+      });
+      const networkElapsed = performance.now() - requestStart;
+      console.info(
+        "[diario] fim fetch",
+        nomeOperacao,
+        Math.round(networkElapsed),
+        "ms",
+        response.status,
+      );
+
+      let responseJson: unknown = null;
+      try {
+        responseJson = await response.json();
+      } catch {
+        responseJson = null;
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        professorAccessTokenRef.current = null;
+      }
+
+      if (!response.ok) {
+        const maybeObject =
+          responseJson && typeof responseJson === "object"
+            ? (responseJson as Record<string, unknown>)
+            : null;
+        const codeFromApi = typeof maybeObject?.code === "string" ? maybeObject.code : null;
+
+        const messageFromApi =
+          typeof maybeObject?.message === "string"
+            ? maybeObject.message
+            : typeof maybeObject?.error === "string"
+              ? maybeObject.error
+              : null;
+
+        if (codeFromApi === "NAO_AUTENTICADO") {
+          throw new Error(DIARIO_SESSAO_EXPIRADA_MENSAGEM);
+        }
+
+        if (codeFromApi === "SEM_ACESSO_TURMA") {
+          throw new Error(DIARIO_SEM_ACESSO_TURMA_MENSAGEM);
+        }
+
+        if (codeFromApi === "SOMENTE_ADMIN") {
+          throw new Error(DIARIO_ADMIN_MENSAGEM);
+        }
+
+        if (response.status === 401) {
+          throw new Error(DIARIO_SESSAO_EXPIRADA_MENSAGEM);
+        }
+
+        if (response.status === 404) {
+          throw new Error(DIARIO_ENDPOINT_NAO_ENCONTRADO_MENSAGEM);
+        }
+
+        if (response.status >= 500) {
+          throw new Error(DIARIO_FALHA_CARREGAMENTO_MENSAGEM);
+        }
+
+        throw new Error(
+          messageFromApi ||
+          mensagemErroPadrao ||
+          "Nao foi possivel concluir a operacao do Diario de Classe.",
+        );
+      }
+
+      return responseJson as T;
+    },
+    [getProfessorAccessTokenSafe],
+  );
+
+  const prepararSessaoSemAula = useCallback((listaAlunosAtivos: Aluno[]) => {
+    const linhasPendentes = listaAlunosAtivos.map((aluno) => createLinhaPendente(aluno));
+    setAula(null);
+    setLinhas(linhasPendentes);
+    baselineRef.current = serializeLinhas(linhasPendentes);
+    setFecharErro("");
+    setFecharPendentes([]);
+  }, []);
+
+  const carregarPresencasDaAula = useCallback(
+    async (aulaBase: Aula, listaAlunosAtivos: Aluno[]) => {
+      const presData = await fetchProfessorJson<{
+        ok: boolean;
+        aula?: Aula;
+        presencas: PresencaDb[];
+      }>(`/api/professor/diario-de-classe/aulas/${aulaBase.id}/presencas`, {
+        mensagemErroPadrao: "Nao foi possivel carregar a frequencia da aula.",
+        nomeOperacao: "carregar_presencas",
+      });
+
+      const aulaResolvida = presData.aula ?? aulaBase;
+      const presencas = Array.isArray(presData.presencas) ? presData.presencas : [];
+      const mapPres = new Map<number, PresencaDb>();
+      for (const presenca of presencas) {
+        mapPres.set(presenca.aluno_pessoa_id, presenca);
+      }
+
+      const linhasMontadas = listaAlunosAtivos.map((aluno) =>
+        mapPresencaToLinha(aluno, mapPres.get(aluno.aluno_pessoa_id))
+      );
+
+      setAula(aulaResolvida);
+      setLinhas(linhasMontadas);
+      baselineRef.current = serializeLinhas(linhasMontadas);
+      setFecharErro("");
+      setFecharPendentes([]);
+      return aulaResolvida;
+    },
+    [fetchProfessorJson],
+  );
+
+  const carregarSessaoAtual = useCallback(
+    async (listaAlunosAtivos: Aluno[], forcarAbertura: boolean) => {
+      if (!turmaId) {
+        prepararSessaoSemAula(listaAlunosAtivos);
+        return null;
+      }
+
+      if (forcarAbertura) {
+        const abertura = await fetchProfessorJson<AbrirAulaResponse>(
+          "/api/professor/diario-de-classe/aulas/abrir",
+          {
+            method: "POST",
+            body: JSON.stringify({ turmaId, dataAula }),
+            mensagemErroPadrao: "Nao foi possivel abrir a aula da turma.",
+            nomeOperacao: "abrir_aula",
+          },
+        );
+
+        await carregarPresencasDaAula(abertura.aula, listaAlunosAtivos);
+        return abertura.aula;
+      }
+
+      const params = new URLSearchParams({
+        turmaId: String(turmaId),
+        dataAula,
+      });
+      const consulta = await fetchProfessorJson<ConsultarAulaResponse>(
+        `/api/professor/diario-de-classe/aulas/abrir?${params.toString()}`,
+        {
+          mensagemErroPadrao: "Nao foi possivel consultar a sessao atual da aula.",
+          nomeOperacao: "consultar_aula",
+        },
+      );
+
+      if (!consulta.aula) {
+        prepararSessaoSemAula(listaAlunosAtivos);
+        return null;
+      }
+
+      await carregarPresencasDaAula(consulta.aula, listaAlunosAtivos);
+      return consulta.aula;
+    },
+    [carregarPresencasDaAula, dataAula, fetchProfessorJson, prepararSessaoSemAula, turmaId],
+  );
+
+  async function abrirAulaSessao() {
+    if (!turmaId) return;
+    if (salvando || fechando) return;
+
+    setFrequenciaFeedback(null);
+    setFecharErro("");
+    setFecharPendentes([]);
+
+    try {
+      await carregarSessaoAtual(alunos, true);
+    } catch (error) {
+      setDiarioErro(normalizarMensagemErroDiario(error));
+    }
+  }
+
+  function fecharModalEncerramento() {
+    setModalEncerramentoAberto(false);
+  }
 
   const tituloAba = useMemo(() => {
     switch (aba) {
@@ -456,70 +907,104 @@ export default function DiarioDeClassePage() {
   useEffect(() => {
     let alive = true;
     (async () => {
+      const effectStart = performance.now();
+      console.info("[diario] carga inicial turmas iniciou");
       setStatus("PENDENTE");
-      setErroMsg("");
-      const params = new URLSearchParams();
-      if (dataAula) params.set("date", dataAula);
-      if (professorFiltro) params.set("professorColaboradorId", String(professorFiltro));
-      const r = await fetchJson<{ ok: boolean; turmas: Turma[] }>(
-        `/api/professor/diario-de-classe/turmas?${params.toString()}`
-      );
-      if (!alive) return;
+      setTurmasErro("");
+      setDiarioErro("");
+      try {
+        const params = new URLSearchParams();
+        if (dataAula) params.set("date", dataAula);
+        if (professorFiltro) params.set("professorColaboradorId", String(professorFiltro));
+        params.set("scope", turmaScope === "TODAS" ? "all" : "own");
+        const data = await fetchProfessorJson<TurmasResponse>(
+          `/api/professor/diario-de-classe/turmas?${params.toString()}`,
+          {
+            mensagemErroPadrao: "Nao foi possivel carregar as turmas do diario.",
+            nomeOperacao: "listar_turmas",
+          },
+        );
+        if (!alive) return;
 
-      if (!r.ok) {
-        setStatus("ERRO");
-        setErroMsg(r.message);
-        return;
+        setTurmas(Array.isArray(data.turmas) ? data.turmas : []);
+        setPodeVerTodasTurmas(Boolean(data.pode_ver_todas_turmas));
+        const effectiveScope: TurmaScope = data.scope === "all" ? "TODAS" : "MINHAS_TURMAS";
+        setTurmaScope((current) => (current === effectiveScope ? current : effectiveScope));
+        setTurmasErro("");
+        setStatus("PRONTO");
+        console.info(
+          "[diario] carga inicial turmas terminou",
+          Math.round(performance.now() - effectStart),
+          "ms",
+        );
+      } catch (error) {
+        if (!alive) return;
+        setStatus("PRONTO");
+        setTurmas([]);
+        setTurmasErro(normalizarMensagemErroDiario(error));
+        console.info(
+          "[diario] carga inicial turmas terminou",
+          Math.round(performance.now() - effectStart),
+          "ms",
+        );
       }
-
-      setTurmas(Array.isArray(r.data.turmas) ? r.data.turmas : []);
-      setStatus("PRONTO");
-    })().catch((e: unknown) => {
-      if (!alive) return;
-      setStatus("ERRO");
-      setErroMsg(e instanceof Error ? e.message : "Erro ao carregar turmas.");
-    });
+    })();
 
     return () => {
       alive = false;
     };
-  }, [dataAula, professorFiltro]);
+  }, [dataAula, fetchProfessorJson, professorFiltro, turmaScope]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const r = await fetchJson<{ ok: boolean; professores: ProfessorOption[] }>(
-        "/api/professor/diario-de-classe/professores"
-      );
-      if (!alive) return;
+      const effectStart = performance.now();
+      console.info("[diario] carga inicial professores iniciou");
+      try {
+        const data = await fetchProfessorJson<{ ok: boolean; professores: ProfessorOption[] }>(
+          "/api/professor/diario-de-classe/professores",
+          {
+            mensagemErroPadrao: "Nao foi possivel carregar a lista de professores.",
+            nomeOperacao: "listar_professores",
+          },
+        );
+        if (!alive) return;
 
-      if (!r.ok) {
-        if (r.status === 403) {
-          setIsAdmin(false);
-          setProfessores([]);
-          setProfessorFiltro(null);
-          return;
-        }
-        return;
+        setIsAdmin(true);
+        setProfessores(Array.isArray(data.professores) ? data.professores : []);
+        console.info(
+          "[diario] carga inicial professores terminou",
+          Math.round(performance.now() - effectStart),
+          "ms",
+        );
+      } catch {
+        if (!alive) return;
+        setIsAdmin(false);
+        setProfessores([]);
+        setProfessorFiltro(null);
+        console.info(
+          "[diario] carga inicial professores terminou",
+          Math.round(performance.now() - effectStart),
+          "ms",
+        );
       }
-
-      setIsAdmin(true);
-      setProfessores(Array.isArray(r.data.professores) ? r.data.professores : []);
-    })().catch(() => {
-      if (!alive) return;
-    });
+    })();
 
     return () => {
       alive = false;
     };
-  }, []);
+  }, [fetchProfessorJson]);
 
   useEffect(() => {
     let alive = true;
 
     (async () => {
-      setSalvoOk(false);
+      const effectStart = performance.now();
+      console.info("[diario] carga inicial diario iniciou");
+      setDiarioErro("");
       setFrequenciaFeedback(null);
+      setResumoEncerramento(null);
+      setModalEncerramentoAberto(false);
       setAula(null);
       setPlano(null);
       setPlanoInstancia(null);
@@ -531,97 +1016,61 @@ export default function DiarioDeClassePage() {
       setAlunosHistorico([]);
       baselineRef.current = null;
 
+      if (status !== "PRONTO") {
+        console.info("[diario] carga inicial diario aguardando carga de turmas");
+        return;
+      }
+
+      if (turmasErro) {
+        console.info("[diario] carga inicial diario interrompida por falha no carregamento de turmas");
+        return;
+      }
+
       if (!turmaId) return;
+      try {
+        const alunosData = await fetchProfessorJson<{
+          ok: boolean;
+          alunos?: Aluno[];
+          alunos_ativos?: Aluno[];
+          alunos_historico?: Aluno[];
+        }>(`/api/professor/diario-de-classe/turmas/${turmaId}/alunos`, {
+          mensagemErroPadrao: "Nao foi possivel carregar os alunos da turma.",
+          nomeOperacao: "listar_alunos_turma",
+        });
+        if (!alive) return;
 
-      setStatus("PENDENTE");
-      setErroMsg("");
-
-      const alunosRes = await fetchJson<{
-        ok: boolean;
-        alunos?: Aluno[];
-        alunos_ativos?: Aluno[];
-        alunos_historico?: Aluno[];
-      }>(
-        `/api/professor/diario-de-classe/turmas/${turmaId}/alunos`
-      );
-      if (!alive) return;
-
-      if (!alunosRes.ok) {
-        setStatus("ERRO");
-        setErroMsg(alunosRes.message);
-        return;
+        const listaAlunos = Array.isArray(alunosData.alunos_ativos)
+          ? alunosData.alunos_ativos
+          : Array.isArray(alunosData.alunos)
+            ? alunosData.alunos
+            : [];
+        const listaHistorico = Array.isArray(alunosData.alunos_historico)
+          ? alunosData.alunos_historico
+          : [];
+        setAlunos(listaAlunos);
+        setAlunosHistorico(listaHistorico);
+        await carregarSessaoAtual(listaAlunos, false);
+        if (!alive) return;
+        console.info(
+          "[diario] carga inicial diario terminou",
+          Math.round(performance.now() - effectStart),
+          "ms",
+        );
+      } catch (error) {
+        if (!alive) return;
+        setDiarioErro(normalizarMensagemErroDiario(error));
+        console.info(
+          "[diario] carga inicial diario terminou",
+          Math.round(performance.now() - effectStart),
+          "ms",
+        );
       }
-
-      const listaAlunos = Array.isArray(alunosRes.data.alunos_ativos)
-        ? alunosRes.data.alunos_ativos
-        : Array.isArray(alunosRes.data.alunos)
-          ? alunosRes.data.alunos
-        : [];
-      const listaHistorico = Array.isArray(alunosRes.data.alunos_historico)
-        ? alunosRes.data.alunos_historico
-        : [];
-      setAlunos(listaAlunos);
-      setAlunosHistorico(listaHistorico);
-
-      const abrirRes = await fetchJson<{ ok: boolean; aula: Aula }>(
-        "/api/professor/diario-de-classe/aulas/abrir",
-        {
-          method: "POST",
-          body: JSON.stringify({ turmaId, dataAula }),
-        }
-      );
-
-      if (!alive) return;
-
-      if (!abrirRes.ok) {
-        setStatus("ERRO");
-        setErroMsg(abrirRes.message);
-        return;
-      }
-
-      setAula(abrirRes.data.aula);
-      setFecharErro("");
-      setFecharPendentes([]);
-
-      const presRes = await fetchJson<{ ok: boolean; aula?: Aula; presencas: PresencaDb[] }>(
-        `/api/professor/diario-de-classe/aulas/${abrirRes.data.aula.id}/presencas`
-      );
-
-      if (!alive) return;
-
-      if (!presRes.ok) {
-        setStatus("ERRO");
-        setErroMsg(presRes.message);
-        return;
-      }
-
-      if (presRes.data.aula) {
-        setAula(presRes.data.aula);
-      }
-
-      const presencas = Array.isArray(presRes.data.presencas)
-        ? presRes.data.presencas
-        : [];
-      const mapPres = new Map<number, PresencaDb>();
-      for (const p of presencas) mapPres.set(p.aluno_pessoa_id, p);
-
-      const linhasMontadas = listaAlunos.map((a) =>
-        mapPresencaToLinha(a, mapPres.get(a.aluno_pessoa_id))
-      );
-
-      setLinhas(linhasMontadas);
-      baselineRef.current = serializeLinhas(linhasMontadas);
-      setStatus("PRONTO");
-    })().catch((e: unknown) => {
-      if (!alive) return;
-      setStatus("ERRO");
-      setErroMsg(e instanceof Error ? e.message : "Erro ao carregar diario.");
-    });
+    })();
 
     return () => {
       alive = false;
     };
-  }, [turmaId, dataAula]);
+  }, [carregarSessaoAtual, dataAula, fetchProfessorJson, status, turmaId, turmasErro]);
 
   useEffect(() => {
     if (!aula) {
@@ -637,7 +1086,6 @@ export default function DiarioDeClassePage() {
   }, [aula?.id]);
 
   function limparFeedbackSalvamento() {
-    setSalvoOk(false);
     setFrequenciaFeedback(null);
   }
 
@@ -878,26 +1326,19 @@ export default function DiarioDeClassePage() {
         return;
       }
 
-      const r = await fetchJson<{ ok: boolean; aula?: Aula; presencas: PresencaDb[] }>(
+      const data = await fetchProfessorJson<{ ok: boolean; aula?: Aula; presencas: PresencaDb[] }>(
         `/api/professor/diario-de-classe/aulas/${aula.id}/presencas`,
         {
           method: "PUT",
           body: JSON.stringify({ itens, removerAlunoPessoaIds }),
-        }
+          mensagemErroPadrao: "Nao foi possivel salvar a frequencia no momento.",
+          nomeOperacao: "salvar_presencas",
+        },
       );
 
-      if (!r.ok) {
-        setFrequenciaFeedback({
-          tipo: "erro",
-          mensagem: r.message || "Nao foi possivel salvar a frequencia no momento.",
-        });
-        return;
-      }
-
-      const presencas = Array.isArray(r.data.presencas) ? r.data.presencas : [];
-      if (r.data.aula) {
-        setAula(r.data.aula);
-      }
+      const presencas = Array.isArray(data.presencas) ? data.presencas : [];
+      const aulaAtualizada = data.aula ?? aula;
+      setAula(aulaAtualizada);
       const mapPres = new Map<number, PresencaDb>();
       for (const p of presencas) mapPres.set(p.aluno_pessoa_id, p);
 
@@ -910,15 +1351,14 @@ export default function DiarioDeClassePage() {
 
       setLinhas(reconciliado);
       baselineRef.current = serializeLinhas(reconciliado);
-      setSalvoOk(true);
       setFrequenciaFeedback({
         tipo: "sucesso",
-        mensagem: getMensagemSucessoFrequencia(aula.data_aula ?? dataAula),
+        mensagem: getMensagemSucessoFrequencia(aulaAtualizada.data_aula ?? dataAula),
       });
-    } catch {
+    } catch (error) {
       setFrequenciaFeedback({
         tipo: "erro",
-        mensagem: "Nao foi possivel salvar a frequencia no momento.",
+        mensagem: normalizarMensagemErroDiario(error),
       });
     } finally {
       setSalvando(false);
@@ -941,26 +1381,24 @@ export default function DiarioDeClassePage() {
     setFecharErro("");
     setFecharPendentes([]);
 
-    const r = await fetchJson<{ ok: boolean; aula: Aula; pendentes?: number[] }>(
-      `/api/professor/diario-de-classe/aulas/${aula.id}/fechar`,
-      { method: "POST" }
-    );
+    try {
+      const data = await fetchProfessorJson<EncerramentoResumo>(
+        `/api/professor/diario-de-classe/aulas/${aula.id}/fechar`,
+        {
+          method: "POST",
+          mensagemErroPadrao: "Erro ao fechar chamada.",
+          nomeOperacao: "fechar_aula",
+        },
+      );
 
-    if (!r.ok) {
-      if (r.status === 422) {
-        const raw = r.data as { pendentes?: unknown } | undefined;
-        const pendentes = Array.isArray(raw?.pendentes) ? raw?.pendentes : [];
-        setFecharPendentes(pendentes);
-        setFecharErro(r.message || "Ha alunos pendentes na chamada.");
-      } else {
-        setFecharErro(r.message || "Erro ao fechar chamada.");
-      }
+      setAula(data.aula);
+      setResumoEncerramento(data);
+      setModalEncerramentoAberto(true);
+    } catch (error) {
+      setFecharErro(normalizarMensagemErroDiario(error));
+    } finally {
       setFechando(false);
-      return;
     }
-
-    setAula(r.data.aula);
-    setFechando(false);
   }
 
   async function carregarPlanoSessao() {
@@ -976,25 +1414,27 @@ export default function DiarioDeClassePage() {
     setPlanoLoading(true);
     setPlanoErro("");
 
-    const r = await fetchJson<{
-      ok: boolean;
-      aula: Aula;
-      plano: PlanoAula | null;
-      instancia: PlanoInstancia | null;
-    }>(`/api/professor/diario-de-classe/aulas/${aula.id}/plano`);
+    try {
+      const data = await fetchProfessorJson<{
+        ok: boolean;
+        aula: Aula;
+        plano: PlanoAula | null;
+        instancia: PlanoInstancia | null;
+      }>(`/api/professor/diario-de-classe/aulas/${aula.id}/plano`, {
+        mensagemErroPadrao: "Nao foi possivel carregar o plano da aula.",
+        nomeOperacao: "carregar_plano",
+      });
 
-    if (!r.ok) {
-      setPlanoErro(r.message);
+      setPlano(data.plano ?? null);
+      setPlanoInstancia(data.instancia ?? null);
+      setNotasPosAula(data.instancia?.notas_pos_aula ?? "");
+      setPlanoLoading(false);
+    } catch (error) {
+      setPlanoErro(normalizarMensagemErroDiario(error));
       setPlano(null);
       setPlanoInstancia(null);
       setPlanoLoading(false);
-      return;
     }
-
-    setPlano(r.data.plano ?? null);
-    setPlanoInstancia(r.data.instancia ?? null);
-    setNotasPosAula(r.data.instancia?.notas_pos_aula ?? "");
-    setPlanoLoading(false);
   }
 
   async function aplicarPlanoSessao() {
@@ -1002,19 +1442,22 @@ export default function DiarioDeClassePage() {
     setPlanoAplicando(true);
     setPlanoErro("");
 
-    const r = await fetchJson<{ ok: boolean; instancia: PlanoInstancia }>(
-      `/api/professor/diario-de-classe/aulas/${aula.id}/plano/aplicar`,
-      { method: "POST" }
-    );
+    try {
+      const data = await fetchProfessorJson<{ ok: boolean; instancia: PlanoInstancia }>(
+        `/api/professor/diario-de-classe/aulas/${aula.id}/plano/aplicar`,
+        {
+          method: "POST",
+          mensagemErroPadrao: "Nao foi possivel aplicar o plano da aula.",
+          nomeOperacao: "aplicar_plano",
+        },
+      );
 
-    if (!r.ok) {
-      setPlanoErro(r.message);
+      setPlanoInstancia(data.instancia);
       setPlanoAplicando(false);
-      return;
+    } catch (error) {
+      setPlanoErro(normalizarMensagemErroDiario(error));
+      setPlanoAplicando(false);
     }
-
-    setPlanoInstancia(r.data.instancia);
-    setPlanoAplicando(false);
   }
 
   async function concluirPlanoSessao() {
@@ -1028,22 +1471,23 @@ export default function DiarioDeClassePage() {
     setPlanoConcluindo(true);
     setPlanoErro("");
 
-    const r = await fetchJson<{ ok: boolean; instancia: PlanoInstancia }>(
-      `/api/professor/diario-de-classe/aulas/${aula.id}/plano/concluir`,
-      {
-        method: "POST",
-        body: JSON.stringify({ notas_pos_aula: notasPosAula.trim() || null }),
-      }
-    );
+    try {
+      const data = await fetchProfessorJson<{ ok: boolean; instancia: PlanoInstancia }>(
+        `/api/professor/diario-de-classe/aulas/${aula.id}/plano/concluir`,
+        {
+          method: "POST",
+          body: JSON.stringify({ notas_pos_aula: notasPosAula.trim() || null }),
+          mensagemErroPadrao: "Nao foi possivel concluir o plano da aula.",
+          nomeOperacao: "concluir_plano",
+        },
+      );
 
-    if (!r.ok) {
-      setPlanoErro(r.message);
+      setPlanoInstancia(data.instancia);
       setPlanoConcluindo(false);
-      return;
+    } catch (error) {
+      setPlanoErro(normalizarMensagemErroDiario(error));
+      setPlanoConcluindo(false);
     }
-
-    setPlanoInstancia(r.data.instancia);
-    setPlanoConcluindo(false);
   }
 
   const turmaSelecionada = useMemo(
@@ -1052,38 +1496,60 @@ export default function DiarioDeClassePage() {
   );
 
   const aulaFechada = Boolean(aula?.fechada_em);
+  const aulaAberta = Boolean(aula?.aberta_em) && !aulaFechada;
+  const carregandoTurmas = status === "PENDENTE";
+  const temFalhaTurmas = Boolean(turmasErro);
   const execucaoUi = getExecucaoAulaUi(aula);
   const abertaEmLabel = formatDateTimeBR(aula?.aberta_em);
   const fechadaEmLabel = formatDateTimeBR(aula?.fechada_em);
   const frequenciaSalvaEmLabel = formatDateTimeBR(aula?.frequencia_salva_em);
-  const statusLabel = status === "ERRO" ? "Erro" : execucaoUi.label;
+  const frequenciaSalva = hasFrequenciaPersistida(aula);
+  const statusLabel = carregandoTurmas
+    ? "Carregando turmas"
+    : temFalhaTurmas
+      ? "Turmas indisponiveis"
+      : execucaoUi.label;
   const statusSubtitle =
-    status === "ERRO"
-      ? erroMsg || "Falha ao carregar diario."
-      : aula?.status_execucao === "VALIDADA"
-        ? `Validada em ${fechadaEmLabel ?? "--"} por ${aula?.fechada_por_nome ?? "nao informado"}.`
-        : aula?.status_execucao === "ABERTA"
-          ? `Aberta em ${abertaEmLabel ?? "--"} por ${aula?.aberta_por_nome ?? "nao informado"}.`
-          : aula?.status_execucao === "NAO_REALIZADA"
-            ? "A aula prevista nao foi validada no periodo esperado."
-            : aula
-              ? "A aula foi aberta e precisa de frequencia salva e fechamento para ser validada."
-              : "Selecione uma turma para abrir a aula do dia.";
-  const statusBadgeLabel = status === "ERRO" ? "ERRO" : execucaoUi.badge;
-  const statusBadgeTone = status === "ERRO" ? "border-rose-200 bg-rose-50 text-rose-700" : execucaoUi.tone;
+    carregandoTurmas
+      ? "Carregando as turmas disponiveis para o Diario de Classe."
+      : temFalhaTurmas
+        ? turmasErro
+        : aulaFechada
+          ? "Aula encerrada com sucesso."
+          : aulaAberta && frequenciaSalva && !dirty && !hasLinhasPendentes(linhas)
+            ? "Presencas salvas. Aula pronta para encerramento."
+            : aulaAberta
+              ? `Aberta em ${abertaEmLabel ?? "--"} por ${aula?.aberta_por_nome ?? "nao informado"}.`
+              : aula
+                ? "A aula do dia ainda nao foi aberta."
+                : "Selecione uma turma para abrir a aula do dia.";
+  const statusBadgeLabel = carregandoTurmas
+    ? "CARREGANDO"
+    : temFalhaTurmas
+      ? "ATENCAO"
+      : execucaoUi.badge;
+  const statusBadgeTone = carregandoTurmas
+    ? "border-slate-200 bg-slate-100 text-slate-700"
+    : temFalhaTurmas
+      ? "border-amber-200 bg-amber-50 text-amber-800"
+      : execucaoUi.tone;
   const aulaNumeroLabel = typeof aula?.aula_numero === "number" ? `#${aula.aula_numero}` : "--";
   const dataSemana = weekdayLabelFromISO(dataAula);
   const presencasMarcadas = countLinhasMarcadas(linhas);
   const possuiPendencias = hasLinhasPendentes(linhas);
   const pendentesCount = Math.max(0, alunos.length - presencasMarcadas);
-  const podeFecharChamada =
+  const podeEncerrarAula =
     Boolean(aula) &&
     Boolean(turmaId) &&
     alunos.length > 0 &&
     !fechando &&
-    !aulaFechada &&
+    aulaAberta &&
+    frequenciaSalva &&
     !dirty &&
     !possuiPendencias;
+  const podeAbrirAula = Boolean(turmaId) && alunos.length > 0 && !aulaAberta && !aulaFechada;
+  const mostrarSalvarFrequencia =
+    Boolean(aula) && aulaAberta && !aulaFechada && !podeEncerrarAula;
   const blocosOrdenados = useMemo(() => {
     const blocos = plano?.plano_aula_blocos ?? [];
     return [...blocos].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
@@ -1147,6 +1613,17 @@ export default function DiarioDeClassePage() {
                 />
                 <span className="text-xs text-slate-500">Dia da semana: {dataSemana}</span>
               </div>
+              {podeVerTodasTurmas ? (
+                <label className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={turmaScope === "TODAS"}
+                    onChange={(e) => setTurmaScope(e.target.checked ? "TODAS" : "MINHAS_TURMAS")}
+                  />
+                  <span>Ver todas as turmas do dia</span>
+                </label>
+              ) : null}
               {isAdmin ? (
                 <div className="mt-3">
                   <div className="text-xs font-semibold text-slate-700">Professor</div>
@@ -1170,6 +1647,29 @@ export default function DiarioDeClassePage() {
             </div>
           </div>
         </div>
+
+        {turmasErro ? (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            <div className="font-semibold">Falha ao carregar turmas</div>
+            <div>{turmasErro}</div>
+            {turmasErro === DIARIO_AUTH_CORROMPIDA_MENSAGEM ? (
+              <div className="mt-1 text-xs text-rose-600">
+                Depois de entrar novamente, recarregue esta pagina.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {diarioErro ? (
+          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            <div>{diarioErro}</div>
+            {diarioErro === DIARIO_AUTH_CORROMPIDA_MENSAGEM ? (
+              <div className="mt-1 text-xs text-rose-600">
+                Depois de entrar novamente, recarregue esta pagina.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -1256,10 +1756,10 @@ export default function DiarioDeClassePage() {
           </div>
         </div>
 
-        {status === "ERRO" ? (
+        {turmasErro ? (
           <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-            <div className="font-semibold">Falha</div>
-            <div className="text-rose-600">{erroMsg || "Erro inesperado."}</div>
+            <div className="font-semibold">Falha ao carregar turmas</div>
+            <div className="text-rose-600">{turmasErro}</div>
           </div>
         ) : null}
       </section>
@@ -1267,16 +1767,18 @@ export default function DiarioDeClassePage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="mb-3">
           <div className="text-sm font-semibold text-slate-900">Pendencias e acoes</div>
-          <div className="text-xs text-slate-500">
-            Abra a chamada da turma e registre a frequencia antes de fechar.
+            <div className="text-xs text-slate-500">
+            Abra a chamada da turma e registre a frequencia antes de fechar. O escopo atual respeita a selecao manual entre minhas turmas e todas as turmas do dia.
           </div>
         </div>
 
-        {status === "ERRO" ? (
+        {turmasErro ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
             <div className="font-semibold">Falha ao carregar turmas</div>
-            <div className="text-rose-600">{erroMsg || "Erro inesperado."}</div>
+            <div className="text-rose-600">{turmasErro}</div>
           </div>
+        ) : carregandoTurmas ? (
+          <div className="text-sm text-slate-500">Carregando turmas disponiveis...</div>
         ) : turmas.length === 0 ? (
           <div className="text-sm text-slate-500">Nenhuma turma disponivel.</div>
         ) : (
@@ -1391,6 +1893,17 @@ export default function DiarioDeClassePage() {
                 ) : null}
 
                 <div className="mt-4 flex flex-col gap-2">
+                  {diarioErro ? (
+                    <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                      <div>{diarioErro}</div>
+                      {diarioErro === DIARIO_AUTH_CORROMPIDA_MENSAGEM ? (
+                        <div className="mt-1 text-xs text-rose-600">
+                          Depois de entrar novamente, recarregue esta pagina.
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   {!turmaId ? (
                     <div className="text-sm text-muted-foreground">
                       Selecione uma turma para carregar a chamada.
@@ -1536,32 +2049,50 @@ export default function DiarioDeClassePage() {
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-xs text-muted-foreground">
-                    {dirty
-                      ? "Alteracoes pendentes."
-                      : possuiPendencias
-                        ? "Marque todos os alunos para liberar o fechamento."
-                      : salvoOk
-                        ? "Presencas salvas. Falta fechar a chamada."
-                        : "Sem alteracoes."}
+                    {aulaFechada
+                      ? "Aula encerrada com sucesso."
+                      : podeAbrirAula
+                        ? "Abra a aula para iniciar a chamada."
+                        : dirty
+                          ? "Alteracoes pendentes."
+                          : possuiPendencias
+                            ? "Marque todos os alunos e salve a frequencia para liberar o encerramento."
+                            : aulaAberta && frequenciaSalva
+                              ? "Presencas salvas. Aula pronta para encerramento."
+                              : "Sem alteracoes."}
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="rounded-full border px-5 py-2 text-sm font-medium disabled:opacity-50"
-                      disabled={!podeFecharChamada}
-                      onClick={() => void fecharChamada()}
-                    >
-                      {fechando ? "Fechando..." : aulaFechada ? "Chamada fechada" : "Fechar chamada"}
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                      disabled={!aula || !turmaId || alunos.length === 0 || salvando || !dirty || aulaFechada}
-                      onClick={() => void salvarFrequencia()}
-                    >
-                      {salvando ? "Salvando..." : "Salvar frequencia"}
-                    </button>
+                    {podeAbrirAula ? (
+                      <button
+                        type="button"
+                        className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                        disabled={salvando || fechando}
+                        onClick={() => void abrirAulaSessao()}
+                      >
+                        Abrir aula
+                      </button>
+                    ) : null}
+                    {podeEncerrarAula ? (
+                      <button
+                        type="button"
+                        className="rounded-full border px-5 py-2 text-sm font-medium disabled:opacity-50"
+                        disabled={!podeEncerrarAula}
+                        onClick={() => void fecharChamada()}
+                      >
+                        {fechando ? "Encerrando..." : "Encerrar aula"}
+                      </button>
+                    ) : null}
+                    {mostrarSalvarFrequencia ? (
+                      <button
+                        type="button"
+                        className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                        disabled={!aula || !turmaId || alunos.length === 0 || salvando || !dirty || aulaFechada}
+                        onClick={() => void salvarFrequencia()}
+                      >
+                        {salvando ? "Salvando..." : "Salvar frequencia"}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1843,6 +2374,66 @@ export default function DiarioDeClassePage() {
       </DiarioModal>
 
       </div>
+
+      {modalEncerramentoAberto && resumoEncerramento ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-lg">
+            <div className="text-sm text-muted-foreground">Registro concluido no Diario de Classe.</div>
+            <div className="mt-1 text-xl font-semibold text-slate-900">
+              Aula encerrada com sucesso
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Abertura</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">
+                  {formatDateTimeBR(resumoEncerramento.aberta_em) ?? "--"}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fechamento</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">
+                  {formatDateTimeBR(resumoEncerramento.fechada_em) ?? "--"}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Duracao</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">
+                  {formatDuracaoMinutos(resumoEncerramento.duracao_minutos)}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total de alunos</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">
+                  {resumoEncerramento.total_alunos}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Presentes</div>
+                <div className="mt-1 text-sm font-medium text-emerald-700">
+                  {resumoEncerramento.presentes}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Faltas</div>
+                <div className="mt-1 text-sm font-medium text-rose-700">
+                  {resumoEncerramento.faltas}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground"
+                onClick={fecharModalEncerramento}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {anotacaoOpen && anotacaoAluno ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

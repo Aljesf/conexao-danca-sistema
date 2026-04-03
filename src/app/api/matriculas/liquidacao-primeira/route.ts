@@ -1,14 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
-import { upsertLancamentoPorCobranca } from "@/lib/credito-conexao/upsertLancamentoPorCobranca";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { requireUser } from "@/lib/supabase/api-auth";
+import {
+  buildReferenciaMatriculaEntradaContaInterna,
+  buildReferenciaMatriculaContaInterna,
+  garantirObrigacaoContaInterna,
+} from "@/lib/financeiro/contaInternaObrigacao";
+import {
+  buildReferenciaMatriculaItemCompetencia,
+  listMatriculaItensAtivos,
+} from "@/lib/matriculas/matriculaItens";
 
 type LiquidacaoModo = "PAGAR_AGORA" | "LANCAR_NO_CARTAO" | "ADIAR_EXCECAO" | "MOVIMENTO";
 type MetodoLiquidacao = "CARTAO_CONEXAO" | "COBRANCAS_LEGADO" | "CREDITO_BOLSA" | "OUTRO";
 
 type Payload = {
   matricula_id: number;
+  matricula_item_ids?: number[];
   tipo_primeira_cobranca: "ENTRADA_PRORATA" | "MENSALIDADE_CHEIA_CARTAO";
   modo: LiquidacaoModo;
 
@@ -56,8 +65,16 @@ type TurmaVinculada = {
 };
 
 type ComposicaoItem = {
+  item_id?: number | null;
   turma_id: number;
   ue_id: number | null;
+  descricao: string;
+  valor_centavos: number;
+};
+
+type MatriculaItemMensal = {
+  item_id: number;
+  turma_id: number | null;
   descricao: string;
   valor_centavos: number;
 };
@@ -544,6 +561,69 @@ async function ensureTurmaAlunoVinculos(params: {
 }) {
   const { supabase, matriculaId, alunoId, vinculoId, dataInicio } = params;
 
+  const { data: itensRows, error: itensError } = await (supabase as unknown as { from: (table: string) => any })
+    .from("matricula_itens")
+    .select("id,turma_id_inicial,status")
+    .eq("matricula_id", matriculaId)
+    .eq("status", "ATIVO");
+
+  if (itensError && !isSchemaMissingError(itensError)) {
+    throw new Error(`falha_buscar_matricula_itens: ${itensError.message}`);
+  }
+
+  const itensAtivos = ((itensRows ?? []) as Array<Record<string, unknown>>)
+    .map((row) => ({
+      id: asInt(row.id),
+      turma_id_inicial: asInt(row.turma_id_inicial),
+    }))
+    .filter((row): row is { id: number; turma_id_inicial: number | null } => Boolean(row.id));
+
+  if (itensAtivos.length > 0) {
+    for (const item of itensAtivos) {
+      if (!item.turma_id_inicial) continue;
+
+      const { data: taExist, error: taErr } = await supabase
+        .from("turma_aluno")
+        .select("turma_aluno_id, matricula_id, matricula_item_id")
+        .eq("turma_id", item.turma_id_inicial)
+        .eq("aluno_pessoa_id", alunoId)
+        .is("dt_fim", null)
+        .limit(1);
+
+      if (taErr) {
+        throw new Error(`falha_buscar_turma_aluno: ${taErr.message}`);
+      }
+
+      if (!taExist || taExist.length === 0) {
+        const { error: taInsErr } = await supabase.from("turma_aluno").insert({
+          turma_id: item.turma_id_inicial,
+          aluno_pessoa_id: alunoId,
+          matricula_id: matriculaId,
+          matricula_item_id: item.id,
+          dt_inicio: dataInicio,
+          status: "ativo",
+        });
+
+        if (taInsErr) {
+          throw new Error(`falha_inserir_turma_aluno: ${taInsErr.message}`);
+        }
+      } else {
+        const { error: taUpdErr } = await supabase
+          .from("turma_aluno")
+          .update({
+            matricula_id: matriculaId,
+            matricula_item_id: item.id,
+          })
+          .eq("turma_aluno_id", taExist[0].turma_aluno_id);
+
+        if (taUpdErr) {
+          throw new Error(`falha_atualizar_turma_aluno: ${taUpdErr.message}`);
+        }
+      }
+    }
+    return;
+  }
+
   const turmaIds = new Set<number>();
 
   const { data: execRows, error: execErr } = await supabase
@@ -606,7 +686,39 @@ async function ensureTurmaAlunoVinculos(params: {
 }
 
 function buildReferenciaLancamentoCartaoConexao(matriculaId: number, competencia: string): string {
-  return `matricula:${matriculaId}|cartao_conexao|competencia:${competencia}`;
+  return buildReferenciaMatriculaContaInterna(matriculaId, competencia);
+}
+
+function normalizeItemIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((item) => asInt(item))
+        .filter((item): item is number => Boolean(item)),
+    ),
+  );
+}
+
+async function carregarMatriculaItensMensais(params: {
+  supabase: SupabaseAdminClient;
+  matriculaId: number;
+  payloadItemIds: number[];
+}): Promise<MatriculaItemMensal[]> {
+  const { supabase, matriculaId, payloadItemIds } = params;
+  const items = await listMatriculaItensAtivos(
+    supabase as unknown as { from: (table: string) => any },
+    matriculaId,
+  );
+
+  return items
+    .filter((item) => payloadItemIds.length === 0 || payloadItemIds.includes(item.id))
+    .map((item) => ({
+      item_id: item.id,
+      turma_id: item.turma_id_inicial,
+      descricao: item.descricao,
+      valor_centavos: Math.max(0, item.valor_liquido_centavos),
+    }));
 }
 
 function asDateStr(n: unknown): string | null {
@@ -614,72 +726,6 @@ function asDateStr(n: unknown): string | null {
   const s = n.trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
   return s;
-}
-
-function toTimestamptzNoonUtc(dateYYYYMMDD: string): string {
-  return `${dateYYYYMMDD}T12:00:00.000Z`;
-}
-
-async function getCentroCustoPadraoEscolaId(supabase: any): Promise<number | null> {
-  const { data, error } = await supabase
-    .from("escola_config_financeira")
-    .select("centro_custo_padrao_escola_id")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(`falha_ler_config_escola_financeira: ${error.message}`);
-  }
-
-  const id = data?.centro_custo_padrao_escola_id;
-  return typeof id === "number" ? id : null;
-}
-
-async function getCentroCustoFallbackPrimeiroAtivoId(supabase: any): Promise<number> {
-  const { data, error } = await supabase
-    .from("centros_custo")
-    .select("id")
-    .eq("ativo", true)
-    .order("id", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error || !data?.id) {
-    throw new Error(`falha_resolver_centro_custo_fallback: ${error?.message ?? "sem_centro_custo"}`);
-  }
-
-  return Number(data.id);
-}
-
-async function inserirMovimentoFinanceiroReceita(params: {
-  supabase: any;
-  centroCustoId: number | null;
-  valorCentavos: number;
-  dataYYYYMMDD: string;
-  origemTipo: string;
-  origemId: number;
-  descricao: string;
-}) {
-  const { supabase, centroCustoId, valorCentavos, dataYYYYMMDD, origemTipo, origemId, descricao } = params;
-
-  const centroPadrao = await getCentroCustoPadraoEscolaId(supabase);
-  const centroIdFinal = centroPadrao ?? centroCustoId ?? (await getCentroCustoFallbackPrimeiroAtivoId(supabase));
-
-  const payload: Record<string, unknown> = {
-    tipo: "RECEITA",
-    centro_custo_id: centroIdFinal,
-    valor_centavos: valorCentavos,
-    data_movimento: toTimestamptzNoonUtc(dataYYYYMMDD),
-    origem: origemTipo,
-    origem_id: origemId,
-    descricao,
-    usuario_id: null,
-  };
-
-  const { error } = await supabase.from("movimento_financeiro").insert(payload);
-  if (error) {
-    throw new Error(`falha_criar_movimento_financeiro: ${error.message}`);
-  }
 }
 
 function ymFromDate(dateYYYYMMDD: string): string {
@@ -764,7 +810,7 @@ async function ensureContaCreditoConexaoAluno(params: { supabase: any; responsav
       pessoa_titular_id: responsavelFinanceiroId,
       responsavel_financeiro_pessoa_id: responsavelFinanceiroId,
       tipo_conta: "ALUNO",
-      descricao_exibicao: "Cartao Conexao ALUNO",
+      descricao_exibicao: "Conta interna do aluno",
       dia_fechamento: 10,
       dia_vencimento: 12,
       ativo: true,
@@ -818,47 +864,6 @@ async function ensureFaturasPeriodo(params: {
     if (error) {
       throw new Error(`falha_criar_fatura_credito_conexao: ${error.message}`);
     }
-  }
-}
-
-async function vincularLancamentoNaFatura(params: {
-  supabase: any;
-  contaConexaoId: number;
-  periodoReferencia: string;
-  lancamentoId: number;
-  valorCentavos: number;
-}) {
-  const { supabase, contaConexaoId, periodoReferencia, lancamentoId, valorCentavos } = params;
-
-  const { data: fatura, error: errFat } = await supabase
-    .from("credito_conexao_faturas")
-    .select("id, valor_total_centavos")
-    .eq("conta_conexao_id", contaConexaoId)
-    .eq("periodo_referencia", periodoReferencia)
-    .single();
-
-  if (errFat || !fatura) {
-    throw new Error(`fatura_nao_encontrada_para_periodo: ${periodoReferencia}`);
-  }
-
-  const { error: errLink } = await supabase.from("credito_conexao_fatura_lancamentos").insert({
-    fatura_id: fatura.id,
-    lancamento_id: lancamentoId,
-  });
-
-  if (errLink) {
-    throw new Error(`falha_vincular_lancamento_fatura: ${errLink.message}`);
-  }
-
-  const novoTotal = (Number(fatura.valor_total_centavos) || 0) + valorCentavos;
-
-  const { error: errUpd } = await supabase
-    .from("credito_conexao_faturas")
-    .update({ valor_total_centavos: novoTotal })
-    .eq("id", fatura.id);
-
-  if (errUpd) {
-    throw new Error(`falha_atualizar_total_fatura: ${errUpd.message}`);
   }
 }
 
@@ -1002,6 +1007,126 @@ function normalizeCompetenciaFim(competenciaInicio: string, competenciaFim: stri
   return competenciaFim;
 }
 
+async function gerarLancamentosCartaoPorItens(params: {
+  supabase: SupabaseAdminClient;
+  contaConexaoId: number;
+  pessoaId: number;
+  matriculaId: number;
+  alunoId: number;
+  itens: MatriculaItemMensal[];
+  competenciaInicio: string;
+  competenciaFim: string;
+  diaVencimento: number | null;
+  fonte: "MATRICULA_ITENS" | "MATRICULA_ITENS_REPROCESSAMENTO";
+  origemSistema: "MATRICULA" | "MATRICULA_REPROCESSAR";
+}): Promise<{
+  cobrancas: Array<{ id: number; competencia_ano_mes: string; item_id: number }>;
+  lancamentosDetalhe: Array<{ id: number; competencia_ano_mes: string; referencia_item: string; item_id: number }>;
+  lancamentos: number;
+  totalCentavos: number;
+}> {
+  const {
+    supabase,
+    contaConexaoId,
+    pessoaId,
+    matriculaId,
+    alunoId,
+    itens,
+    competenciaInicio,
+    competenciaFim,
+    diaVencimento,
+    fonte,
+    origemSistema,
+  } = params;
+
+  const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
+  const cobrancas: Array<{ id: number; competencia_ano_mes: string; item_id: number }> = [];
+  const lancamentosDetalhe: Array<{ id: number; competencia_ano_mes: string; referencia_item: string; item_id: number }> = [];
+  let lancamentos = 0;
+
+  for (const competencia of competencias) {
+    for (const item of itens) {
+      if (item.valor_centavos <= 0) continue;
+
+      const referenciaItem = buildReferenciaMatriculaItemCompetencia(item.item_id, competencia);
+      const descricao = item.descricao || `Item ${item.item_id} - ${competencia}`;
+
+      const obrigacao = await garantirObrigacaoContaInterna({
+        supabase,
+        tipoConta: "ALUNO",
+        pessoaCobrancaId: pessoaId,
+        contaInternaId: contaConexaoId,
+        competencia,
+        valorCentavos: item.valor_centavos,
+        descricao,
+        origemTipoCobranca: "CONTA_INTERNA",
+        origemSubtipoCobranca: "CONTA_INTERNA_MENSALIDADE",
+        origemSistema,
+        origemId: matriculaId,
+        origemItemTipo: "MATRICULA_ITEM",
+        origemItemId: item.item_id,
+        referenciaItem,
+        diaVencimento,
+        alunoId,
+        matriculaId,
+        composicaoJson: {
+          fonte,
+          aluno_pessoa_id: alunoId,
+          responsavel_financeiro_id: pessoaId,
+          matricula_id: matriculaId,
+          competencia,
+          item_id: item.item_id,
+          turma_id: item.turma_id,
+          valor_centavos: item.valor_centavos,
+          descricao: item.descricao,
+        },
+        fallbackLegacyLookup: {
+          origemTipos: ["MATRICULA", "MATRICULA_MENSALIDADE"],
+          origemSubtipo: "CARTAO_CONEXAO",
+          origemId: matriculaId,
+          competenciaAnoMes: competencia,
+        },
+      });
+
+      const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert({
+        matricula_id: matriculaId,
+        tipo: "LANCAMENTO_CREDITO",
+        descricao,
+        valor_centavos: item.valor_centavos,
+        vencimento: null,
+        data_evento: dateFromPeriodo(competencia),
+        status: "PENDENTE_FATURA",
+        origem_tabela: "credito_conexao_lancamentos",
+        origem_id: obrigacao.lancamento_id,
+      } satisfies LedgerInsert);
+
+      if (ledgerErr) {
+        throw new Error(`falha_inserir_ledger: ${ledgerErr.message}`);
+      }
+
+      cobrancas.push({
+        id: obrigacao.cobranca_id,
+        competencia_ano_mes: competencia,
+        item_id: item.item_id,
+      });
+      lancamentosDetalhe.push({
+        id: obrigacao.lancamento_id,
+        competencia_ano_mes: competencia,
+        referencia_item: referenciaItem,
+        item_id: item.item_id,
+      });
+      lancamentos += 1;
+    }
+  }
+
+  return {
+    cobrancas,
+    lancamentosDetalhe,
+    lancamentos,
+    totalCentavos: itens.reduce((acc, item) => acc + Math.max(0, item.valor_centavos), 0),
+  };
+}
+
 async function gerarLancamentosCartaoManual(params: {
   supabase: SupabaseAdminClient;
   contaConexaoId: number;
@@ -1012,7 +1137,9 @@ async function gerarLancamentosCartaoManual(params: {
   totalCentavos: number;
   competenciaInicio: string;
   competenciaFim: string;
+  diaVencimento: number | null;
 }): Promise<{
+  cobrancas: Array<{ id: number; competencia_ano_mes: string }>;
   lancamentosDetalhe: Array<{ id: number; competencia_ano_mes: string; referencia_item: string }>;
   lancamentos: number;
 }> {
@@ -1026,9 +1153,11 @@ async function gerarLancamentosCartaoManual(params: {
     totalCentavos,
     competenciaInicio,
     competenciaFim,
+    diaVencimento,
   } = params;
 
   const competencias = buildCompetenciasBetween(competenciaInicio, competenciaFim);
+  const cobrancas: Array<{ id: number; competencia_ano_mes: string }> = [];
   const lancamentosDetalhe: Array<{ id: number; competencia_ano_mes: string; referencia_item: string }> = [];
   let lancamentos = 0;
 
@@ -1036,7 +1165,7 @@ async function gerarLancamentosCartaoManual(params: {
     const parsed = parsePeriodo(competencia);
     if (!parsed) continue;
 
-    const descricao = `Mensalidade ${competencia} - matricula`;
+    const descricao = `Conta interna - Mensalidade ${competencia}`;
     const referenciaItem = buildReferenciaLancamentoCartaoConexao(matriculaId, competencia);
 
     const composicaoJson = {
@@ -1052,30 +1181,35 @@ async function gerarLancamentosCartaoManual(params: {
       })),
     };
 
-    const lancamento = await upsertLancamentoPorCobranca({
-      referenciaItem,
-      cobrancaId: null,
+    const obrigacao = await garantirObrigacaoContaInterna({
       supabase,
-      contaConexaoId,
+      tipoConta: "ALUNO",
+      pessoaCobrancaId: pessoaId,
+      contaInternaId: contaConexaoId,
       competencia,
       valorCentavos: totalCentavos,
-      alunoId,
-      matriculaId,
       descricao,
+      origemTipoCobranca: "CONTA_INTERNA",
+      origemSubtipoCobranca: "CONTA_INTERNA_MENSALIDADE",
       origemSistema: "MATRICULA",
       origemId: matriculaId,
+      origemItemTipo: "MATRICULA",
+      origemItemId: matriculaId,
+      referenciaItem,
+      diaVencimento,
+      alunoId,
+      matriculaId,
       composicaoJson,
+      fallbackLegacyLookup: {
+        origemTipos: ["MATRICULA", "MATRICULA_MENSALIDADE"],
+        origemSubtipo: "CARTAO_CONEXAO",
+        origemId: matriculaId,
+        competenciaAnoMes: competencia,
+      },
     });
 
+    cobrancas.push({ id: obrigacao.cobranca_id, competencia_ano_mes: competencia });
     lancamentos += 1;
-
-    await vincularLancamentoNaFatura({
-      supabase,
-      contaConexaoId,
-      periodoReferencia: competencia,
-      lancamentoId: lancamento.id,
-      valorCentavos: totalCentavos,
-    });
 
     const ledgerLinha: LedgerInsert = {
       matricula_id: matriculaId,
@@ -1086,7 +1220,7 @@ async function gerarLancamentosCartaoManual(params: {
       data_evento: dateFromPeriodo(competencia),
       status: "PENDENTE_FATURA",
       origem_tabela: "credito_conexao_lancamentos",
-      origem_id: lancamento.id,
+      origem_id: obrigacao.lancamento_id,
     };
 
     const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
@@ -1095,13 +1229,13 @@ async function gerarLancamentosCartaoManual(params: {
     }
 
     lancamentosDetalhe.push({
-      id: lancamento.id,
+      id: obrigacao.lancamento_id,
       competencia_ano_mes: competencia,
       referencia_item: referenciaItem,
     });
   }
 
-  return { lancamentosDetalhe, lancamentos };
+  return { cobrancas, lancamentosDetalhe, lancamentos };
 }
 
 export async function POST(request: NextRequest) {
@@ -1213,6 +1347,36 @@ export async function POST(request: NextRequest) {
   const totalBolsaManual = execucoesBolsa.reduce((acc, execucao) => acc + execucao.valor_mensal_centavos, 0);
   const totalInstitucionalManual = totalMovimentoManual + totalBolsaManual;
   const turmasFamilia = Array.from(new Set(execucoesFamilia.map((execucao) => execucao.turma_id)));
+  const payloadItemIds = normalizeItemIds(body.matricula_item_ids);
+  let matriculaItensMensais: MatriculaItemMensal[] = [];
+  try {
+    matriculaItensMensais = await carregarMatriculaItensMensais({
+      supabase,
+      matriculaId,
+      payloadItemIds,
+    });
+  } catch (matriculaItensError) {
+    const msg = matriculaItensError instanceof Error ? matriculaItensError.message : "erro_desconhecido";
+    return NextResponse.json({ error: "falha_buscar_matricula_itens", details: msg }, { status: 500 });
+  }
+
+  if (matriculaItensMensais.length > 0) {
+    const valorPorTurmaExecucao = new Map<number, number>();
+    for (const execucao of execucoesFamilia) {
+      valorPorTurmaExecucao.set(execucao.turma_id, execucao.valor_mensal_centavos);
+    }
+    matriculaItensMensais = matriculaItensMensais
+      .map((item) => ({
+        ...item,
+        valor_centavos:
+          item.valor_centavos > 0
+            ? item.valor_centavos
+            : item.turma_id
+              ? valorPorTurmaExecucao.get(item.turma_id) ?? 0
+              : 0,
+      }))
+      .filter((item) => item.valor_centavos > 0);
+  }
   let cobrancasCriadasManual: Array<{ id: number; competencia_ano_mes: string }> = [];
   const gerarMensalidadesCartao = async (): Promise<
     | {
@@ -1275,12 +1439,21 @@ export async function POST(request: NextRequest) {
         debugCartao.periodo_inicio = competenciaInicio;
         debugCartao.periodo_fim = competenciaFim;
         debugCartao.total_mensalidade_centavos = totalFamiliaManual;
-        debugCartao.itens = execucoesFamilia.map((execucao) => ({
-          turma_id: execucao.turma_id,
-          ue_id: null,
-          descricao: execucao.nivel ? `Nivel ${execucao.nivel}` : `Turma ${execucao.turma_id}`,
-          valor_centavos: execucao.valor_mensal_centavos,
-        }));
+        debugCartao.itens =
+          matriculaItensMensais.length > 0
+            ? matriculaItensMensais.map((item) => ({
+                item_id: item.item_id,
+                turma_id: item.turma_id ?? 0,
+                ue_id: null,
+                descricao: item.descricao,
+                valor_centavos: item.valor_centavos,
+              }))
+            : execucoesFamilia.map((execucao) => ({
+                turma_id: execucao.turma_id,
+                ue_id: null,
+                descricao: execucao.nivel ? `Nivel ${execucao.nivel}` : `Turma ${execucao.turma_id}`,
+                valor_centavos: execucao.valor_mensal_centavos,
+              }));
 
         const conta = await ensureContaCreditoConexaoAluno({
           supabase,
@@ -1298,22 +1471,44 @@ export async function POST(request: NextRequest) {
           diaVencimento: conta.dia_vencimento ?? 12,
         });
 
-        const resultado = await gerarLancamentosCartaoManual({
-          supabase,
-          contaConexaoId: conta.id,
-          pessoaId: matricula.responsavel_financeiro_id,
-          matriculaId: matricula.id,
-          alunoId,
-          execucoes: execucoesFamilia,
-          totalCentavos: totalFamiliaManual,
-          competenciaInicio,
-          competenciaFim,
-        });
+        const resultado =
+          matriculaItensMensais.length > 0
+            ? await gerarLancamentosCartaoPorItens({
+                supabase,
+                contaConexaoId: conta.id,
+                pessoaId: matricula.responsavel_financeiro_id,
+                matriculaId: matricula.id,
+                alunoId,
+                itens: matriculaItensMensais,
+                competenciaInicio,
+                competenciaFim,
+                diaVencimento: conta.dia_vencimento ?? 12,
+                fonte: "MATRICULA_ITENS",
+                origemSistema: "MATRICULA",
+              })
+            : await gerarLancamentosCartaoManual({
+                supabase,
+                contaConexaoId: conta.id,
+                pessoaId: matricula.responsavel_financeiro_id,
+                matriculaId: matricula.id,
+                alunoId,
+                execucoes: execucoesFamilia,
+                totalCentavos: totalFamiliaManual,
+                competenciaInicio,
+                competenciaFim,
+                diaVencimento: conta.dia_vencimento ?? 12,
+              });
 
+        cobrancasGeradas.push(
+          ...resultado.cobrancas.map((item) => ({
+            id: item.id,
+            competencia_ano_mes: item.competencia_ano_mes,
+          })),
+        );
         lancamentosGerados = resultado.lancamentosDetalhe;
         debugCartao.created_lancamentos += resultado.lancamentos;
         debugCartao.linked_faturas += resultado.lancamentos;
-        totalMensalidade = totalFamiliaManual;
+        totalMensalidade = resultado.totalCentavos;
       } else {
         const inicioVinculo = debugCartao.data_inicio_vinculo;
         const anoRef =
@@ -1342,8 +1537,43 @@ export async function POST(request: NextRequest) {
         });
 
         totalMensalidade = composicao.totalCentavos;
+        const valorPorTurmaComposicao = new Map<number, number>();
+        composicao.itens.forEach((item) => {
+          valorPorTurmaComposicao.set(item.turma_id, item.valor_centavos);
+        });
+
+        const itensMensaisNaoManual =
+          matriculaItensMensais.length > 0
+            ? matriculaItensMensais
+                .map((item) => ({
+                  ...item,
+                  valor_centavos:
+                    item.valor_centavos > 0
+                      ? item.valor_centavos
+                      : item.turma_id
+                        ? valorPorTurmaComposicao.get(item.turma_id) ?? 0
+                        : 0,
+                }))
+                .filter((item) => item.valor_centavos > 0)
+            : [];
+
+        const totalMensalidadePorItens =
+          itensMensaisNaoManual.length > 0
+            ? itensMensaisNaoManual.reduce((acc, item) => acc + item.valor_centavos, 0)
+            : composicao.totalCentavos;
+
+        totalMensalidade = totalMensalidadePorItens;
         debugCartao.total_mensalidade_centavos = totalMensalidade;
-        debugCartao.itens = composicao.itens;
+        debugCartao.itens =
+          itensMensaisNaoManual.length > 0
+            ? itensMensaisNaoManual.map((item) => ({
+                item_id: item.item_id,
+                turma_id: item.turma_id ?? 0,
+                ue_id: null,
+                descricao: item.descricao,
+                valor_centavos: item.valor_centavos,
+              }))
+            : composicao.itens;
 
         if (!totalMensalidade || totalMensalidade <= 0) {
           console.warn(
@@ -1367,69 +1597,104 @@ export async function POST(request: NextRequest) {
             diaVencimento: conta.dia_vencimento ?? 12,
           });
 
-          const composicaoBase = {
-            fonte: "MATRICULA_MULTIPLA_UE",
-            aluno_pessoa_id: alunoId,
-            responsavel_financeiro_id: matricula.responsavel_financeiro_id,
-            ano_referencia: anoRef,
-            total_centavos: totalMensalidade,
-            itens: composicao.itens,
-          };
+          const resultado =
+            itensMensaisNaoManual.length > 0
+              ? await gerarLancamentosCartaoPorItens({
+                  supabase,
+                  contaConexaoId: conta.id,
+                  pessoaId: matricula.responsavel_financeiro_id,
+                  matriculaId: matricula.id,
+                  alunoId,
+                  itens: itensMensaisNaoManual,
+                  competenciaInicio: competenciaMensalidade,
+                  competenciaFim,
+                  diaVencimento: conta.dia_vencimento ?? 12,
+                  fonte: "MATRICULA_ITENS",
+                  origemSistema: "MATRICULA",
+                })
+              : null;
 
-          const competencias = buildCompetenciasBetween(competenciaMensalidade, competenciaFim);
-
-          for (const periodo of competencias) {
-            const parsed = parsePeriodo(periodo);
-            if (!parsed) continue;
-            const dataEvento = buildDateFromYMD(parsed.year, parsed.month, 1);
-            const descricao = `Mensalidade ${periodo} - matricula`;
-
-            const lancamento = await upsertLancamentoPorCobranca({
-              referenciaItem: buildReferenciaLancamentoCartaoConexao(matricula.id, periodo),
-              cobrancaId: null,
-              supabase,
-              contaConexaoId: Number(conta.id),
-              competencia: periodo,
-              valorCentavos: totalMensalidade,
-              alunoId,
-              matriculaId: matricula.id,
-              descricao,
-              origemSistema: "MATRICULA",
-              origemId: matricula.id,
-              composicaoJson: { ...composicaoBase, competencia: periodo },
-            });
-
-            debugCartao.created_lancamentos += 1;
-
-            await vincularLancamentoNaFatura({
-              supabase,
-              contaConexaoId: conta.id,
-              periodoReferencia: periodo,
-              lancamentoId: lancamento.id,
-              valorCentavos: totalMensalidade,
-            });
-
-            debugCartao.linked_faturas += 1;
-
-            const ledgerLinha: LedgerInsert = {
-              matricula_id: matricula.id,
-              tipo: "LANCAMENTO_CREDITO",
-              descricao,
-              valor_centavos: totalMensalidade,
-              vencimento: null,
-              data_evento: dataEvento,
-              status: "PENDENTE_FATURA",
-              origem_tabela: "credito_conexao_lancamentos",
-              origem_id: lancamento.id,
+          if (resultado) {
+            cobrancasGeradas.push(
+              ...resultado.cobrancas.map((item) => ({
+                id: item.id,
+                competencia_ano_mes: item.competencia_ano_mes,
+              })),
+            );
+            debugCartao.created_lancamentos += resultado.lancamentos;
+            debugCartao.linked_faturas += resultado.lancamentos;
+          } else {
+            const composicaoBase = {
+              fonte: "MATRICULA_MULTIPLA_UE",
+              aluno_pessoa_id: alunoId,
+              responsavel_financeiro_id: matricula.responsavel_financeiro_id,
+              ano_referencia: anoRef,
+              total_centavos: totalMensalidade,
+              itens: composicao.itens,
             };
 
-            const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
-            if (ledgerErr) {
-              return NextResponse.json(
-                { error: "falha_inserir_ledger", details: ledgerErr.message },
-                { status: 500 },
-              );
+            const competencias = buildCompetenciasBetween(competenciaMensalidade, competenciaFim);
+            const cobrancasGeradasLoop: Array<{ id: number; competencia_ano_mes: string }> = [];
+
+            for (const periodo of competencias) {
+              const parsed = parsePeriodo(periodo);
+              if (!parsed) continue;
+              const dataEvento = buildDateFromYMD(parsed.year, parsed.month, 1);
+              const descricao = `Conta interna - Mensalidade ${periodo}`;
+
+              const obrigacao = await garantirObrigacaoContaInterna({
+                supabase,
+                tipoConta: "ALUNO",
+                pessoaCobrancaId: matricula.responsavel_financeiro_id,
+                contaInternaId: Number(conta.id),
+                competencia: periodo,
+                valorCentavos: totalMensalidade,
+                descricao,
+                origemTipoCobranca: "CONTA_INTERNA",
+                origemSubtipoCobranca: "CONTA_INTERNA_MENSALIDADE",
+                origemSistema: "MATRICULA",
+                origemId: matricula.id,
+                origemItemTipo: "MATRICULA",
+                origemItemId: matricula.id,
+                referenciaItem: buildReferenciaLancamentoCartaoConexao(matricula.id, periodo),
+                diaVencimento: conta.dia_vencimento ?? 12,
+                alunoId,
+                matriculaId: matricula.id,
+                composicaoJson: { ...composicaoBase, competencia: periodo },
+                fallbackLegacyLookup: {
+                  origemTipos: ["MATRICULA", "MATRICULA_MENSALIDADE"],
+                  origemSubtipo: "CARTAO_CONEXAO",
+                  origemId: matricula.id,
+                  competenciaAnoMes: periodo,
+                },
+              });
+
+              cobrancasGeradasLoop.push({ id: obrigacao.cobranca_id, competencia_ano_mes: periodo });
+              debugCartao.created_lancamentos += 1;
+              debugCartao.linked_faturas += 1;
+
+              const ledgerLinha: LedgerInsert = {
+                matricula_id: matricula.id,
+                tipo: "LANCAMENTO_CREDITO",
+                descricao,
+                valor_centavos: totalMensalidade,
+                vencimento: null,
+                data_evento: dataEvento,
+                status: "PENDENTE_FATURA",
+                origem_tabela: "credito_conexao_lancamentos",
+                origem_id: obrigacao.lancamento_id,
+              };
+
+              const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
+              if (ledgerErr) {
+                return NextResponse.json(
+                  { error: "falha_inserir_ledger", details: ledgerErr.message },
+                  { status: 500 },
+                );
+              }
             }
+
+            cobrancasGeradas.push(...cobrancasGeradasLoop);
           }
         }
       }
@@ -1729,73 +1994,110 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "forma_pagamento_invalida" }, { status: 400 });
     }
 
-    const { data: cobranca, error: errCobr } = await supabase
-      .from("cobrancas")
-      .insert({
-        pessoa_id: matricula.responsavel_financeiro_id,
-        descricao: "Entrada (pro-rata) - ato da matricula",
-        valor_centavos: valorFinal,
-        vencimento: dataPg,
-        status: "PAGA",
-        data_pagamento: dataPg,
-        metodo_pagamento: forma.codigo,
-        observacoes: body.observacoes ?? null,
-        origem_tipo: "MATRICULA",
-        origem_id: matricula.id,
-      })
-      .select("id, centro_custo_id")
-      .single();
+    let conta;
+    try {
+      conta = await ensureContaCreditoConexaoAluno({
+        supabase,
+        responsavelFinanceiroId: matricula.responsavel_financeiro_id,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "erro_desconhecido";
+      return NextResponse.json({ error: "falha_conta_interna", details: msg }, { status: 500 });
+    }
 
-    if (errCobr || !cobranca) {
+    const competenciaPagamento = dataPg.slice(0, 7);
+    const descricaoObrigacao =
+      body.tipo_primeira_cobranca === "ENTRADA_PRORATA"
+        ? "Conta interna - Entrada / pro-rata da matricula"
+        : `Conta interna - Mensalidade ${competenciaPagamento}`;
+    const referenciaObrigacao =
+      body.tipo_primeira_cobranca === "ENTRADA_PRORATA"
+        ? buildReferenciaMatriculaEntradaContaInterna(matricula.id, competenciaPagamento)
+        : buildReferenciaMatriculaContaInterna(matricula.id, competenciaPagamento);
+    const subtipoObrigacao =
+      body.tipo_primeira_cobranca === "ENTRADA_PRORATA"
+        ? "CONTA_INTERNA_ENTRADA_PRORATA"
+        : "CONTA_INTERNA_MENSALIDADE";
+    const origemTipoObrigacao =
+      body.tipo_primeira_cobranca === "ENTRADA_PRORATA" ? "MATRICULA" : "CONTA_INTERNA";
+
+    let obrigacaoContaInterna:
+      | {
+          cobranca_id: number;
+          lancamento_id: number;
+          recebimento_id?: number | null;
+        }
+      | null = null;
+
+    try {
+      obrigacaoContaInterna = await garantirObrigacaoContaInterna({
+        supabase,
+        tipoConta: "ALUNO",
+        pessoaCobrancaId: matricula.responsavel_financeiro_id,
+        contaInternaId: Number(conta.id),
+        competencia: competenciaPagamento,
+        valorCentavos: valorFinal,
+        descricao: descricaoObrigacao,
+        origemTipoCobranca: origemTipoObrigacao,
+        origemSubtipoCobranca: subtipoObrigacao,
+        origemSistema: "MATRICULA",
+        origemId: matricula.id,
+        origemItemTipo: "MATRICULA",
+        origemItemId: matricula.id,
+        referenciaItem: referenciaObrigacao,
+        diaVencimento: conta.dia_vencimento ?? 12,
+        alunoId,
+        matriculaId: matricula.id,
+        observacoes: body.observacoes ?? null,
+        composicaoJson: {
+          fonte: "MATRICULA_PAGA_NO_ATO",
+          tipo_primeira_cobranca: body.tipo_primeira_cobranca,
+          aluno_pessoa_id: alunoId,
+          responsavel_financeiro_id: matricula.responsavel_financeiro_id,
+          competencia: competenciaPagamento,
+          valor_centavos: valorFinal,
+        },
+        pagamento: {
+          dataPagamento: dataPg,
+          metodoPagamento: forma.codigo,
+          formaPagamentoCodigo: forma.codigo,
+          origemSistemaRecebimento: "MATRICULA",
+          observacoes: body.observacoes ?? null,
+          descricaoMovimento: `Pagamento presencial - ${descricaoObrigacao}`,
+          usuarioId: auth.userId ?? null,
+        },
+        fallbackLegacyLookup: {
+          origemTipos: ["MATRICULA", "MATRICULA_MENSALIDADE"],
+          origemSubtipo: "CARTAO_CONEXAO",
+          origemId: matricula.id,
+          competenciaAnoMes: competenciaPagamento,
+        },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "erro_desconhecido";
       return NextResponse.json(
-        { error: "falha_criar_cobranca", details: errCobr?.message ?? "erro_desconhecido" },
+        { error: "falha_criar_obrigacao_conta_interna", details: msg },
         { status: 500 },
       );
     }
-
-    const { data: receb, error: errRec } = await supabase
-      .from("recebimentos")
-      .insert({
-        cobranca_id: cobranca.id,
-        centro_custo_id: cobranca.centro_custo_id ?? null,
-        valor_centavos: valorFinal,
-        data_pagamento: toTimestamptzNoonUtc(dataPg),
-        metodo_pagamento: forma.codigo,
-        origem_sistema: "MATRICULA",
-        observacoes: body.observacoes ?? null,
-        forma_pagamento_codigo: forma.codigo,
-      })
-      .select("id")
-      .single();
-
-    if (errRec || !receb) {
+    if (!obrigacaoExcecao) {
       return NextResponse.json(
-        { error: "falha_criar_recebimento", details: errRec?.message ?? "erro_desconhecido" },
+        { error: "falha_criar_obrigacao_conta_interna", details: "obrigacao_excecao_nao_retorno" },
         { status: 500 },
       );
     }
-
-    await inserirMovimentoFinanceiroReceita({
-      supabase,
-      centroCustoId: cobranca.centro_custo_id ?? null,
-      valorCentavos: valorFinal,
-      dataYYYYMMDD: dataPg,
-      origemTipo: "RECEBIMENTO",
-      origemId: receb.id,
-      descricao: "Pagamento presencial - Entrada (pro-rata) matricula",
-    });
 
     if (body.tipo_primeira_cobranca === "ENTRADA_PRORATA") {
       const ledgerEntrada: LedgerInsert = {
         matricula_id: matricula.id,
         tipo: "ENTRADA",
-        descricao: "Entrada / Pro-rata",
+        descricao: "Conta interna - Entrada / Pro-rata",
         valor_centavos: valorFinal,
         vencimento: null,
         data_evento: dataPg,
         status: "PAGO",
-        origem_tabela: "recebimentos",
-        origem_id: receb.id,
+        origem_tabela: "credito_conexao_lancamentos",
+        origem_id: obrigacaoContaInterna?.lancamento_id ?? null,
       };
 
       const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerEntrada);
@@ -1813,8 +2115,8 @@ export async function POST(request: NextRequest) {
         primeira_cobranca_tipo: body.tipo_primeira_cobranca,
         primeira_cobranca_status: "PAGA",
         primeira_cobranca_valor_centavos: valorFinal,
-        primeira_cobranca_cobranca_id: cobranca.id,
-        primeira_cobranca_recebimento_id: receb.id,
+        primeira_cobranca_cobranca_id: obrigacaoContaInterna?.cobranca_id ?? null,
+        primeira_cobranca_recebimento_id: obrigacaoContaInterna?.recebimento_id ?? null,
         primeira_cobranca_forma_pagamento_id: formaPagamentoId,
         primeira_cobranca_data_pagamento: dataPg,
       })
@@ -1842,8 +2144,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       status: "PAGA",
-      cobranca_id: cobranca.id,
-      recebimento_id: receb.id,
+      cobranca_id: obrigacaoContaInterna?.cobranca_id ?? null,
+      recebimento_id: obrigacaoContaInterna?.recebimento_id ?? null,
+      lancamento_conta_interna_id: obrigacaoContaInterna?.lancamento_id ?? null,
       movimento: movimentoMeta,
       movimento_registros: movimentoRegistros,
       ...(modoManual
@@ -1918,24 +2221,41 @@ export async function POST(request: NextRequest) {
         diaVencimento: conta.dia_vencimento ?? 12,
       });
 
-      const resultado = await gerarLancamentosCartaoManual({
-        supabase,
-        contaConexaoId: conta.id,
-        pessoaId: matricula.responsavel_financeiro_id,
-        matriculaId: matricula.id,
-        alunoId,
-        execucoes: execucoesFamilia,
-        totalCentavos: totalFamiliaManual,
-        competenciaInicio,
-        competenciaFim,
-      });
+      const resultado =
+        matriculaItensMensais.length > 0
+          ? await gerarLancamentosCartaoPorItens({
+              supabase,
+              contaConexaoId: conta.id,
+              pessoaId: matricula.responsavel_financeiro_id,
+              matriculaId: matricula.id,
+              alunoId,
+              itens: matriculaItensMensais,
+              competenciaInicio,
+              competenciaFim,
+              diaVencimento: conta.dia_vencimento ?? 12,
+              fonte: "MATRICULA_ITENS",
+              origemSistema: "MATRICULA",
+            })
+          : await gerarLancamentosCartaoManual({
+              supabase,
+              contaConexaoId: conta.id,
+              pessoaId: matricula.responsavel_financeiro_id,
+              matriculaId: matricula.id,
+              alunoId,
+              execucoes: execucoesFamilia,
+              totalCentavos: totalFamiliaManual,
+              competenciaInicio,
+              competenciaFim,
+              diaVencimento: conta.dia_vencimento ?? 12,
+            });
 
       const { error: errUpd } = await supabase
         .from("matriculas")
         .update({
           primeira_cobranca_tipo: body.tipo_primeira_cobranca,
           primeira_cobranca_status: "LANCADA_CARTAO",
-          primeira_cobranca_valor_centavos: totalFamiliaManual,
+          primeira_cobranca_valor_centavos: resultado.totalCentavos,
+          primeira_cobranca_cobranca_id: resultado.cobrancas[0]?.id ?? null,
           primeira_cobranca_data_pagamento: null,
         })
         .eq("id", matricula.id);
@@ -1955,7 +2275,7 @@ export async function POST(request: NextRequest) {
         ok: true,
         status: "LANCADA_CARTAO",
         matricula_id: matricula.id,
-        total_mensalidade_centavos: totalFamiliaManual,
+        total_mensalidade_centavos: resultado.totalCentavos,
         total_movimento_centavos: totalInstitucionalManual,
         turmas_ativadas: turmasFamilia,
         cobrancas_criadas: resultado.cobrancas,
@@ -1998,66 +2318,132 @@ export async function POST(request: NextRequest) {
     }
 
     const totalMensalidade = composicao.totalCentavos;
-    if (!totalMensalidade || totalMensalidade <= 0) {
+    const valorPorTurmaComposicao = new Map<number, number>();
+    composicao.itens.forEach((item) => {
+      valorPorTurmaComposicao.set(item.turma_id, item.valor_centavos);
+    });
+
+    const itensMensaisCartao =
+      matriculaItensMensais.length > 0
+        ? matriculaItensMensais
+            .map((item) => ({
+              ...item,
+              valor_centavos:
+                item.valor_centavos > 0
+                  ? item.valor_centavos
+                  : item.turma_id
+                    ? valorPorTurmaComposicao.get(item.turma_id) ?? 0
+                    : 0,
+            }))
+            .filter((item) => item.valor_centavos > 0)
+        : [];
+
+    const totalMensalidadeResolvido =
+      itensMensaisCartao.length > 0
+        ? itensMensaisCartao.reduce((acc, item) => acc + item.valor_centavos, 0)
+        : totalMensalidade;
+
+    if (!totalMensalidadeResolvido || totalMensalidadeResolvido <= 0) {
       return NextResponse.json({ error: "valor_nao_resolvido_na_matricula" }, { status: 409 });
     }
 
-    let lancamentoId: number;
+    let obrigacaoCartao:
+      | {
+          cobranca_id: number;
+          lancamento_id: number;
+        }
+      | null = null;
+    let cobrancasCartao: Array<{ id: number; competencia_ano_mes: string; item_id?: number }> = [];
     try {
-      const lancamento = await upsertLancamentoPorCobranca({
-        referenciaItem: buildReferenciaLancamentoCartaoConexao(matricula.id, periodo),
-        cobrancaId: null,
-        supabase,
-        contaConexaoId: Number(conta.id),
-        competencia: periodo,
-        valorCentavos: totalMensalidade,
-        alunoId,
-        matriculaId: matricula.id,
-        descricao: "Mensalidade cheia - matricula",
-        origemSistema: "MATRICULA",
-        origemId: matricula.id,
-        composicaoJson: {
-          fonte: "MATRICULA_MULTIPLA_UE",
-          aluno_pessoa_id: alunoId,
-          responsavel_financeiro_id: matricula.responsavel_financeiro_id,
-          ano_referencia: anoRef,
+      if (itensMensaisCartao.length > 0) {
+        const resultado = await gerarLancamentosCartaoPorItens({
+          supabase,
+          contaConexaoId: conta.id,
+          pessoaId: matricula.responsavel_financeiro_id,
+          matriculaId: matricula.id,
+          alunoId,
+          itens: itensMensaisCartao,
+          competenciaInicio: periodo,
+          competenciaFim: periodo,
+          diaVencimento: conta.dia_vencimento ?? 12,
+          fonte: "MATRICULA_ITENS",
+          origemSistema: "MATRICULA",
+        });
+        obrigacaoCartao =
+          resultado.cobrancas.length > 0 && resultado.lancamentosDetalhe.length > 0
+            ? {
+                cobranca_id: resultado.cobrancas[0].id,
+                lancamento_id: resultado.lancamentosDetalhe[0].id,
+              }
+            : null;
+        cobrancasCartao = resultado.cobrancas.map((item) => ({
+          id: item.id,
+          competencia_ano_mes: item.competencia_ano_mes,
+          item_id: item.item_id,
+        }));
+      } else {
+        obrigacaoCartao = await garantirObrigacaoContaInterna({
+          supabase,
+          tipoConta: "ALUNO",
+          pessoaCobrancaId: matricula.responsavel_financeiro_id,
+          contaInternaId: Number(conta.id),
           competencia: periodo,
-          total_centavos: totalMensalidade,
-          itens: composicao.itens,
-        },
-      });
-      lancamentoId = lancamento.id;
+          valorCentavos: totalMensalidadeResolvido,
+          descricao: `Conta interna - Mensalidade ${periodo}`,
+          origemTipoCobranca: "CONTA_INTERNA",
+          origemSubtipoCobranca: "CONTA_INTERNA_MENSALIDADE",
+          origemSistema: "MATRICULA",
+          origemId: matricula.id,
+          origemItemTipo: "MATRICULA",
+          origemItemId: matricula.id,
+          referenciaItem: buildReferenciaLancamentoCartaoConexao(matricula.id, periodo),
+          diaVencimento: conta.dia_vencimento ?? 12,
+          alunoId,
+          matriculaId: matricula.id,
+          composicaoJson: {
+            fonte: "MATRICULA_MULTIPLA_UE",
+            aluno_pessoa_id: alunoId,
+            responsavel_financeiro_id: matricula.responsavel_financeiro_id,
+            ano_referencia: anoRef,
+            competencia: periodo,
+            total_centavos: totalMensalidadeResolvido,
+            itens: composicao.itens,
+          },
+          fallbackLegacyLookup: {
+            origemTipos: ["MATRICULA", "MATRICULA_MENSALIDADE"],
+            origemSubtipo: "CARTAO_CONEXAO",
+            origemId: matricula.id,
+            competenciaAnoMes: periodo,
+          },
+        });
+
+        const ledgerLinha: LedgerInsert = {
+          matricula_id: matricula.id,
+          tipo: "LANCAMENTO_CREDITO",
+          descricao: `Conta interna - Mensalidade ${periodo}`,
+          valor_centavos: totalMensalidadeResolvido,
+          vencimento: null,
+          data_evento: dateFromPeriodo(periodo),
+          status: "PENDENTE_FATURA",
+          origem_tabela: "credito_conexao_lancamentos",
+          origem_id: obrigacaoCartao?.lancamento_id ?? null,
+        };
+
+        const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
+        if (ledgerErr) {
+          return NextResponse.json(
+            { error: "falha_inserir_ledger", details: ledgerErr.message },
+            { status: 500 },
+          );
+        }
+
+        cobrancasCartao = obrigacaoCartao
+          ? [{ id: obrigacaoCartao.cobranca_id, competencia_ano_mes: periodo }]
+          : [];
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "erro_desconhecido";
       return NextResponse.json({ error: "falha_criar_lancamento_cartao", details: msg }, { status: 500 });
-    }
-
-    await vincularLancamentoNaFatura({
-      supabase,
-      contaConexaoId: conta.id,
-      periodoReferencia: periodo,
-      lancamentoId,
-      valorCentavos: totalMensalidade,
-    });
-
-    const ledgerLinha: LedgerInsert = {
-      matricula_id: matricula.id,
-      tipo: "LANCAMENTO_CREDITO",
-      descricao: "Mensalidade cheia - matricula",
-      valor_centavos: totalMensalidade,
-      vencimento: null,
-      data_evento: dateFromPeriodo(periodo),
-      status: "PENDENTE_FATURA",
-      origem_tabela: "credito_conexao_lancamentos",
-      origem_id: lancamentoId,
-    };
-
-    const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerLinha);
-    if (ledgerErr) {
-      return NextResponse.json(
-        { error: "falha_inserir_ledger", details: ledgerErr.message },
-        { status: 500 },
-      );
     }
 
     const { error: errUpd } = await supabase
@@ -2065,14 +2451,23 @@ export async function POST(request: NextRequest) {
       .update({
         primeira_cobranca_tipo: body.tipo_primeira_cobranca,
         primeira_cobranca_status: "LANCADA_CARTAO",
-        primeira_cobranca_valor_centavos: totalMensalidade,
+        primeira_cobranca_valor_centavos: totalMensalidadeResolvido,
+        primeira_cobranca_cobranca_id: obrigacaoCartao?.cobranca_id ?? null,
         primeira_cobranca_data_pagamento: null,
       })
       .eq("id", matricula.id);
 
     if (errUpd) return failAtualizarMatricula(errUpd, { matricula_id: matricula.id });
 
-    return NextResponse.json({ ok: true, status: "LANCADA_CARTAO", lancamento_cartao_id: lancamentoId });
+    return NextResponse.json({
+      ok: true,
+      status: "LANCADA_CARTAO",
+      lancamento_cartao_id: obrigacaoCartao?.lancamento_id ?? null,
+      cobranca_cartao_id: obrigacaoCartao?.cobranca_id ?? null,
+      lancamento_conta_interna_id: obrigacaoCartao?.lancamento_id ?? null,
+      cobranca_conta_interna_id: obrigacaoCartao?.cobranca_id ?? null,
+      cobrancas_criadas: cobrancasCartao,
+    });
   }
 
   if (body.modo === "ADIAR_EXCECAO") {
@@ -2104,25 +2499,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "meio_cobranca_invalido" }, { status: 400 });
     }
 
-    const { data: cobranca, error: errCobr } = await supabase
-      .from("financeiro_cobrancas_avulsas")
-      .insert({
-        pessoa_id: matricula.responsavel_financeiro_id,
-        origem_tipo: "MATRICULA_ENTRADA",
-        origem_id: matricula.id,
-        valor_centavos: valorFinal,
-        vencimento: vencimentoManual,
-        status: "PENDENTE",
-        meio: meioCobranca,
-        motivo_excecao: motivo,
-        observacao: body.observacoes ?? null,
-      })
-      .select("id")
-      .single();
+    const conta = await ensureContaCreditoConexaoAluno({
+      supabase,
+      responsavelFinanceiroId: matricula.responsavel_financeiro_id,
+    });
+    const competenciaExcecao = ymFromDate(vencimentoManual);
 
-    if (errCobr || !cobranca) {
+    let obrigacaoExcecao:
+      | {
+          cobranca_id: number;
+          lancamento_id: number;
+        }
+      | null = null;
+
+    try {
+      obrigacaoExcecao = await garantirObrigacaoContaInterna({
+        supabase,
+        tipoConta: "ALUNO",
+        pessoaCobrancaId: matricula.responsavel_financeiro_id,
+        contaInternaId: Number(conta.id),
+        competencia: competenciaExcecao,
+        valorCentavos: valorFinal,
+        descricao: "Conta interna - Entrada / Pro-rata",
+        origemTipoCobranca: "MATRICULA",
+        origemSubtipoCobranca: "CONTA_INTERNA_ENTRADA_PRORATA",
+        origemSistema: "MATRICULA",
+        origemId: matricula.id,
+        origemItemTipo: "MATRICULA",
+        origemItemId: matricula.id,
+        referenciaItem: buildReferenciaMatriculaEntradaContaInterna(matricula.id, competenciaExcecao),
+        diaVencimento: conta.dia_vencimento ?? 12,
+        alunoId,
+        matriculaId: matricula.id,
+        composicaoJson: {
+          fonte: "MATRICULA_LIQUIDACAO_EXCECAO",
+          aluno_pessoa_id: alunoId,
+          responsavel_financeiro_id: matricula.responsavel_financeiro_id,
+          competencia: competenciaExcecao,
+          valor_centavos: valorFinal,
+          motivo_excecao: motivo,
+          vencimento_solicitado: vencimentoManual,
+          meio_cobranca_solicitado: meioCobranca,
+          observacoes: body.observacoes ?? null,
+        },
+        fallbackLegacyLookup: {
+          origemTipos: ["MATRICULA", "MATRICULA_ENTRADA"],
+          origemSubtipo: "CARTAO_CONEXAO",
+          origemId: matricula.id,
+          competenciaAnoMes: competenciaExcecao,
+        },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "erro_desconhecido";
       return NextResponse.json(
-        { error: "falha_criar_cobranca_avulsa", details: errCobr?.message ?? "erro_desconhecido" },
+        { error: "falha_criar_obrigacao_conta_interna", details: msg },
         { status: 500 },
       );
     }
@@ -2130,13 +2560,13 @@ export async function POST(request: NextRequest) {
     const ledgerEntrada: LedgerInsert = {
       matricula_id: matricula.id,
       tipo: "ENTRADA",
-      descricao: "Entrada / Pro-rata (adiada)",
+      descricao: "Conta interna - Entrada / Pro-rata (adiada)",
       valor_centavos: valorFinal,
-      vencimento: vencimentoManual,
+      vencimento: null,
       data_evento: vencimentoManual,
-      status: "PENDENTE",
-      origem_tabela: "financeiro_cobrancas_avulsas",
-      origem_id: cobranca.id,
+      status: "PENDENTE_FATURA",
+      origem_tabela: "credito_conexao_lancamentos",
+      origem_id: obrigacaoExcecao.lancamento_id,
     };
 
     const { error: ledgerErr } = await supabase.from("matriculas_financeiro_linhas").insert(ledgerEntrada);
@@ -2153,7 +2583,7 @@ export async function POST(request: NextRequest) {
         primeira_cobranca_tipo: body.tipo_primeira_cobranca,
         primeira_cobranca_status: "ADIADA_EXCECAO",
         primeira_cobranca_valor_centavos: valorFinal,
-        primeira_cobranca_cobranca_id: cobranca.id,
+        primeira_cobranca_cobranca_id: obrigacaoExcecao.cobranca_id,
         primeira_cobranca_recebimento_id: null,
         primeira_cobranca_forma_pagamento_id: null,
         primeira_cobranca_data_pagamento: null,
@@ -2182,9 +2612,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      modo: "EXCECAO_COBRANCA_AVULSA",
-      cobranca_avulsa_id: cobranca.id,
-      cartao_conta_id: debugCartao.conta_conexao_id ?? null,
+      modo: "EXCECAO_CONTA_INTERNA",
+      conta_interna_id: Number(conta.id),
+      cobranca_id: obrigacaoExcecao.cobranca_id,
+      lancamento_conta_interna_id: obrigacaoExcecao.lancamento_id,
+      competencia: competenciaExcecao,
+      cartao_conta_id: debugCartao.conta_conexao_id ?? Number(conta.id),
       lancamentos_criados: debugCartao.created_lancamentos,
       movimento: movimentoMeta,
       movimento_registros: movimentoRegistros,

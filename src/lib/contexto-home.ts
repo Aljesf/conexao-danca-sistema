@@ -2,6 +2,7 @@ export type SupportedContexto =
   | "CAFE"
   | "LOJA"
   | "ESCOLA"
+  | "SECRETARIA"
   | "ADMIN"
   | "FINANCEIRO"
   | "BOLSAS"
@@ -28,6 +29,8 @@ const CONTEXTO_ALIASES: Record<string, SupportedContexto> = {
   FINANCEIRO: "FINANCEIRO",
   LANCHONETE: "CAFE",
   LOJA: "LOJA",
+  SECRETARIA: "SECRETARIA",
+  SECRETARIA_DA_ESCOLA: "SECRETARIA",
   SUPORTE: "SUPORTE",
 };
 
@@ -63,6 +66,15 @@ const CONTEXTO_ROUTE_CONFIGS: Record<SupportedContexto, ContextoRouteConfig> = {
       { rota: "/matriculas", label: "Matriculas" },
       { rota: "/turmas", label: "Turmas" },
       { rota: "/pessoas", label: "Pessoas" },
+    ],
+  },
+  SECRETARIA: {
+    contexto: "SECRETARIA",
+    label: "Secretaria da Escola",
+    fallback: "/secretaria/caixa",
+    routes: [
+      { rota: "/secretaria", label: "Home da Secretaria" },
+      { rota: "/secretaria/caixa", label: "Caixa da Secretaria" },
     ],
   },
   ADMIN: {

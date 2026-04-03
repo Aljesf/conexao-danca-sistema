@@ -24,6 +24,36 @@ type ColaboradorResumo = {
   liquido_centavos: number;
 };
 
+type StatusOrigem = "VALIDA" | "CANCELADA" | "ORFA" | "MISTA";
+
+type ItemOrigemDetalhe = {
+  lancamento_id: number;
+  competencia: string | null;
+  descricao: string | null;
+  origem_amigavel: string;
+  origem_tecnica: string;
+  referencia_item: string | null;
+  status_origem: StatusOrigem;
+  valor_centavos: number;
+  motivos: string[];
+};
+
+type ItemOrigemResumo = {
+  fatura_id: number;
+  competencia: string | null;
+  status_fatura: string | null;
+  status_origem: StatusOrigem;
+  pode_importar_folha: boolean;
+  possui_inconsistencia: boolean;
+  total_fatura_centavos: number;
+  total_validos_centavos: number;
+  total_invalidos_centavos: number;
+  origem_amigavel: string;
+  origem_tecnica: string;
+  motivos: string[];
+  itens_origem: ItemOrigemDetalhe[];
+};
+
 type Item = {
   id: number;
   folha_id: number;
@@ -32,8 +62,11 @@ type Item = {
   tipo_item: string;
   descricao: string;
   valor_centavos: number;
+  referencia_tipo: string | null;
+  referencia_id: number | null;
   criado_automatico: boolean;
   created_at: string;
+  origem_resumo?: ItemOrigemResumo | null;
 };
 
 function brlFromCentavos(v: number): string {
@@ -47,6 +80,27 @@ function parseReaisToCentavos(value: string): number | null {
   const num = Number(normalized);
   if (!Number.isFinite(num) || num <= 0) return null;
   return Math.round(num * 100);
+}
+
+function formatCompetencia(value: string | null | undefined) {
+  if (!value || !/^\d{4}-\d{2}$/.test(value)) return value ?? "-";
+  const [ano, mes] = value.split("-").map(Number);
+  return new Date(ano, mes - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
+function origemBadgeClass(status: StatusOrigem | null | undefined) {
+  if (status === "VALIDA") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "CANCELADA") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (status === "ORFA") return "border-rose-200 bg-rose-50 text-rose-700";
+  return "border-slate-200 bg-slate-100 text-slate-700";
+}
+
+function itemRowClass(item: Item) {
+  if (item.origem_resumo?.status_origem === "ORFA") return "border-t bg-rose-50/70";
+  if (item.origem_resumo?.status_origem === "CANCELADA" || item.origem_resumo?.possui_inconsistencia) {
+    return "border-t bg-amber-50/70";
+  }
+  return "border-t";
 }
 
 export default function FolhaDetalhePage() {
@@ -134,13 +188,23 @@ export default function FolhaDetalhePage() {
     try {
       const res = await fetch(`/api/financeiro/folha/${folhaId}/importar-cartao-conexao`, { method: "POST" });
       const json = (await res.json().catch(() => null)) as
-        | { imported?: number; message?: string; error?: string }
+        | {
+            imported?: number;
+            skipped?: Array<{ fatura_id: number; motivos: string[] }>;
+            message?: string;
+            error?: string;
+          }
         | null;
       if (!res.ok) {
         setMessage(json?.error ?? "falha_importar_faturas");
         return;
       }
-      setMessage(`Importacao concluida: ${json?.imported ?? 0} itens.`);
+      const skipped = Array.isArray(json?.skipped) ? json.skipped.length : 0;
+      setMessage(
+        json?.message
+          ? `${json.message}${skipped > 0 ? ` | faturas ignoradas: ${skipped}` : ""}`
+          : `Importacao concluida: ${json?.imported ?? 0} itens.${skipped > 0 ? ` Ignoradas: ${skipped}.` : ""}`,
+      );
       await loadDetalhes();
     } finally {
       setImporting(false);
@@ -288,7 +352,7 @@ export default function FolhaDetalhePage() {
   }, [folhaId]);
 
   if (!Number.isFinite(folhaId) || folhaId <= 0) {
-    return <div className="p-6 text-sm text-red-600">ID de folha inválido.</div>;
+    return <div className="p-6 text-sm text-red-600">ID de folha invalido.</div>;
   }
 
   return (
@@ -298,7 +362,7 @@ export default function FolhaDetalhePage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="text-xl font-semibold">
-                {folha ? `Folha — Competência ${folha.competencia}` : "Folha — Competência"}
+                {folha ? `Folha - Competencia ${folha.competencia}` : "Folha - Competencia"}
               </h1>
               <p className="mt-1 text-sm text-slate-600">
                 Status: <span className="font-medium">{folha?.status ?? "-"}</span> | Pagamento previsto:{" "}
@@ -324,11 +388,11 @@ export default function FolhaDetalhePage() {
                   href={`/admin/financeiro/folha/colaboradores/${nextFolha.id}`}
                   className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50"
                 >
-                  Próxima
+                  Proxima
                 </Link>
               ) : (
                 <button className="rounded-md border px-3 py-2 text-sm opacity-50" disabled>
-                  Próxima
+                  Proxima
                 </button>
               )}
 
@@ -338,7 +402,7 @@ export default function FolhaDetalhePage() {
                 onClick={() => void importarFaturas()}
                 disabled={importing || folha?.status !== "ABERTA"}
               >
-                {importing ? "Reprocessando..." : "Reprocessar cartao (debug)"}
+                {importing ? "Reprocessando..." : "Reprocessar cartao"}
               </button>
               <button
                 type="button"
@@ -399,7 +463,7 @@ export default function FolhaDetalhePage() {
           <h2 className="text-base font-semibold">Rubricas do colaborador</h2>
 
           <p className="mt-2 text-xs text-slate-600">
-            Observacao de negocio: descontos so entram se existir fatura ABERTA na mesma competencia.
+            Descontos automaticos do Cartao Conexao agora exibem a cadeia tecnica da origem para auditoria.
           </p>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -457,12 +521,83 @@ export default function FolhaDetalhePage() {
                   </tr>
                 ) : (
                   itensFiltrados.map((item) => (
-                    <tr key={item.id} className="border-t">
-                      <td className="px-3 py-2">{item.descricao}</td>
-                      <td className="px-3 py-2">{item.tipo_item}</td>
-                      <td className="px-3 py-2 text-right">{brlFromCentavos(item.valor_centavos)}</td>
-                      <td className="px-3 py-2">{item.criado_automatico ? "Automatico" : "Manual"}</td>
-                      <td className="px-3 py-2">{item.created_at ? item.created_at.slice(0, 10) : "-"}</td>
+                    <tr key={item.id} className={itemRowClass(item)}>
+                      <td className="px-3 py-3 align-top">
+                        <div className="font-medium text-slate-900">{item.descricao}</div>
+                        {item.origem_resumo ? (
+                          <div className="mt-2 space-y-1 text-xs text-slate-600">
+                            <div>
+                              Fatura #{item.origem_resumo.fatura_id} | Competencia{" "}
+                              {formatCompetencia(item.origem_resumo.competencia)}
+                            </div>
+                            <div>Status da fatura: {item.origem_resumo.status_fatura ?? "-"}</div>
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-3 align-top">{item.tipo_item}</td>
+                      <td className="px-3 py-3 text-right align-top">{brlFromCentavos(item.valor_centavos)}</td>
+                      <td className="px-3 py-3 align-top">
+                        {item.origem_resumo ? (
+                          <div className="space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${origemBadgeClass(item.origem_resumo.status_origem)}`}
+                              >
+                                {item.origem_resumo.possui_inconsistencia
+                                  ? `INCONSISTENTE (${item.origem_resumo.status_origem})`
+                                  : item.origem_resumo.status_origem}
+                              </span>
+                              <span className="text-xs text-slate-600">{item.origem_resumo.origem_amigavel}</span>
+                            </div>
+
+                            <div className="rounded-lg border bg-white p-3 text-xs text-slate-700">
+                              <div className="font-medium text-slate-900">Origem tecnica</div>
+                              <div className="mt-1 break-all">{item.origem_resumo.origem_tecnica}</div>
+                              <div className="mt-2 text-slate-600">
+                                Validos: {brlFromCentavos(item.origem_resumo.total_validos_centavos)} | Invalidos:{" "}
+                                {brlFromCentavos(item.origem_resumo.total_invalidos_centavos)}
+                              </div>
+                            </div>
+
+                            {item.origem_resumo.motivos.length > 0 ? (
+                              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                                {item.origem_resumo.motivos.join(" | ")}
+                              </div>
+                            ) : null}
+
+                            <div className="space-y-2">
+                              {item.origem_resumo.itens_origem.map((origem) => (
+                                <div key={origem.lancamento_id} className="rounded-lg border bg-slate-50 p-3 text-xs">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      className={`inline-flex rounded-full border px-2 py-0.5 font-semibold ${origemBadgeClass(origem.status_origem)}`}
+                                    >
+                                      {origem.status_origem}
+                                    </span>
+                                    <span className="font-medium text-slate-900">
+                                      Lancamento #{origem.lancamento_id}
+                                    </span>
+                                    <span className="text-slate-600">{brlFromCentavos(origem.valor_centavos)}</span>
+                                  </div>
+                                  <div className="mt-1 text-slate-700">
+                                    {origem.descricao ?? origem.origem_amigavel} | {formatCompetencia(origem.competencia)}
+                                  </div>
+                                  <div className="mt-1 break-all text-slate-500">{origem.origem_tecnica}</div>
+                                  {origem.referencia_item ? (
+                                    <div className="mt-1 text-slate-500">Ref.: {origem.referencia_item}</div>
+                                  ) : null}
+                                  {origem.motivos.length > 0 ? (
+                                    <div className="mt-2 text-amber-700">{origem.motivos.join(" | ")}</div>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <span>{item.criado_automatico ? "Automatico" : "Manual"}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 align-top">{item.created_at ? item.created_at.slice(0, 10) : "-"}</td>
                     </tr>
                   ))
                 )}

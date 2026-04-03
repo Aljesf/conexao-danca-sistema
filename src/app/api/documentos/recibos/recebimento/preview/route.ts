@@ -33,11 +33,14 @@ async function handlePreview(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "recebimento_id_invalido" }, { status: 400 });
   }
 
+  const modeloIdParam = toPositiveInt(new URL(req.url).searchParams.get("modelo_id"));
+
   try {
     const preview = await gerarPreviewReciboPorRecebimento({
       supabase: auth.supabase,
       recebimentoId,
       operadorUserId: auth.userId,
+      modeloId: modeloIdParam ?? undefined,
     });
 
     const renderRaw = new URL(req.url).searchParams.get("render") === "1";

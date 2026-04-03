@@ -8,16 +8,31 @@ export const escolaSidebar: SidebarSection[] = [
   },
   {
     id: "escola-caixa",
-    title: "💰 Caixa (Escola)",
-    items: [{ label: "💰 Frente de caixa", href: "/escola/caixa" }], // TODO(migracao): ainda sem equivalente confirmado
+    title: "💰 Caixa / Secretaria",
+    items: [{ label: "💰 Caixa da Secretaria", href: "/secretaria/caixa" }],
   },
   {
     id: "escola-calendario",
     title: "📅 Calendário",
     items: [
       { label: "📅 Visão geral", href: "/escola/calendario" },
-      { label: "🎭 Eventos internos", href: "/escola/calendario/eventos-internos" },
       { label: "🗓️ Feriados", href: "/escola/calendario/feriados" },
+    ],
+  },
+  {
+    id: "escola-eventos",
+    title: "🎭 Eventos da Escola",
+    items: [
+      { label: "🎭 Visão geral", href: "/escola/eventos" },
+      { label: "🧱 Novo evento-base", href: "/escola/eventos/novo-evento" },
+      { label: "➕ Nova edição", href: "/escola/eventos/nova" },
+      { label: "🗓️ Agenda / calendário", href: "/escola/eventos/agenda" },
+      { label: "🧾 Inscrições", href: "/escola/eventos/inscricoes" },
+      { label: "💃 Coreografias / elencos", href: "/escola/eventos/coreografias" },
+      { label: "🏷️ Estilos de coreografia", href: "/escola/eventos/coreografia-estilos" },
+      { label: "🎬 Produções / contratações", href: "/escola/eventos/producoes" },
+      { label: "💰 Financeiro", href: "/escola/eventos/financeiro" },
+      { label: "📊 Relatórios", href: "/escola/eventos/relatorios" },
     ],
   },
   {
@@ -44,7 +59,7 @@ export const escolaSidebar: SidebarSection[] = [
       { label: "🧾 Matrículas", href: "/escola/matriculas" },
       { label: "📋 Lista de alunos", href: "/escola/alunos/lista" },
       { label: "🧠 Currículo", href: "/escola/alunos/curriculos" },
-      { label: "👥 Grupos de alunos", href: "/escola/alunos/grupos" },
+      { label: "👥 Núcleos", href: "/escola/alunos/grupos" },
     ],
   },
   {
@@ -58,7 +73,7 @@ export const escolaSidebar: SidebarSection[] = [
       { label: "📝 Plano de aula", href: "/academico/planejamento" },
       { label: "🗓️ Períodos letivos", href: "/escola/academico/periodos-letivos" },
       { label: "📊 Avaliações", href: "/escola/academico/avaliacoes" },
-      { label: "👩‍🏫 Professores", href: "/escola/academico/professores" }, // TODO(migracao): rota ainda nao existe
+      { label: "👩‍🏫 Professores", href: "/config/escola/professores" },
       { label: "➕ Nova turma", href: "/escola/academico/turmas/nova" },
       { label: "🏫 Turmas", href: "/escola/turmas" },
       { label: "🧮 Grade", href: "/escola/academico/turmas/grade" },

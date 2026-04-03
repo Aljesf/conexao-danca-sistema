@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { guardApiByRole } from "@/lib/auth/roleGuard";
-import { requireUser } from "@/lib/supabase/api-auth";
+import { guardCafeApiRequest, requireCafeApiUser } from "@/lib/auth/cafeApiAccess";
 import { getSupabaseAdmin } from "@/lib/supabase/server-admin";
 import { criarComandaCafe, listarComandasCafe } from "@/lib/cafe/caixa";
+import { resolverElegibilidadeContaInterna } from "@/lib/loja/pessoaContaInterna";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -27,6 +27,56 @@ function firstNumber(record: Record<string, unknown>, keys: string[]): number | 
   return null;
 }
 
+type TipoQuitacaoPayload =
+  | "PAGAMENTO_IMEDIATO"
+  | "PAGAMENTO_PARCIAL"
+  | "CONTA_INTERNA_ALUNO"
+  | "CONTA_INTERNA_COLABORADOR"
+  | "IMEDIATA"
+  | "PARCIAL"
+  | "CARTAO_CONEXAO"
+  | "CONTA_INTERNA";
+
+type CaixaVendaPayload = {
+  comprador_pessoa_id?: number | null;
+  colaborador_pessoa_id?: number | null;
+  tipo_quitacao?: TipoQuitacaoPayload | null;
+  forma_pagamento_real?: string | null;
+  valor_pago_abertura_centavos?: number | null;
+  competencia_ano_mes?: string | null;
+  data_hora_venda?: string | null;
+};
+
+function normalizarTextoOpcional(value: string | null): string | null {
+  return value && value.trim() ? value.trim() : null;
+}
+
+function normalizarTipoQuitacao(value: string | null): TipoQuitacaoPayload | null {
+  const normalized = value?.trim().toUpperCase();
+  if (!normalized) return null;
+
+  switch (normalized) {
+    case "PAGAMENTO_IMEDIATO":
+    case "IMEDIATA":
+      return "PAGAMENTO_IMEDIATO";
+    case "PAGAMENTO_PARCIAL":
+    case "PARCIAL":
+      return "PAGAMENTO_PARCIAL";
+    case "CONTA_INTERNA_ALUNO":
+    case "CARTAO_CONEXAO":
+      return "CONTA_INTERNA_ALUNO";
+    case "CONTA_INTERNA_COLABORADOR":
+    case "CONTA_INTERNA":
+      return "CONTA_INTERNA_COLABORADOR";
+    default:
+      return null;
+  }
+}
+
+function isCompetenciaAnoMes(value: string | null): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}$/.test(value);
+}
+
 function statusFromError(message: string): number {
   switch (message) {
     case "payload_invalido":
@@ -35,9 +85,12 @@ function statusFromError(message: string): number {
     case "produto_nao_encontrado":
     case "produto_inativo":
     case "colaborador_pessoa_id_obrigatorio":
+    case "comprador_pessoa_id_obrigatorio":
     case "conta_interna_exige_colaborador":
     case "competencia_obrigatoria_para_conta_interna":
     case "forma_pagamento_obrigatoria":
+    case "data_hora_venda_obrigatoria":
+    case "valor_pago_abertura_obrigatorio_para_pagamento_parcial":
     case "saldo_em_aberto_obrigatorio_para_conta_interna":
     case "competencia_invalida":
     case "comprador_nao_identificado_nao_pode_usar_conta_interna":
@@ -59,8 +112,8 @@ function statusFromError(message: string): number {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await guardApiByRole(request as any);
-  if (denied) return denied as any;
+  const denied = await guardCafeApiRequest(request);
+  if (denied) return denied;
 
   try {
     console.log("[CAFE_CAIXA][GET] query params recebidos");
@@ -81,10 +134,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await guardApiByRole(request as any);
-  if (denied) return denied as any;
-
-  const auth = await requireUser(request);
+  const auth = await requireCafeApiUser(request);
   if (auth instanceof NextResponse) return auth;
 
   try {
@@ -92,6 +142,51 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null);
     console.log("[CAFE_CAIXA][POST] body:", JSON.stringify(body, null, 2));
     if (isRecord(body)) {
+      const payload: CaixaVendaPayload = {
+        comprador_pessoa_id: firstNumber(body, [
+          "comprador_pessoa_id",
+          "compradorPessoaId",
+          "comprador_id",
+          "compradorId",
+          "pagador_pessoa_id",
+          "cliente_pessoa_id",
+        ]),
+        colaborador_pessoa_id: firstNumber(body, [
+          "colaborador_pessoa_id",
+          "colaboradorPessoaId",
+        ]),
+        tipo_quitacao: normalizarTipoQuitacao(
+          firstString(body, ["tipo_quitacao", "tipoQuitacao"]),
+        ),
+        forma_pagamento_real: normalizarTextoOpcional(
+          firstString(body, [
+            "forma_pagamento_real",
+            "formaPagamentoReal",
+            "forma_pagamento",
+            "formaPagamento",
+            "metodo_pagamento",
+            "metodoPagamento",
+          ]),
+        ),
+        valor_pago_abertura_centavos: firstNumber(body, [
+          "valor_pago_abertura_centavos",
+          "valorPagoAberturaCentavos",
+          "valor_pago_centavos",
+          "valorPagoCentavos",
+        ]),
+        competencia_ano_mes: normalizarTextoOpcional(
+          firstString(body, [
+            "competencia_ano_mes",
+            "competenciaAnoMes",
+            "data_competencia",
+            "dataCompetencia",
+            "competencia",
+          ]),
+        ),
+        data_hora_venda: normalizarTextoOpcional(
+          firstString(body, ["data_hora_venda", "dataHoraVenda"]),
+        ),
+      };
       const compradorPessoaId = firstNumber(body, [
         "comprador_pessoa_id",
         "compradorPessoaId",
@@ -100,7 +195,7 @@ export async function POST(request: NextRequest) {
         "pagador_pessoa_id",
         "cliente_pessoa_id",
       ]);
-      const colaboradorPessoaIdInformado = firstNumber(body, ["colaborador_pessoa_id", "colaboradorPessoaId"]);
+      const colaboradorPessoaIdInformado = payload.colaborador_pessoa_id ?? null;
       const colaboradorPessoaId = colaboradorPessoaIdInformado ?? compradorPessoaId;
       const formaPagamentoId = firstNumber(body, [
         "forma_pagamento_saas_id",
@@ -138,10 +233,19 @@ export async function POST(request: NextRequest) {
         forma_pagamento: formaPagamento,
         tipo_quitacao: tipoQuitacao,
         conta_interna_solicitada: contaInternaSolicitada,
+        data_hora_venda: payload.data_hora_venda,
+        competencia_ano_mes: payload.competencia_ano_mes,
       });
 
+      if (!compradorPessoaId) {
+        return NextResponse.json(
+          { error: "falha_criar_comanda_cafe", detalhe: "comprador_pessoa_id_obrigatorio" },
+          { status: 400 },
+        );
+      }
+
       if (contaInternaSolicitada) {
-        const competencia = firstString(body, ["data_competencia", "dataCompetencia", "competencia"]);
+        const competencia = payload.competencia_ano_mes;
 
         if (!colaboradorPessoaId) {
           console.warn("[CAFE_CAIXA][POST][VALIDACAO]", {
@@ -165,6 +269,41 @@ export async function POST(request: NextRequest) {
           });
           return NextResponse.json(
             { error: "falha_criar_comanda_cafe", detalhe: "competencia_obrigatoria_para_conta_interna" },
+            { status: 400 },
+          );
+        }
+      }
+
+      if (payload.tipo_quitacao === "CONTA_INTERNA_ALUNO" || payload.tipo_quitacao === "CONTA_INTERNA_COLABORADOR") {
+        if (!compradorPessoaId) {
+          return NextResponse.json(
+            { error: "falha_criar_comanda_cafe", detalhe: "comprador_obrigatorio_para_fluxo_futuro" },
+            { status: 400 },
+          );
+        }
+
+        if (!isCompetenciaAnoMes(payload.competencia_ano_mes ?? null)) {
+          return NextResponse.json(
+            { error: "falha_criar_comanda_cafe", detalhe: "competencia_obrigatoria_para_conta_interna" },
+            { status: 400 },
+          );
+        }
+
+        const elegibilidade = await resolverElegibilidadeContaInterna(supabase, compradorPessoaId);
+        const possuiContaInternaValida =
+          payload.tipo_quitacao === "CONTA_INTERNA_ALUNO"
+            ? elegibilidade.possuiContaInternaAluno
+            : elegibilidade.possuiContaInternaColaborador;
+
+        if (!possuiContaInternaValida) {
+          return NextResponse.json(
+            {
+              error: "falha_criar_comanda_cafe",
+              detalhe:
+                payload.tipo_quitacao === "CONTA_INTERNA_ALUNO"
+                  ? "conta_interna_aluno_nao_encontrada"
+                  : "conta_interna_colaborador_nao_encontrada",
+            },
             { status: 400 },
           );
         }

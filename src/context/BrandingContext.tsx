@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type ContextKey =
   | "escola"
+  | "secretaria"
   | "loja"
   | "lanchonete"
   | "administracao"
@@ -79,6 +80,24 @@ const defaultLoja: ContextConfig = {
     accent: "#94a3b8",
     gradientFrom: "#e2e8f0",
     gradientTo: "#cbd5e1",
+  },
+};
+
+const defaultSecretaria: ContextConfig = {
+  key: "secretaria",
+  displayName: "Secretaria da Escola",
+  legalName: "",
+  document: "",
+  contacts: {},
+  logoUrl: "",
+  palette: {
+    primary: "#0f4c5c",
+    secondary: "#d97706",
+    background: "#fcfaf6",
+    text: "#1f2937",
+    accent: "#6b7280",
+    gradientFrom: "#f4e7d3",
+    gradientTo: "#e1eef0",
   },
 };
 
@@ -176,6 +195,7 @@ const BrandingContext = createContext<BrandingContextType>({
   activeContext: "escola",
   configs: {
     escola: defaultEscola,
+    secretaria: defaultSecretaria,
     loja: defaultLoja,
     lanchonete: defaultLanchonete,
     administracao: defaultAdmin,
@@ -205,6 +225,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
   const [activeContext, setActiveContext] = useState<ContextKey>("escola");
   const [configs, setConfigs] = useState<Record<ContextKey, ContextConfig>>({
     escola: defaultEscola,
+    secretaria: defaultSecretaria,
     loja: defaultLoja,
     lanchonete: defaultLanchonete,
     administracao: defaultAdmin,
@@ -220,6 +241,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
         const parsed = JSON.parse(saved);
         setConfigs({
           escola: { ...defaultEscola, ...(parsed.escola ?? {}) },
+          secretaria: { ...defaultSecretaria, ...(parsed.secretaria ?? {}) },
           loja: { ...defaultLoja, ...(parsed.loja ?? {}) },
           lanchonete: { ...defaultLanchonete, ...(parsed.lanchonete ?? {}) },
           administracao: { ...defaultAdmin, ...(parsed.administracao ?? {}) },
@@ -233,6 +255,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
           STORAGE_KEY,
           JSON.stringify({
             escola: defaultEscola,
+            secretaria: defaultSecretaria,
             loja: defaultLoja,
             lanchonete: defaultLanchonete,
             administracao: defaultAdmin,

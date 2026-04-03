@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type FolhaRow = {
-  id: number;
+  id: number | null;
   competencia_ano_mes: string;
   colaborador_id: number;
   colaborador_nome: string | null;
@@ -18,7 +18,7 @@ type PainelCompetencia = {
   status_fatura: string;
   status_importacao_folha: string;
   espelho_disponivel: boolean;
-  referencia_fatura_id: number;
+  referencia_fatura_id: number | null;
   folha_pagamento_colaborador_id: number | null;
 };
 
@@ -27,7 +27,7 @@ type PainelColaborador = {
   competencias: PainelCompetencia[];
 };
 
-const STATUS_OPTIONS = ["", "ABERTA", "FECHADA", "PAGA", "CANCELADA"] as const;
+const STATUS_OPTIONS = ["", "NAO_INICIADA", "ABERTA", "FECHADA", "PAGA", "CANCELADA"] as const;
 
 function brl(value: number) {
   return (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -47,6 +47,7 @@ export default function FolhaColaboradoresPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [running, setRunning] = useState<"abrir" | "espelho" | null>(null);
+  const [abrindoLinhaId, setAbrindoLinhaId] = useState<number | null>(null);
 
   const rowsFiltradas = useMemo(() => {
     if (!somenteComDebito) return rows;
@@ -161,6 +162,27 @@ export default function FolhaColaboradoresPage() {
     }
   }
 
+  async function abrirFolhaColaborador(row: FolhaRow) {
+    if (row.id) return;
+    setAbrindoLinhaId(row.colaborador_id);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/folha/colaboradores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competencia, colaborador_id: row.colaborador_id }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; data?: { id?: number } } | null;
+      if (!res.ok || !json?.ok || !json.data?.id) {
+        setMessage(json?.error ?? "falha_criar_folha_individual");
+        return;
+      }
+      window.location.href = `/admin/financeiro/folha/colaboradores/${json.data.id}`;
+    } finally {
+      setAbrindoLinhaId(null);
+    }
+  }
+
   useEffect(() => {
     void fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,18 +194,18 @@ export default function FolhaColaboradoresPage() {
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-xl font-semibold">Folha de pagamento - colaboradores</h1>
+              <h1 className="text-xl font-semibold">Folha geral por competencia</h1>
               <p className="mt-1 text-sm text-slate-600">
-                Visao gerencial por competencia, com foco em processamento, importacao da conta interna e acesso rapido
-                ao perfil financeiro de cada colaborador.
+                Visao gerencial da competencia, com foco em abertura, espelho, importacao da conta interna e acesso
+                rapido a ficha financeira de cada colaborador.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/financeiro/colaboradores">
-                Abrir colaboradores financeiros
+                Abrir fichas financeiras
               </Link>
               <Link className="rounded-md border px-3 py-2 text-sm hover:bg-slate-50" href="/financeiro/credito-conexao/faturas">
-                Faturas da conta interna
+                Faturas globais
               </Link>
             </div>
           </div>
@@ -231,13 +253,13 @@ export default function FolhaColaboradoresPage() {
               </label>
               <label className="flex items-center gap-2 self-end pb-2 text-sm">
                 <input type="checkbox" checked={somenteComDebito} onChange={(event) => setSomenteComDebito(event.target.checked)} />
-                Abrir colaboradores com debito em aberto
+                Somente com debito em aberto
               </label>
             </div>
 
             <div className="flex flex-wrap gap-2">
               <Link className="rounded-md border px-3 py-2 text-sm" href="/financeiro/colaboradores">
-                Colaboradores financeiros
+                Fichas financeiras
               </Link>
               <button type="button" className="rounded-md border px-3 py-2 text-sm" disabled={running !== null} onClick={() => void abrirFolha()}>
                 {running === "abrir" ? "Abrindo..." : "Abrir folha"}
@@ -286,7 +308,7 @@ export default function FolhaColaboradoresPage() {
                     const competenciaAtualPainel =
                       painel?.competencias.find((item) => item.competencia === row.competencia_ano_mes) ?? null;
                     return (
-                      <tr key={row.id} className="border-t">
+                      <tr key={`${row.colaborador_id}-${row.competencia_ano_mes}`} className="border-t">
                         <td className="px-3 py-2">
                           <div className="font-medium">{row.colaborador_nome ?? `Colaborador #${row.colaborador_id}`}</div>
                           <div className="mt-1">
@@ -297,7 +319,11 @@ export default function FolhaColaboradoresPage() {
                         </td>
                         <td className="px-3 py-2">{row.competencia_ano_mes}</td>
                         <td className="px-3 py-2">{row.status}</td>
-                        <td className="px-3 py-2">{painel?.referencias.conta_interna_id ? "Ativa" : "Nao criada"}</td>
+                        <td className="px-3 py-2">
+                          {painel?.referencias.conta_interna_id
+                            ? `Conta interna #${painel.referencias.conta_interna_id}`
+                            : "Nao criada"}
+                        </td>
                         <td className="px-3 py-2">
                           {competenciaAtualPainel
                             ? `${competenciaAtualPainel.status_importacao_folha}${competenciaAtualPainel.espelho_disponivel ? " / Espelho disponivel" : ""}`
@@ -309,9 +335,26 @@ export default function FolhaColaboradoresPage() {
                             <Link className="rounded border px-3 py-1 text-xs hover:bg-slate-50" href={`/admin/config/colaboradores/${row.colaborador_id}`}>
                               Perfil
                             </Link>
-                            <Link className="rounded border px-3 py-1 text-xs hover:bg-slate-50" href={`/admin/financeiro/folha/colaboradores/${row.id}`}>
-                              Abrir folha
+                            <Link className="rounded border px-3 py-1 text-xs hover:bg-slate-50" href={`/financeiro/colaboradores/${row.colaborador_id}?competencia=${row.competencia_ano_mes}`}>
+                              Ficha
                             </Link>
+                            <Link className="rounded border px-3 py-1 text-xs hover:bg-slate-50" href={`/financeiro/colaboradores/${row.colaborador_id}/conta-interna`}>
+                              Conta interna
+                            </Link>
+                            {row.id ? (
+                              <Link className="rounded border px-3 py-1 text-xs hover:bg-slate-50" href={`/admin/financeiro/folha/colaboradores/${row.id}`}>
+                                Abrir folha
+                              </Link>
+                            ) : (
+                              <button
+                                type="button"
+                                className="rounded border px-3 py-1 text-xs hover:bg-slate-50 disabled:opacity-60"
+                                disabled={abrindoLinhaId === row.colaborador_id}
+                                onClick={() => void abrirFolhaColaborador(row)}
+                              >
+                                {abrindoLinhaId === row.colaborador_id ? "Abrindo..." : "Abrir folha"}
+                              </button>
+                            )}
                             {competenciaAtualPainel?.referencia_fatura_id ? (
                               <Link
                                 className="rounded border px-3 py-1 text-xs hover:bg-slate-50"

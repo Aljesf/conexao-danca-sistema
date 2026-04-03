@@ -2,6 +2,7 @@
 import { requireUser } from "@/lib/supabase/api-auth";
 import { markNeofinBillingAsPaid } from "@/lib/neofinClient";
 import { processarClassificacaoFinanceira } from "@/lib/financeiro/processarClassificacaoFinanceira";
+import { recalcularFaturasRelacionadasPorCobranca } from "@/lib/financeiro/creditoConexaoFaturas";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
         {
           ok: false,
           error: "fatura_sem_lancamentos",
-          message: "Nao e possivel pagar uma fatura do Credito Conexao sem lancamentos de consumo.",
+          message: "Nao e possivel pagar uma fatura da conta interna sem lancamentos consolidados.",
         },
         { status: 400 }
       );
@@ -318,7 +319,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Se a cobranca veio de uma fatura de Credito Conexao, atualiza status da fatura
+  // Se a cobranca veio de uma fatura da conta interna, atualiza status da fatura
   if (
     cobrancaAtualizada.origem_tipo === "CREDITO_CONEXAO_FATURA" &&
     cobrancaAtualizada.origem_id
@@ -334,6 +335,15 @@ export async function POST(request: NextRequest) {
         faturaError
       );
     }
+  }
+
+  try {
+    await recalcularFaturasRelacionadasPorCobranca(supabase as any, cobranca.id);
+  } catch (faturaRelacionadaError) {
+    console.warn(
+      "[Registrar pagamento presencial] falha ao recalcular faturas relacionadas:",
+      faturaRelacionadaError
+    );
   }
 
   let neofin_ok = true;

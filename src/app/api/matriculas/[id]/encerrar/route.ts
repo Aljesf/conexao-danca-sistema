@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Pool, type PoolClient } from "pg";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
+import { inserirMatriculaEventoPg } from "@/lib/matriculas/eventos";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { EncerramentoPayloadSchema } from "../_encerramento.types";
 import { computeCobrancasParaCancelar, type CobrancaRow } from "../_encerramento.shared";
@@ -140,6 +141,19 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       [matriculaId, hoje],
     );
 
+    const itensEncerradosResult = await client.query(
+      `
+      UPDATE public.matricula_itens
+      SET
+        status = 'ENCERRADO',
+        data_fim = COALESCE(data_fim, $2::date),
+        updated_at = now()
+      WHERE matricula_id = $1
+        AND COALESCE(upper(status), '') = 'ATIVO'
+      `,
+      [matriculaId, hoje],
+    );
+
     await client.query(
       `
       UPDATE public.matriculas
@@ -179,6 +193,17 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       [matriculaId, motivo, userId, idsParaCancelar.length, valorCancelado, JSON.stringify(payload)],
     );
 
+    await inserirMatriculaEventoPg(client, {
+      matricula_id: matriculaId,
+      tipo_evento: "CONCLUIDA",
+      observacao: motivo,
+      created_by: userId,
+      dados: {
+        itens_encerrados_qtd: itensEncerradosResult.rowCount ?? 0,
+        cobrancas_canceladas_qtd: idsParaCancelar.length,
+      },
+    });
+
     await client.query(
       `
       INSERT INTO public.auditoria_logs (
@@ -212,6 +237,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       cobrancas_canceladas_qtd: idsParaCancelar.length,
       cobrancas_canceladas_valor_centavos: valorCancelado,
       turma_aluno_encerrados: turmaAlunoResult.rowCount ?? 0,
+      itens_encerrados_qtd: itensEncerradosResult.rowCount ?? 0,
     });
   } catch (e: unknown) {
     try {

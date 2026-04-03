@@ -1,0 +1,53 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath('com.android.tools.build:gradle')
+    classpath('com.facebook.react:react-native-gradle-plugin')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+  }
+}
+
+allprojects {
+  repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://www.jitpack.io' }
+  }
+}
+
+def nativeWindowsPathOverrides = [
+  "react-native-screens": [buildDir: ".cxx/rns", cmakeArgs: ["-DCMAKE_OBJECT_PATH_MAX=128"]],
+  "expo-modules-core"  : [buildDir: ".cxx/emc", cmakeArgs: ["-DCMAKE_OBJECT_PATH_MAX=128"]],
+]
+
+subprojects { subproject ->
+  def override = nativeWindowsPathOverrides[subproject.name]
+  if (override == null) {
+    return
+  }
+
+  subproject.plugins.withId("com.android.library") {
+    def androidExtension = subproject.extensions.findByName("android")
+    if (androidExtension == null) {
+      return
+    }
+
+    // Keep native intermediates under a short repo-controlled path so Windows + pnpm monorepo
+    // resolution does not push CMake/Ninja past path length limits.
+    androidExtension.externalNativeBuild.cmake.buildStagingDirectory = rootProject.file(override.buildDir)
+
+    override.cmakeArgs.each { arg ->
+      if (!androidExtension.defaultConfig.externalNativeBuild.cmake.arguments.contains(arg)) {
+        androidExtension.defaultConfig.externalNativeBuild.cmake.arguments += arg
+      }
+    }
+  }
+}
+
+apply plugin: "expo-root-project"
+apply plugin: "com.facebook.react.rootproject"

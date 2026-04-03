@@ -314,7 +314,7 @@ export function FinanceiroMensalDetalheModal({
             ) : null}
             {itensGeradosAntecipadamente > 0 ? (
               <p className="mt-2 text-xs text-slate-500">
-                Previsao baseada em lancamentos ativos ja gerados na Conta Interna Aluno.
+                Previsao baseada em lancamentos ativos ja gerados na Conta Interna.
               </p>
             ) : null}
             {itensSemNeofin > 0 ? (
@@ -484,7 +484,7 @@ export function FinanceiroMensalDetalheModal({
                     <td className="px-3 py-3 text-slate-600">
                       <div>{item.neofin_label}</div>
                       <div className="text-xs text-slate-500">
-                        {item.fatura_id ? `Fatura #${item.fatura_id}` : "Sem fatura vinculada"}
+                        {item.fatura_id ? `Fatura #${item.fatura_id}` : "Competencia em reconciliacao"}
                       </div>
                     </td>
                     <td className="px-3 py-3 text-right font-semibold text-slate-800">

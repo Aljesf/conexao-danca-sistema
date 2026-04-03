@@ -1,11 +1,17 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { TurmaResumoOperacional } from "@/components/turmas/TurmaResumoOperacional";
 import { SectionCard, StatCard, pillAccent, pillNeutral } from "@/components/ui/conexao-cards";
 import { formatarHorario, resolverHorarioTurma, type ResumoAlunosTurma } from "@/lib/turmas";
 
-type FeedItemKind = "PERIODO_LETIVO" | "FAIXA_LETIVA" | "INSTITUCIONAL" | "EVENTO_INTERNO";
+type FeedItemKind =
+  | "PERIODO_LETIVO"
+  | "FAIXA_LETIVA"
+  | "INSTITUCIONAL"
+  | "EVENTO_INTERNO"
+  | "EVENTO_EDICAO";
 
 type FeedItem = {
   kind: FeedItemKind;
@@ -93,7 +99,7 @@ function groupCounts(items: FeedItem[]) {
       institucionais += 1;
       if (it.sem_aula) semAula += 1;
     }
-    if (it.kind === "EVENTO_INTERNO") internos += 1;
+    if (it.kind === "EVENTO_INTERNO" || it.kind === "EVENTO_EDICAO") internos += 1;
   }
 
   return { institucionais, internos, semAula };
@@ -394,6 +400,7 @@ export default function EscolaCalendarioDashboard() {
                 const isSelected = dayISO === selectedISO;
 
                 const hasInterno = its.some((x) => x.kind === "EVENTO_INTERNO");
+                const hasEventoEdicao = its.some((x) => x.kind === "EVENTO_EDICAO");
                 const hasInstitucional = its.some((x) => x.kind === "INSTITUCIONAL" || x.kind === "FAIXA_LETIVA");
                 const hasSemAula = its.some(
                   (x) => (x.kind === "INSTITUCIONAL" || x.kind === "FAIXA_LETIVA") && x.sem_aula
@@ -420,6 +427,7 @@ export default function EscolaCalendarioDashboard() {
                         <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                       ) : null}
                       {hasInterno ? <span className="h-1.5 w-1.5 rounded-full bg-violet-500" /> : null}
+                      {hasEventoEdicao ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
                     </div>
 
                     <div className="mt-1 text-[10px] text-slate-500 truncate">
@@ -433,6 +441,10 @@ export default function EscolaCalendarioDashboard() {
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="inline-flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-violet-500" /> eventos internos
+              </span>
+              <span className="text-slate-300">•</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> eventos da escola
               </span>
               <span className="text-slate-300">•</span>
               <span className="inline-flex items-center gap-1">
@@ -499,9 +511,9 @@ export default function EscolaCalendarioDashboard() {
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              <a className={pillNeutral} href="/escola/calendario/eventos-internos">
-                Gerenciar eventos internos
-              </a>
+              <Link className={pillNeutral} href="/escola/eventos">
+                Abrir Eventos da Escola
+              </Link>
               <a className={pillNeutral} href="/escola/calendario/feriados">
                 Gerenciar feriados
               </a>

@@ -5,6 +5,7 @@ export async function liquidarPrimeiraMatricula(params: {
   baseUrl: string;
   cookieHeader: string;
   matriculaId: number;
+  matriculaItemIds?: number[];
   tipoPrimeiraCobranca: TipoPrimeiraCobranca;
   modo: ModoLiquidacaoAutomatica;
   observacoes?: string | null;
@@ -12,7 +13,7 @@ export async function liquidarPrimeiraMatricula(params: {
   | { ok: true; payload: Record<string, unknown> }
   | { ok: false; error: string; detail: string; payload?: Record<string, unknown> }
 > {
-  const { baseUrl, cookieHeader, matriculaId, tipoPrimeiraCobranca, modo, observacoes } = params;
+  const { baseUrl, cookieHeader, matriculaId, matriculaItemIds, tipoPrimeiraCobranca, modo, observacoes } = params;
 
   try {
     const res = await fetch(`${baseUrl}/api/matriculas/liquidacao-primeira`, {
@@ -23,6 +24,7 @@ export async function liquidarPrimeiraMatricula(params: {
       },
       body: JSON.stringify({
         matricula_id: matriculaId,
+        matricula_item_ids: Array.isArray(matriculaItemIds) ? matriculaItemIds : [],
         tipo_primeira_cobranca: tipoPrimeiraCobranca,
         modo,
         observacoes: observacoes ?? null,

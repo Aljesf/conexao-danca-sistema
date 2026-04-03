@@ -134,7 +134,7 @@ export default function ReprocessarMatriculaPage() {
         <div className="rounded-2xl border bg-white p-6 shadow-sm">
           <h1 className="text-xl font-semibold">Reprocessar matricula (correcao total)</h1>
           <p className="text-sm text-muted-foreground">
-            Diagnostica e corrige: aluno na turma, Cartao Conexao, cobrancas por competencia e
+            Diagnostica e corrige: aluno na turma, conta interna, cobrancas por competencia e
             entrada.
           </p>
         </div>
@@ -159,7 +159,7 @@ export default function ReprocessarMatriculaPage() {
               onChange={(e) => setForcarRebuild(e.target.checked)}
             />
             <span className="text-sm">
-              Forcar rebuild/atualizacao imediata das faturas do Cartao Conexao
+              Forcar rebuild/atualizacao imediata das faturas da conta interna
             </span>
           </div>
         </div>
@@ -176,7 +176,7 @@ export default function ReprocessarMatriculaPage() {
                 <b>Turma/Aluno:</b> {diag.checks.turma_aluno_ok ? "OK" : "FALTA (sera corrigido)"}
               </div>
               <div>
-                <b>Cartao Conexao:</b> {diag.checks.conta_cartao_existe ? "OK" : "NAO EXISTE (sera criado)"}
+                <b>Conta interna:</b> {diag.checks.conta_cartao_existe ? "OK" : "NAO EXISTE (sera criada)"}
               </div>
               <div>
                 <b>Mensalidades:</b> {diag.checks.cobrancas_cartao_existentes} existentes /{" "}
@@ -205,7 +205,7 @@ export default function ReprocessarMatriculaPage() {
         </div>
 
         <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-4">
-          <h2 className="text-base font-semibold">Liquidacao da entrada (fora do Cartao Conexao)</h2>
+          <h2 className="text-base font-semibold">Liquidacao da entrada na conta interna</h2>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="text-sm font-medium">Valor da entrada (R$)</label>
