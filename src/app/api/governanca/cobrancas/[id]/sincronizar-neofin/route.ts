@@ -1,17 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { getNeofinBilling } from "@/lib/neofinClient";
 import { extractNeofinBillingDetails, looksLikeNeofinBillingNumber } from "@/lib/neofinBilling";
+import type { Database, TablesUpdate } from "@/types/supabase.generated";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-type CobrancaSyncRow = {
-  id: number;
-  status: string;
-  neofin_charge_id: string | null;
+type CobrancaSyncRow = Pick<
+  Database["public"]["Tables"]["cobrancas"]["Row"],
+  "id" | "status" | "neofin_charge_id" | "link_pagamento" | "linha_digitavel"
+> & {
   neofin_payload: Record<string, unknown> | null;
-  link_pagamento: string | null;
-  linha_digitavel: string | null;
 };
 
 function mapStatusInterno(remoteStatus: string | null, currentStatus: string): string {
@@ -34,7 +34,7 @@ async function syncCobranca(req: NextRequest, ctx: RouteContext) {
   const auth = await requireUser(req);
   if (auth instanceof NextResponse) return auth;
 
-  const { supabase } = auth;
+  const supabase = auth.supabase as unknown as SupabaseClient<Database>;
   const { id } = await ctx.params;
   const cobrancaId = Number(id);
 
@@ -79,17 +79,18 @@ async function syncCobranca(req: NextRequest, ctx: RouteContext) {
   const remoteStatus = billingInfo.remoteStatus?.toUpperCase() ?? null;
   const nextStatus = mapStatusInterno(remoteStatus, cobranca.status);
   const updatedAt = new Date().toISOString();
+  const cobrancaUpdate: TablesUpdate<"cobrancas"> = {
+    status: nextStatus,
+    neofin_payload: (remote.body ?? null) as TablesUpdate<"cobrancas">["neofin_payload"],
+    neofin_charge_id: billingInfo.billingId ?? cobranca.neofin_charge_id,
+    link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
+    linha_digitavel: billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
+    updated_at: updatedAt,
+  };
 
   const { data: updated, error: updateErr } = await supabase
     .from("cobrancas")
-    .update({
-      status: nextStatus,
-      neofin_payload: remote.body ?? null,
-      neofin_charge_id: billingInfo.billingId ?? cobranca.neofin_charge_id,
-      link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
-      linha_digitavel: billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
-      updated_at: updatedAt,
-    })
+    .update(cobrancaUpdate)
     .eq("id", cobranca.id)
     .select("id,status,neofin_charge_id,link_pagamento,linha_digitavel,neofin_payload,updated_at")
     .single();
@@ -102,12 +103,13 @@ async function syncCobranca(req: NextRequest, ctx: RouteContext) {
   }
 
   if (neofinInvoiceId) {
+    const faturaUpdate: TablesUpdate<"credito_conexao_faturas"> = {
+      neofin_invoice_id: neofinInvoiceId,
+      updated_at: updatedAt,
+    };
     const { error: faturaErr } = await supabase
       .from("credito_conexao_faturas")
-      .update({
-        neofin_invoice_id: neofinInvoiceId,
-        updated_at: updatedAt,
-      })
+      .update(faturaUpdate)
       .eq("cobranca_id", cobranca.id);
 
     if (faturaErr) {
