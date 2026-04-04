@@ -245,7 +245,7 @@ export async function processarCobrancaCanonicaFatura(
     };
   }
 
-  const integrationIdentifier = `fatura-credito-conexao-${input.fatura.id}`;
+  const integrationIdentifierBase = `fatura-credito-conexao-${input.fatura.id}`;
   let neofinChargeId = cobrancaAtual.neofin_charge_id;
   let neofinInvoiceId: string | null = null;
   let linkPagamento = cobrancaAtual.link_pagamento ?? null;
@@ -256,7 +256,7 @@ export async function processarCobrancaCanonicaFatura(
   if (cobrancaAtual.neofin_charge_id && !input.force) {
     const existingSync = await syncExistingNeofinDetails(
       cobrancaAtual.neofin_charge_id,
-      integrationIdentifier,
+      integrationIdentifierBase,
     );
 
     neofinChargeId = existingSync.neofinChargeId;
@@ -278,7 +278,7 @@ export async function processarCobrancaCanonicaFatura(
 
       const providerDetails = extractNeofinBillingDetails(out.payload ?? null, {
         identifier: out.providerCobrancaId,
-        integrationIdentifier,
+        integrationIdentifier: integrationIdentifierBase,
       });
 
       neofinChargeId = firstNonEmptyString(providerDetails.billingId, out.providerCobrancaId) ?? out.providerCobrancaId;
