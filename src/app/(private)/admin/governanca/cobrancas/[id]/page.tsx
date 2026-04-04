@@ -133,7 +133,9 @@ function previewPayload(payload: Record<string, unknown> | null): string {
   return raw.length <= 2200 ? JSON.stringify(payload, null, 2) : `${raw.slice(0, 2200)}...`;
 }
 
-function paymentLinkOriginLabel(value: CobrancaDetalhe["pagamento_exibivel"] extends infer P ? P extends { link_pagamento_origem: infer O } ? O : never : never): string {
+type PaymentLinkOrigin = NonNullable<NonNullable<CobrancaDetalhe["pagamento_exibivel"]>["link_pagamento_origem"]>;
+
+function paymentLinkOriginLabel(value: PaymentLinkOrigin | undefined): string {
   return value === "invoice_oficial_neofin"
     ? "Oficial da invoice"
     : value === "billing_oficial_neofin"

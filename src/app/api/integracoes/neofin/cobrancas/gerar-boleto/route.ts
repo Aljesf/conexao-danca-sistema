@@ -1,7 +1,9 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
 import { extractNeofinBillingDetails } from "@/lib/neofinBilling";
+import type { Database, TablesUpdate } from "@/types/supabase.generated";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,7 +53,7 @@ export async function POST(request: NextRequest) {
     const auth = await requireUser(request);
     if (auth instanceof NextResponse) return auth;
 
-    const { supabase } = auth;
+    const supabase = auth.supabase as unknown as SupabaseClient<Database>;
 
     const body = (await request.json().catch(() => null)) as RequestPayload | null;
     const cobrancaId = body?.cobranca_id ? Number(body.cobranca_id) : NaN;
@@ -159,7 +161,8 @@ export async function POST(request: NextRequest) {
 
     if (!neofinResult.ok) {
       console.error("[Neofin gerar boleto] falha ao enviar para Neofin:", neofinResult);
-      await supabase.from("cobrancas").update({ status: "ERRO_INTEGRACAO" }).eq("id", cobranca.id);
+      const erroIntegracaoUpdate: TablesUpdate<"cobrancas"> = { status: "ERRO_INTEGRACAO" };
+      await supabase.from("cobrancas").update(erroIntegracaoUpdate).eq("id", cobranca.id);
 
       return NextResponse.json(
         {
@@ -176,15 +179,17 @@ export async function POST(request: NextRequest) {
       integrationIdentifier,
     });
 
+    const cobrancaNeofinUpdate: TablesUpdate<"cobrancas"> = {
+      neofin_charge_id: billingInfo.billingId ?? integrationIdentifier,
+      link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
+      linha_digitavel: billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
+      neofin_payload: neofinResult.body ?? cobranca.neofin_payload ?? null,
+      status: cobranca.status === "ERRO_INTEGRACAO" ? "PENDENTE" : cobranca.status,
+    };
+
     const { data: cobrancaAtualizada, error: updateError } = await supabase
       .from("cobrancas")
-      .update({
-        neofin_charge_id: billingInfo.billingId ?? integrationIdentifier,
-        link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
-        linha_digitavel: billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
-        neofin_payload: neofinResult.body ?? cobranca.neofin_payload ?? null,
-        status: cobranca.status === "ERRO_INTEGRACAO" ? "PENDENTE" : cobranca.status,
-      })
+      .update(cobrancaNeofinUpdate)
       .eq("id", cobranca.id)
       .select(
         `

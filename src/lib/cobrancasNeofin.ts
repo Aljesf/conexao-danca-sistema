@@ -1,4 +1,6 @@
 import { upsertNeofinBilling } from "@/lib/neofinClient";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, TablesInsert, TablesUpdate } from "@/types/supabase.generated";
 
 type Pessoa = {
   id: number;
@@ -9,7 +11,7 @@ type Pessoa = {
 };
 
 export type CriarCobrancaNeofinInput = {
-  supabase: any;
+  supabase: SupabaseClient<Database>;
   usuarioId: string | null;
 
   pessoa_id: number;
@@ -85,20 +87,22 @@ export async function criarCobrancaLocalEEnviarNeofin(input: CriarCobrancaNeofin
   }
 
   // Criar cobrança local
+  const cobrancaInsert: TablesInsert<"cobrancas"> = {
+    pessoa_id,
+    descricao,
+    valor_centavos,
+    moeda: "BRL",
+    vencimento,
+    metodo_pagamento: metodo_pagamento ?? null,
+    status: "PENDENTE",
+    centro_custo_id: centro_custo_id ?? null,
+    origem_tipo: origem_tipo ?? null,
+    origem_id: origem_id ?? null,
+  };
+
   const { data: novaCobranca, error: eInsert } = await supabase
     .from("cobrancas")
-    .insert({
-      pessoa_id,
-      descricao,
-      valor_centavos,
-      moeda: "BRL",
-      vencimento,
-      metodo_pagamento: metodo_pagamento ?? null,
-      status: "PENDENTE",
-      centro_custo_id: centro_custo_id ?? null,
-      origem_tipo: origem_tipo ?? null,
-      origem_id: origem_id ?? null,
-    })
+    .insert(cobrancaInsert)
     .select("id, pessoa_id, descricao, valor_centavos, moeda, vencimento, status, neofin_charge_id, link_pagamento")
     .single();
 
@@ -121,9 +125,10 @@ export async function criarCobrancaLocalEEnviarNeofin(input: CriarCobrancaNeofin
   });
 
   if (!neofinResult.ok) {
+    const erroIntegracaoUpdate: TablesUpdate<"cobrancas"> = { status: "ERRO_INTEGRACAO" };
     await supabase
       .from("cobrancas")
-      .update({ status: "ERRO_INTEGRACAO" })
+      .update(erroIntegracaoUpdate)
       .eq("id", novaCobranca.id);
 
     return {
@@ -136,12 +141,14 @@ export async function criarCobrancaLocalEEnviarNeofin(input: CriarCobrancaNeofin
 
   // Atualizar cobrança com marcador de integração
   // (seguindo seu padrão atual: neofin_charge_id = integrationIdentifier)
+  const cobrancaIntegradaUpdate: TablesUpdate<"cobrancas"> = {
+    neofin_charge_id: integrationIdentifier,
+    status: "PENDENTE",
+  };
+
   const { data: cobrancaAtualizada, error: eUpdate } = await supabase
     .from("cobrancas")
-    .update({
-      neofin_charge_id: integrationIdentifier,
-      status: "PENDENTE",
-    })
+    .update(cobrancaIntegradaUpdate)
     .eq("id", novaCobranca.id)
     .select("id, neofin_charge_id, link_pagamento, status")
     .single();

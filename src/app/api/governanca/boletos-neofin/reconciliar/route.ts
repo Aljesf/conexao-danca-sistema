@@ -1,5 +1,7 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
+import type { Database, Tables, TablesUpdate } from "@/types/supabase.generated";
 
 type ReconciliarResult = {
   cobranca_id: number;
@@ -10,11 +12,16 @@ type ReconciliarResult = {
   ultimo_pagamento_em: string | null;
 };
 
-export async function POST() {
-  const auth = await requireUser(req);
+type ReconciliarRow = Pick<
+  Tables<"vw_governanca_boletos_neofin">,
+  "cobranca_id" | "cobranca_status" | "total_recebido_centavos" | "valor_centavos" | "ultimo_pagamento_em"
+>;
+
+export async function POST(request: NextRequest) {
+  const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
 
-  const { supabase } = auth;
+  const supabase = auth.supabase as unknown as SupabaseClient<Database>;
 
   const { data, error } = await supabase
     .from("vw_governanca_boletos_neofin")
@@ -30,12 +37,11 @@ export async function POST() {
     );
   }
 
-  const candidatos =
-    (data ?? []).filter((row: any) => {
-      const total = Number(row.total_recebido_centavos ?? 0);
-      const valor = Number(row.valor_centavos ?? 0);
-      return total >= valor && valor > 0;
-    }) ?? [];
+  const candidatos = ((data ?? []) as unknown as ReconciliarRow[]).filter((row) => {
+    const total = Number(row.total_recebido_centavos ?? 0);
+    const valor = Number(row.valor_centavos ?? 0);
+    return total >= valor && valor > 0;
+  });
 
   const resultados: ReconciliarResult[] = [];
 
@@ -44,13 +50,15 @@ export async function POST() {
     const antes = String(row.cobranca_status ?? "");
     const ultimoPagamento = (row.ultimo_pagamento_em as string | null) ?? null;
 
+    const cobrancaUpdate: TablesUpdate<"cobrancas"> = {
+      status: "PAGO",
+      data_pagamento: ultimoPagamento ? ultimoPagamento.slice(0, 10) : null,
+      updated_at: new Date().toISOString(),
+    };
+
     const { error: upErr } = await supabase
       .from("cobrancas")
-      .update({
-        status: "PAGO",
-        data_pagamento: ultimoPagamento ? ultimoPagamento.slice(0, 10) : null,
-        updated_at: new Date().toISOString(),
-      })
+      .update(cobrancaUpdate)
       .eq("id", cobrancaId);
 
     if (!upErr) {

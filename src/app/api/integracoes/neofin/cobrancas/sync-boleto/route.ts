@@ -1,7 +1,9 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { getNeofinBilling, upsertNeofinBilling } from "@/lib/neofinClient";
 import { extractNeofinBillingDetails } from "@/lib/neofinBilling";
+import type { Database, TablesUpdate } from "@/types/supabase.generated";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
     const auth = await requireUser(request);
     if (auth instanceof NextResponse) return auth;
 
-    const { supabase } = auth;
+    const supabase = auth.supabase as unknown as SupabaseClient<Database>;
 
     const body = (await request.json().catch(() => null)) as RequestPayload | null;
     const cobrancaId = body?.cobranca_id ? Number(body.cobranca_id) : NaN;
@@ -144,15 +146,17 @@ export async function POST(request: NextRequest) {
       });
       identifier = infoCriacao.billingId ?? integrationIdentifier;
 
+      const cobrancaCriadaUpdate: TablesUpdate<"cobrancas"> = {
+        neofin_charge_id: identifier,
+        link_pagamento: infoCriacao.paymentLink ?? cobranca.link_pagamento ?? null,
+        linha_digitavel:
+          infoCriacao.digitableLine ?? infoCriacao.barcode ?? cobranca.linha_digitavel ?? null,
+        neofin_payload: neofinCreate.body ?? cobranca.neofin_payload ?? null,
+      };
+
       await supabase
         .from("cobrancas")
-        .update({
-          neofin_charge_id: identifier,
-          link_pagamento: infoCriacao.paymentLink ?? cobranca.link_pagamento ?? null,
-          linha_digitavel:
-            infoCriacao.digitableLine ?? infoCriacao.barcode ?? cobranca.linha_digitavel ?? null,
-          neofin_payload: neofinCreate.body ?? cobranca.neofin_payload ?? null,
-        })
+        .update(cobrancaCriadaUpdate)
         .eq("id", cobranca.id);
     }
 
@@ -178,15 +182,17 @@ export async function POST(request: NextRequest) {
       integrationIdentifier: cobranca.neofin_charge_id ?? identifier,
     });
 
+    const cobrancaSyncUpdate: TablesUpdate<"cobrancas"> = {
+      neofin_charge_id: billingInfo.billingId ?? cobranca.neofin_charge_id ?? identifier,
+      link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
+      linha_digitavel:
+        billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
+      neofin_payload: neofinResult.body ?? cobranca.neofin_payload ?? null,
+    };
+
     const { data: cobrancaAtualizada, error: updateError } = await supabase
       .from("cobrancas")
-      .update({
-        neofin_charge_id: billingInfo.billingId ?? cobranca.neofin_charge_id ?? identifier,
-        link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
-        linha_digitavel:
-          billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
-        neofin_payload: neofinResult.body ?? cobranca.neofin_payload ?? null,
-      })
+      .update(cobrancaSyncUpdate)
       .eq("id", cobranca.id)
       .select(
         `

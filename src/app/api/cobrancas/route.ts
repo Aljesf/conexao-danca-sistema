@@ -1,7 +1,9 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { upsertNeofinBilling } from "@/lib/neofinClient";
 import { logAuditoria, resolverNomeDoUsuario } from "@/lib/auditoriaLog";
+import type { Database, TablesInsert, TablesUpdate } from "@/types/supabase.generated";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
 
-  const { supabase } = auth;
+  const supabase = auth.supabase as unknown as SupabaseClient<Database>;
 
   const { data, error } = await supabase
     .from("cobrancas")
@@ -79,7 +81,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Erro ao buscar cobrancas." }, { status: 500 });
   }
 
-  return NextResponse.json({ data: data as Cobranca[] }, { status: 200 });
+  return NextResponse.json({ data: ((data ?? []) as unknown as Cobranca[]) }, { status: 200 });
 }
 
 // POST /api/cobrancas -> cria cobranca e tenta integrar com Neofin
@@ -87,7 +89,8 @@ export async function POST(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
 
-  const { supabase, userId } = auth;
+  const supabase = auth.supabase as unknown as SupabaseClient<Database>;
+  const { userId } = auth;
   const usuarioId = userId ?? null;
 
   let payload: NovaCobrancaPayload;
@@ -153,17 +156,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const novaCobrancaInsert: TablesInsert<"cobrancas"> = {
+    pessoa_id: payload.pessoa_id,
+    descricao: payload.descricao,
+    valor_centavos: payload.valor_centavos,
+    moeda: "BRL",
+    vencimento: payload.vencimento,
+    metodo_pagamento: payload.metodo_pagamento ?? null,
+    status: "PENDENTE",
+  };
+
   const { data: novaCobranca, error: eInsert } = await supabase
     .from("cobrancas")
-    .insert({
-      pessoa_id: payload.pessoa_id,
-      descricao: payload.descricao,
-      valor_centavos: payload.valor_centavos,
-      moeda: "BRL",
-      vencimento: payload.vencimento,
-      metodo_pagamento: payload.metodo_pagamento ?? null,
-      status: "PENDENTE",
-    })
+    .insert(novaCobrancaInsert)
     .select(
       `
       id,
@@ -206,7 +211,8 @@ export async function POST(request: NextRequest) {
   if (!neofinResult.ok) {
     console.error("[Neofin] Falha ao enfileirar cobranca na criacao:", neofinResult);
 
-    await supabase.from("cobrancas").update({ status: "ERRO_INTEGRACAO" }).eq("id", novaCobranca.id);
+    const erroIntegracaoUpdate: TablesUpdate<"cobrancas"> = { status: "ERRO_INTEGRACAO" };
+    await supabase.from("cobrancas").update(erroIntegracaoUpdate).eq("id", novaCobranca.id);
 
     return NextResponse.json(
       {
@@ -217,12 +223,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const cobrancaIntegradaUpdate: TablesUpdate<"cobrancas"> = {
+    neofin_charge_id: integrationIdentifier,
+    status: "PENDENTE",
+  };
+
   const { data: cobrancaAtualizada, error: eUpdate } = await supabase
     .from("cobrancas")
-    .update({
-      neofin_charge_id: integrationIdentifier,
-      status: "PENDENTE",
-    })
+    .update(cobrancaIntegradaUpdate)
     .eq("id", novaCobranca.id)
     .select(
       `

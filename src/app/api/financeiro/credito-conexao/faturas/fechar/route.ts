@@ -1,4 +1,5 @@
 ﻿import { NextResponse, type NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { guardApiByRole } from "@/lib/auth/roleGuard";
 import { getCobrancaProvider } from "@/lib/financeiro/cobranca/providers";
@@ -8,6 +9,22 @@ import {
   DuplicidadeCobrancaCanonicaError,
   getOrCreateCobrancaCanonicaFatura,
 } from "@/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura";
+import type { Database, Json, Tables, TablesInsert, TablesUpdate } from "@/types/supabase.generated";
+
+type CreditoConexaoContaRow = Pick<
+  Tables<"credito_conexao_contas">,
+  "id" | "pessoa_titular_id" | "tipo_conta" | "dia_fechamento" | "dia_vencimento" | "centro_custo_principal_id"
+>;
+
+type CreditoConexaoLancamentoRow = Pick<
+  Tables<"credito_conexao_lancamentos">,
+  "id" | "valor_centavos" | "numero_parcelas"
+>;
+
+type CreditoConexaoRegraParcelaRow = Pick<
+  Tables<"credito_conexao_regras_parcelas">,
+  "id" | "tipo_conta" | "numero_parcelas_min" | "numero_parcelas_max" | "valor_minimo_centavos" | "taxa_percentual" | "taxa_fixa_centavos" | "ativo"
+>;
 
 /**
  * POST /api/financeiro/credito-conexao/faturas/fechar
@@ -32,7 +49,7 @@ export async function POST(req: NextRequest) {
     const auth = await requireUser(req);
     if (auth instanceof NextResponse) return auth;
 
-    const { supabase } = auth;
+    const supabase = auth.supabase as unknown as SupabaseClient<Database>;
     const body = await req.json().catch(() => ({}));
 
     const contaConexaoId = Number(body.conta_conexao_id);
@@ -73,7 +90,7 @@ export async function POST(req: NextRequest) {
       `,
       )
       .eq("id", contaConexaoId)
-      .single();
+      .single<CreditoConexaoContaRow>();
 
     if (contaError || !conta) {
       console.error("Conta Credito Conexao nao encontrada", contaError);
@@ -111,7 +128,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!lancamentos || lancamentos.length === 0) {
+    const lancamentosRows = ((lancamentos ?? []) as unknown as CreditoConexaoLancamentoRow[]);
+
+    if (lancamentosRows.length === 0) {
       // Nada a faturar
       return NextResponse.json(
         {
@@ -145,13 +164,13 @@ export async function POST(req: NextRequest) {
       console.error("Erro ao buscar regras de parcelamento Crédito Conexão", regrasError);
     }
 
-    const regrasAtivas = regrasParcelamento ?? [];
+    const regrasAtivas = ((regrasParcelamento ?? []) as unknown as CreditoConexaoRegraParcelaRow[]);
 
     // Somar valor total da fatura aplicando taxas por regra de parcelamento
     let valorComprasTotal = 0;
     let valorTaxasTotal = 0;
 
-    for (const lanc of lancamentos ?? []) {
+    for (const lanc of lancamentosRows) {
       const valorLanc = lanc.valor_centavos ?? 0;
       valorComprasTotal += valorLanc;
 
@@ -192,17 +211,19 @@ export async function POST(req: NextRequest) {
     // Iniciar transacao logica (nao temos BEGIN/COMMIT, entao vamos em passos,
     // mas cuidando para nao deixar estados inconsistentes em caso de erro).
     // 1) Criar fatura
+    const faturaInsert: TablesInsert<"credito_conexao_faturas"> = {
+      conta_conexao_id: contaConexaoId,
+      periodo_referencia: periodo_ref,
+      data_fechamento: dataFechamento.toISOString().slice(0, 10),
+      data_vencimento: dataVencimento ? dataVencimento.toISOString().slice(0, 10) : null,
+      valor_total_centavos: valorTotalFatura,
+      valor_taxas_centavos: valorTaxasTotal,
+      status: "ABERTA",
+    };
+
     const { data: fatura, error: faturaError } = await supabase
       .from("credito_conexao_faturas")
-      .insert({
-        conta_conexao_id: contaConexaoId,
-        periodo_referencia: periodo_ref,
-        data_fechamento: dataFechamento.toISOString().slice(0, 10),
-        data_vencimento: dataVencimento ? dataVencimento.toISOString().slice(0, 10) : null,
-        valor_total_centavos: valorTotalFatura,
-        valor_taxas_centavos: valorTaxasTotal,
-        status: "ABERTA",
-      })
+      .insert(faturaInsert)
       .select()
       .single();
 
@@ -214,7 +235,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const faturaId = fatura.id as number;
+    const faturaId = Number(fatura.id);
 
     // 1.5) Criar cobranca vinculada a fatura (Cartao Conexao Aluno)
     let cobrancaId: number | null = null;
@@ -256,15 +277,17 @@ export async function POST(req: NextRequest) {
               referenciaInterna: { tipo: "FATURA_CREDITO_CONEXAO", id: faturaId },
             });
 
+            const providerUpdate: TablesUpdate<"cobrancas"> = {
+              neofin_charge_id: out.providerCobrancaId,
+              neofin_payload: (out.payload ?? null) as Json | null,
+              link_pagamento: out.linkPagamento ?? null,
+              linha_digitavel: out.linhaDigitavel ?? null,
+              updated_at: new Date().toISOString(),
+            };
+
             const { error: updProviderErr } = await supabase
               .from("cobrancas")
-              .update({
-                neofin_charge_id: out.providerCobrancaId,
-                neofin_payload: out.payload ?? null,
-                link_pagamento: out.linkPagamento ?? null,
-                linha_digitavel: out.linhaDigitavel ?? null,
-                updated_at: new Date().toISOString(),
-              })
+              .update(providerUpdate)
               .eq("id", cobrancaId);
 
             if (updProviderErr) {
@@ -272,9 +295,13 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          const faturaCobrancaUpdate: TablesUpdate<"credito_conexao_faturas"> = {
+            cobranca_id: cobrancaId,
+          };
+
           const { error: updateFaturaError } = await supabase
             .from("credito_conexao_faturas")
-            .update({ cobranca_id: cobrancaId })
+            .update(faturaCobrancaUpdate)
             .eq("id", faturaId);
 
           if (updateFaturaError) {
@@ -304,7 +331,7 @@ export async function POST(req: NextRequest) {
       }
     }
     // 2) Criar vinculos em credito_conexao_fatura_lancamentos
-    const vinculos = lancamentos.map((l) => ({
+    const vinculos: TablesInsert<"credito_conexao_fatura_lancamentos">[] = lancamentosRows.map((l) => ({
       fatura_id: faturaId,
       lancamento_id: l.id,
     }));
@@ -322,11 +349,15 @@ export async function POST(req: NextRequest) {
     }
 
     // 3) Atualizar lancamentos para FATURADO
-    const idsLancamentos = lancamentos.map((l) => l.id);
+    const idsLancamentos = lancamentosRows.map((l) => l.id);
+
+    const lancamentosFaturadosUpdate: TablesUpdate<"credito_conexao_lancamentos"> = {
+      status: "FATURADO",
+    };
 
     const { error: updateLancamentosError } = await supabase
       .from("credito_conexao_lancamentos")
-      .update({ status: "FATURADO" })
+      .update(lancamentosFaturadosUpdate)
       .in("id", idsLancamentos);
 
     if (updateLancamentosError) {
@@ -340,7 +371,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       fatura,
-      quantidade_lancamentos: lancamentos.length,
+      quantidade_lancamentos: lancamentosRows.length,
       valor_total_centavos: valorTotalFatura,
       valor_taxas_centavos: valorTaxasTotal,
       cobranca_id: cobrancaId,
