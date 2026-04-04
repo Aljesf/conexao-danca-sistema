@@ -72,11 +72,53 @@ function miniBadgeClass(tone: "neutral" | "warning" | "danger" | "success" = "ne
   return "bg-slate-100 text-slate-600 ring-slate-200";
 }
 
+// 8: Formato operacional para competência
 function referenceLabel(item: CobrancaListaItem) {
-  if (item.competencia_ano_mes && item.bucket) return `${item.competencia_ano_mes} / ${item.bucket}`;
-  if (item.competencia_ano_mes) return item.competencia_ano_mes;
-  if (item.bucket) return item.bucket;
-  return "Sem recorte";
+  const comp = item.competencia_ano_mes;
+  if (comp) {
+    const [y, m] = comp.split("-");
+    const meses = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    const mesLabel = meses[Number(m) - 1] ?? m;
+    const bucket = item.bucket === "VENCIDA" ? "Vencida" : "";
+    return bucket ? `Ref. ${mesLabel}/${y} \u00B7 ${bucket}` : `Ref. ${mesLabel}/${y}`;
+  }
+  return "Sem referencia";
+}
+
+// 7: Ação recomendada
+function acaoRecomendada(item: CobrancaListaItem): { label: string; cor: string } | null {
+  if (item.status_cobranca === "CANCELADA") return null;
+  if (item.status_interno === "QUITADA") return null;
+  if (item.valor_aberto_centavos <= 0) return null;
+  if (item.atraso_dias > 0 && item.valor_recebido_centavos === 0) {
+    return { label: "Cobrar", cor: "bg-rose-50 text-rose-700" };
+  }
+  if (item.tipo_inconsistencia) {
+    return { label: "Auditar", cor: "bg-amber-50 text-amber-700" };
+  }
+  return null;
+}
+
+// 2: Badge NeoFim discreto
+function neofinBadge(item: CobrancaListaItem): { label: string; cor: string } | null {
+  if (!item.origem_badge_label) return null;
+  const label = item.origem_badge_label;
+  const isNeofinIssue = label.toLowerCase().includes("neofim") || label.toLowerCase().includes("neofin") || label.toLowerCase().includes("boleto");
+  if (!isNeofinIssue) return { label, cor: miniBadgeClass(item.origem_badge_tone === "warning" ? "warning" : "neutral") };
+  // Faturado sem boleto = atenção
+  if (item.contaInternaId && item.status_interno === "VENCIDA") {
+    return { label: "Sem boleto", cor: "bg-amber-50 text-amber-700 ring-amber-200" };
+  }
+  // Pré-fatura normal
+  return { label: "Aguardando fechamento", cor: "bg-slate-100 text-slate-500 ring-slate-200" };
+}
+
+// 3: Badge dias em atraso
+function atrasoBadge(dias: number): string {
+  if (dias > 30) return "bg-rose-100 text-rose-800";
+  if (dias > 15) return "bg-amber-100 text-amber-800";
+  if (dias > 0) return "bg-yellow-100 text-yellow-800";
+  return "bg-slate-100 text-slate-600";
 }
 
 function statusLabel(item: CobrancaListaItem) {
@@ -113,7 +155,7 @@ function origemBruta(item: CobrancaListaItem) {
 }
 
 function origemPrincipal(item: CobrancaListaItem) {
-  return item.origem_label || item.origemLabel || item.origem_tecnica || origemBruta(item) || "Origem em revisao";
+  return item.origem_label || item.origemLabel || item.origem_tecnica || origemBruta(item) || "Em revisao";
 }
 
 function origemPrincipalVisivel(item: CobrancaListaItem) {
@@ -124,19 +166,15 @@ function origemPrincipalVisivel(item: CobrancaListaItem) {
 function origemLancamento(item: CobrancaListaItem) {
   const itemTipo = item.origemItemTipo ?? item.origem_item_tipo;
   if (itemTipo) {
-    return ITEM_TYPE_LABELS[itemTipo] ?? humanizeToken(itemTipo) ?? "Origem em revisao";
+    return ITEM_TYPE_LABELS[itemTipo] ?? humanizeToken(itemTipo) ?? "Em revisao";
   }
   if (item.origem_secundaria) {
-    return item.origem_secundaria.replace(/^Lancamento:\s*/i, "").trim() || "Origem em revisao";
+    return item.origem_secundaria.replace(/^Lancamento:\s*/i, "").trim() || "Em revisao";
   }
   if (item.origem_subtipo) {
-    return humanizeToken(item.origem_subtipo) ?? "Origem em revisao";
+    return humanizeToken(item.origem_subtipo) ?? "Em revisao";
   }
-  return "Origem em revisao";
-}
-
-function centroCustoLancamento(item: CobrancaListaItem) {
-  return item.centro_custo_lancamento_nome ?? item.centro_custo_nome ?? "Centro em revisao";
+  return "Em revisao";
 }
 
 function MetaItem({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
@@ -182,38 +220,40 @@ function FinanceiroCell({ item, visao }: { item: CobrancaListaItem; visao: Conta
       : item.valor_aberto_centavos > 0
         ? item.valor_aberto_centavos
         : item.valor_centavos;
-  const valorDescricao = visao === "RECEBIDAS" ? "Valor recebido" : "Saldo em aberto";
-  const atrasoLabel = visao === "RECEBIDAS" ? "Historico" : item.atraso_dias > 0 ? `${item.atraso_dias} dias` : "No prazo";
+  const atrasoLabel = item.atraso_dias > 0 ? `${item.atraso_dias}d` : "No prazo";
   const vencimentoLabel = visao === "RECEBIDAS" ? formatDateISO(item.ultima_data_recebimento) : formatDateISO(item.vencimento);
+  const acao = acaoRecomendada(item);
+  const neofin = neofinBadge(item);
 
   return (
     <td className="px-4 py-4 align-top">
-      <div className="space-y-3">
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500">{valorDescricao}</div>
-          <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{formatBRLFromCents(valorPrincipal)}</div>
-          <div className="mt-1 text-xs text-slate-500">Valor original {formatBRLFromCents(item.valor_centavos)}</div>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-2">
-          <MetaItem label={visao === "RECEBIDAS" ? "Recebida em" : "Vencimento"} value={vencimentoLabel} />
-          <MetaItem label={visao === "RECEBIDAS" ? "Referencia" : "Dias em atraso"} value={visao === "RECEBIDAS" ? referenceLabel(item) : atrasoLabel} />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ring-1 ${situacaoBadge(item)}`}>
-            {statusLabel(item)}
-          </span>
-          {item.tipo_inconsistencia ? (
-            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${miniBadgeClass("warning")}`}>
-              Em revisao
+      <div className="space-y-2">
+        <div className="flex items-baseline gap-3">
+          <div className="text-2xl font-semibold tracking-tight text-slate-950">{formatBRLFromCents(valorPrincipal)}</div>
+          {item.atraso_dias > 0 ? (
+            <span className={`inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold ${atrasoBadge(item.atraso_dias)}`}>
+              {atrasoLabel}
+            </span>
+          ) : null}
+          {acao ? (
+            <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-medium ${acao.cor}`}>
+              {acao.label}
             </span>
           ) : null}
         </div>
 
-        <div className="space-y-1 text-xs text-slate-500">
-          <div>{situacaoSecundaria(item)}</div>
-          <div>Competencia: {referenceLabel(item)}</div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span>{vencimentoLabel}</span>
+          <span className="text-slate-300">/</span>
+          <span>{referenceLabel(item)}</span>
+          <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${situacaoBadge(item)}`}>
+            {statusLabel(item)}
+          </span>
+          {neofin ? (
+            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${neofin.cor}`}>
+              {neofin.label}
+            </span>
+          ) : null}
         </div>
       </div>
     </td>
@@ -221,38 +261,22 @@ function FinanceiroCell({ item, visao }: { item: CobrancaListaItem; visao: Conta
 }
 
 function OrigemCell({ item }: { item: CobrancaListaItem }) {
-  const technical = item.origem_tecnica ?? origemBruta(item);
-  const technicalVisible = technical && technical !== item.origem_label && technical !== item.origem_secundaria;
   const matriculaCancelada = item.matriculaStatus === "CANCELADA";
 
   return (
     <td className="px-4 py-4 align-top">
-      <div className="space-y-3">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-          <div className="text-sm font-semibold text-slate-900">{origemPrincipalVisivel(item)}</div>
-          <div className="mt-1 text-xs text-slate-500">Lancamento: {origemLancamento(item)}</div>
-          <div className="mt-1 text-xs text-slate-500">Centro de custo: {centroCustoLancamento(item)}</div>
-        </div>
-
+      <div className="space-y-2">
+        <div className="text-sm font-medium text-slate-900">{origemPrincipalVisivel(item)}</div>
+        <div className="text-xs text-slate-500">{origemLancamento(item)}</div>
         <div className="flex flex-wrap items-center gap-1.5">
           <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${CONTEXTO_STYLES[item.contexto_principal]}`}>
             {getContextoLabel(item.contexto_principal)}
           </span>
-          {item.origem_badge_label ? (
-            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${miniBadgeClass(item.origem_badge_tone === "warning" ? "warning" : item.origem_badge_tone === "success" ? "success" : "neutral")}`}>
-              {item.origem_badge_label}
-            </span>
-          ) : null}
           {matriculaCancelada ? (
             <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${miniBadgeClass("danger")}`}>
               Matricula cancelada
             </span>
           ) : null}
-        </div>
-
-        <div className="space-y-1 text-xs text-slate-500">
-          <div>{item.origem_secundaria ?? "Origem consolidada em revisao."}</div>
-          {technicalVisible ? <div>{technical}</div> : null}
         </div>
       </div>
     </td>
@@ -309,8 +333,8 @@ function ActionsCell({
     <td className="px-4 py-4 align-top">
       <div className="flex flex-col items-end gap-2">
         {showReceber ? (
-          <Button type="button" className="h-9 min-w-28" onClick={() => onReceber(item)}>
-            Receber
+          <Button type="button" className="h-9 min-w-28" onClick={() => onReceber(item)} title="Registra o recebimento integral do saldo em aberto">
+            Registrar recebimento
           </Button>
         ) : null}
         <CobrancaOperacionalActions

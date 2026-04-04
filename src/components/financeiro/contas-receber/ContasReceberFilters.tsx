@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type {
@@ -192,6 +193,7 @@ export function ContasReceberFilters(props: Props) {
     onCompetenciaFimChange,
   } = props;
 
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const statusOptions = visao === "INCONSISTENCIAS" ? STATUS : STATUS.filter((item) => item !== "CANCELADA");
   const periodoResumo = buildPeriodoResumo({
     tipoPeriodo,
@@ -203,30 +205,37 @@ export function ContasReceberFilters(props: Props) {
     competenciaFim,
   });
 
+  // Contar filtros avançados ativos
+  const advancedActiveCount = [
+    tipoPeriodo !== "SEM_PERIODO",
+    situacao !== "TODAS",
+    status !== "TODOS",
+    bucket !== "",
+  ].filter(Boolean).length;
+
   return (
     <Card className="border-slate-200 bg-white">
       <CardHeader className="border-slate-100 px-5 py-4">
         <div className="flex flex-col gap-1">
-          <CardTitle className="text-slate-900">Filtros da leitura</CardTitle>
-          <p className="text-sm text-slate-600">Priorize busca, visao e ordenacao. Os demais filtros refinam o recorte.</p>
+          <CardTitle className="text-slate-900">Filtros</CardTitle>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4 px-5 pb-5 pt-0">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.9fr)_220px_240px]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.9fr)_180px_180px_200px]">
           <div className="md:col-span-2 xl:col-span-1">
-            <Field label="Busca" emphasis helperText="Busque por responsavel, aluno, matricula ou origem.">
+            <Field label="Busca" emphasis>
               <Input
                 autoFocus
                 className={SEARCH_CLASS}
                 value={busca}
                 onChange={(event) => onBuscaChange(event.target.value)}
-                placeholder="Buscar responsavel, aluno, matricula ou origem"
+                placeholder="Responsavel, aluno, matricula ou origem"
               />
             </Field>
           </div>
 
-          <Field label="Visao" emphasis helperText="Define o foco operacional da leitura.">
+          <Field label="Visao" emphasis>
             <Select value={visao} onChange={(value) => onVisaoChange(value as ContasReceberVisao)}>
               {VISAO_OPTIONS.map((item) => (
                 <option key={item.value} value={item.value}>
@@ -236,7 +245,7 @@ export function ContasReceberFilters(props: Props) {
             </Select>
           </Field>
 
-          <Field label="Ordenacao" emphasis helperText="Traz primeiro o que precisa de acao.">
+          <Field label="Ordenacao" emphasis>
             <Select value={ordenacao} onChange={(value) => onOrdenacaoChange(value as ContasReceberOrdenacao)}>
               {ordenacoesDisponiveis.map((item) => (
                 <option key={item} value={item}>
@@ -245,20 +254,8 @@ export function ContasReceberFilters(props: Props) {
               ))}
             </Select>
           </Field>
-        </div>
 
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-          <Field label="Tipo de periodo">
-            <Select value={tipoPeriodo} onChange={(value) => onTipoPeriodoChange(value as ContasReceberTipoPeriodo)}>
-              {TIPO_PERIODO_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label="Contexto">
+          <Field label="Contexto" emphasis>
             <Select value={contexto} onChange={(value) => onContextoChange(value as ContextoFilter)}>
               {CONTEXTO_FILTER_OPTIONS.map((item) => (
                 <option key={item.value} value={item.value}>
@@ -267,39 +264,66 @@ export function ContasReceberFilters(props: Props) {
               ))}
             </Select>
           </Field>
-
-          <Field label="Situacao">
-            <Select value={situacao} onChange={(value) => onSituacaoChange(value as SituacaoFilter)}>
-              {SITUACOES.map((item) => (
-                <option key={item} value={item}>
-                  {item === "TODAS" ? "Todas" : humanizeToken(item)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label="Status bruto">
-            <Select value={status} onChange={(value) => onStatusChange(value as StatusFilter)}>
-              {statusOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item === "TODOS" ? "Todos" : humanizeToken(item)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          <Field label="Bucket">
-            <Select value={bucket} onChange={onBucketChange}>
-              {BUCKETS.map((item) => (
-                <option key={item || "TODOS"} value={item}>
-                  {item ? humanizeToken(item) : "Todos"}
-                </option>
-              ))}
-            </Select>
-          </Field>
         </div>
 
-        {tipoPeriodo === "MES_ANO" ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+          onClick={() => setShowAdvanced((c) => !c)}
+        >
+          {showAdvanced ? "Menos filtros" : "Mais filtros"}
+          {advancedActiveCount > 0 ? (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-900 px-1.5 text-[10px] font-semibold text-white">
+              {advancedActiveCount}
+            </span>
+          ) : null}
+        </button>
+
+        {showAdvanced ? (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <Field label="Periodo">
+              <Select value={tipoPeriodo} onChange={(value) => onTipoPeriodoChange(value as ContasReceberTipoPeriodo)}>
+                {TIPO_PERIODO_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Situacao">
+              <Select value={situacao} onChange={(value) => onSituacaoChange(value as SituacaoFilter)}>
+                {SITUACOES.map((item) => (
+                  <option key={item} value={item}>
+                    {item === "TODAS" ? "Todas" : humanizeToken(item)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Status">
+              <Select value={status} onChange={(value) => onStatusChange(value as StatusFilter)}>
+                {statusOptions.map((item) => (
+                  <option key={item} value={item}>
+                    {item === "TODOS" ? "Todos" : humanizeToken(item)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Categoria">
+              <Select value={bucket} onChange={onBucketChange}>
+                {BUCKETS.map((item) => (
+                  <option key={item || "TODOS"} value={item}>
+                    {item ? humanizeToken(item) : "Todos"}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        ) : null}
+
+        {showAdvanced && tipoPeriodo === "MES_ANO" ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Field label="Mes">
               <Select value={mes} onChange={onMesChange}>
@@ -327,7 +351,7 @@ export function ContasReceberFilters(props: Props) {
           </div>
         ) : null}
 
-        {tipoPeriodo === "ANO_INTEIRO" ? (
+        {showAdvanced && tipoPeriodo === "ANO_INTEIRO" ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Field label="Ano">
               <Input
@@ -341,7 +365,7 @@ export function ContasReceberFilters(props: Props) {
           </div>
         ) : null}
 
-        {tipoPeriodo === "ENTRE_DATAS" ? (
+        {showAdvanced && tipoPeriodo === "ENTRE_DATAS" ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Field label="Vencimento inicial">
               <Input className={FIELD_CLASS} type="date" value={vencimentoInicio} onChange={(event) => onVencimentoInicioChange(event.target.value)} />
@@ -353,7 +377,7 @@ export function ContasReceberFilters(props: Props) {
           </div>
         ) : null}
 
-        {tipoPeriodo === "COMPETENCIA" ? (
+        {showAdvanced && tipoPeriodo === "COMPETENCIA" ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Field label="Competencia inicial">
               <Input className={FIELD_CLASS} type="month" value={competenciaInicio} onChange={(event) => onCompetenciaInicioChange(event.target.value)} />

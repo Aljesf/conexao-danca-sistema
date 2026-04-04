@@ -494,13 +494,14 @@ export default function AdminContasReceberPage() {
         ))}
       </div>
 
+      {/* 6: Seção "Maior atraso por pessoa" */}
       {visao === "VENCIDAS" ? (
         <DevedoresTable
           items={payload?.devedores_lista ?? []}
           showAll={showAllRanking}
           onToggleAll={() => setShowAllRanking((current) => !current)}
           onVerTitulos={abrirTitulos}
-          title={viewConfig.tituloRanking}
+          title="Maior atraso por pessoa"
           subtitle={viewConfig.subtituloRanking}
           emptyMessage="Nenhum devedor vencido foi encontrado com os filtros atuais."
         />
@@ -516,13 +517,21 @@ export default function AdminContasReceberPage() {
         />
       )}
 
+      {/* 9: Relação visual entre seções */}
+      {visao === "VENCIDAS" && (payload?.devedores_lista ?? []).length > 0 && (payload?.cobrancas_lista ?? []).length > 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+          Os titulos abaixo correspondem as cobrancas individuais dos devedores acima.
+        </div>
+      ) : null}
+
+      {/* 6: Seção "Cobranças para ação" — destaque principal */}
       <CobrancasTable
         items={payload?.cobrancas_lista ?? []}
         page={payload?.paginacao.page ?? 1}
         totalPages={payload?.paginacao.total_paginas ?? 1}
         total={payload?.paginacao.total ?? 0}
         visao={visao}
-        title={viewConfig.tituloTabela}
+        title="Cobrancas para acao"
         subtitle={viewConfig.subtituloTabela}
         onPageChange={(nextPage) => setPage(nextPage)}
         onAuditar={abrirAuditoria}
@@ -530,7 +539,10 @@ export default function AdminContasReceberPage() {
         onExpurgoConcluido={handleExpurgoConcluido}
       />
 
-      <PerdasCancelamentoTable items={payload?.perdas_cancelamento ?? []} />
+      {/* 5: Perdas por cancelamento — accordion fechado */}
+      {(payload?.perdas_cancelamento ?? []).length > 0 ? (
+        <PerdasAccordion items={payload?.perdas_cancelamento ?? []} />
+      ) : null}
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-5xl p-0">
@@ -707,6 +719,32 @@ export default function AdminContasReceberPage() {
         </DialogContent>
       </Dialog>
     </FinancePageShell>
+  );
+}
+
+function PerdasAccordion({ items }: { items: NonNullable<ContasReceberAuditoriaPayload["perdas_cancelamento"]> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card className="border-slate-200 bg-white">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between px-5 py-4 text-left"
+        onClick={() => setOpen((c) => !c)}
+      >
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">
+            Perdas por cancelamento ({items.length} {items.length === 1 ? "matricula" : "matriculas"})
+          </h3>
+          <p className="mt-0.5 text-sm text-slate-500">Valores informativos. Nao representam cobrancas ativas.</p>
+        </div>
+        <span className="text-sm text-slate-400">{open ? "Recolher" : "Expandir"}</span>
+      </button>
+      {open ? (
+        <CardContent className="border-t border-slate-100 pt-4">
+          <PerdasCancelamentoTable items={items} />
+        </CardContent>
+      ) : null}
+    </Card>
   );
 }
 
