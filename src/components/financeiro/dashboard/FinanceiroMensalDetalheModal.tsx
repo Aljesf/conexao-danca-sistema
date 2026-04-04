@@ -48,6 +48,54 @@ function formatarTotalPrincipal(
   return formatBRLFromCents(totalCentavos);
 }
 
+// 2B: Determina situação operacional do item
+function situacaoDoItem(item: DashboardFinanceiroComposicaoItem): { label: string; cor: string } {
+  if (item.elegivel_recebido || item.confirmado_via_baixa_interna || item.confirmado_via_neofin) {
+    return { label: "Recebido", cor: "bg-emerald-50 text-emerald-700" };
+  }
+  if (item.neofin_situacao_operacional === "VINCULADA") {
+    return { label: "Em NeoFin", cor: "bg-blue-50 text-blue-700" };
+  }
+  if (item.fatura_id && item.status_normalizado?.toUpperCase() === "FECHADA") {
+    return { label: "Faturado", cor: "bg-amber-50 text-amber-700" };
+  }
+  if (item.fatura_id) {
+    return { label: "Faturado", cor: "bg-amber-50 text-amber-700" };
+  }
+  return { label: "Pre-fatura", cor: "bg-slate-100 text-slate-600" };
+}
+
+// 2F: Determina tipo do item baseado na origem
+function tipoDoItem(item: DashboardFinanceiroComposicaoItem): { label: string; cor: string } {
+  const origem = (item.origem_tipo ?? item.origem_label ?? "").toUpperCase();
+  if (origem.includes("EVENTO")) return { label: "Evento", cor: "bg-purple-50 text-purple-700" };
+  if (origem.includes("TAXA_MATRICULA")) return { label: "Taxa", cor: "bg-orange-50 text-orange-700" };
+  if (origem.includes("MATRICULA") || origem.includes("MENSALIDADE")) return { label: "Mensalidade", cor: "bg-sky-50 text-sky-700" };
+  if (origem.includes("LOJA")) return { label: "Loja", cor: "bg-pink-50 text-pink-700" };
+  if (origem.includes("CAFE")) return { label: "Cafe", cor: "bg-yellow-50 text-yellow-700" };
+  return { label: "Manual", cor: "bg-slate-100 text-slate-600" };
+}
+
+// 2E: Verifica se competência é posterior ao vencimento (anomalia)
+function isAnomaliaVencimento(item: DashboardFinanceiroComposicaoItem): boolean {
+  if (!item.competencia || !item.data_vencimento) return false;
+  const compAnoMes = item.competencia.slice(0, 7);
+  const vencAnoMes = item.data_vencimento.slice(0, 7);
+  return compAnoMes > vencAnoMes;
+}
+
+// 2C: Tooltip da origem do vencimento (3 estados)
+function tooltipVencimento(item: DashboardFinanceiroComposicaoItem): string {
+  if (item.fatura_id) return "Vencimento da fatura";
+  if (!item.data_vencimento) return "Vencimento estimado";
+  const vencDia = Number(item.data_vencimento.slice(8, 10));
+  const vencMes = Number(item.data_vencimento.slice(5, 7));
+  const vencAno = Number(item.data_vencimento.slice(0, 4));
+  const lastDay = new Date(vencAno, vencMes, 0).getDate();
+  if (vencDia === lastDay) return "Vencimento estimado";
+  return "Vencimento da cobranca";
+}
+
 function totalPorNatureza(payload: FinanceiroMensalModalPayload, item: DashboardFinanceiroComposicaoItem): number {
   if (payload.natureza === "pago") return item.valor_recebido_centavos;
   if (payload.natureza === "pendente") return item.valor_pendente_centavos;
@@ -171,12 +219,25 @@ export function FinanceiroMensalDetalheModal({
     return totalDoModal(payload, itensFiltrados);
   }, [itensFiltrados, payload]);
 
-  const itensSemNeofin = itensFiltrados.filter((item) => item.neofin_situacao_operacional !== "VINCULADA").length;
   const itensNeoFinConfirmados = itensFiltrados.filter((item) => item.confirmado_via_neofin).length;
   const itensBaixaInterna = itensFiltrados.filter((item) => item.confirmado_via_baixa_interna).length;
   const itensVencidos = itensFiltrados.filter((item) => item.valor_vencido_centavos > 0).length;
   const itensFuturos = itensFiltrados.filter((item) => item.competencia > competenciaAtual).length;
   const itensGeradosAntecipadamente = itensFiltrados.filter((item) => item.gerado_antecipadamente).length;
+
+  // 2A: Subtotais
+  const totalRecebidoCentavos = itensFiltrados.reduce((acc, item) => acc + item.valor_recebido_centavos, 0);
+  const totalBrutoCentavos = itensFiltrados.reduce((acc, item) => acc + item.valor_previsto_centavos, 0);
+  const totalAbertoCentavos = totalBrutoCentavos - totalRecebidoCentavos;
+
+  // 2D: Contadores separados "sem NeoFin"
+  const itensSemFatura = itensFiltrados.filter((item) => !item.fatura_id && !item.elegivel_recebido).length;
+  const itensFaturadosSemBoleto = itensFiltrados.filter(
+    (item) => item.fatura_id && item.neofin_situacao_operacional !== "VINCULADA" && !item.elegivel_recebido,
+  ).length;
+  const itensFalhaIntegracao = itensFiltrados.filter(
+    (item) => item.neofin_label?.toLowerCase().includes("erro") || item.neofin_label?.toLowerCase().includes("falha"),
+  ).length;
 
   async function handleExportarExcel() {
     if (!payload) return;
@@ -204,7 +265,8 @@ export function FinanceiroMensalDetalheModal({
             : [{ label: "Total exibido", value: totaisFiltrados.total_centavos / 100, type: "currency" as const }]),
           { label: "Quantidade", value: itensFiltrados.length, type: "integer" as const },
           { label: "Itens vencidos", value: itensVencidos, type: "integer" as const },
-          { label: "Itens sem vinculo NeoFin", value: itensSemNeofin, type: "integer" as const },
+          { label: "Pre-fatura", value: itensSemFatura, type: "integer" as const },
+          { label: "Faturado sem boleto", value: itensFaturadosSemBoleto, type: "integer" as const },
           { label: "NeoFin confirmado", value: itensNeoFinConfirmados, type: "integer" as const },
           { label: "Baixa interna", value: itensBaixaInterna, type: "integer" as const },
           { label: "Competencias futuras", value: itensFuturos, type: "integer" as const },
@@ -213,7 +275,8 @@ export function FinanceiroMensalDetalheModal({
           { header: "Pessoa", width: 28, value: (item) => item.pessoa_nome },
           { header: "Descricao", width: 42, wrap: true, value: (item) => item.descricao },
           { header: "Origem", width: 22, value: (item) => item.origem_label },
-          { header: "Canal", width: 18, placeholder: "Nao informado", value: (item) => item.canal_recebimento_label ?? "" },
+          { header: "Tipo", width: 14, value: (item) => tipoDoItem(item).label },
+          { header: "Situacao", width: 16, value: (item) => situacaoDoItem(item).label },
           { header: "Competencia", width: 16, align: "center", value: (item) => item.competencia_label },
           { header: "Vencimento", width: 14, type: "date", align: "center", value: (item) => item.data_vencimento ?? "" },
           { header: "Data pagamento", width: 16, type: "date", align: "center", value: (item) => item.data_pagamento ?? "" },
@@ -260,7 +323,7 @@ export function FinanceiroMensalDetalheModal({
           <>
             <div className="grid gap-3 lg:grid-cols-5">
               <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Total exibido</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Previsto bruto</p>
                 <p className="mt-1.5 text-lg font-semibold text-slate-950">
                   {formatarTotalPrincipal(payload?.tipo_total ?? "moeda", totaisFiltrados.total_centavos, totaisFiltrados.percentual)}
                 </p>
@@ -271,38 +334,46 @@ export function FinanceiroMensalDetalheModal({
                       ? ` de ${formatBRLFromCents(totaisFiltrados.total_previsto_centavos)} previstos`
                       : ""}
                   </p>
-                ) : null}
+                ) : (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Recebido: {formatBRLFromCents(totalRecebidoCentavos)} | Em aberto: {formatBRLFromCents(totalAbertoCentavos)}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Quantidade</p>
                 <p className="mt-1.5 text-lg font-semibold text-slate-950">{itensFiltrados.length}</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Este total e composto por {itensFiltrados.length} {itensFiltrados.length === 1 ? "item" : "itens"}.
+                  {itensNeoFinConfirmados + itensBaixaInterna} recebidos | {itensVencidos} vencidos
                 </p>
               </div>
 
               <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">NeoFin confirmado</p>
-                <p className="mt-1.5 text-lg font-semibold text-slate-950">{itensNeoFinConfirmados}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Recebidos</p>
+                <p className="mt-1.5 text-lg font-semibold text-emerald-700">{itensNeoFinConfirmados + itensBaixaInterna}</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  {itensNeoFinConfirmados} {itensNeoFinConfirmados === 1 ? "item tem" : "itens tem"} confirmacao financeira NeoFin.
-                </p>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Baixa interna</p>
-                <p className="mt-1.5 text-lg font-semibold text-slate-950">{itensBaixaInterna}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {itensBaixaInterna} {itensBaixaInterna === 1 ? "item foi" : "itens foram"} confirmados por meios internos.
+                  {itensNeoFinConfirmados} NeoFin | {itensBaixaInterna} baixa interna
                 </p>
               </div>
 
               <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Itens vencidos</p>
-                <p className="mt-1.5 text-lg font-semibold text-slate-950">{itensVencidos}</p>
+                <p className="mt-1.5 text-lg font-semibold text-rose-700">{itensVencidos}</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  {itensVencidos} {itensVencidos === 1 ? "item ja venceu" : "itens ja venceram"}.
+                  {itensVencidos} {itensVencidos === 1 ? "item ja venceu" : "itens ja venceram"}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-slate-50/85 px-4 py-3 ring-1 ring-inset ring-slate-200/70">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Integracao</p>
+                <p className="mt-1.5 text-sm font-medium text-slate-700">
+                  {itensSemFatura > 0 ? <span className="block text-slate-500">Pre-fatura: {itensSemFatura}</span> : null}
+                  {itensFaturadosSemBoleto > 0 ? <span className="block text-amber-600">Faturado sem boleto: {itensFaturadosSemBoleto}</span> : null}
+                  {itensFalhaIntegracao > 0 ? <span className="block text-rose-600">Falha integracao: {itensFalhaIntegracao}</span> : null}
+                  {itensSemFatura === 0 && itensFaturadosSemBoleto === 0 && itensFalhaIntegracao === 0 ? (
+                    <span className="text-emerald-600">Tudo integrado</span>
+                  ) : null}
                 </p>
               </div>
             </div>
@@ -315,11 +386,6 @@ export function FinanceiroMensalDetalheModal({
             {itensGeradosAntecipadamente > 0 ? (
               <p className="mt-2 text-xs text-slate-500">
                 Previsao baseada em lancamentos ativos ja gerados na Conta Interna.
-              </p>
-            ) : null}
-            {itensSemNeofin > 0 ? (
-              <p className="mt-2 text-xs text-slate-500">
-                {itensSemNeofin} {itensSemNeofin === 1 ? "item esta" : "itens estao"} sem vinculo NeoFin.
               </p>
             ) : null}
             {(payload?.resumo_exclusoes.total_itens_excluidos ?? 0) > 0 ? (
@@ -421,24 +487,22 @@ export function FinanceiroMensalDetalheModal({
         ) : null}
 
         <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
-          <table className="w-full min-w-[1160px] text-sm">
+          <table className="w-full min-w-[900px] text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-3 py-3 text-left">Pessoa</th>
                 <th className="px-3 py-3 text-left">Descricao</th>
-                <th className="px-3 py-3 text-left">Origem</th>
-                <th className="px-3 py-3 text-left">Canal</th>
+                <th className="px-3 py-3 text-left">Tipo</th>
+                <th className="px-3 py-3 text-left">Situacao</th>
                 <th className="px-3 py-3 text-left">Competencia</th>
                 <th className="px-3 py-3 text-left">Vencimento</th>
-                <th className="px-3 py-3 text-left">Status</th>
-                <th className="px-3 py-3 text-left">NeoFin</th>
                 <th className="px-3 py-3 text-right">Valor</th>
               </tr>
             </thead>
             <tbody>
               {itensFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
                     Sem itens para os filtros atuais.
                   </td>
                 </tr>
@@ -452,40 +516,34 @@ export function FinanceiroMensalDetalheModal({
                     <td className="px-3 py-3">
                       <div className="font-medium text-slate-800">{item.descricao}</div>
                       <div className="text-xs text-slate-500">
-                        {item.referencia}
+                        {item.origem_label}
                         {item.observacao_resumo ? ` | ${item.observacao_resumo}` : ""}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-slate-600">
-                      <div>{item.origem_label}</div>
-                      <div className="text-xs text-slate-500">
-                        {item.conta_conexao_id ? `Conta #${item.conta_conexao_id}` : "Sem conta interna"}
-                        {item.origem_lancamento ? ` | ${item.origem_lancamento}` : ""}
-                      </div>
+                    <td className="px-3 py-3">
+                      <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-medium ${tipoDoItem(item).cor}`}>
+                        {tipoDoItem(item).label}
+                      </span>
                     </td>
-                    <td className="px-3 py-3 text-slate-600">
-                      <div>{item.canal_recebimento_label ?? "Nao classificado"}</div>
-                      <div className="text-xs text-slate-500">
-                        {item.forma_pagamento_codigo ?? item.metodo_pagamento ?? item.origem_recebimento_sistema ?? "--"}
-                      </div>
+                    <td className="px-3 py-3">
+                      <span className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-medium ${situacaoDoItem(item).cor}`}>
+                        {situacaoDoItem(item).label}
+                      </span>
                     </td>
                     <td className="px-3 py-3 text-slate-600">{item.competencia_label}</td>
                     <td className="px-3 py-3 text-slate-600">
-                      <div>{formatDateISO(item.data_vencimento)}</div>
-                      <div className="text-xs text-slate-500">Pagamento: {formatDateISO(item.data_pagamento)}</div>
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">
-                      <div>{item.status_label}</div>
-                      <div className="text-xs text-slate-500">
-                        {item.status_normalizado}
-                        {item.status_original ? ` | ${item.status_original}` : item.status_bruto ? ` | ${item.status_bruto}` : ""}
+                      <div className="group relative flex items-center gap-1">
+                        {formatDateISO(item.data_vencimento)}
+                        {isAnomaliaVencimento(item) ? (
+                          <span className="text-amber-500">&#9888;</span>
+                        ) : null}
+                        <span className="pointer-events-none absolute -top-7 left-0 z-10 hidden whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[10px] text-white group-hover:block">
+                          {tooltipVencimento(item)}
+                        </span>
                       </div>
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">
-                      <div>{item.neofin_label}</div>
-                      <div className="text-xs text-slate-500">
-                        {item.fatura_id ? `Fatura #${item.fatura_id}` : "Competencia em reconciliacao"}
-                      </div>
+                      {item.data_pagamento ? (
+                        <div className="text-xs text-slate-500">Pago: {formatDateISO(item.data_pagamento)}</div>
+                      ) : null}
                     </td>
                     <td className="px-3 py-3 text-right font-semibold text-slate-800">
                       {formatBRLFromCents(totalPorNatureza(payload!, item))}
