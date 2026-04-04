@@ -207,6 +207,62 @@ function parsePositiveIntOrNull(value: unknown): number | null {
   return num;
 }
 
+type SupabaseContaInternaClient = {
+  from: (table: string) => any;
+};
+
+async function garantirContaInterna(params: {
+  responsavelId: number;
+  supabase: SupabaseContaInternaClient;
+}) {
+  const { responsavelId, supabase } = params;
+
+  if (!Number.isInteger(responsavelId) || responsavelId <= 0) {
+    return null;
+  }
+
+  const { data: contaExistente, error: contaExistenteError } = await supabase
+    .from("credito_conexao_contas")
+    .select("id")
+    .eq("tipo_conta", "ALUNO")
+    .or(`pessoa_titular_id.eq.${responsavelId},responsavel_financeiro_pessoa_id.eq.${responsavelId}`)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (contaExistenteError) {
+    console.error("[Matricula] Erro ao buscar conta interna:", contaExistenteError);
+    return null;
+  }
+
+  if (contaExistente?.id) {
+    return contaExistente.id;
+  }
+
+  const { data: novaConta, error: novaContaError } = await supabase
+    .from("credito_conexao_contas")
+    .insert({
+      pessoa_titular_id: responsavelId,
+      responsavel_financeiro_pessoa_id: responsavelId,
+      tipo_conta: "ALUNO",
+      dia_fechamento: 0,
+      dia_vencimento: 12,
+      ativo: true,
+      centro_custo_intermediacao_id: 5,
+      descricao_exibicao: "Conta interna do responsavel financeiro",
+    })
+    .select("id")
+    .single();
+
+  if (novaContaError) {
+    console.error("[Matricula] Erro ao criar conta interna:", novaContaError);
+    return null;
+  }
+
+  console.log("[Matricula] Conta interna criada:", novaConta.id);
+  return novaConta.id;
+}
+
 function parseMetodoLiquidacao(value: unknown): MetodoLiquidacao {
   const raw = typeof value === "string" ? value.trim().toUpperCase() : "";
   if (raw === "CARTAO_CONEXAO") return "CARTAO_CONEXAO";
@@ -1472,6 +1528,17 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (insErr) return serverError("CRIAR_MATRICULA_FAIL", "Falha ao criar matricula.", { insErr });
+
+  const responsavelFinanceiroId = parsePositiveIntOrNull(
+    (matriculaCriadaInicial as { responsavel_financeiro_id?: unknown })?.responsavel_financeiro_id,
+  );
+
+  if (responsavelFinanceiroId) {
+    await garantirContaInterna({
+      responsavelId: responsavelFinanceiroId,
+      supabase: admin as unknown as SupabaseContaInternaClient,
+    });
+  }
 
   let matriculaCriada = matriculaCriadaInicial;
   const matriculaId = (matriculaCriada as { id: number }).id;
