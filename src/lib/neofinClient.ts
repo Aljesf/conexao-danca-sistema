@@ -139,6 +139,22 @@ async function requestNeofin(
   }
 }
 
+async function getNeofinBillingByBillingId(identifier: string): Promise<NeofinResult> {
+  return requestNeofin(
+    `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(identifier)}`,
+    { headers: getNeofinHeaders(false) },
+    "erro_ao_consultar_cobranca_por_billing_id",
+  );
+}
+
+async function getNeofinBillingByIntegrationIdentifier(identifier: string): Promise<NeofinResult> {
+  return requestNeofin(
+    `${NEOFIN_BASE_URL}/billing/integration/${encodeURIComponent(identifier)}`,
+    { headers: getNeofinHeaders(false) },
+    "erro_ao_consultar_cobranca_por_integration_identifier",
+  );
+}
+
 export async function listNeofinBillings(
   params: { integrationIdentifier?: string | null } = {},
 ): Promise<NeofinResult> {
@@ -291,22 +307,17 @@ export async function getNeofinBilling(
     };
   }
 
-  const primaryUrl = `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(identifier)}`;
-  const primary = await requestNeofin(
-    primaryUrl,
-    { headers: getNeofinHeaders(false) },
-    "erro_ao_consultar_cobranca",
-  );
+  if (looksLikeNeofinBillingNumber(identifier)) {
+    return getNeofinBillingByBillingId(identifier);
+  }
+
+  const primary = await getNeofinBillingByIntegrationIdentifier(identifier);
 
   if (primary.ok) {
     return primary;
   }
 
   if (primary.status !== 404) {
-    return primary;
-  }
-
-  if (looksLikeNeofinBillingNumber(identifier)) {
     return primary;
   }
 
@@ -321,11 +332,7 @@ export async function getNeofinBilling(
   });
 
   if (details.billingId && details.billingId !== identifier && looksLikeNeofinBillingNumber(details.billingId)) {
-    const resolved = await requestNeofin(
-      `${NEOFIN_BASE_URL}/billing/${encodeURIComponent(details.billingId)}`,
-      { headers: getNeofinHeaders(false) },
-      "erro_ao_consultar_cobranca_resolvida",
-    );
+    const resolved = await getNeofinBillingByBillingId(details.billingId);
 
     if (resolved.ok) {
       return resolved;

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/supabase/api-auth";
 import { getNeofinBilling } from "@/lib/neofinClient";
-import { extractNeofinBillingDetails } from "@/lib/neofinBilling";
+import { extractNeofinBillingDetails, looksLikeNeofinBillingNumber } from "@/lib/neofinBilling";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -73,8 +73,12 @@ async function syncCobranca(req: NextRequest, ctx: RouteContext) {
     identifier: cobranca.neofin_charge_id,
     integrationIdentifier: cobranca.neofin_charge_id,
   });
+  const neofinInvoiceId = looksLikeNeofinBillingNumber(billingInfo.billingId)
+    ? billingInfo.billingId
+    : null;
   const remoteStatus = billingInfo.remoteStatus?.toUpperCase() ?? null;
   const nextStatus = mapStatusInterno(remoteStatus, cobranca.status);
+  const updatedAt = new Date().toISOString();
 
   const { data: updated, error: updateErr } = await supabase
     .from("cobrancas")
@@ -84,7 +88,7 @@ async function syncCobranca(req: NextRequest, ctx: RouteContext) {
       neofin_charge_id: billingInfo.billingId ?? cobranca.neofin_charge_id,
       link_pagamento: billingInfo.paymentLink ?? cobranca.link_pagamento ?? null,
       linha_digitavel: billingInfo.digitableLine ?? billingInfo.barcode ?? cobranca.linha_digitavel ?? null,
-      updated_at: new Date().toISOString(),
+      updated_at: updatedAt,
     })
     .eq("id", cobranca.id)
     .select("id,status,neofin_charge_id,link_pagamento,linha_digitavel,neofin_payload,updated_at")
@@ -95,6 +99,23 @@ async function syncCobranca(req: NextRequest, ctx: RouteContext) {
       { ok: false, error: "erro_atualizar_cobranca_local", detail: updateErr?.message ?? null },
       { status: 500 },
     );
+  }
+
+  if (neofinInvoiceId) {
+    const { error: faturaErr } = await supabase
+      .from("credito_conexao_faturas")
+      .update({
+        neofin_invoice_id: neofinInvoiceId,
+        updated_at: updatedAt,
+      })
+      .eq("cobranca_id", cobranca.id);
+
+    if (faturaErr) {
+      return NextResponse.json(
+        { ok: false, error: "erro_atualizar_fatura_local", detail: faturaErr.message },
+        { status: 500 },
+      );
+    }
   }
 
   return NextResponse.json({ ok: true, status: nextStatus, data: updated }, { status: 200 });

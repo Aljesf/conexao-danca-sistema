@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyCronSecret } from "@/lib/auth/verifyCronSecret";
 import { getNeofinBilling } from "@/lib/neofinClient";
-import { extractNeofinBillingDetails } from "@/lib/neofinBilling";
+import { extractNeofinBillingDetails, looksLikeNeofinBillingNumber } from "@/lib/neofinBilling";
 import { confirmarPagamentoCobranca } from "@/lib/financeiro/confirmarPagamentoCobranca";
 
 export const runtime = "nodejs";
@@ -106,7 +106,11 @@ export async function GET(req: NextRequest) {
         identifier: row.neofin_charge_id,
         integrationIdentifier: row.neofin_charge_id,
       });
+      const neofinInvoiceId = looksLikeNeofinBillingNumber(billingInfo.billingId)
+        ? billingInfo.billingId
+        : null;
       const remoteStatus = billingInfo.remoteStatus?.toUpperCase() ?? null;
+      const updatedAt = new Date().toISOString();
 
       // Atualizar payload se mudou
       const { error: payloadErr } = await supabase
@@ -116,7 +120,7 @@ export async function GET(req: NextRequest) {
           neofin_charge_id: billingInfo.billingId ?? row.neofin_charge_id,
           link_pagamento: billingInfo.paymentLink ?? undefined,
           linha_digitavel: billingInfo.digitableLine ?? billingInfo.barcode ?? undefined,
-          updated_at: new Date().toISOString(),
+          updated_at: updatedAt,
         })
         .eq("id", row.id);
 
@@ -133,6 +137,28 @@ export async function GET(req: NextRequest) {
       }
 
       // Se remoto está pago, confirmar pagamento
+      if (neofinInvoiceId) {
+        const { error: faturaErr } = await supabase
+          .from("credito_conexao_faturas")
+          .update({
+            neofin_invoice_id: neofinInvoiceId,
+            updated_at: updatedAt,
+          })
+          .eq("cobranca_id", row.id);
+
+        if (faturaErr) {
+          results.push({
+            cobranca_id: row.id,
+            neofin_charge_id: row.neofin_charge_id,
+            remote_status: remoteStatus,
+            action: "error",
+            detail: `fatura_update: ${faturaErr.message}`,
+          });
+          errCount++;
+          continue;
+        }
+      }
+
       if (remoteStatus && PAID_REMOTE_STATUSES.has(remoteStatus)) {
         const resultado = await confirmarPagamentoCobranca({
           supabase,
