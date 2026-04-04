@@ -1579,12 +1579,21 @@ async function constituirFinanceiroInscricaoEdicaoEvento(
           descricaoFinanceira,
           parcela,
         );
+        // 1A: vencimento provisório = último dia da competência (não hoje)
+        const vencimentoProvisorio = (() => {
+          const [anoComp, mesComp] = parcela.competencia.split("-").map(Number);
+          if (anoComp && mesComp) {
+            const ultimoDia = new Date(anoComp, mesComp, 0).getDate();
+            return `${anoComp}-${String(mesComp).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`;
+          }
+          return hoje;
+        })();
         const cobrancaParcela = await insertCobrancaEventoEdicaoInscricao(db, {
           origemEventoInscricaoId: params.inscricaoId,
           pessoaId: params.pessoaFinanceiraId,
           descricao: descricaoParcela,
           valorCentavos: parcela.valorCentavos,
-          vencimento: hoje,
+          vencimento: vencimentoProvisorio,
           status: "PENDENTE",
           centroCustoId,
           contaInternaId: params.contaInternaId,
@@ -1819,12 +1828,21 @@ async function constituirFinanceiroInscricaoEdicaoEvento(
           params.valorSaldoContaInternaCentavos > 0
             ? params.valorSaldoContaInternaCentavos
             : params.valorTotalCentavos;
+        // 1A: vencimento = último dia da competência (não hoje)
+        const vencProvDireto = (() => {
+          const [ac, mc] = competencia.split("-").map(Number);
+          if (ac && mc) {
+            const ud = new Date(ac, mc, 0).getDate();
+            return `${ac}-${String(mc).padStart(2, "0")}-${String(ud).padStart(2, "0")}`;
+          }
+          return hoje;
+        })();
         const cobranca = await insertCobrancaEventoEdicaoInscricao(db, {
           origemEventoInscricaoId: params.inscricaoId,
           pessoaId: params.pessoaFinanceiraId,
           descricao: descricaoFinanceira,
           valorCentavos: valorParaCobranca,
-          vencimento: hoje,
+          vencimento: vencProvDireto,
           status: "PENDENTE",
           centroCustoId,
           metodoPagamento: null,
@@ -2949,12 +2967,21 @@ export async function criarInscricaoEdicaoEvento(
           descricaoFinanceira,
           parcela,
         );
+        // 1A: vencimento provisório = último dia da competência
+        const vencimentoProvReproc = (() => {
+          const [ac, mc] = parcela.competencia.split("-").map(Number);
+          if (ac && mc) {
+            const ud = new Date(ac, mc, 0).getDate();
+            return `${ac}-${String(mc).padStart(2, "0")}-${String(ud).padStart(2, "0")}`;
+          }
+          return hoje;
+        })();
         const cobrancaParcela = await insertCobrancaEventoEdicaoInscricao(db, {
           origemEventoInscricaoId: String(inscricao.id),
           pessoaId: pessoaFinanceiraId,
           descricao: descricaoParcela,
           valorCentavos: parcela.valorCentavos,
-          vencimento: hoje,
+          vencimento: pagamentoNoAto ? hoje : vencimentoProvReproc,
           status: pagamentoNoAto ? "PAGO" : "PENDENTE",
           centroCustoId,
           contaInternaId,
@@ -3045,14 +3072,14 @@ export async function criarInscricaoEdicaoEvento(
               });
 
         const faturaId = Number(fatura.fatura_id);
-        const vencimentoFatura =
+        const vencimentoFaturaReproc =
           typeof fatura.data_vencimento === "string" && fatura.data_vencimento
             ? fatura.data_vencimento
-            : hoje;
+            : vencimentoProvReproc;
 
         await updateCobrancaEventoEdicaoInscricaoVencimento(db, {
           cobrancaId: cobrancaParcelaId,
-          vencimento: vencimentoFatura,
+          vencimento: vencimentoFaturaReproc,
         });
 
         await insertEventoFinanceiroReferencia(db, {
@@ -3202,12 +3229,20 @@ export async function criarInscricaoEdicaoEvento(
         });
       }
     } else {
+      const vencProvDiretoReproc = (() => {
+        const [ac, mc] = competencia.split("-").map(Number);
+        if (ac && mc) {
+          const ud = new Date(ac, mc, 0).getDate();
+          return `${ac}-${String(mc).padStart(2, "0")}-${String(ud).padStart(2, "0")}`;
+        }
+        return hoje;
+      })();
       const cobranca = await insertCobrancaEventoEdicaoInscricao(db, {
         origemEventoInscricaoId: String(inscricao.id),
         pessoaId: pessoaFinanceiraId,
         descricao: descricaoFinanceira,
         valorCentavos: valorTotalCentavos,
-        vencimento: hoje,
+        vencimento: pagamentoNoAto ? hoje : vencProvDiretoReproc,
         status: pagamentoNoAto ? "PAGO" : "PENDENTE",
         centroCustoId,
         metodoPagamento: pagamentoNoAto ? formaPagamentoCodigo : null,
@@ -4083,12 +4118,21 @@ export async function adicionarItensInscricaoEdicaoEvento(
           descricaoFinanceiraBase,
           parcela,
         );
+        // 1A: vencimento provisório = último dia da competência
+        const vencimentoProvAmpliacao = (() => {
+          const [ac, mc] = parcela.competencia.split("-").map(Number);
+          if (ac && mc) {
+            const ud = new Date(ac, mc, 0).getDate();
+            return `${ac}-${String(mc).padStart(2, "0")}-${String(ud).padStart(2, "0")}`;
+          }
+          return hoje;
+        })();
         const cobrancaParcela = await insertCobrancaEventoEdicaoInscricao(db, {
           origemEventoInscricaoId: payload.inscricaoId,
           pessoaId: pessoaFinanceiraId,
           descricao: descricaoParcela,
           valorCentavos: parcela.valorCentavos,
-          vencimento: hoje,
+          vencimento: pagamentoNoAto ? hoje : vencimentoProvAmpliacao,
           status: pagamentoNoAto ? "PAGO" : "PENDENTE",
           centroCustoId,
           contaInternaId: contaInternaIdAtual,
@@ -4178,14 +4222,14 @@ export async function adicionarItensInscricaoEdicaoEvento(
               });
 
         const faturaId = Number(fatura.fatura_id);
-        const vencimentoFatura =
+        const vencimentoFaturaAmpl =
           typeof fatura.data_vencimento === "string" && fatura.data_vencimento
             ? fatura.data_vencimento
-            : hoje;
+            : vencimentoProvAmpliacao;
 
         await updateCobrancaEventoEdicaoInscricaoVencimento(db, {
           cobrancaId: cobrancaParcelaId,
-          vencimento: vencimentoFatura,
+          vencimento: vencimentoFaturaAmpl,
         });
 
         await insertEventoFinanceiroReferencia(db, {
@@ -4340,12 +4384,20 @@ export async function adicionarItensInscricaoEdicaoEvento(
 
       novoStatusFinanceiro = "PAGO";
     } else {
+      const vencProvDiretoAmpl = (() => {
+        const [ac, mc] = competencia.split("-").map(Number);
+        if (ac && mc) {
+          const ud = new Date(ac, mc, 0).getDate();
+          return `${ac}-${String(mc).padStart(2, "0")}-${String(ud).padStart(2, "0")}`;
+        }
+        return hoje;
+      })();
       const cobranca = await insertCobrancaEventoEdicaoInscricao(db, {
         origemEventoInscricaoId: payload.inscricaoId,
         pessoaId: pessoaFinanceiraId,
         descricao: descricaoFinanceiraBase,
         valorCentavos: valorDeltaCentavos,
-        vencimento: hoje,
+        vencimento: pagamentoNoAto ? hoje : vencProvDiretoAmpl,
         status: pagamentoNoAto ? "PAGO" : "PENDENTE",
         centroCustoId,
         metodoPagamento: pagamentoNoAto ? formaPagamentoCodigo : null,

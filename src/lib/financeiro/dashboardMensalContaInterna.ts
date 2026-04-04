@@ -681,29 +681,34 @@ function criarObservacaoCompetencia(
       : "Sem lancamentos elegiveis no filtro atual.";
   }
 
-  const geradosAntecipadamente = elegiveis.filter((item) => item.gerado_antecipadamente).length;
   const neofin = elegiveis.filter((item) => item.elegivel_neofin).length;
   const pendentes = elegiveis.filter((item) => item.elegivel_pendente).length;
   const recebidos = elegiveis.filter((item) => item.elegivel_recebido).length;
+  const faturados = elegiveis.filter(
+    (item) => item.fatura_id && !item.elegivel_recebido && !item.elegivel_neofin,
+  ).length;
+  const preFatura = elegiveis.filter(
+    (item) => !item.fatura_id && !item.elegivel_recebido,
+  ).length;
+
+  // P3: formato mais claro de composição
   const partes: string[] = [];
+  const composicao: string[] = [];
+  if (recebidos > 0) composicao.push(`${recebidos} recebidos`);
+  if (faturados > 0) composicao.push(`${faturados} faturados`);
+  if (neofin > 0) composicao.push(`${neofin} em NeoFin`);
+  if (preFatura > 0) composicao.push(`${preFatura} pre-fatura`);
+  if (pendentes > 0 && pendentes !== preFatura) composicao.push(`${pendentes} pendentes`);
 
-  if (geradosAntecipadamente > 0) {
-    partes.push("Previsao baseada em lancamentos ativos ja gerados na Conta Interna.");
+  if (composicao.length > 0) {
+    partes.push(`Composicao: ${composicao.join(" \u00B7 ")}`);
   }
-  if (recebidos > 0) {
-    partes.push(`${recebidos} ${pluralizar("item", recebidos)} com recebimento financeiro confirmado.`);
-  }
-  if (pendentes > 0) {
-    partes.push(`${pendentes} ${pluralizar("item", pendentes)} em aberto na composicao operacional.`);
-  }
-  if (neofin > 0) {
-    partes.push(`${neofin} ${pluralizar("item", neofin)} em cobranca NeoFin.`);
-  }
+
   if (exclusoes.total_itens_excluidos > 0 && exclusoes.mensagem) {
-    partes.push(`Itens cancelados/expurgados nao compoem este total: ${exclusoes.mensagem}`);
+    partes.push(`Excluidos: ${exclusoes.mensagem}`);
   }
 
-  return partes.join(" ");
+  return partes.join(" | ");
 }
 
 function cardTitulo(indicador: DashboardMensalCardKey): string {
