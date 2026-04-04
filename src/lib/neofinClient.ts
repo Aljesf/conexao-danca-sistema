@@ -24,6 +24,21 @@ type UpsertNeofinBillingInput = {
   dueDate: string;
   description: string;
   billingType?: string;
+  address?: {
+    city?: string | null;
+    street?: string | null;
+    number?: string | null;
+    complement?: string | null;
+    neighborhood?: string | null;
+    state?: string | null;
+    zipCode?: string | null;
+  };
+  discountBeforePayment?: number;
+  discountBeforePaymentDueDate?: number;
+  fees?: number;
+  fine?: number;
+  installments?: number;
+  installmentType?: string;
   customer: {
     nome: string;
     cpf: string;
@@ -44,6 +59,15 @@ function missingCredentialsResult(): NeofinResult {
     body: null,
     message: "Credenciais da Neofin nao configuradas no servidor.",
   };
+}
+
+function cleanText(value: string | null | undefined, fallback: string): string {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || fallback;
+}
+
+function onlyDigits(value: string | null | undefined): string {
+  return typeof value === "string" ? value.replace(/\D/g, "") : "";
 }
 
 function getNeofinHeaders(contentType = false): Record<string, string> {
@@ -197,6 +221,7 @@ export async function upsertNeofinBilling(
 
   const dueDateTimestamp = Math.floor(new Date(input.dueDate).getTime() / 1000);
   const url = `${NEOFIN_BASE_URL}/billing/`;
+  const address = input.address ?? {};
 
   const payload = {
     billings: [
@@ -205,26 +230,26 @@ export async function upsertNeofinBilling(
         customer_name: input.customer.nome,
         customer_mail: input.customer.email ?? "",
         customer_phone: input.customer.telefone ?? "",
-        address_city: "Salinopolis",
-        address_complement: "",
-        address_neighborhood: "Centro",
-        address_number: "S/N",
-        address_state: "PA",
-        address_street: "Nao informado",
-        address_zip_code: "00000000",
+        address_city: cleanText(address.city, "Salinopolis"),
+        address_complement: typeof address.complement === "string" ? address.complement.trim() : "",
+        address_neighborhood: cleanText(address.neighborhood, "Centro"),
+        address_number: cleanText(address.number, "S/N"),
+        address_state: cleanText(address.state, "PA"),
+        address_street: cleanText(address.street, "Nao informado"),
+        address_zip_code: onlyDigits(address.zipCode) || "68721000",
         amount: input.amountCentavos,
         due_date: dueDateTimestamp,
         original_due_date: dueDateTimestamp,
-        discount_before_payment: 0,
-        discount_before_payment_due_date: 0,
+        discount_before_payment: input.discountBeforePayment ?? 0,
+        discount_before_payment_due_date: input.discountBeforePaymentDueDate ?? 0,
         description: input.description,
-        fees: 0,
-        fine: 0,
-        installment_type: "custom",
-        installments: 1,
+        fees: input.fees ?? 0.0333,
+        fine: input.fine ?? 2,
+        installment_type: cleanText(input.installmentType, "monthly"),
+        installments: input.installments ?? 1,
         nfe_number: "",
         recipients: [],
-        type: input.billingType ?? "generic",
+        type: input.billingType ?? "bolepix",
         integration_identifier: input.integrationIdentifier,
         boleto_base64: "",
         code: "",

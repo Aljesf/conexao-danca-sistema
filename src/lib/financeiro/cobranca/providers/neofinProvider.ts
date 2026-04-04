@@ -9,16 +9,56 @@ type PessoaNeofin = {
   cpf: string | null;
   email: string | null;
   telefone: string | null;
+  endereco_id: number | null;
+};
+
+type EnderecoNeofin = {
+  id: number;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
 };
 
 const CANCELLED_STATUSES = new Set([
   "CANCELED", "CANCELLED", "CANCELADO", "CANCELADA", "VOID", "EXPIRED",
 ]);
+const FALLBACK_ADDRESS = {
+  city: "Salinópolis",
+  street: "Nao informado",
+  number: "S/N",
+  complement: "",
+  neighborhood: "Centro",
+  state: "PA",
+  zipCode: "68721000",
+} as const;
 
 function sanitizeCpf(rawCpf?: string | null): string | null {
   if (!rawCpf) return null;
   const digits = rawCpf.replace(/\D/g, "");
   return digits.length === 11 ? digits : null;
+}
+
+function sanitizeText(value?: string | null): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function sanitizeZipCode(value?: string | null): string | null {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, "");
+  return digits || null;
+}
+
+function formatPhoneWithCountryCode(rawPhone?: string | null): string {
+  const digits = typeof rawPhone === "string" ? rawPhone.replace(/\D/g, "") : "";
+  if (!digits) return "";
+  if (digits.startsWith("55") && digits.length >= 12) return `+${digits}`;
+  return `+55${digits}`;
 }
 
 function isBillingCancelled(body: unknown): boolean {
@@ -35,7 +75,7 @@ export class NeofinProvider implements ICobrancaProvider {
 
     const { data: pessoa, error: pessoaErr } = await supabase
       .from("pessoas")
-      .select("id,nome,cpf,email,telefone")
+      .select("id,nome,cpf,email,telefone,endereco_id")
       .eq("id", input.pessoaId)
       .maybeSingle<PessoaNeofin>();
 
@@ -46,6 +86,21 @@ export class NeofinProvider implements ICobrancaProvider {
     const cpfLimpo = sanitizeCpf(pessoa.cpf);
     if (!cpfLimpo) {
       throw new Error("titular_sem_cpf_valido_para_neofin");
+    }
+
+    let endereco: EnderecoNeofin | null = null;
+    if (pessoa.endereco_id) {
+      const { data: enderecoRow, error: enderecoErr } = await supabase
+        .from("enderecos")
+        .select("id,logradouro,numero,complemento,bairro,cidade,uf,cep")
+        .eq("id", pessoa.endereco_id)
+        .maybeSingle<EnderecoNeofin>();
+
+      if (enderecoErr) {
+        throw new Error(`endereco_nao_encontrado_para_neofin:${enderecoErr.message}`);
+      }
+
+      endereco = enderecoRow ?? null;
     }
 
     // Identifier base e detecção de billing cancelled
@@ -67,13 +122,28 @@ export class NeofinProvider implements ICobrancaProvider {
       nome: pessoa.nome,
       cpf: cpfLimpo,
       email: pessoa.email,
-      telefone: pessoa.telefone,
+      telefone: formatPhoneWithCountryCode(pessoa.telefone),
+    };
+    const addressPayload = {
+      city: sanitizeText(endereco?.cidade) ?? FALLBACK_ADDRESS.city,
+      street: sanitizeText(endereco?.logradouro) ?? FALLBACK_ADDRESS.street,
+      number: sanitizeText(endereco?.numero) ?? FALLBACK_ADDRESS.number,
+      complement: sanitizeText(endereco?.complemento) ?? FALLBACK_ADDRESS.complement,
+      neighborhood: sanitizeText(endereco?.bairro) ?? FALLBACK_ADDRESS.neighborhood,
+      state: sanitizeText(endereco?.uf)?.toUpperCase() ?? FALLBACK_ADDRESS.state,
+      zipCode: sanitizeZipCode(endereco?.cep) ?? FALLBACK_ADDRESS.zipCode,
     };
     console.info("[NeofinProvider] Enviando billing para Neofim:", {
       integrationIdentifier,
       amountCentavos: input.valorCentavos,
       dueDate: input.vencimentoISO,
       description: input.descricao,
+      address: addressPayload,
+      billingType: "bolepix",
+      fees: 0.0333,
+      fine: 2,
+      installments: 1,
+      installmentType: "monthly",
       customer: { ...customerPayload, cpf: `${cpfLimpo.slice(0, 3)}...${cpfLimpo.slice(-2)}` },
     });
 
@@ -82,7 +152,14 @@ export class NeofinProvider implements ICobrancaProvider {
       amountCentavos: input.valorCentavos,
       dueDate: input.vencimentoISO,
       description: input.descricao,
-      billingType: "boleto",
+      billingType: "bolepix",
+      address: addressPayload,
+      discountBeforePayment: 0,
+      discountBeforePaymentDueDate: 0,
+      fees: 0.0333,
+      fine: 2,
+      installments: 1,
+      installmentType: "monthly",
       customer: customerPayload,
     });
 
