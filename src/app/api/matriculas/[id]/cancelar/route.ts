@@ -312,7 +312,7 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
         SET
           valor_total_centavos = t.total_centavos,
           status = CASE
-            WHEN t.total_centavos <= 0 THEN 'CANCELADA'
+            WHEN t.total_centavos <= 0 THEN 'CONCLUIDA'
             WHEN f.data_vencimento IS NOT NULL AND f.data_vencimento < $2::date THEN 'EM_ATRASO'
             ELSE 'ABERTA'
           END,

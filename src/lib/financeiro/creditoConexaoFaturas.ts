@@ -226,9 +226,11 @@ export async function recalcularComprasFatura(supabase: SupabaseClient, fatura_i
   const hoje = new Date().toISOString().slice(0, 10);
 
   if (statusFatura !== "CANCELADA") {
-    if (comprasCentavos > 0 && (cobrancaCanonicaQuitada || todasCobrancasItensQuitadas)) {
+    if (comprasCentavos <= 0) {
+      statusFatura = "CONCLUIDA";
+    } else if (cobrancaCanonicaQuitada || todasCobrancasItensQuitadas) {
       statusFatura = "PAGA";
-    } else if (comprasCentavos > 0 && dataVencimento && dataVencimento < hoje) {
+    } else if (dataVencimento && dataVencimento < hoje) {
       statusFatura = "EM_ATRASO";
     } else {
       statusFatura = "ABERTA";
