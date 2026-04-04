@@ -90,11 +90,11 @@ function acaoRecomendada(item: CobrancaListaItem): { label: string; cor: string 
   if (item.status_cobranca === "CANCELADA") return null;
   if (item.status_interno === "QUITADA") return null;
   if (item.valor_aberto_centavos <= 0) return null;
-  if (item.atraso_dias > 0 && item.valor_recebido_centavos === 0) {
-    return { label: "Cobrar", cor: "bg-rose-50 text-rose-700" };
-  }
   if (item.tipo_inconsistencia) {
     return { label: "Auditar", cor: "bg-amber-50 text-amber-700" };
+  }
+  if (item.atraso_dias > 0 && item.valor_recebido_centavos === 0) {
+    return { label: "Cobrar", cor: "bg-rose-50 text-rose-700" };
   }
   return null;
 }
