@@ -60,7 +60,7 @@
 
 ## Conclusão (real vs mock, prioridades)
 
-- Telas críticas de operação (movimento, centros de custo, contas financeiras, categorias, formas de pagamento, cartão, crédito conexão) já consomem APIs reais.
+- Telas críticas de operação (movimento, centros de custo, contas financeiras, categorias, formas de pagamento, cartão, conta interna) já consomem APIs reais.
 - Telas-chave de contas a pagar/receber (Admin) ainda são **mockadas** e não usam as APIs existentes de contas_pagar/cobrancas; exigem priorização para substituir seeds e integrar Supabase.
 - Relatórios financeiros em `/admin/relatorios/financeiro/*` aparentam placeholders (sem fetch).
 - APIs principais estão implementadas e escrevem nas tabelas reais; destaque para `/api/financeiro/contas-pagar/pagar` que também insere em `movimento_financeiro` e atualiza pedidos de compra.

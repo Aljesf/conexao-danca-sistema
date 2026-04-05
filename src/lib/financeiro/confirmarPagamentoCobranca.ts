@@ -17,6 +17,11 @@ type ConfirmacaoPagamentoResult = {
   errors: string[];
 };
 
+function isCobrancaFaturaCreditoConexao(origemTipo: string | null | undefined): boolean {
+  const normalized = (origemTipo ?? "").toUpperCase();
+  return normalized === "CREDITO_CONEXAO_FATURA" || normalized === "FATURA_CREDITO_CONEXAO";
+}
+
 /**
  * Confirma o pagamento de uma cobrança executando a sequência completa:
  * 1. cobrancas.status = RECEBIDO
@@ -82,7 +87,7 @@ export async function confirmarPagamentoCobranca(
   }
 
   // 2. Se for fatura da conta interna, atualizar fatura e lançamentos
-  if ((cobranca.origem_tipo ?? "").toUpperCase() === "CREDITO_CONEXAO_FATURA" && cobranca.origem_id) {
+  if (isCobrancaFaturaCreditoConexao(cobranca.origem_tipo) && cobranca.origem_id) {
     faturaId = cobranca.origem_id;
 
     const { error: updateFaturaErr } = await supabase

@@ -25,6 +25,22 @@ type EscolaDashboardAlunosModalGrupo = {
   itens: EscolaDashboardAlunosModalItem[];
 };
 
+type AlunoVinculo = {
+  turmaNome: string;
+  serieOuNivel: string | null;
+  classificacaoInstitucional: string;
+  concessaoTipo: string | null;
+  valorMensalCentavos: number | null;
+};
+
+type AlunoAgrupado = {
+  pessoaId: number;
+  nome: string;
+  idade: number | null;
+  vinculos: AlunoVinculo[];
+  valorTotalCentavos: number;
+};
+
 type EscolaDashboardAlunosModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,11 +48,13 @@ type EscolaDashboardAlunosModalProps = {
   subtitulo?: string;
   modo: "institucional" | "turma";
   totalRegistros: number;
+  totalAlunosUnicos?: number;
   somaValoresCentavos: number | null;
   loading?: boolean;
   error?: string | null;
   itens: EscolaDashboardAlunosModalItem[];
   grupos?: EscolaDashboardAlunosModalGrupo[];
+  alunosAgrupados?: AlunoAgrupado[];
 };
 
 const moedaFormatter = new Intl.NumberFormat("pt-BR", {
@@ -128,6 +146,43 @@ function ItemRow({
   );
 }
 
+function AlunoAgrupadoRow({ aluno }: { aluno: AlunoAgrupado }) {
+  return (
+    <div className="rounded-2xl bg-slate-50/80 px-4 py-3 ring-1 ring-inset ring-slate-200/70 space-y-2">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-slate-900">{aluno.nome}</p>
+          <p className="text-sm text-slate-500">{formatIdade(aluno.idade)}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Total</p>
+          <p className="text-sm font-semibold text-slate-900">{formatValor(aluno.valorTotalCentavos)}</p>
+        </div>
+      </div>
+      <div className="space-y-1 border-t border-slate-200/70 pt-2">
+        {aluno.vinculos.map((v, i) => {
+          const badge = badgeLabel(v.concessaoTipo);
+          return (
+            <div key={`${aluno.pessoaId}-v-${i}`} className="flex items-center justify-between gap-3 text-sm text-slate-600">
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5 min-w-0">
+                <span className="truncate">{v.turmaNome}</span>
+                {v.serieOuNivel ? <span className="text-slate-400">· {v.serieOuNivel}</span> : null}
+                <span className="font-medium">{classificacaoLabel(v.classificacaoInstitucional)}</span>
+                {badge ? (
+                  <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${badgeClassName(v.concessaoTipo)}`}>
+                    {badge}
+                  </span>
+                ) : null}
+              </div>
+              <span className="shrink-0 text-slate-500">{formatValor(v.valorMensalCentavos)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function EscolaDashboardAlunosModal({
   open,
   onOpenChange,
@@ -135,12 +190,16 @@ export function EscolaDashboardAlunosModal({
   subtitulo,
   modo,
   totalRegistros,
+  totalAlunosUnicos,
   somaValoresCentavos,
   loading = false,
   error = null,
   itens,
   grupos = [],
+  alunosAgrupados = [],
 }: EscolaDashboardAlunosModalProps) {
+  const usarAgrupado = modo === "institucional" && alunosAgrupados.length > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl overflow-hidden rounded-[28px] border border-slate-200/80 bg-white p-0 shadow-[0_28px_80px_-42px_rgba(15,23,42,0.45)]">
@@ -156,8 +215,11 @@ export function EscolaDashboardAlunosModal({
             ) : null}
           </DialogHeader>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <HeaderStat label="Total de registros" value={totalRegistros} />
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {usarAgrupado ? (
+              <HeaderStat label="Alunos" value={totalAlunosUnicos ?? alunosAgrupados.length} />
+            ) : null}
+            <HeaderStat label="Total de vinculos" value={totalRegistros} />
             <HeaderStat
               label="Soma financeira exibida"
               value={formatValor(somaValoresCentavos)}
@@ -179,6 +241,18 @@ export function EscolaDashboardAlunosModal({
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
               Erro ao carregar alunos: {error}
             </div>
+          ) : usarAgrupado ? (
+            alunosAgrupados.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center text-sm text-slate-500">
+                Nenhum aluno encontrado.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {alunosAgrupados.map((aluno) => (
+                  <AlunoAgrupadoRow key={aluno.pessoaId} aluno={aluno} />
+                ))}
+              </div>
+            )
           ) : itens.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-10 text-center text-sm text-slate-500">
               Nenhum aluno encontrado.

@@ -81,7 +81,7 @@ As pendencias abaixo nao impedem a operacao atual do sistema, mas seguem no back
 | Decisao | Descricao | Data |
 |---------|-----------|------|
 | Neofim - polling | A Neofim nao suporta webhook customizado. Polling automatico a cada 6h via cron. Futuro: integracao bancaria direta. | 2026-04-03 |
-| Nomenclatura Conta Interna | Cartao Conexao aposentado. Banco usa `credito_conexao`. Interface usa Conta Interna. | 2026-04-03 |
+| Nomenclatura Conta Interna | Conta Interna adotada. Banco usa `credito_conexao`. Interface usa Conta Interna. | 2026-04-03 |
 | FIN - Visao A | FIN e camara de compensacao real. Todo credito passa pelo FIN na ida e na volta. Pagamentos a vista nao passam pelo FIN. | 2026-04-03 |
 | Fechamento mensal | Faturas fecham no ultimo dia do mes (`dia_fechamento=0`). Vencimento padrao dia 12. | 2026-04-03 |
 | Multi-tenant | Sistema atual e instalacao unica. Toda nova tabela financeira deve prever `organizacao_id`. | 2026-04-03 |

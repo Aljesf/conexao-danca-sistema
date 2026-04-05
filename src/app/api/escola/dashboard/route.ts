@@ -51,6 +51,7 @@ type DashboardResumoInstitucional = {
   receita_mensal_estimada_centavos: number;
   receita_pagante_estimada_centavos: number;
   receita_concessao_absorvida_centavos: number;
+  alunos_unicos_total: number;
 };
 
 type DashboardResumoModalidadeRow = {
@@ -315,21 +316,32 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const resumoInstitucional = resumoInstitucionalData
+  const { data: alunosDetalheData } = await supabase
+    .from("vw_escola_dashboard_alunos_detalhe")
+    .select("pessoa_id, aluno_ativo")
+    .eq("aluno_ativo", true);
+
+  const alunosUnicos = alunosDetalheData
+    ? new Set((alunosDetalheData as { pessoa_id: number | string }[]).map((r) => r.pessoa_id)).size
+    : 0;
+
+  const riData = resumoInstitucionalData as Record<string, unknown> | null;
+  const resumoInstitucional = riData
     ? {
-        pagantes_total: toNumber(resumoInstitucionalData.pagantes_total),
-        concessao_total: toNumber(resumoInstitucionalData.concessao_total),
-        concessao_integral_total: toNumber(resumoInstitucionalData.concessao_integral_total),
-        concessao_parcial_total: toNumber(resumoInstitucionalData.concessao_parcial_total),
+        pagantes_total: toNumber(riData.pagantes_total),
+        concessao_total: toNumber(riData.concessao_total),
+        concessao_integral_total: toNumber(riData.concessao_integral_total),
+        concessao_parcial_total: toNumber(riData.concessao_parcial_total),
         receita_mensal_estimada_centavos: toNumber(
-          resumoInstitucionalData.receita_mensal_estimada_centavos,
+          riData.receita_mensal_estimada_centavos,
         ),
         receita_pagante_estimada_centavos: toNumber(
-          resumoInstitucionalData.receita_pagante_estimada_centavos,
+          riData.receita_pagante_estimada_centavos,
         ),
         receita_concessao_absorvida_centavos: toNumber(
-          resumoInstitucionalData.receita_concessao_absorvida_centavos,
+          riData.receita_concessao_absorvida_centavos,
         ),
+        alunos_unicos_total: alunosUnicos,
       }
     : null;
 

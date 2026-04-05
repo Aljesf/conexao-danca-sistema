@@ -1,12 +1,12 @@
-﻿# Estado Atual - Cartao Conexao
+﻿# Estado Atual - Conta Interna
 
-> Padrão operacional atual: [Cartão Conexão — Cobranças, Lançamentos e Faturas](../financeiro/cartao-conexao-cobrancas.md)
+> Padrão operacional atual: [Conta Interna — Cobranças, Lançamentos e Faturas](../financeiro/cartao-conexao-cobrancas.md)
 
 
 Gerado em: 2025-12-23T18:02:54.5787618-03:00
 
 ## Objetivo
-- Registrar como o Cartao Conexao esta estruturado HOJE (SQL + APIs + integracoes).
+- Registrar como a Conta Interna esta estruturada HOJE (SQL + APIs + integracoes).
 - Base para refatorar Matriculas para lancar em faturas (sem criar cobrancas diretas).
 
 ## Migrations relacionadas (filtradas por palavras-chave)
@@ -1921,7 +1921,7 @@ export async function POST(req: Request) {
 
 ## Schema (templates de consulta)
 
-### Listar tabelas que parecem ser do Cartao Conexao
+### Listar tabelas que parecem ser da Conta Interna
 ```sql
 SELECT table_name
 FROM information_schema.tables

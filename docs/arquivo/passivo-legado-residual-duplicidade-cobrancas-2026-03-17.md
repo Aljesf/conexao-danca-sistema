@@ -23,5 +23,5 @@ Esse caso ficou fora do lote porque e historico, esta pago e nao possui competen
 ## Recomendacao
 
 - Congelar esses casos para revisao financeira manual.
-- Nao misturar esse passivo com a correcao estrutural ja concluida no Cartao Conexao.
+- Nao misturar esse passivo com a correcao estrutural ja concluida na Conta Interna.
 - Tratar o restante como saneamento historico excepcional, com decisao assistida por conciliacao financeira.

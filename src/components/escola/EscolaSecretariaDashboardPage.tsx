@@ -35,6 +35,7 @@ type DashboardResumoInstitucional = {
   receita_mensal_estimada_centavos: number;
   receita_pagante_estimada_centavos: number;
   receita_concessao_absorvida_centavos: number;
+  alunos_unicos_total: number;
 };
 
 type DashboardResumoModalidade = {
@@ -96,15 +97,33 @@ type DashboardDetalheGrupo = {
   itens: DashboardDetalheItem[];
 };
 
+type DashboardDetalheVinculo = {
+  turmaNome: string;
+  serieOuNivel: string | null;
+  classificacaoInstitucional: string;
+  concessaoTipo: string | null;
+  valorMensalCentavos: number | null;
+};
+
+type DashboardDetalheAlunoAgrupado = {
+  pessoaId: number;
+  nome: string;
+  idade: number | null;
+  vinculos: DashboardDetalheVinculo[];
+  valorTotalCentavos: number;
+};
+
 type DashboardDetalhesPayload = {
   modo: "institucional" | "turma";
   titulo: string;
   subtitulo?: string;
   total: number;
   totalRegistros: number;
+  totalAlunosUnicos?: number;
   somaValoresCentavos: number;
   itens: DashboardDetalheItem[];
   grupos: DashboardDetalheGrupo[];
+  alunosAgrupados?: DashboardDetalheAlunoAgrupado[];
 };
 
 type AlunosModalState = {
@@ -114,9 +133,11 @@ type AlunosModalState = {
   titulo: string;
   subtitulo?: string;
   totalRegistros: number;
+  totalAlunosUnicos: number;
   somaValoresCentavos: number | null;
   itens: DashboardDetalheItem[];
   grupos: DashboardDetalheGrupo[];
+  alunosAgrupados: DashboardDetalheAlunoAgrupado[];
   error: string | null;
 };
 
@@ -253,9 +274,11 @@ const modalStateInicial: AlunosModalState = {
   titulo: "",
   subtitulo: "",
   totalRegistros: 0,
+  totalAlunosUnicos: 0,
   somaValoresCentavos: null,
   itens: [],
   grupos: [],
+  alunosAgrupados: [],
   error: null,
 };
 
@@ -328,9 +351,11 @@ export default function EscolaSecretariaDashboardPage() {
         titulo: payload.titulo,
         subtitulo: payload.subtitulo,
         totalRegistros: payload.totalRegistros,
+        totalAlunosUnicos: payload.totalAlunosUnicos ?? 0,
         somaValoresCentavos: payload.somaValoresCentavos,
         itens: payload.itens,
         grupos: payload.grupos,
+        alunosAgrupados: payload.alunosAgrupados ?? [],
         error: null,
       });
     } catch (e) {
@@ -487,19 +512,13 @@ export default function EscolaSecretariaDashboardPage() {
               <DashboardMetricCard
                 eyebrow="Institucional"
                 title="Matriculas"
-                value={loading ? "..." : kpis?.matriculas_efetivadas_total ?? 0}
-                meta={`Hoje: ${loading ? "..." : kpis?.matriculas_efetivadas_hoje ?? 0} | Ontem: ${loading ? "..." : kpis?.matriculas_efetivadas_ontem ?? 0}`}
-              />
-              <DashboardMetricCard
-                eyebrow="Institucional"
-                title="Alunos"
                 value={
                   loading
                     ? "..."
                     : (resumoInstitucional?.pagantes_total ?? 0) +
                       (resumoInstitucional?.concessao_total ?? 0)
                 }
-                meta="Total de alunos ativos (pagantes + bolsistas)."
+                meta="Soma de vinculos ativos por turma (pagantes + bolsistas)."
                 details={
                   <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-50/85 px-3 py-3 text-sm text-slate-600 ring-1 ring-inset ring-slate-200/70">
                     <button
@@ -534,6 +553,13 @@ export default function EscolaSecretariaDashboardPage() {
                     </button>
                   </div>
                 }
+                onClick={() => void abrirModalDetalhes("escopo=institucional&tipo=alunos_ativos")}
+              />
+              <DashboardMetricCard
+                eyebrow="Institucional"
+                title="Alunos"
+                value={loading ? "..." : resumoInstitucional?.alunos_unicos_total ?? 0}
+                meta="Alunos unicos (sem repetir nome)."
                 accent="sky"
                 onClick={() => void abrirModalDetalhes("escopo=institucional&tipo=alunos_ativos")}
               />
@@ -902,11 +928,13 @@ export default function EscolaSecretariaDashboardPage() {
         subtitulo={alunosModal.subtitulo}
         modo={alunosModal.modo}
         totalRegistros={alunosModal.totalRegistros}
+        totalAlunosUnicos={alunosModal.totalAlunosUnicos}
         somaValoresCentavos={alunosModal.somaValoresCentavos}
         loading={alunosModal.loading}
         error={alunosModal.error}
         itens={alunosModal.itens}
         grupos={alunosModal.grupos}
+        alunosAgrupados={alunosModal.alunosAgrupados}
       />
     </>
   );

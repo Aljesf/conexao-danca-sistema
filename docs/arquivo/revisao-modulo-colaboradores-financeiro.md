@@ -3,7 +3,7 @@
 ## Contexto e objetivo
 Este documento inventaria o estado atual do modulo "Financeiro de Colaboradores" no projeto, cobrindo:
 1. Folha/salarios (declaracao de valores + geracao de folhas)
-2. Cartao Conexao Colaborador (lancamentos + faturas + vinculo com folha)
+2. Conta Interna do Colaborador (lancamentos + faturas + vinculo com folha)
 3. Frequencia/jornada do colaborador (tabelas, APIs e paginas)
 
 Escopo desta revisao: somente leitura e inventario, sem alteracao de regra de negocio.
@@ -19,7 +19,7 @@ Observacao: caminho `/mnt/data/schema-supabase.sql` NAO ENCONTRADO neste workspa
 - `folha_pagamento_eventos` em `schema-supabase.sql:1411`
   - Colunas chave: `folha_pagamento_id`, `tipo`, `descricao`, `valor_centavos`, `origem_tipo`, `origem_id`
 
-### 2) Cartao Conexao
+### 2) Conta Interna
 - `credito_conexao_contas` em `schema-supabase.sql:652`
   - Colunas chave: `id`, `pessoa_titular_id`, `tipo_conta`, `dia_fechamento`, `dia_vencimento`, limites
 - `credito_conexao_faturas` em `schema-supabase.sql:683`
@@ -89,7 +89,7 @@ Observacao: `schema-supabase.sql` nao traz DDL de FKs de forma legivel em todos 
   - Importa faturas abertas da mesma competencia (`periodo_referencia`)
   - Seta `credito_conexao_faturas.folha_pagamento_id` e cria evento `DESCONTO` com origem `CREDITO_CONEXAO_FATURA` (`:173-178`)
 
-### B) Cartao Conexao (contas/faturas/lancamentos)
+### B) Conta Interna (contas/faturas/lancamentos)
 - `GET/POST /api/financeiro/credito-conexao/contas`
   - Arquivo: `src/app/api/financeiro/credito-conexao/contas/route.ts:7` e `:122`
   - Suporta `tipo_conta` em `ALUNO|COLABORADOR` (`:154`)
@@ -123,7 +123,7 @@ Observacao: `schema-supabase.sql` nao traz DDL de FKs de forma legivel em todos 
   - Arquivo: `src/app/api/credito-conexao/gerar-lancamentos-mensais/route.ts`
   - Gera lancamento mensal de matricula; usa conta `tipo_conta='ALUNO'` (`:183`)
 
-### C) Integracoes de consumo (Loja/Cafe -> Cartao Conexao)
+### C) Integracoes de consumo (Loja/Cafe -> Conta Interna)
 - `POST /api/loja/vendas`
   - Arquivo: `src/app/api/loja/vendas/route.ts:205`
   - Suporta `cartao_conexao_tipo_conta` no payload (`:243`, `:747`)
@@ -163,7 +163,7 @@ Observacao: `schema-supabase.sql` nao traz DDL de FKs de forma legivel em todos 
   - Acoes: importar faturas, fechar folha, adicionar evento manual
   - Endpoints: `GET /api/admin/folha/colaboradores/:id`, `POST .../importar-faturas`, `POST .../fechar`, `POST .../eventos`
 
-### B) Cartao Conexao (UI)
+### B) Conta Interna (UI)
 - Contas:
   - `src/app/(private)/admin/financeiro/credito-conexao/contas/page.tsx`
   - URL: `/admin/financeiro/credito-conexao/contas`
@@ -195,11 +195,11 @@ Observacao: `schema-supabase.sql` nao traz DDL de FKs de forma legivel em todos 
 - O sistema hoje trabalha com entidade de folha por colaborador+competencia (`folha_pagamento_colaborador`).
 - Nao existe entidade separada de holerite consolidado mensal por unidade/centro com fechamento em lote.
 - Eventos de folha (`folha_pagamento_eventos`) sao a base de composicao do liquido.
-- Importacao de faturas do Cartao Conexao Colaborador ja existe e gera eventos de desconto na folha.
+- Importacao de faturas da Conta Interna do Colaborador ja existe e gera eventos de desconto na folha.
 
-### 2) Cartao Conexao Colaborador
+### 2) Conta Interna do Colaborador
 - Existem contas `tipo_conta='COLABORADOR'`.
-- Loja/Cafe conseguem gerar cobranca + lancamento para Cartao Conexao com metadado de tipo de conta.
+- Loja/Cafe conseguem gerar cobranca + lancamento para Conta Interna com metadado de tipo de conta.
 - Faturas possuem campo `folha_pagamento_id` e ha endpoint que vincula faturas abertas a folha individual.
 - Fechamento de fatura com cobranca externa (Neofin/cobranca) esta mais orientado ao fluxo ALUNO em partes do modulo.
 
@@ -245,7 +245,7 @@ Observacao: `schema-supabase.sql` nao traz DDL de FKs de forma legivel em todos 
 
 ### Etapa 3 - UI (operacao)
 1. Trocar entrada manual por selecao/filtros (competencia, unidade, centro de custo, status).
-2. Adicionar tela de processamento mensal com resumo: quantidade de folhas, total de descontos Cartao Conexao, pendencias.
+2. Adicionar tela de processamento mensal com resumo: quantidade de folhas, total de descontos Conta Interna, pendencias.
 3. Implementar tela funcional de jornada do colaborador e, se previsto, integracao com calculo da folha.
 
 ## Checklist de validacao por prints
@@ -253,8 +253,8 @@ Observacao: `schema-supabase.sql` nao traz DDL de FKs de forma legivel em todos 
 2. Print do detalhe da folha com:
 - eventos importados de fatura
 - total proventos/descontos/liquido
-3. Print da tela de contas do Cartao Conexao com conta tipo `COLABORADOR`.
-4. Print da tela de faturas do Cartao Conexao filtrada por periodo com coluna `tipo_conta`.
+3. Print da tela de contas da Conta Interna com conta tipo `COLABORADOR`.
+4. Print da tela de faturas da Conta Interna filtrada por periodo com coluna `tipo_conta`.
 5. Print do detalhe de uma fatura com lancamentos vinculados.
 6. Print da tela de jornadas (placeholder atual) para evidenciar lacuna.
 7. Print de resposta da API de alunos da turma mostrando separacao `alunos_ativos` e `alunos_historico` (evidencia de que frequencia atual e de alunos).

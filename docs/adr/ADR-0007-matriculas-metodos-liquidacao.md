@@ -2,12 +2,12 @@
 > Este documento será atualizado para refletir  
 > as Regras Oficiais de Matrícula (Conexão Dança) – v1
 
-# ADR-0007 - Matriculas: metodo de liquidacao (Cartao Conexao vs Credito/Bolsa)
+# ADR-0007 - Matriculas: metodo de liquidacao (Conta Interna vs Credito/Bolsa)
 
 ## Contexto
 O processo de Matricula (contrato/vinculo pedagogico) e independente do mecanismo financeiro de liquidacao.
 O sistema possui:
-- Cartao Conexao: conta + faturas + lancamentos, com fechamento e vencimento.
+- Conta Interna: conta + faturas + lancamentos, com fechamento e vencimento.
 - Credito/Bolsa (Movimento Conexao Danca): saldo de creditos que pode quitar mensalidades/anuidades.
 
 ## Decisao
@@ -19,7 +19,7 @@ A matricula sempre cria:
 
 O que muda e o eixo financeiro:
 1) `CARTAO_CONEXAO_FATURA`
-   - cria/garante conta Cartao Conexao
+   - cria/garante Conta Interna
    - cria/garante faturas por competencia
    - cria lancamentos de fatura (parcelas + pro-rata)
    - cobranca final ocorre no fechamento da fatura
@@ -38,9 +38,9 @@ O que muda e o eixo financeiro:
 ## Consequencias
 - APIs operacionais devem aceitar `metodo_liquidacao`.
 - A API de detalhe operacional deve retornar informacoes financeiras conforme metodo.
-- O modulo Cartao Conexao passa a ser a origem central de vencimento/encargos para matricula quando metodo for fatura.
+- A Conta Interna passa a ser a origem central de vencimento/encargos para matricula quando metodo for fatura.
 
 ## Proximos passos
 - Definir enum/coluna em `matriculas` para metodo de liquidacao.
-- Criar estruturas de "fatura" e "lancamentos" (ou reutilizar as existentes no Cartao Conexao).
+- Criar estruturas de "fatura" e "lancamentos" (ou reutilizar as existentes na Conta Interna).
 - Integrar carteira de creditos/bolsas no fluxo transacional da matricula.

@@ -1,6 +1,6 @@
-﻿# Recorte do Schema - Credito Conexao
+﻿# Recorte do Schema - Conta Interna
 
-> Padrão operacional atual: [Cartão Conexão — Cobranças, Lançamentos e Faturas](../financeiro/cartao-conexao-cobrancas.md)
+> Padrão operacional atual: [Conta Interna — Cobranças, Lançamentos e Faturas](../financeiro/cartao-conexao-cobrancas.md)
 
 
 Fonte: `schema-supabase.sql` (snapshot atualizado)

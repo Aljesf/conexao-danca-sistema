@@ -17,7 +17,7 @@ Introduzir a entidade "Servico" como alvo universal de uma matricula.
 - Turma continua existindo como vinculo pedagogico quando aplicavel, mas nao e o "alvo financeiro" universal.
 
 ## Motivacao
-- Unificar precificacao e liquidacao (Cartao Conexao / Credito/Bolsa) num modelo unico.
+- Unificar precificacao e liquidacao (Conta Interna / Credito/Bolsa) num modelo unico.
 - Permitir relatorios consistentes por tipo de servico.
 - Evitar "matricula paralela" e duplicacao de regras.
 
@@ -27,5 +27,5 @@ Introduzir a entidade "Servico" como alvo universal de uma matricula.
 - UI do wizard escolhe Servico; se o servico exigir turma, escolhe turma em seguida.
 
 ## Plano
-- Executar apos finalizar v1 (Cartao Conexao) nas APIs.
+- Executar apos finalizar v1 (Conta Interna) nas APIs.
 - Implementar antes da UI final (wizard) para evitar retrabalho de interface.

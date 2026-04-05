@@ -88,6 +88,45 @@ async function calcularTotalEItens(
   return { totalCentavos: total, itensDescricao };
 }
 
+async function sincronizarLancamentosFaturados(
+  supabase: SupabaseClient,
+  faturaId: number,
+): Promise<void> {
+  const { data: vinculos, error: vinculosError } = await supabase
+    .from("credito_conexao_fatura_lancamentos")
+    .select("lancamento_id")
+    .eq("fatura_id", faturaId);
+
+  if (vinculosError) {
+    throw new Error(vinculosError.message);
+  }
+
+  const lancamentoIds = Array.from(
+    new Set(
+      (vinculos ?? [])
+        .map((row) => Number((row as { lancamento_id?: unknown }).lancamento_id ?? 0))
+        .filter((value) => Number.isFinite(value) && value > 0),
+    ),
+  );
+
+  if (lancamentoIds.length === 0) {
+    return;
+  }
+
+  const { error: updateError } = await supabase
+    .from("credito_conexao_lancamentos")
+    .update({
+      status: "FATURADO",
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", lancamentoIds)
+    .eq("status", "PENDENTE_FATURA");
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+}
+
 async function updateFaturaComStatusCompativel(
   supabase: SupabaseClient,
   faturaId: number,
@@ -326,6 +365,20 @@ export async function processarCobrancaCanonicaFatura(
         ok: false,
         error: "erro_salvar_cobranca_provider",
         detail: updateChargeError.message,
+      },
+    };
+  }
+
+  try {
+    await sincronizarLancamentosFaturados(input.supabase, input.fatura.id);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 500,
+      body: {
+        ok: false,
+        error: "erro_sincronizar_lancamentos_faturados",
+        detail: error instanceof Error ? error.message : "erro_sincronizar_lancamentos",
       },
     };
   }

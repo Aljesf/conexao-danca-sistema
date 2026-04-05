@@ -29,5 +29,5 @@
 ## 5. Regra institucional
 
 - O Cafe nao mantem financeiro paralelo.
-- O modulo reaproveita cobrancas, recebimentos, movimento financeiro, credito conexao e faturas do projeto.
+- O modulo reaproveita cobrancas, recebimentos, movimento financeiro, conta interna e faturas do projeto.
 - As opcoes de pagamento do Cafe precisam vir do cadastro central por contexto e centro de custo, e nao de uma lista fixa no front.

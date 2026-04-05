@@ -9,8 +9,8 @@
 ## API
 
 - alterar `C:/Users/aliri/conexao-dados/src/app/api/matriculas/liquidacao-primeira/route.ts`
-- para mensalidade cheia do Cartao Conexao, parar de criar `public.cobrancas` com `origem_tipo = 'MATRICULA'`
-- manter apenas o lancamento do cartao e o agendamento/garantia de fatura aberta
+- para mensalidade cheia da Conta Interna, parar de criar `public.cobrancas` com `origem_tipo = 'MATRICULA'`
+- manter apenas o lancamento da conta interna e o agendamento/garantia de fatura aberta
 
 ## API/servicos
 
@@ -25,7 +25,7 @@
 
 ## Estrategia de validacao
 
-- recriar matricula com mensalidade cheia do Cartao Conexao e confirmar:
+- recriar matricula com mensalidade cheia da Conta Interna e confirmar:
   - existe lancamento
   - existe fatura
   - nao existe cobranca `MATRICULA/CARTAO_CONEXAO`

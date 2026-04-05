@@ -26,7 +26,10 @@ export const adminSidebar: SidebarSection[] = [
   {
     id: "admin-financeiro-atalho",
     title: "💰 Financeiro",
-    items: [{ label: "➡️ Ir para Financeiro", href: "/financeiro" }],
+    items: [
+      { label: "➡️ Ir para Financeiro", href: "/financeiro" },
+      { label: "Intermediação Neofim", href: "/admin/financeiro/intermediacao-neofim", icon: "🔗" },
+    ],
   },
   {
     id: "admin-documentos",

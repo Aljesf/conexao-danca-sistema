@@ -54,7 +54,7 @@ Sobre `vinculos_ids` e multiplas unidades de execucao:
 - Isso indica que `vinculos_ids` e multiplas UEs, por si so, nao explicam o padrao principal de duplicidade `MATRICULA_X_FATURA`.
 - Eles podem aumentar a complexidade operacional, mas o helper ainda reutiliza a mesma cobranca da matricula por competencia.
 
-## 3. Fluxo real do Credito Conexao
+## 3. Fluxo real da Conta Interna
 
 Arquivo inicial analisado: `C:/Users/aliri/conexao-dados/src/app/api/financeiro/credito-conexao/cobrancas/vincular-fatura/route.ts`
 
@@ -144,7 +144,7 @@ A hipotese mais forte, suportada pelo codigo real, e:
 
 Fatores que sustentam essa hipotese:
 
-- a matricula cria cobranca mensal completa para o Cartao Conexao;
+- a matricula cria cobranca mensal completa para a Conta Interna;
 - a fatura fecha/gera cobranca usando outra identidade logica;
 - a busca de cobranca existente no fluxo da fatura nao considera a cobranca da matricula;
 - o reprocessamento repete o mesmo padrao de cobranca `MATRICULA/CARTAO_CONEXAO`;
@@ -166,11 +166,11 @@ Fatores que sustentam essa hipotese:
 
 ## 6. Correcao recomendada
 
-Sem implementar ainda, o ponto que precisa virar fonte unica e a cobranca canonica da fatura do Cartao Conexao.
+Sem implementar ainda, o ponto que precisa virar fonte unica e a cobranca canonica da fatura da Conta Interna.
 
 Recomendacoes:
 
-- a rota de matricula nao deve criar cobranca mensal cheia em `public.cobrancas` para o Cartao Conexao;
+- a rota de matricula nao deve criar cobranca mensal cheia em `public.cobrancas` para a Conta Interna;
 - a matricula deve gerar apenas lancamento/agenda de faturamento, deixando a cobranca externa nascer exclusivamente do fechamento/geracao de cobranca da fatura;
 - deve existir guarda de idempotencia transversal entre matricula e fatura, no minimo em codigo, e idealmente apoiada por protecao SQL;
 - o fluxo legado `src/app/api/financeiro/credito-conexao/faturas/fechar/route.ts` deve ser removido, desativado ou redirecionado para o fluxo moderno;

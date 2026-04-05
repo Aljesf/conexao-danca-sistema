@@ -35,6 +35,22 @@ type DashboardDetalheItem = {
   valorMensalCentavos: number | null;
 };
 
+type DashboardDetalheVinculo = {
+  turmaNome: string;
+  serieOuNivel: string | null;
+  classificacaoInstitucional: "ATIVO" | "PAGANTE" | "CONCESSAO";
+  concessaoTipo: "INTEGRAL" | "PARCIAL" | null;
+  valorMensalCentavos: number | null;
+};
+
+type DashboardDetalheAlunoAgrupado = {
+  pessoaId: number;
+  nome: string;
+  idade: number | null;
+  vinculos: DashboardDetalheVinculo[];
+  valorTotalCentavos: number;
+};
+
 type DashboardDetalheGrupo = {
   chave: string;
   total: number;
@@ -109,7 +125,7 @@ function buildSubtitulo(
 ): string {
   if (escopo === "institucional") {
     const recorteCurso = curso ? ` Recorte de curso: ${curso}.` : "";
-    return `Inclui vinculos ativos por turma. Um mesmo aluno pode aparecer mais de uma vez quando participa de mais de uma turma/modalidade.${recorteCurso}`;
+    return `Alunos agrupados com seus vinculos por turma/modalidade.${recorteCurso}`;
   }
 
   return turmaNome
@@ -128,6 +144,36 @@ function mapRowToItem(row: DashboardAlunoDetalheRow, escopo: EscopoDetalhe): Das
     concessaoTipo: row.concessao_tipo,
     valorMensalCentavos: toNumber(row.valor_mensal_estimado_centavos),
   };
+}
+
+function agruparPorAluno(items: DashboardDetalheItem[]): DashboardDetalheAlunoAgrupado[] {
+  const map = new Map<number, DashboardDetalheAlunoAgrupado>();
+
+  for (const item of items) {
+    const existing = map.get(item.pessoaId);
+    const vinculo: DashboardDetalheVinculo = {
+      turmaNome: item.turmaNome ?? "",
+      serieOuNivel: item.serieOuNivel ?? null,
+      classificacaoInstitucional: item.classificacaoInstitucional,
+      concessaoTipo: item.concessaoTipo,
+      valorMensalCentavos: item.valorMensalCentavos,
+    };
+
+    if (existing) {
+      existing.vinculos.push(vinculo);
+      existing.valorTotalCentavos += item.valorMensalCentavos ?? 0;
+    } else {
+      map.set(item.pessoaId, {
+        pessoaId: item.pessoaId,
+        nome: item.nome,
+        idade: item.idade,
+        vinculos: [vinculo],
+        valorTotalCentavos: item.valorMensalCentavos ?? 0,
+      });
+    }
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
 function buildGrupos(items: DashboardDetalheItem[]): DashboardDetalheGrupo[] {
@@ -250,7 +296,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      turmaNome = turmaData?.nome ?? null;
+      turmaNome = (turmaData as { nome?: string } | null)?.nome ?? null;
     }
   }
 
@@ -261,6 +307,7 @@ export async function GET(request: NextRequest) {
     0,
   );
   const grupos = escopo === "turma" ? buildGrupos(itens) : [];
+  const alunosAgrupados = escopo === "institucional" ? agruparPorAluno(itens) : [];
 
   return NextResponse.json(
     {
@@ -269,9 +316,11 @@ export async function GET(request: NextRequest) {
       subtitulo: buildSubtitulo(escopo, turmaNome, cursoFilter),
       total: totalRegistros,
       totalRegistros,
+      totalAlunosUnicos: alunosAgrupados.length,
       somaValoresCentavos,
       itens,
       grupos,
+      alunosAgrupados,
     },
     { status: 200 },
   );

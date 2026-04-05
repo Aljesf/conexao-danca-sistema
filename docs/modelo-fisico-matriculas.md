@@ -19,11 +19,11 @@ Tabela de Preços — Cursos (Escola) como fonte única de valores;
 
 Plano de pagamento definindo apenas como pagar;
 
-Entrada (Pró-rata) fora do Cartão Conexão;
+Entrada (Pró-rata) fora da Conta Interna;
 
-Mensalidades cheias lançadas no Cartão Conexão;
+Mensalidades cheias lançadas na Conta Interna;
 
-Vencimento financeiro controlado exclusivamente pelo Cartão Conexão;
+Vencimento financeiro controlado exclusivamente pela Conta Interna;
 
 Parametrização institucional e auditoria completa.
 
@@ -56,11 +56,11 @@ referencia regras vigentes;
 
 registra auditoria.
 
-1.3 Cartão Conexão é o motor financeiro
+1.3 Conta Interna é o motor financeiro
 
 Mensalidades cheias ? credito_conexao_lancamentos;
 
-Vencimento, juros e mora ? Cartão Conexão;
+Vencimento, juros e mora ? Conta Interna;
 
 Entrada (Pró-rata) ? cobrança direta (cobrancas / recebimentos).
 
@@ -128,7 +128,7 @@ reconstrução histórica;
 
 conferência humana.
 
-O vencimento real sempre vem do Cartão Conexão.
+O vencimento real sempre vem da Conta Interna.
 
 4. Tabela escola_tabelas_precos_cursos (Tabela de Preços — Cursos (Escola))
 4.1 Papel
@@ -248,7 +248,7 @@ Regra:
 
 Exceção não altera valor, apenas o momento/canal.
 
-9. Integração com Cartão Conexão
+9. Integração com Conta Interna
 9.1 Mensalidade cheia
 
 Criar credito_conexao_lancamento
@@ -263,7 +263,7 @@ Criar cobrancas
 
 Registrar recebimentos
 
-Não criar lançamento no Cartão Conexão
+Não criar lançamento na Conta Interna
 
 10. Tabela turma_aluno
 

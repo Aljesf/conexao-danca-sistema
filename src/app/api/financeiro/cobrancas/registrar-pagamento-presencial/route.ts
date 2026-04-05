@@ -27,6 +27,11 @@ type Cobranca = {
   origem_id?: number | null;
 };
 
+function isCobrancaFaturaCreditoConexao(origemTipo: string | null | undefined): boolean {
+  const normalized = (origemTipo ?? "").toUpperCase();
+  return normalized === "CREDITO_CONEXAO_FATURA" || normalized === "FATURA_CREDITO_CONEXAO";
+}
+
 async function getCentroCustoIdPorCodigo(
   supabase: SupabaseClient,
   codigo: string
@@ -61,6 +66,48 @@ async function contarLancamentosDaFatura(
   }
 
   return count ?? 0;
+}
+
+async function marcarLancamentosDaFaturaComoPagos(
+  supabase: SupabaseClient,
+  faturaId: number
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: faturaLancamentos, error: vinculosError } = await supabase
+    .from("credito_conexao_fatura_lancamentos")
+    .select("lancamento_id")
+    .eq("fatura_id", faturaId);
+
+  if (vinculosError) {
+    console.error(
+      "[Registrar pagamento presencial] erro ao buscar lancamentos da fatura:",
+      vinculosError
+    );
+    return { ok: false, error: "erro_buscar_lancamentos_fatura" };
+  }
+
+  const lancamentoIds = (faturaLancamentos ?? [])
+    .map((item: any) => Number(item?.lancamento_id ?? 0))
+    .filter((id: number) => Number.isFinite(id) && id > 0);
+
+  if (lancamentoIds.length === 0) {
+    return { ok: true };
+  }
+
+  const { error: lancamentosError } = await supabase
+    .from("credito_conexao_lancamentos")
+    .update({ status: "PAGO", updated_at: new Date().toISOString() })
+    .in("id", lancamentoIds)
+    .eq("status", "FATURADO");
+
+  if (lancamentosError) {
+    console.error(
+      "[Registrar pagamento presencial] erro ao atualizar lancamentos da fatura:",
+      lancamentosError
+    );
+    return { ok: false, error: "erro_atualizar_lancamentos_fatura" };
+  }
+
+  return { ok: true };
 }
 
 export async function POST(request: NextRequest) {
@@ -123,7 +170,7 @@ export async function POST(request: NextRequest) {
   }
 
   let lancamentosFaturaCount: number | null = null;
-  if (cobranca.origem_tipo === "CREDITO_CONEXAO_FATURA" && cobranca.origem_id) {
+  if (isCobrancaFaturaCreditoConexao(cobranca.origem_tipo) && cobranca.origem_id) {
     lancamentosFaturaCount = await contarLancamentosDaFatura(supabase, cobranca.origem_id);
     if (lancamentosFaturaCount === -1) {
       return NextResponse.json(
@@ -145,7 +192,7 @@ export async function POST(request: NextRequest) {
 
   if (cobranca.status === "PAGO") {
     if (
-      cobranca.origem_tipo === "CREDITO_CONEXAO_FATURA" &&
+      isCobrancaFaturaCreditoConexao(cobranca.origem_tipo) &&
       cobranca.origem_id &&
       lancamentosFaturaCount !== 0
     ) {
@@ -321,7 +368,7 @@ export async function POST(request: NextRequest) {
 
   // Se a cobranca veio de uma fatura da conta interna, atualiza status da fatura
   if (
-    cobrancaAtualizada.origem_tipo === "CREDITO_CONEXAO_FATURA" &&
+    isCobrancaFaturaCreditoConexao(cobrancaAtualizada.origem_tipo) &&
     cobrancaAtualizada.origem_id
   ) {
     const { error: faturaError } = await supabase
@@ -333,6 +380,17 @@ export async function POST(request: NextRequest) {
       console.warn(
         "[Registrar pagamento presencial] falha ao atualizar status da fatura:",
         faturaError
+      );
+    }
+
+    const syncLancamentos = await marcarLancamentosDaFaturaComoPagos(
+      supabase,
+      cobrancaAtualizada.origem_id
+    );
+    if (!syncLancamentos.ok) {
+      console.warn(
+        "[Registrar pagamento presencial] falha ao atualizar lancamentos pagos:",
+        syncLancamentos.error
       );
     }
   }

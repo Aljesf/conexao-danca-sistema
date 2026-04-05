@@ -11,7 +11,7 @@ Consolidar e conectar o material antigo (docs) de matrícula/curso livre/projeto
 - `public.servicos` (alvo universal)
 - `public.matricula_precos_servico`
 - `public.matriculas.servico_id` + `vinculo_id` opcional
-- `metodo_liquidacao` (Cartão Conexão como padrão)
+- `metodo_liquidacao` (Conta Interna como padrão)
 
 ## Fontes encontradas (principais)
 - docs/api-matriculas.md
@@ -52,7 +52,7 @@ Consolidar e conectar o material antigo (docs) de matrícula/curso livre/projeto
 ## Liquidação financeira (padrão)
 - `metodo_liquidacao` default: CARTAO_CONEXAO
 - matrícula cria lançamentos `credito_conexao_lancamentos` com `origem_sistema='MATRICULA'` e `status='PENDENTE_FATURA'`
-- faturas e cobrança final seguem o fluxo do Cartão Conexão (já existente)
+- faturas e cobrança final seguem o fluxo da Conta Interna (já existente)
 
 ## Status dos fluxos de UI
 - Novo: src/app/(private)/escola/matriculas/* (processo operacional)

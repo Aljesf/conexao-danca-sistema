@@ -18,7 +18,7 @@
 - Recorrência vs pontual (proxy): peso de pagadores recorrentes vs pagadores únicos nos últimos 30d.
 
 ## O que ainda NÃO está incluído (planejado/evolução)
-- Cartão Conexão como ativo financeiro dedicado (projeção e risco próprio).
+- Conta Interna como ativo financeiro dedicado (projeção e risco próprio).
 - Qualidade de receita por produto/serviço (mix e dependência de SKU).
 - Adequação fiscal/contábil e conciliações bancárias.
 - Previsões de inadimplência (modelos preditivos) além do atraso real.

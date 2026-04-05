@@ -1,4 +1,4 @@
-# Resumo Final - Duplicidade de Cobrancas do Cartao Conexao
+# Resumo Final - Duplicidade de Cobrancas da Conta Interna
 
 ## 1. Problema original
 
@@ -8,11 +8,11 @@ O problema original era a coexistencia de duas cobrancas para o mesmo contexto f
 
 - Dois fluxos validos operavam sem coordenacao entre si.
 - Nao existia idempotencia transversal para impedir cobrancas paralelas.
-- A cobranca mensal do Cartao Conexao nao tinha fonte unica.
+- A cobranca mensal da Conta Interna nao tinha fonte unica.
 
 ## 3. Correcao estrutural aplicada
 
-- A matricula nao gera mais cobranca mensal paralela do Cartao Conexao.
+- A matricula nao gera mais cobranca mensal paralela da Conta Interna.
 - A cobranca canonica por fatura passou a usar helper centralizado.
 - Foi adicionada protecao SQL com indice canonico.
 - A auditoria final confirmou ausencia de duplicidade ativa canonica por `origem_id`.

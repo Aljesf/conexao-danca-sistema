@@ -1,12 +1,12 @@
-# Diagnostico tecnico - matricula orfa no Cartao Conexao
+# Diagnostico tecnico - matricula orfa na Conta Interna
 
 ## Contexto do problema
 
-Foi identificado um caso em que uma matricula de teste foi cancelada/excluida, mas permaneceram residuos financeiros de R$ 3,00 em faturas do Cartao Conexao do colaborador. Esses residuos continuavam aparecendo na importacao da folha e impactando o liquido da competencia.
+Foi identificado um caso em que uma matricula de teste foi cancelada/excluida, mas permaneceram residuos financeiros de R$ 3,00 em faturas da Conta Interna do colaborador. Esses residuos continuavam aparecendo na importacao da folha e impactando o liquido da competencia.
 
 ## Fluxo atual encontrado
 
-1. A geracao mensal de mensalidade em `src/app/api/credito-conexao/gerar-lancamentos-mensais/route.ts` criava ou atualizava a cobranca da matricula e fazia `upsert` do lancamento consolidado no Cartao Conexao.
+1. A geracao mensal de mensalidade em `src/app/api/credito-conexao/gerar-lancamentos-mensais/route.ts` criava ou atualizava a cobranca da matricula e fazia `upsert` do lancamento consolidado na Conta Interna.
 2. Esse lancamento era gravado via `src/lib/credito-conexao/upsertLancamentoPorCobranca.ts`.
 3. O fechamento/rebuild de fatura reaproveitava lancamentos ativos em `credito_conexao_lancamentos` e seus vinculos em `credito_conexao_fatura_lancamentos`.
 4. A importacao da folha em `src/app/api/admin/folha/colaboradores/[id]/importar-faturas/route.ts` e `src/app/api/financeiro/folha/[folhaId]/importar-cartao-conexao/route.ts` consumia o valor total da fatura sem validar a integridade completa da cadeia de origem.
@@ -15,7 +15,7 @@ Foi identificado um caso em que uma matricula de teste foi cancelada/excluida, m
 
 O problema nao estava em um unico ponto, e sim na combinacao abaixo:
 
-1. A geracao mensal do Cartao Conexao gravava lancamentos com `origem_sistema = 'MATRICULA_MENSAL'`, mas sem reforcar sempre `matricula_id`, sem usar referencia canonica de negocio e sem bloquear matricula cancelada.
+1. A geracao mensal da Conta Interna gravava lancamentos com `origem_sistema = 'MATRICULA_MENSAL'`, mas sem reforcar sempre `matricula_id`, sem usar referencia canonica de negocio e sem bloquear matricula cancelada.
 2. A rota de cancelamento da matricula em `src/app/api/matriculas/[id]/cancelar/route.ts` limpava apenas:
    - cobrancas futuras abertas ligadas por `origem_tipo = 'MATRICULA'`
    - lancamentos com origem direta `MATRICULA`
@@ -63,7 +63,7 @@ Em termos praticos, o residuo ficou principalmente como:
 2. Endurecer `upsertLancamentoPorCobranca` para bloquear cobranca cancelada, item cancelado, matricula cancelada ou cadeia orfa.
 3. Corrigir a rota de cancelamento da matricula para cancelar toda a cadeia derivada ainda aberta:
    - cobrancas ligadas por origem principal ou canonica
-   - lancamentos do Cartao Conexao ligados por `matricula_id`, `origem_sistema` ou `cobranca_id`
+   - lancamentos da Conta Interna ligados por `matricula_id`, `origem_sistema` ou `cobranca_id`
    - pivots da fatura
    - recomposicao da folha quando a fatura ja havia sido importada
 4. Criar migration corretiva para localizar e limpar residuos ja existentes com criterio rastreavel por origem, competencia e vinculacao.

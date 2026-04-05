@@ -1,13 +1,13 @@
-﻿# ðŸ“˜ Regras de Parcelamento â€” CartÃ£o ConexÃ£o
+﻿# ðŸ”˜ Regras de Parcelamento â€” Conta Interna
 
-> Padrão operacional atual: [Cartão Conexão — Cobranças, Lançamentos e Faturas](./financeiro/cartao-conexao-cobrancas.md)
+> Padrão operacional atual: [Conta Interna — Cobranças, Lançamentos e Faturas](./financeiro/cartao-conexao-cobrancas.md)
 
-Documento oficial descrevendo o modelo de parcelamento do **CartÃ£o ConexÃ£o**, incluindo regras, valores mÃ­nimos e taxas por quantidade de parcelas.
+Documento oficial descrevendo o modelo de parcelamento da **Conta Interna**, incluindo regras, valores mÃ­nimos e taxas por quantidade de parcelas.
 
 ---
 
 # âœ… 1. Objetivo
-Permitir que o CartÃ£o ConexÃ£o (ALUNO e COLABORADOR) ofereÃ§a parcelamento com:
+Permitir que a Conta Interna (ALUNO e COLABORADOR) ofereÃ§a parcelamento com:
 
 - NÃºmero mÃ¡ximo de parcelas configurÃ¡vel.
 - Taxas variÃ¡veis por faixa de parcelas.
@@ -92,7 +92,7 @@ Se a venda permitir escolher quantidade de parcelas:
 3. Se nÃ£o atingir o valor mÃ­nimo â†’ parcela nÃ£o aparece na lista.
 4. Se regra encontrada:
    - taxa Ã© aplicada
-   - lanÃ§amento Ã© criado na conta de CrÃ©dito ConexÃ£o
+   - lanÃ§amento Ã© criado na Conta Interna
    - taxa pode virar **lanÃ§amento separado** como receita interna.
 
 ---
@@ -121,7 +121,7 @@ status = PENDENTE_FATURA
 
 # ðŸŽ¨ 5. Telas relacionadas
 
-## 5.1 ConfiguraÃ§Ã£o Geral do CartÃ£o ConexÃ£o
+## 5.1 ConfiguraÃ§Ã£o Geral da Conta Interna
 Nova rota no Admin:
 
 /admin/financeiro/credito-conexao/configuracoes
@@ -157,7 +157,7 @@ Agora que o fluxo principal funciona:
 # ðŸ“Œ 7. ObservaÃ§Ãµes
 
 - As regras **nÃ£o interferem** nas contas (titulares).  
-- Parcelamento **nÃ£o afeta limite do cartÃ£o**, mas taxa sim deve ser contabilizada.  
+- Parcelamento **nÃ£o afeta limite da conta**, mas taxa sim deve ser contabilizada.  
 - Taxas sÃ£o receitas internas e precisam ir para o mÃ³dulo financeiro.
 
 ---

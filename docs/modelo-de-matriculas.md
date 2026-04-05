@@ -18,7 +18,7 @@ Em caso de conflito, prevalece o documento oficial.
 - **Vencimento padrao:** dia 12 (configuravel). O vencimento e a data limite de pagamento; nao define o ciclo.
 - **Tabela de Preços — Cursos (Escola):** define itens e valores.
 - **Plano de Pagamento:** define a organizacao temporal do compromisso financeiro (cobrancas), nunca o valor. No MVP, e declarativo e nao gera cobrancas/recebimentos.
-- **Cartao Conexao:** motor financeiro central (vencimento efetivo, mora, multa e juros).
+- **Conta Interna:** motor financeiro central (vencimento efetivo, mora, multa e juros).
 
 ---
 
@@ -48,7 +48,7 @@ Em caso de conflito, prevalece o documento oficial.
 - Nao executa pagamento e nao gera cobrancas/recebimentos neste MVP.
 
 7) Confirmar forma de liquidacao
-- O Cartao Conexao e o motor financeiro central.
+- A Conta Interna e o motor financeiro central.
 - A operacao deve respeitar as Regras Oficiais de Matricula (v1).
 
 8) Concluir matricula
@@ -76,7 +76,7 @@ A primeira cobranca e obrigatoria no ato da matricula, correspondente ao **prime
 
 Matriculas em janeiro:
 - de 1 a 12:
-  - mensalidade cheia de janeiro, vencimento padrao no dia 12, lancada no Cartao Conexao.
+  - mensalidade cheia de janeiro, vencimento padrao no dia 12, lancada na Conta Interna.
 - apos 12:
   - Entrada (Pro-rata de Janeiro) proporcional aos dias letivos restantes, paga no ato.
 
@@ -87,21 +87,21 @@ Matriculas em janeiro:
 
 ---
 
-## 5. Cobrancas e Cartao Conexao
+## 5. Cobrancas e Conta Interna
 
-### 5.1 O que vai para o Cartao Conexao
+### 5.1 O que vai para a Conta Interna
 
 - Mensalidades cheias (ciclos completos).
-- Itens da Tabela de Preços — Cursos (Escola) que forem configurados para seguir o fluxo regular no Cartao Conexao (ex.: itens recorrentes do curso).
+- Itens da Tabela de Preços — Cursos (Escola) que forem configurados para seguir o fluxo regular na Conta Interna (ex.: itens recorrentes do curso).
 
-### 5.2 O que nao vai para o Cartao Conexao
+### 5.2 O que nao vai para a Conta Interna
 
 - Entrada (Pro-rata) e Entrada (Pro-rata de Janeiro).
-- A Entrada e paga **no ato** e **nao integra** o Cartao Conexao.
+- A Entrada e paga **no ato** e **nao integra** a Conta Interna.
 
 ### 5.3 Multa, juros e vencimento
 
-- O Cartao Conexao define vencimento efetivo, mora, multa e juros.
+- A Conta Interna define vencimento efetivo, mora, multa e juros.
 - A matricula **nao** calcula multa ou juros.
 
 ---
@@ -173,7 +173,7 @@ Exemplo: matricula em julho com inicio em agosto.
 
 - A data de inicio do vinculo define o primeiro ciclo efetivo (agosto).
 - A primeira cobranca deve refletir esse primeiro ciclo (mensalidade cheia de agosto), paga no ato como pagamento antecipado.
-- As cobrancas seguintes entram no fluxo normal do Cartao Conexao.
+- As cobrancas seguintes entram no fluxo normal da Conta Interna.
 
 ### 8.2 Matricula em janeiro
 

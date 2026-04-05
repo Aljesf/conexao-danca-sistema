@@ -1,12 +1,12 @@
-# Relatorio de Correcao - Duplicidade de Cobrancas do Cartao Conexao
+# Relatorio de Correcao - Duplicidade de Cobrancas da Conta Interna
 
 ## Causa raiz confirmada
 - A matricula criava cobranca mensal local com `origem_tipo = MATRICULA` e `origem_subtipo = CARTAO_CONEXAO`.
-- O faturamento do Cartao Conexao criava a cobranca canonica da fatura com `origem_tipo = FATURA_CREDITO_CONEXAO`.
+- O faturamento da Conta Interna criava a cobranca canonica da fatura com `origem_tipo = FATURA_CREDITO_CONEXAO`.
 - Os dois fluxos eram validos isoladamente, mas nao havia coordenacao nem guarda de idempotencia transversal.
 
 ## Decisao arquitetural adotada
-- A mensalidade do Cartao Conexao passa a nascer como lancamento elegivel em `credito_conexao_lancamentos`.
+- A mensalidade da Conta Interna passa a nascer como lancamento elegivel em `credito_conexao_lancamentos`.
 - A cobranca externa/canonica passa a ser fonte unica da fatura.
 - A reaplicacao da cobranca canonica fica centralizada em um helper unico.
 
@@ -22,7 +22,7 @@
 - [route.ts](C:/Users/aliri/conexao-dados/src/app/api/escola/matriculas/[id]/reprocessar-financeiro/route.ts) foi alinhada com a mesma separacao e passou a bloquear reprocessamento quando o lancamento ja existe.
 - [route.ts](C:/Users/aliri/conexao-dados/src/app/api/matriculas/novo/route.ts) foi revisada; o fluxo continua delegando a liquidacao para `liquidacao-primeira`, sem criacao direta adicional de cobranca mensal nessa etapa.
 
-## O que mudou na API/faturamento do Credito Conexao
+## O que mudou na API/faturamento da Conta Interna
 - Foi criado o helper [getOrCreateCobrancaCanonicaFatura.ts](C:/Users/aliri/conexao-dados/src/lib/credito-conexao/getOrCreateCobrancaCanonicaFatura.ts).
 - [route.ts](C:/Users/aliri/conexao-dados/src/app/api/financeiro/credito-conexao/faturas/[id]/gerar-cobranca/route.ts) passou a reutilizar a cobranca canônica existente e falhar com erro controlado em duplicidade.
 - [route.ts](C:/Users/aliri/conexao-dados/src/app/api/financeiro/credito-conexao/faturas/[id]/fechar/route.ts) passou a delegar para o helper canônico antes de chamar o provider.
@@ -35,7 +35,7 @@
 - O fechamento legado de faturas continua precisando de vigilancia operacional ate sua consolidacao total no fluxo moderno.
 
 ## Como validar manualmente
-1. Matricula de Cartao Conexao: confirmar que o fluxo gera lancamento em `credito_conexao_lancamentos` e nao cria nova linha em `public.cobrancas` com `origem_tipo = MATRICULA` e `origem_subtipo = CARTAO_CONEXAO`.
+1. Matricula da Conta Interna: confirmar que o fluxo gera lancamento em `credito_conexao_lancamentos` e nao cria nova linha em `public.cobrancas` com `origem_tipo = MATRICULA` e `origem_subtipo = CARTAO_CONEXAO`.
 2. Geracao/fechamento de fatura: executar a geracao duas vezes para a mesma fatura e confirmar reaproveitamento do mesmo `cobranca_id`.
 3. Reprocessamento financeiro: confirmar que a mesma matricula/competencia e bloqueada quando o lancamento elegivel ja existe.
 4. Auditoria SQL: confirmar que a query de pre-indice continua sem duplicidades canônicas ativas.

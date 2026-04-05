@@ -14,7 +14,7 @@ Este documento estabelece as regras oficiais que regem:
 - a cobranca de valores educacionais;
 - a aplicacao de planos de pagamento;
 - a geracao de documentos juridicos;
-- a integracao com o Cartao Conexao.
+- a integracao com a Conta Interna.
 
 > Nota: Este documento e a fonte unica de verdade. Qualquer tela, regra de sistema ou documento juridico deve estar em conformidade com ele.
 
@@ -95,15 +95,15 @@ A Tabela de Preços — Cursos (Escola) define apenas itens e valores. Não defi
 - mora ou juros;
 - regras financeiras de atraso.
 
-Esses aspectos pertencem ao Plano de Pagamento e ao Cartao Conexao.
+Esses aspectos pertencem ao Plano de Pagamento e à Conta Interna.
 
-## 6. Pagamentos, Vencimentos e Cartao Interno Conexao
+## 6. Pagamentos, Vencimentos e Conta Interna
 
 ### 6.1. Fonte do vencimento financeiro
 
 Os vencimentos financeiros das mensalidades, anuidades e demais cobrancas recorrentes nao sao definidos pela matricula.
 
-O vencimento efetivo e aplicado exclusivamente pelo Cartao Interno Conexao, conforme a politica financeira vigente da Instituicao.
+O vencimento efetivo e aplicado exclusivamente pela Conta Interna, conforme a politica financeira vigente da Instituicao.
 
 A matricula tem como funcao:
 
@@ -123,7 +123,7 @@ Regra geral (fevereiro a dezembro)
 Matriculas realizadas ate o dia de corte institucional:
 
 - nao geram pro-rata;
-- a mensalidade do mes vigente e considerada integral e segue o fluxo normal do Cartao Interno Conexao.
+- a mensalidade do mes vigente e considerada integral e segue o fluxo normal da Conta Interna.
 
 Matriculas realizadas apos o dia de corte institucional:
 
@@ -147,7 +147,7 @@ Quando existir Entrada (Pro-rata), esta deve ser paga no ato da matricula, por m
 
 A Entrada (Pro-rata):
 
-- nao integra o Cartao Interno Conexao;
+- nao integra a Conta Interna;
 - nao gera parcelas recorrentes;
 - refere-se exclusivamente ao primeiro periodo proporcional de aulas.
 
@@ -176,12 +176,12 @@ A excecao nao descaracteriza a regra padrao e nao cria precedente automatico par
 O sistema distingue claramente:
 
 - ciclo de servico (competencia): periodo de aulas ao qual o pagamento se refere;
-- ciclo financeiro (vencimento): data de vencimento aplicada pelo Cartao Interno Conexao.
+- ciclo financeiro (vencimento): data de vencimento aplicada pela Conta Interna.
 
 O padrao vigente adota:
 
 - competencia baseada no mes civil, com excecoes institucionais (ex.: janeiro);
-- vencimento definido e controlado exclusivamente pelo Cartao Interno Conexao.
+- vencimento definido e controlado exclusivamente pela Conta Interna.
 
 ## 7. Anuidade (obrigacao financeira)
 
@@ -216,7 +216,7 @@ O plano define:
 O plano:
 
 - nao altera o ciclo da cobranca;
-- nao altera o vencimento padrao definido pela escola e pelo Cartao Conexao.
+- nao altera o vencimento padrao definido pela escola e pela Conta Interna.
 
 ### 8.2 Regra obrigatoria de comunicacao
 
@@ -298,7 +298,7 @@ A Entrada (Pro-rata):
 - possui vencimento no ato;
 - deve ser quitada imediatamente;
 - nao integra o plano de pagamento;
-- nao entra no Cartao Conexao.
+- nao entra na Conta Interna.
 
 ### 9.4 Regra especifica para o mes de janeiro
 
@@ -309,7 +309,7 @@ O pro-rata de janeiro, quando aplicavel, e calculado exclusivamente sobre os dia
 Matriculas realizadas:
 
 - de 1º a 12 de janeiro:
-  - geram mensalidade cheia de janeiro, com vencimento padrao no dia 12, lancada no Cartao Conexao.
+  - geram mensalidade cheia de janeiro, com vencimento padrao no dia 12, lancada na Conta Interna.
 - apos 12 de janeiro:
   - geram Entrada (Pro-rata de Janeiro) proporcional aos dias letivos restantes, paga no ato.
 

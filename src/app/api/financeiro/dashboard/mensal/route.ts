@@ -159,6 +159,33 @@ function isStatusCanceladoLike(value: unknown): boolean {
   return normalized === "CANCELADO" || normalized === "CANCELADA";
 }
 
+function isOrigemCanonicaFaturaContaInterna(value: unknown): boolean {
+  const normalized = upper(value);
+  return normalized === "FATURA_CREDITO_CONEXAO" || normalized === "CREDITO_CONEXAO_FATURA";
+}
+
+function buildPessoaCompetenciaKey(pessoaId: number | null, competencia: string | null): string | null {
+  if (typeof pessoaId !== "number" || !Number.isFinite(pessoaId) || pessoaId <= 0) return null;
+  const competenciaLimpa = textOrNull(competencia);
+  if (!isCompetencia(competenciaLimpa)) return null;
+  return `${pessoaId}:${competenciaLimpa}`;
+}
+
+function isLinhaOperacionalAbsorvidaPorFatura(row: Pick<DashboardOperacionalRow, "origem_tipo" | "origem_subtipo">): boolean {
+  const origemTipo = upper(row.origem_tipo);
+  const origemSubtipo = upper(row.origem_subtipo);
+
+  if (isOrigemCanonicaFaturaContaInterna(origemTipo)) return false;
+  if (origemTipo === "EVENTO_ESCOLA_INSCRICAO" || origemTipo === "EVENTO_ESCOLA_INSCRICAO_EXTERNA") return true;
+  if (origemTipo === "CAFE" && origemSubtipo === "CONTA_INTERNA_COLABORADOR") return true;
+
+  return (
+    origemSubtipo === "CONTA_INTERNA_MENSALIDADE" ||
+    origemSubtipo === "CARTAO_CONEXAO" ||
+    origemSubtipo === "CARTAO_CONEXAO_COLABORADOR"
+  );
+}
+
 function calcularDiasAtraso(vencimento: string | null): number {
   const due = textOrNull(vencimento);
   if (!due || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return 0;
@@ -471,7 +498,7 @@ export async function GET(req: NextRequest) {
   const contasById = new Map<number, ContaConexaoDashboardRow>(contas.map((row) => [Number(row.id), row]));
   const recebimentosRecentes = (recebimentosRecentesResult.data ?? []) as RecebimentoDashboardRow[];
   const avulsasPagasRecentes = (avulsasPagasRecentesResult.data ?? []) as CobrancaAvulsaMetaRow[];
-  const operacionalRowsCanonicos = operacionalRows.filter((row) => {
+  const operacionalRowsAtivos = operacionalRows.filter((row) => {
     const cobrancaId = Number(row.cobranca_id ?? 0) || null;
     const isAvulsa = upper(String(row.cobranca_fonte ?? "")) === "COBRANCA_AVULSA";
 
@@ -489,6 +516,21 @@ export async function GET(req: NextRequest) {
     if (Boolean(metaCobranca?.expurgada)) return false;
     return true;
   });
+  const canonicasAtivasPorPessoaCompetencia = new Set(
+    operacionalRowsAtivos
+      .filter((row) => isOrigemCanonicaFaturaContaInterna(row.origem_tipo))
+      .map((row) => buildPessoaCompetenciaKey(row.pessoa_id, row.competencia_ano_mes))
+      .filter((key): key is string => Boolean(key)),
+  );
+  const operacionalRowsCanonicos = operacionalRowsAtivos.filter((row) => {
+    if (isOrigemCanonicaFaturaContaInterna(row.origem_tipo)) return true;
+
+    const pessoaCompetenciaKey = buildPessoaCompetenciaKey(row.pessoa_id, row.competencia_ano_mes);
+    if (!pessoaCompetenciaKey || !canonicasAtivasPorPessoaCompetencia.has(pessoaCompetenciaKey)) return true;
+
+    // Quando a fatura canonica existe, itens absorvidos por ela nao devem aparecer como linha independente.
+    return !isLinhaOperacionalAbsorvidaPorFatura(row);
+  });
 
   const contaIds = contas.map((row) => Number(row.id)).filter((id) => Number.isFinite(id) && id > 0);
   const { data: lancamentosRaw, error: lancamentosError } = contaIds.length > 0
@@ -498,7 +540,7 @@ export async function GET(req: NextRequest) {
       .in("conta_conexao_id", contaIds)
       .gte("competencia", competenciaInicio)
       .lte("competencia", competenciaFim)
-      .in("status", ["PENDENTE_FATURA", "FATURADO"])
+      .eq("status", "PENDENTE_FATURA")
       .order("competencia", { ascending: true })
       .order("id", { ascending: true })
     : { data: [], error: null };
@@ -622,7 +664,8 @@ export async function GET(req: NextRequest) {
       if (!isCompetencia(competenciaLanc)) return false;
       const faturaId = faturaIdByLancamentoId.get(Number(row.id)) ?? null;
       const fatura = faturaId ? faturasById.get(faturaId) ?? null : null;
-      return !["PAGA", "CANCELADA"].includes(upper(fatura?.status));
+      // Dashboard mensal deve expor apenas pre-fatura real.
+      return !fatura || upper(fatura.status) === "ABERTA";
     })
     .map((row) => {
       const competenciaLanc = textOrNull(row.competencia) ?? competenciaInicio;

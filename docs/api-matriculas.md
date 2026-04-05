@@ -17,8 +17,8 @@ Objetivo da rota (v2):
 - Criar uma nova matrícula na tabela `matriculas` (unidade oficial do vínculo).
 - Criar/garantir vínculo operacional em `turma_aluno` com `matricula_id`.
 - Gerar os registros financeiros conforme as regras oficiais:
-  - **Mensalidade cheia** ? lançamento no **Cartão Conexão** (`credito_conexao_lancamentos`).
-  - **Entrada (Pró-rata)** ? cobrança direta (`cobrancas` + `recebimentos`), fora do Cartão Conexão.
+  - **Mensalidade cheia** ? lançamento na **Conta Interna** (`credito_conexao_lancamentos`).
+  - **Entrada (Pró-rata)** ? cobrança direta (`cobrancas` + `recebimentos`), fora da Conta Interna.
   - Suportar **exceção negociável** da Entrada (adiar para vencimento) com auditoria.
 
 Escopo (primeira entrega desta API):
@@ -29,7 +29,7 @@ Escopo (primeira entrega desta API):
 - Não gera contrato/PDF ainda (fases futuras).
 - Financeiro limitado ao necessário para:
   - Entrada (pró-rata) e
-  - Lançamento da mensalidade cheia no Cartão Conexão.
+  - Lançamento da mensalidade cheia na Conta Interna.
 
 ---
 
@@ -62,14 +62,14 @@ A API **não deve**:
 - definir “data de vencimento” para mensalidade;
 - tratar `vencimento` como campo editável da matrícula.
 
-O vencimento financeiro real pertence ao **Cartão Conexão**.
+O vencimento financeiro real pertence à **Conta Interna**.
 
 A matrícula pode registrar apenas:
 - `vencimento_padrao_referencia` (snapshot da política vigente).
 
 ### 3.2 Separação financeira
 
-- Mensalidade cheia ? `credito_conexao_lancamentos` (Cartão Conexão).
+- Mensalidade cheia ? `credito_conexao_lancamentos` (Conta Interna).
 - Entrada (Pró-rata) ? `cobrancas`/`recebimentos` (pagamento no ato) OU cobrança pendente quando houver exceção.
 
 ---
@@ -228,4 +228,4 @@ Retornar:
 - Contratos (geração, emissão, assinatura)
 - Integração completa com Tabela de Preços — Cursos (Escola) e Planos
 - Matrícula de Projeto Artístico
-- Integração com cobrança Neofin (faturas/boletos) via Cartão Conexão
+- Integração com cobrança Neofin (faturas/boletos) via Conta Interna

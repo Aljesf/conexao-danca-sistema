@@ -2,22 +2,22 @@
 > Este documento será atualizado para refletir  
 > as Regras Oficiais de Matrícula (Conexão Dança) – v1
 
-# Spec - Matriculas integradas ao Cartao Conexao (v1)
+# Spec - Matriculas integradas à Conta Interna (v1)
 
 Gerado em: 2025-12-23T18:11:21.1914542-03:00
 
 ## 1) Objetivo
-Refatorar o eixo financeiro da matricula para que, em vez de gerar cobrancas diretas, a matricula gere lancamentos no Cartao Conexao (Credito Conexao), consolidando o pagamento em uma fatura por periodo.
+Refatorar o eixo financeiro da matricula para que, em vez de gerar cobrancas diretas, a matricula gere lancamentos na Conta Interna, consolidando o pagamento em uma fatura por periodo.
 
 Base atual (referencia):
 - Snapshot Matriculas Operacional: docs/registros/matriculas-operacional-estado-atual.md
-- Snapshot Cartao Conexao: docs/registros/cartao-conexao-estado-atual.md
+- Snapshot Conta Interna: docs/registros/cartao-conexao-estado-atual.md
 
 ## 2) Premissas
 - Matricula continua sendo o processo (contrato) e sempre cria:
   - public.matriculas
   - vinculo pedagogico (public.turma_aluno ou via inculo_id, conforme schema atual)
-- O Cartao Conexao ja existe e opera com:
+- A Conta Interna ja existe e opera com:
   - credito_conexao_contas (contas por titular)
   - credito_conexao_lancamentos (itens)
   - credito_conexao_faturas (faturas por periodo)
@@ -34,7 +34,7 @@ Valores:
 
 A matricula e unica; muda apenas o metodo de liquidacao.
 
-## 4) Mapeamento: matricula -> lancamentos do Cartao Conexao
+## 4) Mapeamento: matricula -> lancamentos da Conta Interna
 
 ### 4.1 Conta (credito_conexao_contas)
 - Titular: esponsavel_financeiro_id (pessoa)
@@ -74,9 +74,9 @@ A fatura e garantida/gerida pelo mecanismo existente:
 - /api/financeiro/credito-conexao/faturas/incluir-pendencias
 - /api/financeiro/credito-conexao/faturas/fechar
 
-Ou seja: matricula gera pendencias; rotina do cartao consolida.
+Ou seja: matricula gera pendencias; rotina da conta interna consolida.
 
-## 5) Regras de negocio v1 (Cartao Conexao)
+## 5) Regras de negocio v1 (Conta Interna)
 
 ### 5.1 Pro-rata
 - Mantem mes comercial 30 dias (ja fechado no modulo matriculas).
@@ -94,7 +94,7 @@ Para evitar duplicar lancamentos se o usuario clicar duas vezes:
   - origem_sistema='MATRICULA' AND origem_id={matricula_id}
 - Se existirem, nao recriar (ou falhar com 409 "matricula_financeiro_ja_gerado").
 
-## 6) Encerramento (impacto no Cartao)
+## 6) Encerramento (impacto na Conta Interna)
 Ao encerrar matricula:
 - Encerrar vinculo pedagogico e status da matricula (como hoje).
 - Se metodo de liquidacao for CARTAO_CONEXAO:
@@ -107,7 +107,7 @@ Ao encerrar matricula:
 ### API 4 - Criar Matricula
 - adiciona payload metodo_liquidacao
 - cria matricula + vinculo (sempre)
-- se CARTAO_CONEXAO: cria lancamentos (pendencias) no cartao
+- se CARTAO_CONEXAO: cria lancamentos (pendencias) na conta interna
 - se COBRANCAS_LEGADO: mantem criacao de cobrancas (temporario)
 
 ### API 6 - Detalhe operacional

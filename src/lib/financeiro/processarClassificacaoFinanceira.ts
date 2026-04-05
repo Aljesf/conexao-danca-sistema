@@ -169,7 +169,7 @@ export async function processarClassificacaoFinanceira(
   await limparRateiosAnteriores(supabase, cobranca.id);
 
   // Branch especial para conta interna por fatura/competencia
-  if (origemTipo === "CREDITO_CONEXAO_FATURA" && cobranca.origem_id) {
+  if ((origemTipo === "CREDITO_CONEXAO_FATURA" || origemTipo === "FATURA_CREDITO_CONEXAO") && cobranca.origem_id) {
     const { data: fatura, error: faturaError } = await supabase
       .from("credito_conexao_faturas")
       .select(

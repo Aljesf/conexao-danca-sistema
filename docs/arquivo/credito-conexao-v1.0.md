@@ -1,24 +1,24 @@
-﻿# Cartao Conexao - Especificacao Funcional & Tecnica v1.0
+﻿# Conta Interna - Especificacao Funcional & Tecnica v1.0
 
-> Padrão operacional atual: [Cartão Conexão — Cobranças, Lançamentos e Faturas](./financeiro/cartao-conexao-cobrancas.md)
+> Padrão operacional atual: [Conta Interna — Cobranças, Lançamentos e Faturas](./financeiro/cartao-conexao-cobrancas.md)
 
 
 > Nome do produto (para o usuario):
-> - **Cartao Conexao Aluno**
-> - **Cartao Conexao Colaborador**
+> - **Conta Interna do Aluno**
+> - **Conta Interna do Colaborador**
 >
-> Nome tecnico (banco/API): **Credito Conexao**
+> Nome tecnico (banco/API): **Conta Interna** (tabelas usam prefixo `credito_conexao`)
 
 ---
 
 ## 1. Visao geral
 
-O **Credito Conexao** e o sistema de **cartao de credito interno** da Conexao Danca.
+A **Conta Interna** e o sistema de **cartao de credito interno** da Conexao Danca.
 
 Ele substitui o conceito de crediario, permitindo que:
 
-- Pais/responsaveis utilizem o **Cartao Conexao Aluno** para compras na escola, loja e cafe.
-- Colaboradores utilizem o **Cartao Conexao Colaborador** para compras internas.
+- Pais/responsaveis utilizem a **Conta Interna do Aluno** para compras na escola, loja e cafe.
+- Colaboradores utilizem a **Conta Interna do Colaborador** para compras internas.
 - Todas as compras ao longo do mes sao consolidadas em uma **fatura mensal**.
 - O pagamento ocorre via:
   - Boleto Neofin (para Alunos)
@@ -28,7 +28,7 @@ Ele substitui o conceito de crediario, permitindo que:
 
 ## 2. Relacao com o Financeiro atual
 
-O modulo Credito Conexao utiliza a infraestrutura existente:
+O modulo Conta Interna utiliza a infraestrutura existente:
 
 - `cobrancas`
 - `recebimentos`
@@ -39,7 +39,7 @@ O modulo Credito Conexao utiliza a infraestrutura existente:
 
 Fluxo:
 
-1. Credito Conexao -> gera **lancamentos**  
+1. Conta Interna -> gera **lancamentos**  
 2. Lancamentos -> geram **faturas**  
 3. Faturas -> geram **cobranca** (Alunos) ou **desconto em folha** (Colaboradores)  
 4. Pagamento -> gera **recebimento + movimento financeiro**
@@ -48,12 +48,12 @@ Fluxo:
 
 ## 3. Conceitos do dominio
 
-### 3.1. Conta de Credito Conexao
+### 3.1. Conta Interna
 
 Representa uma "conta/cartao" interna:
 
-- **Cartao Conexao Aluno** (para pais/responsaveis)
-- **Cartao Conexao Colaborador**
+- **Conta Interna do Aluno** (para pais/responsaveis)
+- **Conta Interna do Colaborador**
 
 Armazena:
 - titular
@@ -62,7 +62,7 @@ Armazena:
 - configuracoes de ciclo
 - limites (futuro)
 
-### 3.2. Lancamento de Credito Conexao
+### 3.2. Lancamento da Conta Interna
 
 Transacao que ira compor a fatura:
 
@@ -72,7 +72,7 @@ Transacao que ira compor a fatura:
 - ajustes
 - estornos
 
-### 3.3. Fatura Conexao
+### 3.3. Fatura da Conta Interna
 
 Consolida lancamentos de um periodo:
 
@@ -108,7 +108,7 @@ tipo_conta = COLABORADOR
 
 Na Frente de Caixa:
 
-Selecionou Cartao Conexao -> nao gera recebimento imediato.
+Selecionou Conta Interna -> nao gera recebimento imediato.
 
 Gera lancamento interno.
 
@@ -117,7 +117,7 @@ Gera lancamento interno.
 ### 5.1. Tabelas principais
 
 1) **credito_conexao_contas**  
-Representa a conta/cartao.
+Representa a conta interna.
 
 Campos (conceito):
 
@@ -173,7 +173,7 @@ Campos:
 
 ## 6. Fluxos
 
-### 6.1. Cartao Conexao Aluno
+### 6.1. Conta Interna do Aluno
 
 Durante o mes:
 - Cada compra/consumo gera credito_conexao_lancamento.
@@ -184,7 +184,7 @@ Fechamento da fatura:
 Pagamento:
 - Quando o boleto e pago: cria recebimento, gera movimento_financeiro, marca fatura como paga.
 
-### 6.2. Cartao Conexao Colaborador
+### 6.2. Conta Interna do Colaborador
 
 Durante o mes:
 - Compras internas geram lancamentos.
@@ -201,7 +201,7 @@ Pagamento via folha:
 
 ## 7. Etapas de Implementacao
 
-- Etapa 1 — Criar tabelas do modulo Credito Conexao
+- Etapa 1 — Criar tabelas do modulo Conta Interna
 - Etapa 2 — Integrar com Formas de Pagamento (CARTAO_CONEXAO)
 - Etapa 3 — Implementar lancamentos na venda
 - Etapa 4 — Implementar fechamento da fatura (Aluno)
@@ -210,12 +210,12 @@ Pagamento via folha:
 
 ## 8. Nome oficial do modulo
 
-Produto: Cartao Conexao
+Produto: Conta Interna
 
-- Cartao Conexao Aluno
-- Cartao Conexao Colaborador
+- Conta Interna do Aluno
+- Conta Interna do Colaborador
 
-Tecnico: Credito Conexao
+Tecnico: tabelas com prefixo `credito_conexao`
 
 - credito_conexao_contas
 - credito_conexao_lancamentos

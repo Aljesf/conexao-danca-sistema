@@ -70,7 +70,7 @@ Formas que lancam na Conta Interna:
 
 Regra de nomenclatura:
 - em interface e documentacao, usar sempre `Conta Interna`
-- `Cartao Conexao` fica restrito a legado tecnico
+- `Conta Interna` fica restrito a legado tecnico
 
 ---
 

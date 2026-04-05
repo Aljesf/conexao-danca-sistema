@@ -4,7 +4,7 @@ Data da validacao: 19/03/2026
 
 ## Escopo validado
 
-- fechamento mensal canonico do Cartao Conexao Aluno por configuracao de ciclo
+- fechamento mensal canonico da Conta Interna do Aluno por configuracao de ciclo
 - reaproveitamento do mesmo servico de cobranca canonica entre fluxo automatico e fluxo manual
 - resolucao de pagamento exibivel da fatura e da cobranca financeira com prioridade para dados remotos da NeoFin
 - leitura operacional da fatura de educacao com cobranca canonica e auditoria tecnica recolhida
@@ -47,9 +47,9 @@ Resumo do dry-run:
 
 Exemplos retornados pelo servico:
 
-- conta `#2` (`Cartao Conexao ALUNO`), dia de fechamento resolvido `10`, periodos `2026-01`, `2026-02` e `2026-03` marcados como `reutilizada`
-- conta `#3` (`Cartao Conexao ALUNO`), dia de fechamento resolvido `10`, periodo `2026-01` como `reutilizada` e `2026-02` / `2026-03` como `processada`
-- conta `#4` (`Cartao Conexao Aluno`), dia de fechamento resolvido `10`, com combinacao de `reutilizada` e `processada`
+- conta `#2` (`Conta Interna do Aluno`), dia de fechamento resolvido `10`, periodos `2026-01`, `2026-02` e `2026-03` marcados como `reutilizada`
+- conta `#3` (`Conta Interna do Aluno`), dia de fechamento resolvido `10`, periodo `2026-01` como `reutilizada` e `2026-02` / `2026-03` como `processada`
+- conta `#4` (`Conta Interna do Aluno`), dia de fechamento resolvido `10`, com combinacao de `reutilizada` e `processada`
 
 Conclusao do cenario:
 

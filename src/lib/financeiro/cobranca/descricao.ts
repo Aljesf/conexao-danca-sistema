@@ -17,7 +17,7 @@ function trunc(s: string, maxLen: number): string {
 
 export function buildDescricaoCobranca(p: DescricaoCobrancaParams): string {
   const maxLen = p.maxLen ?? 140;
-  const base = clean(`Mensalidade Conexao Danca - ${p.periodo} - Fatura #${p.faturaId}`);
+  const base = clean(`Conta interna - ${p.periodo} - Fatura #${p.faturaId}`);
 
   const extras = (p.itensDescricao ?? [])
     .map(clean)

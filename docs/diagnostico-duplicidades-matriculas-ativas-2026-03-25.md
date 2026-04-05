@@ -13,7 +13,7 @@ Leitura consolidada:
 - `19` das `20` matrículas têm pelo menos um vínculo operacional em `public.turma_aluno`.
 - `12` das `20` matrículas têm sinal financeiro ativo no diagnóstico:
   - `11` com cobranças ligadas diretamente à matrícula.
-  - `1` com lançamentos de Cartão Conexão por competência.
+  - `1` com lançamentos de Conta Interna por competência.
 - Há **1 caso com forte indício de matrícula duplicada sem uso**.
 - Há **9 casos que exigem análise manual obrigatória**, porque existe concorrência operacional e/ou financeira real entre as matrículas ativas.
 
@@ -72,10 +72,10 @@ Resumo das matrículas:
 
 - `#2`: `REGULAR`, `2026`, data da matrícula `2026-01-12`, turma de vínculo `Ballet Clássico - 3ª série/4ª série/+1 - Tarde - Seg/Qua - 2026`.
   Item: `#2`, origem `LEGADO`, descrição `Item legado - Ballet Clássico - 3ª série/4ª série/+1 - Tarde - Seg/Qua - 2026`, valor base/liquido `9.900`.
-  Financeiro: `13` cobranças (`128.700`), `2` recebimentos (`19.800`), `0` lançamentos de Cartão Conexão.
+  Financeiro: `13` cobranças (`128.700`), `2` recebimentos (`19.800`), `0` lançamentos de Conta Interna.
 - `#103`: `REGULAR`, `2026`, data da matrícula `2026-02-24`, turma de vínculo `Ballet Clássico - Pontas e Pas de Deux I - Noite - Sex - 2026`.
   Item: `#93`, origem `LEGADO`, descrição `Item legado - Ballet Clássico - Pontas e Pas de Deux I - Noite - Sex - 2026`, valor base/liquido `12.000`.
-  Financeiro: `10` cobranças (`120.000`), `0` recebimentos, `0` lançamentos de Cartão Conexão.
+  Financeiro: `10` cobranças (`120.000`), `0` recebimentos, `0` lançamentos de Conta Interna.
 
 ### 2. Anna Alissa Demétrio Cruz Fonseca
 
@@ -90,11 +90,11 @@ Resumo das matrículas:
 - `#13`: `REGULAR`, `2026`, data da matrícula `2026-01-14`, turma de vínculo `Ballet Clássico - 6ª série/7ª série - Noite - Seg/Qua - 2026`.
   Item: `#9`, origem `LEGADO`, descrição `Item legado - Ballet Clássico - 6ª série/7ª série - Noite - Seg/Qua - 2026`, valor base/liquido `30.334`.
   Operacional: `3` turmas ativas ligadas à matrícula.
-  Financeiro: `11` cobranças (`333.674`), `1` recebimento (`30.334`), `0` lançamentos de Cartão Conexão.
+  Financeiro: `11` cobranças (`333.674`), `1` recebimento (`30.334`), `0` lançamentos de Conta Interna.
 - `#31`: `REGULAR`, `2026`, data da matrícula `2026-01-29`, turma de vínculo `Ballet Clássico - Pontas e Pas de Deux I - Noite - Sex - 2026`.
   Item: `#27`, origem `LEGADO`, descrição `Item legado - Ballet Clássico - Pontas e Pas de Deux I - Noite - Sex - 2026`, valor base/liquido `12.000`.
   Operacional: sem vínculo em `turma_aluno`.
-  Financeiro: sem cobranças, sem recebimentos e sem lançamentos de Cartão Conexão.
+  Financeiro: sem cobranças, sem recebimentos e sem lançamentos de Conta Interna.
 
 ### 3. Cibele Beatriz do Nascimento Costa
 
@@ -107,7 +107,7 @@ Resumo das matrículas:
 Resumo das matrículas:
 
 - `#25`: item `#21`, `LEGADO`, turma `Ballet Clássico - Pontas e Pas de Deux I - Noite - Sex - 2026`, valor `12.000`.
-  Financeiro: `11` cobranças (`132.000`), `1` recebimento (`12.000`), sem lançamentos de Cartão Conexão.
+  Financeiro: `11` cobranças (`132.000`), `1` recebimento (`12.000`), sem lançamentos de Conta Interna.
 - `#50`: item `#41`, `LEGADO`, turma inicial `Ballet Clássico - 6ª série/7ª série - Noite - Seg/Qua - 2026`, valor `44.000`.
   Operacional: `2` turmas ativas.
   Financeiro: sem cobranças, sem recebimentos e sem lançamentos.
@@ -117,7 +117,7 @@ Resumo das matrículas:
 - `pessoa_id`: `159`
 - Matrículas ativas: `#101`, `#119`
 - Responsável: `Rosely de Souza Monteiro`
-- Leitura técnica: a matrícula `#101` mantém várias turmas operacionais; a `#119` já possui lançamentos de Cartão Conexão por competência.
+- Leitura técnica: a matrícula `#101` mantém várias turmas operacionais; a `#119` já possui lançamentos de Conta Interna por competência.
 - Sugestão de ação: `ANALISE_MANUAL_OBRIGATORIA`
 
 Resumo das matrículas:
@@ -126,7 +126,7 @@ Resumo das matrículas:
   Operacional: `3` turmas ativas.
   Financeiro: sem cobranças, sem recebimentos e sem lançamentos.
 - `#119`: item `#100`, `LEGADO`, turma `Ballet Clássico - Pontas e Pas de Deux I - Noite - Sex - 2026`, valor `12.000`.
-  Financeiro: `10` lançamentos de Cartão Conexão (`120.000`) nas competências `2026-03` a `2026-12`.
+  Financeiro: `10` lançamentos de Conta Interna (`120.000`) nas competências `2026-03` a `2026-12`.
 
 ### 5. Evelin do Santos Costa
 
@@ -141,7 +141,7 @@ Resumo das matrículas:
 - `#46`: item `#37`, `LEGADO`, turma `Hip Hop - 6ª Série/7ª Série  - Noite - Ter/Qui - 2026`, valor `18.000`.
   Financeiro: sem cobranças, sem recebimentos e sem lançamentos.
 - `#113`: item `#99`, `LEGADO`, turma `Jazz Dance - 6ª Série/7ª Série  - Noite - Ter/Qui - 2026`, valor `15.000`.
-  Financeiro: `9` cobranças (`135.000`), `0` recebimentos, `0` lançamentos de Cartão Conexão.
+  Financeiro: `9` cobranças (`135.000`), `0` recebimentos, `0` lançamentos de Conta Interna.
 
 ### 6. Fernanda Gabriella Figueiredo da Silva
 
@@ -199,7 +199,7 @@ Resumo das matrículas:
 Resumo das matrículas:
 
 - `#22`: item `#18`, `LEGADO`, turma `Jazz Dance - 3ª Série/4ª Série /+1 - Tarde - Ter/Qui - 2026`, valor `15.000`.
-  Financeiro: `11` cobranças (`165.000`), `0` recebimentos, `0` lançamentos de Cartão Conexão.
+  Financeiro: `11` cobranças (`165.000`), `0` recebimentos, `0` lançamentos de Conta Interna.
 - `#88`: item `#78`, `LEGADO`, turma `Ballet Clássico - 3ª série/4ª série/+1 - Tarde - Seg/Qua - 2026`, valor `22.000`.
   Financeiro: sem cobranças, sem recebimentos e sem lançamentos.
 

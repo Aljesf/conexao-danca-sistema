@@ -9,7 +9,7 @@ Gerado em: 2025-12-23T17:50:10.7217809-03:00
 
 ## Objetivo
 - Registrar como o modulo esta estruturado HOJE (SQL + APIs + telas de teste).
-- Base para a grande mudanca: Matricula -> lancamentos no Cartao Conexao (faturas).
+- Base para a grande mudanca: Matricula -> lancamentos na Conta Interna (faturas).
 
 ## Migrations relacionadas
   

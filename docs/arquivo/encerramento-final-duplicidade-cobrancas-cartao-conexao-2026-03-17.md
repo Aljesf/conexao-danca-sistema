@@ -1,8 +1,8 @@
-# Encerramento Final - Duplicidade de Cobrancas do Cartao Conexao
+# Encerramento Final - Duplicidade de Cobrancas da Conta Interna
 
 ## 1. Problema
 
-O problema original era a geracao de cobrancas duplicadas para o mesmo contexto financeiro do Cartao Conexao.
+O problema original era a geracao de cobrancas duplicadas para o mesmo contexto financeiro da Conta Interna.
 
 ## 2. Causa raiz
 

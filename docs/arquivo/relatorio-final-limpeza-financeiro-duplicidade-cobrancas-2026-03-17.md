@@ -2,7 +2,7 @@
 
 ## Correcao estrutural
 
-- Matricula sem cobranca paralela para mensalidade do Cartao Conexao.
+- Matricula sem cobranca paralela para mensalidade da Conta Interna.
 - Fatura com cobranca canonica unica por origem.
 - Indice canonico integro e sem duplicidade ativa por `origem_id`.
 

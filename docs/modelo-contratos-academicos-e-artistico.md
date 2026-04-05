@@ -23,9 +23,9 @@ Este contrato **nao define valores, parcelas, pro-rata, vencimento, multa ou jur
 
 ## 4. Forma de cobranca e controle financeiro
 
-A Instituicao utiliza o **Cartao Conexao** como meio central de cobranca e controle financeiro, nos termos das Regras Oficiais de Matricula (Conexao Danca) – v1 e da Tabela de Preços — Cursos (Escola) vigente.
+A Instituicao utiliza a **Conta Interna** como meio central de cobranca e controle financeiro, nos termos das Regras Oficiais de Matricula (Conexao Danca) – v1 e da Tabela de Preços — Cursos (Escola) vigente.
 
-A cobranca e o controle de vencimentos, mora, multa e juros sao regidos pelos documentos normativos vigentes e pelo funcionamento do Cartao Conexao.
+A cobranca e o controle de vencimentos, mora, multa e juros sao regidos pelos documentos normativos vigentes e pelo funcionamento da Conta Interna.
 
 ## 5. Obrigações da Instituicao
 
@@ -51,7 +51,7 @@ A frequencia e a participacao do(a) Aluno(a) devem observar as orientacoes pedag
 
 O cancelamento, trancamento ou rescisao da matricula deve seguir os procedimentos internos da Instituicao.
 
-Os efeitos financeiros do cancelamento seguem exclusivamente os documentos normativos vigentes e o fluxo operacional do Cartao Conexao, sem que este contrato estabeleca regras proprias.
+Os efeitos financeiros do cancelamento seguem exclusivamente os documentos normativos vigentes e o fluxo operacional da Conta Interna, sem que este contrato estabeleca regras proprias.
 
 ## 9. Instrumentos juridicos acessorios
 

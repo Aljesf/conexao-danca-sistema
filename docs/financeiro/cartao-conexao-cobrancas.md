@@ -1,20 +1,20 @@
-﻿# 📘 Cartão Conexão — Cobranças, Lançamentos e Faturas (Padrão Oficial)
+﻿# 📘 Conta Interna — Cobranças, Lançamentos e Faturas (Padrão Oficial)
 Sistema Conexão Dança  
 Versão: 1.0  
 Status: Ativo  
-Objetivo: registrar o padrão canônico de integração financeira do Cartão Conexão.
+Objetivo: registrar o padrão canônico de integração financeira da Conta Interna.
 
 ## 1. Conceitos (fonte de verdade)
 - **Cobrança** (`cobrancas`): unidade financeira canônica.
-- **Lançamento do Cartão Conexão** (`credito_conexao_lancamentos`): derivado de cobrança elegível.
+- **Lançamento da Conta Interna** (`credito_conexao_lancamentos`): derivado de cobrança elegível.
 - **Fatura** (`credito_conexao_faturas`): consolidação mensal dos lançamentos por competência.
 
 ## 2. Regra de ouro
 - **1 cobrança elegível → 1 lançamento** (por `cobranca_id`).
 - Parcelamento significa **N cobranças**, nunca “1 cobrança com parcelas”.
 
-## 3. Elegibilidade ao Cartão Conexão
-Uma cobrança entra no Cartão Conexão quando:
+## 3. Elegibilidade à Conta Interna
+Uma cobrança entra na Conta Interna quando:
 - `origem_subtipo = 'CARTAO_CONEXAO'` (padrão institucional)
 - `competencia_ano_mes` preenchida (YYYY-MM)
 - Status compatível com cobrança aberta/ativa (conforme regra do financeiro)
@@ -42,7 +42,7 @@ Recomendado para mensalidades e combos (múltiplas UEs):
 - O boleto (NEOFIN) deve ser gerado **somente** para a cobrança da **fatura**:
   - `credito_conexao_faturas.cobranca_id`
   - `cobrancas.origem_tipo = 'CREDITO_CONEXAO_FATURA'`
-- Cobranças “itens” (matrícula/loja/café), mesmo elegíveis ao Cartão Conexão, **não geram boleto direto**.
+- Cobranças “itens” (matrícula/loja/café), mesmo elegíveis à Conta Interna, **não geram boleto direto**.
 
 ## 8. Impacto nos módulos
 - Matrículas: geram cobranças elegíveis por competência.
