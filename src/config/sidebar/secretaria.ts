@@ -4,7 +4,7 @@ export const secretariaSidebar: SidebarSection[] = [
   {
     id: "secretaria-inicio",
     title: "Inicio",
-    items: [{ label: "Visao geral", href: "/secretaria" }],
+    items: [{ label: "Visao geral", href: "/escola/secretaria" }],
   },
   {
     id: "secretaria-caixa",

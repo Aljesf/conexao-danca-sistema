@@ -40,6 +40,7 @@ export type ContextConfig = {
 
 type BrandingContextType = {
   activeContext: ContextKey;
+  isReady: boolean;
   configs: Record<ContextKey, ContextConfig>;
   setActiveContext: (key: ContextKey) => void;
   updateContext: (key: ContextKey, patch: Partial<ContextConfig>) => void;
@@ -193,6 +194,7 @@ const defaultSuporte: ContextConfig = {
 
 const BrandingContext = createContext<BrandingContextType>({
   activeContext: "escola",
+  isReady: false,
   configs: {
     escola: defaultEscola,
     secretaria: defaultSecretaria,
@@ -223,6 +225,7 @@ function applyPalette(palette: Palette) {
 
 export function BrandingProvider({ children }: { children: React.ReactNode }) {
   const [activeContext, setActiveContext] = useState<ContextKey>("escola");
+  const [isReady, setIsReady] = useState(false);
   const [configs, setConfigs] = useState<Record<ContextKey, ContextConfig>>({
     escola: defaultEscola,
     secretaria: defaultSecretaria,
@@ -268,17 +271,21 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       console.warn("Falha ao carregar branding salvo:", err);
+    } finally {
+      setIsReady(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!isReady) return;
+
     applyPalette(configs[activeContext].palette);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...configs, activeContext }));
     } catch (err) {
       console.warn("Falha ao salvar branding:", err);
     }
-  }, [configs, activeContext]);
+  }, [configs, activeContext, isReady]);
 
   const updateContext = (key: ContextKey, patch: Partial<ContextConfig>) => {
     setConfigs((prev) => ({
@@ -299,8 +306,8 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ activeContext, configs, setActiveContext, updateContext }),
-    [activeContext, configs],
+    () => ({ activeContext, isReady, configs, setActiveContext, updateContext }),
+    [activeContext, configs, isReady],
   );
 
   return <BrandingContext.Provider value={value}>{children}</BrandingContext.Provider>;

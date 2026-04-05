@@ -1,3 +1,5 @@
+import { DEFAULT_HOME, resolveContextHome } from "@/config/contextHomeMap";
+
 export type SupportedContexto =
   | "CAFE"
   | "LOJA"
@@ -60,9 +62,10 @@ const CONTEXTO_ROUTE_CONFIGS: Record<SupportedContexto, ContextoRouteConfig> = {
   ESCOLA: {
     contexto: "ESCOLA",
     label: "Escola",
-    fallback: "/escola",
+    fallback: "/escola/calendario",
     routes: [
-      { rota: "/escola", label: "Home da Escola" },
+      { rota: "/escola", label: "Entrada da Escola" },
+      { rota: "/escola/calendario", label: "Calendario da Escola" },
       { rota: "/matriculas", label: "Matriculas" },
       { rota: "/turmas", label: "Turmas" },
       { rota: "/pessoas", label: "Pessoas" },
@@ -71,16 +74,17 @@ const CONTEXTO_ROUTE_CONFIGS: Record<SupportedContexto, ContextoRouteConfig> = {
   SECRETARIA: {
     contexto: "SECRETARIA",
     label: "Secretaria da Escola",
-    fallback: "/secretaria/caixa",
+    fallback: "/escola/secretaria",
     routes: [
       { rota: "/secretaria", label: "Home da Secretaria" },
+      { rota: "/escola/secretaria", label: "Visao Geral da Secretaria" },
       { rota: "/secretaria/caixa", label: "Caixa da Secretaria" },
     ],
   },
   ADMIN: {
     contexto: "ADMIN",
     label: "Administracao do Sistema",
-    fallback: "/admin",
+    fallback: "/admin/financeiro",
     routes: [
       { rota: "/admin", label: "Painel administrativo" },
       { rota: "/admin/financeiro", label: "Financeiro (Admin)" },
@@ -137,8 +141,8 @@ export function listContextoRouteConfigs(): ContextoRouteConfig[] {
 
 export function getFallbackRouteForContext(value: string | null | undefined): string {
   const contexto = normalizeContextoKey(value);
-  if (!contexto) return "/admin";
-  return CONTEXTO_ROUTE_CONFIGS[contexto].fallback;
+  if (!contexto) return DEFAULT_HOME;
+  return resolveContextHome(contexto);
 }
 
 export function isRouteAllowedForContext(contexto: SupportedContexto, rota: string): boolean {

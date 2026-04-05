@@ -2,34 +2,13 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { resolveContextHome } from "@/config/contextHomeMap";
 import { useBranding } from "@/context/BrandingContext";
 import {
   CONTEXTOS_CONFIG,
   detectContextByPathname,
   type AppContextItem,
 } from "@/config/contextosConfig";
-import { getFallbackRouteForContext } from "@/lib/contexto-home";
-
-async function resolveContextHome(contexto: string, fallback: string) {
-  try {
-    const response = await fetch(`/api/me/contexto-home/resolver?contexto=${encodeURIComponent(contexto)}`, {
-      method: "GET",
-      cache: "no-store",
-    });
-
-    const payload = (await response.json().catch(() => null)) as
-      | { rota_principal?: string }
-      | null;
-
-    if (response.ok && payload?.rota_principal) {
-      return payload.rota_principal;
-    }
-  } catch (error) {
-    console.warn("[ContextSelector] falha ao resolver home do contexto:", error);
-  }
-
-  return fallback;
-}
 
 export default function ContextSelector() {
   const { activeContext, setActiveContext, configs } = useBranding();
@@ -48,14 +27,13 @@ export default function ContextSelector() {
     setOpen(false);
     setPendingKey(opt.key);
 
-    const fallback = getFallbackRouteForContext(opt.key) || opt.href;
-    void (async () => {
-      const target = await resolveContextHome(opt.key, fallback);
-      setPendingKey(null);
-      if (pathname !== target) {
-        router.push(target);
-      }
-    })();
+    const target = resolveContextHome(opt.brandingKey);
+    if (pathname !== target) {
+      router.push(target);
+      return;
+    }
+
+    setPendingKey(null);
   }
 
   return (

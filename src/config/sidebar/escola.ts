@@ -4,12 +4,14 @@ export const escolaSidebar: SidebarSection[] = [
   {
     id: "escola-inicio",
     title: "🏠 Início",
-    items: [{ label: "🏠 Início", href: "/escola" }], // TODO(migracao): rota /escola ainda nao existe
+    items: [{ label: "Calendário", href: "/escola/calendario", icon: "📅" }],
   },
   {
     id: "escola-caixa",
     title: "💰 Caixa / Secretaria",
-    items: [{ label: "💰 Caixa da Secretaria", href: "/secretaria/caixa" }],
+    items: [
+      { label: "Caixa da Secretaria", href: "/secretaria/caixa", icon: "💰" },
+    ],
   },
   {
     id: "escola-calendario",

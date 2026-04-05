@@ -22,14 +22,6 @@ export type AppContextItem = {
 
 export const CONTEXTOS_CONFIG: AppContextItem[] = [
   {
-    key: "ESCOLA",
-    brandingKey: "escola",
-    label: "Escola",
-    emoji: "🏫",
-    description: "Operacao academica e matriculas",
-    href: "/escola",
-  },
-  {
     key: "SECRETARIA",
     brandingKey: "secretaria",
     label: "Secretaria da Escola",
@@ -38,12 +30,20 @@ export const CONTEXTOS_CONFIG: AppContextItem[] = [
     href: "/secretaria",
   },
   {
-    key: "LOJA",
-    brandingKey: "loja",
-    label: "AJ Dance Store",
-    emoji: "🛍️",
-    description: "Vendas e estoque da loja",
-    href: "/loja",
+    key: "ESCOLA",
+    brandingKey: "escola",
+    label: "Escola",
+    emoji: "🏫",
+    description: "Operacao academica e matriculas",
+    href: "/escola",
+  },
+  {
+    key: "BOLSAS",
+    brandingKey: "bolsas",
+    label: "Bolsas & Projetos Sociais",
+    emoji: "🎓",
+    description: "Gestao de bolsas e projetos sociais",
+    href: "/bolsas",
   },
   {
     key: "CAFE",
@@ -52,6 +52,14 @@ export const CONTEXTOS_CONFIG: AppContextItem[] = [
     emoji: "☕",
     description: "Operacao e vendas do cafe",
     href: "/cafe",
+  },
+  {
+    key: "LOJA",
+    brandingKey: "loja",
+    label: "AJ Dance Store",
+    emoji: "🛍️",
+    description: "Vendas e estoque da loja",
+    href: "/loja",
   },
   {
     key: "FINANCEIRO",
@@ -77,14 +85,6 @@ export const CONTEXTOS_CONFIG: AppContextItem[] = [
     description: "Chamados, erros, melhorias e acompanhamento",
     href: "/suporte-usuario",
     icon: "LifeBuoy",
-  },
-  {
-    key: "BOLSAS",
-    brandingKey: "bolsas",
-    label: "Bolsas & Projetos Sociais",
-    emoji: "🎓",
-    description: "Gestao de bolsas e projetos sociais",
-    href: "/bolsas",
   },
 ];
 
