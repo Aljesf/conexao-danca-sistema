@@ -14,6 +14,10 @@ dev-servicos*.log
 
 # Temporarios locais
 /tmp-encoding-test.txt
+_tmp_*.txt
+tmp_*.txt
+tmp-*.txt
+*.log
 *.tmp
 *.temp
 .tmp/
